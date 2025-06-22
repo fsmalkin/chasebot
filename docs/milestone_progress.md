@@ -27,25 +27,26 @@ ChaseBot has successfully completed foundational work with Webots simulation and
 #### ROS Migration Deliverables:
 - [x] **Choose simulation platform** (Gazebo + ROS vs Webots evaluation)
   - ✅ Selected Gazebo with ROS integration for better hardware transfer
-- [ ] **Install and configure ROS + Gazebo environment** 🔄
-  - Install ROS Melodic and Gazebo 9
-  - Set up catkin workspace structure  
-  - Configure JetBot ROS packages
-- [ ] **Create JetBot URDF model with camera and differential drive** 🔄
-  - Integrate or adapt existing JetBot URDF
-  - Configure camera sensor and motor controllers
-  - Set up Gazebo plugins for hardware simulation
-- [ ] **Create simple test world with golf balls scattered on flat surface** 🔄
-  - Design Gazebo world file with arena
-  - Place golf ball objects with realistic physics
-  - Configure lighting and textures
+- [x] **Install and configure ROS + Gazebo environment** ✅ COMPLETE
+  - ✅ ROS Melodic and Gazebo 9 installed and operational
+  - ✅ Catkin workspace structure configured at ~/catkin_ws
+  - ✅ JetBot ROS packages created and built successfully
+- [x] **Create JetBot URDF model with camera and differential drive** ✅ COMPLETE + UAT SUCCESS
+  - ✅ JetBot URDF integrated with enhanced physics configuration
+  - ✅ Camera sensor and motor controllers configured with ROS plugins
+  - ✅ Gazebo plugins operational for hardware simulation
+  - ✅ **PHYSICS FIXED**: Robot moves properly with user-confirmed UAT
+- [ ] **Create simple test world with golf balls scattered on flat surface** 🔄 NEXT PRIORITY
+  - Design Gazebo world file with arena (4x4m from Webots)
+  - Place golf ball objects with realistic physics (46g mass, 42mm diameter)
+  - Configure lighting and textures matching Webots environment
 
 #### Success Criteria Status:
-- [ ] **ROS master and Gazebo simulation launch without errors** 🔄
-- [ ] **JetBot URDF loads and publishes `/cmd_vel` topic control** 🔄
-- [ ] **Camera publishes to `/camera/image_raw` and `/camera/camera_info`** 🔄
-- [ ] **Golf balls are visible in camera feed and distinguishable** 🔄
-- [ ] **RViz displays robot model, camera feed, and world correctly** 🔄
+- [x] **ROS master and Gazebo simulation launch without errors** ✅ COMPLETE
+- [x] **JetBot URDF loads and publishes `/cmd_vel` topic control** ✅ COMPLETE + UAT SUCCESS
+- [x] **Camera publishes to `/camera/image_raw` and `/camera/camera_info`** ✅ COMPLETE
+- [ ] **Golf balls are visible in camera feed and distinguishable** 🔄 PENDING WORLD CREATION
+- [x] **RViz displays robot model, camera feed, and world correctly** ✅ COMPLETE
 
 #### Files Created:
 ```
