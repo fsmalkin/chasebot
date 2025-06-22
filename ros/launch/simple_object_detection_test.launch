@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- ChaseBot Simple Object Detection Test Launch File -->
+  <!-- Tests basic object detection in simulation environment -->
+
+  <!-- Launch the simulation environment with golf ball -->
+  <include file="$(find chasebot_description)/launch/chasebot_simple_world.launch"/>
+
+  <!-- Object Detection Node -->
+  <node name="opencv_object_detector" pkg="chasebot_description" type="opencv_object_detection_test.py" output="screen">
+    <remap from="/camera/image_raw" to="/camera/image_raw"/>
+    <remap from="/object_detection" to="/object_detection"/>
+  </node>
+
+  <!-- Simple UAT Test Node -->
+  <node name="simple_object_detection_uat" pkg="chasebot_description" type="simple_object_detection_uat.py" output="screen"/>
+
+</launch>

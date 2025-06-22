@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- ChaseBot Vision-Based Navigation Launch File -->
+  <!-- Coordinates ball detection, navigation, and simulation -->
+
+  <!-- Launch the simulation environment with golf ball -->
+  <include file="$(find chasebot_description)/launch/chasebot_simple_world.launch"/>
+
+  <!-- Ball Detection Node -->
+  <node name="ball_detector" pkg="chasebot_description" type="ball_detector.py" output="screen">
+    <remap from="/camera/image_raw" to="/camera/image_raw"/>
+    <remap from="/ball_detection" to="/ball_detection"/>
+    <remap from="/ball_detection_debug" to="/ball_detection_debug"/>
+  </node>
+
+  <!-- Vision-Based Navigation Node -->
+  <node name="vision_ball_approach" pkg="chasebot_description" type="vision_ball_approach.py" output="screen">
+    <remap from="/ball_detection" to="/ball_detection"/>
+    <remap from="/cmd_vel" to="/cmd_vel"/>
+    <remap from="/chasebot/status" to="/chasebot/status"/>
+  </node>
+
+  <!-- Optional: RViz for visualization -->
+  <!-- Uncomment to launch RViz with camera view -->
+  <!--
+  <node name="rviz" pkg="rviz" type="rviz" args="-d $(find chasebot_description)/config/vision_debug.rviz" output="screen"/>
+  -->
+
+  <!-- Status monitoring (optional) -->
+  <node name="status_monitor" pkg="rostopic" type="rostopic" args="echo /chasebot/status" output="screen"/>
+
+</launch>

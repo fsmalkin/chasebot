@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- ChaseBot Super Simple Detection Test -->
+  <!-- Tests if we can detect ANYTHING in the camera feed -->
+
+  <!-- Launch the simulation environment with golf ball -->
+  <include file="$(find chasebot_description)/launch/chasebot_simple_world.launch"/>
+
+  <!-- Super Simple Object Detection Node -->
+  <node name="super_simple_detector" pkg="chasebot_description" type="super_simple_detector.py" output="screen">
+    <remap from="/camera/image_raw" to="/camera/image_raw"/>
+    <remap from="/object_detection" to="/object_detection"/>
+  </node>
+
+  <!-- Simple UAT Test Node -->
+  <node name="simple_object_detection_uat" pkg="chasebot_description" type="simple_object_detection_uat_py2.py" output="screen"/>
+
+</launch>
