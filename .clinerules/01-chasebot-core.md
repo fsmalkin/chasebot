@@ -31,7 +31,15 @@ ChaseBot is a ROS-based autonomous golf ball collection robot built on the JetBo
 - Implement proper hardware safety constraints and emergency stops
 - Validate all changes in simulation before hardware deployment
 
-### 5. Professional Standards
+### 5. Thin Slice Development
+- **Break down complex problems into very small, testable pieces**
+- Each iteration should have a single, clear UAT success criterion
+- Avoid building multiple features simultaneously - focus on one working piece at a time
+- Examples: Test package installation → Test basic launch → Test with camera → Test detection
+- Each slice should be independently demonstrable and valuable
+- Build incrementally: working foundation before adding complexity
+
+### 6. Professional Standards
 - Follow ROS naming conventions for nodes, topics, and parameters
 - Use catkin workspace structure with proper package organization
 - Implement proper error handling and diagnostics
@@ -39,11 +47,12 @@ ChaseBot is a ROS-based autonomous golf ball collection robot built on the JetBo
 
 ## Development Workflow
 1. **Plan** - Always understand the requirement and approach before coding
-2. **Simulate** - Test in Gazebo simulation first
-3. **Document** - Update relevant documentation
-4. **Validate** - Ensure ROS integration works properly
-5. **UAT** - Nothing is considered complete until User Acceptance Testing confirms it works as expected
-6. **Commit** - Use descriptive commit messages with proper scope
+2. **Slice** - Break the work into thin, testable slices with clear UAT criteria
+3. **Simulate** - Test in Gazebo simulation first
+4. **Document** - Update relevant documentation
+5. **Validate** - Ensure ROS integration works properly
+6. **UAT** - Nothing is considered complete until User Acceptance Testing confirms it works as expected
+7. **Commit** - Use descriptive commit messages with proper scope
 
 ## Definition of Done
 - **Code Complete**: Implementation finished and internally tested
