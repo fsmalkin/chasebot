@@ -10,8 +10,12 @@ ChaseBot is a ROS-based autonomous golf ball collection robot built on the JetBo
 - Prioritize proven, well-maintained packages with active communities (check GitHub stars, commits)
 - Look for packages that solve 80% of the problem rather than building from scratch
 - Examples: darknet_ros for object detection, move_base for navigation, opencv_apps for vision
+- **CRITICAL INSIGHT**: Prefer integrated solutions over manual component bridging
+  - Better: Single "YOLO object following" package
+  - Avoid: Manual YOLO → position → follower bridging
 - Custom development should only fill gaps that existing packages don't address
 - Document why existing solutions were chosen over custom implementation
+- **SUCCESS PATTERN**: This principle led to discovering darknet_ros and superior following packages
 
 ### 2. ROS-First Development
 - All functionality must be implemented as ROS nodes with proper topic/service interfaces

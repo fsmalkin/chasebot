@@ -6,53 +6,61 @@ ChaseBot is designed as a modular, ROS-based autonomous robot system for golf ba
 
 ## Core ROS Components
 
-### 1. Vision System (chasebot_vision package)
+### 1. Professional Object Detection System (darknet_ros package)
+- **Package**: darknet_ros (2.3k GitHub stars) - industry-standard YOLO implementation
 - **Input**: Camera feed via `/camera/image_raw` topic (sensor_msgs/Image)
-- **Processing**: OpenCV-based computer vision with cv_bridge integration
-- **Detection**: Golf ball identification using shape/color recognition
-- **Output**: Target detections published to `/ball_detections` topic (custom message type)
-- **Node**: `ball_detector_node` with configurable parameters
+- **Processing**: Pre-trained YOLO v2-tiny model with 80 object classes
+- **Detection**: Golf ball detected as "sports ball" class (43-60% confidence)
+- **Output**: Bounding boxes via `/darknet_ros/bounding_boxes` topic (darknet_ros_msgs/BoundingBoxes)
+- **Visualization**: Detection results on `/darknet_ros/detection_image` topic
 
-### 2. Navigation Subsystem (chasebot_navigation package)
-- **Interface**: ROS Navigation Stack integration (move_base)
-- **Input**: Target goals from `/ball_detections` and `/move_base_simple/goal`
-- **Output**: Motor commands via `/cmd_vel` topic (geometry_msgs/Twist) 
-- **Implementation**: Differential drive base controller with obstacle avoidance
-- **Planning**: Global and local path planning via ROS navigation stack
-- **Feedback**: Odometry and localization through AMCL or wheel encoders
+### 2. Proven Navigation System (ros_simple_follower package)
+- **Package**: ros_simple_follower (56 GitHub stars) - proven object following solution
+- **Input**: Object position via `/object_tracker/current_position` topic (geometry_msgs/PointStamped)
+- **Output**: Motor commands via `/cmd_vel` topic (geometry_msgs/Twist)
+- **Implementation**: Tested differential drive control with proportional steering
+- **Architecture**: Clean separation between detection and navigation
+- **Benefits**: No custom navigation code required - leverages proven solution
 
-### 3. Behavior Coordination (chasebot_behavior package)
-- **Purpose**: High-level task coordination and decision making
-- **Interface**: ROS action servers for tool abstraction (`FindBall.action`, `ApproachBall.action`, `ReturnHome.action`)
-- **Implementation**: State machine or behavior tree for task sequencing
-- **Integration**: Coordinates vision and navigation subsystems
-- **Scope**: Strategic planning and mission-level coordination
+### 3. YOLO-to-Position Bridge (chasebot_vision package)
+- **Purpose**: Convert YOLO bounding boxes to 3D position estimates
+- **Node**: `yolo_position_publisher.py` - minimal custom code
+- **Input**: `/darknet_ros/bounding_boxes` (darknet_ros_msgs/BoundingBoxes)
+- **Processing**: Filter "sports ball" detections, calculate position from bounding box center
+- **Output**: `/object_tracker/current_position` (geometry_msgs/PointStamped)
+- **Scope**: Thin interface layer between proven systems
 
-### 4. Hardware Interface (chasebot_bringup package)
-- **Purpose**: Hardware abstraction and system startup
-- **Components**: Launch files, configuration files, and hardware drivers
-- **Simulation**: Gazebo integration with JetBot URDF model
-- **Hardware**: JetBot motor control and camera interface via ROS
+### 4. System Integration (chasebot_bringup package)
+- **Purpose**: Launch file coordination and parameter management
+- **Components**: Integrated launch files combining all subsystems
+- **Simulation**: Gazebo integration with JetBot URDF model and ChaseBot world
+- **Architecture**: Modular design enabling independent testing of components
+- **Configuration**: Parameter files for simulation vs hardware deployment
 
 ## ROS Data Flow
 
 ```
-/camera/image_raw → Vision Node → /ball_detections → Behavior Node → /move_base_simple/goal
-     ↑                    ↓                             ↓                        ↓
-Camera Driver    /camera/camera_info          Action Feedback        Navigation Stack
-     ↑                    ↓                             ↓                        ↓
-Hardware Layer   Vision Diagnostics       /behavior_status         /cmd_vel → Motor Control
+/camera/image_raw → darknet_ros → /darknet_ros/bounding_boxes → yolo_position_publisher → /object_tracker/current_position
+     ↑                     ↓                                            ↓                            ↓
+Camera Driver    /darknet_ros/detection_image                Bridge Node Processing           ros_simple_follower
+     ↑                     ↓                                            ↓                            ↓
+Hardware Layer    Visual Confirmation                      Position Calculation              /cmd_vel → Motor Control
 ```
 
 ## ROS Topic Architecture
 
-### Core Topics
-- `/camera/image_raw` (sensor_msgs/Image) - Raw camera feed
+### Core Topics (New Architecture)
+- `/camera/image_raw` (sensor_msgs/Image) - Raw camera feed from robot
+- `/darknet_ros/bounding_boxes` (darknet_ros_msgs/BoundingBoxes) - YOLO detection results
+- `/darknet_ros/detection_image` (sensor_msgs/Image) - Visual detection overlay
+- `/object_tracker/current_position` (geometry_msgs/PointStamped) - Target position for follower
+- `/cmd_vel` (geometry_msgs/Twist) - Motor control commands to robot
+
+### Legacy Topics (For Reference)
 - `/camera/camera_info` (sensor_msgs/CameraInfo) - Camera calibration
-- `/ball_detections` (chasebot_msgs/BallDetectionArray) - Detected golf balls
-- `/cmd_vel` (geometry_msgs/Twist) - Motor control commands
-- `/odom` (nav_msgs/Odometry) - Robot odometry
-- `/move_base_simple/goal` (geometry_msgs/PoseStamped) - Navigation goals
+- `/ball_detections` (chasebot_msgs/BallDetectionArray) - Custom detection format (future)
+- `/odom` (nav_msgs/Odometry) - Robot odometry (future)
+- `/move_base_simple/goal` (geometry_msgs/PoseStamped) - Navigation goals (future)
 
 ### Diagnostic Topics
 - `/behavior_status` (chasebot_msgs/BehaviorStatus) - Current behavior state
