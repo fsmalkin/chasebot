@@ -53,11 +53,13 @@ A vision-based autonomous robot for collecting golf balls, built on the JetBot N
 
 ## 🛠️ Development Tools
 
+- **Development Environment**: VS Code with GitHub sync
 - **Simulation**: Webots/Gazebo + Python control scripts
 - **Vision**: OpenCV + lightweight object detection
 - **Control**: Python-based navigation and planning modules
-- **Development**: Jupyter notebooks for interactive testing
+- **Testing**: Jupyter notebooks for interactive analysis
 - **Deployment**: Direct Python scripts for hardware
+- **Version Control**: Git with continuous GitHub synchronization
 
 ## 📋 Next Steps
 

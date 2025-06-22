@@ -59,11 +59,12 @@ Camera Feed → Vision Processing → Target Detection → Navigation Commands �
 - **Power**: Portable battery pack
 
 ### Software Stack
-- **OS**: Ubuntu 18.04 (JetPack)
+- **OS**: Ubuntu 18.04 (JetPack) for hardware deployment
 - **Runtime**: Python 3.6+
 - **Vision**: OpenCV 4.x
 - **Simulation**: Webots or Gazebo
-- **Development**: Jupyter notebooks + VS Code
+- **Development**: VS Code with GitHub sync for all development
+- **Testing**: Local Python scripts + Jupyter notebooks for analysis
 
 ## Simulation Strategy
 
