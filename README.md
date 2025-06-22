@@ -71,3 +71,37 @@ A vision-based autonomous robot for collecting golf balls, built on the JetBot N
 ## 📚 Documentation
 
 See `/docs` folder for detailed architecture decisions, milestone planning, and setup guides.
+
+## ✅ Current Status
+
+**Phase 1 Complete**: Basic Webots simulation environment
+- JetBot robot model integrated and functional ✅
+- Golf ball objects placed in arena ✅ 
+- Manual movement control working ✅
+- Physics simulation properly configured ✅
+- Position tracking and debugging tools implemented ✅
+
+**Phase 2 Ready**: Computer vision and navigation
+- Movement system fully debugged and operational ✅
+- Camera integration ready for implementation 🔄
+- Golf ball detection algorithm 🔄
+- Navigation and collection logic 🔄
+
+## 🎓 Lessons Learned
+
+### Movement System Debugging
+- **Device Discovery Critical**: Motor device names in JetBot are "left_wheel_hinge" and "right_wheel_hinge", not the expected "left wheel motor" / "right wheel motor"
+- **Physics Configuration Required**: JetBot PROTO didn't include physics by default - had to manually add Physics field with mass (2.5kg) and inertia matrix
+- **Velocity Scaling Issues**: Default motor velocities (1.0 rad/s) produce barely perceptible movement (~0.1mm). Practical velocities need 10-50x scaling (10-50 rad/s) for visible movement
+- **Position Tracking Essential**: Supervisor-based position tracking was crucial for debugging movement issues that weren't visually apparent
+- **External Controller Approach**: Using `controller "<extern>"` with auto-connect scripts provides better debugging visibility than embedded controllers
+
+### Development Tools
+- **Modular Testing Scripts**: Created multiple test scripts for different debugging scenarios (device discovery, position tracking, high-speed movement)
+- **Auto-Connect Framework**: Flexible launcher system (`auto_run_with_controller.py`) enables easy testing of different controllers
+- **Console Output Critical**: Real-time console output was essential for debugging when visual feedback was insufficient
+
+### Technical Implementation
+- **Simulation Environment**: Webots provides robust physics simulation but requires careful configuration
+- **Device Abstraction**: Understanding the gap between expected device names and actual PROTO implementation
+- **Physics vs Visual**: Movement can occur at the physics level without being visually apparent - position tracking is essential

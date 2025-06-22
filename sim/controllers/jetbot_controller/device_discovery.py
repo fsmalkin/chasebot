@@ -4,7 +4,7 @@ Device Discovery Script for JetBot
 Helps identify correct device names in Webots
 """
 
-from controller import Robot
+from controller import Robot # type: ignore
 
 def discover_devices():
     """Discover all available devices on the robot"""

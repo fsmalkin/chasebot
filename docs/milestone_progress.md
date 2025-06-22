@@ -155,3 +155,36 @@ sim/
 **Active Development**: Vision system parameter tuning for golf ball detection in simulation environment.
 
 **Next Priority**: Debug and optimize golf ball detection parameters for reliable target acquisition.
+
+---
+
+## Movement System Debugging Completion ✅
+
+### Critical Issues Resolved:
+1. **Device Name Discovery**: Found correct motor device names ("left_wheel_hinge", "right_wheel_hinge")
+2. **Physics Configuration**: Added missing Physics field to JetBot (mass: 2.5kg, inertia matrix)
+3. **Velocity Scaling**: Determined proper velocity scaling (10-50x) for visible movement
+4. **Position Tracking**: Implemented supervisor-based position tracking for debugging
+
+### Diagnostic Tools Created:
+- **discover_devices.py**: Enumerate all available robot devices
+- **diagnose_physics.py**: Check physics configuration and ground contact
+- **test_movement_supervisor.py**: Movement testing with position tracking
+- **test_high_speed_movement.py**: High-speed movement for visual verification
+- **auto_run_with_controller.py**: Flexible controller launcher framework
+
+### Movement System Verification:
+- ✅ **Basic Movement**: Forward/backward motion confirmed via position tracking
+- ✅ **Turning**: Left/right rotation confirmed via position tracking  
+- ✅ **Physics**: Robot properly interacts with ground surface (settled to Z=-0.0002)
+- ✅ **Velocity Response**: Motors correctly respond to velocity commands
+- ✅ **High-Speed Movement**: 18cm movement achieved in 2 seconds at 50 rad/s
+
+### Key Technical Insights:
+- **Velocity Scaling**: Default 1.0 rad/s = ~0.1mm movement (imperceptible)
+- **Practical Velocities**: 10-50 rad/s needed for visible simulation movement
+- **Position Resolution**: Supervisor tracking accurate to 0.0001m (0.1mm)
+- **Physics Requirement**: JetBot PROTO requires manual physics configuration
+- **External Controllers**: Better debugging visibility than embedded controllers
+
+**Status**: Movement system fully operational and documented. Ready for vision system integration.

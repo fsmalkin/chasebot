@@ -152,7 +152,7 @@ class JetBotController:
             area = cv2.contourArea(contour)
             print(f"  Contour {i}: area={area}")
             
-            if area > 50 and area < 10000:  # More permissive area range
+            if area > 20 and area < 10000:  # Much more permissive area range
                 # Get bounding rectangle
                 x, y, w, h = cv2.boundingRect(contour)
                 
@@ -160,7 +160,7 @@ class JetBotController:
                 aspect_ratio = float(w) / h
                 print(f"  Contour {i}: bbox=({x},{y},{w},{h}), aspect_ratio={aspect_ratio:.2f}")
                 
-                if 0.5 <= aspect_ratio <= 2.0:  # More permissive aspect ratio
+                if 0.3 <= aspect_ratio <= 4.0:  # Much more permissive aspect ratio
                     center_x = x + w // 2
                     center_y = y + h // 2
                     golf_balls.append({

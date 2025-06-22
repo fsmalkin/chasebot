@@ -42,11 +42,25 @@ RectangleArena {
 }
 
 JetBot {
-  translation 0 0 0.02
+  translation 0 0 0
   rotation 0 0 1 0
   controller "<extern>"
   supervisor TRUE
   name "ChaseBot"
+  physics Physics {
+    density -1
+    mass 2.5
+    centerOfMass [
+      0 0 0
+    ]
+    inertiaMatrix [
+      0.1 0.1 0.1
+      0 0 0
+    ]
+  }
+  gps GPS {
+    name "gps"
+  }
 }
 
 # Golf Ball 1 - Directly in front of robot for immediate detection

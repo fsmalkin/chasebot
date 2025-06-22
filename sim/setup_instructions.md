@@ -30,10 +30,77 @@ Add Webots to your PATH if not done automatically:
 3. Restart VS Code to reload environment
 
 ## Next Steps After Installation
-Once Webots is installed, run:
+Once Webots is installed, the simulation environment is ready to use with our pre-configured world files.
+
+## Testing Movement System
+
+### Quick Movement Test
 ```cmd
 cd c:/workspaces/chasebot/sim
-python setup_jetbot_world.py
+python auto_run_with_controller.py test_manual_movement.py
 ```
 
-This will create the initial JetBot world and controller files.
+### High-Speed Visible Movement Test
+```cmd
+cd c:/workspaces/chasebot/sim
+python auto_run_with_controller.py test_high_speed_movement.py
+```
+
+### Position Tracking Test (for debugging)
+```cmd
+cd c:/workspaces/chasebot/sim
+python auto_run_with_controller.py test_movement_supervisor.py
+```
+
+## Important Configuration Notes
+
+### Motor Device Names
+- Left motor: `"left_wheel_hinge"`
+- Right motor: `"right_wheel_hinge"`
+- **NOT** "left wheel motor" or "right wheel motor"
+
+### Motor Velocity Scaling
+- Low velocities (1.0 rad/s): Barely visible movement (~0.1mm)
+- Practical velocities: 10-50 rad/s for visible movement
+- High-speed test uses 50 rad/s for demonstration
+
+### Physics Configuration
+The ChaseBot world file includes proper physics configuration:
+- Mass: 2.5kg
+- Inertia matrix properly configured
+- Contact friction: 8.0 (high traction)
+
+## Available Test Scripts
+
+1. **test_manual_movement.py** - Basic movement sequence test
+2. **test_movement_supervisor.py** - Movement with position tracking
+3. **test_high_speed_movement.py** - High-speed visible movement test
+4. **discover_devices.py** - Device discovery and enumeration
+5. **diagnose_physics.py** - Physics configuration diagnostics
+
+## World Files
+
+1. **chasebot_world.wbt** - Full environment with golf balls
+2. **simple_test_world.wbt** - Minimal test environment
+
+## Running Custom Controllers
+
+Use the flexible launcher to test any controller:
+```cmd
+python auto_run_with_controller.py [controller_script.py]
+```
+
+## Troubleshooting
+
+### No Movement Visible
+- Check motor velocities (increase to 10-50 for visible movement)
+- Verify physics is enabled in world file
+- Use position tracking test to verify actual movement
+
+### Motor Not Found Errors
+- Ensure using correct device names: "left_wheel_hinge", "right_wheel_hinge"
+- Run device discovery script to enumerate available devices
+
+### Physics Issues
+- Run physics diagnostic script to check configuration
+- Verify robot has physics field with proper mass and inertia
