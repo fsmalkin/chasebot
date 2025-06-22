@@ -1,65 +1,74 @@
 # ChaseBot - Golf Ball Collection Robot
 
-A vision-based autonomous robot for collecting golf balls, built on the JetBot Nano platform. This project follows a phase-based development approach, starting with simulation and progressing to hardware implementation.
+A ROS-based vision-guided autonomous robot for collecting golf balls, built on the JetBot Nano platform with the Robot Operating System. This project follows a phase-based development approach, starting with ROS simulation and progressing to hardware deployment.
 
 ## 🎯 Project Overview
 
 **Ultimate Goal**: Full-sized autonomous golf ball collection robot for driving ranges and golf courses.
 
-**Current POC**: Mini proof-of-concept focused on core golf ball acquisition behaviors using a JetBot Nano platform.
+**Current POC**: Mini proof-of-concept focused on core golf ball acquisition behaviors using a JetBot Nano platform with ROS navigation stack.
 
-**Phase 1 Focus**: Simulation environment setup to develop and test vision + control logic before hardware deployment.
+**Phase 1 Focus**: ROS + Gazebo simulation environment to develop and test vision + navigation logic before hardware deployment.
 
-**First Milestone**: End-to-end demo of acquiring a golf ball in view and navigating toward it.
+**First Milestone**: End-to-end ROS demo of detecting golf balls and autonomously navigating toward them using the navigation stack.
 
 ## ✅ Folder Structure
 
 ```
-/hardware      # BOM, wiring diagrams, JetBot setup notes
-/software      # Core control code (vision, navigation, reasoning)
-/sim           # Sim environment (JetBot models, Gazebo/Webots, etc.)
-/docs          # Architecture, decisions, milestone plans, setup guides
+/hardware      # BOM, wiring diagrams, JetBot + JetPack setup notes
+/software      # ROS packages (chasebot_vision, chasebot_navigation, chasebot_bringup)
+/sim          # Gazebo simulation (JetBot URDF, worlds, launch files)
+/docs         # Architecture, decisions, milestone plans, ROS setup guides
+/legacy_sim   # Previous Webots work (preserved for reference and lessons learned)
 ```
 
 ## 📌 Project Architecture Decisions
 
-* **Robot platform:** JetBot Mini with Jetson Nano 4GB and pre-mounted IMX219 camera
-* **Vision-only navigation:** No lidar, sonar, or encoders for now; rely on monocular visual input
-* **Navigation subsystem:** Exposes abstract commands like `turn(angle)`, `move_forward(distance)`, `acquire_target()`
-* **Reasoning layer:** Long-term vision to integrate an LLM or lightweight agent that issues structured commands (e.g., "navigate to ball and return to origin")
-* **Tool abstraction layer:** The reasoning layer will not micromanage coordinates; it will call general tools like `find_ball`, `approach_ball`, `return_home`
-* **Sensor input routing:** Shared vision feed accessible to both navigation system and higher-level controller
-* **Training-free principle:** Avoid model training; use lightweight CV + planning modules and optionally open-source models (YOLOv8, SAM, etc.)
+* **Robot platform:** JetBot Nano with Jetson Nano 4GB, IMX219 camera, and JetPack 4.6+ with ROS Melodic
+* **ROS-based navigation:** Leverage ROS Navigation Stack (`move_base`, `amcl`, `map_server`) instead of custom control
+* **Vision pipeline:** ROS nodes publishing detected targets to `/ball_detections` topic
+* **Hardware abstraction:** JetBot ROS packages handle motor control via `/cmd_vel` geometry_msgs/Twist
+* **Simulation platform:** Gazebo with JetBot URDF model for physics-accurate simulation
+* **Node architecture:** Modular ROS nodes (vision, navigation, behavior) communicating via topics/services
+* **Reasoning layer:** High-level ROS action server for task coordination (`find_ball`, `approach_ball`, `return_home`)
+* **Tool abstraction layer:** ROS services expose robot capabilities to reasoning layer
+* **Training-free principle:** Classical computer vision + ROS navigation, optionally enhanced with pre-trained models
 
-## 📈 Current Phase: Simulation Setup
+## 📈 Current Phase: ROS Setup & Migration
 
 **Objectives:**
-- Choose simulation environment (Webots, Gazebo, or JetBot Collab sim)
-- Implement basic simulated vision + mobility
-- Prove that vision loop can locate golf ball in frame and issue move commands
+- Migrate from Webots to Gazebo + ROS simulation environment  
+- Implement ROS node architecture for vision and navigation
+- Leverage JetBot ROS packages for hardware abstraction
+- Validate ROS navigation stack for golf ball collection task
 
 **Success Criteria:**
-- Simulated JetBot can detect golf ball in camera view
-- Navigation system can generate movement commands toward target
-- Complete vision-to-action loop demonstrates ball acquisition behavior
+- Gazebo simulation runs with JetBot URDF model
+- ROS nodes communicate properly via topics and services
+- Navigation stack can autonomously drive toward detected targets
+- Same ROS nodes work in simulation and on hardware
 
 ## 🚗 Target Hardware
 
-- **Robot**: NVIDIA JetBot Nano
-- **Board**: Jetson Nano 4GB
-- **Camera**: IMX219 160-degree FOV camera module
-- **Actuators**: Differential drive motors
-- **Power**: Portable battery pack
+- **Robot**: NVIDIA JetBot Nano with ROS integration
+- **Board**: Jetson Nano 4GB with JetPack 4.6+
+- **OS**: Ubuntu 18.04 with ROS Melodic pre-installed
+- **Camera**: IMX219 160-degree FOV camera module with CSI interface
+- **Actuators**: Differential drive motors controlled via ROS
+- **Sensors**: Optional IMU and wheel encoders for improved navigation
+- **Power**: Portable battery pack with power management
 
 ## 🛠️ Development Tools
 
-- **Development Environment**: VS Code with GitHub sync
-- **Simulation**: Webots/Gazebo + Python control scripts
-- **Vision**: OpenCV + lightweight object detection
-- **Control**: Python-based navigation and planning modules
-- **Testing**: Jupyter notebooks for interactive analysis
-- **Deployment**: Direct Python scripts for hardware
-- **Version Control**: Git with continuous GitHub synchronization
+- **Development Environment**: VS Code with ROS extensions and GitHub sync
+- **ROS Distribution**: ROS Melodic (compatible with JetPack 4.6)
+- **Simulation**: Gazebo + ROS Gazebo integration packages
+- **Vision**: OpenCV with cv_bridge for ROS integration
+- **Navigation**: ROS Navigation Stack (move_base, amcl, map_server)
+- **Build System**: Catkin workspace with package dependencies
+- **Testing**: ROS testing framework + RViz for visualization
+- **Deployment**: ROS launch files for coordinated node startup
+- **Version Control**: Git with ROS package structure
 
 ## 📋 Next Steps
 
@@ -74,34 +83,44 @@ See `/docs` folder for detailed architecture decisions, milestone planning, and 
 
 ## ✅ Current Status
 
-**Phase 1 Complete**: Basic Webots simulation environment
-- JetBot robot model integrated and functional ✅
-- Golf ball objects placed in arena ✅ 
-- Manual movement control working ✅
-- Physics simulation properly configured ✅
-- Position tracking and debugging tools implemented ✅
+**Phase 1 Migration**: From Webots to ROS + Gazebo
+- ✅ **Webots Foundation Complete**: Successful proof-of-concept with motor control and physics
+- ✅ **ROS Architecture Designed**: Node-based approach with navigation stack integration
+- 🔄 **Gazebo Environment Setup**: JetBot URDF model and simulation world
+- 🔄 **ROS Package Structure**: chasebot_vision, chasebot_navigation, chasebot_bringup packages
+- 🔄 **Navigation Stack Integration**: move_base configuration for differential drive
 
-**Phase 2 Ready**: Computer vision and navigation
-- Movement system fully debugged and operational ✅
-- Camera integration ready for implementation 🔄
-- Golf ball detection algorithm 🔄
-- Navigation and collection logic 🔄
+**Phase 2 Ready**: ROS-based vision and navigation
+- ✅ **Movement Principles Proven**: Webots work validates navigation feasibility
+- 🔄 **ROS Vision Node**: Golf ball detection publishing to `/ball_detections`
+- 🔄 **ROS Navigation Integration**: `/cmd_vel` control via navigation stack
+- 🔄 **Hardware Deployment**: JetBot + JetPack + ROS Melodic setup
 
-## 🎓 Lessons Learned
+## 🎓 Lessons Learned & ROS Migration Insights
 
-### Movement System Debugging
-- **Device Discovery Critical**: Motor device names in JetBot are "left_wheel_hinge" and "right_wheel_hinge", not the expected "left wheel motor" / "right wheel motor"
-- **Physics Configuration Required**: JetBot PROTO didn't include physics by default - had to manually add Physics field with mass (2.5kg) and inertia matrix
-- **Velocity Scaling Issues**: Default motor velocities (1.0 rad/s) produce barely perceptible movement (~0.1mm). Practical velocities need 10-50x scaling (10-50 rad/s) for visible movement
-- **Position Tracking Essential**: Supervisor-based position tracking was crucial for debugging movement issues that weren't visually apparent
-- **External Controller Approach**: Using `controller "<extern>"` with auto-connect scripts provides better debugging visibility than embedded controllers
+### Webots Foundation (Preserved Knowledge)
+- **Device Discovery**: Understanding hardware abstraction layer requirements
+- **Physics Configuration**: Importance of proper robot modeling (mass, inertia, collision)
+- **Velocity Scaling**: Real-world vs simulation velocity mapping principles
+- **Position Tracking**: Value of ground truth for debugging navigation algorithms
+- **Modular Testing**: Benefits of incremental testing and validation
 
-### Development Tools
-- **Modular Testing Scripts**: Created multiple test scripts for different debugging scenarios (device discovery, position tracking, high-speed movement)
-- **Auto-Connect Framework**: Flexible launcher system (`auto_run_with_controller.py`) enables easy testing of different controllers
-- **Console Output Critical**: Real-time console output was essential for debugging when visual feedback was insufficient
+### ROS Migration Benefits
+- **Hardware Abstraction**: ROS handles device discovery and motor control complexity
+- **Navigation Stack**: Professional-grade path planning and obstacle avoidance
+- **Simulation Consistency**: Gazebo + ROS provides better sim-to-hardware transfer
+- **Community Support**: Extensive JetBot ROS ecosystem and documentation
+- **Debugging Tools**: RViz, rostopic, rosbag for advanced debugging capabilities
 
-### Technical Implementation
-- **Simulation Environment**: Webots provides robust physics simulation but requires careful configuration
-- **Device Abstraction**: Understanding the gap between expected device names and actual PROTO implementation
-- **Physics vs Visual**: Movement can occur at the physics level without being visually apparent - position tracking is essential
+### Architecture Improvements
+- **Topic-Based Communication**: Cleaner separation between vision, navigation, and control
+- **Launch File Coordination**: Systematic startup and parameter management
+- **Service-Based Tools**: Standardized interfaces for high-level reasoning layer
+- **Configuration Management**: ROS parameter server for tuning and deployment
+- **Hardware Independence**: Same nodes run on simulation and physical robot
+
+### Development Workflow
+- **Catkin Workspace**: Structured development environment with dependency management
+- **Package Organization**: Logical separation of concerns (vision, navigation, behavior)
+- **Testing Framework**: ROS testing tools and simulation validation
+- **Deployment Pipeline**: Launch files enable consistent multi-node deployment

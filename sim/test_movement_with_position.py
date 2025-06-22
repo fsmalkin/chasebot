@@ -4,7 +4,7 @@ Movement Test with Position Tracking
 Shows actual robot position to verify movement
 """
 
-from controller import Robot, Motor, GPS
+from controller import Robot, Motor, GPS # type: ignore
 import time
 
 def main():
@@ -45,7 +45,7 @@ def main():
     # Try supervisor functions for position
     supervisor_node = None
     try:
-        from controller import Supervisor
+        from controller import Supervisor # type: ignore
         if hasattr(robot, 'getSelf'):
             supervisor_node = robot.getSelf()
             print("Supervisor mode available")

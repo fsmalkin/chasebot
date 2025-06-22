@@ -4,7 +4,7 @@ Physics Diagnostic Script
 Check robot physics configuration and ground contact
 """
 
-from controller import Robot, Supervisor
+from controller import Robot, Supervisor # type: ignore
 
 def main():
     # Initialize robot as supervisor to access physics info

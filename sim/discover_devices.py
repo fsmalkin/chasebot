@@ -4,7 +4,7 @@ Device Discovery Script
 Find all available devices on the JetBot
 """
 
-from controller import Robot
+from controller import Robot # type: ignore
 
 def main():
     # Initialize robot

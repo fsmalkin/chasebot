@@ -1,36 +1,76 @@
-# ChaseBot Architecture
+# ChaseBot ROS Architecture
 
 ## System Overview
 
-ChaseBot is designed as a modular, vision-based autonomous robot system for golf ball collection. The architecture emphasizes abstraction layers to enable both simulation development and hardware deployment.
+ChaseBot is designed as a modular, ROS-based autonomous robot system for golf ball collection. The architecture leverages the Robot Operating System (ROS) for standardized communication, navigation, and hardware abstraction, enabling seamless development from simulation to hardware deployment.
 
-## Core Components
+## Core ROS Components
 
-### 1. Vision System
-- **Input**: Monocular camera feed (IMX219 160° FOV)
-- **Processing**: OpenCV-based computer vision pipeline
+### 1. Vision System (chasebot_vision package)
+- **Input**: Camera feed via `/camera/image_raw` topic (sensor_msgs/Image)
+- **Processing**: OpenCV-based computer vision with cv_bridge integration
 - **Detection**: Golf ball identification using shape/color recognition
-- **Output**: Target positions and confidence scores
+- **Output**: Target detections published to `/ball_detections` topic (custom message type)
+- **Node**: `ball_detector_node` with configurable parameters
 
-### 2. Navigation Subsystem
-- **Interface**: Abstract movement commands (`turn(angle)`, `move_forward(distance)`, `acquire_target()`)
-- **Implementation**: Differential drive motor control
-- **Planning**: Reactive navigation toward detected targets
-- **Feedback**: Vision-based position estimation
+### 2. Navigation Subsystem (chasebot_navigation package)
+- **Interface**: ROS Navigation Stack integration (move_base)
+- **Input**: Target goals from `/ball_detections` and `/move_base_simple/goal`
+- **Output**: Motor commands via `/cmd_vel` topic (geometry_msgs/Twist) 
+- **Implementation**: Differential drive base controller with obstacle avoidance
+- **Planning**: Global and local path planning via ROS navigation stack
+- **Feedback**: Odometry and localization through AMCL or wheel encoders
 
-### 3. Reasoning Layer (Future)
-- **Purpose**: High-level decision making and task coordination
-- **Interface**: Tool-based abstraction (`find_ball`, `approach_ball`, `return_home`)
-- **Implementation**: LLM or scripted planner
-- **Scope**: Strategic planning, not micro-coordination
+### 3. Behavior Coordination (chasebot_behavior package)
+- **Purpose**: High-level task coordination and decision making
+- **Interface**: ROS action servers for tool abstraction (`FindBall.action`, `ApproachBall.action`, `ReturnHome.action`)
+- **Implementation**: State machine or behavior tree for task sequencing
+- **Integration**: Coordinates vision and navigation subsystems
+- **Scope**: Strategic planning and mission-level coordination
 
-## Data Flow
+### 4. Hardware Interface (chasebot_bringup package)
+- **Purpose**: Hardware abstraction and system startup
+- **Components**: Launch files, configuration files, and hardware drivers
+- **Simulation**: Gazebo integration with JetBot URDF model
+- **Hardware**: JetBot motor control and camera interface via ROS
+
+## ROS Data Flow
 
 ```
-Camera Feed → Vision Processing → Target Detection → Navigation Commands → Motor Control
-     ↑                                      ↓
-     └────── Shared Feed ←────────── Reasoning Layer
+/camera/image_raw → Vision Node → /ball_detections → Behavior Node → /move_base_simple/goal
+     ↑                    ↓                             ↓                        ↓
+Camera Driver    /camera/camera_info          Action Feedback        Navigation Stack
+     ↑                    ↓                             ↓                        ↓
+Hardware Layer   Vision Diagnostics       /behavior_status         /cmd_vel → Motor Control
 ```
+
+## ROS Topic Architecture
+
+### Core Topics
+- `/camera/image_raw` (sensor_msgs/Image) - Raw camera feed
+- `/camera/camera_info` (sensor_msgs/CameraInfo) - Camera calibration
+- `/ball_detections` (chasebot_msgs/BallDetectionArray) - Detected golf balls
+- `/cmd_vel` (geometry_msgs/Twist) - Motor control commands
+- `/odom` (nav_msgs/Odometry) - Robot odometry
+- `/move_base_simple/goal` (geometry_msgs/PoseStamped) - Navigation goals
+
+### Diagnostic Topics
+- `/behavior_status` (chasebot_msgs/BehaviorStatus) - Current behavior state
+- `/vision_diagnostics` (diagnostic_msgs/DiagnosticArray) - Vision system health
+- `/navigation_diagnostics` (diagnostic_msgs/DiagnosticArray) - Navigation status
+
+## ROS Service Architecture
+
+### Behavior Services
+- `/find_ball` (chasebot_srvs/FindBall) - Initiate ball search behavior
+- `/approach_ball` (chasebot_srvs/ApproachBall) - Navigate to specific ball
+- `/return_home` (chasebot_srvs/ReturnHome) - Return to starting position
+- `/emergency_stop` (std_srvs/Trigger) - Immediate stop command
+
+### Configuration Services
+- `/set_vision_params` (dynamic_reconfigure) - Adjust detection parameters
+- `/set_nav_params` (dynamic_reconfigure) - Tune navigation behavior
+- `/calibrate_camera` (chasebot_srvs/CalibrateCamera) - Camera calibration routine
 
 ## Key Design Decisions
 

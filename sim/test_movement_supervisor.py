@@ -4,7 +4,7 @@ Movement Test with Supervisor Position Tracking
 Uses supervisor functionality to track robot position
 """
 
-from controller import Supervisor
+from controller import Supervisor # type: ignore
 
 def main():
     # Initialize robot as supervisor

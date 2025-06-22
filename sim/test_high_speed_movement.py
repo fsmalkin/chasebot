@@ -4,7 +4,7 @@ High Speed Movement Test
 Test with much higher velocities to get visible movement
 """
 
-from controller import Supervisor
+from controller import Supervisor # type: ignore
 
 def main():
     # Initialize robot as supervisor
