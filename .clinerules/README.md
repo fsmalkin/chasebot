@@ -26,6 +26,15 @@ Memory Bank integration instructions:
 - Context preservation commands
 - Session continuity best practices
 
+### 04-environment-management.md
+Environment management for WSL2 + ROS development:
+- Session initialization protocols
+- WSL2 and ROS process management
+- File synchronization between Windows and WSL2
+- Python compatibility requirements
+- User interaction best practices
+- Environment troubleshooting patterns
+
 ### README.md (this file)
 Overview and usage instructions for the rules system.
 
@@ -68,10 +77,11 @@ The rules work together with the `/memory-bank/` system:
 ## File Structure
 ```
 .clinerules/
-├── README.md              # This overview file
-├── 01-chasebot-core.md    # Core project principles
-├── 02-ros-standards.md    # ROS development standards
-└── 03-memory-bank.md      # Memory bank integration
+├── README.md                    # This overview file
+├── 01-chasebot-core.md          # Core project principles
+├── 02-ros-standards.md          # ROS development standards
+├── 03-memory-bank.md            # Memory bank integration
+└── 04-environment-management.md # WSL2 + ROS environment management
 ```
 
 These rules ensure ChaseBot development maintains professional standards while preserving the flexibility to adapt and improve over time.
