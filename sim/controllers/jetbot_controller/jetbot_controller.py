@@ -40,11 +40,11 @@ class JetBotController:
             if device is not None:
                 self.camera = device
                 self.camera.enable(self.timestep)
-                print(f"✅ Camera found: '{name}'")
+                print(f"[OK] Camera found: '{name}'")
                 break
         
         if self.camera is None:
-            print("❌ No camera found")
+            print("[ERROR] No camera found")
         
         # Try to find motors
         motor_pairs = [
@@ -69,7 +69,7 @@ class JetBotController:
             if left_device is not None and right_device is not None:
                 self.left_motor = left_device
                 self.right_motor = right_device
-                print(f"✅ Motors found: '{left_name}', '{right_name}'")
+                print(f"[OK] Motors found: '{left_name}', '{right_name}'")
                 
                 # Set motors to velocity control
                 try:
@@ -77,13 +77,13 @@ class JetBotController:
                     self.right_motor.setPosition(float('inf'))
                     self.left_motor.setVelocity(0.0)
                     self.right_motor.setVelocity(0.0)
-                    print("✅ Motors configured for velocity control")
+                    print("[OK] Motors configured for velocity control")
                 except Exception as e:
-                    print(f"⚠️ Motor configuration error: {e}")
+                    print(f"[WARNING] Motor configuration error: {e}")
                 break
         
         if self.left_motor is None or self.right_motor is None:
-            print("❌ Motors not found")
+            print("[ERROR] Motors not found")
             
         # List all devices for debugging
         print("\n=== All Devices ===")
@@ -118,38 +118,49 @@ class JetBotController:
     def detect_golf_balls(self, image):
         """Detect golf balls in camera image using simple color/shape detection"""
         if image is None:
+            print("[ERROR] No image received from camera")
             return []
+        
+        print(f"[CAMERA] Image shape: {image.shape}, dtype: {image.dtype}")
         
         # Convert to HSV for better color detection
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
         
-        # Define white color range for golf balls
-        # Golf balls appear white/light colored
-        lower_white = np.array([0, 0, 200])
-        upper_white = np.array([180, 30, 255])
+        # Define white color range for golf balls - Make more permissive
+        lower_white = np.array([0, 0, 150])  # Lowered brightness threshold
+        upper_white = np.array([180, 50, 255])  # Increased saturation tolerance
         
         # Create mask for white objects
         mask = cv2.inRange(hsv, lower_white, upper_white)
         
+        # Debug: Check how many white pixels we found
+        white_pixels = cv2.countNonZero(mask)
+        print(f"[VISION] White pixels found: {white_pixels}")
+        
         # Apply morphological operations to clean up mask
-        kernel = np.ones((5,5), np.uint8)
+        kernel = np.ones((3,3), np.uint8)  # Smaller kernel
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
         
         # Find contours
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        print(f"[VISION] Found {len(contours)} contours")
         
         golf_balls = []
-        for contour in contours:
+        for i, contour in enumerate(contours):
             # Filter by area (golf balls should be reasonably sized)
             area = cv2.contourArea(contour)
-            if area > 100 and area < 5000:  # Adjust based on testing
+            print(f"  Contour {i}: area={area}")
+            
+            if area > 50 and area < 10000:  # More permissive area range
                 # Get bounding rectangle
                 x, y, w, h = cv2.boundingRect(contour)
                 
                 # Check if shape is roughly circular (aspect ratio close to 1)
                 aspect_ratio = float(w) / h
-                if 0.7 <= aspect_ratio <= 1.3:
+                print(f"  Contour {i}: bbox=({x},{y},{w},{h}), aspect_ratio={aspect_ratio:.2f}")
+                
+                if 0.5 <= aspect_ratio <= 2.0:  # More permissive aspect ratio
                     center_x = x + w // 2
                     center_y = y + h // 2
                     golf_balls.append({
@@ -157,7 +168,13 @@ class JetBotController:
                         'area': area,
                         'bbox': (x, y, w, h)
                     })
+                    print(f"  [FOUND] Golf ball candidate: center=({center_x},{center_y}), area={area}")
+                else:
+                    print(f"  [REJECT] Aspect ratio {aspect_ratio:.2f} not circular enough")
+            else:
+                print(f"  [REJECT] Area {area} out of range [50, 10000]")
         
+        print(f"[RESULT] Total golf balls detected: {len(golf_balls)}")
         return golf_balls
     
     def calculate_movement(self, target_center, image_width):

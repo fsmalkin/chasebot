@@ -49,9 +49,9 @@ JetBot {
   name "ChaseBot"
 }
 
-# Golf Ball 1
+# Golf Ball 1 - Directly in front of robot for immediate detection
 Solid {
-  translation 1.5 0.5 0.02
+  translation 0.5 0 0.02
   children [
     Shape {
       appearance PBRAppearance {
