@@ -1,7 +1,7 @@
 # ChaseBot Active Context
 
 ## Current Work Focus
-**PROFESSIONAL YOLO OBJECT DETECTION BREAKTHROUGH ACHIEVED** - Upgraded from basic OpenCV detection to industry-standard YOLO system using existing darknet_ros package! Golf ball detection working perfectly with bounding boxes and professional ROS integration. Ready for vision-guided navigation implementation.
+**PRAGMATIC ARCHITECTURE BREAKTHROUGH** - Discovered superior approach combining proven YOLO detection with simple iterative node development. Ready to implement simple topic-based nodes that evolve into sophisticated coordination without throwaway work. Focus: Navigate to Target milestone with gsotirchos/ball-chaser-bot pattern.
 
 ## Recent Changes (2025-06-22)
 ### PARADIGM SHIFT: Professional Object Detection with YOLO ✅
@@ -31,41 +31,49 @@
    - ✅ Visual confirmation of robust object detection working in real-time
 
 ## Next Steps (Immediate Priorities)
-### Phase 2: Integrated Object Following Solutions ⏳ UPDATED PRIORITY
-1. **"Search Existing Solutions First" BREAKTHROUGH - Integrated Packages Discovery**
-   - ✅ Discovered that manual bridging (YOLO → position → follower) was reinventing the wheel
-   - ✅ Found superior integrated solutions:
-     * **robust_people_follower** (29 stars) - complete person following for mobile robots
-     * **YOLOv8-based robot followers** - direct YOLO detection to robot commands
-     * **Monocular depth estimation packages** - proper 3D distance from single camera
-   - ✅ Key insight: Need integrated "YOLO object following" packages, not separate detection/navigation
+### Phase 1: Simple Node Implementation (Current Milestone: Navigate to Target)
+1. **Three Simple Nodes Approach** ⏳ CURRENT PRIORITY
+   - Implement `target_selector_node`: YOLO bounding boxes → best target selection
+   - Implement `approach_controller_node`: target position → motor control (ball-chaser-bot pattern)
+   - Implement `state_monitor_node`: system state tracking for debugging
+   - All nodes designed to become primitive actions in future coordination layer
 
-2. **YOLO Integration SUCCESS with Lessons Learned** 
-   - ✅ Successfully created working YOLO-to-position bridge (`yolo_position_publisher.py`)
-   - ✅ Proved data flow works: YOLO detections → position estimates → robot movement
-   - ✅ Robot responds to ball detection and moves (validates core integration)
-   - ⚠️ Control issue discovered: robot circles left instead of approaching ball
-   - 🎯 Root cause: Fixed distance assumption (1.0m) and simple turning logic
+2. **gsotirchos/ball-chaser-bot Integration Strategy**
+   - ✅ Identified proven OpenCV ball following with 4 GitHub stars
+   - ✅ Service-based architecture: `drive_bot` + `process_image_opencv` pattern
+   - ✅ Can adapt vision processing to use our YOLO detections instead of OpenCV
+   - Strategy: Replace OpenCV ball detection with YOLO "sports ball" detection
 
-3. **Working Integration Components**
-   - ✅ YOLO detection: Golf ball consistently detected as "sports ball" (40-53% confidence)
-   - ✅ Position conversion: Bridge node successfully converts bounding boxes to 3D positions
-   - ✅ Robot control: Robot responds to position data and moves toward detected object
-   - ✅ Launch system: Complete integrated system launches successfully
-   - ✅ Proof of concept: All components communicate correctly via ROS topics
+3. **Implementation Sequence (Zero Throwaway Work)**
+   - Start with simple topic-based nodes for immediate progress
+   - Each node becomes reusable primitive action later
+   - No complex coordination until simple following works
+   - Natural evolution path to SMACH states or BehaviorTree.CPP when needed
 
-4. **Next Implementation Strategy: Integrated Solutions**
-   - Replace manual bridge with integrated object following package
-   - Research specific "YOLO mobile robot following" packages
-   - Consider adapting robust_people_follower for "sports ball" instead of people
-   - Or implement proper distance estimation from bounding box size using proven algorithms
+4. **YOLO Detection Foundation (COMPLETE)**
+   - ✅ darknet_ros working: Golf balls detected as "sports ball" (40-60% confidence)
+   - ✅ Real-time bounding boxes with visual confirmation
+   - ✅ Professional ROS integration with `/darknet_ros/bounding_boxes` topic
+   - Ready to feed into target_selector_node
+
+5. **Future Architecture Evolution Path**
+   - **Phase 1**: Simple nodes (current) → working robot following
+   - **Phase 2**: Coordination layer when complexity demands it
+   - **Phase 3**: LLM integration for "collect ball" → primitive action decomposition
 
 ## Active Decisions & Considerations
 ### Architecture Choices
-- **ROS Navigation Stack**: Chosen over custom control for professional robustness
+- **Iterative Development**: Simple nodes first, evolve to coordination without throwaway work
+- **Proven Patterns**: Adapt gsotirchos/ball-chaser-bot approach with YOLO detection
 - **Gazebo Simulation**: Selected over Webots for better ROS integration
 - **Python Implementation**: Maintaining Python for ROS Melodic compatibility
-- **Modular Package Design**: Separate packages for vision, navigation, behavior
+- **Future LLM Ready**: Architecture designed for eventual task decomposition
+
+### Implementation Philosophy
+- **Start Simple**: Basic topic/service nodes for immediate progress
+- **Zero Throwaway**: Each simple node becomes primitive action later
+- **Unblock Progress**: Focus on working robot behavior over architectural perfection
+- **Proven Solutions**: Leverage ball-chaser-bot pattern instead of custom control
 
 ### Key Technical Patterns
 - **Hardware Abstraction**: Same nodes work in simulation and hardware
@@ -88,13 +96,13 @@
 
 ## Current State Summary
 - ✅ **Foundation Complete**: Webots proof-of-concept successfully validated
-- ✅ **Architecture Designed**: Comprehensive ROS system architecture documented
-- ✅ **Documentation Updated**: All project docs reflect current success state
-- ✅ **ROS Environment Setup**: ROS Melodic + Gazebo 9 installed and validated
-- ✅ **JetBot URDF Model**: ROS integration complete with enhanced physics - UAT PASSED
-- ✅ **ChaseBot World Environment**: Simple world with golf ball created and tested
-- ✅ **Navigation Behavior**: Time-based ball approach working with physical contact
-- ⏳ **Next Priority**: Vision-based ball detection and advanced navigation
+- ✅ **YOLO Detection System**: darknet_ros working with golf ball detection
+- ✅ **Architecture Designed**: Pragmatic iterative approach documented
+- ✅ **Pre-Built Solutions Found**: gsotirchos/ball-chaser-bot identified for adaptation
+- ✅ **ROS Environment**: ROS Melodic + Gazebo 9 + darknet_ros functional
+- ✅ **JetBot URDF Model**: ROS integration complete with enhanced physics
+- ✅ **ChaseBot World**: Simple environment with golf ball created and tested
+- ⏳ **Current Milestone**: Implement three simple nodes for navigate-to-target behavior
 
 ## Working Principles
 1. **Simulation-First**: All functionality validated in Gazebo before hardware

@@ -2,140 +2,170 @@
 
 ## System Overview
 
-ChaseBot is designed as a modular, ROS-based autonomous robot system for golf ball collection. The architecture leverages the Robot Operating System (ROS) for standardized communication, navigation, and hardware abstraction, enabling seamless development from simulation to hardware deployment.
+ChaseBot is designed as a modular, ROS-based autonomous robot system for golf ball collection. The architecture follows an **iterative development approach** - starting with simple topic-based nodes that can evolve into more sophisticated behavior coordination without throwaway work.
 
-## Core ROS Components
+## Development Philosophy
 
-### 1. Professional Object Detection System (darknet_ros package)
+### Pragmatic Iteration
+- **Start Simple**: Basic topic/service nodes for immediate progress
+- **Evolve Naturally**: Each simple node becomes a reusable primitive action
+- **Zero Throwaway**: All code remains useful as system grows in complexity
+- **Unblock Progress**: Focus on working robot behavior over architectural perfection
+
+### Future LLM Integration Path
+The architecture is designed to eventually support LLM-driven task decomposition:
+```
+"Collect Ball" → acquire_target + approach_object + engage_ball + push_to_location
+```
+
+Current simple nodes will become the primitive actions for this higher-level coordination.
+
+## Current Architecture (Milestone: Navigate to Target)
+
+### 1. Object Detection System (darknet_ros)
 - **Package**: darknet_ros (2.3k GitHub stars) - industry-standard YOLO implementation
 - **Input**: Camera feed via `/camera/image_raw` topic (sensor_msgs/Image)
-- **Processing**: Pre-trained YOLO v2-tiny model with 80 object classes
-- **Detection**: Golf ball detected as "sports ball" class (43-60% confidence)
+- **Processing**: Pre-trained YOLO v2-tiny model detecting golf balls as "sports ball" class
 - **Output**: Bounding boxes via `/darknet_ros/bounding_boxes` topic (darknet_ros_msgs/BoundingBoxes)
 - **Visualization**: Detection results on `/darknet_ros/detection_image` topic
 
-### 2. Proven Navigation System (ros_simple_follower package)
-- **Package**: ros_simple_follower (56 GitHub stars) - proven object following solution
-- **Input**: Object position via `/object_tracker/current_position` topic (geometry_msgs/PointStamped)
-- **Output**: Motor commands via `/cmd_vel` topic (geometry_msgs/Twist)
-- **Implementation**: Tested differential drive control with proportional steering
-- **Architecture**: Clean separation between detection and navigation
-- **Benefits**: No custom navigation code required - leverages proven solution
-
-### 3. YOLO-to-Position Bridge (chasebot_vision package)
-- **Purpose**: Convert YOLO bounding boxes to 3D position estimates
-- **Node**: `yolo_position_publisher.py` - minimal custom code
+### 2. Target Selection Node (chasebot_navigation)
+- **Node**: `target_selector_node` - simple custom node
 - **Input**: `/darknet_ros/bounding_boxes` (darknet_ros_msgs/BoundingBoxes)
-- **Processing**: Filter "sports ball" detections, calculate position from bounding box center
-- **Output**: `/object_tracker/current_position` (geometry_msgs/PointStamped)
-- **Scope**: Thin interface layer between proven systems
+- **Processing**: Filter "sports ball" detections, select best target (closest/largest)
+- **Output**: `/target_position` (geometry_msgs/PointStamped)
+- **Logic**: Simple heuristics for target prioritization
 
-### 4. System Integration (chasebot_bringup package)
-- **Purpose**: Launch file coordination and parameter management
-- **Components**: Integrated launch files combining all subsystems
-- **Simulation**: Gazebo integration with JetBot URDF model and ChaseBot world
-- **Architecture**: Modular design enabling independent testing of components
-- **Configuration**: Parameter files for simulation vs hardware deployment
+### 3. Approach Controller Node (chasebot_navigation)
+- **Node**: `approach_controller_node` - adapted from ball-chaser-bot pattern
+- **Input**: `/target_position` (geometry_msgs/PointStamped)
+- **Processing**: Proportional control algorithm for differential drive
+- **Output**: `/cmd_vel` (geometry_msgs/Twist)
+- **Implementation**: Based on proven gsotirchos/ball-chaser-bot approach
 
-## ROS Data Flow
+### 4. State Monitor Node (chasebot_navigation)
+- **Node**: `state_monitor_node` - simple status tracking
+- **Input**: `/target_position`, `/cmd_vel`
+- **Processing**: Track system state for debugging and future coordination
+- **Output**: `/approach_status` (std_msgs/String)
+- **States**: "searching", "approaching", "reached", "lost_target"
+
+## ROS Data Flow (Current Implementation)
 
 ```
-/camera/image_raw → darknet_ros → /darknet_ros/bounding_boxes → yolo_position_publisher → /object_tracker/current_position
-     ↑                     ↓                                            ↓                            ↓
-Camera Driver    /darknet_ros/detection_image                Bridge Node Processing           ros_simple_follower
-     ↑                     ↓                                            ↓                            ↓
-Hardware Layer    Visual Confirmation                      Position Calculation              /cmd_vel → Motor Control
+/camera/image_raw → darknet_ros → /darknet_ros/bounding_boxes → target_selector_node → /target_position
+     ↑                     ↓                                            ↓                        ↓
+Camera Driver    /darknet_ros/detection_image              Target Selection Logic    approach_controller_node
+     ↑                     ↓                                            ↓                        ↓
+Hardware Layer    Visual Confirmation                     Best Target Position            /cmd_vel → Motor Control
+                                                                   ↓
+                                                          state_monitor_node → /approach_status
 ```
 
 ## ROS Topic Architecture
 
-### Core Topics (New Architecture)
+### Core Topics (Current Milestone)
 - `/camera/image_raw` (sensor_msgs/Image) - Raw camera feed from robot
 - `/darknet_ros/bounding_boxes` (darknet_ros_msgs/BoundingBoxes) - YOLO detection results
 - `/darknet_ros/detection_image` (sensor_msgs/Image) - Visual detection overlay
-- `/object_tracker/current_position` (geometry_msgs/PointStamped) - Target position for follower
+- `/target_position` (geometry_msgs/PointStamped) - Selected target for approach
 - `/cmd_vel` (geometry_msgs/Twist) - Motor control commands to robot
+- `/approach_status` (std_msgs/String) - System state for monitoring
 
-### Legacy Topics (For Reference)
-- `/camera/camera_info` (sensor_msgs/CameraInfo) - Camera calibration
-- `/ball_detections` (chasebot_msgs/BallDetectionArray) - Custom detection format (future)
-- `/odom` (nav_msgs/Odometry) - Robot odometry (future)
-- `/move_base_simple/goal` (geometry_msgs/PoseStamped) - Navigation goals (future)
+### Future Evolution Topics
+- `/ball_detections` (chasebot_msgs/BallDetectionArray) - Rich detection format
+- `/odom` (nav_msgs/Odometry) - Robot odometry for path planning
+- `/move_base_simple/goal` (geometry_msgs/PoseStamped) - Navigation goals
 
-### Diagnostic Topics
-- `/behavior_status` (chasebot_msgs/BehaviorStatus) - Current behavior state
-- `/vision_diagnostics` (diagnostic_msgs/DiagnosticArray) - Vision system health
-- `/navigation_diagnostics` (diagnostic_msgs/DiagnosticArray) - Navigation status
+## Evolution Path (No Throwaway Work)
 
-## ROS Service Architecture
+### Phase 1: Simple Nodes (Current)
+```python
+# Each node is standalone and testable
+target_selector_node      # → becomes "acquire_target" action
+approach_controller_node  # → becomes "approach_object" action  
+state_monitor_node       # → becomes behavior tree conditions
+```
 
-### Behavior Services
-- `/find_ball` (chasebot_srvs/FindBall) - Initiate ball search behavior
-- `/approach_ball` (chasebot_srvs/ApproachBall) - Navigate to specific ball
-- `/return_home` (chasebot_srvs/ReturnHome) - Return to starting position
-- `/emergency_stop` (std_srvs/Trigger) - Immediate stop command
+### Phase 2: Coordination Layer (When Needed)
+Choose based on complexity:
+- **Simple Growth**: Python coordinator script
+- **Medium Complexity**: SMACH state machines
+- **High Complexity**: BehaviorTree.CPP framework
 
-### Configuration Services
-- `/set_vision_params` (dynamic_reconfigure) - Adjust detection parameters
-- `/set_nav_params` (dynamic_reconfigure) - Tune navigation behavior
-- `/calibrate_camera` (chasebot_srvs/CalibrateCamera) - Camera calibration routine
+### Phase 3: LLM Integration (Future)
+```
+LLM Task Planner
+    ↓
+Behavior Coordinator (Trees/States)
+    ↓
+Primitive Actions (Current Simple Nodes)
+```
 
-## Key Design Decisions
+## Pre-Built Package Integration
 
-### Vision-Only Navigation
-- **Rationale**: Simplicity and cost-effectiveness for POC
-- **Trade-offs**: Limited accuracy vs. sensor complexity
-- **Future**: May add encoders or IMU for improved positioning
+### gsotirchos/ball-chaser-bot Integration
+Our approach adapts the proven ball-chaser-bot pattern:
+- **Service Architecture**: `drive_bot` + `process_image_opencv` pattern
+- **OpenCV Replacement**: Use YOLO detections instead of OpenCV ball detection
+- **Control Logic**: Proven proportional control algorithms
+- **Clean Separation**: Vision processing separate from motor control
 
-### Training-Free Approach
-- **Rationale**: Avoid model training overhead and data requirements
-- **Implementation**: Classical CV + heuristic planning
-- **Alternative**: Leverage pre-trained models (YOLOv8, SAM)
-
-### Modular Abstraction
-- **Benefit**: Clean separation between simulation and hardware
-- **Implementation**: Interface-based design with mode switching
-- **Testing**: Identical logic runs in sim and on hardware
+### Alternative Packages Evaluated
+- **aravindh96/Turtlebot_Object_Follower**: Camera-based white ball following
+- **53+ ball_chaser repositories**: Various ROS object following implementations
+- **ROS 2 Migration Path**: Future upgrade options identified
 
 ## Platform Specifications
 
 ### Hardware Target
-- **Robot**: JetBot Nano kit
+- **Robot**: JetBot Nano kit (Proof of Concept scope)
 - **Compute**: Jetson Nano 4GB
 - **Camera**: IMX219 CSI camera
 - **Motors**: Differential drive with PWM control
-- **Power**: Portable battery pack
+- **Scope**: Golf ball sized objects, controlled environment
 
 ### Software Stack
-- **OS**: Ubuntu 18.04 (JetPack) for hardware deployment
-- **Runtime**: Python 3.6+
-- **Vision**: OpenCV 4.x
-- **Simulation**: Webots or Gazebo
-- **Development**: VS Code with GitHub sync for all development
-- **Testing**: Local Python scripts + Jupyter notebooks for analysis
+- **OS**: Ubuntu 18.04 (JetPack) / WSL2 for development
+- **ROS**: ROS Melodic (target platform compatibility)
+- **Vision**: OpenCV 4.x + darknet_ros
+- **Simulation**: Gazebo with JetBot URDF
+- **Development**: VS Code with cross-platform workflow
 
-## Simulation Strategy
+## Key Design Decisions
 
-### Environment
-- **Platform**: Webots (preferred) or Gazebo
-- **World**: Simple flat surface with scattered golf balls
-- **Robot Model**: JetBot with camera and differential drive
-- **Physics**: Basic collision and dynamics
+### Simplicity First
+- **Rationale**: Unblock current milestone without over-engineering
+- **Implementation**: Topic-based nodes that can evolve
+- **Benefits**: Immediate progress, clear interfaces, testable components
 
-### Validation Approach
-- **Development**: Iterate in simulation first
-- **Testing**: Identical code runs in sim and hardware
-- **Metrics**: Success rate, approach accuracy, cycle time
+### Pre-Built Package Leverage
+- **Rationale**: Proven solutions over custom implementation
+- **Strategy**: Adapt gsotirchos/ball-chaser-bot for our detection pipeline
+- **Benefits**: Faster development, battle-tested algorithms
 
-## Security & Safety
+### Modular Evolution
+- **Current**: Simple standalone nodes
+- **Near-term**: Coordination layer when complexity demands it
+- **Long-term**: LLM-driven task decomposition using current nodes as primitives
 
-### Safety Considerations
-- **Speed Limits**: Maximum velocity constraints
-- **Collision Avoidance**: Basic obstacle detection
-- **Manual Override**: Emergency stop capability
-- **Power Management**: Battery monitoring and shutdown
+### Vision-Only Navigation
+- **Rationale**: Appropriate complexity for POC scope
+- **Trade-offs**: Acceptable accuracy limitations for proof of concept
+- **Future**: Can add sensors without changing core architecture
 
-### Deployment Safety
-- **Environment**: Controlled indoor/outdoor spaces
-- **Supervision**: Human oversight during testing
-- **Fail-safes**: Automatic stop on vision loss or errors
+## Testing Strategy
+
+### Development Workflow
+- **Simulation First**: Test all logic in Gazebo before hardware
+- **Component Testing**: Each node testable independently
+- **Integration Testing**: Complete pipeline validation
+- **Hardware Deployment**: Same code runs on JetBot
+
+### Success Criteria
+- **Basic Following**: Robot approaches detected golf balls
+- **Visual Confirmation**: Can observe behavior in simulation
+- **Modular Design**: Components can be tested/replaced independently
+- **Evolution Ready**: Architecture supports future complexity growth
+
+This architecture prioritizes immediate progress on the current milestone while maintaining a clear path for future sophistication without requiring throwaway work.
