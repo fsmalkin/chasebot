@@ -42,4 +42,12 @@
 - Unit tests for individual node functionality
 - Integration tests using rostest framework
 - Simulation validation before hardware deployment
+- **User Acceptance Testing (UAT)**: Final validation by user before marking anything complete
 - Automated CI/CD pipeline for ROS package building
+
+## UAT Requirements
+- All ROS nodes must be tested by the user in their intended environment
+- Navigation behaviors must be demonstrated and confirmed working
+- Vision detection must be validated with real-world scenarios
+- Emergency stop and safety systems must be user-tested
+- **Nothing is considered complete without user confirmation that it works as expected**

@@ -34,7 +34,17 @@ ChaseBot is a ROS-based autonomous golf ball collection robot built on the JetBo
 2. **Simulate** - Test in Gazebo simulation first
 3. **Document** - Update relevant documentation
 4. **Validate** - Ensure ROS integration works properly
-5. **Commit** - Use descriptive commit messages with proper scope
+5. **UAT** - Nothing is considered complete until User Acceptance Testing confirms it works as expected
+6. **Commit** - Use descriptive commit messages with proper scope
+
+## Definition of Done
+- **Code Complete**: Implementation finished and internally tested
+- **Documentation Updated**: All relevant docs reflect changes
+- **Simulation Validated**: Functionality proven in Gazebo environment
+- **UAT Passed**: User has tested and confirmed the feature works as expected
+- **Repository Updated**: Changes committed with proper documentation
+
+**CRITICAL**: No work item is considered "done" or "complete" until the user has performed User Acceptance Testing and confirmed it meets requirements.
 
 ## Key Technologies
 - ROS Melodic (target platform: JetPack 4.6+)
