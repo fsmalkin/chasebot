@@ -5,25 +5,33 @@ ChaseBot is a ROS-based autonomous golf ball collection robot built on the JetBo
 
 ## Core Principles
 
-### 1. ROS-First Development
+### 1. Search Existing Solutions First
+- **ALWAYS search for existing ROS packages before building custom solutions**
+- Prioritize proven, well-maintained packages with active communities (check GitHub stars, commits)
+- Look for packages that solve 80% of the problem rather than building from scratch
+- Examples: darknet_ros for object detection, move_base for navigation, opencv_apps for vision
+- Custom development should only fill gaps that existing packages don't address
+- Document why existing solutions were chosen over custom implementation
+
+### 2. ROS-First Development
 - All functionality must be implemented as ROS nodes with proper topic/service interfaces
 - Use standard ROS message types when possible (geometry_msgs, sensor_msgs, nav_msgs)
 - Leverage ROS Navigation Stack instead of custom motor control
 - Implement proper ROS launch files for system coordination
 
-### 2. Documentation-Driven Development
+### 3. Documentation-Driven Development
 - Update documentation BEFORE implementing changes
 - Keep docs/milestone_progress.md current with latest status
 - Maintain architecture decisions in docs/architecture.md
 - Document all ROS topics, services, and parameters
 
-### 3. Hardware Abstraction
+### 4. Hardware Abstraction
 - Same ROS nodes must work in both Gazebo simulation and on JetBot hardware
 - Use ROS parameter server for hardware-specific configurations
 - Implement proper hardware safety constraints and emergency stops
 - Validate all changes in simulation before hardware deployment
 
-### 4. Professional Standards
+### 5. Professional Standards
 - Follow ROS naming conventions for nodes, topics, and parameters
 - Use catkin workspace structure with proper package organization
 - Implement proper error handling and diagnostics

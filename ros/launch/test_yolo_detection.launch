@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Launch ChaseBot world with camera -->
+    <include file="$(find chasebot_description)/launch/chasebot_simple_world.launch"/>
+    
+    <!-- YOLO Object Detection -->
+    <node name="darknet_ros" pkg="darknet_ros" type="darknet_ros" output="screen" launch-prefix="">
+        <!-- Camera input -->
+        <remap from="/camera/rgb/image_raw" to="/camera/image_raw"/>
+        
+        <!-- Detection outputs -->
+        <!-- /darknet_ros/bounding_boxes - structured detection data -->
+        <!-- /darknet_ros/detection_image - image with bounding boxes -->
+        <!-- /darknet_ros/object_detector - count of detected objects -->
+        
+        <!-- Load YOLO configuration -->
+        <rosparam command="load" ns="darknet_ros" file="$(find darknet_ros)/config/ros.yaml"/>
+        <rosparam command="load" ns="darknet_ros" file="$(find darknet_ros)/config/yolov2-tiny.yaml"/>
+    </node>
+    
+    <!-- Display original camera feed -->
+    <node name="camera_view" pkg="image_view" type="image_view" respawn="false">
+        <remap from="image" to="/camera/image_raw"/>
+        <param name="window_name" value="Original Camera"/>
+    </node>
+    
+    <!-- Display YOLO detection results -->
+    <node name="detection_view" pkg="image_view" type="image_view" respawn="false">
+        <remap from="image" to="/darknet_ros/detection_image"/>
+        <param name="window_name" value="YOLO Object Detection"/>
+    </node>
+</launch>

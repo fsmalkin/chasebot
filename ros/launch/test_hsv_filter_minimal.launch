@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Minimal test: Just launch hsv_color_filter node to verify it can start -->
+    <node name="hsv_color_filter_test" pkg="opencv_apps" type="hsv_color_filter" output="screen">
+        <!-- Use default camera topic - this will fail to receive images but node should still launch -->
+        <remap from="image" to="/camera/image_raw"/>
+        
+        <!-- Basic HSV parameters for any colored object -->
+        <param name="h_limit_max" value="30"/>
+        <param name="h_limit_min" value="10"/>
+        <param name="s_limit_max" value="255"/>
+        <param name="s_limit_min" value="50"/>
+        <param name="v_limit_max" value="255"/>
+        <param name="v_limit_min" value="50"/>
+        
+        <!-- Don't require camera_info -->
+        <param name="use_camera_info" value="false"/>
+    </node>
+    
+    <!-- Simple status output -->
+    <node name="test_status" pkg="rospy_tutorials" type="talker" output="screen"/>
+</launch>

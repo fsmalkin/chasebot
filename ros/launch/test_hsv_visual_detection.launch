@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Launch ChaseBot world with camera -->
+    <include file="$(find chasebot_description)/launch/chasebot_simple_world.launch"/>
+    
+    <!-- HSV Color Filter connected to camera -->
+    <node name="hsv_filter" pkg="opencv_apps" type="hsv_color_filter" output="screen">
+        <remap from="image" to="/camera/image_raw"/>
+        <remap from="hsv_filter/image" to="/ball_detection_visual"/>
+        
+        <!-- Golf ball color range - tuned for white/gray objects -->
+        <param name="h_limit_max" value="180"/>
+        <param name="h_limit_min" value="0"/>
+        <param name="s_limit_max" value="50"/>
+        <param name="s_limit_min" value="0"/>
+        <param name="v_limit_max" value="255"/>
+        <param name="v_limit_min" value="150"/>
+        
+        <param name="use_camera_info" value="false"/>
+    </node>
+    
+    <!-- Display original camera feed -->
+    <node name="camera_view" pkg="image_view" type="image_view" respawn="false">
+        <remap from="image" to="/camera/image_raw"/>
+        <param name="window_name" value="Original Camera"/>
+    </node>
+    
+    <!-- Display filtered detection output -->
+    <node name="detection_view" pkg="image_view" type="image_view" respawn="false">
+        <remap from="image" to="/ball_detection_visual"/>
+        <param name="window_name" value="HSV Detection (Objects in White)"/>
+    </node>
+</launch>

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<launch>
+  <!-- Launch ChaseBot world with camera -->
+  <include file="$(find chasebot_description)/launch/chasebot_simple_world.launch"/>
+  
+  <!-- YOLO Detection using working darknet_ros configuration -->
+  <arg name="image" default="/camera/image_raw" />
+  
+  <!-- Config and weights folder -->
+  <arg name="yolo_weights_path" default="$(find darknet_ros)/yolo_network_config/weights"/>
+  <arg name="yolo_config_path" default="$(find darknet_ros)/yolo_network_config/cfg"/>
+  
+  <!-- ROS and network parameter files -->
+  <arg name="ros_param_file" default="$(find darknet_ros)/config/ros.yaml"/>
+  <arg name="network_param_file" default="$(find darknet_ros)/config/yolov2-tiny.yaml"/>
+  
+  <!-- Load parameters -->
+  <rosparam command="load" ns="darknet_ros" file="$(arg ros_param_file)"/>
+  <rosparam command="load" ns="darknet_ros" file="$(arg network_param_file)"/>
+  
+  <!-- Start darknet and ros wrapper -->
+  <node pkg="darknet_ros" type="darknet_ros" name="darknet_ros" output="screen">
+    <param name="weights_path" value="$(arg yolo_weights_path)" />
+    <param name="config_path" value="$(arg yolo_config_path)" />
+    <remap from="camera/rgb/image_raw" to="$(arg image)" />
+  </node>
+  
+  <!-- Display original camera feed -->
+  <node name="camera_view" pkg="image_view" type="image_view" respawn="false">
+    <remap from="image" to="/camera/image_raw"/>
+    <param name="window_name" value="Original Camera"/>
+  </node>
+  
+  <!-- Display YOLO detection results -->
+  <node name="detection_view" pkg="image_view" type="image_view" respawn="false">
+    <remap from="image" to="/darknet_ros/detection_image"/>
+    <param name="window_name" value="YOLO Object Detection"/>
+  </node>
+</launch>
