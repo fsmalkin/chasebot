@@ -1,23 +1,79 @@
 # ChaseBot Environment Management Rules
 
-## WSL2 + ROS Development Environment
+## 🚀 QUICK START - FINDING ROS 2
+**Current Development Environment**: ROS 2 Humble on Ubuntu-22.04 WSL2
+- **Quick Check**: `wsl -d Ubuntu-22.04 bash -c "source /opt/ros/humble/setup.bash && ros2 --help"`
+- **Workspace Location**: `~/ros2_ws/`
+- **Launch Robot**: `ros2 launch chasebot_description jetbot_gazebo.launch.py`
+- **⚠️ NO GPU REQUIRED** - ROS 2 works perfectly without GPU
+
+## GPU Requirements - CLARIFICATION
+### ✅ What DOESN'T need GPU (Current Development):
+- **ROS 2 Humble** - Works perfectly without GPU
+- **Gazebo Classic** - Works with ROS 2 without GPU  
+- **All our current robot development** - No GPU needed
+- **Keyboard/programmatic robot control** - No GPU needed
+
+### ❌ What DOES need GPU (Future Upgrades):
+- **Modern Gazebo (Ignition/Fortress)** - OpenGL errors without GPU
+- **Isaac Sim** - Requires NVIDIA RTX GPU
+- **GPU-accelerated Isaac ROS perception** - Optional performance boost
+
+### 📝 Bottom Line:
+**Continue ROS 2 development now, upgrade simulators when GPU available**
+
+## New Session Checklist
+**Start every session with this validation:**
+1. **Check which ROS you need:**
+   - ROS 1 (Ubuntu-18.04): Legacy reference system
+   - **ROS 2 (Ubuntu-22.04): Current development** ⭐
+2. **Verify WSL2 running**: `wsl --list --verbose`
+3. **Quick ROS 2 test**: `wsl -d Ubuntu-22.04 bash -c "ros2 --help"`
+4. **If ROS 2 not found**: Check Ubuntu-22.04 is running, source environment
+
+## DUAL WSL2 + ROS Development Environment
+
+### CRITICAL: Two Separate ROS Environments
+**We maintain BOTH ROS 1 and ROS 2 environments for different purposes:**
+
+#### **ROS 1 Environment (Legacy/Reference)**
+- **WSL2 Instance**: `Ubuntu-18.04`
+- **ROS Version**: ROS Melodic
+- **Purpose**: Baseline autonomous ball following system (reference implementation)
+- **Launch Check**: `wsl -d Ubuntu-18.04 bash -c "source /opt/ros/melodic/setup.bash && which roscore"`
+
+#### **ROS 2 Environment (Current Development)**
+- **WSL2 Instance**: `Ubuntu-22.04` 
+- **ROS Version**: ROS 2 Humble LTS
+- **Purpose**: Modern migration target with Isaac ROS integration
+- **Launch Check**: `wsl -d Ubuntu-22.04 bash -c "source /opt/ros/humble/setup.bash && ros2 --help"`
 
 ### Session Initialization Protocol
 **ALWAYS start each session with environment validation:**
 
 1. **Check WSL2 Status**: `wsl --list --verbose`
-   - If stopped, restart with: `wsl -d Ubuntu-18.04`
-   - WSL2 Ubuntu must be running for ROS functionality
+   - **ROS 1**: If Ubuntu-18.04 stopped, restart with: `wsl -d Ubuntu-18.04`
+   - **ROS 2**: If Ubuntu-22.04 stopped, restart with: `wsl -d Ubuntu-22.04`
 
-2. **Validate ROS Environment**:
+2. **Choose and Validate Target Environment**:
+
+   **FOR ROS 1 WORK (Legacy System)**:
    - Kill existing processes: `wsl -d Ubuntu-18.04 bash -c "pkill -f ros; pkill -f gazebo"`
-   - Check ROS availability: `source /opt/ros/melodic/setup.bash && which roscore`
-   - Source catkin workspace: `source ~/catkin_ws/devel/setup.bash`
+   - Check ROS availability: `wsl -d Ubuntu-18.04 bash -c "source /opt/ros/melodic/setup.bash && which roscore"`
+   - Source catkin workspace: `wsl -d Ubuntu-18.04 bash -c "source ~/catkin_ws/devel/setup.bash"`
+
+   **FOR ROS 2 WORK (Current Development)**:
+   - Kill existing processes: `wsl -d Ubuntu-22.04 bash -c "pkill -f ros; pkill -f gazebo"`
+   - Check ROS 2 availability: `wsl -d Ubuntu-22.04 bash -c "source /opt/ros/humble/setup.bash && ros2 --help"`
+   - Source workspace: `wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source install/setup.bash"`
 
 3. **File Synchronization**:
-   - Windows edits at: `c:/workspaces/chasebot/`
-   - WSL2 execution from: `~/catkin_ws/src/chasebot_description/`
-   - Copy command: `cp /mnt/c/workspaces/chasebot/file.ext ~/catkin_ws/src/target/`
+   - **Windows edits**: `c:/workspaces/chasebot/`
+   - **ROS 1 execution**: `~/catkin_ws/src/chasebot_description/` (Ubuntu-18.04)
+   - **ROS 2 execution**: `~/ros2_ws/src/chasebot_description/` (Ubuntu-22.04)
+   - **Copy commands**: 
+     - ROS 1: `wsl -d Ubuntu-18.04 bash -c "cp /mnt/c/workspaces/chasebot/file.ext ~/catkin_ws/src/target/"`
+     - ROS 2: `wsl -d Ubuntu-22.04 bash -c "cp /mnt/c/workspaces/chasebot/file.ext ~/ros2_ws/src/target/"`
 
 ### Code Compatibility Requirements
 
