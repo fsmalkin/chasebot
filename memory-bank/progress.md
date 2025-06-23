@@ -171,80 +171,103 @@
    - ✅ Proved concept before discovering professional alternative
    - ✅ Important learning step that led to better solution discovery
 
-## What's Left to Build
-### Phase 2: Behavior Enhancement (🔄 Next Priorities)
-1. **🔄 Full Autonomous Ball Following**
-   - Enable complete robot movement toward detected balls (system ready)
-   - Test and validate following behavior in simulation
-   - Parameter tuning for optimal approach behavior
-   - Multi-scenario testing (different ball positions, lighting conditions)
+## ROS 2 + Isaac ROS Migration (🚀 Strategic Pivot)
+### Phase 1: ROS 2 Environment Setup ⏳ CURRENT
+**Goal**: Establish modern ROS 2 development environment
 
-2. **🔄 Enhanced Detection Capabilities**
-   - Multi-ball management with target prioritization
-   - Improved distance estimation using bounding box size
-   - Dynamic confidence threshold adjustment
-   - Ball tracking persistence across frames
+**Slice 1.1: ROS 2 Installation & Validation**
+- Install ROS 2 Humble LTS in WSL2 Ubuntu 22.04 environment
+- Set up ROS 2 workspace alongside existing ROS 1 system
+- Validate basic ROS 2 functionality (talker/listener)
+- **UAT**: ROS 2 basic communication working
 
-3. **🔄 Collection Behavior Integration**
-   - Ball pickup/collection mechanism design
-   - Collection state management (collected vs uncollected)
-   - Return to base behavior after collection
-   - Multi-session collection coordination
+**Slice 1.2: ROS 2 Gazebo Integration**
+- Install ROS 2 Gazebo packages and integration
+- Test Gazebo simulation with ROS 2
+- Configure ros1_bridge for ROS1↔ROS2 communication (if needed)
+- **UAT**: View robot simulation in ROS 2 environment
 
-### Phase 3: Advanced Navigation (🔄 Planned)
-1. **ROS Navigation Stack Integration**
-   - Obstacle avoidance and path planning capabilities
-   - SLAM integration for environment mapping
-   - Dynamic goal setting and replanning
-   - Safety systems and emergency stop implementation
+### Phase 2: Core System Migration 🔄 NEXT
+**Goal**: Port existing autonomous ball following system to ROS 2
 
-2. **Professional Architecture Enhancement**
-   - Structured object detection messages (chasebot_msgs/DetectedObject)
-   - RViz visualization markers for detected objects
-   - Dynamic reconfigure for runtime parameter tuning
-   - Comprehensive logging and diagnostics
+**Slice 2.1: URDF & Simulation Migration**
+- Port JetBot URDF to ROS 2 format and conventions
+- Convert launch files from ROS 1 XML to ROS 2 Python format
+- Update package.xml and CMakeLists.txt for ROS 2
+- **UAT**: Robot spawns in Gazebo via ROS 2 launch
 
-3. **Performance Optimization**
-   - GPU acceleration for YOLO detection (if available)
-   - Multi-threading for parallel processing
-   - Memory optimization for embedded deployment
-   - Real-time performance tuning
+**Slice 2.2: Basic Movement & Control**
+- Port cmd_vel control and differential drive to ROS 2
+- Test basic robot movement commands
+- Validate camera feed and topics in ROS 2
+- **UAT**: Robot moves and camera works via ROS 2 commands
 
-### Phase 4: Hardware Deployment (🔄 Future)
-1. **JetBot Hardware Integration**
-   - Deploy integrated system to physical JetBot Nano
-   - Real-world camera calibration and tuning
-   - Hardware-specific parameter optimization
-   - Physical world testing and validation
+### Phase 3: Isaac ROS Integration 🔄 PLANNED
+**Goal**: Replace custom components with Isaac ROS capabilities
 
-2. **Advanced Features**
-   - LLM integration for natural language commands
-   - Multi-robot coordination capabilities
-   - Learning and adaptation over time
-   - Fleet management and coordination
+**Slice 3.1: Isaac ROS Installation**
+- Install Isaac ROS packages in ROS 2 environment
+- Configure Isaac ROS for our simulation setup
+- Test basic Isaac ROS functionality
+- **UAT**: Isaac ROS example launches successfully
+
+**Slice 3.2: Isaac ROS Object Detection**
+- Replace YOLO with Isaac ROS DNN detection
+- Configure Isaac ROS DNN for ball detection
+- Test performance vs current YOLO approach
+- **UAT**: Detect golf ball with Isaac ROS DNN
+
+**Slice 3.3: Isaac ROS Visual Tracking**
+- Enable Isaac ROS object tracking capabilities
+- Solve "lost ball" problem with advanced tracking
+- Test tracking persistence during robot turns
+- **UAT**: Robot maintains ball tracking during 360° turn
+
+### Phase 4: Advanced Integration 🔄 FUTURE
+**Goal**: Production-grade capabilities with behavior trees
+
+**Slice 4.1: Isaac ROS Navigation**
+- Configure Isaac ROS Nav2 for approach behavior
+- Set up costmaps and path planning
+- Test obstacle avoidance capabilities
+- **UAT**: Robot navigates to ball using Isaac ROS
+
+**Slice 4.2: Behavior Trees & LLM Integration**
+- Implement behavior trees for task orchestration
+- Create LLM-compatible task interface
+- Multi-ball collection sequencing
+- **UAT**: Complete multi-ball collection cycle via natural language
+
+### Future: Production Deployment 🔄 FUTURE
+**Goal**: Hardware deployment with full capabilities
+- Deploy to JetBot Nano with Isaac ROS optimization
+- Real-world testing and validation
+- Performance optimization for embedded hardware
+- **UAT**: Autonomous operation in real environment
 
 ## Current Status
-### Project Health: 🟢 EXCELLENT - MAJOR MILESTONE ACHIEVED
-- **Vision System**: ✅ Professional YOLO detection operational
-- **Robot Control**: ✅ Complete movement integration working
-- **System Integration**: ✅ Full end-to-end pipeline functional
-- **Navigation Capability**: ✅ Navigate to Target milestone COMPLETE
-- **Technical Architecture**: ✅ Professional ROS-based system established
-- **UAT Validation**: ✅ 26+ seconds continuous operation confirmed
+### Project Health: 🚀 EXCELLENT - STRATEGIC ROS 2 + ISAAC ROS MIGRATION
+- **Foundation Complete**: ✅ Autonomous ball following working as ROS 1 baseline
+- **Architecture Proven**: ✅ Professional ROS 1 integration patterns established
+- **Strategic Direction**: 🚀 Migrating to ROS 2 + Isaac ROS for modern capabilities
+- **Migration Plan**: ✅ Phased approach with clear UAT criteria for each slice
+- **Target Architecture**: ROS 2 + Isaac ROS + Behavior Trees + LLM Integration
+- **Future-Proof**: Modern ROS 2 platform with Jetson-accelerated AI models
 
 ### Development Velocity
-- **Major Breakthrough**: YOLO Object Following Integration completed successfully
-- **Documentation**: Comprehensive technical documentation completed
-- **Technical Debt**: Minimal - clean professional architecture established
-- **Environment Stability**: All technical environment issues resolved
-- **Next Phase Ready**: System prepared for autonomous following behavior
+- **Strategic Pivot**: ROS 2 + Isaac ROS identified as optimal modern solution
+- **Foundation Preserved**: Current ROS 1 working system maintained as reference
+- **Documentation Updated**: Migration plan and architecture documented
+- **Next Phase**: ROS 2 environment setup and basic functionality (Phase 1)
+- **Long-term Vision**: LLM-orchestrated task execution on modern ROS 2 platform
 
 ### Achievement Summary
-**COMPLETE: Navigate to Target Milestone**
-- Robot can SEE golf balls (YOLO detection)
-- Robot can CALCULATE precise positions (position bridge)
-- Robot can MOVE toward targets (follower integration)
-- Complete autonomous ball following capability operational
+**FOUNDATION COMPLETE: Autonomous Ball Following (ROS 1)**
+- Robot autonomously detects and follows balls (proven capability)
+- Professional ROS 1 architecture established (valuable reference)
+- **STRATEGIC UPGRADE**: Moving to ROS 2 + Isaac ROS for production-grade capabilities
+- **TARGET**: Modern robotics stack with LLM task orchestration
+- **LEARNING VALUE**: ROS 2 migration provides valuable modern robotics experience
 
 ## Known Issues & Limitations
 ### Current Limitations
