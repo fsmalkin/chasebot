@@ -111,20 +111,36 @@ ROS 2 Humble → Gazebo Classic → libgazebo_ros_diff_drive → JetBot Robot Mo
 - ✅ **Detection Visualization**: Green bounding boxes, red center points, area information
 - ✅ **Interactive Interface**: 'Q' key quit functionality and keyboard controls
 - ✅ **Dual Processing**: Camera feed analysis + visual display simultaneously
-- ✅ **Performance Validated**: 1300+ frames processed at 30 Hz with visual feedback
+- ✅ **Performance Validated**: 1600+ frames processed at 30 Hz with visual feedback
 - ✅ **UAT Success**: User confirmed "i see the UI and a camera window" - full functionality
 - ✅ **Professional Quality**: Industry-standard visual feedback system operational
+- ✅ **Stability Confirmed**: System remains stable after FOV visualization attempts
+
+### 📋 PHASE 3 STEP 3.2 FOV VISUALIZATION ATTEMPTED: Lessons Learned
+**Technical Exploration: 3D Field of View Visualization**
+- 🔄 **FOV Node Created**: `ros2_fov_visualization.py` with ROS 2 visualization markers
+- 🔄 **Marker System**: Complex marker arrays for FOV boundary visualization
+- 🔄 **TF2 Integration**: Transform lookups for camera pose tracking
+- ❌ **System Instability**: Gazebo + RViz + OpenCV exceeded WSL2 GUI capabilities
+- ❌ **Resource Exhaustion**: Multiple GUI applications caused crashes
+- ✅ **Rollback Success**: Reverted to stable `jetbot_with_visual_display.launch.py`
+- ✅ **Documentation**: Comprehensive lessons learned documented
 
 ## Next Development Steps
 ### Phase 3: Advanced Robot Features 🔄 IN PROGRESS
 **Step 3.2: Basic Vision Integration - Thin Slice 3: Golf Ball Detection Testing** 🔄 READY
 - 🔄 Test detection with actual golf balls in simulation (world file ready)
-- 🔄 Validate detection accuracy and overlay display
+- 🔄 Validate detection accuracy and overlay display  
 - 🔄 Verify topic publishing with detected golf balls
 
 **Step 3.2: Basic Vision Integration - Remaining Slices** 🔄 PLANNED
 - 🔄 Thin Slice 4: Vision-guided robot movement toward detected balls
 - 🔄 Thin Slice 5: Complete approach behavior with safety timeouts
+
+**Future Considerations** 🔄 DEFERRED
+- 🔄 FOV Visualization: Consider 2D camera overlay approach vs 3D markers
+- 🔄 Resource Management: Test system limits before adding complex features
+- 🔄 Hardware Upgrade: GPU availability for advanced visualization features
 
 **Step 3.2: Basic Vision Integration**  
 - 🔄 Add simple vision processing node
