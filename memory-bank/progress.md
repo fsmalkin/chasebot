@@ -208,14 +208,23 @@
 - **Launch Command**: `ros2 launch chasebot_description jetbot_gazebo.launch.py`
 - **Technical Success**: Robot spawning, camera publishing, cmd_vel subscription all operational
 
-**Slice 2.2: Basic Movement & Control - 🔄 NEXT (UPDATED PLAN)**
-- **CRITICAL RESEARCH FINDING**: Isaac ROS provides advanced perception, NOT basic movement control
-- **NEW STRATEGY**: Use standard ROS 2 packages that integrate seamlessly with Isaac ROS
-- **Step 1**: Install `teleop_twist_keyboard` package for immediate keyboard movement control
-- **Step 2**: Validate robot movement via keyboard teleop commands in Gazebo simulation
-- **Future Foundation**: Configure Nav2 (ROS 2 Navigation Stack) as professional navigation framework
-- **Integration Benefit**: Nav2 + Isaac ROS perception provides production-grade autonomous navigation
-- **UAT**: Robot moves via keyboard control and camera feed publishes properly in ROS 2
+**Slice 2.2: Basic Movement & Control - ✅ COMPLETE WITH UAT SUCCESS**
+- ✅ **teleop_twist_keyboard installed** - Standard ROS 2 package for movement control
+- ✅ **Robot movement validated** - Keyboard teleop responds correctly (i/j/k/l keys)
+- ✅ **Camera feed confirmed** - All essential topics publishing (/cmd_vel, /odom, /camera/image_raw)
+- ✅ **ROS 2 Foundation Ready** - Basic movement control established for Isaac ROS integration
+- **UAT PASSED**: Robot moves via keyboard control and camera publishes properly in ROS 2
+- **Key Achievement**: Complete ROS 2 movement control foundation ready for advanced perception
+
+**Slice 2.3: Programmatic Movement Control - 🔄 NEXT**
+- **Objective**: Replace keyboard teleop with automated movement commands for testing
+- **Implementation Options**:
+  - ROS 2 CLI commands: `ros2 topic pub /cmd_vel geometry_msgs/msg/Twist`
+  - Python movement scripts with timed sequences and safety timeouts
+  - Movement test suite for automated UAT validation
+- **Target Capabilities**: Forward/backward, rotation, movement patterns (square, circle)
+- **Benefits**: Automated testing, repeatable movement patterns, preparation for autonomous behavior
+- **UAT**: Robot executes programmatic movement commands and patterns successfully
 
 ### Phase 3: Isaac ROS Integration 🔄 PLANNED
 **Goal**: Replace custom components with Isaac ROS capabilities
