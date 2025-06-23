@@ -37,13 +37,17 @@
   <!-- ros_simple_follower navigation -->
   <node pkg="simple_follower" type="follower.py" name="follower" output="screen">
     <!-- Subscribes to /object_tracker/current_position -->
-    <!-- Publishes to /cmd_vel -->
+    <!-- Publishes to /cmd_vel/yolo, remap to /cmd_vel -->
+    <remap from="/cmd_vel/yolo" to="/cmd_vel"/>
     <param name="switchMode" value="false"/>
+    <param name="controllButtonIndex" value="0"/>
+    <param name="targetDist" value="0.5"/>
     <param name="maxSpeed" value="0.2"/>
-    <param name="x_threshold" value="0.1"/>
-    <param name="y_threshold" value="0.1"/>
-    <param name="max_linear_vel" value="0.2"/>
-    <param name="max_angular_vel" value="0.5"/>
+    <rosparam param="PID_controller">
+      P: [1.0, 1.0]
+      I: [0.0, 0.0] 
+      D: [0.1, 0.1]
+    </rosparam>
   </node>
   
   <!-- Optional: Display original camera feed -->
