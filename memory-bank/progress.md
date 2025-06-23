@@ -208,11 +208,14 @@
 - **Launch Command**: `ros2 launch chasebot_description jetbot_gazebo.launch.py`
 - **Technical Success**: Robot spawning, camera publishing, cmd_vel subscription all operational
 
-**Slice 2.2: Basic Movement & Control - 🔄 NEXT**
-- Port cmd_vel control and differential drive to ROS 2
-- Test basic robot movement commands
-- Validate camera feed and topics in ROS 2
-- **UAT**: Robot moves and camera works via ROS 2 commands
+**Slice 2.2: Basic Movement & Control - 🔄 NEXT (UPDATED PLAN)**
+- **CRITICAL RESEARCH FINDING**: Isaac ROS provides advanced perception, NOT basic movement control
+- **NEW STRATEGY**: Use standard ROS 2 packages that integrate seamlessly with Isaac ROS
+- **Step 1**: Install `teleop_twist_keyboard` package for immediate keyboard movement control
+- **Step 2**: Validate robot movement via keyboard teleop commands in Gazebo simulation
+- **Future Foundation**: Configure Nav2 (ROS 2 Navigation Stack) as professional navigation framework
+- **Integration Benefit**: Nav2 + Isaac ROS perception provides production-grade autonomous navigation
+- **UAT**: Robot moves via keyboard control and camera feed publishes properly in ROS 2
 
 ### Phase 3: Isaac ROS Integration 🔄 PLANNED
 **Goal**: Replace custom components with Isaac ROS capabilities

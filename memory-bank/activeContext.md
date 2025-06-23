@@ -115,40 +115,48 @@
 - **ACHIEVEMENT**: Full ROS 2 package structure with working simulation
 - **LAUNCH**: `ros2 launch chasebot_description jetbot_gazebo.launch.py`
 
-**Slice 2.2: Basic Movement & Control - 🔄 NEXT**
-- Port cmd_vel control and differential drive to ROS 2
-- Test basic robot movement commands
-- Validate camera feed and topics in ROS 2
-- **UAT**: Robot moves and camera works via ROS 2 commands
+**Slice 2.2: Basic Movement & Control - 🔄 NEXT (UPDATED PLAN)**
+- **CRITICAL FINDING**: Isaac ROS provides advanced perception, NOT basic movement control
+- **NEW STRATEGY**: Use standard ROS 2 packages that integrate well with Isaac ROS
+- **Step 1**: Install `teleop_twist_keyboard` for immediate keyboard movement control
+- **Step 2**: Validate robot movement via keyboard teleop in Gazebo
+- **Future**: Configure Nav2 (ROS 2 Navigation Stack) for professional navigation + Isaac ROS integration
+- **UAT**: Robot moves via keyboard control and camera feed visible in ROS 2
 
-### Phase 3: Isaac ROS Integration 🔄 PLANNED
-**Slice 3.1: Isaac ROS Installation**
-- Install Isaac ROS packages in ROS 2 environment
-- Configure Isaac ROS for our simulation setup
-- Test basic Isaac ROS functionality
-- **UAT**: Isaac ROS example launches successfully
+### Phase 3: Isaac ROS Integration 🔄 PLANNED (UPDATED UNDERSTANDING)
+**Key Discovery**: Isaac ROS specializes in **perception and AI**, not basic robot control
+- **Isaac ROS Capabilities**: Object Detection (YOLOv8, RT-DETR), Visual SLAM, DNN Inference, Scene Reconstruction
+- **Integration Strategy**: Use Isaac ROS for perception + Nav2 for navigation + teleop for testing
 
-**Slice 3.2: Isaac ROS Object Detection**
-- Replace YOLO with Isaac ROS DNN detection
-- Configure Isaac ROS DNN for ball detection
-- Test performance vs current YOLO approach
-- **UAT**: Detect golf ball with Isaac ROS DNN
+**Slice 3.1: Isaac ROS Installation & Setup**
+- Install Isaac ROS packages focused on perception (YOLOv8, RT-DETR)
+- Configure Isaac ROS DNN inference with TensorRT acceleration
+- Test basic Isaac ROS functionality with our camera feed
+- **UAT**: Isaac ROS perception examples launch successfully
 
-**Slice 3.3: Isaac ROS Visual Tracking**
-- Enable Isaac ROS object tracking capabilities
-- Solve "lost ball" problem with advanced tracking
-- Test tracking persistence during robot turns
-- **UAT**: Robot maintains ball tracking during 360° turn
+**Slice 3.2: Isaac ROS Object Detection (Advanced YOLO Replacement)**
+- Replace darknet_ros with Isaac ROS YOLOv8 or RT-DETR
+- Configure Isaac ROS DNN for GPU-accelerated ball detection
+- Test performance improvements vs current YOLO approach
+- **UAT**: Detect golf ball with Isaac ROS DNN at higher FPS and accuracy
+
+**Slice 3.3: Nav2 + Isaac ROS Integration**
+- Configure Nav2 (ROS 2 Navigation Stack) for professional navigation
+- Integrate Isaac ROS perception with Nav2 path planning
+- Enable advanced object tracking and obstacle avoidance
+- **UAT**: Robot navigates to ball using Nav2 + Isaac ROS perception
 
 ### Phase 4: Advanced Integration 🔄 FUTURE
-**Slice 4.1: Isaac ROS Navigation**
-- Configure Isaac ROS Nav2 for approach behavior
-- Set up costmaps and path planning
-- **UAT**: Robot navigates to ball using Isaac ROS
+**Slice 4.1: Advanced Perception & Tracking**
+- Enable Isaac ROS visual tracking capabilities  
+- Solve "lost ball" problem with advanced tracking algorithms
+- Test tracking persistence during robot turns and complex maneuvers
+- **UAT**: Robot maintains ball tracking during 360° turn
 
 **Slice 4.2: Behavior Trees & LLM Integration**
-- Implement behavior trees for task orchestration
-- Create LLM-compatible task interface
+- Implement behavior trees in Nav2 for task orchestration
+- Create LLM-compatible task interface using ROS 2 actions/services
+- Multi-ball collection sequencing with natural language commands
 - **UAT**: Complete multi-ball collection cycle via natural language
 
 ## Architecture Achieved
