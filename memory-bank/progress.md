@@ -183,14 +183,18 @@
 - **UAT**: ✅ ROS 2 basic communication working - talker/listener exchanging messages
 - **DECISION**: No ros1_bridge needed - clean migration approach preserves ROS 1 as reference
 
-**Slice 1.2: ROS 2 Modern Gazebo Integration - ⏳ CURRENT ACTIVE TASK**
-- **CRITICAL DISCOVERY**: No GPU available → Isaac Sim ruled out (requires NVIDIA RTX GPU)
-- **STRATEGIC DECISION**: Use Modern Gazebo (Ignition) instead of legacy Gazebo Classic
-- **KEY INSIGHT**: Isaac ROS ≠ Isaac Sim → Can use Isaac ROS packages with any ROS 2 simulator
-- **RATIONALE**: Modern Gazebo provides future-proof ROS 2 simulation without GPU requirements
-- Install Modern Gazebo (formerly Ignition) for ROS 2
-- Test CPU-only simulation with ROS 2 integration
-- **UAT**: Launch Modern Gazebo with ROS 2 and see simulation GUI working
+**Slice 1.2: ROS 2 Gazebo Integration - ✅ COMPLETE WITH CRITICAL HARDWARE FINDINGS**
+- **CRITICAL DISCOVERY #1**: No GPU available → Isaac Sim ruled out (requires NVIDIA RTX GPU)
+- **CRITICAL DISCOVERY #2**: Modern Gazebo also requires GPU → OpenGL errors in CPU-only WSL2
+- **STRATEGIC PIVOT**: Use Gazebo Classic for ROS 2 migration despite EOL status
+- **KEY INSIGHT**: Isaac ROS ≠ Isaac Sim → Can use Isaac ROS packages with Gazebo Classic
+- ✅ Installed ros-humble-gazebo-ros-pkgs (136 packages) - working with ROS 2
+- ✅ Installed ros-humble-ros-gz packages (169 packages) - ready for future GPU setup
+- ❌ Modern Gazebo crashes: `OGRE EXCEPTION(9:UnimplementedException)` in headless and GUI modes
+- ✅ Gazebo Classic + ROS 2 launches successfully with working GUI (EOL warning present)
+- **DECISION**: Proceed with Gazebo Classic for ROS 2 development until GPU available
+- **UAT**: ✅ ROS 2 + Gazebo Classic integration working - simulation GUI displays properly
+- **PHASE 1 COMPLETE**: ROS 2 environment ready for core system migration
 
 ### Phase 2: Core System Migration 🔄 NEXT
 **Goal**: Port existing autonomous ball following system to ROS 2
