@@ -1,10 +1,24 @@
 # ChaseBot Active Context
 
 ## Current Work Focus
-**ROS 2 + ISAAC ROS MIGRATION - PHASE 2: CORE SYSTEM MIGRATION** 🚀 - Completed ROS 2 environment setup and basic movement control. Current focus: Implementing programmatic movement control to replace keyboard teleop with automated movement commands and testing capabilities. This enables automated UAT validation and prepares for Isaac ROS perception integration.
+**ROS 2 FRESH REBUILD STRATEGY** 🔄 - After successful Gazebo crash recovery and programmatic movement script development, encountered persistent robot spawning issues in ROS 2. Decision made to implement complete fresh rebuild of ROS 2 workspace using proven working configurations to restore reliable robot simulation and movement testing capabilities.
 
-## Recent Changes (2025-06-22)
-### MAJOR BREAKTHROUGH: Autonomous Ball Following ACHIEVED ✅
+## Recent Changes (2025-06-22/23)
+### ROS 2 GAZEBO CRASH RECOVERY & REBUILD DECISION ⚠️🔄
+**Issue Encountered**: During E2E test development, Gazebo GUI began causing computer crashes
+- ✅ **Recovery Implemented**: Complete process cleanup, cache clearing, and Gazebo reinstallation
+- ✅ **GUI Restored**: Gazebo GUI now displays without crashes
+- ❌ **Robot Spawning Issue**: gzserver crashes prevent robot from appearing in simulation
+- 🔄 **Strategic Decision**: Implement fresh rebuild of ROS 2 workspace using proven configurations
+- 📚 **Lesson Learned**: Incremental fixes can create configuration drift from working baseline
+
+### PROGRAMMATIC MOVEMENT CONTROL SCRIPTS COMPLETE ✅
+- ✅ Created comprehensive ROS 2 movement test scripts (forward, rotation, square pattern)
+- ✅ Built E2E test framework for automated UAT validation
+- ✅ Movement logic proven to work (tests executed successfully before spawning issues)
+- 📋 **Ready for Implementation**: Scripts ready for use once robot spawning is restored
+
+### MAJOR BREAKTHROUGH: Autonomous Ball Following ACHIEVED ✅ (ROS 1 Baseline)
 1. **Autonomous Movement SUCCESS**
    - ✅ Robot actively moves toward detected golf balls (Linear: 0.150, Angular: -0.150)
    - ✅ No joystick or manual control required - fully autonomous operation

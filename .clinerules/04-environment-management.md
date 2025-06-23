@@ -5,6 +5,7 @@
 - **Quick Check**: `wsl -d Ubuntu-22.04 bash -c "source /opt/ros/humble/setup.bash && ros2 --help"`
 - **Workspace Location**: `~/ros2_ws/`
 - **Launch Robot**: `ros2 launch chasebot_description jetbot_gazebo.launch.py`
+- **⚠️ CURRENT ISSUE**: gzserver crashes prevent robot spawning - fresh rebuild required
 - **⚠️ NO GPU REQUIRED** - ROS 2 works perfectly without GPU
 
 ## GPU Requirements - CLARIFICATION

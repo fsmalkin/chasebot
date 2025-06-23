@@ -216,15 +216,18 @@
 - **UAT PASSED**: Robot moves via keyboard control and camera publishes properly in ROS 2
 - **Key Achievement**: Complete ROS 2 movement control foundation ready for advanced perception
 
-**Slice 2.3: Programmatic Movement Control - 🔄 NEXT**
-- **Objective**: Replace keyboard teleop with automated movement commands for testing
-- **Implementation Options**:
-  - ROS 2 CLI commands: `ros2 topic pub /cmd_vel geometry_msgs/msg/Twist`
-  - Python movement scripts with timed sequences and safety timeouts
-  - Movement test suite for automated UAT validation
-- **Target Capabilities**: Forward/backward, rotation, movement patterns (square, circle)
-- **Benefits**: Automated testing, repeatable movement patterns, preparation for autonomous behavior
-- **UAT**: Robot executes programmatic movement commands and patterns successfully
+**Slice 2.3: Programmatic Movement Control - ✅ SCRIPTS COMPLETE, BLOCKED BY SPAWNING ISSUE**
+- ✅ **Movement Scripts Created**: Complete ROS 2 programmatic movement test suite
+  - `ros2_forward_movement_test.py` - 3-second forward movement at 0.2 m/s
+  - `ros2_rotation_test.py` - 360° clockwise and counter-clockwise rotations  
+  - `ros2_square_pattern_test.py` - 1m x 1m square movement pattern
+  - `ros2_movement_test_suite.py` - Comprehensive test combining all patterns
+  - `chasebot_e2e_test_runner.py` - Full E2E test framework
+  - `run_chasebot_tests.py` - Simple launcher script
+- ✅ **Movement Logic Validated**: Tests executed successfully before robot spawning issues
+- ❌ **Blocked by gzserver**: Robot fails to spawn in simulation (gzserver crashes)
+- 🔄 **Fresh Rebuild Required**: Need clean ROS 2 workspace rebuild to restore functionality
+- **UAT**: Pending robot spawning resolution for full movement test validation
 
 ### Phase 3: Isaac ROS Integration 🔄 PLANNED
 **Goal**: Replace custom components with Isaac ROS capabilities
