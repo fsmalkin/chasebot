@@ -1,11 +1,21 @@
 # ChaseBot Technical Context
 
 ## Core Technologies
+### ROS 1 Baseline (Stable)
 - **ROS Distribution**: ROS Melodic (LTS compatibility with JetPack 4.6+)
 - **Simulation Platform**: Gazebo 9 with ROS integration
-- **Operating System**: Ubuntu 18.04 LTS (JetPack target)
-- **Programming Language**: Python 3.6+ (ROS Melodic compatibility)
-- **Computer Vision**: OpenCV 4.x with cv_bridge integration
+- **Operating System**: Ubuntu 18.04 LTS (WSL2 - ROS Melodic)
+- **Programming Language**: Python 2.7/3.6+ (ROS Melodic compatibility)
+- **Computer Vision**: darknet_ros YOLO v2-tiny (42-48% confidence golf ball detection)
+- **Status**: ✅ **COMPLETE AUTONOMOUS BALL FOLLOWING**
+
+### ROS 2 Target (Fresh Start Strategy)
+- **ROS Distribution**: ROS 2 Humble LTS (5+ year support)
+- **Advanced Stack**: NVIDIA Isaac ROS for GPU-accelerated perception
+- **Simulation Platform**: Gazebo Classic (CPU-compatible) + Isaac ROS integration
+- **Operating System**: Ubuntu 22.04 LTS (WSL2 - Fresh Installation)
+- **Build System**: colcon for ROS 2 package building
+- **Computer Vision**: Isaac ROS YOLOv8/RT-DETR (target >5 FPS performance)
 - **Hardware Platform**: NVIDIA JetBot Nano with Jetson Nano 4GB
 
 ## ROS Package Architecture
@@ -73,8 +83,17 @@
 - Proven computer vision detection pipeline
 - Comprehensive debugging and diagnostic methodologies
 
-### ROS Migration (Current)
-- Transitioning to Gazebo + ROS simulation environment
-- Converting direct motor control to ROS Navigation Stack
-- Implementing proper ROS node architecture and communication
-- Establishing professional robotics development workflow
+### ROS 1 Achievement (Completed ✅)
+- **Autonomous Ball Following**: Complete working system operational
+- **Professional Architecture**: ROS-native design with proper patterns
+- **YOLO Vision Pipeline**: darknet_ros with 42-48% confidence detection
+- **Launch Command**: `roslaunch chasebot_description autonomous_ball_following.launch`
+- **Status**: Preserved as stable baseline and architectural reference
+
+### ROS 2 Fresh Start Strategy (Active 🔄)
+- **Decision**: Complete Ubuntu 22.04 + ROS 2 environment rebuild
+- **Root Cause**: gzserver crashes from configuration drift
+- **Approach**: Clean installation following proven ROS 1 success patterns
+- **Target**: ROS 2 + Isaac ROS + Nav2 + Behavior Trees + LLM integration
+- **Timeline**: 6-9 sessions for complete modern robotics stack
+- **Benefits**: Stable foundation + GPU acceleration + advanced capabilities

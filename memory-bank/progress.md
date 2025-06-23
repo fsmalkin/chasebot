@@ -171,99 +171,102 @@
    - ✅ Proved concept before discovering professional alternative
    - ✅ Important learning step that led to better solution discovery
 
-## ROS 2 + Isaac ROS Migration (🚀 Strategic Pivot)
-### Phase 1: ROS 2 Environment Setup ⏳ CURRENT
-**Goal**: Establish modern ROS 2 development environment
+## ROS 2 + Isaac ROS Migration (🚀 COMPLETE FRESH START)
+### STRATEGIC DECISION: COMPLETE RESTART ⏳ ACTIVE
+**Goal**: Build clean, modern robotics stack free from configuration drift
 
-**Slice 1.1: ROS 2 Installation & Validation - ✅ COMPLETE WITH UAT SUCCESS**
-- ✅ Create Ubuntu 22.04 WSL2 instance for clean ROS 2 environment
-- ✅ Install ROS 2 Humble LTS with desktop packages (500+ packages)
-- ✅ Set up ROS 2 workspace and environment configuration (sourced in ~/.bashrc)
-- ✅ Validate basic ROS 2 functionality (talker/listener test successful)
-- **UAT**: ✅ ROS 2 basic communication working - talker/listener exchanging messages
-- **DECISION**: No ros1_bridge needed - clean migration approach preserves ROS 1 as reference
+**Root Cause Analysis**
+- ❌ **gzserver crashes**: Persistent exit code 255 preventing robot spawning
+- ❌ **Configuration drift**: Incremental fixes led to unstable system state  
+- ✅ **Success pattern**: ROS 1 system works perfectly because it was built cleanly
+- 🚀 **Solution**: Complete fresh start with Ubuntu 22.04 + ROS 2 + Isaac ROS
 
-**Slice 1.2: ROS 2 Gazebo Integration - ✅ COMPLETE WITH CRITICAL HARDWARE FINDINGS**
-- **CRITICAL DISCOVERY #1**: No GPU available → Isaac Sim ruled out (requires NVIDIA RTX GPU)
-- **CRITICAL DISCOVERY #2**: Modern Gazebo also requires GPU → OpenGL errors in CPU-only WSL2
-- **STRATEGIC PIVOT**: Use Gazebo Classic for ROS 2 migration despite EOL status
-- **KEY INSIGHT**: Isaac ROS ≠ Isaac Sim → Can use Isaac ROS packages with Gazebo Classic
-- ✅ Installed ros-humble-gazebo-ros-pkgs (136 packages) - working with ROS 2
-- ✅ Installed ros-humble-ros-gz packages (169 packages) - ready for future GPU setup
-- ❌ Modern Gazebo crashes: `OGRE EXCEPTION(9:UnimplementedException)` in headless and GUI modes
-- ✅ Gazebo Classic + ROS 2 launches successfully with working GUI (EOL warning present)
-- **DECISION**: Proceed with Gazebo Classic for ROS 2 development until GPU available
-- **UAT**: ✅ ROS 2 + Gazebo Classic integration working - simulation GUI displays properly
-- **PHASE 1 COMPLETE**: ROS 2 environment ready for core system migration
+### Phase 1: Fresh Ubuntu 22.04 + ROS 2 Installation 🔄 ACTIVE
+**Step 1.1: Environment Cleanup & Fresh Install**
+- 🔄 Remove existing Ubuntu-22.04 WSL2 instance (corrupted configuration)
+- 🔄 Install fresh Ubuntu 22.04 with clean configuration
+- 🔄 Verify WSL2 functionality and display support
 
-### Phase 2: Core System Migration 🔄 IN PROGRESS
-**Goal**: Port existing autonomous ball following system to ROS 2
+**Step 1.2: ROS 2 Humble Installation (Proven Path)**
+- 🔄 Add ROS 2 apt repositories and keys
+- 🔄 Install ros-humble-desktop (500+ packages)
+- 🔄 Install ros-humble-gazebo-ros-pkgs (Gazebo Classic integration)
+- 🔄 Configure environment in ~/.bashrc
+- 🔄 Install python3-colcon-common-extensions and build tools
 
-**Slice 2.1: URDF & Simulation Migration - ✅ COMPLETE WITH UAT SUCCESS**
-- ✅ Ported JetBot URDF to ROS 2 format with updated Gazebo plugins
-- ✅ Converted launch files from ROS 1 XML to ROS 2 Python format
-- ✅ Updated package.xml and CMakeLists.txt for ROS 2 compatibility
-- ✅ **UAT PASSED**: Robot spawns successfully in Gazebo via ROS 2 launch
-- **Key Achievement**: Full ROS 2 package structure with working differential drive and camera plugins
-- **Launch Command**: `ros2 launch chasebot_description jetbot_gazebo.launch.py`
-- **Technical Success**: Robot spawning, camera publishing, cmd_vel subscription all operational
+**Step 1.3: Basic Validation**
+- 🔄 Test talker/listener communication (validate ROS 2 works)
+- 🔄 Launch empty Gazebo world (verify GUI works)
+- 🔄 Install and test teleop_twist_keyboard
 
-**Slice 2.2: Basic Movement & Control - ✅ COMPLETE WITH UAT SUCCESS**
-- ✅ **teleop_twist_keyboard installed** - Standard ROS 2 package for movement control
-- ✅ **Robot movement validated** - Keyboard teleop responds correctly (i/j/k/l keys)
-- ✅ **Camera feed confirmed** - All essential topics publishing (/cmd_vel, /odom, /camera/image_raw)
-- ✅ **ROS 2 Foundation Ready** - Basic movement control established for Isaac ROS integration
-- **UAT PASSED**: Robot moves via keyboard control and camera publishes properly in ROS 2
-- **Key Achievement**: Complete ROS 2 movement control foundation ready for advanced perception
+### Phase 2: Incremental Robot Package Creation 🔄 PLANNED
+**Step 2.1: Minimal Package Creation**
+- 🔄 Create chasebot_description package from scratch
+- 🔄 Start with simple box URDF (minimal complexity)
+- 🔄 Test basic spawning in Gazebo
+- 🔄 Validate each addition before proceeding
 
-**Slice 2.3: Programmatic Movement Control - ✅ SCRIPTS COMPLETE, BLOCKED BY SPAWNING ISSUE**
-- ✅ **Movement Scripts Created**: Complete ROS 2 programmatic movement test suite
-  - `ros2_forward_movement_test.py` - 3-second forward movement at 0.2 m/s
-  - `ros2_rotation_test.py` - 360° clockwise and counter-clockwise rotations  
-  - `ros2_square_pattern_test.py` - 1m x 1m square movement pattern
-  - `ros2_movement_test_suite.py` - Comprehensive test combining all patterns
-  - `chasebot_e2e_test_runner.py` - Full E2E test framework
-  - `run_chasebot_tests.py` - Simple launcher script
-- ✅ **Movement Logic Validated**: Tests executed successfully before robot spawning issues
-- ❌ **Blocked by gzserver**: Robot fails to spawn in simulation (gzserver crashes)
-- 🔄 **Fresh Rebuild Required**: Need clean ROS 2 workspace rebuild to restore functionality
-- **UAT**: Pending robot spawning resolution for full movement test validation
+**Step 2.2: Progressive Feature Addition**
+- 🔄 Add wheels and differential drive plugin
+- 🔄 Add camera sensor (no plugin initially)
+- 🔄 Add camera plugin and test feed
+- 🔄 Convert to full JetBot shape and proportions
+- 🔄 Test movement with teleop after each step
+
+**Step 2.3: Movement Script Recreation**
+- 🔄 Port `ros2_forward_movement_test.py` to fresh environment
+- 🔄 Port `ros2_rotation_test.py` with 360° validation
+- 🔄 Port `ros2_square_pattern_test.py` for complex patterns
+- 🔄 Recreate E2E test framework with proper error handling
+- 🔄 **Target UAT**: All movement patterns execute successfully
+
+### Previous ROS 2 Work (Reference Only - NOT Trusted)
+**Slice 2.3: Programmatic Movement Control - ✅ ARCHITECTURE COMPLETE, CORRUPTED ENVIRONMENT**
+- ✅ **Movement Architecture Proven**: UAT documentation shows successful design
+- ✅ **Test Framework Designed**: E2E testing approach validated
+- ❌ **Environment Corrupted**: gzserver crashes prevent execution
+- 🔄 **Solution**: Port proven architecture to fresh environment
 
 ### Phase 3: Isaac ROS Integration 🔄 PLANNED
-**Goal**: Replace custom components with Isaac ROS capabilities
+**Goal**: Modern perception stack with GPU acceleration
 
-**Slice 3.1: Isaac ROS Installation**
-- Install Isaac ROS packages in ROS 2 environment
-- Configure Isaac ROS for our simulation setup
-- Test basic Isaac ROS functionality
-- **UAT**: Isaac ROS example launches successfully
+**Step 3.1: Isaac ROS Installation**
+- 🔄 Install ros-humble-isaac-ros-dnn-inference
+- 🔄 Install ros-humble-isaac-ros-image-pipeline  
+- 🔄 Configure Isaac ROS for camera integration
+- 🔄 Test basic DNN inference functionality
+- **UAT**: Isaac ROS perception examples launch successfully
 
-**Slice 3.2: Isaac ROS Object Detection**
-- Replace YOLO with Isaac ROS DNN detection
-- Configure Isaac ROS DNN for ball detection
-- Test performance vs current YOLO approach
-- **UAT**: Detect golf ball with Isaac ROS DNN
+**Step 3.2: Advanced Object Detection**
+- 🔄 Replace darknet_ros with Isaac ROS YOLOv8/RT-DETR
+- 🔄 Configure golf ball detection with improved accuracy
+- 🔄 Test performance vs ROS 1 baseline (target: >5 FPS vs 1 FPS)
+- 🔄 Implement persistent object tracking
+- **UAT**: Detect golf ball with Isaac ROS DNN at higher FPS and accuracy
 
-**Slice 3.3: Isaac ROS Visual Tracking**
-- Enable Isaac ROS object tracking capabilities
-- Solve "lost ball" problem with advanced tracking
-- Test tracking persistence during robot turns
-- **UAT**: Robot maintains ball tracking during 360° turn
+**Step 3.3: Navigation Integration**
+- 🔄 Install ros-humble-navigation2
+- 🔄 Configure Nav2 with Isaac ROS perception
+- 🔄 Implement professional path planning
+- 🔄 Enable obstacle avoidance and recovery behaviors
+- **UAT**: Robot navigates to ball using Nav2 + Isaac ROS perception
 
-### Phase 4: Advanced Integration 🔄 FUTURE
-**Goal**: Production-grade capabilities with behavior trees
+### Phase 4: Advanced Capabilities 🔄 FUTURE
+**Goal**: Production-grade autonomous behaviors
 
-**Slice 4.1: Isaac ROS Navigation**
-- Configure Isaac ROS Nav2 for approach behavior
-- Set up costmaps and path planning
-- Test obstacle avoidance capabilities
-- **UAT**: Robot navigates to ball using Isaac ROS
+**Step 4.1: Behavior Trees & Task Orchestration**
+- 🔄 Implement behavior trees for complex task sequencing
+- 🔄 Multi-ball collection behaviors
+- 🔄 Error recovery and replanning capabilities
+- 🔄 Performance monitoring and optimization
+- **UAT**: Robot executes complex multi-ball collection sequences
 
-**Slice 4.2: Behavior Trees & LLM Integration**
-- Implement behavior trees for task orchestration
-- Create LLM-compatible task interface
-- Multi-ball collection sequencing
-- **UAT**: Complete multi-ball collection cycle via natural language
+**Step 4.2: LLM Integration & Natural Language**
+- 🔄 ROS 2 action servers for high-level commands
+- 🔄 Natural language task parsing interface
+- 🔄 Status reporting and task feedback
+- 🔄 Multi-robot coordination capabilities
+- **UAT**: Complete multi-ball collection cycle via natural language commands
 
 ### Future: Production Deployment 🔄 FUTURE
 **Goal**: Hardware deployment with full capabilities
@@ -273,30 +276,32 @@
 - **UAT**: Autonomous operation in real environment
 
 ## Current Status
-### Project Health: 🚀 EXCELLENT - ROS 2 + ISAAC ROS MIGRATION IN PROGRESS
-- **Foundation Complete**: ✅ Autonomous ball following working as ROS 1 baseline
-- **Architecture Proven**: ✅ Professional ROS 1 integration patterns established
-- **Current Phase**: ⏳ ROS 2 environment setup (Phase 1, Slice 1.1 - IN PROGRESS)
-- **Strategic Direction**: 🚀 Migrating to ROS 2 + Isaac ROS for modern capabilities
-- **Migration Plan**: ✅ Phased approach with clear UAT criteria for each slice
-- **Target Architecture**: ROS 2 + Isaac ROS + Behavior Trees + LLM Integration
-- **Future-Proof**: Modern ROS 2 platform with Jetson-accelerated AI models
-- **Clean Migration**: No bridge needed - clean ROS 1 → ROS 2 migration approach
+### Project Health: 🚀 EXCELLENT - FRESH START STRATEGY ACTIVE
+- **Stable Baseline**: ✅ Complete ROS 1 autonomous ball following system (preserved)
+- **Proven Architecture**: ✅ Professional patterns and integration methods established
+- **Strategic Decision**: 🔄 Complete fresh start to eliminate configuration drift
+- **Current Phase**: ⏳ Fresh Ubuntu 22.04 + ROS 2 installation (Phase 1 - ACTIVE)
+- **Target Architecture**: ROS 2 + Isaac ROS + Nav2 + Behavior Trees + LLM Integration
+- **Success Pattern**: Following proven clean installation approach from ROS 1
+- **Reference System**: ROS 1 baseline remains intact for architecture guidance
+- **Modern Capabilities**: GPU-accelerated perception + professional navigation stack
 
 ### Development Velocity
-- **Strategic Pivot**: ROS 2 + Isaac ROS identified as optimal modern solution
-- **Foundation Preserved**: Current ROS 1 working system maintained as reference
-- **Documentation Updated**: Migration plan and architecture documented
-- **Next Phase**: ROS 2 environment setup and basic functionality (Phase 1)
-- **Long-term Vision**: LLM-orchestrated task execution on modern ROS 2 platform
+- **Strategic Restart**: Complete fresh start to ensure stable foundation
+- **Baseline Preserved**: ROS 1 working system intact as reference architecture
+- **Clean Approach**: No configuration drift - start fresh with proven methods
+- **Documentation Complete**: Fresh start plan and architecture fully documented
+- **Current Focus**: Ubuntu 22.04 + ROS 2 + Isaac ROS clean installation
+- **Target Outcome**: Modern robotics stack with LLM integration capabilities
 
 ### Achievement Summary
-**FOUNDATION COMPLETE: Autonomous Ball Following (ROS 1)**
+**STABLE BASELINE: Autonomous Ball Following (ROS 1)**
 - Robot autonomously detects and follows balls (proven capability)
-- Professional ROS 1 architecture established (valuable reference)
-- **STRATEGIC UPGRADE**: Moving to ROS 2 + Isaac ROS for production-grade capabilities
-- **TARGET**: Modern robotics stack with LLM task orchestration
-- **LEARNING VALUE**: ROS 2 migration provides valuable modern robotics experience
+- Professional ROS 1 architecture established (architectural reference)
+- **FRESH START STRATEGY**: Complete rebuild for modern capabilities
+- **TARGET**: ROS 2 + Isaac ROS + Nav2 + Behavior Trees + LLM Integration
+- **SUCCESS PATTERN**: Clean installation approach that made ROS 1 successful
+- **FUTURE-PROOF**: Modern stack ready for GPU acceleration and advanced AI
 
 ## Known Issues & Limitations
 ### Current Limitations
