@@ -29,56 +29,83 @@ Robot Movement (Our proven differential drive system)
 - ✅ **GPU Acceleration**: Multi-threaded ONNX inference
 - ✅ **Focus on Value**: LLM strategic planning vs low-level detection
 
-## Revised Implementation Strategy (Professional Foundation)
+## Revised Implementation Strategy - POC Priority Order (2025-06-24)
 
-### **Slice 1: ros2_vision_inference Integration** 🎯 NEXT
-**UAT Goal**: "I can see multiple balls detected with 3D positions and confidence scores"
+**Strategic Decision**: Prioritize foundation-first approach with proven technologies before experimental features. This minimizes risk and ensures each component adds immediate value.
 
-#### Why This Approach is Superior
-- **Professional 3D Object Detection** vs our 2D HSV filtering
-- **Pre-trained on sports balls** - our exact use case!
-- **GPU acceleration** with multi-threading vs single-threaded processing
-- **Standard vision_msgs** vs custom message definitions
-- **Proven reliability** vs experimental custom detection
+### 🎯 New Priority Order:
+1. **Navigation Stack Integration (Nav2)** - Professional navigation foundation
+2. **Professional 3D Vision** - Enhanced detection accuracy  
+3. **LLM Strategic Planning** - Intelligent decision making
+4. **Collection State Machine** - Complete system orchestration
+
+### **Slice 1: Navigation Stack Integration (Nav2)** 🎯 NEXT
+**UAT Goal**: "Robot navigates to ball using professional path planning with obstacle avoidance"
+
+#### Why Nav2 First
+- **Immediate Professional Upgrade**: Transforms basic "drive at ball" → industry-standard navigation
+- **Low Integration Risk**: Nav2 is mature, well-documented, proven technology
+- **Foundation for Everything**: All future components benefit from professional navigation
+- **Works with Current System**: Can use existing HSV detection + coordinate transformation
 
 #### Technical Implementation
-1. **Install ros2_vision_inference Package**
-   - Clone from https://github.com/Owen-Liuyuxuan/ros2_vision_inference
-   - Install dependencies: `pip3 install onnxruntime-gpu`
-   - Build package in our ROS 2 workspace
+1. **Install Nav2 Stack**
+   - Install `ros-humble-navigation2` and `ros-humble-nav2-bringup`
+   - Configure for differential drive robot (JetBot)
+   - Set up costmaps and planners
 
-2. **Configure Pre-trained Models**
-   - Download `mono3d_yolox_576_768.onnx` - YoloX-m MonoFlex trained on sports balls
-   - Configure model paths in launch files
-   - Set up input image size and processing parameters
+2. **Robot Configuration**
+   - Create Nav2 parameter files for JetBot dimensions
+   - Configure local and global costmaps
+   - Set up DWB local planner for differential drive
 
-3. **Integration with Our System**
-   - Connect to existing `/camera/image_raw` and `/camera/camera_info` topics
-   - Configure detection confidence thresholds for golf balls
-   - Test professional detection vs our HSV approach
+3. **Integration with Current System**
+   - Transform camera ball detection → world coordinates
+   - Publish navigation goals to Nav2
+   - Replace direct `/cmd_vel` commands with Nav2 planning
 
-4. **Output Processing**
-   - Receive `vision_msgs/Detection3DArray` with 3D ball positions
-   - Extract ball positions, confidence scores, and bounding boxes
-   - Create visualization for multiple detected balls
+4. **Obstacle Simulation**
+   - Add obstacles to test world
+   - Validate path planning around obstacles
+   - Test dynamic obstacle avoidance
 
 #### Files to Create/Modify
-- `ros2_vision_inference/` - Professional detection package (external)
-- `jetbot_professional_detection.launch.py` - Launch with ros2_vision_inference
-- `multi_ball_test_world.world` - Test environment (keep existing)
-- Integration parameters and configuration files
+- `nav2_params.yaml` - Nav2 configuration for JetBot
+- `jetbot_nav2_bringup.launch.py` - Launch Nav2 with our robot
+- `ball_to_nav_goal.py` - Convert ball detection to Nav2 goals
+- `obstacle_test_world.world` - World with obstacles
 
 #### Success Criteria
-- ✅ ros2_vision_inference detects multiple sports balls with 3D positions
-- ✅ Confidence scores and world coordinates available for each ball
-- ✅ Professional detection outperforms our HSV approach
-- ✅ Standard vision_msgs interface working properly
-- ✅ User confirms: "I can see multiple balls detected with 3D positions and confidence scores"
+- ✅ Nav2 stack launches with JetBot configuration
+- ✅ Robot plans paths around obstacles to reach balls
+- ✅ Smooth navigation replacing direct drive behavior
+- ✅ Professional path planning visible in RViz
+- ✅ User confirms: "Robot navigates to ball using professional path planning"
 
 ---
 
-### **Slice 2: Basic Ball Selection Logic**
-**UAT Goal**: "System picks closest ball and highlights it"
+### **Slice 2: Professional 3D Vision (ros2_vision_inference)**
+**UAT Goal**: "I can see multiple balls detected with 3D positions and confidence scores"
+
+#### Why 3D Vision Second
+- **Enhanced Nav2 Goals**: Professional 3D coordinates make navigation more accurate
+- **Standard Interfaces**: vision_msgs/Detection3DArray integrates cleanly
+- **Proven Technology**: Pre-trained models for sports ball detection
+- **Foundation Enhancement**: Upgrades perception quality for all future components
+
+#### Technical Implementation
+[Previous ros2_vision_inference implementation details remain the same]
+
+#### Success Criteria
+- ✅ Professional 3D detection of multiple sports balls
+- ✅ Direct world coordinates for Nav2 goal setting
+- ✅ Improved detection robustness vs HSV approach
+- ✅ User confirms: "Multiple balls detected with 3D positions"
+
+---
+
+### **Slice 3: LLM Strategic Planning**
+**UAT Goal**: "LLM analyzes ball positions and selects optimal collection strategy"
 
 #### Technical Implementation
 1. **Ball Selection Node**

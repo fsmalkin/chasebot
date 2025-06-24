@@ -101,35 +101,37 @@ The ROS 2 system is designed for direct deployment to Jetson Nano:
 - **Intelligence**: LLM controller for strategic collection decisions
 - **Architecture**: ros2_vision_inference + Nav2 + LLM Planning + Existing robot foundation
 
-### Updated Implementation Plan (Professional Foundation)
+### Updated Implementation Plan - POC Priority Order (2025-06-24)
 
-#### **Slice 1: ros2_vision_inference Integration** 🎯 NEXT
-**UAT**: "I can see multiple balls detected with 3D positions and confidence scores"
-- Install and configure ros2_vision_inference package
-- Use pre-trained sports ball detection models (mono3d_yolox_576_768.onnx)
-- Integrate with our existing camera topics (`/camera/image_raw`)
-- **Benefit**: Professional 3D detection vs custom 2D HSV filtering
+**Strategic Decision**: Foundation-first approach with proven technologies before experimental features
 
-#### **Slice 2: LLM Strategic Planning Layer**
+#### **Slice 1: Navigation Stack Integration (Nav2)** 🎯 NEXT
+**UAT**: "Robot navigates to ball using professional path planning with obstacle avoidance"
+- Install and configure Nav2 for differential drive robot
+- Transform camera ball detection to world coordinates
+- Replace direct cmd_vel with professional path planning
+- **Benefit**: Immediate professional upgrade with low integration risk
+
+#### **Slice 2: Professional 3D Vision (ros2_vision_inference)**
+**UAT**: "Multiple balls detected with 3D positions and confidence scores"
+- Install ros2_vision_inference with sports ball detection models
+- Integrate with Nav2 for direct world coordinate goals
+- Enhanced detection robustness vs HSV approach
+- **Build on**: Professional navigation foundation
+
+#### **Slice 3: LLM Strategic Planning**
 **UAT**: "LLM analyzes ball positions and selects optimal collection strategy"
-- Create LLM service that receives vision_msgs/Detection3DArray
-- LLM makes strategic decisions: "Target ball #2 first - closest to current position"
-- Publish strategic commands to collection coordinator
-- **Build on**: Professional ball detection from Slice 1
-
-#### **Slice 3: Nav2 Integration with 3D Positioning**
-**UAT**: "Robot navigates to LLM-selected ball using 3D coordinates"
-- Install and configure Nav2 for our robot
-- Convert 3D ball positions to Nav2 navigation goals
-- Test navigation to ball positions using professional path planning
-- **Build on**: 3D ball positions + LLM strategic selection
+- Create LLM service for intelligent collection decisions
+- Leverage Nav2 path planning + 3D vision inputs
+- Strategic routing and efficiency optimization
+- **Build on**: Nav2 + 3D Vision foundation
 
 #### **Slice 4: Collection State Machine**
 **UAT**: "Robot completes full autonomous collection cycle for multiple balls"
-- Implement "Detect → Plan → Navigate → Collect → Repeat" state machine
-- LLM guides entire collection sequence and strategy
-- Complete autonomous multi-ball collection behavior
-- **Build on**: All previous professional components
+- Implement complete mission orchestration
+- Integrate all components into autonomous operation
+- Track collection progress and handle errors
+- **Build on**: All previous components working together
 
 ### New Target Architecture (Professional Grade)
 ```
