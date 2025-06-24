@@ -88,25 +88,70 @@ The ROS 2 system is designed for direct deployment to Jetson Nano:
 - Same HSV detection parameters
 - Same proportional control algorithms
 
-## Next Phase Options
+## Next Phase: Multi-Ball Collection with LLM Planning 🎯 ACTIVE
 
-### Option 1: Hardware Deployment 🎯 READY
-- Deploy autonomous system to physical Jetson Nano JetBot
-- Test with real camera and golf balls
-- Validate autonomous behavior in physical environment
-- Real-world performance tuning and optimization
+### Strategic Direction: Advanced Autonomous System
+**Goal**: Build intelligent multi-ball collection system with LLM-based planning
+- **Perception**: Multi-ball detection and tracking
+- **Navigation**: Nav2 integration for professional path planning and obstacle avoidance
+- **Intelligence**: LLM controller for collection strategy and decision making
+- **Architecture**: Isaac ROS + Nav2 + LLM Planning + Existing robot foundation
 
-### Option 2: Advanced Simulation Features 🔄 AVAILABLE
-- Multiple ball collection scenarios
-- Dynamic environments with obstacles
-- Performance optimization and speed tuning
-- Advanced navigation and path planning
+### Thin Slice Implementation Plan
 
-### Option 3: Isaac ROS Integration 🔄 FUTURE
-- Modern perception stack with Isaac ROS
-- YOLOv8 object detection for enhanced accuracy
-- Nav2 integration for advanced navigation
-- Multi-robot coordination capabilities
+#### **Slice 1: Multi-Ball Detection Foundation** 🎯 NEXT
+**UAT**: "I can see multiple green balls detected simultaneously"
+- Modify existing HSV detector to find ALL balls (not just largest)
+- Create `/ball_detections` topic with array of ball positions
+- Visual feedback showing all detected balls
+- **Build on**: Our working single-ball detection
+
+#### **Slice 2: Basic Ball Selection Logic** 
+**UAT**: "System picks closest ball and highlights it"
+- Simple "closest ball" selection algorithm (no LLM yet)
+- Publish `/target_ball` topic with selected ball
+- Visual indication of which ball is selected
+- **Build on**: Multi-ball detection from Slice 1
+
+#### **Slice 3: Nav2 Integration - Basic Waypoints**
+**UAT**: "Robot navigates to a specific X,Y coordinate"
+- Install and configure Nav2 for our robot
+- Test navigation to manual waypoint goals
+- Replace direct movement with Nav2 goal requests
+- **Build on**: Our working differential drive system
+
+#### **Slice 4: Ball Position → Navigation Goal**
+**UAT**: "Robot navigates to selected ball using Nav2"
+- Convert ball pixel position to world coordinates
+- Send ball position as Nav2 navigation goal
+- Robot navigates to ball instead of direct following
+- **Build on**: Nav2 integration + ball selection
+
+#### **Slice 5: Simple LLM Planning Stub**
+**UAT**: "LLM selects next target ball from list"
+- Create mock LLM service that receives ball list
+- LLM responds with "target ball #2" type decisions
+- Replace simple "closest ball" logic with LLM calls
+- **Build on**: Multi-ball detection and navigation
+
+#### **Slice 6: Collection State Machine**
+**UAT**: "Robot completes full collection cycle for 2+ balls"
+- "Navigate → Collect → Plan Next → Repeat" behavior
+- LLM decides collection order and strategy
+- Complete autonomous multi-ball collection
+- **Build on**: All previous slices
+
+### Target Architecture
+```
+LLM Controller (High-level reasoning & strategy)
+    ↓ "Collect ball #3 next based on efficiency"
+Isaac ROS (Multi-ball detection & tracking)
+    ↓ "I see 5 balls at positions X,Y,Z..."
+Nav2 (Professional navigation & obstacle avoidance)
+    ↓ "Planning path to target, avoiding obstacles"
+Robot Movement (Our working differential drive)
+    ↓ "Executing movement commands"
+```
 
 ## Development Environment Status
 ### WSL2 + ROS 2 Setup ✅

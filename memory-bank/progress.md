@@ -118,41 +118,82 @@ ROS 2 Humble → Gazebo Classic → libgazebo_ros_diff_drive → Robot Movement
 - ✅ `CMakeLists.txt` and `package.xml` configured for installation
 - ✅ Colcon build system working reliably
 
-## Next Development Steps
+## Next Development Steps: Multi-Ball Collection with LLM Planning
 
-### Phase 3: Advanced Robot Features 🔄 READY FOR IMPLEMENTATION
-**Step 3.1: Add Camera Sensor** 🔄 NEXT
-- 🔄 Add camera link and joint to URDF
-- 🔄 Configure camera plugin (libgazebo_ros_camera.so)
-- 🔄 Test camera feed publishing to /camera/image_raw
-- 🔄 Validate camera integration before vision processing
+### Phase 4: COMPLETE - Single Ball Autonomous Following ✅
+**Successfully achieved autonomous ball following behavior**
+- ✅ **Movement System**: Robot responds to /cmd_vel commands perfectly
+- ✅ **Vision System**: HSV-based golf ball detection operational
+- ✅ **Integration**: Autonomous approach and control working
+- ✅ **UAT Success**: User confirmed "That was awesome it went up to the ball"
 
-**Step 3.2: Basic Vision Integration** 🔄 PLANNED
-- 🔄 Add simple vision processing node
-- 🔄 Test basic image processing capabilities
-- 🔄 Implement basic object detection (colored objects)
-- 🔄 Create vision-guided movement behaviors
+### Phase 5: Multi-Ball Collection System 🎯 ACTIVE
 
-**Step 3.3: JetBot Shape Conversion** 🔄 PLANNED
-- 🔄 Convert box robot to realistic JetBot proportions
-- 🔄 Add JetBot-style chassis and camera mount
-- 🔄 Maintain differential drive functionality
-- 🔄 Prepare for hardware deployment compatibility
+#### **Slice 1: Multi-Ball Detection Foundation** 🎯 NEXT
+**UAT Goal**: "I can see multiple green balls detected simultaneously"
+- 🔄 Modify `ros2_golf_ball_follower.py` to detect ALL balls (not just largest)
+- 🔄 Create custom message type for ball detection array
+- 🔄 Create `/ball_detections` topic with array of ball positions
+- 🔄 Add visual feedback showing all detected balls with IDs
+- 🔄 Create multi-ball test world with 3-5 green golf balls
+- **Build on**: Our working single-ball HSV detection
 
-### Phase 4: Isaac ROS Integration 🔄 PLANNED
-**Modern Perception Pipeline**
-- 🔄 Install Isaac ROS packages
-- 🔄 Configure YOLOv8 for golf ball detection
-- 🔄 Implement object tracking and following
-- 🔄 Add Nav2 navigation capabilities
+#### **Slice 2: Basic Ball Selection Logic** 🔄 NEXT
+**UAT Goal**: "System picks closest ball and highlights it"
+- 🔄 Simple "closest ball" selection algorithm (no LLM yet)
+- 🔄 Publish `/target_ball` topic with selected ball information
+- 🔄 Visual indication of which ball is currently targeted
+- 🔄 Basic priority logic (closest first, then next closest)
+- **Build on**: Multi-ball detection from Slice 1
 
-### Phase 5: Full Autonomous Behavior Recreation 🔄 FUTURE
-**Goal**: Recreate ROS 1 autonomous ball following capabilities in ROS 2
-- 🔄 Port YOLO detection to Isaac ROS
-- 🔄 Implement position bridge for ROS 2
-- 🔄 Create autonomous follower node
-- 🔄 Achieve autonomous ball following in ROS 2
-- **Target**: Match or exceed ROS 1 performance with modern stack
+#### **Slice 3: Nav2 Integration - Basic Waypoints** 🔄 PLANNED
+**UAT Goal**: "Robot navigates to a specific X,Y coordinate"
+- 🔄 Install and configure Nav2 packages for ROS 2 Humble
+- 🔄 Create costmap configuration for our robot
+- 🔄 Test navigation to manual waypoint goals via `/move_base_simple/goal`
+- 🔄 Replace direct movement commands with Nav2 goal requests
+- 🔄 Add basic obstacle detection and avoidance
+- **Build on**: Our working differential drive system
+
+#### **Slice 4: Ball Position → Navigation Goal** 🔄 PLANNED  
+**UAT Goal**: "Robot navigates to selected ball using Nav2"
+- 🔄 Convert ball pixel position to world coordinates using camera calibration
+- 🔄 Send ball position as Nav2 navigation goal
+- 🔄 Robot navigates to ball instead of direct following behavior
+- 🔄 Add "collection" behavior when robot reaches ball location
+- **Build on**: Nav2 integration + ball selection logic
+
+#### **Slice 5: Simple LLM Planning Stub** 🔄 PLANNED
+**UAT Goal**: "LLM selects next target ball from list"
+- 🔄 Create ROS 2 service interface for LLM planning
+- 🔄 Implement mock LLM service that receives ball detection list
+- 🔄 LLM responds with strategic decisions: "target ball #2 next"
+- 🔄 Replace simple "closest ball" logic with LLM-guided selection
+- 🔄 Add reasoning capabilities (efficiency, obstacles, collection order)
+- **Build on**: Multi-ball detection and navigation
+
+#### **Slice 6: Collection State Machine** 🔄 PLANNED
+**UAT Goal**: "Robot completes full collection cycle for 2+ balls"
+- 🔄 Implement "Navigate → Collect → Plan Next → Repeat" state machine
+- 🔄 LLM decides optimal collection order and strategy
+- 🔄 Complete autonomous multi-ball collection behavior
+- 🔄 Add collection tracking and mission completion logic
+- 🔄 Performance optimization and efficiency metrics
+- **Build on**: All previous slices integrated
+
+### Phase 6: Advanced Perception Integration 🔄 FUTURE
+**Goal**: Replace HSV detection with professional computer vision
+- 🔄 Isaac ROS integration for robust object detection
+- 🔄 YOLOv8 or RT-DETR for "sports ball" classification
+- 🔄 Enhanced tracking and pose estimation
+- 🔄 Robust performance in varying lighting conditions
+
+### Phase 7: Hardware Deployment 🔄 FUTURE
+**Goal**: Deploy complete system to Jetson Nano JetBot
+- 🔄 Multi-ball collection behavior on real hardware
+- 🔄 Real-world navigation and obstacle avoidance
+- 🔄 Performance tuning and optimization
+- 🔄 Field testing and validation
 
 ## Current Status
 

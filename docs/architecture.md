@@ -1,54 +1,102 @@
-# ChaseBot ROS Architecture
+# ChaseBot ROS 2 Architecture: Multi-Ball Collection with LLM Planning
 
 ## System Overview
 
-ChaseBot is designed as a modular, ROS-based autonomous robot system for golf ball collection. The architecture follows an **iterative development approach** - starting with simple topic-based nodes that can evolve into more sophisticated behavior coordination without throwaway work.
+ChaseBot has successfully achieved **autonomous golf ball following** and is now evolving into an intelligent **multi-ball collection system with LLM planning**. The architecture combines professional robotics stacks (ROS 2 + Isaac ROS + Nav2) with AI reasoning capabilities for strategic collection planning and execution.
 
 ## Development Philosophy
 
-### Pragmatic Iteration
-- **Start Simple**: Basic topic/service nodes for immediate progress
-- **Evolve Naturally**: Each simple node becomes a reusable primitive action
-- **Zero Throwaway**: All code remains useful as system grows in complexity
-- **Unblock Progress**: Focus on working robot behavior over architectural perfection
+### Thin Slice Iteration ✅ PROVEN SUCCESS
+- **Build Incrementally**: Each slice adds one testable capability
+- **Validate Early**: UAT testing confirms each component works
+- **Preserve Foundation**: Build on proven working systems
+- **Professional Standards**: Use industry-standard robotics packages
 
-### Future LLM Integration Path
-The architecture is designed to eventually support LLM-driven task decomposition:
+### LLM-Integrated Robotics
+The architecture enables LLM reasoning to orchestrate professional robotics capabilities:
 ```
-"Collect Ball" → acquire_target + approach_object + engage_ball + push_to_location
+LLM: "Collect ball #3 next - it's closest and path is clear"
+    ↓
+Nav2: "Planning obstacle-free path to target coordinates"
+    ↓  
+Isaac ROS: "Tracking all 5 balls, target #3 confirmed"
+    ↓
+Robot: "Executing navigation and collection behavior"
 ```
 
-Current simple nodes will become the primitive actions for this higher-level coordination.
+Each layer provides professional capabilities that LLM can reason about and coordinate.
 
-## Current Architecture (Milestone: Navigate to Target)
+## Current Status: Autonomous Ball Following ✅ COMPLETE
 
-### 1. Object Detection System (darknet_ros)
-- **Package**: darknet_ros (2.3k GitHub stars) - industry-standard YOLO implementation
-- **Input**: Camera feed via `/camera/image_raw` topic (sensor_msgs/Image)
-- **Processing**: Pre-trained YOLO v2-tiny model detecting golf balls as "sports ball" class
-- **Output**: Bounding boxes via `/darknet_ros/bounding_boxes` topic (darknet_ros_msgs/BoundingBoxes)
-- **Visualization**: Detection results on `/darknet_ros/detection_image` topic
+### ROS 2 Foundation Working
+- **ROS 2 Humble**: Professional robotics platform with modern DDS communication
+- **Gazebo Classic**: Simulation environment operational with robot spawning
+- **JetBot URDF**: Complete robot model with differential drive and camera
+- **HSV Detection**: Reliable green golf ball detection and following behavior
+- **Autonomous Control**: Robot approaches and centers on detected balls
+- **User Validation**: "That was awesome it went up to the ball" - complete success
 
-### 2. Target Selection Node (chasebot_navigation)
-- **Node**: `target_selector_node` - simple custom node
-- **Input**: `/darknet_ros/bounding_boxes` (darknet_ros_msgs/BoundingBoxes)
-- **Processing**: Filter "sports ball" detections, select best target (closest/largest)
-- **Output**: `/target_position` (geometry_msgs/PointStamped)
-- **Logic**: Simple heuristics for target prioritization
+## Target Architecture: Multi-Ball Collection with LLM Planning
 
-### 3. Approach Controller Node (chasebot_navigation)
-- **Node**: `approach_controller_node` - adapted from ball-chaser-bot pattern
-- **Input**: `/target_position` (geometry_msgs/PointStamped)
-- **Processing**: Proportional control algorithm for differential drive
-- **Output**: `/cmd_vel` (geometry_msgs/Twist)
-- **Implementation**: Based on proven gsotirchos/ball-chaser-bot approach
+### Phase 5: Multi-Ball Collection System 🎯 ACTIVE
 
-### 4. State Monitor Node (chasebot_navigation)
-- **Node**: `state_monitor_node` - simple status tracking
-- **Input**: `/target_position`, `/cmd_vel`
-- **Processing**: Track system state for debugging and future coordination
-- **Output**: `/approach_status` (std_msgs/String)
-- **States**: "searching", "approaching", "reached", "lost_target"
+#### Slice 1: Multi-Ball Detection Foundation 🎯 NEXT
+**Goal**: Detect and track multiple golf balls simultaneously
+```
+Multi-Ball HSV Detector
+    ↓ /ball_detections (chasebot_msgs/BallDetectionArray)
+Visual Feedback System → Display all detected balls with IDs
+```
+
+#### Slice 2: Basic Ball Selection Logic
+**Goal**: Intelligent target selection from multiple options
+```
+Ball Selection Node
+    ↓ /target_ball (chasebot_msgs/TargetBall)  
+Priority Logic → Select optimal ball (closest, efficiency-based)
+```
+
+#### Slice 3: Nav2 Integration - Professional Navigation
+**Goal**: Replace direct movement with professional path planning
+```
+Nav2 Navigation Stack
+    ↓ /move_base_simple/goal (geometry_msgs/PoseStamped)
+Costmap → Obstacle detection and avoidance
+Path Planning → Optimal routes to targets
+```
+
+#### Slice 4: Ball Position → Navigation Goal
+**Goal**: Convert visual detections to navigation targets
+```
+Position Bridge
+    ↓ Camera coordinates → World coordinates → Nav2 goals
+Collection Behavior → Navigate to ball + collection sequence
+```
+
+#### Slice 5: LLM Planning Integration
+**Goal**: AI-driven collection strategy and decision making
+```
+LLM Planning Service
+    ↓ Strategic decisions based on ball positions and efficiency
+Collection Coordinator → "Collect ball #3 next - optimal path"
+```
+
+#### Slice 6: Complete Collection State Machine
+**Goal**: Full autonomous multi-ball collection system
+```
+Collection State Machine
+    ↓ Navigate → Collect → Plan Next → Repeat
+Mission Completion → Track collected balls and optimize routes
+```
+
+### Advanced Perception Layer (Future)
+**Goal**: Replace HSV with professional computer vision
+```
+Isaac ROS Integration
+    ↓ GPU-accelerated YOLO detection
+Object Tracking → Persistent ball tracking during navigation
+Robustness → Works with white balls in varying lighting
+```
 
 ## ROS Data Flow (Current Implementation)
 
