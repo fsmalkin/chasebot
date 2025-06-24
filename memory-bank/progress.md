@@ -127,66 +127,54 @@ ROS 2 Humble → Gazebo Classic → libgazebo_ros_diff_drive → Robot Movement
 - ✅ **Integration**: Autonomous approach and control working
 - ✅ **UAT Success**: User confirmed "That was awesome it went up to the ball"
 
-### Phase 5: Multi-Ball Collection System 🎯 ACTIVE
+### Phase 5: Multi-Ball Collection System 🎯 STRATEGIC PIVOT
 
-#### **Slice 1: Multi-Ball Detection Foundation** 🎯 NEXT
-**UAT Goal**: "I can see multiple green balls detected simultaneously"
-- 🔄 Modify `ros2_golf_ball_follower.py` to detect ALL balls (not just largest)
-- 🔄 Create custom message type for ball detection array
-- 🔄 Create `/ball_detections` topic with array of ball positions
-- 🔄 Add visual feedback showing all detected balls with IDs
-- 🔄 Create multi-ball test world with 3-5 green golf balls
-- **Build on**: Our working single-ball HSV detection
+#### 🚀 **MAJOR DISCOVERY**: Professional Solutions Already Exist! 
+**Research Breakthrough (Dec 24, 2025)**: Discovered existing ROS 2 packages that solve our multi-ball detection problem better than custom development. Strategic pivot from "build from scratch" to "leverage existing solutions + focus on LLM value-add."
 
-#### **Slice 2: Basic Ball Selection Logic** 🔄 NEXT
-**UAT Goal**: "System picks closest ball and highlights it"
-- 🔄 Simple "closest ball" selection algorithm (no LLM yet)
-- 🔄 Publish `/target_ball` topic with selected ball information
-- 🔄 Visual indication of which ball is currently targeted
-- 🔄 Basic priority logic (closest first, then next closest)
-- **Build on**: Multi-ball detection from Slice 1
+#### **Previous Slice 1: Custom Multi-Ball Detection** ❌ CANCELLED
+**Original Plan**: Build custom HSV multi-ball detector
+**Strategic Decision**: ❌ Cancelled in favor of professional ros2_vision_inference package
+**Reason**: Existing solution provides superior 3D detection, standard interfaces, and proven reliability
 
-#### **Slice 3: Nav2 Integration - Basic Waypoints** 🔄 PLANNED
-**UAT Goal**: "Robot navigates to a specific X,Y coordinate"
-- 🔄 Install and configure Nav2 packages for ROS 2 Humble
-- 🔄 Create costmap configuration for our robot
-- 🔄 Test navigation to manual waypoint goals via `/move_base_simple/goal`
-- 🔄 Replace direct movement commands with Nav2 goal requests
-- 🔄 Add basic obstacle detection and avoidance
-- **Build on**: Our working differential drive system
+#### **New Slice 1: ros2_vision_inference Integration** 🎯 NEXT
+**UAT Goal**: "I can see multiple balls detected with 3D positions and confidence scores"
+- 🔄 Install and configure ros2_vision_inference package
+- 🔄 Use pre-trained sports ball detection models (mono3d_yolox_576_768.onnx)
+- 🔄 Integrate with existing camera topics (`/camera/image_raw`)
+- 🔄 Test professional 3D ball detection vs our HSV approach
+- **Benefit**: Professional 3D detection + GPU acceleration vs custom 2D HSV
 
-#### **Slice 4: Ball Position → Navigation Goal** 🔄 PLANNED  
-**UAT Goal**: "Robot navigates to selected ball using Nav2"
-- 🔄 Convert ball pixel position to world coordinates using camera calibration
-- 🔄 Send ball position as Nav2 navigation goal
-- 🔄 Robot navigates to ball instead of direct following behavior
-- 🔄 Add "collection" behavior when robot reaches ball location
-- **Build on**: Nav2 integration + ball selection logic
-
-#### **Slice 5: Simple LLM Planning Stub** 🔄 PLANNED
-**UAT Goal**: "LLM selects next target ball from list"
-- 🔄 Create ROS 2 service interface for LLM planning
-- 🔄 Implement mock LLM service that receives ball detection list
-- 🔄 LLM responds with strategic decisions: "target ball #2 next"
-- 🔄 Replace simple "closest ball" logic with LLM-guided selection
+#### **Slice 2: LLM Strategic Planning Layer** 🔄 PLANNED
+**UAT Goal**: "LLM analyzes ball positions and selects optimal collection strategy"
+- 🔄 Create LLM service that receives vision_msgs/Detection3DArray
+- 🔄 LLM makes strategic decisions: "Target ball #2 first - closest to current position"
+- 🔄 Publish strategic commands to collection coordinator
 - 🔄 Add reasoning capabilities (efficiency, obstacles, collection order)
-- **Build on**: Multi-ball detection and navigation
+- **Build on**: Professional ball detection from Slice 1
 
-#### **Slice 6: Collection State Machine** 🔄 PLANNED
-**UAT Goal**: "Robot completes full collection cycle for 2+ balls"
-- 🔄 Implement "Navigate → Collect → Plan Next → Repeat" state machine
-- 🔄 LLM decides optimal collection order and strategy
+#### **Slice 3: Nav2 Integration with 3D Positioning** 🔄 PLANNED
+**UAT Goal**: "Robot navigates to LLM-selected ball using 3D coordinates"
+- 🔄 Install and configure Nav2 packages for ROS 2 Humble
+- 🔄 Convert 3D ball positions to Nav2 navigation goals
+- 🔄 Test navigation to ball positions using professional path planning
+- 🔄 Add basic obstacle detection and avoidance
+- **Build on**: 3D ball positions + LLM strategic selection
+
+#### **Slice 4: Collection State Machine** 🔄 PLANNED
+**UAT Goal**: "Robot completes full autonomous collection cycle for multiple balls"
+- 🔄 Implement "Detect → Plan → Navigate → Collect → Repeat" state machine
+- 🔄 LLM guides entire collection sequence and strategy
 - 🔄 Complete autonomous multi-ball collection behavior
 - 🔄 Add collection tracking and mission completion logic
-- 🔄 Performance optimization and efficiency metrics
-- **Build on**: All previous slices integrated
+- **Build on**: All previous professional components
 
-### Phase 6: Advanced Perception Integration 🔄 FUTURE
-**Goal**: Replace HSV detection with professional computer vision
-- 🔄 Isaac ROS integration for robust object detection
-- 🔄 YOLOv8 or RT-DETR for "sports ball" classification
+### Phase 6: Advanced Features & Optimization 🔄 FUTURE
+**Goal**: Enhanced performance and additional capabilities
+- 🔄 Advanced LLM reasoning (path optimization, environmental awareness)
 - 🔄 Enhanced tracking and pose estimation
-- 🔄 Robust performance in varying lighting conditions
+- 🔄 Multi-robot coordination capabilities
+- 🔄 Performance optimization and efficiency metrics
 
 ### Phase 7: Hardware Deployment 🔄 FUTURE
 **Goal**: Deploy complete system to Jetson Nano JetBot
