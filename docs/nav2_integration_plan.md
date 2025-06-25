@@ -111,10 +111,12 @@ This approach provides:
 ### Phase 1: Vision-Based Obstacle Detection
 **Goal**: Convert RGB camera feed to laser scan for Nav2
 - [x] Research IMX219 compatibility - monocular RGB only
-- [ ] Create vision-based obstacle detection node
-- [ ] Convert obstacle positions to laser scan format
-- [ ] Test simulated scan generation from RGB camera
-- [ ] Verify scan data in RViz
+- [x] Create vision-based obstacle detection node
+- [x] Convert obstacle positions to laser scan format
+- [x] Test simulated scan generation from RGB camera
+- [x] Verify scan data publishing to /scan topic
+- [x] Implement HSV-based detection for green golf balls
+- [ ] Debug and optimize obstacle detection accuracy
 
 ### Phase 2: Basic Nav2 with Camera-based Laser
 **Goal**: Nav2 navigation using camera-generated laser scans
@@ -139,5 +141,8 @@ This approach provides:
 
 ## Current Status
 - ✅ Nav2 packages installed successfully
-- ✅ Research completed - found depthimage_to_laserscan solution
-- 🎯 Next: Install and configure depthimage_to_laserscan
+- ✅ IMX219 camera compatibility resolved - using vision-based approach
+- ✅ Vision to laser scan conversion implemented (both darkness and HSV versions)
+- ✅ Laser scan topic publishing successfully
+- ✅ Initial testing shows obstacle detection working (71 points detected)
+- 🎯 Next: Debug detection accuracy and integrate full Nav2 stack

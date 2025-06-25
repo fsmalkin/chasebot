@@ -48,18 +48,24 @@ def generate_launch_description():
         arguments=['-entity', 'jetbot', '-topic', 'robot_description', '-x', '0', '-y', '0', '-z', '0.1']
     )
     
-    # Vision to laserscan node (our custom node for IMX219)
+    # Vision to laserscan node (HSV-based for green golf balls)
     vision_to_laserscan = Node(
         package='chasebot_description',
-        executable='ros2_vision_to_laserscan.py',
-        name='vision_to_laserscan',
+        executable='ros2_vision_to_laserscan_hsv.py',
+        name='vision_to_laserscan_hsv',
         output='screen',
         parameters=[{
-            'scan_height_ratio': 0.5,      # Scan at middle of image
+            'scan_height_ratio': 0.5,       # Scan at middle of image
             'num_scan_samples': 180,        # 180 scan points (2 degree resolution)
             'scan_range_max': 3.0,          # Max 3 meters
             'scan_range_min': 0.2,          # Min 0.2 meters
-            'obstacle_threshold': 80        # Dark pixels are obstacles
+            'min_obstacle_width': 5,        # Min pixels for valid obstacle
+            'hsv_lower_h': 35,              # Green hue lower bound
+            'hsv_upper_h': 85,              # Green hue upper bound
+            'hsv_lower_s': 50,              # Saturation lower bound
+            'hsv_upper_s': 255,             # Saturation upper bound
+            'hsv_lower_v': 50,              # Value lower bound
+            'hsv_upper_v': 255              # Value upper bound
         }]
     )
     
