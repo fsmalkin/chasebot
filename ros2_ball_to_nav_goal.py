@@ -166,10 +166,11 @@ class BallToNavGoal(Node):
         """Convert ball detection to world pose for navigation."""
         try:
             # Get transform from camera to base_link
+            # Use the image timestamp instead of current time to avoid future extrapolation
             transform = self.tf_buffer.lookup_transform(
                 'base_link',
                 header.frame_id,
-                rclpy.time.Time(),
+                header.stamp,
                 timeout=rclpy.duration.Duration(seconds=1.0)
             )
             
@@ -184,7 +185,8 @@ class BallToNavGoal(Node):
             # Create goal pose
             goal = PoseStamped()
             goal.header.frame_id = 'base_link'
-            goal.header.stamp = self.get_clock().now().to_msg()
+            # Use the image timestamp to maintain temporal consistency
+            goal.header.stamp = header.stamp
             
             # Set position (approach point, not ball center)
             goal.pose.position.x = approach_x
@@ -196,8 +198,8 @@ class BallToNavGoal(Node):
             goal.pose.orientation.z = math.sin(yaw / 2.0)
             goal.pose.orientation.w = math.cos(yaw / 2.0)
             
-            # Transform to map frame
-            goal_map = self.tf_buffer.transform(goal, 'map', timeout=rclpy.duration.Duration(seconds=1.0))
+            # Transform to odom frame (we're using odom as global frame for mapless navigation)
+            goal_map = self.tf_buffer.transform(goal, 'odom', timeout=rclpy.duration.Duration(seconds=1.0))
             
             return goal_map
             

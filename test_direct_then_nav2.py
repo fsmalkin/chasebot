@@ -1,118 +1,163 @@
 #!/usr/bin/env python3
+"""
+Test script that first moves the robot with direct cmd_vel, 
+then attempts a Nav2 goal to verify both systems work.
+"""
 
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import Twist, PoseStamped
-from nav2_msgs.action import NavigateToPose
 from rclpy.action import ActionClient
+from nav2_msgs.action import NavigateToPose
+from geometry_msgs.msg import PoseStamped, Twist
+from sensor_msgs.msg import LaserScan
 import time
+import math
 
-class TestDirectThenNav2(Node):
-    """
-    Test direct control first, then try Nav2.
-    This helps debug if the issue is with movement or Nav2.
-    """
-    
+class DirectThenNav2Test(Node):
     def __init__(self):
-        super().__init__('test_direct_then_nav2')
+        super().__init__('direct_then_nav2_test')
         
-        # Publishers
-        self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        # Publishers and subscribers
+        self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
         
-        # Nav2 action client (will test later)
+        # Nav2 action client
         self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         
-        # State
-        self.phase = 0
-        self.nav2_available = False
+        # State tracking
+        self.scan_received = False
+        self.phase = "starting"
         
-        # Timer for test sequence
-        self.timer = self.create_timer(2.0, self.timer_callback)
+        # Start test sequence
+        self.create_timer(1.0, self.test_sequence)
         
-        self.get_logger().info('Test Direct Then Nav2 initialized')
-        self.get_logger().info('Phase 1: Testing direct cmd_vel control...')
+    def scan_callback(self, msg):
+        """Track if we're receiving laser scans."""
+        if not self.scan_received:
+            self.scan_received = True
+            valid_ranges = sum(1 for r in msg.ranges if not math.isinf(r))
+            self.get_logger().info(f'✅ Laser scan received! {valid_ranges} valid points out of {len(msg.ranges)}')
     
-    def timer_callback(self):
-        if self.phase == 0:
-            # Test forward movement
-            cmd = Twist()
-            cmd.linear.x = 0.2
-            self.cmd_pub.publish(cmd)
-            self.get_logger().info('Sending forward command (0.2 m/s)...')
-            self.phase = 1
+    def test_sequence(self):
+        """Execute test sequence."""
+        if self.phase == "starting":
+            self.get_logger().info('=== STARTING NAV2 INTEGRATION TEST ===')
+            self.phase = "check_scan"
             
-        elif self.phase == 1:
-            # Stop
-            cmd = Twist()
-            self.cmd_pub.publish(cmd)
-            self.get_logger().info('Stopping...')
-            self.phase = 2
-            
-        elif self.phase == 2:
-            # Test rotation
-            cmd = Twist()
-            cmd.angular.z = 0.5
-            self.cmd_pub.publish(cmd)
-            self.get_logger().info('Rotating (0.5 rad/s)...')
-            self.phase = 3
-            
-        elif self.phase == 3:
-            # Stop
-            cmd = Twist()
-            self.cmd_pub.publish(cmd)
-            self.get_logger().info('Stopping...')
-            self.get_logger().info('Direct control test complete!')
-            self.get_logger().info('If robot moved, basic control is working.')
-            
-            # Check Nav2
-            self.get_logger().info('\nPhase 2: Checking Nav2 availability...')
-            if self.nav_client.wait_for_server(timeout_sec=2.0):
-                self.nav2_available = True
-                self.get_logger().info('Nav2 is available! Sending test goal...')
-                self.phase = 4
+        elif self.phase == "check_scan":
+            if self.scan_received:
+                self.get_logger().info('✅ Vision-to-laserscan working')
+                self.phase = "test_direct_control"
             else:
-                self.get_logger().warn('Nav2 not available. Need to launch Nav2 stack.')
-                self.get_logger().info('Try: ros2 launch nav2_bringup navigation_launch.py')
-                self.timer.cancel()
+                self.get_logger().info('⏳ Waiting for laser scan data...')
                 
-        elif self.phase == 4 and self.nav2_available:
-            # Send simple Nav2 goal
-            goal = PoseStamped()
-            goal.header.frame_id = 'odom'
-            goal.header.stamp = self.get_clock().now().to_msg()
+        elif self.phase == "test_direct_control":
+            self.get_logger().info('📍 Testing direct cmd_vel control (forward 0.1 m/s for 2 seconds)...')
             
-            # Simple forward goal
-            goal.pose.position.x = 0.5
-            goal.pose.position.y = 0.0
-            goal.pose.orientation.w = 1.0
+            # Send forward command
+            twist = Twist()
+            twist.linear.x = 0.1
+            twist.angular.z = 0.0
+            self.cmd_vel_pub.publish(twist)
             
-            self.send_nav_goal(goal)
-            self.timer.cancel()
-    
-    def send_nav_goal(self, pose):
-        """Send navigation goal to Nav2."""
-        self.get_logger().info(f'Sending Nav2 goal to ({pose.pose.position.x:.2f}, '
-                              f'{pose.pose.position.y:.2f})')
+            # Schedule stop
+            self.create_timer(2.0, self.stop_direct_movement, run_once=True)
+            self.phase = "waiting_direct"
+            
+        elif self.phase == "check_nav2":
+            self.get_logger().info('🔍 Checking Nav2 availability...')
+            
+            if self.nav_client.wait_for_server(timeout_sec=5.0):
+                self.get_logger().info('✅ Nav2 action server is ready!')
+                self.phase = "test_nav2_goal"
+            else:
+                self.get_logger().error('❌ Nav2 action server not available!')
+                self.phase = "done"
+                
+        elif self.phase == "test_nav2_goal":
+            self.get_logger().info('🎯 Sending Nav2 goal (1 meter forward)...')
+            self.send_nav2_goal()
+            self.phase = "waiting_nav2"
+            
+        elif self.phase == "done":
+            self.get_logger().info('=== TEST COMPLETE ===')
+            # Keep spinning to see results
+            
+    def stop_direct_movement(self):
+        """Stop direct movement and move to Nav2 test."""
+        twist = Twist()
+        twist.linear.x = 0.0
+        twist.angular.z = 0.0
+        self.cmd_vel_pub.publish(twist)
         
+        self.get_logger().info('✅ Direct control test complete')
+        time.sleep(1.0)
+        self.phase = "check_nav2"
+        
+    def send_nav2_goal(self):
+        """Send a simple Nav2 goal."""
+        goal = PoseStamped()
+        goal.header.frame_id = 'odom'
+        goal.header.stamp = self.get_clock().now().to_msg()
+        
+        # Goal: 1 meter forward from current position
+        goal.pose.position.x = 1.0
+        goal.pose.position.y = 0.0
+        goal.pose.position.z = 0.0
+        
+        # No rotation
+        goal.pose.orientation.w = 1.0
+        
+        # Create and send goal
         goal_msg = NavigateToPose.Goal()
-        goal_msg.pose = pose
+        goal_msg.pose = goal
         
-        future = self.nav_client.send_goal_async(goal_msg)
-        future.add_done_callback(self.goal_response_callback)
-    
-    def goal_response_callback(self, future):
+        self.future = self.nav_client.send_goal_async(
+            goal_msg,
+            feedback_callback=self.nav2_feedback_callback
+        )
+        
+        self.future.add_done_callback(self.nav2_goal_response_callback)
+        
+    def nav2_goal_response_callback(self, future):
+        """Handle Nav2 goal response."""
         goal_handle = future.result()
         
         if not goal_handle.accepted:
-            self.get_logger().error('Goal rejected by Nav2!')
+            self.get_logger().error('❌ Nav2 goal REJECTED!')
+            self.get_logger().info('Check Nav2 logs for rejection reason')
         else:
-            self.get_logger().info('Goal accepted by Nav2! Robot should navigate.')
+            self.get_logger().info('✅ Nav2 goal ACCEPTED!')
+            self.get_logger().info('🚀 Robot navigating with professional path planning!')
+            
+            # Get result
+            self.result_future = goal_handle.get_result_async()
+            self.result_future.add_done_callback(self.nav2_result_callback)
+            
+        self.phase = "done"
+        
+    def nav2_result_callback(self, future):
+        """Handle navigation result."""
+        result = future.result().result
+        status = future.result().status
+        
+        if status == 4:  # SUCCEEDED
+            self.get_logger().info('🎉 Nav2 Navigation SUCCEEDED!')
+        else:
+            self.get_logger().info(f'Nav2 Navigation finished with status: {status}')
+            
+    def nav2_feedback_callback(self, feedback_msg):
+        """Handle Nav2 feedback."""
+        feedback = feedback_msg.feedback
+        current_pose = feedback.current_pose.pose
+        
+        self.get_logger().info(f'📍 Nav2 position: ({current_pose.position.x:.2f}, {current_pose.position.y:.2f})')
 
 
 def main(args=None):
     rclpy.init(args=args)
     
-    test_node = TestDirectThenNav2()
+    test_node = DirectThenNav2Test()
     
     try:
         rclpy.spin(test_node)
