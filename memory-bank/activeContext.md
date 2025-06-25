@@ -10,7 +10,10 @@
 **NAV2 CAMERA-ONLY NAVIGATION** - Implementing professional navigation stack with camera-based obstacle detection
 - ✅ Nav2 packages installed (ros-humble-navigation2, nav2-bringup)
 - ✅ Research completed - discovered depthimage_to_laserscan solution
-- 🎯 Next: Install and configure depthimage_to_laserscan for camera → laser scan conversion
+- ✅ IMX219 compatibility research - monocular RGB camera without depth
+- 🎯 Next: Implement vision-based obstacle detection for IMX219 camera
+
+**Critical Discovery**: JetBot's IMX219 camera is RGB-only (no depth), requiring vision-based obstacle detection instead of depth → laser scan conversion
 
 ## Major Achievement (2025-06-24)
 ### ✅ BREAKTHROUGH ACCOMPLISHED: MULTI-BALL AUTONOMOUS COLLECTION SYSTEM WORKING
@@ -122,6 +125,7 @@ The ROS 2 system is designed for direct deployment to Jetson Nano:
 - 🎯 Transform camera ball detection to world coordinates
 - 🎯 Replace direct cmd_vel with professional path planning
 - **Discovery**: ros-perception/depthimage_to_laserscan enables camera-only Nav2!
+- **Update**: IMX219 is RGB-only, pivoting to vision-based obstacle detection approach
 
 #### **Slice 2: Professional 3D Vision (ros2_vision_inference)**
 **UAT**: "Multiple balls detected with 3D positions and confidence scores"

@@ -84,13 +84,36 @@ After researching existing solutions for camera-only Nav2 navigation, we discove
 3. Laser scan → Nav2 navigation (standard approach)
 4. Ball detection → Navigation goals → Professional path planning
 
+### IMX219 Camera Compatibility (Updated)
+After research, we discovered that the **IMX219 is a monocular RGB camera** without native depth capabilities. This requires adjusting our approach since depthimage_to_laserscan requires depth images.
+
+**IMX219 Characteristics:**
+- ✅ Standard camera on JetBot hardware
+- ✅ 8MP resolution, 1080p video capability
+- ❌ No native depth information
+- ❌ Incompatible with depthimage_to_laserscan without modification
+
+**Recommended Approach: Vision-Based Obstacle Detection**
+Instead of depth → laser scan conversion, we'll implement:
+1. RGB camera feed → Computer vision obstacle detection
+2. Obstacle positions → Simulated laser scan data
+3. Simulated scan → Nav2 navigation
+4. Ball detection → Navigation goals → Professional path planning
+
+This approach provides:
+- ✅ Professional Nav2 integration
+- ✅ Hardware compatibility with IMX219
+- ✅ Real obstacle avoidance capability
+- ✅ Manageable implementation complexity
+
 ## Revised Implementation Plan
 
-### Phase 1: depthimage_to_laserscan Integration
-**Goal**: Convert camera feed to laser scan for Nav2
-- [ ] Install depthimage_to_laserscan package for ROS 2
-- [ ] Configure depth camera simulation
-- [ ] Test laser scan generation from camera
+### Phase 1: Vision-Based Obstacle Detection
+**Goal**: Convert RGB camera feed to laser scan for Nav2
+- [x] Research IMX219 compatibility - monocular RGB only
+- [ ] Create vision-based obstacle detection node
+- [ ] Convert obstacle positions to laser scan format
+- [ ] Test simulated scan generation from RGB camera
 - [ ] Verify scan data in RViz
 
 ### Phase 2: Basic Nav2 with Camera-based Laser
