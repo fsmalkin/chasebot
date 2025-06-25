@@ -36,6 +36,8 @@ install(PROGRAMS
   scripts/ros2_vision_to_laserscan_hsv.py
   scripts/ros2_ball_to_nav_goal.py
   scripts/test_nav2_vision.py
+  scripts/test_nav2_goal.py
+  scripts/test_direct_then_nav2.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

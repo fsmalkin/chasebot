@@ -178,5 +178,17 @@ This approach provides:
 3. **Nav2 Action Server**: Get basic Nav2 action server running with minimal config
 4. **Integration Test**: Once Nav2 accepts goals, integrate with ball detection
 
-### Key Insight
-The base autonomous system (direct cmd_vel control) is working perfectly. This provides a solid fallback while we integrate the more sophisticated Nav2 navigation stack. The challenge is getting Nav2 properly configured for our camera-only navigation approach.
+### Key Insights
+1. **Base System Works**: Direct cmd_vel control confirmed working perfectly
+2. **Nav2 Resource Requirements**: Full Nav2 stack is very resource-intensive
+   - Can cause system overheating on limited hardware
+   - Requires significant CPU/RAM for planning, costmaps, behaviors
+3. **Practical Approach**: Current direct control system is sufficient for basic ball following
+   - Professional path planning can be added when more powerful hardware available
+   - All Nav2 components are created and ready for future integration
+
+### Recommendations
+- **Continue with Direct Control**: The current autonomous ball following system works well
+- **Nav2 for Future**: When deploying to more powerful hardware (Jetson Nano/Xavier)
+- **Incremental Approach**: Could try just Nav2 controller without full planning stack
+- **Alternative**: Consider lighter-weight planners like DWA-local-planner only
