@@ -139,27 +139,44 @@ This approach provides:
 - [ ] Demonstrate path planning around obstacles
 - [ ] Complete UAT with professional navigation
 
-## Current Status
+## Current Status (2025-06-24 22:57)
 - ✅ Nav2 packages installed successfully
 - ✅ IMX219 camera compatibility resolved - using vision-based approach
 - ✅ Vision to laser scan conversion implemented (both darkness and HSV versions)
 - ✅ Laser scan topic publishing successfully
 - ✅ Initial testing shows obstacle detection working (71 points detected)
 - ✅ Launch files and nodes running without errors
-- ⚠️ **Current Issue**: Robot spawns but no autonomous movement occurring
-- 🎯 Next: Debug why Nav2 isn't initiating autonomous movement
+- ✅ Fixed Windows line ending issue in ros2_ball_to_nav_goal.py
+- ✅ **CONFIRMED**: Base autonomous ball following still works perfectly!
+  - User validation: "wohoo it went to the first ball"
+  - Direct cmd_vel control functioning as expected
 
 ### Implementation Progress
 - **ros2_vision_to_laserscan_hsv.py**: Converting camera to laser scan using HSV detection
   - HSV range [35,50,50] to [85,255,255] for green detection
   - Publishing to /scan topic with 180 scan points
   - Debug visualization on /vision_to_laserscan/debug
-- **jetbot_nav2_vision.launch.py**: Launch file for Nav2 with vision-based scanning
-  - Spawns JetBot in Gazebo with golf balls
-  - Runs vision_to_laserscan_hsv node
-  - Sets up camera_optical_link to laser_frame transform
+- **ros2_ball_to_nav_goal.py**: Detects balls and sends Nav2 navigation goals
+  - Waits for Nav2 action server
+  - Converts ball positions to world coordinates
+  - Sends NavigateToPose actions
+- **nav2_params_simple.yaml**: Simplified Nav2 config without map requirement
+  - Uses odom frame as global frame
+  - Rolling window for global costmap
+  - Basic obstacle avoidance from camera-based laser scan
+- **jetbot_nav2_complete.launch.py**: Full Nav2 integration launch
+  - Launches complete Nav2 stack
+  - Includes all navigation components
+- **test_nav2_vision.py**: Simple test script for incremental verification
+  - Tests laser scan reception
+  - Tests direct motor control
+  - Prepares for Nav2 goal testing
 
-### Known Issues
-1. **No Autonomous Movement**: Despite all nodes launching successfully, the robot remains stationary
-2. **Unclear if Nav2 Stack is Fully Integrated**: May need additional Nav2 components or configuration
-3. **Goal Setting**: Not clear if navigation goals are being set automatically or need manual triggering
+### Next Steps
+1. **Nav2 Launch Simplification**: Break down Nav2 launch into smaller components
+2. **Transform Tree Verification**: Ensure all required transforms are published
+3. **Nav2 Action Server**: Get basic Nav2 action server running with minimal config
+4. **Integration Test**: Once Nav2 accepts goals, integrate with ball detection
+
+### Key Insight
+The base autonomous system (direct cmd_vel control) is working perfectly. This provides a solid fallback while we integrate the more sophisticated Nav2 navigation stack. The challenge is getting Nav2 properly configured for our camera-only navigation approach.
