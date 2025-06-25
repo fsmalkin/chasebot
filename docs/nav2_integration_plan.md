@@ -145,4 +145,21 @@ This approach provides:
 - ✅ Vision to laser scan conversion implemented (both darkness and HSV versions)
 - ✅ Laser scan topic publishing successfully
 - ✅ Initial testing shows obstacle detection working (71 points detected)
-- 🎯 Next: Debug detection accuracy and integrate full Nav2 stack
+- ✅ Launch files and nodes running without errors
+- ⚠️ **Current Issue**: Robot spawns but no autonomous movement occurring
+- 🎯 Next: Debug why Nav2 isn't initiating autonomous movement
+
+### Implementation Progress
+- **ros2_vision_to_laserscan_hsv.py**: Converting camera to laser scan using HSV detection
+  - HSV range [35,50,50] to [85,255,255] for green detection
+  - Publishing to /scan topic with 180 scan points
+  - Debug visualization on /vision_to_laserscan/debug
+- **jetbot_nav2_vision.launch.py**: Launch file for Nav2 with vision-based scanning
+  - Spawns JetBot in Gazebo with golf balls
+  - Runs vision_to_laserscan_hsv node
+  - Sets up camera_optical_link to laser_frame transform
+
+### Known Issues
+1. **No Autonomous Movement**: Despite all nodes launching successfully, the robot remains stationary
+2. **Unclear if Nav2 Stack is Fully Integrated**: May need additional Nav2 components or configuration
+3. **Goal Setting**: Not clear if navigation goals are being set automatically or need manual triggering
