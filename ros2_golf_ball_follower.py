@@ -51,6 +51,10 @@ class GolfBallFollower(Node):
         self.last_detection_time = self.get_clock().now()
         self.detection_timeout = 2.0  # seconds
         
+        # Logging throttle
+        self.log_counter = 0
+        self.log_frequency = 30  # Log every 30th detection (approx 1Hz at 30fps)
+        
         self.get_logger().info('Golf Ball Follower initialized')
         self.get_logger().info(f'Target center: ({self.center_x}, {self.center_y})')
         self.get_logger().info(f'Linear speed: {self.linear_speed} m/s, Angular speed: {self.angular_speed} rad/s')
@@ -71,7 +75,10 @@ class GolfBallFollower(Node):
                 twist = self.generate_movement_command(ball_x, ball_y, ball_area)
                 self.cmd_vel_pub.publish(twist)
                 
-                self.get_logger().info(f'Following ball at ({ball_x}, {ball_y}) area={ball_area}')
+                # Throttled logging
+                self.log_counter += 1
+                if self.log_counter % self.log_frequency == 0:
+                    self.get_logger().info(f'Following ball at ({ball_x}, {ball_y}) area={ball_area}')
             else:
                 # Check for detection timeout
                 current_time = self.get_clock().now()
@@ -81,7 +88,9 @@ class GolfBallFollower(Node):
                     # Stop robot if no detection for too long
                     twist = Twist()
                     self.cmd_vel_pub.publish(twist)
-                    self.get_logger().warn(f'No ball detected for {time_since_detection:.1f}s - stopping')
+                    # Only warn once per second about no detection
+                    if int(time_since_detection) > int(time_since_detection - 0.033):  # Roughly once per second
+                        self.get_logger().warn(f'No ball detected for {time_since_detection:.1f}s - stopping')
                 
         except Exception as e:
             self.get_logger().error(f'Image processing error: {e}')
@@ -155,16 +164,24 @@ class GolfBallFollower(Node):
         if ball_area > self.max_area:
             # Too close - back away
             twist.linear.x = -self.linear_speed * 0.5
-            self.get_logger().info('Too close - backing away')
+            # Only log state changes
+            if hasattr(self, '_last_state') and self._last_state != 'too_close':
+                self.get_logger().info('Too close - backing away')
+                self._last_state = 'too_close'
         elif ball_area < (self.target_area - self.area_tolerance):
             # Too far - approach
             # Reduce speed when turning
             speed_factor = 1.0 - abs(twist.angular.z) / self.max_angular_speed * 0.5
             twist.linear.x = self.linear_speed * speed_factor
+            if hasattr(self, '_last_state') and self._last_state != 'approaching':
+                self.get_logger().info('Approaching ball')
+                self._last_state = 'approaching'
         else:
             # At good distance - just rotate to center
             twist.linear.x = 0.0
-            self.get_logger().info('At optimal distance - centering')
+            if hasattr(self, '_last_state') and self._last_state != 'optimal':
+                self.get_logger().info('At optimal distance - centering')
+                self._last_state = 'optimal'
         
         # Clamp linear velocity
         twist.linear.x = max(-self.max_linear_speed, min(self.max_linear_speed, twist.linear.x))
