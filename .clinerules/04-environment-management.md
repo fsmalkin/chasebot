@@ -4,33 +4,31 @@
 **Current Development Environment**: ROS 2 Humble on Ubuntu-22.04 WSL2
 - **Quick Check**: `wsl -d Ubuntu-22.04 bash -c "source /opt/ros/humble/setup.bash && ros2 --help"`
 - **Workspace Location**: `~/ros2_ws/`
-- **Launch Robot**: `ros2 launch chasebot_description jetbot_gazebo.launch.py`
-- **⚠️ CURRENT ISSUE**: gzserver crashes prevent robot spawning - fresh rebuild required
-- **⚠️ NO GPU REQUIRED** - ROS 2 works perfectly without GPU
+- **Core Foundation Validated**: `ros2 launch ~/ros2_ws/src/chasebot_description/launch/jetbot_autonomous_headless.launch.py`
+- **✅ UAT SUCCESS**: Non-Nav2 demo proven operational - robot movement and control validated
+- **🎯 NEXT PRIORITY**: GUI environment setup for vision-based autonomous behavior
 
-## GPU Requirements - CLARIFICATION
-### ✅ What DOESN'T need GPU (Current Development):
-- **ROS 2 Humble** - Works perfectly without GPU
-- **Gazebo Classic** - Works with ROS 2 without GPU  
-- **All our current robot development** - No GPU needed
-- **Keyboard/programmatic robot control** - No GPU needed
+## Current Status: Core Foundation Complete, GUI Environment Required
 
-### ❌ What DOES need GPU (Future Upgrades):
-- **Modern Gazebo (Ignition/Fortress)** - OpenGL errors without GPU
-- **Isaac Sim** - Requires NVIDIA RTX GPU
-- **GPU-accelerated Isaac ROS perception** - Optional performance boost
+### ✅ What Works (UAT Validated - 2025-06-28):
+- **ROS 2 Humble + Gazebo** - Complete simulation environment operational
+- **Robot Spawning** - JetBot successfully spawned in headless simulation  
+- **Movement Control** - Robot responds perfectly to `/cmd_vel` commands
+- **Physics Simulation** - Validated movement from (0,0) to (0.76m, 0.71m) with rotation
+- **Professional ROS Topics** - All communication channels operational
 
-### 📝 Bottom Line:
-**Continue ROS 2 development now, upgrade simulators when GPU available**
+### 🎯 Current Priority: GUI Environment for Vision
+- **Issue**: Camera sensor requires GUI ("Unable to create CameraSensor. Rendering is disabled")
+- **Impact**: Vision-based ball following cannot operate in headless mode
+- **Solution**: Configure WSL2 display/X11 forwarding for Gazebo GUI
+- **Goal**: Enable complete autonomous ball following with visual feedback
 
 ## New Session Checklist
 **Start every session with this validation:**
-1. **Check which ROS you need:**
-   - ROS 1 (Ubuntu-18.04): Legacy reference system
-   - **ROS 2 (Ubuntu-22.04): Current development** ⭐
-2. **Verify WSL2 running**: `wsl --list --verbose`
-3. **Quick ROS 2 test**: `wsl -d Ubuntu-22.04 bash -c "ros2 --help"`
-4. **If ROS 2 not found**: Check Ubuntu-22.04 is running, source environment
+1. **Verify Core Foundation**: Confirm ROS 2 + Gazebo headless simulation working
+2. **Check WSL2 Status**: `wsl --list --verbose`
+3. **Quick ROS 2 Test**: `wsl -d Ubuntu-22.04 bash -c "ros2 --help"`
+4. **Priority Assessment**: Focus on GUI environment setup for vision capabilities
 
 ## DUAL WSL2 + ROS Development Environment
 
@@ -41,12 +39,14 @@
 - **WSL2 Instance**: `Ubuntu-18.04`
 - **ROS Version**: ROS Melodic
 - **Purpose**: Baseline autonomous ball following system (reference implementation)
+- **Status**: Complete autonomous system validated
 - **Launch Check**: `wsl -d Ubuntu-18.04 bash -c "source /opt/ros/melodic/setup.bash && which roscore"`
 
-#### **ROS 2 Environment (Current Development)**
+#### **ROS 2 Environment (Current Development) ✅ VALIDATED**
 - **WSL2 Instance**: `Ubuntu-22.04` 
 - **ROS Version**: ROS 2 Humble LTS
-- **Purpose**: Modern migration target with Isaac ROS integration
+- **Purpose**: Modern robotics platform with Nav2 integration
+- **Status**: Core foundation UAT complete, GUI environment next priority
 - **Launch Check**: `wsl -d Ubuntu-22.04 bash -c "source /opt/ros/humble/setup.bash && ros2 --help"`
 
 ### Session Initialization Protocol
@@ -58,12 +58,12 @@
 
 2. **Choose and Validate Target Environment**:
 
-   **FOR ROS 1 WORK (Legacy System)**:
+   **FOR ROS 1 WORK (Legacy Reference)**:
    - Kill existing processes: `wsl -d Ubuntu-18.04 bash -c "pkill -f ros; pkill -f gazebo"`
    - Check ROS availability: `wsl -d Ubuntu-18.04 bash -c "source /opt/ros/melodic/setup.bash && which roscore"`
    - Source catkin workspace: `wsl -d Ubuntu-18.04 bash -c "source ~/catkin_ws/devel/setup.bash"`
 
-   **FOR ROS 2 WORK (Current Development)**:
+   **FOR ROS 2 WORK (Current Development) ✅ VALIDATED**:
    - Kill existing processes: `wsl -d Ubuntu-22.04 bash -c "pkill -f ros; pkill -f gazebo"`
    - Check ROS 2 availability: `wsl -d Ubuntu-22.04 bash -c "source /opt/ros/humble/setup.bash && ros2 --help"`
    - Source workspace: `wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source install/setup.bash"`
@@ -75,6 +75,30 @@
    - **Copy commands**: 
      - ROS 1: `wsl -d Ubuntu-18.04 bash -c "cp /mnt/c/workspaces/chasebot/file.ext ~/catkin_ws/src/target/"`
      - ROS 2: `wsl -d Ubuntu-22.04 bash -c "cp /mnt/c/workspaces/chasebot/file.ext ~/ros2_ws/src/target/"`
+
+## GUI Environment Setup (Next Priority)
+
+### Current Limitation
+- **Headless Success**: Core robotics foundation validated in headless mode
+- **Vision Barrier**: Camera sensor requires GUI for autonomous ball following
+- **GUI Required**: WSL2 display configuration needed for Gazebo visual interface
+
+### GUI Setup Options
+1. **WSL2 + X11 Forwarding**: Configure display forwarding to Windows
+2. **VcXsrv Windows X Server**: Native Windows X server for WSL2 GUI
+3. **Native Windows ROS 2**: Direct Windows installation for GUI access
+
+### GUI Validation Commands
+```bash
+# Test GUI environment
+wsl -d Ubuntu-22.04 bash -c "echo $DISPLAY"
+
+# Launch Gazebo with GUI (target command)
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && gazebo"
+
+# Complete autonomous demo (goal)
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch ~/ros2_ws/src/chasebot_description/launch/jetbot_autonomous_direct.launch.py"
+```
 
 ### Code Compatibility Requirements
 
@@ -92,21 +116,22 @@
 
 #### Automated vs Manual Workflows
 - **PREFERRED**: Single automated commands that launch GUI applications
-- **EFFECTIVE**: `roslaunch package_name launch_file.launch` followed by automated test
+- **EFFECTIVE**: `ros2 launch package_name launch_file.launch.py` followed by automated test
 - **AVOID**: Multi-step manual instructions requiring user terminal input
 - **PATTERN**: Launch → Wait → Test → Visual Confirmation
 
 #### UAT Testing Approach
-- **LAUNCH**: Automated simulation startup
+- **LAUNCH**: Automated simulation startup with GUI
 - **EXECUTE**: Automated movement/behavior test
-- **OBSERVE**: User visual confirmation in GUI
+- **OBSERVE**: User visual confirmation in Gazebo GUI
 - **VALIDATE**: Clear success/failure criteria
 
 ### Environment Troubleshooting
 
 #### Common Issues & Solutions
-- **"Unable to communicate with master"** → Restart ROS master
-- **"SyntaxError" on f-strings** → Use `.format()` syntax
+- **"Unable to create CameraSensor"** → GUI environment required
+- **"Can't open display"** → Configure WSL2 X11 forwarding
+- **"SyntaxError" on f-strings** → Use `.format()` syntax for ROS Melodic
 - **Robot not moving** → Check physics configuration and topic availability
 - **Gazebo won't start** → Verify WSL2 status and display configuration
 - **File not found** → Verify file sync between Windows and WSL2
@@ -125,12 +150,12 @@
 - **Edit**: Windows VS Code for development
 - **Execute**: WSL2 environment for ROS operations
 - **Sync**: Manual copy commands between environments
-- **Build**: Always rebuild catkin workspace after file changes
+- **Build**: Always rebuild workspace after file changes
 
 #### Testing Execution
 - **Simulation First**: Always test in Gazebo before hardware
 - **Clean Environment**: Fresh ROS processes for each test session
-- **Visual Validation**: User confirmation of expected behavior
+- **Visual Validation**: User confirmation of expected behavior in GUI
 - **Automated Scripts**: Minimize manual user interaction
 
 #### Session Continuity
@@ -139,11 +164,31 @@
 - **File Status**: Track which files are synced between environments
 - **Process Management**: Clean shutdown/startup procedures
 
+### Validated Working Commands (ROS 2)
+
+#### Core Foundation (✅ PROVEN)
+```bash
+# Headless simulation with robot control
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch ~/ros2_ws/src/chasebot_description/launch/jetbot_autonomous_headless.launch.py"
+
+# Movement test
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist '{linear: {x: 0.1}, angular: {z: 0.2}}'"
+
+# Odometry verification
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 topic echo /odom --once"
+```
+
+#### Next Target (GUI Required)
+```bash
+# Full autonomous ball following (requires GUI)
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch ~/ros2_ws/src/chasebot_description/launch/jetbot_autonomous_direct.launch.py"
+```
+
 ### Critical Success Factors
 1. **Environment Validation**: Always verify WSL2 and ROS status first
-2. **Process Hygiene**: Clean process startup/shutdown procedures
-3. **File Synchronization**: Maintain sync between Windows and WSL2
-4. **Automated Testing**: Minimize manual user interaction
-5. **Visual Confirmation**: Provide clear validation in simulation GUI
+2. **GUI Priority**: Configure display environment for vision capabilities
+3. **Process Hygiene**: Clean process startup/shutdown procedures
+4. **File Synchronization**: Maintain sync between Windows and WSL2
+5. **Visual Confirmation**: Enable GUI for complete UAT validation
 
-These practices ensure reliable, repeatable ChaseBot development sessions across the Windows/WSL2/ROS environment stack.
+**Current Achievement**: Core robotics foundation validated. GUI environment setup is the only barrier to complete autonomous ball following demonstration.
