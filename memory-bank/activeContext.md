@@ -34,25 +34,27 @@
 
 ## Current Issue & Next Priority: GUI Environment
 
-### GUI Requirement Identified
-**⚠️ CURRENT LIMITATION: Camera/Vision Requires GUI**
+### GUI Strategy Decision (2025-06-28)
+**✅ DECISION: WSL2 + X11 for Immediate Vision Enablement**
 - **Problem**: Camera sensor can't initialize in headless mode ("Unable to create CameraSensor. Rendering is disabled")
 - **Impact**: Vision-based ball following requires GUI environment
-- **Root Cause**: WSL2 display/X11 configuration for Gazebo GUI
-- **Solution Path**: Configure X11 forwarding or native Windows GUI options
+- **Solution Chosen**: WSL2 + X11 forwarding with VcXsrv for Windows
+- **Rationale**: Physical accuracy priority over photorealistic rendering, quick enablement of existing work
 
-### Next Session Priority: GUI Environment Setup
+### Current Session Priority: X11 Setup for Vision
 
-#### Immediate Goal: Enable Gazebo GUI for Vision
-1. **Configure WSL2 Display**: Set up X11 forwarding or VcXsrv for Windows
-2. **Test Gazebo GUI**: Launch full Gazebo with client interface
-3. **Validate Camera**: Confirm camera sensor operational with visual feed
-4. **Complete Vision UAT**: Test full autonomous ball following with GUI
+#### Immediate Implementation Plan
+1. **Install VcXsrv**: Windows X server for WSL2 GUI applications
+2. **Configure WSL2 Display**: Set DISPLAY environment variable
+3. **Test Gazebo GUI**: Launch full Gazebo with client interface
+4. **Validate Camera**: Confirm camera sensor operational with visual feed
+5. **Complete Vision UAT**: Test full autonomous ball following with GUI
 
-#### Alternative Approaches Available
-1. **Primary**: WSL2 + X11 forwarding for Linux GUI on Windows
-2. **Alternative**: Native Windows ROS 2 installation for direct GUI
-3. **Development**: Continue with Nav2 demos that don't require camera
+#### Technical Approach
+- **X Server**: VcXsrv on Windows host
+- **WSL2 Config**: DISPLAY forwarding to Windows X server
+- **Gazebo Launch**: Switch from headless to GUI mode
+- **Camera Testing**: Enable visual sensor simulation for ball detection
 
 ## Development Environment Status
 
