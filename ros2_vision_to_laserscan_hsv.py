@@ -111,7 +111,7 @@ class VisionToLaserScanHSV(Node):
         # Create laser scan message
         scan = LaserScan()
         scan.header = header
-        scan.header.frame_id = 'camera_optical_link'
+        scan.header.frame_id = 'base_link'  # Changed from camera_optical_link to avoid transform warnings
         
         # Configure scan parameters
         scan.angle_min = -self.horizontal_fov / 2
