@@ -136,13 +136,22 @@ wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash &
 - **Gazebo won't start** → Verify WSL2 status and display configuration
 - **File not found** → Verify file sync between Windows and WSL2
 
-#### Session Recovery Pattern
-1. Terminate all existing processes
+#### Session Recovery Pattern - CRITICAL: ALWAYS USE PIDs
+1. **Terminate all existing processes using PIDs**: 
+   - First: `ps aux | grep -E '(gazebo|gzserver|gzclient|ros2|nav2)' | grep -v grep`
+   - Then: `kill -9 [PID1] [PID2] [PID3]` (use specific PIDs, never generic pkill)
+   - Verify: Check that all processes are actually terminated
 2. Verify WSL2 is running
 3. Copy latest files to WSL2
 4. Source ROS environment
 5. Launch fresh simulation
 6. Execute automated tests
+
+#### MANDATORY: PID-Based Process Management
+- **ALWAYS use PIDs for process termination** - Generic pkill commands are unreliable
+- **NEVER use pkill -f** or similar generic commands for critical processes
+- **PATTERN**: `ps aux | grep [process] → kill -9 [specific PIDs] → verify termination`
+- **REASON**: Ensures complete cleanup and prevents "Address already in use" errors
 
 ### Development Workflow Standards
 
