@@ -149,6 +149,14 @@ kill -9 1227 1249 1251 1854 1876 1878 1880 1882 1884 1886 1888 1890
 ## Next Development Phases
 
 ### Phase 8: Vision-Based Autonomous Navigation (READY)
+**UAT Goal**: "Robot autonomously navigates to a single golf ball using Nav2 path planning in GUI simulation"
+
+**Demo Requirements**:
+- Gazebo GUI world with one golf ball visible
+- Robot detects golf ball and navigates to it using Nav2 path planning
+- Visual confirmation of autonomous behavior in Gazebo GUI
+- **NOTE**: No camera feed display required - just visual confirmation of robot movement
+
 **Components Available**:
 - ✅ GUI environment operational
 - ✅ Camera sensor working

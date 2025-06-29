@@ -74,7 +74,8 @@ ros2 launch ~/ros2_ws/src/chasebot_description/launch/jetbot_autonomous_direct.l
 - JetBot robot spawned and operational
 - Nav2 stack active and processing goals
 - Robot detects golf ball and navigates to it using professional path planning
-- Complete autonomous behavior demonstrated with visual confirmation
+- Complete autonomous behavior demonstrated with visual confirmation in Gazebo GUI
+- **NOTE**: No need to display camera feed - just visual confirmation of robot movement in simulation
 
 **Technical Components Ready**:
 - ✅ GUI environment (VcXsrv + WSL2)
