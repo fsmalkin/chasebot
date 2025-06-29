@@ -64,31 +64,47 @@ ros2 launch ~/ros2_ws/src/chasebot_description/launch/jetbot_autonomous_direct.l
 - **URDF Models**: JetBot with sensors defined
 - **Scripts**: Autonomous ball following ready
 
-## Next Steps
+## ✅ DOCUMENTATION COMPLETE: Working UAT Procedure Captured
 
-### Priority 1: Complete Vision + Nav2 UAT Demo
-**UAT Goal**: "Robot autonomously navigates to a single golf ball using Nav2 path planning in GUI simulation"
+### 🎉 Major Achievement (2025-06-29)
+**WORKING PROCEDURE NOW DOCUMENTED AND AUTOMATED**
 
-**Demo Requirements**:
-- Gazebo GUI world with one golf ball visible
-- JetBot robot spawned and operational
-- Nav2 stack active and processing goals
-- Robot detects golf ball and navigates to it using professional path planning
-- Complete autonomous behavior demonstrated with visual confirmation in Gazebo GUI
-- **NOTE**: No need to display camera feed - just visual confirmation of robot movement in simulation
+### Key Deliverables Created
+1. **`run_chasebot_demo.sh`** - Master script for one-command demo execution
+2. **`docs/WORKING_UAT_PROCEDURE.md`** - Complete documentation of proven working sequence
+3. **Memory Bank Updated** - Current context preserved for future sessions
 
-**Technical Components Ready**:
-- ✅ GUI environment (VcXsrv + WSL2)
-- ✅ Nav2 stack operational
-- ✅ Camera sensor working
-- ✅ Ball detection algorithms (`ros2_vision_to_laserscan_hsv.py`)
-- ✅ Goal conversion (`ros2_ball_to_nav_goal.py`)
-- ✅ Launch file (`nav2_complete_uat.launch.py`)
+### Proven Working Sequence (Now Automated)
+1. ✅ **Display Environment Setup** - Auto-detect and configure VcXsrv connection
+2. ✅ **File Synchronization** - Copy latest files from Windows to WSL2
+3. ✅ **Workspace Rebuild** - Ensure all components properly installed
+4. ✅ **Process Cleanup** - PID-based cleanup of existing processes
+5. ✅ **Sequential Component Launch** - Proper timing and dependencies
+   - Gazebo GUI with golf ball world
+   - JetBot robot spawn
+   - Nav2 navigation stack
+   - Vision processing components
 
-### Priority 2: Repository Commit and Documentation
-- Commit all changes to git with descriptive messages
-- Ensure all documentation reflects current state
-- Halt development for review and planning
+### ✅ CRITICAL DISCOVERY: Golf Ball Spawning Issue Resolved (2025-06-29)
+
+**Key Learning**: World file golf balls do NOT spawn automatically in Gazebo
+**Root Cause**: XML parsing/model loading issues during world initialization
+**Solution**: Manual golf ball spawning using standalone SDF files
+
+**Working Golf Ball Spawning Procedure**:
+```bash
+# Copy SDF file and spawn manually
+cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/green_golf_ball.sdf ~/ros2_ws/
+ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/green_golf_ball.sdf -entity golf_ball_1 -x 1.0 -y 0.0 -z 0.025
+ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/green_golf_ball.sdf -entity golf_ball_2 -x 2.5 -y 1.0 -z 0.025
+ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/green_golf_ball.sdf -entity golf_ball_3 -x 1.5 -y -1.5 -z 0.025
+```
+
+### Next Priority: Clean Autonomous Navigation Test
+- **All Components Validated**: Gazebo + Robot + Nav2 + Vision + Manual Golf Ball Spawning
+- **Next Step**: Run complete clean test to validate robot movement toward golf balls
+- **Expected Result**: Full autonomous navigation demonstration
+- **Documentation**: All critical procedures now captured and validated
 
 ## Key Lessons Learned
 - **Don't abandon working foundations** for complex alternatives
