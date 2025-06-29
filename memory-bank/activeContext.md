@@ -100,11 +100,23 @@ ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/green_golf_ball.sdf -entity 
 ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/green_golf_ball.sdf -entity golf_ball_3 -x 1.5 -y -1.5 -z 0.025
 ```
 
+### ⚠️ CRITICAL UPDATE: Script Approach Failed - Use Manual Steps Only (2025-06-29)
+
+**Key Learning**: The `run_chasebot_demo.sh` script approach has failed repeatedly in new sessions
+**Root Cause**: Script execution issues with environment variables, timing, and shell complexity
+**Solution**: Use EXACT manual steps only - proven to work reliably
+
+**Simplified Approach**:
+- **NO SCRIPTS**: Manual command execution only
+- **ONE BALL**: Spawn just one golf ball for simplicity
+- **SEQUENTIAL**: Wait between each step for proper initialization
+- **DOCUMENTED**: See `docs/MANUAL_STEPS_ONLY.md` for exact proven procedure
+
 ### Next Priority: Clean Autonomous Navigation Test
-- **All Components Validated**: Gazebo + Robot + Nav2 + Vision + Manual Golf Ball Spawning
-- **Next Step**: Run complete clean test to validate robot movement toward golf balls
-- **Expected Result**: Full autonomous navigation demonstration
-- **Documentation**: All critical procedures now captured and validated
+- **Method**: Manual steps only (no scripts)
+- **Setup**: One golf ball at (1.0, 0.0, 0.025) directly in front
+- **Expected**: Robot detects and moves toward single ball
+- **Validation**: Visual confirmation in Gazebo GUI
 
 ## Key Lessons Learned
 - **Don't abandon working foundations** for complex alternatives
