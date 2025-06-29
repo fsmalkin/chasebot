@@ -69,3 +69,28 @@ The manual procedure works perfectly for launching all components. The issue is 
 
 ## Files Created This Session
 - `test_vision_debug.py` - Debug script to analyze camera HSV values
+- `vision_only_test.launch.py` - Simplified launch file for vision testing
+- `simple_camera_viewer.py` - Real-time camera viewer with HSV analysis
+
+## Next Session Plan
+
+1. Launch minimal Gazebo setup:
+   ```bash
+   # Launch Gazebo
+   ros2 launch gazebo_ros gazebo.launch.py
+   
+   # Spawn golf ball
+   ros2 run gazebo_ros spawn_entity.py -file green_golf_ball.sdf -entity golf_ball -x 1.0 -y 0.0 -z 0.025
+   
+   # Spawn robot
+   ros2 run gazebo_ros spawn_entity.py -file ros2_jetbot.urdf -entity jetbot -x 0 -y 0 -z 0.1
+   ```
+
+2. Run camera viewer to see actual camera feed:
+   ```bash
+   python3 simple_camera_viewer.py
+   ```
+
+3. Analyze the golf ball's actual HSV values in simulation
+4. Adjust HSV thresholds in vision_to_laserscan_hsv.py
+5. Test detection with updated values
