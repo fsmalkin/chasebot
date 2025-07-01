@@ -1,157 +1,177 @@
 # ChaseBot Milestone Progress
 
-**Last Updated**: 2025-06-30 14:40 EST
+**Last Updated**: 2025-06-30 22:57 EST
 
-## 🎉 MAJOR MILESTONE ACHIEVED: Extended Distance Navigation Working! ✅
+## 🎯 Current Focus: Vision System Upgrade to YOLO-Based Detection
 
-**ChaseBot successfully navigates autonomously to golf balls at 2x distance** - Complete vision-based navigation pipeline scales to longer ranges!
+**Plan**: Replace HSV detection with `ros2_vision_inference` for professional-grade YOLO-based 3D detection
 
-## Current Status: Extended Distance Autonomous Navigation Achieved
+## Current Status: Baseline Working, Vision Upgrade Planned
 
-### Key Achievement (2025-06-30)
-**EXTENDED DISTANCE NAVIGATION WORKING** - Successfully demonstrated autonomous ball following at 2.0m distance using low-threshold vision detection.
+### ✅ Achieved Baseline (2025-06-30)
+- **HSV Detection**: Working at 2m+ distances
+- **Autonomous Navigation**: Complete vision → navigation pipeline
+- **Nav2 Integration**: Professional path planning operational
+- **GUI Environment**: VcXsrv + WSL2 fully configured
+
+### 🚀 Vision Upgrade Tasks (Not Started)
+
+#### Task 1: Install & Validate ros2_vision_inference
+- **Goal**: Install and configure YOLO-based detection
+- **UAT**: `/detection3d_array` publishes sports ball detections
+- **Status**: ⏳ Not started
+
+#### Task 2: Connect Goal Bridge  
+- **Goal**: Bridge Detection3DArray to Nav2 goals
+- **UAT**: Detection → Nav2 goal → autonomous movement
+- **Status**: ⏳ Not started
+
+#### Task 3: Fix Final Approach
+- **Goal**: Tune to stop at 3 inches (0.0762m)
+- **UAT**: Stops within 3 ± 0.5 inches consistently
+- **Status**: ⏳ Not started
+
+#### Task 4: Documentation & Launch
+- **Goal**: Create unified launch and update docs
+- **UAT**: Single launch for complete system
+- **Status**: ⏳ Not started
+
+## Completed Phases (Historical Reference)
 
 ### ✅ Phase 1: Foundation (COMPLETE)
-- **ROS 2 Environment**: Fully operational ROS 2 Humble on WSL2
-- **Robot Simulation**: JetBot spawning and physics validated  
-- **Basic Movement**: Differential drive control working
-- **Transform Chain**: Proper odom → base_link transformations
+- ROS 2 Humble environment on WSL2
+- JetBot simulation and physics
+- Basic differential drive control
+- Transform chain (odom → base_link)
 
-### ✅ Phase 2: Integration (COMPLETE)  
-- **Navigation Stack**: Nav2 components fully configured
-- **Costmaps**: Local and global obstacle avoidance
-- **Path Planning**: GridBased/NavfnPlanner operational
-- **Action Interface**: Professional action client/server pattern
+### ✅ Phase 2: Integration (COMPLETE)
+- Nav2 stack configuration
+- Costmaps and obstacle avoidance
+- Path planning algorithms
+- Action client/server pattern
 
-### ✅ Phase 3: Professional Navigation (COMPLETE - 2025-06-28) 🎉
-- **✅ Multi-waypoint Navigation**: 3/4 complex goals achieved
-- **✅ Real-time Control**: 20Hz controller frequency maintained  
-- **✅ Path Intelligence**: Dynamic re-planning and obstacle avoidance
-- **✅ Professional Integration**: Industry-standard Nav2 stack
-- **✅ UAT Validation**: Complete autonomous navigation demonstrated
+### ✅ Phase 3: Professional Navigation (COMPLETE)
+- Multi-waypoint navigation
+- Real-time control at 20Hz
+- Dynamic path re-planning
+- Industry-standard Nav2 integration
 
-### ✅ Phase 4: Vision System (COMPLETE - 2025-06-29) 🎉
-- **✅ GUI Environment**: VcXsrv + WSL2 working perfectly
-- **✅ Camera Sensor**: Publishing at ~22Hz successfully  
-- **✅ Vision Detection**: Detecting golf balls (77-78 pixels)
-- **✅ Distance Estimation**: Accurate 1.76m measurements
-- **✅ Array Indexing**: FIXED - Laser scan properly populated
-- **✅ Autonomous Navigation**: Robot navigates to detected balls!
+### ✅ Phase 4: Vision System (COMPLETE - HSV Baseline)
+- GUI environment with VcXsrv
+- Camera sensor at ~22Hz
+- HSV golf ball detection
+- Distance estimation from pixels
 
-### ✅ Phase 5: Extended Range Navigation (COMPLETE - 2025-06-30) 🎉
-- **✅ Long Distance Detection**: 2.0m+ golf ball detection working
-- **✅ Low-Threshold Vision**: 3-pixel threshold enables distant targets
-- **✅ Scalable Navigation**: Nav2 handles 2m+ path planning perfectly
-- **✅ Professional Performance**: 100% navigation success rate
-- **✅ Range Flexibility**: System adapts from 1m to 2m+ distances
+### ✅ Phase 5: Extended Range (COMPLETE - HSV Baseline)
+- 2m+ detection with low threshold
+- Scalable Nav2 navigation
+- 100% navigation success rate
+- Continuous autonomous operation
 
-## Technical Achievements
+## Technical Architecture Evolution
 
-### Extended Distance Success (2025-06-30)
+### Current System (HSV-Based)
 ```
-Test Configuration: Golf ball at 2.0m (2x previous distance)
-Detection Performance:
-- ✅ Initial detection: 2.38m (accurate)
-- ✅ Green pixels: 33-34 (sufficient with low threshold)
-- ✅ Navigation success: 2.38m → 2.08m → 1.70m
-- ✅ Continuous operation: Multiple approach cycles
+Camera → HSV Detection → Pixel Counting → Laser Scan → Nav2 → Movement
+  ✅         ✅              ✅              ✅         ✅       ✅
 ```
 
-### Vision System Excellence
+### Target System (YOLO-Based)
 ```
-Breakthrough Achievement: Low-threshold detection
-- Original threshold: 10 pixels per column
-- New threshold: 3 pixels per column
-- Result: 2x+ distance capability unlocked
-- Performance: 100% detection reliability
+Camera → YOLO Detection → Detection3DArray → Goal Bridge → Nav2 → 3" Stop
+  ✅      [PLANNED]         [PLANNED]        [PLANNED]      ✅    [PLANNED]
 ```
 
-### Navigation System Excellence
-```
-Navigation Success Rate: 100% (continuous approaches)
-- ✅ Long-distance planning: 2.0m+ paths
-- ✅ Professional execution: Nav2 stack performance
-- ✅ Real-time adaptation: Dynamic goal updates
-- ✅ Transform handling: Perfect coordinate conversion
-```
+## Key Improvements with Vision Upgrade
 
-### Professional Standards Exceeded
-- **Industry Standard**: Official Nav2 navigation stack
-- **ROS 2 Native**: Full ROS 2 Humble compatibility  
-- **Vision Integration**: Scalable Camera → Detection → Navigation
-- **Robust Architecture**: Modular, fault-tolerant design
-- **Production Ready**: Complete autonomous system with range flexibility
+### Detection Robustness
+- **Current**: HSV color-based, lighting sensitive
+- **Target**: YOLO neural network, robust in various conditions
 
-## Current Issues & Next Steps
+### Position Accuracy  
+- **Current**: Pixel counting distance estimation
+- **Target**: Professional 3D position from Detection3DArray
 
-### ⚠️ Minor Tuning Needed
-1. **Final Approach Distance**: Robot stops at 1.7m instead of 0.3m approach
-2. **Goal Calculation**: Need to adjust approach distance math
-3. **Collection Behavior**: Add final close approach for ball pickup
+### Approach Precision
+- **Current**: Stops at ~1.7m
+- **Target**: Precise 3-inch (0.0762m) for pickup
 
-### 🔬 Advanced Vision Research Priority
-Based on user direction, investigate superior depth estimation:
+### Standards Compliance
+- **Current**: Custom laser scan messages
+- **Target**: Standard ROS 2 Detection3DArray
 
-#### MonoDepth2 Integration
-- **Repository**: https://github.com/nianticlabs/monodepth2
-- **Technology**: Deep learning monocular depth estimation
-- **Benefit**: More accurate distance than HSV pixel counting
-- **Range**: 10m+ detection capability
+## Development Environment
 
-#### ROS DepthImage to LaserScan
-- **Package**: https://wiki.ros.org/depthimage_to_laserscan
-- **Technology**: Professional ROS depth processing
-- **Benefit**: Industry-standard depth camera integration
-- **Integration**: Direct Nav2 compatibility
+### ✅ Working Foundation
+- **Platform**: ROS 2 Humble on Ubuntu-22.04 WSL2
+- **Display**: VcXsrv GUI for Gazebo visualization
+- **Navigation**: Nav2 stack fully operational
+- **Workspace**: ~/ros2_ws/
 
-## Development Environment Status
+### 🎯 Target Integration
+- **Detection**: ros2_vision_inference package
+- **Messages**: vision_msgs/Detection3DArray
+- **Bridge**: Custom goal bridge node
+- **Launch**: Unified system launch file
 
-### ✅ Complete Working System (WSL2)
-- **ROS 2 Humble**: Fully operational with extended capabilities
-- **Gazebo Simulation**: GUI working with VcXsrv for visual feedback
-- **Nav2 Stack**: All components active and validated for long distances
-- **Vision Pipeline**: Scalable Detection → LaserScan → Navigation
-- **Autonomous Behavior**: Robot seeks and approaches golf balls at any range
+## Success Criteria
 
-## The Path Forward
+### Minimum Viable Product (This Phase)
+- ✅ YOLO-based ball detection in simulation
+- ✅ Standard Detection3DArray messages
+- ✅ Autonomous navigation to detected ball
+- ✅ Stop at 3 inches for pickup range
+- ✅ Single unified launch file
 
-### Immediate (High Priority)
-1. **Approach Distance Fix**: Adjust goal calculation for closer approach
-2. **Collection Mechanism**: Add gripper or pusher for ball pickup
-3. **Multi-ball Logic**: Handle multiple golf balls sequentially
+### Out of Scope (This Phase)
+- ❌ Multi-ball prioritization
+- ❌ Hardware deployment
+- ❌ Physical collection mechanism
+- ❌ Return to base behavior
 
-### Research Phase (High Priority)
-1. **MonoDepth2 Evaluation**: Deep learning depth estimation assessment
-2. **DepthImage to LaserScan**: Professional depth processing evaluation
-3. **Comparative Analysis**: Performance comparison with current HSV approach
+## Lessons from Baseline System
 
-### Future Development
-1. **Hardware Deployment**: Test on physical JetBot
-2. **Advanced Behaviors**: Obstacle avoidance, search patterns
-3. **Performance Optimization**: Increase speed and efficiency
+### What Worked Well
+- **Modular Architecture**: Easy to swap detection methods
+- **Professional Nav2**: Handles any distance perfectly
+- **Simple Solutions**: Low threshold enabled 2x range
+- **Standards Focus**: ROS 2 patterns ensure compatibility
 
-## Lessons Learned
+### Why Upgrade to YOLO
+- **Lighting Independence**: Neural networks handle various conditions
+- **3D Position**: Direct position estimation vs pixel counting
+- **Industry Standard**: Detection3DArray is ROS 2 standard
+- **Scalability**: Same approach works for other objects
 
-### Breakthrough Insights
-- **Simple Solutions Work**: 3-pixel threshold change unlocked 2x range
-- **Modular Architecture Wins**: Easy to experiment with different approaches
-- **Professional Tools Excel**: Nav2 handles any reasonable distance perfectly
-- **Vision Scales Well**: HSV detection surprisingly effective at distance
+## Timeline
 
-### System Maturity Indicators
-- **Robust Foundation**: Core navigation architecture handles scaling
-- **Professional Integration**: Industry standards enable easy enhancement
-- **Research Ready**: Solid base for advanced vision system integration
-- **Production Capable**: Complete autonomous system ready for deployment
+### 2025-06-30 (Today)
+- ✅ Defined focused vision upgrade plan
+- ✅ Identified ros2_vision_inference solution
+- ✅ Created 4-task implementation roadmap
+- ✅ Updated all documentation
+
+### Previous Achievements
+- HSV detection at 2m+ range
+- Complete autonomous navigation
+- Professional Nav2 integration
+- GUI environment setup
+
+## Next Steps
+
+### Immediate Action
+1. Begin Task 1: Install ros2_vision_inference
+2. Configure for sports ball detection
+3. Validate Detection3DArray output
+
+### Following Tasks
+1. Create goal bridge node (Task 2)
+2. Tune 3-inch approach (Task 3)
+3. Create unified launch (Task 4)
 
 ## Conclusion
 
-**ChaseBot has achieved scalable autonomous golf ball navigation!** The robot successfully:
-- Detects green golf balls from 1m to 2m+ distances
-- Plans and executes professional navigation paths of any reasonable length
-- Maintains continuous autonomous operation with 100% success rates
-- Provides a solid foundation for advanced depth estimation research
+ChaseBot is ready for a vision system upgrade from HSV to YOLO-based detection. With a clear 4-task plan and working baseline, the path to professional-grade autonomous golf ball collection is well-defined.
 
-**✅ EXTENDED DISTANCE NAVIGATION**: Complete and operational at production quality!
-
-The system is now ready for advanced vision research to push capabilities even further while maintaining the robust autonomous navigation foundation.
+**Current Focus**: Task 1 - Install and validate ros2_vision_inference
+**End Goal**: Reliable 3-inch approach for golf ball pickup in simulation
