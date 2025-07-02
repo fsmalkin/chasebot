@@ -4,6 +4,22 @@
 
 ChaseBot is upgrading from a working HSV-based detection system to a professional YOLO-based detection pipeline using `ros2_vision_inference`. The upgrade will provide robust ball detection, standard ROS 2 messaging, and precise 3-inch approach distance for golf ball collection.
 
+### Navigation Philosophy: Vision-Based, Map-Free
+
+**CRITICAL ARCHITECTURAL DECISION**: ChaseBot uses **direct vision-based navigation** without relying on pre-built maps or SLAM. This is intentional and optimal for dynamic environments like golf driving ranges where:
+- Balls constantly appear and disappear
+- The environment is open and unstructured
+- Mapping would provide no benefit
+- Vision targets are the primary navigation goals
+
+**Navigation Strategy**:
+1. **No SLAM Required**: We do NOT use SLAM_toolbox or build persistent maps
+2. **Direct Goal Publishing**: YOLO detections → Transform to odom frame → Nav2 goals
+3. **Local Planning Only**: Nav2 handles obstacle avoidance via local costmaps
+4. **Transform Chain**: Simple odom → base_link (with optional static map → odom if Nav2 requires it)
+
+This approach is simpler, more robust, and perfectly suited for POC through production deployment.
+
 ## Current Status: Vision Upgrade Planned
 
 ### Working Baseline (HSV System)

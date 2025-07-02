@@ -129,24 +129,32 @@ ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/src/chasebot_description/ros
         
         self.run_command(f"wsl -d Ubuntu-22.04 bash -c \"{robot_cmd}\"", "JetBot Robot", wait_time=3)
         
-        # 3. Launch Nav2
+        # 3. Launch SLAM_toolbox (CRITICAL: Must be before Nav2!)
+        slam_cmd = """cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && \\
+export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{{print $2}}'):0.0 && \\
+ros2 launch slam_toolbox online_async_launch.py use_sim_time:=true"""
+        
+        self.run_command(f"wsl -d Ubuntu-22.04 bash -c \"{slam_cmd}\"", "SLAM Toolbox (Map Frame)", wait_time=10)
+        print("   ℹ️  SLAM must create map frame before Nav2 can start")
+        
+        # 4. Launch Nav2 (only after SLAM is ready)
         nav2_cmd = """cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && \\
 export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{{print $2}}'):0.0 && \\
 ros2 launch nav2_bringup navigation_launch.py use_sim_time:=true"""
         
         self.run_command(f"wsl -d Ubuntu-22.04 bash -c \"{nav2_cmd}\"", "Nav2 Stack", wait_time=8)
         
-        # 4. Start YOLO detection
+        # 5. Start YOLO detection
         yolo_cmd = """cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && \\
 export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{{print $2}}'):0.0 && \\
 ros2 launch yolov8_bringup yolov8.launch.py model:=yolov8m.pt input_image_topic:=/camera/image_raw device:=cpu"""
         
         self.run_command(f"wsl -d Ubuntu-22.04 bash -c \"{yolo_cmd}\"", "YOLO Detection", wait_time=5)
         
-        # 5. NOW SPAWN THE BALL - Visual indicator for tester
+        # 6. NOW SPAWN THE BALL - Visual indicator for tester
         self.spawn_golf_ball()
         
-        # 6. Start the bridge node (with fixes)
+        # 7. Start the bridge node (with fixes)
         bridge_cmd = """cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && \\
 export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{{print $2}}'):0.0 && \\
 python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/ros2_yolo_to_nav_goal.py"""

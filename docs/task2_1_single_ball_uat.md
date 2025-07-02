@@ -1,103 +1,164 @@
 # Task 2.1 UAT Procedure: Transform Timing Fix with Single Ball Test
 
 ## Overview
-This UAT validates the fix for transform timing errors while maintaining successful navigation to a single golf ball.
+This UAT validates the fix for transform timing errors while maintaining successful navigation to a single golf ball using **vision-based, map-free navigation**.
+
+## Navigation Architecture
+**CRITICAL**: ChaseBot uses direct vision-to-navigation without SLAM or mapping:
+- YOLO detections are transformed directly to navigation goals
+- No persistent maps are built or required
+- Nav2 uses local costmaps for obstacle avoidance
+- This approach is simpler and more robust for dynamic environments
 
 ## Prerequisites
 1. **VcXsrv Running**: Launch VcXsrv with "Disable access control" checked
 2. **WSL2 Active**: Ubuntu-22.04 instance running
 3. **Working Directory**: `/mnt/c/workspaces/chasebot/`
 
-## Test Execution
+## Important Note
+**⚠️ AUTOMATED SCRIPT ISSUE**: The automated test runner (`run_single_ball_test.py`) has quote escaping issues when running from Windows. Use the manual steps below instead.
 
-### Step 1: Copy Updated Files to WSL2
+## Manual Test Execution Steps
+
+### Step 1: Clean Any Existing Processes
 ```bash
-# Copy the updated scripts and configs
-wsl -d Ubuntu-22.04 bash -c "cp -r /mnt/c/workspaces/chasebot/ros2_scripts/* ~/ros2_ws/src/chasebot_description/ros2_scripts/"
-wsl -d Ubuntu-22.04 bash -c "cp -r /mnt/c/workspaces/chasebot/ros2_config/* ~/ros2_ws/src/chasebot_description/ros2_config/"
+# In Terminal 1
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws/src/chasebot_description && python3 ros2_scripts/kill_chasebot_processes.py"
 ```
 
-### Step 2: Make Scripts Executable
+### Step 2: Launch Gazebo with Empty World
 ```bash
-wsl -d Ubuntu-22.04 bash -c "chmod +x ~/ros2_ws/src/chasebot_description/ros2_scripts/*.py"
+# In Terminal 2
+wsl -d Ubuntu-22.04
+cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
+ros2 launch gazebo_ros gazebo.launch.py world:=~/ros2_ws/src/chasebot_description/ros2_config/worlds/single_ball_test.world
 ```
+Wait for Gazebo to fully load (5-10 seconds)
 
-### Step 3: Run Single Ball Test
+### Step 3: Spawn the Robot
 ```bash
-# From Windows PowerShell/CMD in the ChaseBot directory:
-python ros2_scripts/run_single_ball_test.py
+# In Terminal 3
+wsl -d Ubuntu-22.04
+cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
+ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/src/chasebot_description/ros2_config/urdf/ros2_jetbot.urdf -entity jetbot -x 0 -y 0 -z 0.05
+```
+Verify robot appears in Gazebo
+
+### Step 4: Static Transform Publisher (Optional - if Nav2 requires map frame)
+```bash
+# In Terminal 4
+wsl -d Ubuntu-22.04
+source /opt/ros/humble/setup.bash
+ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 map odom
+```
+**Note**: Only needed if Nav2 complains about missing map frame. Creates identity transform map→odom.
+
+### Step 5: Launch Nav2 Stack
+```bash
+# In Terminal 5
+wsl -d Ubuntu-22.04
+cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
+ros2 launch nav2_bringup navigation_launch.py use_sim_time:=true
+```
+Wait for "Managed nodes are active" message
+
+### Step 6: Launch YOLO Detection
+```bash
+# In Terminal 6
+wsl -d Ubuntu-22.04
+cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
+ros2 launch yolov8_bringup yolov8.launch.py model:=yolov8m.pt input_image_topic:=/camera/image_raw device:=cpu
+```
+Wait for "YOLOv8m summary" message
+
+### Step 7: Spawn Golf Ball (Visual Test Indicator)
+```bash
+# In Terminal 7
+wsl -d Ubuntu-22.04
+cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
+
+# CRITICAL: Ball must be directly in front of robot for camera to see it!
+# Create golf ball SDF
+cat > /tmp/golf_ball.sdf << 'EOF'
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <model name="golf_ball">
+    <pose>2.0 0.0 0.021 0 0 0</pose>
+    <link name="link">
+      <inertial>
+        <mass>0.045</mass>
+        <inertia>
+          <ixx>1.5e-05</ixx>
+          <iyy>1.5e-05</iyy>
+          <izz>1.5e-05</izz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry>
+          <sphere>
+            <radius>0.021</radius>
+          </sphere>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <sphere>
+            <radius>0.021</radius>
+          </sphere>
+        </geometry>
+        <material>
+          <ambient>0.9 0.9 0.9 1</ambient>
+          <diffuse>0.9 0.9 0.9 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
+EOF
+
+# Spawn the ball DIRECTLY IN FRONT of robot (y=0.0 is critical!)
+ros2 run gazebo_ros spawn_entity.py -file /tmp/golf_ball.sdf -entity golf_ball -x 2.0 -y 0.0 -z 0.021
+```
+**⛳ Golf ball appears = Testing begins!**
+
+### Step 8: Launch YOLO-to-Nav2 Bridge
+```bash
+# In Terminal 8
+wsl -d Ubuntu-22.04
+cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash
+export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
+python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/ros2_yolo_to_nav_goal.py
 ```
 
 ## Expected Timeline & Behavior
 
-### T+0s: Process Cleanup
-- "ChaseBot Process Killer" message
-- "✓ No ChaseBot processes found" or list of killed processes
-
-### T+2s: VcXsrv Check
-- "✅ VcXsrv is running"
-
-### T+5s: Gazebo Launch
-- Gazebo window opens with empty world (gray ground plane)
-- Red message box visible at top saying "SINGLE BALL TEST"
-
-### T+10s: Robot Spawn
-- JetBot robot appears at origin (0,0)
-- Camera visible on robot
-
-### T+18s: SLAM Initialization
-- SLAM_toolbox starts: "Using solver plugin solver_plugins::CeresSolver"
-- **CRITICAL**: Wait for map frame creation before Nav2
-- May show initial transform warnings - this is normal
-
-### T+23s: Nav2 Stack Launch
-- **IMPORTANT**: Only start after SLAM is ready
-- Terminal shows "Managed nodes are active"
-- "Creating bond timer..." message
-- If you see "Invalid frame ID 'map'" errors, SLAM wasn't ready yet
-
-### T+28s: YOLO Ready
-- "YOLOv8m summary" with model details
-- CPU usage increases
-
-### T+28s: ⛳ GOLF BALL SPAWNS
-- **VISUAL CUE**: White golf ball appears at position (2.0, 0.5)
-- "SPAWNING GOLF BALL - TESTING SHOULD BEGIN NOW!" message
-- This is when the actual test begins
-
-### T+30s: Visual Debug Window
-- **YOLO Debug Window Opens**: Shows camera view with labeled bounding boxes
-- Golf ball should have "sports ball" label with confidence score
-- Bounding box should be drawn around the ball
-- This confirms YOLO is detecting objects correctly
-
-### T+32s: Bridge Active
-- "YOLO to Nav Goal bridge initialized" message
-- "Nav2 action server is ready!" message
-
-### T+34s: Detection & Navigation
-- **SUCCESS CRITERIA**:
-  1. ✅ NO transform timing errors (no "extrapolation" messages)
-  2. ✅ "Ball detected: sports ball" message with confidence
-  3. ✅ "Detection pixels: (X, Y)" with bbox size
-  4. ✅ "Estimated distance: X.XXm" 
-  5. ✅ "Ball position in camera frame: (X.XX, Y.YY)"
-  6. ✅ "Approach position in base_link: (X.XX, Y.YY)"
-  7. ✅ "Sending navigation goal to (X.XX, Y.YY)"
-  8. ✅ "Goal accepted by Nav2, navigating..."
-  9. ✅ Robot physically moves toward ball in Gazebo
-  10. ✅ Robot stops approximately 0.3m from ball
-  11. ✅ "Navigation succeeded! Reached the ball."
+### Detection & Navigation
+Within seconds of launching the bridge, you should see:
+1. ✅ "Ball detected: sports ball" message with confidence
+2. ✅ "Detection pixels: (X, Y)" with bbox size
+3. ✅ "Estimated distance: X.XXm" 
+4. ✅ "Ball position in camera frame: (X.XX, Y.YY)"
+5. ✅ "Approach position in base_link: (X.XX, Y.YY)"
+6. ✅ "Sending navigation goal to (X.XX, Y.YY)"
+7. ✅ "Goal accepted by Nav2, navigating..."
+8. ✅ Robot physically moves toward ball in Gazebo
+9. ✅ Robot stops approximately 0.3m from ball
+10. ✅ "Navigation succeeded! Reached the ball."
 
 ## UAT Success Indicators
 
 ### Primary Success (Transform Fix)
 - ✅ **NO TRANSFORM ERRORS** in logs
+- ✅ No "extrapolation" or timing-related errors
 - ✅ Clean detection-to-navigation pipeline
 - ✅ Robot successfully navigates to ball
 
 ### Secondary Success (System Health)
-- ✅ Process management works cleanly
 - ✅ Clear visual timing (ball spawns when ready)
 - ✅ Detailed logging shows coordinate transformations
 - ✅ Navigation completes without errors
@@ -111,15 +172,11 @@ python ros2_scripts/run_single_ball_test.py
 ## Common Issues & Solutions
 
 ### Issue: "Invalid frame ID 'map'" Errors
-**Cause**: Nav2 launched before SLAM created the map frame
+**Cause**: Nav2 requires a map frame but we're not using SLAM
 **Solution**: 
-1. Kill all processes
-2. Restart with proper sequence:
-   - Launch Gazebo + Robot
-   - Launch SLAM_toolbox and wait for initialization
-   - Move robot manually to help SLAM build initial map
-   - THEN launch Nav2
-   - Finally launch YOLO and bridge
+1. Add the static transform publisher (Step 4) if not already running
+2. Ensure the static publisher is running before launching Nav2
+3. The static transform creates map→odom identity transform
 
 ### Issue: YOLO Shows Empty Detections
 **Cause**: Golf ball not visible to camera or model not detecting
@@ -135,19 +192,12 @@ python ros2_scripts/run_single_ball_test.py
 2. Verify map frame exists: `ros2 run tf2_tools view_frames`
 3. Check for navigation feedback in terminal
 
-## Debugging Information
-If issues occur, check:
-1. **Transform Chain**: Look for "Transform chain odom->base_link exists" message
-2. **Detection Details**: Pixel coordinates and bbox size logged
-3. **Distance Estimation**: "Estimated distance" should be reasonable (0.3-3.0m)
-4. **Coordinate Transformation**: Camera frame → base_link → odom positions logged
-5. **SLAM Status**: Map frame should exist before Nav2 launches
-
 ## Test Cleanup
-Press `Ctrl+C` in the test runner window to:
-- Stop all processes gracefully
-- Run automatic cleanup
-- See "✅ Test complete and cleaned up" message
+To stop all processes:
+```bash
+# Press Ctrl+C in each terminal, then run:
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws/src/chasebot_description && python3 ros2_scripts/kill_chasebot_processes.py"
+```
 
 ## Task 2.1 Complete When:
 1. Robot detects and navigates to single golf ball

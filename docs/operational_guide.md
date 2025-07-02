@@ -107,6 +107,14 @@ wsl -d Ubuntu-22.04 bash -c "cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/*.ya
 wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && colcon build --packages-select chasebot_description"
 ```
 
+## Navigation Philosophy
+
+**IMPORTANT**: ChaseBot uses **vision-based, map-free navigation**. We do NOT use SLAM or build maps because:
+- Our targets (golf balls) are detected visually
+- The environment is dynamic (balls appear/disappear)
+- Direct vision-to-navigation is simpler and more robust
+- This approach works from POC through production
+
 ## Manual Component Launch Sequence
 
 ### 1. Launch Gazebo with World
@@ -131,19 +139,16 @@ wsl -d Ubuntu-22.04 bash -c "
 ```
 **Wait**: 3 seconds for controllers to initialize
 
-### 3. Launch SLAM Toolbox (CRITICAL: Before Nav2!)
+### 3. Static Transform Publisher (Optional - only if Nav2 requires map frame)
 ```bash
 wsl -d Ubuntu-22.04 bash -c "
-    export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0
     source /opt/ros/humble/setup.bash
-    cd ~/ros2_ws && source install/setup.bash
-    ros2 launch slam_toolbox online_async_launch.py use_sim_time:=true
+    ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 map odom
 " &
 ```
-**Wait**: 5 seconds for SLAM to create map frame
-**Note**: Move robot with teleop to help SLAM initialize if needed
+**Note**: This creates a static map→odom transform if Nav2 complains about missing map frame
 
-### 4. Launch Nav2 Stack (After SLAM!)
+### 4. Launch Nav2 Stack
 ```bash
 wsl -d Ubuntu-22.04 bash -c "
     export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0
@@ -153,7 +158,7 @@ wsl -d Ubuntu-22.04 bash -c "
 " &
 ```
 **Wait**: 8 seconds for Nav2 initialization
-**Check**: No "Invalid frame ID 'map'" errors
+**Note**: Nav2 uses local costmaps for obstacle avoidance, no global map needed
 
 ### 5. Launch YOLO Detection
 ```bash
@@ -178,23 +183,15 @@ wsl -d Ubuntu-22.04 bash -c "
 ```
 **Visual**: Golf ball appears in Gazebo and YOLO debug window
 
-### 5. Start Vision Processing
+### 7. Start YOLO-to-Nav Goal Bridge
 ```bash
 wsl -d Ubuntu-22.04 bash -c "
     source /opt/ros/humble/setup.bash
     cd ~/ros2_ws && source install/setup.bash
-    python3 ~/ros2_ws/src/chasebot_description/scripts/ros2_vision_to_laserscan_hsv.py
+    python3 ~/ros2_ws/src/chasebot_description/scripts/ros2_yolo_to_nav_goal.py
 " &
 ```
-
-### 6. Start Ball-to-Nav Goal Converter
-```bash
-wsl -d Ubuntu-22.04 bash -c "
-    source /opt/ros/humble/setup.bash
-    cd ~/ros2_ws && source install/setup.bash
-    python3 ~/ros2_ws/src/chasebot_description/scripts/ros2_ball_to_nav_goal.py
-" &
-```
+**Function**: Converts YOLO detections directly to Nav2 goals in odom frame
 
 ## Common Issues & Solutions
 
