@@ -1,12 +1,12 @@
 # ChaseBot Milestone Progress
 
-**Last Updated**: 2025-06-30 22:57 EST
+**Last Updated**: 2025-07-01 20:46 EST
 
 ## 🎯 Current Focus: Vision System Upgrade to YOLO-Based Detection
 
-**Plan**: Replace HSV detection with `ros2_vision_inference` for professional-grade YOLO-based 3D detection
+**Status**: YOLO detection working, Navigation functional but needs calibration
 
-## Current Status: Baseline Working, Vision Upgrade Planned
+## Current Status: YOLO + Nav2 Integration Functional
 
 ### ✅ Achieved Baseline (2025-06-30)
 - **HSV Detection**: Working at 2m+ distances
@@ -14,27 +14,33 @@
 - **Nav2 Integration**: Professional path planning operational
 - **GUI Environment**: VcXsrv + WSL2 fully configured
 
-### 🚀 Vision Upgrade Tasks (Not Started)
+### 🚀 Vision Upgrade Tasks (IN PROGRESS)
 
-#### Task 1: Install & Validate ros2_vision_inference
+#### Task 1: Install & Validate YOLO Detection
 - **Goal**: Install and configure YOLO-based detection
-- **UAT**: `/detection3d_array` publishes sports ball detections
-- **Status**: ⏳ Not started
+- **UAT**: `/yolo/detections` publishes sports ball detections
+- **Status**: ✅ COMPLETE - yolov8_ros working with >60% confidence
 
 #### Task 2: Connect Goal Bridge  
-- **Goal**: Bridge Detection3DArray to Nav2 goals
+- **Goal**: Bridge DetectionArray to Nav2 goals
 - **UAT**: Detection → Nav2 goal → autonomous movement
-- **Status**: ⏳ Not started
+- **Status**: ✅ FUNCTIONAL - Robot navigates to detected balls
+- **Issues**: Position calculations incorrect, needs calibration
+
+#### Task 2.1: Fix Position Calibration (NEW)
+- **Goal**: Fix coordinate transformation calculations
+- **UAT**: Robot navigates to actual ball locations
+- **Status**: ⏳ Not started - Identified transform timing issues
 
 #### Task 3: Fix Final Approach
 - **Goal**: Tune to stop at 3 inches (0.0762m)
 - **UAT**: Stops within 3 ± 0.5 inches consistently
-- **Status**: ⏳ Not started
+- **Status**: ⏳ Blocked by Task 2.1
 
 #### Task 4: Documentation & Launch
 - **Goal**: Create unified launch and update docs
 - **UAT**: Single launch for complete system
-- **Status**: ⏳ Not started
+- **Status**: ✅ PARTIAL - jetbot_yolo_nav2_complete.launch.py created
 
 ## Completed Phases (Historical Reference)
 

@@ -4,7 +4,18 @@ This consolidated guide combines all operational procedures for ChaseBot develop
 
 ## Quick Start Commands
 
-### YOLO Detection Demo (Recommended)
+### Complete Autonomous Ball Following (NEW)
+```bash
+# 1. Start VcXsrv with access control disabled
+# 2. Launch complete YOLO + Nav2 system
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0 && ros2 launch ~/ros2_ws/src/chasebot_description/launch/jetbot_yolo_nav2_complete.launch.py"
+
+# 3. View detections with bounding boxes (optional)
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0 && ros2 run rqt_image_view rqt_image_view"
+# Select /yolo/debug_image in the dropdown
+```
+
+### YOLO Detection Only (Previous)
 ```bash
 # 1. Start VcXsrv with access control disabled
 # 2. Launch complete YOLO system
