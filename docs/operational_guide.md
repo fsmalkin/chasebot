@@ -112,10 +112,7 @@ wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash &
 ### 1. Launch Gazebo with World
 ```bash
 wsl -d Ubuntu-22.04 bash -c "
-    DISPLAY_IP=\$(ip route show default | awk '{print \$3}')
-    export DISPLAY=\${DISPLAY_IP}:0
-    export LIBGL_ALWAYS_INDIRECT=1
-    export MESA_GL_VERSION_OVERRIDE=3.3
+    export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0
     source /opt/ros/humble/setup.bash
     cd ~/ros2_ws && source install/setup.bash
     ros2 launch gazebo_ros gazebo.launch.py world:=~/ros2_ws/src/chasebot_description/worlds/autonomous_golf_ball_world.world
@@ -123,19 +120,10 @@ wsl -d Ubuntu-22.04 bash -c "
 ```
 **Wait**: 10 seconds for Gazebo initialization
 
-### 2. Spawn Golf Balls (Manual Required)
+### 2. Spawn JetBot Robot
 ```bash
 wsl -d Ubuntu-22.04 bash -c "
-    source /opt/ros/humble/setup.bash
-    cd ~/ros2_ws && source install/setup.bash
-    ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/green_golf_ball.sdf -entity golf_ball_1 -x 1.0 -y 0.0 -z 0.025
-"
-```
-**Note**: World file golf balls do NOT spawn automatically
-
-### 3. Spawn JetBot Robot
-```bash
-wsl -d Ubuntu-22.04 bash -c "
+    export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0
     source /opt/ros/humble/setup.bash
     cd ~/ros2_ws && source install/setup.bash
     ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/src/chasebot_description/urdf/ros2_jetbot.urdf -entity jetbot -x 0 -y 0 -z 0.1
@@ -143,15 +131,52 @@ wsl -d Ubuntu-22.04 bash -c "
 ```
 **Wait**: 3 seconds for controllers to initialize
 
-### 4. Launch Nav2 Stack
+### 3. Launch SLAM Toolbox (CRITICAL: Before Nav2!)
 ```bash
 wsl -d Ubuntu-22.04 bash -c "
+    export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0
     source /opt/ros/humble/setup.bash
     cd ~/ros2_ws && source install/setup.bash
-    ros2 launch nav2_bringup navigation_launch.py params_file:=/home/macro2/ros2_ws/src/chasebot_description/nav2_params_simple.yaml use_sim_time:=true
+    ros2 launch slam_toolbox online_async_launch.py use_sim_time:=true
+" &
+```
+**Wait**: 5 seconds for SLAM to create map frame
+**Note**: Move robot with teleop to help SLAM initialize if needed
+
+### 4. Launch Nav2 Stack (After SLAM!)
+```bash
+wsl -d Ubuntu-22.04 bash -c "
+    export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0
+    source /opt/ros/humble/setup.bash
+    cd ~/ros2_ws && source install/setup.bash
+    ros2 launch nav2_bringup navigation_launch.py use_sim_time:=true
 " &
 ```
 **Wait**: 8 seconds for Nav2 initialization
+**Check**: No "Invalid frame ID 'map'" errors
+
+### 5. Launch YOLO Detection
+```bash
+wsl -d Ubuntu-22.04 bash -c "
+    export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0
+    source /opt/ros/humble/setup.bash
+    cd ~/ros2_ws && source install/setup.bash
+    ros2 launch yolo_bringup yolov8.launch.py model:=yolov8m.pt input_image_topic:=/camera/image_raw device:=cpu
+" &
+```
+**Wait**: 5 seconds for model loading
+**Visual**: Debug window opens showing camera view with bounding boxes
+
+### 6. Spawn Golf Balls
+```bash
+wsl -d Ubuntu-22.04 bash -c "
+    export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0
+    source /opt/ros/humble/setup.bash
+    cd ~/ros2_ws && source install/setup.bash
+    ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/green_golf_ball.sdf -entity golf_ball_1 -x 1.0 -y 0.0 -z 0.025
+"
+```
+**Visual**: Golf ball appears in Gazebo and YOLO debug window
 
 ### 5. Start Vision Processing
 ```bash

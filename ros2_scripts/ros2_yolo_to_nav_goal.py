@@ -120,6 +120,9 @@ class YoloToNavGoal(Node):
     def detection_to_world_pose(self, detection, header):
         """Convert YOLO detection to world pose for navigation."""
         try:
+            # Get current time for all transforms (fixes timing issues)
+            current_time = self.get_clock().now()
+            
             # Get bounding box center in pixels
             pixel_x = detection.bbox.center.position.x
             pixel_y = detection.bbox.center.position.y
@@ -128,9 +131,16 @@ class YoloToNavGoal(Node):
             bbox_width = detection.bbox.size.x
             bbox_height = detection.bbox.size.y
             
+            # Log detection details
+            self.get_logger().info(
+                f'Detection pixels: ({pixel_x:.0f}, {pixel_y:.0f}), '
+                f'bbox size: {bbox_width:.0f}x{bbox_height:.0f}'
+            )
+            
             # Estimate distance based on bounding box size
             # Assuming the ball fills the bounding box
             distance = self.estimate_distance_from_bbox(bbox_width, bbox_height)
+            self.get_logger().info(f'Estimated distance: {distance:.2f}m')
             
             # Convert pixel to angle using camera FOV
             if self.camera_info:
@@ -151,10 +161,14 @@ class YoloToNavGoal(Node):
             ball_x = distance * math.cos(angle_x)
             ball_y = distance * math.sin(angle_x)
             
+            self.get_logger().info(
+                f'Ball position in camera frame: ({ball_x:.2f}, {ball_y:.2f})'
+            )
+            
             # Create pose in camera frame
             ball_pose = PoseStamped()
             ball_pose.header.frame_id = header.frame_id  # Should be camera frame
-            ball_pose.header.stamp = header.stamp
+            ball_pose.header.stamp = current_time.to_msg()  # Use current time instead of detection timestamp
             
             # Ball position
             ball_pose.pose.position.x = ball_x
@@ -186,7 +200,7 @@ class YoloToNavGoal(Node):
             # Create goal pose
             goal = PoseStamped()
             goal.header.frame_id = 'base_link'
-            goal.header.stamp = header.stamp
+            goal.header.stamp = current_time.to_msg()  # Use current time
             
             # Set approach position
             goal.pose.position.x = approach_x
@@ -197,6 +211,10 @@ class YoloToNavGoal(Node):
             yaw = math.atan2(ball_in_base.pose.position.y, ball_in_base.pose.position.x)
             goal.pose.orientation.z = math.sin(yaw / 2.0)
             goal.pose.orientation.w = math.cos(yaw / 2.0)
+            
+            self.get_logger().info(
+                f'Approach position in base_link: ({approach_x:.2f}, {approach_y:.2f})'
+            )
             
             # Transform to odom frame for navigation
             goal_odom = self.tf_buffer.transform(
@@ -210,6 +228,17 @@ class YoloToNavGoal(Node):
         except (TransformException, tf2_ros.LookupException, tf2_ros.ConnectivityException, 
                 tf2_ros.ExtrapolationException) as e:
             self.get_logger().error(f'Transform error: {str(e)}')
+            
+            # Try to provide more context about the transform failure
+            try:
+                # Check if base_link exists
+                self.tf_buffer.lookup_transform('odom', 'base_link', 
+                                                rclpy.time.Time(), 
+                                                timeout=rclpy.duration.Duration(seconds=0.1))
+                self.get_logger().info('Transform chain odom->base_link exists')
+            except:
+                self.get_logger().error('Transform chain odom->base_link is broken!')
+                
             return None
     
     def estimate_distance_from_bbox(self, bbox_width, bbox_height):
@@ -219,7 +248,8 @@ class YoloToNavGoal(Node):
         
         # Camera parameters (adjust based on calibration)
         # At 1 meter, a 4.3cm golf ball might appear as ~40 pixels
-        reference_pixels = 40.0
+        # Adjusted based on empirical observations
+        reference_pixels = 30.0  # Adjusted for better accuracy
         reference_distance = 1.0
         
         # Simple inverse relationship
