@@ -27,6 +27,8 @@ install(DIRECTORY ros2_config/worlds
 # Install Python scripts as executables
 install(PROGRAMS
   ros2_scripts/shutdown_manager.py
+  ros2_scripts/cleanup_before_launch.py
+  ros2_scripts/ros2_yolo_detector.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
