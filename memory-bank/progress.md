@@ -13,11 +13,19 @@
 - **Key Fix**: WSL2 audio issues resolved, physics type corrected
 - **Files**: `jetbot_basic_spawn_headless.launch.py`
 
-### 📋 Slice 2: Add Static Transforms (NEXT)
-- **Status**: Not started
+### ✅ Slice 2: Add Static Transforms (COMPLETE)
+- **Status**: UAT Successful - 2025-01-02 18:52
 - **Goal**: Fix transform tree fragmentation
-- **Implementation**: Add explicit static transform publishers
-- **UAT**: Complete TF tree: map → odom → base_link → camera_link → camera_optical_link
+- **Implementation**: Added 3 explicit static transform publishers
+- **Files Created**:
+  - `jetbot_with_transforms.launch.py` - Launch file with transform publishers
+  - `slice2_uat.md` - UAT documentation
+  - `sync_slice2_to_wsl.bat` - File sync helper
+- **UAT Results**:
+  - ✅ All static transforms publishing correctly
+  - ✅ Complete TF tree verified: map → odom → base_link → camera_link → camera_optical_link
+  - ✅ No transform errors or "extrapolation" warnings
+  - ✅ Note: GUI display issue deferred (transforms work in headless mode)
 
 ### 📋 Slice 3: Add YOLO Detection
 - **Status**: Not started

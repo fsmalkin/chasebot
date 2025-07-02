@@ -27,12 +27,30 @@
 - Display working with VcXsrv at 172.22.96.1:0.0
 - Pre-launch cleanup helpful but needs CMakeLists fix for proper installation
 
-#### Slice 2: Add Static Transforms (NEXT UP)
+#### Slice 2: Add Static Transforms (✅ UAT COMPLETE)
 **Goal**: Fix transform tree fragmentation with explicit publishers
-**Implementation**:
-- Add explicit static transform publishers
-- Verify complete chain: map → odom → base_link → camera_link → camera_optical_link
-- Test with `ros2 run tf2_tools view_frames`
+**Status**: UAT Successful - 2025-01-02 18:52
+**Files Created**:
+- `jetbot_with_transforms.launch.py` - Adds 3 static transform publishers
+- `slice2_uat.md` - UAT documentation with transform verification steps
+- `sync_slice2_to_wsl.bat` - File sync helper
+
+**Implementation Details**:
+- Added 3 critical static transform publishers:
+  1. map → odom (0,0,0) - Required for Nav2
+  2. base_link → camera_link (0.07,0,0.12) - Often missing from Gazebo
+  3. camera_link → camera_optical_link (optical frame convention)
+- All publishers use simulation time
+- Launch timing: Transforms publish at T+9s after robot spawn
+
+**UAT Results**:
+- ✅ All 3 static transform publishers launched successfully
+- ✅ No "extrapolation into future" errors
+- ✅ Complete TF tree verified with `view_frames`
+- ✅ Valid transform data continuously published (verified with `tf2_echo`)
+- ✅ Transform chain complete: map → odom → base_link → camera_link → camera_optical_link
+
+**Observation**: Gazebo GUI crashed due to display config issue (resolv.conf missing), but simulation server and all transforms working perfectly. Display issue deferred to next slice that requires GUI.
 
 #### Planned Slices (Not Yet Implemented)
 
