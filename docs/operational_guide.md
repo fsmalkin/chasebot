@@ -4,9 +4,15 @@ This consolidated guide combines all operational procedures for ChaseBot develop
 
 ## Quick Start Commands
 
-### Automated Demo (Recommended)
+### YOLO Detection Demo (Recommended)
 ```bash
-./run_chasebot_demo.sh
+# 1. Start VcXsrv with access control disabled
+# 2. Launch complete YOLO system
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0 && ros2 launch ~/ros2_ws/jetbot_yolo_complete.launch.py"
+
+# 3. View detections with bounding boxes
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0 && ros2 run rqt_image_view rqt_image_view"
+# Select /yolo/debug_image in the dropdown
 ```
 
 ### Environment Check
@@ -18,7 +24,7 @@ wsl --list --verbose
 wsl -d Ubuntu-22.04 bash -c "source /opt/ros/humble/setup.bash && ros2 --help"
 
 # Test X11 display
-wsl -d Ubuntu-22.04 bash -c "DISPLAY=\$(ip route show default | awk '{print \$3}'):0 && xset q"
+wsl -d Ubuntu-22.04 bash -c "DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0 && xeyes"
 ```
 
 ## Session Initialization
