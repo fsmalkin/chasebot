@@ -153,6 +153,46 @@ wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash &
 - **PATTERN**: `ps aux | grep [process] → kill -9 [specific PIDs] → verify termination`
 - **REASON**: Ensures complete cleanup and prevents "Address already in use" errors
 
+#### CRITICAL: WSL Path Mapping Issues
+**DISCOVERED 2025-01-03**: Git Bash fails with WSL file operations due to path mapping issues.
+
+**SYMPTOMS**:
+- Error: "cannot stat 'C:/Program Files/Git/mnt/c/..." 
+- Error: "No such file or directory"
+- Git Bash incorrectly prefixes WSL paths with Git installation directory
+
+**SOLUTION**: Never use Git Bash for WSL file operations. Use these alternatives:
+
+**Method 1: Command Prompt (RECOMMENDED)**
+```cmd
+# Open Command Prompt (cmd.exe) and run:
+wsl -d Ubuntu-22.04 cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/file.py ~/ros2_ws/src/target/
+```
+
+**Method 2: Direct WSL Terminal**
+```bash
+# Open WSL terminal directly and run:
+cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/file.py ~/ros2_ws/src/target/
+```
+
+**File Sync Pattern**:
+```bash
+# 1. Use Command Prompt for file operations
+wsl -d Ubuntu-22.04 cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_scripts/new_file.py ~/ros2_ws/src/chasebot_description/ros2_scripts/
+
+# 2. Fix line endings
+wsl -d Ubuntu-22.04 sed -i 's/\r$//' ~/ros2_ws/src/chasebot_description/ros2_scripts/new_file.py
+
+# 3. Make executable
+wsl -d Ubuntu-22.04 chmod +x ~/ros2_ws/src/chasebot_description/ros2_scripts/new_file.py
+
+# 4. Build workspace
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && colcon build --packages-select chasebot_description"
+```
+
+**NEVER**: Use Git Bash for WSL commands
+**ALWAYS**: Use Command Prompt or direct WSL terminal for file sync operations
+
 ### Development Workflow Standards
 
 #### File Management
