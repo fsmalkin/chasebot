@@ -29,6 +29,8 @@ install(PROGRAMS
   ros2_scripts/shutdown_manager.py
   ros2_scripts/cleanup_before_launch.py
   ros2_scripts/ros2_yolo_detector.py
+  ros2_scripts/ros2_yolo_detector_quiet.py
+  ros2_scripts/ros2_yolo_detector_silent.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
