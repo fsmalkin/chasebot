@@ -43,6 +43,7 @@ install(PROGRAMS
   ros2_scripts/ros2_yolo_detector_silent.py
   ros2_scripts/ros2_yolo_to_nav_goal.py
   ros2_scripts/ros2_yolo_to_nav_goal_fixed.py
+  ros2_scripts/blank_map_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

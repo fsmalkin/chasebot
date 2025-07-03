@@ -177,8 +177,10 @@ class YoloToNavGoal(Node):
                 angle_x = (pixel_x - self.image_width/2) * camera_fov / self.image_width
             
             # Calculate ball position relative to camera
+            # Note: Invert Y to match coordinate frame conventions
+            # When ball is on left of image (negative angle), robot should turn left (positive Y)
             ball_x = distance * math.cos(angle_x)
-            ball_y = distance * math.sin(angle_x)
+            ball_y = -distance * math.sin(angle_x)  # Inverted to fix turn direction
             
             self.get_logger().info(
                 f'Ball position in camera frame: ({ball_x:.2f}, {ball_y:.2f})'
