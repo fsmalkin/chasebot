@@ -24,6 +24,11 @@ install(DIRECTORY ros2_config/worlds
   DESTINATION share/${PROJECT_NAME}/ros2_config/
 )
 
+# Install ROS 2 params files
+install(DIRECTORY ros2_config/params
+  DESTINATION share/${PROJECT_NAME}/ros2_config/
+)
+
 # Install Python scripts as executables
 install(PROGRAMS
   ros2_scripts/shutdown_manager.py
@@ -31,6 +36,7 @@ install(PROGRAMS
   ros2_scripts/ros2_yolo_detector.py
   ros2_scripts/ros2_yolo_detector_quiet.py
   ros2_scripts/ros2_yolo_detector_silent.py
+  ros2_scripts/ros2_yolo_to_nav_goal.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
