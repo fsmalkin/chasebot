@@ -166,6 +166,7 @@ wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash &
 - Error: "cannot stat 'C:/Program Files/Git/mnt/c/..." 
 - Error: "No such file or directory"
 - Git Bash incorrectly prefixes WSL paths with Git installation directory
+- **NEW**: File copy commands may succeed but files don't actually update in WSL2
 
 **SOLUTION**: Never use Git Bash for WSL file operations. Use these alternatives:
 
@@ -179,6 +180,15 @@ wsl -d Ubuntu-22.04 cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/file.py ~/ros
 ```bash
 # Open WSL terminal directly and run:
 cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/file.py ~/ros2_ws/src/target/
+```
+
+**Method 3: Direct WSL2 Editing (MOST RELIABLE)**
+```bash
+# For critical file changes, edit directly in WSL2:
+wsl -d Ubuntu-22.04 -- bash -c "sed -i 's/OLD_CONTENT/NEW_CONTENT/' ~/ros2_ws/src/path/to/file"
+
+# Always verify changes took effect:
+wsl -d Ubuntu-22.04 -- bash -c "cat ~/ros2_ws/src/path/to/file | grep PATTERN"
 ```
 
 **File Sync Pattern**:
@@ -221,10 +231,19 @@ wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash &
 
 ### Validated Working Commands (ROS 2)
 
+#### Display Configuration (✅ PROVEN 2025-01-04)
+```bash
+# Use Windows host IP for reliable display connection:
+export DISPLAY=172.17.112.1:0.0
+
+# Verify IP if needed:
+ipconfig | findstr /i "ipv4"  # Run in Windows to find IP
+```
+
 #### Core Foundation (✅ PROVEN)
 ```bash
-# Headless simulation with robot control
-wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch ~/ros2_ws/src/chasebot_description/launch/jetbot_autonomous_headless.launch.py"
+# GUI simulation with full visual validation
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=172.17.112.1:0.0 && ros2 launch chasebot_description jetbot_nav2_integration_complete.launch.py"
 
 # Movement test
 wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist '{linear: {x: 0.1}, angular: {z: 0.2}}'"
@@ -250,9 +269,11 @@ wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash &
 1. **Environment Validation**: Always verify WSL2 and ROS status first
 2. **Coordinate Accuracy**: Use corrected bridge for proper ball approach
 3. **Process Hygiene**: Clean process startup/shutdown procedures using PIDs
-4. **File Synchronization**: Maintain sync between Windows and WSL2 using Command Prompt
-5. **Visual Confirmation**: Enable GUI for complete UAT validation
+4. **File Synchronization**: Verify file sync with direct WSL2 checks after copying
+5. **Visual Confirmation**: Enable GUI with Windows IP for complete UAT validation
 6. **Position Diagnostics**: Use diagnostic tools to validate coordinate accuracy
+7. **Detection Range**: YOLO optimal at 3m, unreliable beyond 5m
+8. **File Updates**: For critical changes, edit directly in WSL2 to ensure updates apply
 
 ### Project Achievement Milestones
 1. **✅ Core Foundation (2025-06-28)**: ROS 2 + Gazebo + Robot control validated
