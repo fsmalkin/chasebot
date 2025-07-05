@@ -1,65 +1,51 @@
-# ChaseBot Active Context - 2025-01-04
+# Active Context - ChaseBot ROS 2 Development
 
-## ✅ GUI DISPLAY WORKING + COORDINATE FIX VALIDATED! 🎯
+## Current Date: July 4, 2025, 10:45 PM
 
-### COMPLETE ACHIEVEMENT:
-**Problem**: Display connection issues prevented visual validation
-**Solution**: Used Windows IP address (172.17.112.1:0.0) for DISPLAY variable
-**Result**: ✅ **GUI WORKING + COORDINATE FIX VISUALLY CONFIRMED**
+## Current Focus: Navigation Bridge V2.0.0 Debugging
 
-### GUI VALIDATION RESULTS:
-- ✅ **Display Connection**: Successfully connected using Windows IP
-- ✅ **Gazebo GUI**: Launches with full visual interface
-- ✅ **Robot Spawning**: JetBot visible in simulation
-- ✅ **Ball Detection**: YOLO detecting balls at various distances
-- ✅ **Navigation**: Robot successfully navigating to balls
-- ✅ **Coordinate Fix**: Robot approaches within target distance
+### Immediate Context
+Working on fixing the YOLO-to-Nav2 bridge for autonomous ball following. Implemented v2.0.0 with camera intrinsics but encountering operational issues.
 
-### CRITICAL DISCOVERY - FILE SYNC ISSUES:
-**Problem**: File changes in Windows not syncing to WSL2
-- Git Bash path mapping issues caused file copy failures
-- Changes to world files weren't propagating to simulation
+### Current Issues
+1. **Line Ending Problems**: Windows line endings preventing Python script execution in WSL2
+2. **Camera Info Not Received**: Bridge waiting for camera calibration data
+3. **Robot Not Moving**: Despite ball being detected at 1m with 88% confidence
 
-**Solution**: Direct WSL2 file editing
+### Recent Changes
+- Created v2.0.0 of YOLO-to-Nav2 bridge using camera intrinsics for proper coordinate transformation
+- Added comprehensive telemetry with emoji indicators for clarity
+- Implemented semantic versioning for all bridge implementations
+- Added min/max detection distance thresholds (0.3m - 2.0m)
+
+### Key Files Modified
+- `ros2_scripts/ros2_yolo_to_nav_goal_v2.0.0.py` - New camera intrinsics implementation
+- `ros2_scripts/ros2_yolo_to_nav_goal_v1.0.0.py` - Renamed from original
+- `ros2_scripts/ros2_yolo_to_nav_goal_v1.1.0.py` - Renamed from _fixed version
+- `ros2_scripts/ros2_yolo_to_nav_goal_v1.2.0.py` - Renamed from _corrected version
+- `CMakeLists.txt` - Added all versioned scripts
+- `docs/navigation_v2_status.md` - Current status report
+
+### Technical Details
+- Ball position: 1.0m forward (in world file)
+- YOLO detection: Working (88% confidence)
+- Nav2 stack: Fully operational
+- Bridge issue: Not receiving camera info, thus not sending navigation goals
+
+### Next Session Priority
+1. Fix line ending issues (consider editing directly in WSL2)
+2. Debug camera info topic pipeline
+3. Test basic Nav2 functionality with manual goals
+4. Consider simpler approach if v2.0.0 proves too complex
+
+### Commands Ready for Next Session
 ```bash
-# Direct edit in WSL2 to bypass sync issues
-wsl -d Ubuntu-22.04 -- bash -c "sed -i 's/<pose>OLD/<pose>NEW/' ~/ros2_ws/src/..."
+# Check if camera info is being published
+ros2 topic echo /camera/camera_info --once
+
+# Test Nav2 with manual goal
+ros2 topic pub --once /goal_pose geometry_msgs/PoseStamped '{header: {frame_id: odom}, pose: {position: {x: 0.85, y: 0.0, z: 0.0}}}'
 ```
 
-### DETECTION DISTANCE INSIGHTS:
-- 5m: Too far for reliable YOLO detection (0 detections)
-- 3m: Optimal detection distance (reliable detection)
-- Robot successfully navigates to detected balls
-
-## COMPLETE SYSTEM STATUS:
-```
-✅ Gazebo Simulation: GUI mode fully operational
-✅ Robot Spawning: URDF loads correctly with camera
-✅ YOLO Detection: Working at appropriate distances
-✅ Nav2 Navigation: Complete stack operational
-✅ Coordinate Fix: Accurate approach confirmed
-✅ Transform Tree: Full chain functional
-✅ GUI Display: VcXsrv connection working
-```
-
-## 🎯 MISSION ACCOMPLISHED
-
-### ChaseBot Autonomous Ball Following:
-1. **Vision**: YOLO reliably detects golf balls
-2. **Navigation**: Nav2 plans and executes paths
-3. **Approach**: Robot stops within 15cm of ball (vs previous 57cm)
-4. **GUI**: Full visual validation available
-
-### Key Technical Solutions:
-1. **Display**: `export DISPLAY=172.17.112.1:0.0`
-2. **File Sync**: Direct WSL2 editing for reliability
-3. **Detection Range**: 3m optimal for YOLO
-4. **Coordinate Transform**: Fixed approach calculations
-
-## NEXT DEVELOPMENT OPPORTUNITIES:
-- Multi-ball collection behavior
-- Dynamic obstacle avoidance
-- Return-to-base functionality
-- Real hardware deployment preparation
-
-The ChaseBot project has achieved its core autonomous ball following objective with professional-quality implementation!
+### Summary
+V2.0.0 bridge mathematically sound but operationally blocked. Need to resolve basic connectivity issues before complex coordinate transformations can be validated.

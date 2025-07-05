@@ -67,9 +67,9 @@
       </link>
     </model>
 
-    <!-- Golf ball for YOLO detection - placed directly in front at 3m -->
+    <!-- Golf ball for YOLO detection - placed closer at 1m for better detection -->
     <model name="golf_ball">
-      <pose>3.0 0.0 0.02 0 0 0</pose>
+      <pose>1.0 0.0 0.02 0 0 0</pose>
       <static>false</static>
       <link name="link">
         <inertial>

@@ -7,8 +7,9 @@ Final integration of all proven components for autonomous ball following
 import os
 from launch import LaunchDescription
 from launch_ros.actions import Node
-from launch.actions import IncludeLaunchDescription, TimerAction, LogInfo
+from launch.actions import IncludeLaunchDescription, TimerAction, LogInfo, DeclareLaunchArgument
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+from launch.substitutions import LaunchConfiguration, PythonExpression
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
@@ -18,7 +19,18 @@ def generate_launch_description():
     # Nav2 configuration
     nav2_params_path = os.path.join(pkg_share, 'ros2_config', 'params', 'nav2_params_minimal_fixed.yaml')
     
+    # Launch arguments
+    bridge_version_arg = DeclareLaunchArgument(
+        'bridge_version',
+        default_value='2.0.0',
+        description='Version of YOLO to Nav2 bridge to use (1.0.0, 1.1.0, 1.2.0, 2.0.0)'
+    )
+    
+    bridge_version = LaunchConfiguration('bridge_version')
+    
     return LaunchDescription([
+        # Declare launch arguments
+        bridge_version_arg,
         # 1. Include the ENTIRE working Slice 3.5 launch file
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
@@ -133,18 +145,18 @@ def generate_launch_description():
             ]
         ),
         
-        # 6. YOLO to Nav2 Bridge (FIXED version) - 20 seconds after start
+        # 6. YOLO to Nav2 Bridge v2.0.0 - 20 seconds after start
         TimerAction(
             period=20.0,
             actions=[
                 Node(
                     package='chasebot_description',
-                    executable='ros2_yolo_to_nav_goal_fixed.py',
+                    executable='ros2_yolo_to_nav_goal_v2.0.0.py',
                     name='yolo_to_nav_goal',
                     output='screen',
                     parameters=[{'use_sim_time': True}]
                 ),
-                LogInfo(msg='Started YOLO to Nav2 bridge - ChaseBot is now fully autonomous!')
+                LogInfo(msg='Started YOLO to Nav2 bridge v2.0.0 - Proper coordinate conversion with camera intrinsics!')
             ]
         ),
     ])
