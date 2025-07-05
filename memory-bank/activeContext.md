@@ -2,10 +2,30 @@
 
 ## Current Date: January 5, 2025, 1:10 AM
 
-## Current Focus: Intel RealSense D415 3D Camera Integration (Accelerated Approach)
+## Current Focus: Migrating to New Gazebo (Ignition Fortress)
 
-### Major Architecture Decision
-Moving from problematic 2D vision system to 3D camera-based detection using Intel RealSense D415. This eliminates coordinate transformation bugs by providing direct 3D world coordinates.
+### 🚀 CRITICAL ARCHITECTURE CHANGE
+**Date**: January 5, 2025, 7:00 PM
+**See**: [`docs/new_gazebo_migration_plan.md`](../docs/new_gazebo_migration_plan.md)
+
+**Decision**: Migrate from Gazebo Classic to New Gazebo (Ignition Fortress) due to fundamental ROS 2 incompatibility issues.
+
+**Key Findings**:
+1. ✅ Path resolution fixed but camera plugins still don't work
+2. ❌ Both RGB and depth camera plugins fail to publish ROS 2 topics
+3. ✅ Confirmed Gazebo Classic is at EOL (January 2025)
+4. ✅ New Gazebo has native ROS 2 support via ros_gz_bridge
+
+**Migration Timeline**: 1-2 days to fully unblock 3D vision development
+
+**Next Steps**:
+1. Install Ignition Fortress with ROS 2 integration
+2. Convert world files to new SDF format
+3. Test camera functionality with ros_gz_bridge
+4. Resume D415 integration with working camera simulation
+
+### Previous Focus: Intel RealSense D415 3D Camera Integration (ON HOLD)
+Moving from problematic 2D vision system to 3D camera-based detection using Intel RealSense D415. This approach is blocked by Gazebo simulation issues.
 
 ### Updated Strategy: Leverage Existing Solutions
 **Critical Discovery**: Found existing ROS2 packages that implement exactly what we need:
