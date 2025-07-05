@@ -1,5 +1,11 @@
 # CRITICAL BUG: Coordinate System Mismatch
 
+> **⚠️ DEPRECATION NOTICE: January 5, 2025**  
+> This coordinate transformation bug is being eliminated entirely by migrating to Intel RealSense D415 3D camera.  
+> The 3D camera provides direct world coordinates, making all these pixel-to-world conversions obsolete.  
+> See `docs/d415_implementation_plan.md` for the new architecture.
+
+
 ## The Problem
 
 ### What YOLO Publishes:
@@ -94,3 +100,13 @@ The claim that "transforms were removed and it worked" appears to be completely 
 The "fixed" version was on the right track but had implementation issues (hardcoded values, poor distance estimation). The "corrected" version went backwards by removing ALL coordinate conversion logic.
 
 **The truth**: Transforms ARE necessary. The problem wasn't that transforms were wrong, but that the distance estimation was poor.
+
+## SOLUTION: Intel RealSense D415 3D Camera
+
+**Update (January 2025)**: This entire problem is being solved by switching to 3D camera vision:
+- D415 provides direct depth measurement for each pixel
+- No more pixel-to-world coordinate transformation needed
+- Eliminates all coordinate system confusion
+- Professional robotics solution
+
+The 2D vision approach with coordinate transforms is fundamentally flawed for accurate distance measurement. The D415 3D camera provides the correct solution.

@@ -1,5 +1,11 @@
 # ChaseBot Current State Analysis - July 4, 2025
 
+> **⚠️ DEPRECATION NOTICE: January 5, 2025**  
+> This analysis of the 2D vision system is now obsolete. ChaseBot is migrating to Intel RealSense D415 3D camera  
+> which eliminates all coordinate transformation issues by providing direct world coordinates.  
+> See `docs/d415_implementation_plan.md` for the new architecture.
+
+
 ## Executive Summary
 After extensive analysis, the current state shows significant documentation drift and confusion between what's documented vs. what's actually deployed. This document provides the definitive current state.
 
