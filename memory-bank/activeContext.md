@@ -1,46 +1,68 @@
 # ChaseBot Active Context
 
 ## Current Focus (Jan 2025)
-Successfully restored gz_ros2_control functionality with proper differential drive control.
+D415 camera integration for 3D vision system - making steady progress through thin slices.
 
 ### Latest Achievement
 - **Date**: 2025-01-06
-- **Status**: gz_ros2_control fully operational
-- **Key Fix**: Set IGN_GAZEBO_SYSTEM_PLUGIN_PATH=/opt/ros/humble/lib environment variable
-- **Result**: Robot responds correctly to velocity commands with proper kinematics
+- **Status**: D415 camera integration Steps 1-2 complete
+- **Progress**: 
+  - ✅ Camera link added to robot model (v1.1.0)
+  - ✅ Basic RGB sensor operational (v1.2.0)
+  - ✅ Camera topics bridged and available
+  - 🚧 Next: RGBD sensor upgrade for depth (v2.0.0)
 
 ### Working Configuration
-- **Launch File**: jetbot_gz_control_v3.0.0.launch.py
-- **Controllers**: 
-  - joint_state_broadcaster (active)
-  - jetbot_base_controller (active)
-- **Command Topic**: /jetbot_base_controller/cmd_vel
-- **Message Type**: geometry_msgs/msg/TwistStamped (NOT Twist)
+- **Base System**: gz_ros2_control with differential drive (fully operational)
+- **Launch File**: jetbot_gz_control_camera_test.launch.py
+- **Camera Topics**:
+  - /d415/image_raw (RGB image)
+  - /d415/camera_info (camera calibration)
+- **Controllers**: joint_state_broadcaster + jetbot_base_controller (active)
 
 ### Critical Commands
 ```bash
-# Launch with working configuration
+# Launch with camera sensor
 export IGN_GAZEBO_SYSTEM_PLUGIN_PATH=/opt/ros/humble/lib
-ros2 launch chasebot_sim jetbot_gz_control_v3.0.0.launch.py
+ros2 launch chasebot_sim jetbot_gz_control_camera_test.launch.py
 
-# Send velocity commands
-ros2 topic pub /jetbot_base_controller/cmd_vel geometry_msgs/msg/TwistStamped '{twist: {linear: {x: 0.2}, angular: {z: 0.0}}}'
+# Check camera topics
+ros2 topic list | grep d415
 ```
 
-## Next Steps
-1. Integrate D415 camera into robot model
-2. Set up 3D vision with yolov8_ros package
-3. Implement depth-based ball following using direct 3D coordinates
-4. Test Nav2 integration with working control system
+## Next Steps (Priority Order)
+1. **Complete D415 RGBD Integration** (Step 4)
+   - Upgrade to rgbd_camera sensor type
+   - Add depth image topics
+   - Configure D415 depth specifications
+
+2. **Integrate yolov8_ros Package**
+   - Install and configure for 3D detection
+   - Test with simulated golf balls
+   - Validate 3D coordinate extraction
+
+3. **Implement 3D Ball Following**
+   - Use depth data for direct 3D positions
+   - Eliminate coordinate transformation issues
+   - Test approach accuracy
 
 ## Technical Context
 - **Platform**: ROS 2 Humble on Ubuntu 22.04 (WSL2)
-- **Simulation**: Ignition Gazebo (Fortress)
-- **Control**: gz_ros2_control with diff_drive_controller
-- **Vision Goal**: Use D415 depth camera for 3D object detection
+- **Simulation**: Ignition Gazebo (headless mode)
+- **Control**: gz_ros2_control working perfectly
+- **Vision**: Migrating from 2D to 3D with D415
+- **Key Insight**: yolov8_ros has built-in 3D detection support
 
 ## Recent Changes
-- Restored working gz_ros2_control configuration
-- Verified differential drive kinematics
-- Confirmed visual wheel rotation is correct
-- Environment variable IGN_GAZEBO_SYSTEM_PLUGIN_PATH is critical
+- Added D415 camera link to robot model
+- Configured basic RGB camera sensor
+- Successfully bridged camera topics to ROS 2
+- Documented incremental progress in d415_slices/
+
+## Files Created This Session
+- ros2_config/urdf/jetbot_core_ignition_v1.1.0.sdf (camera link)
+- ros2_config/urdf/jetbot_core_ignition_v1.2.0.sdf (RGB sensor)
+- ros2_config/launch/jetbot_gz_control_camera_test.launch.py
+- docs/d415_slices/slice12_camera_link_step1*.md
+- docs/d415_slices/slice13_camera_sensor_step2*.md
+- docs/d415_slices/slice14_rgbd_camera_step4.md (plan)
