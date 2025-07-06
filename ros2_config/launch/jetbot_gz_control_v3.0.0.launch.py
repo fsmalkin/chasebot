@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
+"""
+JetBot Ignition Gazebo Control Launch File - Version 3.0.0
+Major changes:
+- v3.0.0: Added controller configuration YAML loading
+- v2.0.0: Added controller timeout fixes and simulation running flag
+- v1.0.0: Initial gz_ros2_control implementation
+"""
 
 import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, Command
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -28,18 +35,26 @@ def generate_launch_description():
     
     # Paths
     world_path = PathJoinSubstitution([
-        FindPackageShare('chasebot_description'),
+        FindPackageShare('chasebot_sim'),
         'ros2_config', 'worlds', world_file
     ])
     
     sdf_path = PathJoinSubstitution([
-        FindPackageShare('chasebot_description'),
+        FindPackageShare('chasebot_sim'),
         'ros2_config', 'urdf', 'jetbot_core_ignition.sdf'
     ])
     
+    # Controller configuration file
+    controller_config = PathJoinSubstitution([
+        FindPackageShare('chasebot_sim'),
+        'ros2_config', 'config', 'jetbot_diff_drive_v1.0.0.yaml'
+    ])
+    
     # Start Gazebo with GUI (using working display configuration)
+    # CRITICAL: Adding -r flag to start simulation running (not paused)
+    # This prevents controller activation timeout issues
     start_gazebo_cmd = ExecuteProcess(
-        cmd=['ign', 'gazebo', '-v', '4', world_path],
+        cmd=['ign', 'gazebo', '-v', '4', '-r', world_path],
         output='screen',
         additional_env={
             'DISPLAY': '172.25.128.1:0.0',
@@ -121,19 +136,31 @@ def generate_launch_description():
         output='screen'
     )
     
-    # Spawn controllers using the Gazebo-internal controller manager
-    # Wait longer to ensure gz_ros2_control is fully initialized
+    # Spawn controllers with increased timeout values and configuration file
+    # Based on gz_ros2_control issue #421 research
     spawn_joint_state_broadcaster_cmd = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['joint_state_broadcaster', '--controller-manager', '/controller_manager'],
+        arguments=[
+            'joint_state_broadcaster',
+            '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30',  # Increased from default
+            '--switch-timeout', '20',               # Increased activation timeout
+            '--param-file', controller_config       # Load controller configuration
+        ],
         output='screen'
     )
     
     spawn_diff_drive_controller_cmd = Node(
         package='controller_manager',
         executable='spawner',
-        arguments=['jetbot_base_controller', '--controller-manager', '/controller_manager'],
+        arguments=[
+            'jetbot_base_controller',
+            '--controller-manager', '/controller_manager',
+            '--controller-manager-timeout', '30',  # Increased from default
+            '--switch-timeout', '20',               # Increased activation timeout
+            '--param-file', controller_config       # Load controller configuration
+        ],
         output='screen'
     )
     

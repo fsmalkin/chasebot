@@ -289,7 +289,7 @@
 
     <!-- gz_ros2_control Plugin -->
     <plugin filename="libgz_ros2_control-system.so" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
-      <parameters>/home/macro2/ros2_ws/install/chasebot_description/share/chasebot_description/ros2_config/config/jetbot_controllers.yaml</parameters>
+      <parameters>/home/macro2/ros2_ws/install/chasebot_sim/share/chasebot_sim/ros2_config/config/jetbot_controllers.yaml</parameters>
       <ros>
         <remapping>/controller_manager/robot_description:=/robot_description</remapping>
       </ros>
