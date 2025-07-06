@@ -264,21 +264,35 @@
       <child>caster_back</child>
     </joint>
 
-    <!-- Differential Drive Plugin for Ignition Fortress -->
-    <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
-      <left_joint>left_wheel_joint</left_joint>
-      <right_joint>right_wheel_joint</right_joint>
-      <wheel_separation>0.16</wheel_separation>
-      <wheel_radius>0.032</wheel_radius>
-      <odom_publish_frequency>1</odom_publish_frequency>
-      <max_linear_acceleration>1</max_linear_acceleration>
-      <min_linear_acceleration>-1</min_linear_acceleration>
-      <max_angular_acceleration>2</max_angular_acceleration>
-      <min_angular_acceleration>-2</min_angular_acceleration>
-      <max_linear_velocity>0.5</max_linear_velocity>
-      <min_linear_velocity>-0.5</min_linear_velocity>
-      <max_angular_velocity>1</max_angular_velocity>
-      <min_angular_velocity>-1</min_angular_velocity>
+    <!-- ROS 2 Control Configuration -->
+    <ros2_control name="GazeboSimSystem" type="system">
+      <hardware>
+        <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+      </hardware>
+      <joint name="left_wheel_joint">
+        <command_interface name="velocity">
+          <param name="min">-10</param>
+          <param name="max">10</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="right_wheel_joint">
+        <command_interface name="velocity">
+          <param name="min">-10</param>
+          <param name="max">10</param>
+        </command_interface>
+        <state_interface name="position"/>
+        <state_interface name="velocity"/>
+      </joint>
+    </ros2_control>
+
+    <!-- gz_ros2_control Plugin -->
+    <plugin filename="libgz_ros2_control-system.so" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(find chasebot_description)/config/jetbot_controllers.yaml</parameters>
+      <ros>
+        <remapping>/controller_manager/robot_description:=/robot_description</remapping>
+      </ros>
     </plugin>
 
     <!-- Pose Publisher Plugin for Ignition -->
