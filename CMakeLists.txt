@@ -29,6 +29,11 @@ install(DIRECTORY ros2_config/params
   DESTINATION share/${PROJECT_NAME}/ros2_config/
 )
 
+# Install ROS 2 config files  
+install(DIRECTORY ros2_config/config
+  DESTINATION share/${PROJECT_NAME}/ros2_config/
+)
+
 # Install ROS 2 behavior trees
 install(DIRECTORY ros2_config/behavior_trees
   DESTINATION share/${PROJECT_NAME}/ros2_config/

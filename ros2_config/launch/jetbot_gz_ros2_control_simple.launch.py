@@ -2,7 +2,7 @@
 
 import os
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
@@ -44,7 +44,7 @@ def generate_launch_description():
     
     # Start Gazebo server (headless)
     start_gazebo_server_cmd = ExecuteProcess(
-        cmd=['gz', 'sim', world_path, '-s', '--verbose'],
+        cmd=['ign', 'gazebo', world_path, '-s', '--verbose'],
         output='screen'
     )
     
@@ -94,11 +94,74 @@ def generate_launch_description():
         output='screen'
     )
     
-    # Robot state publisher
+    # Minimal URDF content with ros2_control tag for controller_manager
+    minimal_urdf = '''<?xml version="1.0"?>
+    <robot name="jetbot">
+        <link name="base_link">
+            <visual>
+                <geometry>
+                    <box size="0.15 0.12 0.08"/>
+                </geometry>
+            </visual>
+        </link>
+        <link name="left_wheel">
+            <visual>
+                <geometry>
+                    <cylinder radius="0.032" length="0.02"/>
+                </geometry>
+            </visual>
+        </link>
+        <link name="right_wheel">
+            <visual>
+                <geometry>
+                    <cylinder radius="0.032" length="0.02"/>
+                </geometry>
+            </visual>
+        </link>
+        <joint name="left_wheel_joint" type="continuous">
+            <parent link="base_link"/>
+            <child link="left_wheel"/>
+            <origin xyz="0 0.08 0.032"/>
+            <axis xyz="0 1 0"/>
+        </joint>
+        <joint name="right_wheel_joint" type="continuous">
+            <parent link="base_link"/>
+            <child link="right_wheel"/>
+            <origin xyz="0 -0.08 0.032"/>
+            <axis xyz="0 1 0"/>
+        </joint>
+        
+        <ros2_control name="GazeboSimSystem" type="system">
+            <hardware>
+                <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+            </hardware>
+            <joint name="left_wheel_joint">
+                <command_interface name="velocity">
+                    <param name="min">-10</param>
+                    <param name="max">10</param>
+                </command_interface>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="right_wheel_joint">
+                <command_interface name="velocity">
+                    <param name="min">-10</param>
+                    <param name="max">10</param>
+                </command_interface>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+            </joint>
+        </ros2_control>
+    </robot>'''
+    
+    # Robot state publisher with minimal URDF
     robot_state_publisher_cmd = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
-        parameters=[{'use_sim_time': use_sim_time}],
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'robot_description': minimal_urdf
+        }],
         output='screen'
     )
     
@@ -113,9 +176,9 @@ def generate_launch_description():
     ld.add_action(start_gazebo_server_cmd)
     ld.add_action(spawn_robot_cmd)
     ld.add_action(ros_gz_bridge_cmd)
+    ld.add_action(robot_state_publisher_cmd)  # Must start before controller_manager
     ld.add_action(controller_manager_cmd)
     ld.add_action(spawn_joint_state_broadcaster_cmd)
     ld.add_action(spawn_diff_drive_controller_cmd)
-    ld.add_action(robot_state_publisher_cmd)
     
     return ld
