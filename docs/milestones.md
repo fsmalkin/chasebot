@@ -16,10 +16,10 @@ ChaseBot development follows a structured phase-based approach, progressing from
   - Install ROS Melodic and Gazebo 9
   - Set up catkin workspace structure
   - Configure JetBot ROS packages
-- [ ] **Create JetBot URDF model with camera and differential drive**
-  - Integrate or adapt existing JetBot URDF
+- [ ] **Create JetBot SDF model with camera and differential drive**
+  - Integrate or adapt existing JetBot SDF for Ignition Gazebo
   - Configure camera sensor and motor controllers
-  - Set up Gazebo plugins for hardware simulation
+  - Set up Ignition plugins for hardware simulation
 - [ ] **Create simple test world with golf balls scattered on flat surface**
   - Design Gazebo world file with arena
   - Place golf ball objects with realistic physics
@@ -27,7 +27,7 @@ ChaseBot development follows a structured phase-based approach, progressing from
 
 **Success Criteria:**
 - ROS master and Gazebo simulation launch without errors
-- JetBot URDF loads and publishes `/cmd_vel` topic control
+- JetBot SDF loads and publishes `/cmd_vel` topic control
 - Camera publishes to `/camera/image_raw` and `/camera/camera_info`
 - Golf balls are visible in camera feed and distinguishable
 - RViz displays robot model, camera feed, and world correctly

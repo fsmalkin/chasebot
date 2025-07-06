@@ -1,9 +1,14 @@
-# JetBot URDF vs SDF Configuration Comparison
+# JetBot SDF Configuration (Migrated from URDF)
 
 **Date**: 2025-07-06  
-**Purpose**: Verify configuration consistency after wheel axis fix
+**Purpose**: Document the migration from URDF to SDF format for Ignition Gazebo
+**Current Format**: SDF (Simulation Description Format)
 
-## Configuration Comparison
+## Migration Summary
+
+We have successfully migrated from URDF to SDF format for use with Ignition Gazebo. The SDF format is now our primary robot description format, with a minimal URDF retained only for ros2_control compatibility.
+
+## Configuration Comparison (Old URDF vs Current SDF)
 
 ### ✅ Matching Elements
 
@@ -50,9 +55,9 @@
 - **New SDF**: No camera (deferred to next slice)
 - **Next step**: Add camera after movement validation
 
-### ✅ Validation Complete
+### ✅ Migration Complete
 
-All critical mechanical configurations match between the old working URDF and the new SDF:
+All critical mechanical configurations were successfully migrated from the old URDF to the new SDF:
 - Robot dimensions ✓
 - Mass properties ✓
 - Joint positions ✓
@@ -60,3 +65,5 @@ All critical mechanical configurations match between the old working URDF and th
 - Wheel axes (now fixed) ✓
 
 The only missing element is the camera, which will be added in the next development slice after movement is validated.
+
+**Note**: We maintain a minimal URDF file alongside the SDF purely for ros2_control compatibility, as ros2_control requires URDF format for its configuration. The actual simulation uses the SDF format exclusively.

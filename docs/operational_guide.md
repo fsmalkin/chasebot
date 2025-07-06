@@ -95,8 +95,8 @@ wsl -d Ubuntu-22.04 bash -c "cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/*.py
 # Copy worlds
 wsl -d Ubuntu-22.04 bash -c "cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/*.world ~/ros2_ws/src/chasebot_description/worlds/"
 
-# Copy URDF
-wsl -d Ubuntu-22.04 bash -c "cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/*.urdf ~/ros2_ws/src/chasebot_description/urdf/"
+# Copy SDF model files
+wsl -d Ubuntu-22.04 bash -c "cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/*.sdf ~/ros2_ws/src/chasebot_description/urdf/"
 
 # Copy config files
 wsl -d Ubuntu-22.04 bash -c "cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/*.yaml ~/ros2_ws/src/chasebot_description/"
@@ -134,7 +134,7 @@ wsl -d Ubuntu-22.04 bash -c "
     export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0
     source /opt/ros/humble/setup.bash
     cd ~/ros2_ws && source install/setup.bash
-    ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/src/chasebot_description/urdf/ros2_jetbot.urdf -entity jetbot -x 0 -y 0 -z 0.1
+    ros2 run gazebo_ros spawn_entity.py -file ~/ros2_ws/src/chasebot_description/urdf/jetbot_core_ignition.sdf -entity jetbot -x 0 -y 0 -z 0.1
 "
 ```
 **Wait**: 3 seconds for controllers to initialize

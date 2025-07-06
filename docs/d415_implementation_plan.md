@@ -361,9 +361,8 @@ pip install ultralytics  # Already in YOLO_Realsense_ROS
 ```xml
 <launch>
   <!-- D415 Camera -->
-  <include file="$(find realsense2_description)/launch/view_model.launch.py">
-    <arg name="model" value="test_d415_camera.urdf.xacro"/>
-  </include>
+  <!-- Note: We'll integrate D415 directly into our SDF model rather than using separate URDF -->
+  <!-- The camera sensor will be added to jetbot_core_ignition.sdf -->
   
   <!-- YOLO 3D Detector -->
   <node pkg="chasebot_description" exec="ros2_yolo_detector_3d.py" name="yolo_3d_detector">
