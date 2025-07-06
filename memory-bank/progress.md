@@ -44,8 +44,8 @@ The "corrected" coordinate bridge has a fundamental flaw:
 
 #### Robot Movement (Slices 5-7) - 🎯 TOP PRIORITY
 - [x] **Slice 5: JetBot Core Migration to Ignition Fortress** ✅ **MAJOR SUCCESS**
-- [x] **Slice 6: Differential Drive Plugin Research** ✅ **COMPLETE - PIVOT TO JOINT CONTROLLERS**
-- [ ] **Slice 7: Joint Velocity Controller Implementation** 🎯 **CURRENT PRIORITY**
+- [x] **Slice 6: Differential Drive Plugin Research** ✅ **COMPLETE - PIVOT TO GZ_ROS2_CONTROL**
+- [ ] **Slice 7: gz_ros2_control Implementation** 🎯 **CURRENT PRIORITY - ROS 2 NATIVE SOLUTION**
 
 #### 3D Camera Integration (Slices 8-10) - AFTER MOVEMENT
 - [ ] Slice 8: Create D415 camera model in new Gazebo SDF format
