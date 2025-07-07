@@ -35,10 +35,16 @@ def generate_launch_description():
         value='/opt/ros/humble/lib'
     )
     
-    # Start Ignition Gazebo
+    # Start Ignition Gazebo with proper display configuration
     ignition_spawn = ExecuteProcess(
         cmd=['ign', 'gazebo', '-v', '4', '-r', world_path],
-        output='screen'
+        output='screen',
+        additional_env={
+            'DISPLAY': '172.25.128.1:0.0',
+            'QT_X11_NO_MITSHM': '1',
+            'LIBGL_ALWAYS_SOFTWARE': '1',
+            'IGN_GAZEBO_SYSTEM_PLUGIN_PATH': '/opt/ros/humble/lib'
+        }
     )
 
     # Note: robot_state_publisher not needed for Ignition Gazebo with SDF files
