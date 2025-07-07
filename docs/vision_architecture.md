@@ -1,7 +1,10 @@
 # ChaseBot Vision Architecture: YOLO-Based Professional Detection
 
 ## Overview
-ChaseBot is upgrading to a professional YOLO-based vision system using `ros2_vision_inference` for robust golf ball detection. This replaces the HSV-based system with neural network detection that outputs standard ROS 2 `Detection3DArray` messages.
+ChaseBot is implementing a professional YOLO-based 3D vision system using the `mgonzs13/yolo_ros` package for robust golf ball detection with depth information. This proven solution (739 stars) provides built-in 3D object detection capabilities using RGB-D cameras and outputs standard ROS 2 messages.
+
+## Update (July 7, 2025)
+Following our "Search Existing Solutions First" principle, we've selected mgonzs13/yolo_ros over custom development. This package already implements the 3D detection pipeline we need, saving significant development time.
 
 ## Architecture Diagram
 ```
@@ -21,59 +24,49 @@ ChaseBot is upgrading to a professional YOLO-based vision system using `ros2_vis
                             └─────────────────┘ └─────────────────┘
 ```
 
-## Implementation Plan
+## Implementation Plan: 7 Thin Slices
 
-### Task 1: Install & Validate ros2_vision_inference ⏳
-**Package**: `ros2_vision_inference`
-**Node**: YOLO-based detection node
-- **Input**: `/camera/image_raw` (sensor_msgs/Image)
-- **Processing**: Neural network inference for sports ball detection
-- **Output**: `/detection3d_array` (vision_msgs/Detection3DArray)
-- **Features**:
-  - Professional 3D object detection
-  - Confidence scores for each detection
-  - GPU/CPU inference support
-  - Standard ROS 2 message types
+### Slice 1: Install & Validate mgonzs13/yolo_ros ⏳
+**Package**: `mgonzs13/yolo_ros` (https://github.com/mgonzs13/yolo_ros)
+**Features**:
+- Built-in 3D object detection with depth cameras
+- Supports YOLOv8 through YOLOv12
+- ROS 2 Humble compatible
+- Lifecycle nodes for resource efficiency
+- Active maintenance and community support
 
-### Task 2: Goal Bridge Development ⏳
-**Node**: `ball_to_nav_goal_3d.py`
-- **Input**: `/detection3d_array` (vision_msgs/Detection3DArray)
+### Slice 2: Connect to D415 Camera (2D) ⏳
+- Configure for `/d415/image_raw`
+- Verify 2D detection working
+- Monitor `/yolo/detections` topic
+
+### Slice 3: Enable 3D Detection ⏳
+- Add depth stream: `/d415/depth/image_raw`
+- Enable `use_3d:=True`
+- Verify `/yolo/detections_3d` publishes
+
+### Slice 4: Validate 3D Accuracy ⏳
+- Test with ball at known positions
+- Compare detected vs actual coordinates
+- Ensure transforms are correct
+
+### Slice 5: Navigation Bridge ⏳
+**Node**: `yolo_to_nav2_bridge.py`
+- **Input**: `/yolo/detections_3d` (vision_msgs/Detection3DArray)
 - **Processing**:
-  - Parse all detected balls from array
-  - Select closest ball based on 3D position
-  - Calculate approach goal (3 inches from ball)
-- **Output**: Navigation goal to Nav2 via action interface
-- **Features**:
-  - Closest ball prioritization
-  - 3-inch approach distance calculation
-  - Goal update cooldown
-  - State tracking
+  - Select closest ball from detections
+  - Calculate approach position
+- **Output**: Navigation goal to Nav2
 
-### Task 3: Approach Distance Tuning ⏳
-**Goal**: Precise 3-inch (0.0762m) stopping distance
-- **Current Issue**: Robot stops at ~1.7m
-- **Solution**: Adjust goal calculation math
-- **Implementation**:
-  ```python
-  # Target: Stop 3 inches from ball
-  APPROACH_DISTANCE = 0.0762  # 3 inches in meters
-  goal_distance = max(0.0, ball_distance - APPROACH_DISTANCE)
-  ```
-- **Validation**: Measure actual stop distance repeatedly
+### Slice 6: Approach Tuning ⏳
+- Target: 3-inch (0.0762m) stopping distance
+- Adjust approach calculation
+- Test multiple runs for consistency
 
-### Task 4: System Integration ⏳
-**Launch File**: `chasebot_yolo_golf.launch.py`
-- **Components**:
-  - Gazebo simulation with golf ball
-  - Robot spawning and state publisher
-  - Nav2 navigation stack
-  - ros2_vision_inference node
-  - Goal bridge node
-- **Configuration**:
-  - YOLO model for sports balls
-  - Camera parameters
-  - Navigation parameters
-  - Approach distance settings
+### Slice 7: System Integration ⏳
+- Unified launch file
+- Performance optimization
+- Complete autonomous operation
 
 ## Vision System Comparison
 
@@ -93,11 +86,15 @@ ChaseBot is upgrading to a professional YOLO-based vision system using `ros2_vis
 
 ## ROS 2 Topic Architecture
 
-### Vision Pipeline Topics
+### Vision Pipeline Topics (with yolo_ros)
 ```
-/camera/image_raw (sensor_msgs/Image)
+/d415/image_raw + /d415/depth/image_raw
     ↓
-/detection3d_array (vision_msgs/Detection3DArray)
+yolo_ros (3D Detection Processing)
+    ↓
+/yolo/detections_3d (vision_msgs/Detection3DArray)
+    ↓
+yolo_to_nav2_bridge
     ↓
 NavigateToPose Action (Nav2 Interface)
     ↓
@@ -179,18 +176,21 @@ def process_detections(self, msg: Detection3DArray):
 - **Approach Accuracy**: 3 ± 0.5 inches
 - **System Latency**: <200ms detection to navigation
 
-## Migration Strategy
+## Implementation Timeline
 
-### Parallel Development
-1. Keep HSV system as reference
-2. Develop YOLO system alongside
-3. Compare detection quality
-4. Switch when YOLO proven superior
+### Estimated Completion: 2-3 Hours
+- Slice 1: 15 minutes (package installation)
+- Slice 2: 20 minutes (camera connection)
+- Slice 3: 15 minutes (enable 3D)
+- Slice 4: 30 minutes (accuracy validation)
+- Slice 5: 30 minutes (navigation bridge)
+- Slice 6: 30 minutes (approach tuning)
+- Slice 7: 20 minutes (integration)
 
-### Rollback Plan
-- HSV system remains functional
-- Easy switch via launch file
-- No destructive changes
+### Risk Mitigation
+- Each slice independently testable
+- Can stop at any point if blocked
+- Fallback to reference implementation if needed
 
 ## Future Enhancements (Out of Scope)
 
@@ -227,4 +227,11 @@ def process_detections(self, msg: Detection3DArray):
 
 ## Summary
 
-The vision architecture upgrade from HSV to YOLO-based detection represents a significant improvement in robustness, accuracy, and standards compliance. The focused 4-task implementation plan provides a clear path to achieving reliable 3-inch approach distance for golf ball collection in simulation. The architecture leverages professional tools (ros2_vision_inference) while maintaining the proven Nav2 navigation foundation.
+The vision architecture leverages the proven mgonzs13/yolo_ros package for 3D object detection, following our "Search Existing Solutions First" principle. The 7-slice implementation plan provides a low-risk path to achieving reliable 3-inch approach distance for golf ball collection. By using an existing, well-maintained package with built-in 3D detection support, we significantly reduce development time and technical risk while maintaining professional standards.
+
+## Key Advantages of yolo_ros
+- **Proven Solution**: 739 stars, active community
+- **3D Built-in**: No custom depth processing needed
+- **Standard Messages**: Compatible with ROS 2 ecosystem
+- **Lifecycle Nodes**: Efficient resource management
+- **Multiple YOLO Versions**: Future-proof architecture
