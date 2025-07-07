@@ -20,7 +20,7 @@ def generate_launch_description():
     # Set paths
     world_path = PathJoinSubstitution([
         FindPackageShare('chasebot_sim'),
-        'ros2_config', 'worlds', 'yolo_test_world.world'
+        'ros2_config', 'worlds', 'yolo_test_world_v2_colored.world'
     ])
 
     # Using v1.3.0 model with camera sensor plugin
