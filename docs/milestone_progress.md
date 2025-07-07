@@ -1,6 +1,6 @@
 # ChaseBot Project - Milestone Progress
 
-## Current Status (Jan 7, 2025)
+## Current Status (July 7, 2025)
 **🎯 MAJOR BREAKTHROUGH: D415 3D Camera Working!**
 - Camera feed operational and accessible via ROS 2 topics
 - Proper sensor plugin integration achieved
@@ -9,7 +9,7 @@
 
 ## Recent Achievements
 
-### D415 Camera Integration (Jan 6-7, 2025)
+### D415 Camera Integration (July 6-7, 2025)
 **✅ COMPLETE - Camera Operational**
 - **Key Fix**: Added missing sensor system plugin to SDF (`<plugin name="ignition::gazebo::systems::Sensors" filename="ignition-gazebo-systems-system"/>`)
 - **Camera Data**: Receiving images at proper rate via `/d415/image_raw`
