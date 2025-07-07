@@ -5,12 +5,14 @@ D415 camera integration for 3D vision system - making steady progress through th
 
 ### Latest Achievement
 - **Date**: 2025-01-06
-- **Status**: D415 camera integration Steps 1-2 complete
+- **Status**: D415 camera integration Steps 1-2 complete + visualization attempted
 - **Progress**: 
   - ✅ Camera link added to robot model (v1.1.0)
   - ✅ Basic RGB sensor operational (v1.2.0)
   - ✅ Camera topics bridged and available
-  - 🚧 Next: RGBD sensor upgrade for depth (v2.0.0)
+  - ✅ Camera viewer script created (d415_vision_display.py)
+  - ❌ GUI display blocked by X11 configuration issue
+  - 🚧 Next: Fix display config, then RGBD sensor upgrade (v2.0.0)
 
 ### Working Configuration
 - **Base System**: gz_ros2_control with differential drive (fully operational)
@@ -63,6 +65,9 @@ ros2 topic list | grep d415
 - ros2_config/urdf/jetbot_core_ignition_v1.1.0.sdf (camera link)
 - ros2_config/urdf/jetbot_core_ignition_v1.2.0.sdf (RGB sensor)
 - ros2_config/launch/jetbot_gz_control_camera_test.launch.py
+- ros2_config/launch/jetbot_gz_control_camera_headless.launch.py
+- ros2_scripts/d415_vision_display.py (camera viewer with YOLO overlay)
 - docs/d415_slices/slice12_camera_link_step1*.md
 - docs/d415_slices/slice13_camera_sensor_step2*.md
 - docs/d415_slices/slice14_rgbd_camera_step4.md (plan)
+- docs/d415_slices/slice15_camera_visual_feed_uat*.md
