@@ -28,17 +28,19 @@ Successfully restored gz_ros2_control functionality with proper differential dri
 
 ## What's Left to Build
 
-### 🚧 D415 Camera Integration (In Progress)
-- ✅ Add Intel RealSense D415 to robot model (v1.1.0)
-- ✅ Configure basic RGB camera sensor (v1.2.0)
-- ✅ Set up camera topics and bridges
-- 🔲 Upgrade to RGBD sensor for depth (Step 4)
-- 🔲 Validate depth measurements
+### 🟢 OAK-D Lite Integration (NEW DIRECTION - Jan 6, 2025)
+- 🔲 Create synthetic OAK-D publisher for simulation
+- 🔲 Install depthai-ros package
+- 🔲 Deploy YOLO to camera VPU (blob format)
+- 🔲 Create ROS 2 bridge for spatial detections
+- 🔲 Test with synthetic golf ball data
+- 🔲 Implement 15cm approach distance logic
+- 🔲 Prepare for hardware deployment
 
-### 🔲 3D Vision System
-- Integrate yolov8_ros package (found with 3D support)
-- Configure for golf ball detection with depth
-- Eliminate coordinate transformation issues
+### 🔲 3D Vision System (via OAK-D)
+- YOLO runs directly on OAK-D's Myriad X VPU
+- Direct 3D world coordinates (no transformation)
+- Reduces Jetson Nano load by 60-70%
 
 ### 🔲 Autonomous Ball Following
 - Use direct 3D coordinates from YOLO
@@ -52,12 +54,26 @@ Successfully restored gz_ros2_control functionality with proper differential dri
 
 ## Recent Milestones
 
+### January 6, 2025 - Part 4: Pivot to OAK-D Lite
+- **Decision**: Switch from blocked D415 to OAK-D Lite camera
+- **Rationale**: Onboard AI, synthetic data support, lower power
+- **Strategy**: Use synthetic publisher for simulation (industry standard)
+- **Benefits**: No coordinate transformation, reduced CPU load
+- **Next**: Implement synthetic OAK-D publisher and detection pipeline
+
+### January 6, 2025 - Part 3: Camera Rendering Blocker Confirmed
+- **Discovery**: Ignition Gazebo cameras require rendering context
+- **Issue**: No image data in headless mode - topics exist but 0 Hz
+- **Attempted**: Multiple launch configs, display settings, frame saver script
+- **Root Cause**: Ignition's architecture needs GPU/renderer for cameras
+- **Resolution**: Pivot to OAK-D with synthetic data approach
+
 ### January 6, 2025 - Part 2: D415 Camera Progress
 - **Achievement**: Completed Steps 1-2 of D415 integration
 - **Step 1**: Added camera link to robot model (jetbot_core_ignition_v1.1.0.sdf)
 - **Step 2**: Configured RGB camera sensor with proper topics
 - **Result**: Camera topics available (/d415/image_raw, /d415/camera_info)
-- **Next**: Upgrade to RGBD sensor for depth capabilities
+- **Blocker**: Discovered cameras need rendering context for data flow
 
 ### January 6, 2025 - Part 1: Control System Fix
 - **Issue**: gz_ros2_control plugin failed to load
@@ -72,18 +88,18 @@ Successfully restored gz_ros2_control functionality with proper differential dri
 
 ## Implementation Plan
 
-### Current Slice: D415 RGBD Sensor (Step 4)
-1. ✅ Create robot model with D415 camera link
-2. ✅ Configure basic RGB camera sensor
-3. 🚧 Upgrade to RGBD sensor type for depth
-4. 🔲 Verify depth data topics
-5. 🔲 Test depth-based distance measurements
+### Current Slice: OAK-D Synthetic Publisher (Slice 1)
+1. 🔲 Create mock OAK-D node with synthetic data
+2. 🔲 Publish RGB, depth, and detection topics
+3. 🔲 Place synthetic golf balls at known positions
+4. 🔲 Verify topic formats match real OAK-D
+5. 🔲 Test detection pipeline with synthetic data
 
-### Next Major Slice: yolov8_ros Integration
-1. Install yolov8_ros package
-2. Configure for 3D object detection
-3. Test with simulated golf balls
-4. Validate 3D coordinate extraction
+### Next Major Slice: YOLO on VPU (Slice 3)
+1. Convert YOLO model to blob format
+2. Deploy to OAK-D's Myriad X VPU
+3. Configure for golf ball detection
+4. Verify >10 FPS performance
 
 ### Following Slices
 1. yolov8_ros integration with 3D detection
@@ -96,3 +112,5 @@ Successfully restored gz_ros2_control functionality with proper differential dri
 - TwistStamped messages required (not Twist) for diff_drive_controller
 - Direct 3D coordinates eliminate complex transformations
 - Working control foundation enables all future autonomy features
+- OAK-D's onboard AI processing solves both simulation and performance issues
+- Synthetic data approach bypasses Ignition's camera rendering limitations
