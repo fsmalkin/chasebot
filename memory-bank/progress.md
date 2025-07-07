@@ -1,9 +1,9 @@
 # ChaseBot Progress Tracking
 
-## Overall Status: ROS 2 Control System Operational ✅
-Successfully restored gz_ros2_control functionality with proper differential drive kinematics.
+## Overall Status: Camera Working! 🎉
+Successfully got D415 camera operational in Ignition Gazebo with data flowing!
 
-## What's Working (Jan 2025)
+## What's Working (Jan 6, 2025)
 
 ### ✅ Core ROS 2 + Ignition Gazebo
 - Full simulation environment with GUI
@@ -16,31 +16,40 @@ Successfully restored gz_ros2_control functionality with proper differential dri
 - **Topic**: `/jetbot_base_controller/cmd_vel` (TwistStamped messages)
 - **Critical Fix**: Must set `IGN_GAZEBO_SYSTEM_PLUGIN_PATH=/opt/ros/humble/lib`
 
+### ✅ D415 Camera Integration
+- **BREAKTHROUGH**: Camera sensor now producing data!
+- **Publishing Rate**: 10-14 Hz on `/d415/image_raw`
+- **ROS 2 Bridge**: Successfully bridging camera topics
+- **Visualization**: Can view feed in rqt_image_view
+- **Issue**: Camera oriented 90 degrees wrong - needs pose adjustment
+
 ### ✅ Robot Model
 - JetBot URDF/SDF with proper wheel joints
 - Differential drive configuration
+- D415 camera mounted and functional
 - Visual wheel rotation confirmed correct
 
 ### ✅ Development Environment
 - ROS 2 Humble on Ubuntu 22.04 (WSL2)
 - Ignition Gazebo Fortress
+- Display working: `DISPLAY=172.25.128.1:0.0`
 - Reliable file sync patterns established
 
 ## What's Left to Build
 
-### 🟢 OAK-D Lite Integration (NEW DIRECTION - Jan 6, 2025)
-- 🔲 Create synthetic OAK-D publisher for simulation
-- 🔲 Install depthai-ros package
-- 🔲 Deploy YOLO to camera VPU (blob format)
-- 🔲 Create ROS 2 bridge for spatial detections
-- 🔲 Test with synthetic golf ball data
-- 🔲 Implement 15cm approach distance logic
-- 🔲 Prepare for hardware deployment
+### 🔲 Fix Camera Orientation
+- Adjust camera pose in SDF to correct 90-degree rotation
+- Verify camera view matches robot's forward direction
 
-### 🔲 3D Vision System (via OAK-D)
-- YOLO runs directly on OAK-D's Myriad X VPU
+### 🔲 YOLO Integration
+- Connect YOLO detection to camera feed
+- Test golf ball detection
+- Implement detection-to-navigation pipeline
+
+### 🔲 3D Vision System
+- Use camera's depth data for accurate positioning
 - Direct 3D world coordinates (no transformation)
-- Reduces Jetson Nano load by 60-70%
+- 15cm approach distance implementation
 
 ### 🔲 Autonomous Ball Following
 - Use direct 3D coordinates from YOLO
@@ -54,63 +63,56 @@ Successfully restored gz_ros2_control functionality with proper differential dri
 
 ## Recent Milestones
 
-### January 6, 2025 - Part 4: Pivot to OAK-D Lite
-- **Decision**: Switch from blocked D415 to OAK-D Lite camera
-- **Rationale**: Onboard AI, synthetic data support, lower power
-- **Strategy**: Use synthetic publisher for simulation (industry standard)
-- **Benefits**: No coordinate transformation, reduced CPU load
-- **Next**: Implement synthetic OAK-D publisher and detection pipeline
+### January 6, 2025 - CAMERA BREAKTHROUGH! 🎉
+- **Discovery**: Camera sensor system plugin was missing from SDF
+- **Solution**: Added `libignition-gazebo-sensors-system.so` plugin
+- **Files Created**:
+  - `jetbot_core_ignition_v1.3.0.sdf` - Working camera model
+  - `jetbot_gz_control_camera_test_v2.launch.py` - Working launch file
+- **Result**: Camera data flowing at 10-14 Hz!
+- **Next**: Fix orientation and integrate YOLO
 
-### January 6, 2025 - Part 3: Camera Rendering Blocker Confirmed
-- **Discovery**: Ignition Gazebo cameras require rendering context
-- **Issue**: No image data in headless mode - topics exist but 0 Hz
-- **Attempted**: Multiple launch configs, display settings, frame saver script
-- **Root Cause**: Ignition's architecture needs GPU/renderer for cameras
-- **Resolution**: Pivot to OAK-D with synthetic data approach
+### Key Technical Fix:
+```xml
+<!-- This was missing and blocking camera operation -->
+<plugin filename="libignition-gazebo-sensors-system.so" name="ignition::gazebo::systems::Sensors">
+  <render_engine>ogre2</render_engine>
+</plugin>
+```
 
-### January 6, 2025 - Part 2: D415 Camera Progress
-- **Achievement**: Completed Steps 1-2 of D415 integration
-- **Step 1**: Added camera link to robot model (jetbot_core_ignition_v1.1.0.sdf)
-- **Step 2**: Configured RGB camera sensor with proper topics
-- **Result**: Camera topics available (/d415/image_raw, /d415/camera_info)
-- **Blocker**: Discovered cameras need rendering context for data flow
+### January 6, 2025 - Earlier: Display and Control Working
+- Successfully configured VcXsrv display
+- Robot control system fully operational
+- Camera topics created but initially no data
 
 ### January 6, 2025 - Part 1: Control System Fix
 - **Issue**: gz_ros2_control plugin failed to load
 - **Solution**: Set IGN_GAZEBO_SYSTEM_PLUGIN_PATH environment variable
 - **Result**: Full control system restoration with v3.0.0 configuration
-- **Validation**: Movement tests pass, visual inspection confirms proper wheel rotation
-
-### January 2025 (Previous)
-- Discovered yolov8_ros with built-in 3D detection support
-- Migrated from 2D to 3D vision approach
-- Identified direct 3D coordinate approach to eliminate transformation errors
 
 ## Implementation Plan
 
-### Current Slice: OAK-D Synthetic Publisher (Slice 1)
-1. 🔲 Create mock OAK-D node with synthetic data
-2. 🔲 Publish RGB, depth, and detection topics
-3. 🔲 Place synthetic golf balls at known positions
-4. 🔲 Verify topic formats match real OAK-D
-5. 🔲 Test detection pipeline with synthetic data
+### Current Slice: Fix Camera Orientation
+1. ✅ Get camera producing data (COMPLETE!)
+2. 🔲 Adjust camera pose for correct orientation
+3. 🔲 Verify camera view in rqt_image_view
+4. 🔲 Ensure camera points forward with robot
 
-### Next Major Slice: YOLO on VPU (Slice 3)
-1. Convert YOLO model to blob format
-2. Deploy to OAK-D's Myriad X VPU
-3. Configure for golf ball detection
-4. Verify >10 FPS performance
+### Next Slice: YOLO Integration
+1. 🔲 Connect YOLO to camera feed
+2. 🔲 Test golf ball detection
+3. 🔲 Visualize detections
+4. 🔲 Publish detection coordinates
 
 ### Following Slices
-1. yolov8_ros integration with 3D detection
+1. 3D coordinate extraction from detections
 2. Direct coordinate ball following
 3. Nav2 integration for advanced behaviors
 4. Multi-ball collection logic
 
 ## Key Insights
+- Camera sensors require the Ignition sensors system plugin to function
+- Display must be properly configured for GUI tools like rqt_image_view
 - gz_ros2_control requires proper plugin path environment variable
 - TwistStamped messages required (not Twist) for diff_drive_controller
-- Direct 3D coordinates eliminate complex transformations
-- Working control foundation enables all future autonomy features
-- OAK-D's onboard AI processing solves both simulation and performance issues
-- Synthetic data approach bypasses Ignition's camera rendering limitations
+- Direct 3D coordinates will eliminate complex transformations
