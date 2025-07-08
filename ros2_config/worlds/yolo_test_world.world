@@ -86,14 +86,14 @@
         <collision name="collision">
           <geometry>
             <sphere>
-              <radius>0.021</radius>
+              <radius>0.05</radius>
             </sphere>
           </geometry>
         </collision>
         <visual name="visual">
           <geometry>
             <sphere>
-              <radius>0.021</radius>
+              <radius>0.05</radius>
             </sphere>
           </geometry>
           <material>

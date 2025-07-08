@@ -42,7 +42,7 @@ class YOLODetectorNode(Node):
         
         # COCO class names (sports ball is class 32)
         self.SPORTS_BALL_CLASS = 32
-        self.CONFIDENCE_THRESHOLD = 0.6
+        self.CONFIDENCE_THRESHOLD = 0.01  # Ultra-low threshold for debugging
         
         # Publishers
         self.debug_image_pub = self.create_publisher(Image, '/yolo/debug_image', 10)
