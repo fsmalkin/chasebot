@@ -1,53 +1,79 @@
 # Active Context - ChaseBot Development
 
-## Current Focus (July 7, 2025)
-**3D Vision Pipeline with mgonzs13/yolo_ros**
-- Adopting existing ROS 2 YOLO package (739 stars, actively maintained)
-- Package already supports 3D object detection with depth cameras
-- Thin slice approach: 7 incremental steps to full integration
-- Leverages our existing D415 camera and Nav2 infrastructure
+## Current Focus (January 7, 2025)
+Working on 3D Vision Pipeline implementation using yolo_ros package. Currently stuck on detection - YOLO integration works but doesn't detect simulated balls.
 
-## Recent Decisions
-**Package Selection**
-- Researched multiple YOLO ROS 2 packages
-- Selected mgonzs13/yolo_ros for:
-  - Built-in 3D detection support
-  - ROS 2 Humble compatibility
-  - Active maintenance and community
-  - Standard vision_msgs output
-- Follows ChaseBot principle: "Search Existing Solutions First"
+## Key Findings from Today's Session
 
-## Implementation Plan (7 Slices)
-1. **Package Installation** - Basic validation
-2. **D415 RGB Connection** - 2D detection first
-3. **Enable 3D Detection** - Add depth processing
-4. **Validate 3D Accuracy** - Verify positions
-5. **Navigation Bridge** - Connect to Nav2
-6. **Approach Tuning** - 3-inch distance
-7. **System Integration** - Complete solution
+### Camera System Status ✅
+- D415 camera integration successful
+- Producing images at ~18Hz 
+- Resolution: 640x480
+- GUI visualization working with rqt_image_view
+- Camera orientation: Forward-facing (confirmed with 4-ball test world)
 
-## Technical Context
-- **Environment**: ROS 2 Humble on Ubuntu 22.04 (WSL2)
-- **Simulation**: Ignition Gazebo Fortress with GUI working
-- **Camera**: D415 producing data at 10-14 Hz ✅
-- **Robot Model**: `jetbot_core_ignition_v1.3.0.sdf`
-- **Nav2**: Stack operational with corrected coordinates ✅
+### YOLO Integration Status ⚠️
+- yolo_ros package installed and working
+- All nodes running correctly
+- Subscribing to correct camera topic
+- Publishing empty detections
+- **CRITICAL ISSUE**: Pre-trained YOLO models don't recognize uniform-colored simulation balls
 
-## Working System Components
-1. **Robot Control**: gz_ros2_control differential drive ✅
-2. **Navigation**: Nav2 stack with coordinate fix ✅
-3. **D415 Camera**: Sensor integration complete ✅
-4. **ROS Bridge**: Ignition↔ROS 2 topics ✅
-5. **3D Vision**: In progress (using yolo_ros)
+### Detection Problem Analysis
+- Simulated balls are simple uniform-colored spheres
+- Real-world trained models expect textured sports balls (seams, panels, etc.)
+- 0 detections despite clear visibility in camera feed
+- Need alternative detection approach for simulation
 
-## Key Files to Reference
-- `ros2_config/urdf/jetbot_core_ignition_v1.3.0.sdf` - Working robot model
-- `ros2_config/launch/jetbot_gz_control_camera_test_v2.launch.py` - Current launch
-- `docs/yolo_ros_integration_plan.md` - Detailed implementation plan (to create)
-- External: https://github.com/mgonzs13/yolo_ros - Package we're integrating
+### Wheel Axis Bug Regression ⚠️
+- Bug reappeared in multi-ball world test
+- Was previously fixed in single-ball configuration
+- Indicates inconsistent launch file configurations
+- Need to propagate fix across all launch files
 
-## Development Notes
-- Each slice has clear UAT criteria
-- Leveraging existing infrastructure at each step
-- Can isolate issues with independent test tools if needed
-- Expected completion: 2-3 hours vs days of custom development
+## Recent Technical Decisions
+
+### Detection Strategy Pivot Needed
+Current options being considered:
+1. **Color-based detector** - Quick solution for uniform balls
+2. **Textured ball models** - Make simulation more realistic
+3. **Custom YOLO training** - Train on simulated balls
+4. **Alternative detection** - Circle detection, HSV filtering
+
+### Working Reference Configuration
+Last fully working setup (without detection):
+- Launch: `jetbot_nav2_integration_complete.launch.py`
+- World: Single ball at 3.0m
+- Bridge: `ros2_yolo_to_nav_goal_corrected.py`
+- Result: Accurate approach within 15cm
+
+## Next Session Priority
+1. **Isolate detection solution** - Get any detection working
+2. **Fix wheel axis consistency** - Apply fix to all launch files
+3. **Port working detection** - Integrate with Nav2 system
+
+## Key Files Modified Today
+- `ros2_scripts/monitor_yolo_detections.py` - Detection monitoring tool
+- `ros2_scripts/analyze_yolo_raw_detections.py` - Detailed analyzer
+- `docs/slice_2_yolo_monitoring_complete.md` - Session documentation
+
+## Important Commands for Reproduction
+
+### Camera Test with GUI
+```bash
+# Terminal 1: Simulation
+export DISPLAY=172.25.128.1:0.0
+ros2 launch chasebot_description jetbot_gz_control_camera_test_v2.launch.py
+
+# Terminal 2: YOLO
+ros2 launch yolo_bringup yolo.launch.py model:=yolov8m.pt input_image_topic:=/d415/image_raw
+
+# Terminal 3: Camera viewer
+export DISPLAY=172.25.128.1:0.0
+ros2 run rqt_image_view rqt_image_view
+```
+
+## Current Blockers
+1. **Detection**: YOLO won't detect simulated balls
+2. **Consistency**: Wheel axis fix not applied uniformly
+3. **Integration**: Can't proceed without working detection

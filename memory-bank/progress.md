@@ -1,96 +1,120 @@
-# ChaseBot Development Progress
+# ChaseBot Progress Tracker
 
-## Overall Status: 85% Complete (3D Vision Pipeline Starting)
+## Overall Status: 3D Vision Pipeline Development Phase
 
-### ✅ Completed Components
+### ✅ Completed Milestones
 
-#### 1. Development Environment (100%)
+#### 1. ROS 2 Foundation (June 2024)
 - ROS 2 Humble on Ubuntu 22.04 WSL2
-- Ignition Gazebo Fortress with GUI
-- File sync workflow established
-- Display configuration working
+- Gazebo Ignition (Fortress) integration
+- Basic robot spawning and control
+- gz_ros2_control for motor control
 
-#### 2. Robot Platform (100%)
-- JetBot model in SDF format
-- gz_ros2_control integration
-- Differential drive control working
-- Proper physics and wheel configuration
+#### 2. Navigation Stack Integration (July 2024)
+- Nav2 fully integrated
+- Path planning and obstacle avoidance working
+- Accurate goal navigation (within 15cm)
+- Coordinate transformation fix implemented
 
-#### 3. Basic Navigation (100%)
-- Nav2 stack integrated
-- Path planning operational
-- Obstacle avoidance ready
-- Coordinate transformation fixed
+#### 3. 2D Vision System (July 2024) 
+- D415 camera integration complete
+- YOLO detection working (for single ball)
+- Vision-to-navigation bridge implemented
+- Autonomous ball following achieved in 2D
 
-#### 4. 2D Vision System (100%)
-- YOLO v8 detection working
-- Ball tracking functional
-- Coordinate bridge operational
-- 15cm approach accuracy achieved
+#### 4. Coordinate Accuracy Fix (July 2024)
+- Discovered and fixed 0.57m offset error
+- Created corrected bridge using proper transformations
+- Achieved 15cm approach accuracy
+- Validated with position diagnostics
 
-#### 5. D415 Camera Integration (100%) 🎉
-- Sensor plugin issue resolved
-- Camera producing data at 10-14 Hz
-- ROS 2 topic bridge working
-- Orientation validated (facing forward)
+#### 5. 3D Camera Hardware Integration (January 2025)
+- D415 camera producing depth data
+- Camera orientation corrected
+- 10-14 Hz update rate achieved
+- All camera topics available
 
-### 🚧 In Progress
+### 🚧 Current Work: 3D Vision Pipeline
 
-#### 6. 3D Vision Pipeline (0%)
-**Using mgonzs13/yolo_ros package** - Follows "Search Existing Solutions First" principle
+#### Slice 1: YOLO ROS Package Installation ✅
+- Package installed and building
+- All dependencies resolved
+- Nodes launching successfully
 
-**Thin Slice Implementation Plan:**
-- [x] Slice 1: Package Installation & Basic Validation ✅
-- [ ] Slice 2: Connect to D415 Camera (2D Only)
-- [ ] Slice 3: Enable 3D Detection with Depth
-- [ ] Slice 4: Validate 3D Accuracy
-- [ ] Slice 5: Navigation Bridge (Minimal)
-- [ ] Slice 6: Approach Distance Tuning (3 inches)
-- [ ] Slice 7: System Integration
+#### Slice 2: YOLO Detection Monitoring ⚠️
+**Status**: Integration working but detection failing
+- Camera feed confirmed working (640x480 @ 18Hz)
+- YOLO nodes running and subscribing correctly
+- **BLOCKER**: Pre-trained models don't detect uniform simulation balls
+- 0 detections despite clear visibility
 
-### 📋 Remaining Tasks
+**Key Issue**: Simulated balls lack textures expected by real-world trained models
 
-1. **3D Object Detection (via yolo_ros)**
-   - [ ] Install and configure mgonzs13/yolo_ros
-   - [ ] Connect to D415 RGB and depth streams
-   - [ ] Validate 3D bounding box generation
-   - [ ] Test detection accuracy
+#### Slice 3: 3D Detection Integration 🔄
+- Cannot proceed without working 2D detection
+- Waiting on detection solution
 
-2. **3D Navigation Integration**
-   - [ ] Create bridge from yolo_ros to Nav2
-   - [ ] Calculate 3-inch approach positions
-   - [ ] Test approach accuracy with depth
-   - [ ] Optimize for real-time performance
+### ⚠️ Regressions Discovered
 
-3. **System Integration**
-   - [ ] Create unified launch file
-   - [ ] Performance optimization
-   - [ ] Comprehensive testing
-   - [ ] Documentation update
+1. **Wheel Axis Bug**
+   - Fixed in single-ball world
+   - Reappeared in multi-ball world test
+   - Launch file consistency issue
 
-4. **Hardware Deployment**
-   - [ ] Port to physical JetBot
-   - [ ] Calibrate real D415 camera
-   - [ ] Tune navigation parameters
-   - [ ] Field testing
+### 📋 Next Steps Priority
 
-## Key Achievements This Session
-- **Package Research Complete**: Found mgonzs13/yolo_ros with 3D support
-- **Implementation Plan**: 7 thin slices with clear UAT criteria
-- **Time Estimate**: 2-3 hours vs days of custom development
-- **Risk Mitigation**: Each slice independently testable
+1. **Solve Detection Problem** (CRITICAL)
+   - Option A: Color-based detector
+   - Option B: Textured ball models
+   - Option C: Custom YOLO training
+   - Option D: Alternative detection method
 
-## Technical Debt
-- None currently - leveraging proven solution
-- All components properly integrated
-- Documentation being updated
+2. **Fix Launch File Consistency**
+   - Apply wheel axis fix to all launch files
+   - Ensure uniform configuration
 
-## Risk Items
-- yolo_ros compatibility with our setup (mitigated by thin slices)
-- Real-time processing constraints
-- Hardware deployment unknowns
+3. **Complete 3D Pipeline**
+   - Once detection works
+   - Integrate depth information
+   - Port to main simulation
 
-## Success Metrics
-- Each slice has specific UAT criteria
-- Final goal: 3-inch approach to detected golf balls
-- System running at >5 Hz for real-time operation
+### 📊 Current Capabilities
+
+| Feature | 2D System | 3D System |
+|---------|-----------|-----------|
+| Camera Feed | ✅ Working | ✅ Working |
+| Object Detection | ✅ (was working) | ❌ Blocked |
+| Depth Data | N/A | ✅ Available |
+| Navigation | ✅ Complete | 🔄 Waiting |
+| Autonomous Following | ✅ (was working) | 🔄 Waiting |
+
+### 🎯 Success Criteria for Current Phase
+
+- [ ] Any form of ball detection working in simulation
+- [ ] Consistent wheel axis behavior across all launches
+- [ ] 3D position extraction from depth data
+- [ ] Integration with Nav2 for 3D following
+
+### 📝 Working Reference Configuration
+
+**Last Fully Working Setup** (2D, no 3D):
+```bash
+# Launch: jetbot_nav2_integration_complete.launch.py
+# World: single ball at 3.0m
+# Bridge: ros2_yolo_to_nav_goal_corrected.py
+# Detection: Was working with real-textured balls
+```
+
+### 🔧 Technical Debt
+
+1. Multiple similar launch files need consolidation
+2. Wheel axis fix needs to be in robot model, not launch files
+3. Detection approach needs to be simulation-friendly
+4. Need automated testing for regressions
+
+### 📅 Timeline Impact
+
+- Original 3D completion target: January 2025
+- Current blocker: Detection incompatibility
+- Estimated additional time: 1-2 days for detection solution
+- Risk: May need significant rework if texture approach chosen
