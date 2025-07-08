@@ -1,7 +1,7 @@
 # Active Context - ChaseBot Development
 
 ## Current Focus (January 7, 2025)
-Working on 3D Vision Pipeline implementation using yolo_ros package. Currently stuck on detection - YOLO integration works but doesn't detect simulated balls.
+Investigating YOLO detection regression - discovered that YOLO which previously detected green balls on plain backgrounds is now failing completely. This appears to be a deeper issue than just texture/color problems.
 
 ## Key Findings from Today's Session
 
@@ -19,11 +19,15 @@ Working on 3D Vision Pipeline implementation using yolo_ros package. Currently s
 - Publishing empty detections
 - **CRITICAL ISSUE**: Pre-trained YOLO models don't recognize uniform-colored simulation balls
 
-### Detection Problem Analysis
-- Simulated balls are simple uniform-colored spheres
-- Real-world trained models expect textured sports balls (seams, panels, etc.)
-- 0 detections despite clear visibility in camera feed
-- Need alternative detection approach for simulation
+### Detection Problem Analysis - DEEPER ISSUE FOUND
+- **REGRESSION**: User reports YOLO previously had "no problem detecting green balls on plain backgrounds"
+- Current tests fail with ALL ball configurations:
+  - Multi-colored balls (red, blue, yellow, green)
+  - White ball on green grass with blue sky
+  - Larger ball sizes (0.05m radius)
+  - Confidence threshold lowered to 0.01
+- Suggests fundamental change between old Gazebo Classic and new Ignition Gazebo
+- May be image pipeline, rendering differences, or missing configuration
 
 ### Wheel Axis Bug Regression ⚠️
 - Bug reappeared in multi-ball world test
@@ -41,21 +45,44 @@ Current options being considered:
 4. **Alternative detection** - Circle detection, HSV filtering
 
 ### Working Reference Configuration
-Last fully working setup (without detection):
+
+#### 🔴 CRITICAL: Old YOLO Detection Working Config
+**This configuration successfully detected green balls:**
+```bash
+ros2 launch chasebot_description jetbot_with_yolo_clean_fixed.launch.py
+```
+- **Package**: `chasebot_description` (NOT `chasebot_sim`)
+- **Launch**: `jetbot_with_yolo_clean_fixed.launch.py`
+- **Result**: YOLO detected green balls on plain backgrounds
+
+#### Last Nav2 Working Setup (without detection):
 - Launch: `jetbot_nav2_integration_complete.launch.py`
 - World: Single ball at 3.0m
 - Bridge: `ros2_yolo_to_nav_goal_corrected.py`
 - Result: Accurate approach within 15cm
 
 ## Next Session Priority
-1. **Isolate detection solution** - Get any detection working
-2. **Fix wheel axis consistency** - Apply fix to all launch files
-3. **Port working detection** - Integrate with Nav2 system
+1. **Deep debugging required**:
+   - Save and analyze raw camera images from simulation
+   - Compare with old Gazebo Classic image characteristics
+   - Research Ignition vs Classic rendering differences
+   - Test YOLO on saved real-world images to verify model
+2. **Online research needed**:
+   - Known issues with pre-trained models on Ignition Gazebo
+   - Image encoding/format differences between simulators
+   - Community solutions for synthetic image detection
+3. **Alternative approaches if needed**:
+   - Custom YOLO training on simulated images
+   - Classical CV methods (color/shape detection)
+   - Different detection frameworks
 
 ## Key Files Modified Today
 - `ros2_scripts/monitor_yolo_detections.py` - Detection monitoring tool
 - `ros2_scripts/analyze_yolo_raw_detections.py` - Detailed analyzer
-- `docs/slice_2_yolo_monitoring_complete.md` - Session documentation
+- `docs/slice_2_yolo_monitoring_complete.md` - Initial monitoring documentation
+- `docs/slice_3_yolo_detection_regression.md` - Regression investigation
+- `ros2_config/worlds/yolo_test_world_v4_white_forward.world` - Test world with white ball
+- `ros2_config/launch/jetbot_gz_control_camera_test_v3.launch.py` - Updated launch file
 
 ## Important Commands for Reproduction
 
