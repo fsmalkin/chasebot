@@ -20,7 +20,7 @@ class YOLO3DPositionExtractor(Node):
         super().__init__('yolo_3d_position_extractor')
         
         # Parameters
-        self.declare_parameter('confidence_threshold', 0.4)
+        self.declare_parameter('confidence_threshold', 0.1)  # Lowered to 0.1
         self.confidence_threshold = self.get_parameter('confidence_threshold').value
         
         # CV Bridge for image conversion
@@ -69,7 +69,7 @@ class YOLO3DPositionExtractor(Node):
         
         self.camera_info_sub = self.create_subscription(
             CameraInfo,
-            '/d415/camera_info',
+            '/d415/depth/camera_info',
             self.camera_info_callback,
             sensor_qos
         )
@@ -82,8 +82,13 @@ class YOLO3DPositionExtractor(Node):
         )
         
         self.get_logger().info('3D Position Extractor initialized')
-        self.get_logger().info(f'Confidence threshold: {self.confidence_threshold}')
+        self.get_logger().info(f'Confidence threshold: {self.confidence_threshold} (VERY LOW)')
         self.get_logger().info('Waiting for camera info and detections...')
+        
+        # Debug counters
+        self.position_received_count = 0
+        self.confidence_received_count = 0
+        self.depth_received_count = 0
     
     def camera_info_callback(self, msg):
         """Extract camera intrinsics from camera info"""
@@ -102,21 +107,35 @@ class YOLO3DPositionExtractor(Node):
     def position_callback(self, msg):
         """Store latest 2D position (normalized coordinates)"""
         self.latest_position_2d = msg
+        self.position_received_count += 1
+        if self.position_received_count % 10 == 1:  # Log every 10th
+            self.get_logger().info(f'Position received #{self.position_received_count}: ({msg.x:.3f}, {msg.y:.3f})')
     
     def confidence_callback(self, msg):
         """Store latest confidence"""
         self.latest_confidence = msg.data
+        self.confidence_received_count += 1
+        if self.confidence_received_count % 10 == 1:  # Log every 10th
+            self.get_logger().info(f'Confidence received #{self.confidence_received_count}: {msg.data:.3f}')
     
     def depth_callback(self, msg):
         """Process depth image and extract 3D position if detection is available"""
+        self.depth_received_count += 1
+        
         # Check if we have all required data
         if self.fx is None:
+            if self.depth_received_count % 30 == 1:
+                self.get_logger().warn('Waiting for camera intrinsics...')
             return
         
         if self.latest_position_2d is None:
+            if self.depth_received_count % 30 == 1:
+                self.get_logger().info('Waiting for YOLO position...')
             return
         
         if self.latest_confidence < self.confidence_threshold:
+            if self.depth_received_count % 30 == 1:
+                self.get_logger().info(f'Confidence {self.latest_confidence:.3f} < threshold {self.confidence_threshold:.3f}')
             return
         
         try:
@@ -143,9 +162,26 @@ class YOLO3DPositionExtractor(Node):
             # Get depth value at detection center
             depth_value = depth_image[pixel_y, pixel_x] * depth_scale
             
+            # Get depth statistics for debugging
+            valid_depths = depth_image[depth_image > 0]
+            if len(valid_depths) > 0:
+                min_depth = np.min(valid_depths) * depth_scale
+                max_depth = np.max(valid_depths) * depth_scale
+                mean_depth = np.mean(valid_depths) * depth_scale
+                
+                # Log depth stats every 30 frames
+                if self.depth_received_count % 30 == 0:
+                    self.get_logger().info(
+                        f'Depth stats: min={min_depth:.2f}m, max={max_depth:.2f}m, '
+                        f'mean={mean_depth:.2f}m, valid_pixels={len(valid_depths)}'
+                    )
+            
             # Skip if depth is invalid (0 or very large)
-            if depth_value <= 0.1 or depth_value > 10.0:
-                self.get_logger().warn(f'Invalid depth at ({pixel_x}, {pixel_y}): {depth_value:.3f}m')
+            if depth_value <= 0.01 or depth_value > 10.0:
+                self.get_logger().warn(
+                    f'Invalid depth at ({pixel_x}, {pixel_y}): {depth_value:.3f}m '
+                    f'(encoding: {msg.encoding}, scale: {depth_scale})'
+                )
                 return
             
             # Convert pixel + depth to 3D point using camera intrinsics
