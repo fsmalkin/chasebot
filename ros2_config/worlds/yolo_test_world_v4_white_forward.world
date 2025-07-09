@@ -66,8 +66,8 @@
       </link>
     </model>
 
-    <!-- WHITE ball - FORWARD (positive X) - LARGER SIZE -->
-    <model name="white_ball_forward">
+    <!-- RED ball - FORWARD (positive X) - LARGER SIZE -->
+    <model name="red_ball_forward">
       <pose>1.0 0.0 0.05 0 0 0</pose>
       <static>false</static>
       <link name="link">
@@ -96,9 +96,9 @@
             </sphere>
           </geometry>
           <material>
-            <ambient>1.0 1.0 1.0 1</ambient>  <!-- White color -->
-            <diffuse>1.0 1.0 1.0 1</diffuse>
-            <specular>0.5 0.5 0.5 1</specular>
+            <ambient>1.0 0.0 0.0 1</ambient>  <!-- Red color -->
+            <diffuse>1.0 0.0 0.0 1</diffuse>
+            <specular>0.3 0.1 0.1 1</specular>
           </material>
         </visual>
       </link>
@@ -180,8 +180,8 @@
       </link>
     </model>
 
-    <!-- RED ball - BEHIND (negative X) - LARGER SIZE -->
-    <model name="red_ball_behind">
+    <!-- WHITE ball - BEHIND (negative X) - LARGER SIZE -->
+    <model name="white_ball_behind">
       <pose>-1.0 0.0 0.05 0 0 0</pose>
       <static>false</static>
       <link name="link">
@@ -210,9 +210,9 @@
             </sphere>
           </geometry>
           <material>
-            <ambient>1.0 0.0 0.0 1</ambient>  <!-- Red color -->
-            <diffuse>1.0 0.0 0.0 1</diffuse>
-            <specular>0.3 0.1 0.1 1</specular>
+            <ambient>1.0 1.0 1.0 1</ambient>  <!-- White color -->
+            <diffuse>1.0 1.0 1.0 1</diffuse>
+            <specular>0.5 0.5 0.5 1</specular>
           </material>
         </visual>
       </link>

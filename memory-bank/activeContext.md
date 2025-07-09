@@ -1,7 +1,32 @@
 # Active Context - ChaseBot Development
 
-## Current Focus (January 7-8, 2025) - YOLO DETECTION & WHEEL AXIS FIXED! 🎉
-Major breakthroughs: Fixed YOLO detection (topic mismatch) and wheel axis bug!
+## Current Focus (January 8, 2025) - 3D Position Extraction Development 🚧
+Working on extracting 3D positions from YOLO detections for autonomous navigation.
+
+### Current Development Files (In Progress)
+- **`ros2_scripts/discover_yolo_format.py`** - Tool to analyze YOLO output format
+- **`ros2_scripts/test_slice_2_1_discovery.py`** - Discovery test for YOLO format analysis
+- **`ros2_scripts/yolo_3d_position_extractor.py`** - Extracts 3D positions from 2D YOLO detections
+- **`ros2_scripts/test_3d_position_extraction.py`** - Integration test for 3D extraction pipeline
+
+### Known Issues
+- YOLO detector crashes when trying to display images (cv2.imshow without display)
+- Need to verify depth topic availability for 3D position calculation
+- Simulation stability issues during testing
+
+### Working Detection Status
+- YOLO detection working with frisbee class (29) ✅
+- Detection confidence: ~0.5-0.55
+- Camera publishing to `/d415/image_raw` ✅
+- Need depth data from `/d415/depth/*` topics for 3D extraction
+
+## Previous Working State (January 8, 2025 earlier) - YOLO DETECTION WORKING WITH FRISBEE! 🎉
+
+### 🚀 WORKING TEST SCRIPT
+```bash
+python ros2_scripts/test_sports_ball_detection_uat.py
+```
+This launches everything and shows live detection! Works great!
 
 ## BREAKTHROUGH: Topic Mismatch Discovered and Fixed
 
@@ -66,15 +91,19 @@ ros2 launch chasebot_description jetbot_with_yolo_clean_fixed.launch.py
 - Result: Accurate approach within 15cm
 
 ## Next Session Priority
-1. **Implement multi-class detection**:
+1. **Complete 3D position extraction**:
+   - Debug depth topic availability
+   - Fix YOLO headless operation (remove cv2.imshow)
+   - Test complete 3D position pipeline
+2. **Implement multi-class detection**:
    - Create `ros2_yolo_detector_multi_class.py`
    - Accept both frisbee (29) and sports ball (32) classes
    - Test complete autonomous pipeline
-2. **Integration testing**:
+3. **Integration testing**:
    - Connect YOLO detection to Nav2 navigation
    - Test autonomous ball following
    - Verify 3D positioning with depth data
-3. **Documentation cleanup**:
+4. **Documentation cleanup**:
    - Update all READMEs with working configuration
    - Archive deprecated files
    - Create operational guide
@@ -82,6 +111,10 @@ ros2 launch chasebot_description jetbot_with_yolo_clean_fixed.launch.py
 ## Key Files Created/Modified Today (Jan 7-8, 2025)
 - **`ros2_scripts/ros2_yolo_detector_fixed.py`** - FIXED YOLO detector with correct topic ✅
 - **`ros2_scripts/test_camera_topic.py`** - Camera topic diagnostic tool ✅
+- **`ros2_scripts/discover_yolo_format.py`** - YOLO output format analyzer 🚧
+- **`ros2_scripts/test_slice_2_1_discovery.py`** - Format discovery test 🚧
+- **`ros2_scripts/yolo_3d_position_extractor.py`** - 3D position extraction node 🚧
+- **`ros2_scripts/test_3d_position_extraction.py`** - 3D extraction integration test 🚧
 - **`.clinerules/08-documentation-structure.md`** - New documentation standards
 - **`docs/README.md`** - Master project plan and status tracker
 - **`ros2_scripts/README.md`** - Complete script inventory
@@ -106,13 +139,15 @@ wsl -d Ubuntu-22.04 -- bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bas
 ## Current Status & Next Steps
 1. **Detection**: ✅ FIXED - YOLO detecting objects as "frisbee"
 2. **Movement**: ✅ FIXED - Wheel axis corrected, robot moves properly
-3. **Classification**: Need multi-class support (frisbee + sports ball)
-4. **Integration**: Ready to connect vision to navigation
-5. **Documentation**: ✅ All READMEs updated with clear fix status
+3. **3D Position**: 🚧 IN PROGRESS - Extracting depth from detections
+4. **Classification**: Need multi-class support (frisbee + sports ball)
+5. **Integration**: Ready to connect vision to navigation
+6. **Documentation**: ✅ All READMEs updated with clear fix status
 
 ## Success Metrics
 - Camera publishing at 18Hz ✅
 - YOLO receiving images ✅
 - Object detection working ✅
 - Confidence > 0.5 ✅
+- 3D position extraction 🚧
 - Next: Full autonomous ball following

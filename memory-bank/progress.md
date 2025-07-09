@@ -1,135 +1,90 @@
 # ChaseBot Progress Tracker
 
-## Overall Status: 3D Vision Pipeline Development Phase
+## Current Development Phase: 3D Vision Integration 🚧
+**Status**: Implementing 3D position extraction from YOLO detections
+**Date**: January 8, 2025
 
-### ✅ Completed Milestones
+### Active Development Files
+1. **`ros2_scripts/discover_yolo_format.py`** - Analyzes YOLO detection output format
+2. **`ros2_scripts/test_slice_2_1_discovery.py`** - Tests YOLO format discovery
+3. **`ros2_scripts/yolo_3d_position_extractor.py`** - Main 3D position extraction node
+4. **`ros2_scripts/test_3d_position_extraction.py`** - Integration test for full pipeline
 
-#### 1. ROS 2 Foundation (June 2024)
-- ROS 2 Humble on Ubuntu 22.04 WSL2
-- Gazebo Ignition (Fortress) integration
-- Basic robot spawning and control
-- gz_ros2_control for motor control
+### Current Technical Stack
+- **Detection**: YOLO v8 (detecting balls as frisbee class 29)
+- **Camera**: D415 RGB at 640x480, 18Hz on `/d415/image_raw`
+- **Simulation**: Gazebo Ignition with GUI display
+- **ROS 2**: Humble on Ubuntu 22.04 WSL2
+- **Navigation**: Nav2 stack (ready for integration)
 
-#### 2. Navigation Stack Integration (July 2024)
-- Nav2 fully integrated
-- Path planning and obstacle avoidance working
-- Accurate goal navigation (within 15cm)
-- Coordinate transformation fix implemented
+## Major Accomplishments
 
-#### 3. 2D Vision System (July 2024) 
-- D415 camera integration complete
-- YOLO detection working (for single ball)
-- Vision-to-navigation bridge implemented
-- Autonomous ball following achieved in 2D
+### ✅ COMPLETED: YOLO Detection Fixed (Jan 8, 2025)
+- **Issue**: Topic mismatch - YOLO looking at wrong topic
+- **Solution**: Fixed topic subscription in `ros2_yolo_detector_fixed.py`
+- **Working Test**: `python ros2_scripts/test_sports_ball_detection_uat.py`
+- **Result**: Reliable detection at ~18Hz
 
-#### 4. Coordinate Accuracy Fix (July 2024)
-- Discovered and fixed 0.57m offset error
-- Created corrected bridge using proper transformations
-- Achieved 15cm approach accuracy
-- Validated with position diagnostics
+### ✅ COMPLETED: Wheel Axis Bug Fixed (Jan 8, 2025)
+- **Issue**: Wheels rotating on wrong axis (Y instead of Z)
+- **Fixed Files**: 
+  - `ros2_config/urdf/jetbot_core_ignition_v1.3.0.sdf`
+  - `ros2_config/urdf/jetbot_core_ignition.sdf`
+- **Result**: Proper differential drive movement
 
-#### 5. 3D Camera Hardware Integration (January 2025)
-- D415 camera producing depth data
-- Camera orientation corrected
-- 10-14 Hz update rate achieved
-- All camera topics available
+### ✅ COMPLETED: Documentation Restructure (Jan 8, 2025)
+- Created comprehensive README files in each directory
+- Established documentation standards in `.clinerules/08-documentation-structure.md`
+- Master project plan in `docs/README.md`
 
-### 🚧 Current Work: 3D Vision Pipeline
+## In Progress
 
-#### Slice 1: YOLO ROS Package Installation ✅
-- Package installed and building
-- All dependencies resolved
-- Nodes launching successfully
+### 🚧 3D Position Extraction
+**Current Files Under Development:**
+- `ros2_scripts/discover_yolo_format.py` - Format analysis tool
+- `ros2_scripts/test_slice_2_1_discovery.py` - Discovery testing
+- `ros2_scripts/yolo_3d_position_extractor.py` - 3D extraction node
+- `ros2_scripts/test_3d_position_extraction.py` - Integration test
 
-#### Slice 2: YOLO Detection Monitoring ✅
-**Status**: Monitoring tools complete and working
-- Created comprehensive detection monitoring
-- Real-time analysis tools functioning
-- Camera feed confirmed (640x480 @ 18Hz)
+**Blockers:**
+- Need to verify depth topic availability
+- YOLO detector crashes with cv2.imshow (no display)
+- Need headless operation mode
 
-#### Slice 3: YOLO Detection Regression 🔴
-**Status**: Critical regression discovered
-- **REGRESSION**: YOLO previously detected green balls on plain backgrounds
-- Now failing with ALL configurations:
-  - Multi-colored balls
-  - White ball on green grass/blue sky
-  - Larger balls (0.05m radius)
-  - Confidence threshold at 0.01
-- **ROOT CAUSE**: Likely Ignition Gazebo vs Classic rendering differences
-- **IMPACT**: Complete detection failure, blocking all progress
+## Project Statistics
+- **Total ROS2 Scripts**: 50+ in `ros2_scripts/`
+- **Active Development Files**: 4 (3D position extraction)
+- **Working Detection Files**: 2 (`ros2_yolo_detector_fixed.py`, `ros2_yolo_detector_frisbee.py`)
+- **Launch Files**: 30+ in `ros2_config/launch/`
+- **Fixed SDF Files**: 2 (v1.3.0 and latest)
 
-**Deep Investigation Required**: This is not a simple texture issue
+## Next Immediate Steps
+1. **Debug depth topics** - Check if D415 publishes depth data
+2. **Create headless YOLO** - Remove cv2.imshow dependencies
+3. **Test 3D extraction** - Verify position calculations
+4. **Integrate with Nav2** - Connect detection to navigation
 
-#### Slice 3: 3D Detection Integration 🔄
-- Cannot proceed without working 2D detection
-- Waiting on detection solution
+## Working Command Reference
 
-### ⚠️ Regressions Discovered
-
-1. **Wheel Axis Bug**
-   - Fixed in single-ball world
-   - Reappeared in multi-ball world test
-   - Launch file consistency issue
-
-### 📋 Next Steps Priority
-
-1. **Deep Debug Detection Regression** (CRITICAL)
-   - Save and analyze raw camera images
-   - Compare Ignition vs Classic Gazebo rendering
-   - Test YOLO on real images to verify model
-   - Research known compatibility issues
-
-2. **Online Research Required**
-   - Ignition Gazebo synthetic image characteristics
-   - Pre-trained model limitations on simulated data
-   - Community solutions and workarounds
-
-2. **Fix Launch File Consistency**
-   - Apply wheel axis fix to all launch files
-   - Ensure uniform configuration
-
-3. **Complete 3D Pipeline**
-   - Once detection works
-   - Integrate depth information
-   - Port to main simulation
-
-### 📊 Current Capabilities
-
-| Feature | 2D System | 3D System |
-|---------|-----------|-----------|
-| Camera Feed | ✅ Working | ✅ Working |
-| Object Detection | ✅ (was working) | ❌ Blocked |
-| Depth Data | N/A | ✅ Available |
-| Navigation | ✅ Complete | 🔄 Waiting |
-| Autonomous Following | ✅ (was working) | 🔄 Waiting |
-
-### 🎯 Success Criteria for Current Phase
-
-- [ ] Any form of ball detection working in simulation
-- [ ] Consistent wheel axis behavior across all launches
-- [ ] 3D position extraction from depth data
-- [ ] Integration with Nav2 for 3D following
-
-### 📝 Working Reference Configuration
-
-**Last Fully Working Setup** (2D, no 3D):
+### Current Testing Commands
 ```bash
-# Launch: jetbot_nav2_integration_complete.launch.py
-# World: single ball at 3.0m
-# Bridge: ros2_yolo_to_nav_goal_corrected.py
-# Detection: Was working with real-textured balls
+# Test YOLO detection (working)
+python ros2_scripts/test_sports_ball_detection_uat.py
+
+# Test 3D extraction (in development)
+python ros2_scripts/test_3d_position_extraction.py
+
+# Camera diagnostics
+python ros2_scripts/test_camera_topic.py
 ```
 
-### 🔧 Technical Debt
+### Launch Files in Use
+- **Working**: `jetbot_gz_control_camera_test_v3.launch.py`
+- **Detection Test**: Uses above with `ros2_yolo_detector_frisbee.py`
+- **Navigation Ready**: `jetbot_nav2_integration_complete.launch.py`
 
-1. Multiple similar launch files need consolidation
-2. Wheel axis fix needs to be in robot model, not launch files
-3. Detection approach needs to be simulation-friendly
-4. Need automated testing for regressions
-
-### 📅 Timeline Impact
-
-- Original 3D completion target: January 2025
-- Current blocker: Detection incompatibility
-- Estimated additional time: 1-2 days for detection solution
-- Risk: May need significant rework if texture approach chosen
+## Timeline
+- Jan 7: Discovered topic mismatch issue
+- Jan 8 AM: Fixed YOLO detection, wheel axis
+- Jan 8 PM: Working on 3D position extraction
+- Next: Complete 3D extraction and Nav2 integration

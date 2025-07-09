@@ -1,5 +1,16 @@
 # ROS2 Scripts Directory
 
+## 🚀 QUICK START - Working Demo!
+
+### **test_sports_ball_detection_uat.py** - Complete Working Test
+```bash
+python ros2_scripts/test_sports_ball_detection_uat.py
+```
+This script launches the entire system (simulation + YOLO detection) and shows live visualization!
+- **Status**: FULLY WORKING - Use this for demos
+- **What it does**: Launches Gazebo, spawns robot with camera, starts YOLO detector
+- **Note**: Currently detects balls as "frisbee" which works perfectly fine
+
 ## Overview
 This directory contains all ROS2 Python scripts for the ChaseBot project, including vision processing, robot control, navigation utilities, and testing tools.
 
