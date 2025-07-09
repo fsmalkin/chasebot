@@ -75,12 +75,12 @@ def main():
         print("Available D415 topics:")
         print(result.stdout)
         
-        # Step 2: Launch YOLO detector (quiet version with correct topic)
-        print("\nStep 2: Launching YOLO detector (quiet version to prevent flooding)...")
+        # Step 2: Launch YOLO detector (frisbee version with correct topic)
+        print("\nStep 2: Launching YOLO detector (frisbee detector - proven to work)...")
         yolo_cmd = [
             'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
             'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
-            'python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/ros2_yolo_detector_quiet.py '
+            'python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/ros2_yolo_detector_frisbee.py '
             '--ros-args -p use_sim_time:=true -p confidence_threshold:=0.3 '
             '-p input_topic:=/d415/color/image_raw'  # CRITICAL: Use correct topic!
         ]
