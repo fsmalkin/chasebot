@@ -1,24 +1,39 @@
 # Active Context - ChaseBot Development
 
-## Current Focus (January 8, 2025) - 3D Position Extraction Development 🚧
-Working on extracting 3D positions from YOLO detections for autonomous navigation.
+## Current Focus (January 8, 2025 11:15 PM) - D415 Depth Camera Configuration 🚧
+Working on properly configuring D415 depth sensing based on Depth_Camera_Simulation example.
+
+### Latest Progress - Depth Camera Setup
+- **Created v1.6.0 SDF**: Separated RGB and depth sensors (following D435 example)
+- **Created v5 world file**: Added critical sensors system plugin
+- **Created v5 launch file**: Updated topic bridging for new sensor names
+- **Key Changes**:
+  - Changed from `rgbd_camera` to separate `camera` and `depth_camera` sensors
+  - Added sensors plugin to world file (was missing!)
+  - Updated topic names: `/d415/color/image_raw` and `/d415/depth/image_raw`
+
+### Potential Resources Found
+- **FusionVision**: https://github.com/safouaneelg/FusionVision
+- **realsense_3d_detector**: https://github.com/arthurfenderbucker/realsense_3d_detector
+- These might provide useful examples for 3D detection implementation
 
 ### Current Development Files (In Progress)
-- **`ros2_scripts/discover_yolo_format.py`** - Tool to analyze YOLO output format
-- **`ros2_scripts/test_slice_2_1_discovery.py`** - Discovery test for YOLO format analysis
+- **`ros2_config/urdf/jetbot_core_ignition_v1.6.0.sdf`** - Updated with separated sensors
+- **`ros2_config/worlds/yolo_test_world_v5_sensors.world`** - Added sensors plugin
+- **`ros2_config/launch/jetbot_gz_control_camera_test_v5.launch.py`** - Updated launch config
 - **`ros2_scripts/yolo_3d_position_extractor.py`** - Extracts 3D positions from 2D YOLO detections
 - **`ros2_scripts/test_3d_position_extraction.py`** - Integration test for 3D extraction pipeline
 
 ### Known Issues
 - YOLO detector crashes when trying to display images (cv2.imshow without display)
-- Need to verify depth topic availability for 3D position calculation
+- Need to verify depth topic availability with new configuration
 - Simulation stability issues during testing
 
 ### Working Detection Status
 - YOLO detection working with frisbee class (29) ✅
 - Detection confidence: ~0.5-0.55
 - Camera publishing to `/d415/image_raw` ✅
-- Need depth data from `/d415/depth/*` topics for 3D extraction
+- Need depth data from `/d415/depth/image_raw` topics for 3D extraction
 
 ## Previous Working State (January 8, 2025 earlier) - YOLO DETECTION WORKING WITH FRISBEE! 🎉
 
@@ -62,8 +77,9 @@ This launches everything and shows live detection! Works great!
 - **Solution**: Changed to Z-axis (0 0 1) in SDF files
 - **Fixed Files**: 
   - `jetbot_core_ignition_v1.3.0.sdf` ✅
+  - `jetbot_core_ignition_v1.6.0.sdf` ✅
   - `jetbot_core_ignition.sdf` ✅
-- **Broken Files**: v1.0.0, v1.1.0, v1.2.0 still have the bug
+- **Broken Files**: v1.0.0, v1.1.0, v1.2.0, v1.4.0, v1.5.0 still have the bug
 - **Result**: Robot now moves properly with correct differential drive
 
 ## Recent Technical Decisions
@@ -91,24 +107,35 @@ ros2 launch chasebot_description jetbot_with_yolo_clean_fixed.launch.py
 - Result: Accurate approach within 15cm
 
 ## Next Session Priority
-1. **Complete 3D position extraction**:
-   - Debug depth topic availability
+1. **Test new depth camera configuration**:
+   - Launch v5 setup and verify depth topics
+   - Check if depth data is actually published
+   - Debug any sensor plugin issues
+2. **Analyze external repos**:
+   - Review FusionVision for sensor fusion approaches
+   - Study realsense_3d_detector for 3D detection patterns
+   - Integrate useful patterns into our implementation
+3. **Complete 3D position extraction**:
    - Fix YOLO headless operation (remove cv2.imshow)
-   - Test complete 3D position pipeline
-2. **Implement multi-class detection**:
+   - Test complete 3D position pipeline with depth data
+   - Verify coordinate transformations
+4. **Implement multi-class detection**:
    - Create `ros2_yolo_detector_multi_class.py`
    - Accept both frisbee (29) and sports ball (32) classes
    - Test complete autonomous pipeline
-3. **Integration testing**:
+5. **Integration testing**:
    - Connect YOLO detection to Nav2 navigation
    - Test autonomous ball following
    - Verify 3D positioning with depth data
-4. **Documentation cleanup**:
+6. **Documentation cleanup**:
    - Update all READMEs with working configuration
    - Archive deprecated files
    - Create operational guide
 
-## Key Files Created/Modified Today (Jan 7-8, 2025)
+## Key Files Created/Modified Today (Jan 8, 2025)
+- **`ros2_config/urdf/jetbot_core_ignition_v1.6.0.sdf`** - Separated RGB/depth sensors ✅
+- **`ros2_config/worlds/yolo_test_world_v5_sensors.world`** - Added sensors plugin ✅
+- **`ros2_config/launch/jetbot_gz_control_camera_test_v5.launch.py`** - Updated for v1.6.0 ✅
 - **`ros2_scripts/ros2_yolo_detector_fixed.py`** - FIXED YOLO detector with correct topic ✅
 - **`ros2_scripts/test_camera_topic.py`** - Camera topic diagnostic tool ✅
 - **`ros2_scripts/discover_yolo_format.py`** - YOLO output format analyzer 🚧
@@ -120,11 +147,10 @@ ros2 launch chasebot_description jetbot_with_yolo_clean_fixed.launch.py
 - **`ros2_scripts/README.md`** - Complete script inventory
 - **`ros2_config/launch/README.md`** - Launch file documentation with wheel fix notes
 - **`ros2_config/urdf/README.md`** - Clear documentation of which SDF files have wheel fix
-- **`ros2_config/urdf/jetbot_core_ignition_v1.3.0.sdf`** - Fixed wheel axis from Y to Z ✅
 
 ## Working Commands for YOLO Detection
 
-### Complete Working Setup
+### Complete Working Setup (Old)
 ```bash
 # Terminal 1: Launch simulation with camera
 wsl -d Ubuntu-22.04 -- bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=172.25.128.1:0.0 && ros2 launch chasebot_sim jetbot_gz_control_camera_test_v3.launch.py"
@@ -136,18 +162,29 @@ wsl -d Ubuntu-22.04 -- bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bas
 wsl -d Ubuntu-22.04 -- bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=172.25.128.1:0.0 && python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/ros2_yolo_detector_fixed.py"
 ```
 
+### New Setup to Test (v5 with depth)
+```bash
+# Terminal 1: Launch v5 simulation with separated sensors
+wsl -d Ubuntu-22.04 -- bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=172.25.128.1:0.0 && ros2 launch chasebot_sim jetbot_gz_control_camera_test_v5.launch.py"
+
+# Terminal 2: Check depth topics
+wsl -d Ubuntu-22.04 -- bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 topic list | grep depth"
+```
+
 ## Current Status & Next Steps
 1. **Detection**: ✅ FIXED - YOLO detecting objects as "frisbee"
 2. **Movement**: ✅ FIXED - Wheel axis corrected, robot moves properly
-3. **3D Position**: 🚧 IN PROGRESS - Extracting depth from detections
-4. **Classification**: Need multi-class support (frisbee + sports ball)
-5. **Integration**: Ready to connect vision to navigation
-6. **Documentation**: ✅ All READMEs updated with clear fix status
+3. **Depth Camera**: 🚧 IN PROGRESS - Configuring D415 depth sensing
+4. **3D Position**: 🚧 BLOCKED - Waiting for depth data
+5. **Classification**: Need multi-class support (frisbee + sports ball)
+6. **Integration**: Ready to connect vision to navigation
+7. **Documentation**: ✅ All READMEs updated with clear fix status
 
 ## Success Metrics
 - Camera publishing at 18Hz ✅
 - YOLO receiving images ✅
 - Object detection working ✅
 - Confidence > 0.5 ✅
+- Depth topic publishing ❓ (needs testing)
 - 3D position extraction 🚧
 - Next: Full autonomous ball following
