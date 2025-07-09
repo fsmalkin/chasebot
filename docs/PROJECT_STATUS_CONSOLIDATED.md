@@ -186,7 +186,7 @@ wsl -d Ubuntu-22.04 -- bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bas
 
 ### Active Docs
 - `memory-bank/activeContext.md` - Current work focus
-- `memory-bank/progress.md` - Detailed progress tracking
+- `docs/PROJECT_STATUS_CONSOLIDATED.md` - This comprehensive status report
 - `docs/README.md` - Project overview
 
 ### Technical References

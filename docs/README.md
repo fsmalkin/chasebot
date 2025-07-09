@@ -168,5 +168,5 @@ chasebot/
 
 ---
 
-For detailed progress tracking, see `memory-bank/progress.md`
+For comprehensive project status, see `docs/PROJECT_STATUS_CONSOLIDATED.md`
 For current work context, see `memory-bank/activeContext.md`
