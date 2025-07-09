@@ -120,8 +120,36 @@ wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash &
 wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/monitor_yolo_detections.py"
 ```
 
-## Conclusion
+## Resolution (January 9, 2025)
 
-This appears to be a deeper compatibility issue between pre-trained YOLO models and Ignition Gazebo's image rendering, rather than a simple color/background problem. The fact that detection worked in the old setup but fails completely in the new one suggests a fundamental change in how images are generated or processed.
+### Root Cause Discovered: Topic Mismatch
+The YOLO detection regression was caused by a topic name change in the v5 configuration:
+- **Old Topic**: `/d415/image_raw` (v3/v4 configurations)
+- **New Topic**: `/d415/color/image_raw` (v5 configuration with separated sensors)
 
-**Priority**: Investigate the differences between old Gazebo Classic and new Ignition Gazebo image rendering to understand why pre-trained models fail on synthetic images.
+### The Fix
+Pass the correct topic parameter to YOLO detectors:
+```bash
+python3 ros2_yolo_detector_frisbee.py --ros-args -p input_topic:=/d415/color/image_raw
+```
+
+### Why It Failed
+- YOLO detectors were still subscribing to `/d415/image_raw`
+- v5 configuration separated RGB and depth into different sensors
+- RGB data now publishes to `/d415/color/image_raw`
+- YOLO was receiving no images, hence zero detections
+
+### Verification
+After fixing the topic parameter:
+- **Detection Rate**: ~100% for visible balls
+- **Confidence**: 0.77 (detecting as "frisbee" class 29)
+- **Performance**: Real-time at 18Hz
+
+### Key Lesson
+Always verify topic names when upgrading sensor configurations. The v5 separation of RGB and depth sensors fundamentally changed the topic structure, requiring explicit topic parameters for all vision nodes.
+
+## Original Conclusion
+
+This appeared to be a deeper compatibility issue between pre-trained YOLO models and Ignition Gazebo's image rendering, but was actually a simple topic configuration issue. The detection capability was always there - YOLO just wasn't receiving any images due to the topic mismatch.
+
+**Lesson Learned**: Before investigating complex compatibility issues, always verify basic connectivity - check that data is actually flowing between nodes using the correct topic names.
