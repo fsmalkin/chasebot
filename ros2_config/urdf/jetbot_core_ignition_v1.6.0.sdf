@@ -407,6 +407,11 @@ Changes:
       </ros>
     </plugin>
 
+    <!-- Camera Sensor Plugin for Ignition - CRITICAL FOR SENSOR FUNCTIONALITY! -->
+    <plugin filename="libignition-gazebo-sensors-system.so" name="ignition::gazebo::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
     <!-- Pose Publisher Plugin for Ignition -->
     <plugin filename="libignition-gazebo-pose-publisher-system.so" name="ignition::gazebo::systems::PosePublisher">
       <publish_link_pose>true</publish_link_pose>

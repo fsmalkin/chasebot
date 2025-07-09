@@ -18,10 +18,10 @@ def generate_launch_description():
     # Get package directories
     pkg_chasebot_sim = get_package_share_directory('chasebot_sim')
     
-    # Set paths
+    # Set paths - Using world without sensors plugin (now in model)
     world_path = PathJoinSubstitution([
         FindPackageShare('chasebot_sim'),
-        'ros2_config', 'worlds', 'yolo_test_world_v5_sensors.world'
+        'ros2_config', 'worlds', 'yolo_test_world_v5_no_sensors_plugin.world'
     ])
 
     # Using v1.6.0 model with separated RGB and depth sensors
