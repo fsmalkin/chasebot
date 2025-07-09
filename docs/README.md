@@ -1,39 +1,45 @@
 # ChaseBot Project Documentation
 
-## Project Status (January 8, 2025)
+## Project Status (January 9, 2025)
 
-### ✅ 3D Vision Integration WORKING!
-**CRITICAL BREAKTHROUGH**: D415 Depth Camera fully operational with separated RGB/depth sensors
+### ✅ 3D Position Extraction COMPLETE!
+**MAJOR MILESTONE**: Full 3D vision pipeline operational with YOLO detection + depth sensing
 
-**Major Fix (Jan 8, 2025 - 11:40 PM):**
-- ✅ Fixed empty world issue by adding sensors plugin to robot model
-- ✅ D415 depth topics confirmed: `/d415/depth/image_raw` and `/d415/depth/camera_info`
-- ✅ Separated RGB and depth sensors working perfectly
-- ✅ World loads with all colored balls visible
+**Latest Achievement (Jan 9, 2025 - 12:30 AM):**
+- ✅ 3D position extraction working: [x:~0.56m, y:~0.50m, z:~0.97m]
+- ✅ YOLO detection at 0.77 confidence (frisbee class)
+- ✅ Complete pipeline from camera → detection → 3D position
+- ✅ Test script validated end-to-end functionality
 
-### 🎯 LATEST WORKING FILE VERSIONS (USE THESE!)
+### 🎯 WORKING CONFIGURATION (EXACT FILES - USE THESE!)
 
 **Robot Model (SDF):**
-- ✅ **`ros2_config/urdf/jetbot_core_ignition_v1.6.0.sdf`** - LATEST with separated RGB/depth sensors + sensors plugin
+- ✅ **`ros2_config/urdf/jetbot_core_ignition_v1.6.0.sdf`** - Separated RGB/depth sensors
 
 **World File:**
-- ✅ **`ros2_config/worlds/yolo_test_world_v5_no_sensors_plugin.world`** - LATEST without sensors plugin (plugin is in model)
+- ✅ **`ros2_config/worlds/yolo_test_world_v5_no_sensors_plugin.world`** - Working world
 
 **Launch File:**
-- ✅ **`ros2_config/launch/jetbot_gz_control_camera_test_v5.launch.py`** - LATEST with corrected world reference
+- ✅ **`ros2_config/launch/jetbot_gz_control_camera_test_v5.launch.py`** - v5 configuration
 
-**Critical Configuration:**
-- The sensors plugin MUST be in the robot model file, NOT the world file
-- Use v1.6.0 SDF with v5_no_sensors_plugin world for proper operation
+**Detection & 3D Pipeline:**
+- ✅ **`ros2_scripts/ros2_yolo_detector_frisbee.py`** - YOLO detector (MUST use `-p input_topic:=/d415/color/image_raw`)
+- ✅ **`ros2_scripts/yolo_3d_position_extractor.py`** - 3D position extraction node
+- ✅ **`ros2_scripts/test_3d_position_extraction.py`** - Complete test script
 
-**Files Ready for 3D Development:**
-- `ros2_scripts/yolo_3d_position_extractor.py` - 3D position extraction node 🚧
-- `ros2_scripts/test_3d_position_extraction.py` - Integration test 🚧
+**Critical Fix (Jan 9):**
+- v5 configuration uses `/d415/color/image_raw` NOT `/d415/image_raw`
+- This topic change was causing detection failures
+- Always pass `-p input_topic:=/d415/color/image_raw` to YOLO detectors
+
+### Known Issues (Non-Blocking)
+1. **Visualization Bugs**: No overlays on color image, empty depth display
+2. **Distance Bug**: Ball at ~1m instead of expected 3m (world file issue)
 
 ### ✅ Recent Achievements
-1. **YOLO Detection Fixed** - Topic mismatch resolved
-2. **Wheel Axis Bug Fixed** - Proper differential drive working
-3. **Documentation Restructured** - Clear README in each directory
+1. **3D Position Extraction** - Complete pipeline working
+2. **Topic Fix** - Discovered v5 uses different camera topics
+3. **Test Infrastructure** - End-to-end test script operational
 
 ## Quick Start - Working Detection Demo
 
@@ -47,14 +53,15 @@ python ros2_scripts/test_sports_ball_detection_uat.py
 ### Vision Pipeline Status
 ```
 D415 Camera → YOLO Detection → 3D Position → Nav2 Goals
-    ✅             ✅             🚧            ⏳
+    ✅             ✅             ✅            ⏳
 ```
 
 ### Key Components
-- **Camera**: D415 publishing to `/d415/image_raw` at 18Hz
-- **Detection**: YOLO v8 detecting balls as "frisbee" (class 29)
+- **Camera**: D415 publishing to `/d415/color/image_raw` and `/d415/depth/image_raw` at 18Hz
+- **Detection**: YOLO v8 detecting balls as "frisbee" (class 29) with 0.77 confidence
+- **3D Position**: Extracting [x, y, z] coordinates from 2D detection + depth
 - **Navigation**: Nav2 stack ready for integration
-- **Robot**: JetBot with fixed wheel axis (v1.3.0 SDF)
+- **Robot**: JetBot with fixed wheel axis (v1.6.0 SDF)
 
 ## Critical Files Reference
 
@@ -111,14 +118,16 @@ wsl -d Ubuntu-22.04 -- bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bas
 - [x] YOLO detection working
 - [x] Wheel axis bug fixed
 - [x] Documentation structure
+- [x] 3D position extraction from detections
+- [x] Depth topic verification
 
 ### In Progress 🚧
-- [ ] 3D position extraction from detections
-- [ ] Headless YOLO operation
-- [ ] Depth topic verification
+- [ ] Visualization bug fixes (overlays, depth display)
+- [ ] Distance calibration (ball placement)
+- [ ] Nav2 integration with 3D positions
 
 ### Planned ⏳
-- [ ] YOLO → Nav2 integration
+- [ ] YOLO → Nav2 goal setter
 - [ ] Multi-class detection (frisbee + sports ball)
 - [ ] Complete autonomous ball following
 - [ ] Hardware deployment preparation
