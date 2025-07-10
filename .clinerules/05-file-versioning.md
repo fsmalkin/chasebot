@@ -1,5 +1,51 @@
 # File Versioning Standards for ChaseBot
 
+## ALWAYS Follow This Pattern
+
+1. **Copy Existing File Exactly**
+   ```bash
+   cp original_file.py original_file_v1.0.0.py  # Preserve original
+   cp original_file.py new_file_v2.0.0.py       # Create new version
+   ```
+
+2. **Increment Version Number**
+   - v1.0.0 → v1.1.0 (minor feature addition)
+   - v1.1.0 → v1.2.0 (another feature)
+   - v1.2.0 → v2.0.0 (major rewrite/breaking change)
+   - v1.1.0 → v1.1.1 (bug fix only)
+
+3. **Make Targeted Changes**
+   - Use `replace_in_file` for specific edits
+   - Document what changed in the file header
+   - Update FILE_REGISTRY.yaml with version info
+
+### Example: Creating Headless YOLO Detector
+
+```python
+# Step 1: Copy exactly
+cp ros2_yolo_detector_frisbee_quiet.py ros2_yolo_detector_headless.py
+
+# Step 2: Add version header
+"""
+ROS 2 YOLO Frisbee Detection Node - Headless Version
+Version: 1.0.0 (created from frisbee_quiet.py v1.0.0)
+Changes:
+- Removed cv2.imshow() for headless operation
+- Removed window_name variable
+- Removed cv2.waitKey() and key handling
+"""
+
+# Step 3: Make targeted changes only
+# Remove ONLY the display-related code, keep everything else
+```
+
+### Why This Pattern?
+
+1. **Traceability**: Know exactly what each version changed
+2. **Rollback**: Can revert to any previous version
+3. **Comparison**: Can diff versions to see changes
+4. **No Ambiguity**: Version numbers are clear, not "fixed" or "corrected"
+
 ## Naming Convention Requirements
 
 ### PROHIBITED Terms

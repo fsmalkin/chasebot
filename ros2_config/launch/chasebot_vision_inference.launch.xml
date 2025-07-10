@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Only enable mono3d detection for ball detection -->
+    <arg name="mono3d_flag" default="true"/>
+    <arg name="mono3d_ckpt_file" default="/home/macro2/ros2_ws/models/mono3d_yolox_576_768.onnx"/>
+    <arg name="mono3d_gpu_index" default="0"/>
+
+    <!-- Disable segmentation and depth for now -->
+    <arg name="seg_flag" default="false"/>
+    <arg name="seg_ckpt_file" default=""/>
+    <arg name="seg_gpu_index" default="0"/>
+
+    <arg name="monodepth_flag" default="false"/>
+    <arg name="monodepth_ckpt_file" default=""/>
+    <arg name="monodepth_gpu_index" default="0"/>
+
+    <!-- Map to our D415 topics -->
+    <arg name="camera_topic" default="/d415/color/image_raw"/>
+    <arg name="compressed_image_topic" default="/d415/color/image_raw/compressed"/>
+    <arg name="camera_param" default="/d415/color/camera_info"/>
+    
+    <!-- Output topics -->
+    <arg name="output_bbox_topic" default="/vision_inference/detections"/>
+    <arg name="output_seg_pointcloud_topic" default="/vision_inference/point_cloud"/>
+
+    <node pkg="ros2_vision_inference" exec="vision_inference_node" name="vision_inference" output="screen">
+        <param name="MONO3D_FLAG" value="$(var mono3d_flag)"/>
+        <param name="MONO3D_CKPT_FILE" value="$(var mono3d_ckpt_file)"/>
+        <param name="MONO3D_GPU_INDEX" value="$(var mono3d_gpu_index)"/>
+
+        <param name="SEG_FLAG" value="$(var seg_flag)"/>
+        <param name="SEG_CKPT_FILE" value="$(var seg_ckpt_file)"/>
+        <param name="SEG_GPU_INDEX" value="$(var seg_gpu_index)"/>
+
+        <param name="MONODEPTH_FLAG" value="$(var monodepth_flag)"/>
+        <param name="MONODEPTH_CKPT_FILE" value="$(var monodepth_ckpt_file)"/>
+        <param name="MONODEPTH_GPU_INDEX" value="$(var monodepth_gpu_index)"/>
+
+        <param name="CAMERA_TOPIC" value="$(var camera_topic)"/>
+        <param name="COMPRESSED_IMAGE_TOPIC" value="$(var compressed_image_topic)"/>
+        <param name="CAMERA_PARAM" value="$(var camera_param)"/>
+        <param name="OUTPUT_BBOX_TOPIC" value="$(var output_bbox_topic)"/>
+        <param name="OUTPUT_SEG_POINTCLOUD_TOPIC" value="$(var output_seg_pointcloud_topic)"/>
+    </node>
+</launch>

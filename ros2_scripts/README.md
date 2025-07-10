@@ -1,20 +1,22 @@
 # ROS2 Scripts Directory
-*Auto-generated on 2025-07-09 21:13 from FILE_REGISTRY.yaml*
+*Auto-generated on 2025-07-10 00:00 from FILE_REGISTRY.yaml*
 
 ## 📊 Summary
-- **Total Files**: 52
-- **Active**: 16
+- **Total Files**: 66
+- **Active**: 34
 - **Deprecated**: 8
-- **Experimental**: 9
-- **Unknown/Needs Review**: 19
+- **Experimental**: 11
+- **Unknown/Needs Review**: 13
 
 ## 🚀 Quick Reference
 
 ### Working YOLO Detectors
-- `ros2_yolo_detector_frisbee.py (verbose)`
-- `ros2_yolo_detector_frisbee_quiet.py (production)`
+- `ros2_yolo_detector_frisbee.py (verbose, requires display)`
+- `ros2_yolo_detector_frisbee_quiet.py (production, requires display)`
+- `ros2_yolo_detector_headless.py (headless, perfect for WSL2)`
 
 ### Working Test Scripts
+- `test_existing_yolo_detector.py (test headless detector)`
 - `test_sports_ball_detection_uat.py (full demo)`
 - `test_3d_position_extraction.py (3D vision)`
 - `test_camera_topic.py (diagnostics)`
@@ -33,18 +35,28 @@
 |------|---------|---------|--------------|----------------|
 | analyze_yolo_raw_detections.py | Detailed analysis of YOLO raw data | 1.0.0 | 2025-01-06 | N/A |
 | check_depth_topics.py | Verify depth data availability | 1.0.0 | 2025-01-06 | N/A |
+| check_vision_topics.py | Check all topics from vision_inference node | 1.0.0 | 2025-01-09 | N/A |
 | cleanup_before_launch.py | Pre-launch cleanup of stale processes | 1.0.0 | 2025-01-06 | VERIFIED |
 | d415_3d_debug_viewer.py | GUI viewer for RGB + depth + detections + 3D posit... | 1.0.0 | 2025-01-09 | VERIFIED |
 | kill_chasebot_processes.py | Emergency cleanup of all ChaseBot processes | 1.0.0 | 2025-01-06 | VERIFIED |
+| monitor_3d_detections.py | Monitor 3D detections from vision_inference node | 1.0.0 | 2025-01-09 | N/A |
 | monitor_yolo_detections.py | Real-time monitoring of YOLO output | 1.0.0 | 2025-01-06 | N/A |
 | ros2_simple_movement_test.py | Test basic robot movement commands | 1.0.0 | 2025-01-06 | N/A |
 | ros2_yolo_detector_frisbee.py | YOLO detector accepting frisbee class (29) for sim... | 1.0.0 | 2025-01-07 | VERIFIED |
 | ros2_yolo_detector_frisbee_quiet.py | Same as frisbee.py but with reduced logging (5s su... | 1.0.0 | 2025-01-09 | VERIFIED |
+| ros2_yolo_detector_headless.py | Headless version of frisbee detector - no GUI disp... | 1.0.0 | 2025-01-09 | VERIFIED |
+| ros2_yolo_to_nav_goal_v3.0.0.py | Bridge YOLO detections to Nav2 goals | 3.0.0 | 2025-01-09 | N/A |
 | shutdown_manager.py | Auto-shutdown after timeout | 1.0.0 | 2025-01-06 | N/A |
 | simple_odom_publisher.py | Publish odometry data for testing | 1.0.0 | 2025-01-06 | N/A |
 | test_3d_position_extraction.py | End-to-end test of 3D vision pipeline | 1.1.0 | 2025-01-09 | VERIFIED |
 | test_camera_topic.py | Diagnostic tool for camera topics | 1.0.0 | 2025-01-07 | VERIFIED |
+| test_existing_yolo_detector.py | Test our existing YOLO detector to verify it still... | 1.0.0 | 2025-01-09 | VERIFIED |
 | test_sports_ball_detection_uat.py | Complete working demo for YOLO detection | 1.0.0 | 2025-01-07 | VERIFIED |
+| test_vision_inference_basic.py | Basic test of ros2_vision_inference package | 1.0.0 | 2025-01-09 | PARTIAL |
+| test_vision_inference_debug.py | Debug why vision_inference won't detect balls | 1.0.0 | 2025-01-09 | N/A |
+| test_vision_inference_direct.py | Direct test of vision_inference with custom launch | 1.0.0 | 2025-01-09 | N/A |
+| test_vision_inference_final.py | Final test using correct launch file detect_seg_de... | 1.0.0 | 2025-01-09 | PARTIAL |
+| test_vision_inference_topics.py | Test topics from ros2_vision_inference package | 1.0.0 | 2025-01-09 | PARTIAL |
 | yolo_3d_position_extractor.py | Extracts 3D positions from YOLO detections + depth... | 1.0.0 | 2025-01-09 | VERIFIED |
 
 ### ❌ DEPRECATED FILES
@@ -70,19 +82,21 @@
 | navigation_telemetry.py | Navigation monitoring and telemetry | 0.5.0 |
 | ros2_fov_visualization.py | Visualize camera field of view | 0.5.0 |
 | ros2_yolo_detector_debug.py | Comprehensive debug output, multi-class detection | 0.5.0 |
+| test_3d_position_extraction_v2_with_nav2.py | Test 3D position extraction with Nav2 integration | 0.5.0 |
+| yolo_3d_to_nav2_bridge.py | Bridge 3D YOLO positions to Nav2 | 0.5.0 |
 
 ## 📡 Topic Reference
 
 ### Publishers
 - **/cmd_vel**: ros2_simple_movement_test.py
 - **/odom**: simple_odom_publisher.py
-- **/yolo/ball_position**: ros2_yolo_detector_frisbee.py, ros2_yolo_detector_frisbee_quiet.py
+- **/yolo/ball_position**: ros2_yolo_detector_frisbee.py, ros2_yolo_detector_frisbee_quiet.py, ros2_yolo_detector_headless.py
 - **/yolo/ball_position_3d**: yolo_3d_position_extractor.py
-- **/yolo/confidence**: ros2_yolo_detector_frisbee.py, ros2_yolo_detector_frisbee_quiet.py
-- **/yolo/debug_image**: ros2_yolo_detector_frisbee.py, ros2_yolo_detector_frisbee_quiet.py
+- **/yolo/confidence**: ros2_yolo_detector_frisbee.py, ros2_yolo_detector_frisbee_quiet.py, ros2_yolo_detector_headless.py
+- **/yolo/debug_image**: ros2_yolo_detector_frisbee.py, ros2_yolo_detector_frisbee_quiet.py, ros2_yolo_detector_headless.py
 
 ### Subscribers
-- **/d415/color/image_raw**: ros2_yolo_detector_frisbee.py, ros2_yolo_detector_frisbee_quiet.py
+- **/d415/color/image_raw**: ros2_yolo_detector_frisbee.py, ros2_yolo_detector_frisbee_quiet.py, ros2_yolo_detector_headless.py
 - **/d415/depth/camera_info**: yolo_3d_position_extractor.py
 - **/d415/depth/image_raw**: yolo_3d_position_extractor.py
 - **/yolo/ball_position**: yolo_3d_position_extractor.py, monitor_yolo_detections.py

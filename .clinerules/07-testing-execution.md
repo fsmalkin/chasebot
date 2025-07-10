@@ -48,6 +48,28 @@ wsl -d Ubuntu-22.04 -- bash -c "source /opt/ros/humble/setup.bash && ros2 topic 
 wsl -d Ubuntu-22.04 -- bash -c "source /opt/ros/humble/setup.bash && ros2 topic hz /d415/image_raw"
 ```
 
+## Testing Pattern
+
+### Always Test in Isolation First
+
+1. **Unit Test**: Test the specific functionality
+2. **Integration Test**: Test with one other component
+3. **System Test**: Test in full system
+
+### Example: Vision Inference Testing
+
+```bash
+# 1. Unit: Can the node start?
+ros2 run ros2_vision_inference vision_inference_node
+
+# 2. Integration: Does it subscribe to camera?
+ros2 topic echo /d415/color/image_raw  # Verify data
+ros2 node info /vision_inference        # Check subscriptions
+
+# 3. System: Does it detect objects?
+python test_vision_inference_final.py   # Full test
+```
+
 ## Execution Workflow
 
 ### 1. Immediate Testing

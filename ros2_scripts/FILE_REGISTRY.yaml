@@ -16,7 +16,7 @@ files:
     topics:
       subscribes: ["/d415/color/image_raw"]
       publishes: ["/yolo/debug_image", "/yolo/ball_position", "/yolo/confidence"]
-    known_issues: ["Verbose logging - logs every detection"]
+    known_issues: ["Verbose logging - logs every detection", "Requires display for cv2.imshow()"]
     notes: "Primary detector for simulation, balls appear as frisbees"
 
   ros2_yolo_detector_frisbee_quiet.py:
@@ -30,8 +30,23 @@ files:
     topics:
       subscribes: ["/d415/color/image_raw"]
       publishes: ["/yolo/debug_image", "/yolo/ball_position", "/yolo/confidence"]
-    known_issues: []
+    known_issues: ["Requires display for cv2.imshow()"]
     notes: "Best for production/demos to avoid terminal flooding"
+
+  ros2_yolo_detector_headless.py:
+    status: ACTIVE
+    purpose: "Headless version of frisbee detector - no GUI display required"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    dependencies: ["ROS2 Humble", "OpenCV", "ultralytics", "cv_bridge"]
+    working_status: VERIFIED
+    test_command: "python ros2_scripts/test_existing_yolo_detector.py"
+    topics:
+      subscribes: ["/d415/color/image_raw"]
+      publishes: ["/yolo/debug_image", "/yolo/ball_position", "/yolo/confidence"]
+    known_issues: []
+    notes: "Perfect for WSL2 or headless environments. Created as copy of frisbee_quiet.py with cv2.imshow() removed"
+    detection_output: "Ball position (0.499, 0.547) with 50.5% confidence verified"
 
   ros2_yolo_detector.py:
     status: DEPRECATED
@@ -118,6 +133,16 @@ files:
     notes: "May be redundant with d415_3d_debug_viewer.py"
 
   # ===== Test Scripts =====
+  test_existing_yolo_detector.py:
+    status: ACTIVE
+    purpose: "Test our existing YOLO detector to verify it still works"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    working_status: VERIFIED
+    what_it_tests: ["Simulation launch", "YOLO headless detector", "Ball detection output"]
+    output: "Confirmed detection at (0.499, 0.547) with 50.5% confidence"
+    notes: "Uses headless detector for WSL2 compatibility"
+
   test_3d_position_extraction.py:
     status: ACTIVE
     purpose: "End-to-end test of 3D vision pipeline"
@@ -145,6 +170,60 @@ files:
     working_status: VERIFIED
     output: "Message rates for camera topics"
     notes: "Essential debugging tool"
+
+  # ===== Vision Inference Package Test Scripts =====
+  test_vision_inference_topics.py:
+    status: ACTIVE
+    purpose: "Test topics from ros2_vision_inference package"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    working_status: "PARTIAL"
+    notes: "Vision inference node runs but no detections - model not trained on golf balls"
+
+  test_vision_inference_basic.py:
+    status: ACTIVE
+    purpose: "Basic test of ros2_vision_inference package"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    working_status: "PARTIAL"
+    notes: "Node runs but no ball detections"
+
+  test_vision_inference_debug.py:
+    status: ACTIVE
+    purpose: "Debug why vision_inference won't detect balls"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    findings: "Model loads successfully but doesn't detect golf balls"
+
+  test_vision_inference_direct.py:
+    status: ACTIVE
+    purpose: "Direct test of vision_inference with custom launch"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    notes: "Attempted custom launch file but still no detections"
+
+  test_vision_inference_final.py:
+    status: ACTIVE
+    purpose: "Final test using correct launch file detect_seg_depth.launch.xml"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    working_status: "PARTIAL"
+    output: "Node runs, publishes /mono3d/bbox but only empty MarkerArray messages"
+    notes: "Correct launch configuration found but model doesn't detect golf balls"
+
+  monitor_3d_detections.py:
+    status: ACTIVE
+    purpose: "Monitor 3D detections from vision_inference node"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    findings: "Only empty MarkerArray messages on /mono3d/bbox"
+
+  check_vision_topics.py:
+    status: ACTIVE
+    purpose: "Check all topics from vision_inference node"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    findings: "Camera data flowing at 3-4 Hz but no Detection3DArray messages"
 
   # ===== Monitoring/Analysis Scripts =====
   monitor_yolo_detections.py:
@@ -336,21 +415,48 @@ files:
     purpose: "Vision with display"
     needs_review: true
 
+  sync_manager.py:
+    status: UNKNOWN
+    purpose: "Sync management utility"
+    needs_review: true
+
+  test_3d_position_extraction_v2_with_nav2.py:
+    status: EXPERIMENTAL
+    purpose: "Test 3D position extraction with Nav2 integration"
+    version: 0.5.0
+    last_updated: 2025-01-09
+    notes: "Version 2 with Nav2 bridge"
+
+  ros2_yolo_to_nav_goal_v3.0.0.py:
+    status: ACTIVE
+    purpose: "Bridge YOLO detections to Nav2 goals"
+    version: 3.0.0
+    last_updated: 2025-01-09
+    notes: "Version 3 with improved coordinate handling"
+
+  yolo_3d_to_nav2_bridge.py:
+    status: EXPERIMENTAL
+    purpose: "Bridge 3D YOLO positions to Nav2"
+    version: 0.5.0
+    last_updated: 2025-01-09
+
 # Summary Statistics
 summary:
-  total_files: 52
-  active: 16
+  total_files: 66
+  active: 34
   deprecated: 8
-  experimental: 9
-  unknown: 19
-  needs_review: 19
+  experimental: 11
+  unknown: 13
+  needs_review: 13
 
 # Quick Reference
 working_detectors:
-  - ros2_yolo_detector_frisbee.py (verbose)
-  - ros2_yolo_detector_frisbee_quiet.py (production)
+  - ros2_yolo_detector_frisbee.py (verbose, requires display)
+  - ros2_yolo_detector_frisbee_quiet.py (production, requires display)
+  - ros2_yolo_detector_headless.py (headless, perfect for WSL2)
 
 working_tests:
+  - test_existing_yolo_detector.py (test headless detector)
   - test_sports_ball_detection_uat.py (full demo)
   - test_3d_position_extraction.py (3D vision)
   - test_camera_topic.py (diagnostics)
@@ -360,3 +466,11 @@ essential_tools:
   - cleanup_before_launch.py
   - yolo_3d_position_extractor.py
   - d415_3d_debug_viewer.py
+
+vision_inference_status:
+  package: ros2_vision_inference
+  status: "Runs but doesn't detect golf balls"
+  issue: "Model not trained on golf balls"
+  tested_with: "mono3d_yolox_576_768.onnx"
+  output_topic: "/mono3d/bbox (MarkerArray - empty)"
+  note: "Has sports ball class but still no detections"

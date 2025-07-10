@@ -1,172 +1,181 @@
-# ChaseBot Project Documentation
+# ChaseBot Documentation
 
-## Project Status (January 9, 2025)
+## Project Status Tracker
 
-### ✅ 3D Position Extraction COMPLETE!
-**MAJOR MILESTONE**: Full 3D vision pipeline operational with YOLO detection + depth sensing
-
-**Latest Achievement (Jan 9, 2025 - 12:30 AM):**
-- ✅ 3D position extraction working: [x:~0.56m, y:~0.50m, z:~0.97m]
-- ✅ YOLO detection at 0.77 confidence (frisbee class)
-- ✅ Complete pipeline from camera → detection → 3D position
-- ✅ Test script validated end-to-end functionality
-
-### 🎯 WORKING CONFIGURATION (EXACT FILES - USE THESE!)
-
-**Robot Model (SDF):**
-- ✅ **`ros2_config/urdf/jetbot_core_ignition_v1.6.0.sdf`** - Separated RGB/depth sensors
-
-**World File:**
-- ✅ **`ros2_config/worlds/yolo_test_world_v5_no_sensors_plugin.world`** - Working world
-
-**Launch File:**
-- ✅ **`ros2_config/launch/jetbot_gz_control_camera_test_v5.launch.py`** - v5 configuration
-
-**Detection & 3D Pipeline:**
-- ✅ **`ros2_scripts/ros2_yolo_detector_frisbee.py`** - YOLO detector (MUST use `-p input_topic:=/d415/color/image_raw`)
-- ✅ **`ros2_scripts/yolo_3d_position_extractor.py`** - 3D position extraction node
-- ✅ **`ros2_scripts/test_3d_position_extraction.py`** - Complete test script
-
-**Critical Fix (Jan 9):**
-- v5 configuration uses `/d415/color/image_raw` NOT `/d415/image_raw`
-- This topic change was causing detection failures
-- Always pass `-p input_topic:=/d415/color/image_raw` to YOLO detectors
-
-### Known Issues (Non-Blocking)
-1. **Visualization Bugs**: No overlays on color image, empty depth display
-2. **Distance Bug**: Ball at ~1m instead of expected 3m (world file issue)
-
-### ✅ Recent Achievements
-1. **3D Position Extraction** - Complete pipeline working
-2. **Topic Fix** - Discovered v5 uses different camera topics
-3. **Test Infrastructure** - End-to-end test script operational
-
-## Quick Start - Working Detection Demo
-
-```bash
-# Run this to see YOLO detection working:
-python ros2_scripts/test_sports_ball_detection_uat.py
-```
-
-## System Architecture
-
-### Vision Pipeline Status
-```
-D415 Camera → YOLO Detection → 3D Position → Nav2 Goals
-    ✅             ✅             ✅            ⏳
-```
-
-### Key Components
-- **Camera**: D415 publishing to `/d415/color/image_raw` and `/d415/depth/image_raw` at 18Hz
-- **Detection**: YOLO v8 detecting balls as "frisbee" (class 29) with 0.77 confidence
-- **3D Position**: Extracting [x, y, z] coordinates from 2D detection + depth
-- **Navigation**: Nav2 stack ready for integration
-- **Robot**: JetBot with fixed wheel axis (v1.6.0 SDF)
-
-## Critical Files Reference
-
-### Working Detection Files
-- `ros2_scripts/ros2_yolo_detector_fixed.py` - Fixed topic subscription ✅
-- `ros2_scripts/ros2_yolo_detector_frisbee.py` - Accepts frisbee class ✅
-- `ros2_scripts/test_sports_ball_detection_uat.py` - Complete test ✅
-
-### Fixed Robot Definition
-- `ros2_config/urdf/jetbot_core_ignition_v1.3.0.sdf` - Wheel axis fixed ✅
-- `ros2_config/urdf/jetbot_core_ignition.sdf` - Latest version ✅
-
-### Launch Files
-- `ros2_config/launch/jetbot_gz_control_camera_test_v3.launch.py` - Current test
-- `ros2_config/launch/jetbot_nav2_integration_complete.launch.py` - Full Nav2
-
-## Development Workflow
-
-### Current Testing Command
-```bash
-# Terminal 1: Launch simulation
-wsl -d Ubuntu-22.04 -- bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=172.25.128.1:0.0 && ros2 launch chasebot_sim jetbot_gz_control_camera_test_v3.launch.py"
-
-# Terminal 2: Run YOLO detector
-wsl -d Ubuntu-22.04 -- bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=172.25.128.1:0.0 && python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/ros2_yolo_detector_frisbee.py"
-```
-
-## Known Issues & Solutions
-
-### Issue: YOLO Detects Balls as "Frisbee"
-- **Cause**: Pre-trained model misclassifies simulated objects
-- **Solution**: Accept frisbee (class 29) detections
-- **Status**: Working with frisbee detection ✅
-
-### Decision: GUI Required for YOLO Detection
-- **Requirement**: YOLO detector uses cv2.imshow for visualization
-- **Solution**: Always run with display enabled (DISPLAY=172.25.128.1:0.0)
-- **Benefit**: Visual feedback helps verify detection accuracy
-- **Status**: GUI-based operation is standard ✅
-
-### Resolved: D415 Depth Topics Working! ✅
-- **Topics Available**: `/d415/depth/image_raw` and `/d415/depth/camera_info`
-- **Configuration**: Separated RGB and depth sensors (v1.6.0 SDF)
-- **Key Fix**: Added sensors system plugin to world file
-- **Status**: Topics created, waiting for robot spawn for data flow
-
-## Project Milestones
-
-### Completed ✅
-- [x] ROS 2 Humble environment setup
-- [x] Gazebo Ignition integration
-- [x] Robot movement control
-- [x] Camera integration (D415)
-- [x] YOLO detection working
-- [x] Wheel axis bug fixed
-- [x] Documentation structure
-- [x] 3D position extraction from detections
-- [x] Depth topic verification
-
-### In Progress 🚧
-- [ ] Visualization bug fixes (overlays, depth display)
-- [ ] Distance calibration (ball placement)
-- [ ] Nav2 integration with 3D positions
-
-### Planned ⏳
-- [ ] YOLO → Nav2 goal setter
-- [ ] Multi-class detection (frisbee + sports ball)
-- [ ] Complete autonomous ball following
-- [ ] Hardware deployment preparation
-
-## Directory Structure
-
-```
-chasebot/
-├── ros2_scripts/          # All Python scripts (50+ files)
-│   ├── *_fixed.py        # Fixed/working versions
-│   ├── *_frisbee.py      # Frisbee-specific detectors
-│   └── test_*.py         # Test scripts
-├── ros2_config/          # ROS 2 configuration
-│   ├── launch/           # Launch files (30+)
-│   ├── urdf/             # Robot definitions (check README for fixed versions)
-│   └── worlds/           # Simulation worlds
-├── memory-bank/          # Project context & progress
-├── docs/                 # This documentation
-└── archive/              # Old/deprecated files
-```
-
-## Next Steps
-
-1. **Complete 3D Position Extraction**
-   - Debug depth topic availability
-   - Fix headless operation
-   - Test position calculations
-
-2. **Integration Testing**
-   - Connect YOLO to Nav2
-   - Test autonomous navigation
-   - Validate approach accuracy
-
-3. **Documentation & Cleanup**
-   - Archive deprecated files
-   - Create operational guide
-   - Update hardware prep docs
+### Current Phase: Vision System Evaluation
+**Date**: 2025-01-09
+**Status**: Evaluating Two Paths for 3D Vision
 
 ---
 
-For comprehensive project status, see `docs/PROJECT_STATUS_CONSOLIDATED.md`
-For current work context, see `memory-bank/activeContext.md`
+## Project Overview
+ChaseBot is an autonomous golf ball collection robot built on the JetBot Nano platform, running in ROS 2 simulation with advanced 3D vision capabilities.
+
+## Current Vision System Status
+
+### 🟢 Path 1: Our Custom YOLO Detector (WORKING)
+- **Status**: ✅ FULLY OPERATIONAL
+- **Detection Rate**: Successfully detects golf balls as "frisbee" (class 29)
+- **Latest Test**: Ball detected at (0.499, 0.547) with 50.5% confidence
+- **Files**:
+  - `ros2_yolo_detector_headless.py` - No display required (WSL2 compatible)
+  - `ros2_yolo_detector_frisbee_quiet.py` - Reduced logging version
+  - `ros2_yolo_detector_frisbee.py` - Verbose version for debugging
+- **Next Step**: Add 3D position extraction using depth data
+
+### 🟡 Path 2: ros2_vision_inference Package (PARTIAL)
+- **Status**: ⚠️ RUNS BUT NO DETECTIONS
+- **Issue**: Model not trained on golf balls (despite having sports ball class)
+- **Behavior**: 
+  - Node starts successfully
+  - Subscribes to camera topics correctly
+  - Camera data flows at 3-4 Hz
+  - Publishes only empty MarkerArray on `/mono3d/bbox`
+- **Model**: `mono3d_yolox_576_768.onnx`
+- **Note**: Package advertised sports ball detection but doesn't detect our golf balls
+
+---
+
+## Phase Status Overview
+
+### ✅ Phase 1: Core Foundation (COMPLETE)
+- ROS 2 Humble + Gazebo Ignition working
+- JetBot URDF with diff drive control
+- Basic simulation environment
+
+### ✅ Phase 2: Camera Integration (COMPLETE)
+- Intel RealSense D415 camera integrated
+- Publishing RGB and depth images
+- Camera positioned for optimal ball detection
+
+### 🔄 Phase 3: Vision Detection (IN PROGRESS)
+- **Option A**: Use our working YOLO detector ✅
+- **Option B**: Debug ros2_vision_inference package ⚠️
+
+### ⏳ Phase 4: 3D Position & Navigation (PENDING)
+- Convert 2D detections to 3D world coordinates
+- Bridge to Nav2 navigation stack
+- Handle multiple ball detections
+
+### ⏳ Phase 5: Full Integration Test (PENDING)
+- Complete autonomous ball following
+- Performance optimization
+- Multi-ball handling
+
+---
+
+## Quick Start Commands
+
+### Using Our Working YOLO Detector
+```bash
+# Terminal 1: Launch simulation
+ros2 launch chasebot_sim jetbot_gz_control_camera_test_v5.launch.py
+
+# Terminal 2: Launch YOLO detector (headless)
+python3 ros2_scripts/ros2_yolo_detector_headless.py
+
+# Terminal 3: Monitor detections
+ros2 topic echo /yolo/ball_position
+ros2 topic echo /yolo/confidence
+```
+
+### Testing ros2_vision_inference (for debugging)
+```bash
+# Terminal 1: Launch simulation
+ros2 launch chasebot_sim jetbot_gz_control_camera_test_v5.launch.py
+
+# Terminal 2: Launch vision inference
+ros2 launch ros2_vision_inference detect_seg_depth.launch.xml \
+  mono3d_flag:=true \
+  mono3d_ckpt_file:=/home/macro2/ros2_ws/models/mono3d_yolox_576_768.onnx \
+  seg_flag:=false \
+  monodepth_flag:=false \
+  camera_topic:=/d415/color/image_raw \
+  camera_param:=/d415/color/camera_info
+
+# Terminal 3: Monitor (will show empty arrays)
+ros2 topic echo /mono3d/bbox
+```
+
+---
+
+## Working Components Summary
+
+### ✅ Verified Working
+- Gazebo simulation with JetBot robot
+- D415 camera publishing RGB and depth
+- Custom YOLO detector (detects balls as frisbees)
+- Camera data flow at proper rates
+- Topic publishing infrastructure
+
+### ⚠️ Partially Working
+- ros2_vision_inference package (runs but no detections)
+
+### ❌ Not Working
+- Golf ball detection in ros2_vision_inference
+- Detection3DArray messages (not published at all)
+
+---
+
+## File Organization
+
+```
+chasebot/
+├── docs/
+│   ├── README.md (this file - project status)
+│   ├── development_patterns.md (coding standards)
+│   ├── vision_system_working.md (YOLO success details)
+│   ├── slice_3_vision_inference_*.md (debugging logs)
+│   └── vision_strategy_pivot.md (decision rationale)
+├── ros2_scripts/
+│   ├── FILE_REGISTRY.yaml (complete file inventory)
+│   ├── README.md (auto-generated from registry)
+│   ├── ros2_yolo_detector_*.py (our detectors)
+│   └── test_*.py (test scripts)
+└── memory-bank/
+    └── activeContext.md (session memory)
+```
+
+---
+
+## Development Patterns
+
+See [`docs/development_patterns.md`](./development_patterns.md) for:
+- File versioning standards
+- Testing patterns
+- Documentation requirements
+- Clear status reporting
+
+---
+
+## Next Actions
+
+### Option 1: Continue with Our YOLO Detector (Recommended)
+1. Implement 3D position extraction using depth data
+2. Create Nav2 bridge for navigation goals
+3. Test complete autonomous ball following
+
+### Option 2: Debug ros2_vision_inference
+1. Investigate why sports ball class doesn't detect golf balls
+2. Check model training classes and confidence thresholds
+3. Consider retraining model or modifying detection parameters
+
+---
+
+## Known Issues & Solutions
+
+| Issue | Solution | Status |
+|-------|----------|--------|
+| YOLO detects balls as "frisbee" | Accept class 29 detections | ✅ Solved |
+| GUI scripts fail in WSL2 | Created headless versions | ✅ Solved |
+| ros2_vision_inference no detections | Model not trained on golf balls | 🔍 Investigating |
+| Some scripts need Windows | Document in FILE_REGISTRY | ✅ Documented |
+
+---
+
+## References
+
+- [ros2_vision_inference GitHub](https://github.com/Ikhyeon-Cho/ros2_vision_inference)
+- [Nav2 Documentation](https://navigation.ros.org/)
+- [ChaseBot Memory Bank](../memory-bank/)
+- [ROS2 Scripts Registry](../ros2_scripts/FILE_REGISTRY.yaml)

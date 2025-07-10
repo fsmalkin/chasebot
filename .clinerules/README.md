@@ -35,6 +35,47 @@ Environment management for WSL2 + ROS development:
 - User interaction best practices
 - Environment troubleshooting patterns
 
+### 05-file-versioning.md
+File versioning standards and patterns:
+- Copy-increment-change workflow
+- Semantic versioning requirements
+- Prohibited naming patterns
+- Version documentation requirements
+- Launch file integration
+- Migration strategies
+
+### 06-documentation-linking.md
+Documentation cross-referencing standards:
+- Link maintenance requirements
+- Cross-reference matrix
+- Maintenance patterns for links
+- Standard link blocks
+- Benefits and enforcement
+
+### 07-testing-execution.md
+Testing and execution standards:
+- Direct execution over documentation
+- Terminal diagnostics over scripts
+- Testing patterns (unit/integration/system)
+- Progressive diagnostics
+- Real-time reporting
+
+### 08-documentation-structure.md
+Documentation organization standards:
+- No floating documentation files
+- Hierarchical structure requirements
+- Master project plan location
+- Directory-level READMEs
+- Memory bank for session details
+
+### 09-development-patterns.md
+Development patterns and practices:
+- Documentation pattern for changes
+- Debugging pattern and workflows
+- Clear status reporting standards
+- Status categories and requirements
+- Integration with other standards
+
 ### README.md (this file)
 Overview and usage instructions for the rules system.
 
@@ -81,7 +122,12 @@ The rules work together with the `/memory-bank/` system:
 ├── 01-chasebot-core.md          # Core project principles
 ├── 02-ros-standards.md          # ROS development standards
 ├── 03-memory-bank.md            # Memory bank integration
-└── 04-environment-management.md # WSL2 + ROS environment management
+├── 04-environment-management.md # WSL2 + ROS environment management
+├── 05-file-versioning.md        # File versioning standards
+├── 06-documentation-linking.md  # Documentation linking standards
+├── 07-testing-execution.md      # Testing and execution patterns
+├── 08-documentation-structure.md # Documentation organization
+└── 09-development-patterns.md   # Development patterns and practices
 ```
 
 These rules ensure ChaseBot development maintains professional standards while preserving the flexibility to adapt and improve over time.
