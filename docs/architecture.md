@@ -18,6 +18,19 @@ ChaseBot is upgrading from a problematic 2D vision system to a professional 3D c
 3. **Local Planning Only**: Nav2 handles obstacle avoidance via local costmaps
 4. **Transform Chain**: Simplified - depth camera provides world coordinates directly
 
+### Nav2 Integration Requirements (January 10, 2025 Update)
+
+**Challenge**: Nav2 expects a map frame even for map-free navigation
+
+**Solution Architecture**:
+1. **Blank Map Publisher**: Provides minimal map frame for Nav2 compatibility
+2. **Topic Remapping**: Bridge controller topics to Nav2 expectations
+   - Robot publishes: `/jetbot_base_controller/cmd_vel` and `/jetbot_base_controller/odom`
+   - Nav2 expects: `/cmd_vel` and `/odom`
+3. **Transform Tree**: Maintain proper tf2 transforms (map → odom → base_link)
+
+This allows Nav2's sophisticated planning and control while maintaining our vision-based, map-free approach.
+
 ## Architecture Evolution
 
 ### Previous 2D System (DEPRECATED)

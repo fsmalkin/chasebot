@@ -1,5 +1,43 @@
 # Recent Changes Log
 
+## 2025-01-10 Session - Vision Decision & Nav2 Integration
+
+### Major Changes
+1. **Vision System Decision Finalized**
+   - Tested both YOLO and ros2_vision_inference side-by-side
+   - Confirmed YOLO+Depth as primary approach (100% detection rate)
+   - ros2_vision_inference doesn't detect golf balls (model limitation)
+   - Created `test_yolo_vs_vision_inference_comparison.py` for validation
+
+2. **Nav2 Integration Started**
+   - Created `test_nav2_slice1_basic_connectivity.py` - first thin slice test
+   - Created `test_nav2_integration_headless.py` - full integration test (experimental)
+   - Discovered critical integration issues:
+     - Missing map frame (Nav2 requires "map" transform)
+     - Topic mismatch (/jetbot_base_controller/cmd_vel vs /cmd_vel)
+     - Nav2 goal rejection due to incomplete activation
+
+3. **Documentation Updates**
+   - Updated `docs/README.md` with Nav2 Integration Challenges section
+   - Updated Phase 4 status to IN PROGRESS
+   - Added Known Issues for Nav2 integration
+   - Updated FILE_REGISTRY.yaml with new test scripts
+
+### Key Insights
+- Vision system is complete and working (YOLO+Depth)
+- Nav2 integration needs map provider and topic remapping
+- Thin slice approach proving valuable for systematic debugging
+- Headless YOLO detector perfect for WSL2 environments
+
+### Next Steps
+1. Add blank map publisher (Slice 1.5)
+2. Fix topic remapping (Slice 2)
+3. Verify basic navigation (Slice 3)
+4. Integrate vision pipeline (Slice 4)
+5. Complete autonomous following (Slice 5)
+
+---
+
 ## 2025-01-09 Session - Documentation & Cleanup
 
 ### Major Changes
