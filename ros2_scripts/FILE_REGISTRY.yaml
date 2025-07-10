@@ -427,6 +427,18 @@ files:
     last_updated: 2025-01-09
     notes: "Version 2 with Nav2 bridge"
 
+  test_nav2_integration_headless.py:
+    status: ACTIVE
+    purpose: "Complete YOLO + Depth + Nav2 integration test (headless)"
+    version: 1.0.0
+    last_updated: 2025-01-10
+    dependencies: ["ROS2 Humble", "Nav2", "No display required"]
+    working_status: EXPERIMENTAL
+    what_it_tests: ["Simulation launch", "YOLO headless detector", "3D extraction", "Nav2 navigation", "Autonomous ball following"]
+    features: ["WSL2 optimized", "No GUI required", "15cm approach distance", "5s cooldown"]
+    run_from: "Windows PowerShell/CMD (not WSL)"
+    notes: "Based on test_3d_position_extraction_v2_with_nav2.py but using headless components"
+
   ros2_yolo_to_nav_goal_v3.0.0.py:
     status: ACTIVE
     purpose: "Bridge YOLO detections to Nav2 goals"
@@ -440,10 +452,22 @@ files:
     version: 0.5.0
     last_updated: 2025-01-09
 
+  test_nav2_slice1_basic_connectivity.py:
+    status: ACTIVE
+    purpose: "Slice 1: Nav2 Basic Connectivity Test"
+    version: 1.0.0
+    last_updated: 2025-01-10
+    dependencies: ["ROS2 Humble", "Nav2", "Gazebo with GUI"]
+    working_status: EXPERIMENTAL
+    what_it_tests: ["Simulation launch", "Nav2 stack", "Simple navigation goal", "Robot movement"]
+    UAT_criteria: "Robot moves forward 1 meter when given a simple goal"
+    run_from: "Windows PowerShell/CMD (not WSL)"
+    notes: "First thin slice for Nav2 integration - tests basic connectivity only"
+
 # Summary Statistics
 summary:
-  total_files: 66
-  active: 34
+  total_files: 67
+  active: 35
   deprecated: 8
   experimental: 11
   unknown: 13

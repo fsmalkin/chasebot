@@ -1,71 +1,43 @@
-# Active Context - ChaseBot Development
+# Active Context - ChaseBot ROS 2 Development
 
-## Last Updated: 2025-01-09
+## Current Focus (January 10, 2025)
+**Vision System Decision**: After extensive testing and comparison, we've confirmed YOLO+Depth as our primary vision approach.
 
-## Current Focus: 3D Vision System Integration
+### Key Findings from Vision Comparison Test:
+1. **YOLO Detector**: Working perfectly - 100% detection rate, consistent 3D positions
+2. **ros2_vision_inference**: Actively processing but producing no detections - model not trained on golf balls
+3. **Decision**: Continue with YOLO+Depth pipeline, keep ros2_vision_inference as future enhancement
 
-### What We're Working On
-Integrating the `ros2_vision_inference` package to provide 3D object detection using YOLO for autonomous golf ball following. Currently troubleshooting why the model isn't detecting golf balls.
+## Recent Accomplishments
+- Created comprehensive test comparing YOLO vs ros2_vision_inference
+- Confirmed YOLO detector reliability (detects golf balls as "frisbee" class 29)
+- 3D position extraction working: ~[0.560, 0.500, 0.975]m
+- Identified vision_inference limitation: model doesn't recognize golf balls
+- Made architectural decision to proceed with YOLO+Depth
 
-### Recent Progress (Session: 2025-01-09)
+## Current Architecture
+```
+Camera (D415) → YOLO Detector → 3D Position Extractor → Nav2 Bridge → Navigation
+                     ↓
+              Ball detected as
+              "frisbee" (class 29)
+              ~0.5 confidence
+```
 
-#### ✅ Achievements
-1. **Successfully installed ros2_vision_inference package**
-   - Resolved all dependencies (onnxruntime-gpu, numba)
-   - Package builds and runs without errors
-   
-2. **Vision inference node operational**
-   - Node starts and subscribes to camera topics correctly
-   - Receives camera data at ~3-4 Hz
-   - Creates expected topics (though only publishes empty detections)
+## Next Steps
+1. Finalize Nav2 integration bridge
+2. Test full autonomous ball following
+3. Optimize performance if needed
+4. Document ros2_vision_inference as future enhancement opportunity
 
-3. **Discovered correct launch configuration**
-   ```bash
-   ros2 launch ros2_vision_inference detect_seg_depth.launch.xml \
-     mono3d_flag:=true \
-     mono3d_ckpt_file:=/home/macro2/ros2_ws/models/mono3d_yolox_576_768.onnx \
-     seg_flag:=false \
-     monodepth_flag:=false \
-     camera_topic:=/d415/color/image_raw \
-     camera_param:=/d415/color/camera_info
-   ```
+## Key Files
+- `test_yolo_vs_vision_inference_comparison.py` - Comprehensive comparison test
+- `ros2_yolo_detector_headless.py` - Working detector (no display needed)
+- `yolo_3d_position_extractor.py` - Converts 2D detections to 3D positions
+- `ros2_yolo_to_nav_goal_v3.0.0.py` - Bridge to Nav2 (needs testing)
 
-#### ❌ Current Blockers
-1. **No actual detections** - `/mono3d/bbox` only publishes empty MarkerArray messages
-2. **Model may not be trained on golf balls** - Need to verify model classes
-3. **No Detection3DArray messages** - Expected detection format not found
-
-### Technical Decisions
-- Using `detect_seg_depth.launch.xml` (not mono3d.launch.py as initially thought)
-- Disabled segmentation and depth modules to focus on 3D detection
-- Camera integration verified working with D415 at proper frame rate
-
-### Next Steps
-1. **Investigate model compatibility**
-   - Check what objects the ONNX model was trained to detect
-   - Verify if golf balls are included in training classes
-   
-2. **Debug detection pipeline**
-   - Add logging to see inference results
-   - Check confidence thresholds
-   
-3. **Consider alternatives**
-   - Find models trained on sports equipment/golf balls
-   - Fallback to color-based detection if needed
-   - Potentially train custom YOLO model
-
-### Key Files Modified/Created
-- `ros2_scripts/test_vision_inference_*.py` - Multiple test scripts for debugging
-- `docs/slice_3_vision_inference_partial_success.md` - Current status documentation
-- `docs/README.md` - Updated project status tracker
-
-### Environment State
-- Simulation: JetBot with D415 camera in Gazebo
-- Vision: ros2_vision_inference node running but not detecting
-- Navigation: Nav2 stack ready but awaiting detection input
-
-### Critical Insights
-- Vision inference package architecture uses MarkerArray for visualization only
-- Actual detection messages should be Detection3DArray but aren't being published
-- Model selection is critical - need models trained on target objects
-- Package remapping doesn't work as expected for output topics
+## Technical Decisions
+- **Primary Vision**: YOLO + Depth (ultralytics YOLOv8)
+- **3D Reconstruction**: Using D415 depth data with camera intrinsics
+- **Detection Class**: Golf balls appear as "frisbee" (class 29)
+- **Future Option**: ros2_vision_inference when models support golf balls
