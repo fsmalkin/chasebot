@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
-ROS 2 YOLO Frisbee Detection Node
-Accepts frisbee detections (class 29) as our simulated balls are classified as frisbees
+File: ros2_yolo_detector_frisbee.py
+Status: ACTIVE
+Version: 1.0.0
+Last Updated: 2025-01-07
+Purpose: YOLO detector accepting frisbee class (29) for simulated balls
+Dependencies: ROS2 Humble, OpenCV, ultralytics
+Test With: test_sports_ball_detection_uat.py
+Known Issues: Verbose logging - logs every detection
 """
 
 import rclpy

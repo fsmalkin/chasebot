@@ -40,6 +40,33 @@ def main():
     print("- Depth: /d415/depth/image_raw")
     print("=" * 60)
     
+    # Get display IP dynamically
+    print("\nDetecting display IP...")
+    get_ip_cmd = [
+        'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
+        'cat /etc/resolv.conf | grep nameserver | awk \'{print $2}\''
+    ]
+    result = subprocess.run(get_ip_cmd, capture_output=True, text=True)
+    # Extract just the IP address
+    output = result.stdout.strip()
+    if output:
+        # Handle case where output might be "nameserver X.X.X.X" or just "X.X.X.X"
+        parts = output.split()
+        display_ip = parts[-1] if parts else ""
+    else:
+        display_ip = ""
+    
+    # Default fallback if detection fails
+    if not display_ip:
+        display_ip = "192.168.96.1"
+        print(f"Could not detect display IP, using default: {display_ip}")
+    else:
+        print(f"Detected display IP: {display_ip}")
+    
+    display_var = f"{display_ip}:0.0"
+    print(f"Using DISPLAY={display_var}")
+    print("=" * 60)
+    
     processes = []
     
     try:
@@ -55,7 +82,7 @@ def main():
         sim_cmd = [
             'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
             'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
-            'export DISPLAY=172.25.128.1:0.0 && '
+            f'export DISPLAY={display_var} && '
             'ros2 launch chasebot_sim jetbot_gz_control_camera_test_v5.launch.py'
         ]
         sim_proc = run_command(sim_cmd, "Simulation")
@@ -76,11 +103,12 @@ def main():
         print(result.stdout)
         
         # Step 2: Launch YOLO detector (frisbee version with correct topic)
-        print("\nStep 2: Launching YOLO detector (frisbee detector - proven to work)...")
+        print("\nStep 2: Launching YOLO detector (quiet version to reduce terminal flooding)...")
         yolo_cmd = [
             'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
             'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
-            'python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/ros2_yolo_detector_frisbee.py '
+            f'export DISPLAY={display_var} && '
+            'python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/ros2_yolo_detector_frisbee_quiet.py '
             '--ros-args -p use_sim_time:=true -p confidence_threshold:=0.3 '
             '-p input_topic:=/d415/color/image_raw'  # CRITICAL: Use correct topic!
         ]
@@ -118,7 +146,7 @@ def main():
         viewer_cmd = [
             'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
             'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
-            'export DISPLAY=172.25.128.1:0.0 && '
+            f'export DISPLAY={display_var} && '
             'python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/d415_3d_debug_viewer.py '
             '--ros-args -p use_sim_time:=true'
         ]
@@ -154,6 +182,8 @@ def main():
         print("- If no detections: Check that YOLO is using /d415/color/image_raw topic")
         print("- If no depth data: Verify /d415/depth/image_raw is publishing")
         print("- If viewer is blank: Check DISPLAY environment variable")
+        print(f"  Current DISPLAY: {display_var}")
+        print("  To find correct IP: wsl -d Ubuntu-22.04 bash -c \"cat /etc/resolv.conf | grep nameserver | awk '{print $2}'\"")
         
     except KeyboardInterrupt:
         print("\n\nTest interrupted by user")

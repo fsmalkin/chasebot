@@ -1,0 +1,362 @@
+# ROS2 Scripts File Registry
+# This file tracks the status, purpose, and metadata of all scripts
+# Status: ACTIVE, DEPRECATED, EXPERIMENTAL, ARCHIVE
+# Last Updated: 2025-01-09
+
+files:
+  # ===== YOLO Detectors =====
+  ros2_yolo_detector_frisbee.py:
+    status: ACTIVE
+    purpose: "YOLO detector accepting frisbee class (29) for simulated balls"
+    version: 1.0.0
+    last_updated: 2025-01-07
+    dependencies: ["ROS2 Humble", "OpenCV", "ultralytics", "cv_bridge"]
+    working_status: VERIFIED
+    test_command: "python ros2_scripts/test_sports_ball_detection_uat.py"
+    topics:
+      subscribes: ["/d415/color/image_raw"]
+      publishes: ["/yolo/debug_image", "/yolo/ball_position", "/yolo/confidence"]
+    known_issues: ["Verbose logging - logs every detection"]
+    notes: "Primary detector for simulation, balls appear as frisbees"
+
+  ros2_yolo_detector_frisbee_quiet.py:
+    status: ACTIVE
+    purpose: "Same as frisbee.py but with reduced logging (5s summaries)"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    dependencies: ["ROS2 Humble", "OpenCV", "ultralytics", "cv_bridge"]
+    working_status: VERIFIED
+    test_command: "python ros2_scripts/test_3d_position_extraction.py"
+    topics:
+      subscribes: ["/d415/color/image_raw"]
+      publishes: ["/yolo/debug_image", "/yolo/ball_position", "/yolo/confidence"]
+    known_issues: []
+    notes: "Best for production/demos to avoid terminal flooding"
+
+  ros2_yolo_detector.py:
+    status: DEPRECATED
+    purpose: "Original YOLO detector"
+    version: 0.1.0
+    last_updated: 2025-01-06
+    replaced_by: "ros2_yolo_detector_frisbee.py"
+    issue: "Subscribes to wrong topic /camera/image_raw"
+    archive_reason: "Wrong topic subscription"
+
+  ros2_yolo_detector_fixed.py:
+    status: DEPRECATED
+    purpose: "Fixed topic subscription to /d415/image_raw"
+    version: 0.2.0
+    last_updated: 2025-01-07
+    replaced_by: "ros2_yolo_detector_frisbee.py"
+    issue: "Only looks for sports ball class, not frisbee"
+    archive_reason: "Superseded by frisbee version"
+
+  ros2_yolo_detector_quiet.py:
+    status: DEPRECATED
+    purpose: "Reduced logging version"
+    version: 0.1.0
+    last_updated: 2025-01-06
+    replaced_by: "ros2_yolo_detector_frisbee_quiet.py"
+    issue: "Wrong topic + wrong class"
+    archive_reason: "Multiple issues"
+
+  ros2_yolo_detector_silent.py:
+    status: DEPRECATED
+    purpose: "Even quieter logging"
+    version: 0.1.0
+    last_updated: 2025-01-06
+    replaced_by: "ros2_yolo_detector_frisbee_quiet.py"
+    issue: "Wrong topic + wrong class"
+    archive_reason: "Redundant with quiet version"
+
+  ros2_yolo_detector_sports_ball.py:
+    status: DEPRECATED
+    purpose: "Looks for sports ball class (32)"
+    version: 0.1.0
+    last_updated: 2025-01-06
+    issue: "Simulated balls appear as frisbees, not sports balls"
+    archive_reason: "Wrong detection class"
+
+  ros2_yolo_detector_debug.py:
+    status: EXPERIMENTAL
+    purpose: "Comprehensive debug output, multi-class detection"
+    version: 0.5.0
+    last_updated: 2025-01-07
+    dependencies: ["ROS2 Humble", "OpenCV", "ultralytics", "cv_bridge"]
+    features: ["Shows all detections", "Adjustable threshold", "Multi-class"]
+    potential_use: "Could be updated for advanced debugging"
+
+  # ===== 3D Vision Scripts =====
+  yolo_3d_position_extractor.py:
+    status: ACTIVE
+    purpose: "Extracts 3D positions from YOLO detections + depth data"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    dependencies: ["ROS2 Humble", "numpy"]
+    working_status: VERIFIED
+    topics:
+      subscribes: ["/yolo/ball_position", "/yolo/confidence", "/d415/depth/image_raw", "/d415/depth/camera_info"]
+      publishes: ["/yolo/ball_position_3d"]
+    output: "3D coordinates in meters [x, y, z]"
+    notes: "Core component of 3D vision pipeline"
+
+  d415_3d_debug_viewer.py:
+    status: ACTIVE
+    purpose: "GUI viewer for RGB + depth + detections + 3D positions"
+    version: 1.0.0
+    last_updated: 2025-01-09
+    dependencies: ["ROS2 Humble", "OpenCV", "numpy", "X11 display"]
+    working_status: VERIFIED
+    known_issues: ["Display bugs noted but functional"]
+    requires: "DISPLAY environment variable set correctly"
+
+  d415_vision_display.py:
+    status: EXPERIMENTAL
+    purpose: "Simple D415 camera feed display"
+    version: 0.5.0
+    last_updated: 2025-01-06
+    notes: "May be redundant with d415_3d_debug_viewer.py"
+
+  # ===== Test Scripts =====
+  test_3d_position_extraction.py:
+    status: ACTIVE
+    purpose: "End-to-end test of 3D vision pipeline"
+    version: 1.1.0
+    last_updated: 2025-01-09
+    working_status: VERIFIED
+    what_it_tests: ["Simulation launch", "YOLO detection", "3D extraction", "Debug viewer"]
+    run_from: "Windows PowerShell/CMD (not WSL)"
+    notes: "Complete integration test, auto-detects display IP"
+
+  test_sports_ball_detection_uat.py:
+    status: ACTIVE
+    purpose: "Complete working demo for YOLO detection"
+    version: 1.0.0
+    last_updated: 2025-01-07
+    working_status: VERIFIED
+    what_it_does: "Launches Gazebo, spawns robot, starts YOLO detector"
+    notes: "Best demo script for showing system working"
+
+  test_camera_topic.py:
+    status: ACTIVE
+    purpose: "Diagnostic tool for camera topics"
+    version: 1.0.0
+    last_updated: 2025-01-07
+    working_status: VERIFIED
+    output: "Message rates for camera topics"
+    notes: "Essential debugging tool"
+
+  # ===== Monitoring/Analysis Scripts =====
+  monitor_yolo_detections.py:
+    status: ACTIVE
+    purpose: "Real-time monitoring of YOLO output"
+    version: 1.0.0
+    last_updated: 2025-01-06
+    topics:
+      subscribes: ["/yolo/detections", "/yolo/ball_position"]
+
+  analyze_yolo_raw_detections.py:
+    status: ACTIVE
+    purpose: "Detailed analysis of YOLO raw data"
+    version: 1.0.0
+    last_updated: 2025-01-06
+
+  discover_yolo_format.py:
+    status: DEPRECATED
+    purpose: "One-time discovery of YOLO output format"
+    version: 0.1.0
+    last_updated: 2025-01-06
+    archive_reason: "One-time use tool"
+
+  check_depth_topics.py:
+    status: ACTIVE
+    purpose: "Verify depth data availability"
+    version: 1.0.0
+    last_updated: 2025-01-06
+    topics:
+      monitors: ["/d415/depth/image_raw", "/d415/depth/camera_info"]
+
+  # ===== Utility Scripts =====
+  kill_chasebot_processes.py:
+    status: ACTIVE
+    purpose: "Emergency cleanup of all ChaseBot processes"
+    version: 1.0.0
+    last_updated: 2025-01-06
+    working_status: VERIFIED
+    notes: "Essential cleanup tool"
+
+  cleanup_before_launch.py:
+    status: ACTIVE
+    purpose: "Pre-launch cleanup of stale processes"
+    version: 1.0.0
+    last_updated: 2025-01-06
+    working_status: VERIFIED
+
+  shutdown_manager.py:
+    status: ACTIVE
+    purpose: "Auto-shutdown after timeout"
+    version: 1.0.0
+    last_updated: 2025-01-06
+    notes: "Used in launch files"
+
+  # ===== Navigation/Movement Scripts =====
+  ros2_simple_movement_test.py:
+    status: ACTIVE
+    purpose: "Test basic robot movement commands"
+    version: 1.0.0
+    last_updated: 2025-01-06
+    topics:
+      publishes: ["/cmd_vel"]
+
+  simple_odom_publisher.py:
+    status: ACTIVE
+    purpose: "Publish odometry data for testing"
+    version: 1.0.0
+    last_updated: 2025-01-06
+    topics:
+      publishes: ["/odom"]
+
+  nav2_minimal_test.py:
+    status: EXPERIMENTAL
+    purpose: "Minimal Nav2 stack testing"
+    version: 0.5.0
+    last_updated: 2025-01-06
+
+  navigation_telemetry.py:
+    status: EXPERIMENTAL
+    purpose: "Navigation monitoring and telemetry"
+    version: 0.5.0
+    last_updated: 2025-01-06
+
+  complete_nav2_uat_demo.py:
+    status: EXPERIMENTAL
+    purpose: "Full Nav2 demo"
+    version: 0.5.0
+    last_updated: 2025-01-06
+
+  # ===== Other Vision Scripts =====
+  headless_vision_analyzer.py:
+    status: EXPERIMENTAL
+    purpose: "Analyze vision without GUI"
+    version: 0.5.0
+    last_updated: 2025-01-06
+    notes: "For headless operation"
+
+  camera_orientation_viewer.py:
+    status: EXPERIMENTAL
+    purpose: "Debug camera orientation issues"
+    version: 0.5.0
+    last_updated: 2025-01-06
+
+  ros2_fov_visualization.py:
+    status: EXPERIMENTAL
+    purpose: "Visualize camera field of view"
+    version: 0.5.0
+    last_updated: 2025-01-06
+
+  # ===== Gazebo Control Tests =====
+  test_gz_controller_movement.py:
+    status: UNKNOWN
+    purpose: "Test Gazebo controller movement"
+    needs_review: true
+
+  test_gz_movement_simple.py:
+    status: UNKNOWN
+    purpose: "Simple Gazebo movement test"
+    needs_review: true
+
+  test_gz_movement.py:
+    status: UNKNOWN
+    purpose: "Gazebo movement test"
+    needs_review: true
+
+  test_gz_ros2_control.py:
+    status: UNKNOWN
+    purpose: "Test gz_ros2_control integration"
+    needs_review: true
+
+  test_jetbot_ignition_core.py:
+    status: UNKNOWN
+    purpose: "Core JetBot Ignition test"
+    needs_review: true
+
+  test_minimal_gz_control.py:
+    status: UNKNOWN
+    purpose: "Minimal Gazebo control test"
+    needs_review: true
+
+  test_wheel_axis_fix.py:
+    status: UNKNOWN
+    purpose: "Test wheel axis fixes"
+    needs_review: true
+
+  # ===== Other Scripts =====
+  blank_map_publisher.py:
+    status: UNKNOWN
+    purpose: "Publish blank map for navigation"
+    needs_review: true
+
+  run_single_ball_test.py:
+    status: UNKNOWN
+    purpose: "Single ball detection test"
+    needs_review: true
+
+  save_yolo_debug_image.py:
+    status: UNKNOWN
+    purpose: "Save YOLO debug images"
+    needs_review: true
+
+  simple_camera_viewer.py:
+    status: UNKNOWN
+    purpose: "Simple camera viewer"
+    needs_review: true
+
+  test_slice_2_1_discovery.py:
+    status: UNKNOWN
+    purpose: "Slice 2.1 test"
+    needs_review: true
+
+  validate_ros_setup.py:
+    status: UNKNOWN
+    purpose: "Validate ROS setup"
+    needs_review: true
+
+  ros2_detection_test.py:
+    status: UNKNOWN
+    purpose: "Generic detection test"
+    needs_review: true
+
+  ros2_vision_comparison.py:
+    status: UNKNOWN
+    purpose: "Compare vision approaches"
+    needs_review: true
+
+  ros2_vision_with_display.py:
+    status: UNKNOWN
+    purpose: "Vision with display"
+    needs_review: true
+
+# Summary Statistics
+summary:
+  total_files: 52
+  active: 16
+  deprecated: 8
+  experimental: 9
+  unknown: 19
+  needs_review: 19
+
+# Quick Reference
+working_detectors:
+  - ros2_yolo_detector_frisbee.py (verbose)
+  - ros2_yolo_detector_frisbee_quiet.py (production)
+
+working_tests:
+  - test_sports_ball_detection_uat.py (full demo)
+  - test_3d_position_extraction.py (3D vision)
+  - test_camera_topic.py (diagnostics)
+
+essential_tools:
+  - kill_chasebot_processes.py
+  - cleanup_before_launch.py
+  - yolo_3d_position_extractor.py
+  - d415_3d_debug_viewer.py

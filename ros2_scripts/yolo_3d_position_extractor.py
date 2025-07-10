@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
-3D Position Extractor for YOLO Detections
-Combines 2D YOLO detections with D415 depth data to compute 3D positions
+File: yolo_3d_position_extractor.py
+Status: ACTIVE
+Version: 1.0.0
+Last Updated: 2025-01-09
+Purpose: Extracts 3D positions from YOLO detections + depth data
+Dependencies: ROS2 Humble, numpy
+Working Status: VERIFIED
+Notes: Core component of 3D vision pipeline
 """
 
 import rclpy
