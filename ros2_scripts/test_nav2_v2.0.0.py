@@ -26,10 +26,14 @@ def run_test():
     
     # Launch simulation with robot
     print("\n[STEP 1] Launching simulation with JetBot...")
+    # Use static IP for stable display connection
+    display_ip = "192.168.86.237"
+    print(f"Using static Ethernet IP for display: {display_ip}")
+    
     sim_process = subprocess.Popen([
         "wsl", "-d", "Ubuntu-22.04", "--", "bash", "-c",
         "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && "
-        "export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0 && "
+        f"export DISPLAY={display_ip}:0.0 && "
         "ros2 launch chasebot_description jetbot_gz_control_camera_test_v5.launch.py"
     ])
     
