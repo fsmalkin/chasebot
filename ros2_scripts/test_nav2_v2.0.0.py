@@ -84,7 +84,7 @@ def run_test():
         "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && "
         "ros2 run nav2_controller controller_server --ros-args "
         "-p use_sim_time:=True "
-        "--params-file ~/ros2_ws/src/chasebot_description/ros2_scripts/nav2_minimal_params_v2.yaml "
+        "--params-file ~/ros2_ws/src/chasebot_description/ros2_scripts/nav2_minimal_params_v3.yaml "
         "--remap cmd_vel:=cmd_vel_nav "  # Nav2 publishes to cmd_vel_nav
         "--log-level info"
     ])
@@ -98,7 +98,7 @@ def run_test():
         "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && "
         "ros2 run nav2_planner planner_server --ros-args "
         "-p use_sim_time:=True "
-        "--params-file ~/ros2_ws/src/chasebot_description/ros2_scripts/nav2_minimal_params_v2.yaml "
+        "--params-file ~/ros2_ws/src/chasebot_description/ros2_scripts/nav2_minimal_params_v3.yaml "
         "--log-level info"
     ])
     
