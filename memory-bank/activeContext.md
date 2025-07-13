@@ -1,6 +1,6 @@
 # Active Context - ChaseBot YOLO + Depth Pipeline Integration
 
-## Session Date: 2025-07-12 (Latest Update)
+## Session Date: 2025-07-13 (Latest Update)
 
 ### Current Focus: Nav2 Integration & Coordinate Transformation Issue
 
@@ -79,6 +79,15 @@ cd ros2_scripts && python test_direct_follower.py
    - Consider: robot_x = camera_z, robot_y = camera_x, robot_z = camera_y
    - Test with visualization to verify correct transformation
 3. **Alternative: Train YOLO on robot's view if coordinate fix too complex**
+
+#### Important Configuration Update (July 13):
+- **Stable Display Configuration Found**: Using static Ethernet IP 192.168.86.237:0.0
+- **Benefits**: Much more stable than WSL adapter IP which changes on reboot
+- **Requirements**: VcXsrv must be configured to accept connections from all interfaces
+- **Updated Files**:
+  - test_direct_follower.py - Now uses static IP
+  - jetbot_gz_control_camera_test_v5.launch.py - Hardcoded to static IP
+  - Environment management clinerules - Documented stable configuration
 
 #### Achievement Despite Issue:
 **Autonomous ball tracking is operational!** The robot successfully detects golf balls and responds with movement. The backwards motion is a solvable coordinate transformation issue.

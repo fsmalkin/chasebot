@@ -170,12 +170,13 @@ files:
     status: ACTIVE
     purpose: "Complete test for direct follower - LAST KNOWN GOOD"
     version: 1.0.0
-    last_updated: 2025-07-12
+    last_updated: 2025-07-13
     working_status: "VERIFIED - Robot moves but backwards"
     what_it_tests: ["Simulation launch", "YOLO detection", "3D extraction", "Direct follower control"]
     run_from: "Windows PowerShell/CMD"
     command: "cd ros2_scripts && python test_direct_follower.py"
-    notes: "Complete autonomous ball following demo (with backwards motion issue)"
+    display_config: "Uses static Ethernet IP: 192.168.86.237:0.0 for stable X11 forwarding"
+    notes: "Complete autonomous ball following demo (with backwards motion issue). Updated to use stable static IP for reliable display."
 
   test_direct_follower_v2.py:
     status: EXPERIMENTAL

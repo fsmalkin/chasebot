@@ -270,19 +270,26 @@ powershell -Command "wsl -d Ubuntu-22.04 -- bash -c 'sed -i \"s/<pose>5.0 0.0 0.
 
 ### Validated Working Commands (ROS 2)
 
-#### Display Configuration (✅ PROVEN 2025-07-04)
+#### Display Configuration (✅ PROVEN 2025-07-13 - STABLE STATIC IP)
 ```bash
-# Use Windows host IP for reliable display connection:
-export DISPLAY=172.17.112.1:0.0
+# Use static Ethernet IP for reliable display connection:
+export DISPLAY=192.168.86.237:0.0
 
-# Verify IP if needed:
-ipconfig | findstr /i "ipv4"  # Run in Windows to find IP
+# This is the Windows machine's static Ethernet IP address
+# Much more stable than using the WSL adapter IP which can change
+# VcXsrv must be configured to accept connections from all interfaces
+
+# To verify your static IP (run in Windows):
+ipconfig  # Look for "Ethernet adapter Ethernet" IPv4 Address
+
+# Alternative: WSL adapter IP (less stable, changes on reboot):
+# export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0
 ```
 
 #### Core Foundation (✅ PROVEN)
 ```bash
 # GUI simulation with full visual validation
-wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=172.17.112.1:0.0 && ros2 launch chasebot_description jetbot_nav2_integration_complete.launch.py"
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=192.168.86.237:0.0 && ros2 launch chasebot_description jetbot_nav2_integration_complete.launch.py"
 
 # Movement test
 wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist '{linear: {x: 0.1}, angular: {z: 0.2}}'"
@@ -294,11 +301,11 @@ wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash &
 #### Complete Autonomous Ball Following (WORKING)
 ```bash
 # Method 1: Integrated launch with corrected bridge
-wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0 && ros2 launch chasebot_description jetbot_nav2_integration_complete.launch.py"
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=192.168.86.237:0.0 && ros2 launch chasebot_description jetbot_nav2_integration_complete.launch.py"
 
 # Method 2: Separate terminals for debugging
 # Terminal 1: Main system
-wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=$(cat /etc/resolv.conf | grep nameserver | awk '{print $2}'):0.0 && ros2 launch chasebot_description jetbot_nav2_integration_complete.launch.py"
+wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && export DISPLAY=192.168.86.237:0.0 && ros2 launch chasebot_description jetbot_nav2_integration_complete.launch.py"
 
 # Terminal 2: Corrected bridge
 wsl -d Ubuntu-22.04 bash -c "cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/ros2_yolo_to_nav_goal_corrected.py --ros-args -p use_sim_time:=true"

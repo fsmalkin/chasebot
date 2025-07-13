@@ -54,28 +54,12 @@ def main():
     print("  - Proportional gains: 0.5 linear, 2.0 angular")
     print("=" * 80)
     
-    # Get display IP dynamically
-    print("\nDetecting display IP...")
-    get_ip_cmd = [
-        'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
-        'cat /etc/resolv.conf | grep nameserver | awk \'{print $2}\''
-    ]
-    result = subprocess.run(get_ip_cmd, capture_output=True, text=True)
-    # Extract just the IP address
-    output = result.stdout.strip()
-    if output:
-        # Handle case where output might be "nameserver X.X.X.X" or just "X.X.X.X"
-        parts = output.split()
-        display_ip = parts[-1] if parts else ""
-    else:
-        display_ip = ""
-    
-    # Default fallback if detection fails
-    if not display_ip:
-        display_ip = "192.168.96.1"
-        print(f"Could not detect display IP, using default: {display_ip}")
-    else:
-        print(f"Detected display IP: {display_ip}")
+    # Use static IP for stable display connection
+    # This uses the Windows Ethernet adapter IP which is static
+    # VcXsrv must be configured to accept connections from all interfaces
+    print("\nConfiguring display...")
+    display_ip = "192.168.86.237"
+    print(f"Using static Ethernet IP: {display_ip}")
     
     display_var = f"{display_ip}:0.0"
     print(f"Using DISPLAY={display_var}")

@@ -43,11 +43,12 @@ def generate_launch_description():
     )
     
     # Start Ignition Gazebo with proper display configuration
+    # Using static Ethernet IP for stable X11 forwarding (VcXsrv must accept connections from all interfaces)
     ignition_spawn = ExecuteProcess(
         cmd=['ign', 'gazebo', '-v', '4', '-r', world_path],
         output='screen',
         additional_env={
-            'DISPLAY': '172.25.128.1:0.0',
+            'DISPLAY': '192.168.86.237:0.0',  # Static Ethernet IP for stable display
             'QT_X11_NO_MITSHM': '1',
             'LIBGL_ALWAYS_SOFTWARE': '1',
             'IGN_GAZEBO_SYSTEM_PLUGIN_PATH': '/opt/ros/humble/lib'
