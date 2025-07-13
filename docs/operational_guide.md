@@ -2,6 +2,35 @@
 
 This consolidated guide combines all operational procedures for ChaseBot development and testing.
 
+## 🚨 CRITICAL: Always Copy Working Files Before Editing
+
+**NEVER edit a working file directly. ALWAYS make a copy first!**
+
+### The Golden Rule of Development
+```bash
+# BEFORE making ANY changes to a working file:
+cp working_file.py working_file_backup_$(date +%Y%m%d_%H%M%S).py
+# OR
+cp working_file.py working_file_v2.py
+
+# THEN edit the copy, not the original
+```
+
+### Why This Matters
+- **Preserve Working State**: You can always revert to the last known good version
+- **Debug Safely**: Compare working vs broken versions to identify issues
+- **Fast Recovery**: Restore functionality in seconds, not hours
+- **Document Progress**: Version history shows evolution of solutions
+
+### Example Workflow
+```bash
+# You have a working direct follower
+cp yolo_3d_direct_follower.py yolo_3d_direct_follower_v1_working.py
+# Now create v2 for coordinate fixes
+cp yolo_3d_direct_follower_v1_working.py yolo_3d_direct_follower_v2.py
+# Edit v2 - if it breaks, v1 still works!
+```
+
 ## Quick Start Commands
 
 ### Complete Autonomous Ball Following (NEW)
@@ -36,6 +65,54 @@ wsl -d Ubuntu-22.04 bash -c "source /opt/ros/humble/setup.bash && ros2 --help"
 
 # Test X11 display
 wsl -d Ubuntu-22.04 bash -c "DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0 && xeyes"
+```
+
+## File Management Best Practices
+
+### Version Control Rules
+1. **ALWAYS copy before editing**: `cp file.py file_backup.py`
+2. **Use descriptive names**: `file_v1_working.py`, `file_v2_coordinate_fix.py`
+3. **Test incrementally**: Make one change, test, then make another
+4. **Keep working versions**: Never delete a working file until replacement is proven
+
+### When You Break Something
+```bash
+# Step 1: Don't panic - you have backups!
+# Step 2: Compare versions
+diff working_file_backup.py broken_file.py
+
+# Step 3: Restore working version
+cp working_file_backup.py current_file.py
+
+# Step 4: Try again with smaller changes
+```
+
+### File Naming Convention
+```bash
+# Original file
+yolo_3d_direct_follower.py
+
+# Working backup (timestamped)
+yolo_3d_direct_follower_working_20250112_2200.py
+
+# Version with specific fix attempt
+yolo_3d_direct_follower_v2_coordinate_fix.py
+
+# Known good version
+yolo_3d_direct_follower_LAST_KNOWN_GOOD.py
+```
+
+### CRITICAL for WSL2 Development
+```bash
+# ALWAYS copy files to WSL2 before testing
+# NEVER assume a file is updated in WSL2 just because you edited it in Windows
+
+# Example workflow:
+1. Copy working file: cp file.py file_backup.py
+2. Edit the copy in Windows
+3. Copy to WSL2: wsl -d Ubuntu-22.04 bash -c "cp /mnt/c/path/file.py ~/ros2_ws/..."
+4. Test in WSL2
+5. If broken, you still have file_backup.py!
 ```
 
 ## Session Initialization

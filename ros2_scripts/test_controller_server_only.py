@@ -81,7 +81,7 @@ local_costmap:
 """
     
     # Write params file
-    with open("ros2_scripts/controller_minimal_params.yaml", "w") as f:
+    with open("controller_minimal_params.yaml", "w") as f:
         f.write(minimal_params)
     
     # Copy to WSL

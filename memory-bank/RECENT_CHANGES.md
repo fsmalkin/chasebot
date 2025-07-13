@@ -1,5 +1,40 @@
 # Recent Changes - ChaseBot Project
 
+## 2025-07-12 Session: Nav2 Integration Progress
+
+### Major Achievements:
+1. **Breakthrough with Nav2** - Bypassed lifecycle_manager to get controller/planner working
+   - Discovered Nav2 publishes to `/cmd_vel_nav` (Twist)
+   - Robot expects `/jetbot_base_controller/cmd_vel` (TwistStamped)
+   - Created `cmd_vel_relay_v2.0.0.py` to bridge the gap
+   
+2. **Identified Missing Odometry**
+   - Nav2 expects `/odom` but has 0 publishers
+   - Gazebo publishes to `/model/jetbot/odometry`
+   - Need odometry relay for complete Nav2 functionality
+
+3. **Successfully Tested Nav2 Components**
+   - Controller server configured and activated with DWB critics
+   - Planner server working with NavFn planner
+   - Path computation successful (computed path to 1m goal)
+   - Command relay verified (793 messages relayed before stopping)
+
+### Files Created:
+- `test_nav2_simple.py` - Bypasses lifecycle_manager for direct control
+- `test_nav2_v2.0.0.py` - Includes cmd_vel relay integration
+- `test_nav2_minimal_v1.0.0.py` - Minimal Nav2 configuration
+- `cmd_vel_relay_v2.0.0.py` - Converts Twist to TwistStamped with logging
+- `nav2_minimal_params_v2.yaml` - Nav2 params without critics (failed)
+- `nav2_minimal_params_v3.yaml` - Nav2 params with proper DWB critics (working)
+
+### Key Discoveries:
+- Nav2 stops sending commands after ~2 seconds without odometry feedback
+- DWB local planner requires critics to be defined
+- Manual lifecycle management bypasses bt_navigator issues
+- Topic type mismatches are common in ROS 2 integrations
+
+---
+
 ## 2025-01-12 Session: Direct Follower Implementation & Coordinate Issue
 
 ### Major Achievements:

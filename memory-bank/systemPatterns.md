@@ -3,6 +3,36 @@
 ## Overview
 This document captures architectural patterns, design decisions, and system-level insights discovered during ChaseBot development.
 
+## 🚨 CRITICAL DEVELOPMENT PATTERN: Always Copy Working Files
+
+### The Golden Rule
+**NEVER edit a working file directly. ALWAYS make a backup copy first.**
+
+```bash
+# Before ANY changes to a working file:
+cp working_file.py working_file_backup_$(date +%Y%m%d_%H%M%S).py
+# OR
+cp working_file.py working_file_v2.py
+```
+
+### Why This Is Critical
+1. **Preserve Working State**: Can revert in seconds, not hours
+2. **Debug Safely**: Compare working vs broken to identify issues
+3. **Document Progress**: Version history shows solution evolution
+4. **Risk-Free Experimentation**: Try bold changes without fear
+
+### Real Example from Jan 12
+- Had working direct follower (moved backwards but worked)
+- Copied to `yolo_3d_direct_follower_v1_working.py`
+- Created v2 for coordinate fixes
+- When v2 failed, v1 was still available
+- Could diff versions to see exactly what changed
+
+### File Naming Pattern
+```
+original.py → original_backup_20250112_2200.py → original_v2.py → original_v2_coordinate_fix.py
+```
+
 ## Core Architecture
 
 ### Vision Pipeline Architecture (VERIFIED WORKING)
@@ -85,18 +115,60 @@ angular_vel = max(-max_angular, min(max_angular, angular_vel))
 
 ### Lifecycle Manager Hanging
 - **Symptom**: Hangs waiting for bt_navigator/get_state
-- **Root Cause**: Missing behavior tree XML files or service timeout
+- **Root Cause**: bt_navigator requires behavior tree XML files
 - **Solutions Attempted**:
   1. Set bond_timeout to 0
   2. Manual component launch
   3. Direct lifecycle transitions
   4. Minimal controller testing
 
+### Breakthrough: Bypassing Lifecycle Manager (July 12)
+Successfully got Nav2 working without lifecycle_manager:
+```python
+# Launch controller and planner directly
+controller_proc = subprocess.Popen(["ros2", "run", "nav2_controller", "controller_server", ...])
+planner_proc = subprocess.Popen(["ros2", "run", "nav2_planner", "planner_server", ...])
+
+# Manual lifecycle activation
+subprocess.run(["ros2", "lifecycle", "set", "/controller_server", "configure"])
+subprocess.run(["ros2", "lifecycle", "set", "/controller_server", "activate"])
+```
+
+### Topic Mismatch Discoveries
+1. **Command Velocity**:
+   - Nav2 publishes: `/cmd_vel_nav` (geometry_msgs/Twist)
+   - Robot expects: `/jetbot_base_controller/cmd_vel` (geometry_msgs/TwistStamped)
+   - Solution: Created cmd_vel_relay_v2.0.0.py
+
+2. **Odometry**:
+   - Nav2 expects: `/odom` (nav_msgs/Odometry)
+   - Gazebo publishes: `/model/jetbot/odometry` (nav_msgs/Odometry)
+   - Solution needed: Odometry relay
+
+### cmd_vel Relay Pattern
+```python
+# Subscribe to Nav2 output
+self.cmd_vel_sub = self.create_subscription(
+    Twist, '/cmd_vel_nav', self.cmd_vel_callback, 10)
+
+# Publish to robot controller
+self.cmd_vel_pub = self.create_publisher(
+    TwistStamped, '/jetbot_base_controller/cmd_vel', 10)
+
+# Convert Twist to TwistStamped
+def cmd_vel_callback(self, msg):
+    stamped_msg = TwistStamped()
+    stamped_msg.header.stamp = self.get_clock().now().to_msg()
+    stamped_msg.header.frame_id = 'base_link'
+    stamped_msg.twist = msg
+    self.cmd_vel_pub.publish(stamped_msg)
+```
+
 ### Direct Follower as Alternative
-Bypassed Nav2 complexity with direct proportional control:
+Still valuable because:
 - Simpler implementation
 - Immediate results
-- No lifecycle management
+- No transform requirements
 - Direct topic publishing
 
 ## Testing Patterns
@@ -197,5 +269,6 @@ ros2 topic hz /d415/color/image_raw
 ### Future Improvements
 1. Fix coordinate transformation properly
 2. Train YOLO specifically on golf balls
-3. Debug Nav2 for advanced behaviors
+3. Complete Nav2 integration with odometry relay
 4. Add obstacle avoidance
+5. Integrate Nav2 with vision pipeline for advanced planning

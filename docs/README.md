@@ -1,10 +1,19 @@
 # ChaseBot Documentation
 
+## 🚨 CRITICAL DEVELOPMENT RULE
+
+**ALWAYS COPY WORKING FILES BEFORE EDITING!**
+```bash
+# Before ANY changes:
+cp working_file.py working_file_backup_$(date +%Y%m%d_%H%M%S).py
+```
+See [Operational Guide](./operational_guide.md) for detailed file management practices.
+
 ## Project Status Tracker
 
-### Current Phase: Vision System Finalized
-**Date**: 2025-01-10
-**Status**: YOLO + Depth Pipeline Selected as Primary Approach
+### Current Phase: Nav2 Integration Progress
+**Date**: 2025-07-12
+**Status**: Nav2 controller/planner working, needs odometry relay
 
 ---
 
@@ -63,10 +72,14 @@ ChaseBot is an autonomous golf ball collection robot built on the JetBot Nano pl
   - **Attempted Fix**: Transform in v2 (robot_x = camera_z, robot_y = -camera_x) - still backwards
 - **Working Command**: `cd ros2_scripts && python test_direct_follower.py`
 
-### 🚧 Phase 4.5: Nav2 Integration (BLOCKED)
-**Status**: Nav2 lifecycle_manager hangs on bt_navigator initialization
-- Created multiple debugging solutions (see FILE_REGISTRY.yaml)
-- Direct follower provides immediate functionality while Nav2 is debugged
+### 🚧 Phase 4.5: Nav2 Integration (PARTIAL SUCCESS)
+**Latest Update**: 2025-07-12
+- ✅ **Breakthrough**: Bypassed lifecycle_manager, got controller/planner working
+- ✅ **cmd_vel relay created**: Successfully converts Twist → TwistStamped
+- ✅ **Nav2 sends commands**: Verified 793 messages sent during path following
+- ⚠️ **Odometry missing**: Need relay from `/model/jetbot/odometry` to `/odom`
+- **Key Discovery**: Nav2 publishes to `/cmd_vel_nav`, robot expects `/jetbot_base_controller/cmd_vel`
+- **Next Step**: Create odometry relay to complete Nav2 integration
 
 ### ⏳ Phase 5: Full Integration Test (PENDING)
 - Complete autonomous ball following
@@ -159,37 +172,48 @@ See [`docs/development_patterns.md`](./development_patterns.md) for:
 
 ---
 
-## Nav2 Integration Challenges
+## Nav2 Integration Progress (July 12)
 
-### Issue 1: Missing Map Frame
-**Problem**: Nav2 global costmap waiting for transform from `base_link` to `map`
-**Error**: `Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist`
-**Solution**: Need to provide a map frame, either through:
-- SLAM (Simultaneous Localization and Mapping)
-- Static map server
-- Blank map publisher for testing
+### ✅ Solved Issues
 
-### Issue 2: Topic Remapping
-**Problem**: Topic namespace mismatch
-- Robot publishes: `/jetbot_base_controller/cmd_vel` and `/jetbot_base_controller/odom`
-- Nav2 expects: `/cmd_vel` and `/odom`
-**Solution**: Configure remapping in Nav2 launch file or robot controller
+#### Issue 1: Lifecycle Manager Hanging
+**Problem**: lifecycle_manager stuck on bt_navigator/get_state
+**Solution**: Bypass lifecycle_manager, launch controller/planner directly
+**Status**: ✅ Working - nodes activate successfully
 
-### Issue 3: Nav2 Activation Sequence
-**Problem**: Nav2 lifecycle nodes fail to activate without proper map
-**Solution**: Ensure all dependencies are met before Nav2 startup:
-1. Provide map frame
-2. Ensure transforms are available
-3. Verify topic connections
+#### Issue 2: Command Velocity Type Mismatch
+**Problem**: 
+- Nav2 publishes: `/cmd_vel_nav` (geometry_msgs/Twist)
+- Robot expects: `/jetbot_base_controller/cmd_vel` (geometry_msgs/TwistStamped)
+**Solution**: Created `cmd_vel_relay_v2.0.0.py`
+**Status**: ✅ Working - successfully relays 793 messages
 
-### Thin Slice Testing Approach
-To address these issues systematically:
-- **Slice 1**: ✅ Basic connectivity test (revealed issues)
-- **Slice 1.5**: Add blank map publisher
-- **Slice 2**: Fix topic remapping
-- **Slice 3**: Verify basic navigation
-- **Slice 4**: Integrate 3D vision pipeline
-- **Slice 5**: Complete autonomous ball following
+#### Issue 3: Missing Map Frame
+**Problem**: Nav2 needs map frame for navigation
+**Solution**: Created `blank_map_publisher.py`
+**Status**: ✅ Working - provides required map frame
+
+### ⚠️ Remaining Issue
+
+#### Odometry Topic Mismatch
+**Problem**:
+- Nav2 expects: `/odom` (0 publishers)
+- Gazebo publishes: `/model/jetbot/odometry` (1 publisher)
+**Solution Needed**: Create odometry relay similar to cmd_vel relay
+**Impact**: Nav2 stops sending commands after ~2 seconds without position feedback
+
+### Working Nav2 Commands
+```bash
+# Terminal 1: Launch simulation
+ros2 launch chasebot_sim jetbot_gz_control_camera_test_v5.launch.py
+
+# Terminal 2: Run Nav2 test with relays
+python ros2_scripts/test_nav2_v2.0.0.py
+
+# Terminal 3: Monitor command relay
+ros2 topic echo /cmd_vel_nav  # See Nav2 commands
+ros2 topic echo /jetbot_base_controller/cmd_vel  # See relayed commands
+```
 
 ---
 
@@ -216,9 +240,10 @@ To address these issues systematically:
 | GUI scripts fail in WSL2 | Created headless versions | ✅ Solved |
 | ros2_vision_inference no detections | Model not trained on golf balls | 📋 Documented as limitation |
 | Some scripts need Windows | Document in FILE_REGISTRY | ✅ Documented |
-| Nav2 missing map frame | Add blank map publisher | 🔧 In Progress |
-| Nav2 topic mismatch | Configure remapping for cmd_vel/odom | 🔧 In Progress |
-| Nav2 goal rejection | Fix map frame and remapping first | 🔧 In Progress |
+| Nav2 missing map frame | Add blank map publisher | ✅ Solved |
+| Nav2 cmd_vel type mismatch | Created cmd_vel_relay_v2.0.0.py | ✅ Solved |
+| Nav2 missing odometry | Need odometry relay | 🔧 In Progress |
+| Robot moves backwards | Coordinate transformation issue | 🔧 Needs Fix |
 
 ---
 

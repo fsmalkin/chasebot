@@ -1,7 +1,7 @@
 # ROS2 Scripts File Registry
 # This file tracks the status, purpose, and metadata of all scripts
 # Status: ACTIVE, DEPRECATED, EXPERIMENTAL, ARCHIVE
-# Last Updated: 2025-07-12
+# Last Updated: 2025-07-12 23:30
 
 files:
   # ===== YOLO Detectors =====
@@ -614,12 +614,70 @@ files:
     version: 1.0.0
     last_updated: 2025-07-12
 
-  cmd_vel_relay.py:
+  test_nav2_simple.py:
     status: ACTIVE
+    purpose: "Simple Nav2 test bypassing lifecycle_manager"
+    version: 1.0.0
+    last_updated: 2025-07-12
+    working_status: "PARTIAL - controller/planner work but need odometry relay"
+    features: ["Manual node activation", "Component-level testing", "Bypasses bt_navigator"]
+    findings: ["Nav2 publishes to /cmd_vel_nav", "Robot expects /jetbot_base_controller/cmd_vel", "Odometry missing on /odom"]
+    notes: "Identifies key integration issues: cmd_vel type mismatch and missing odometry"
+
+  test_nav2_v2.0.0.py:
+    status: ACTIVE
+    purpose: "Nav2 test with cmd_vel relay integration"
+    version: 2.0.0
+    last_updated: 2025-07-12
+    working_status: "PARTIAL - relay works but navigation blocked by missing odometry"
+    features: ["Includes cmd_vel_relay_v2.0.0.py", "Manual lifecycle management"]
+    findings: ["Relay successfully converts Twist to TwistStamped", "Nav2 sends 793 commands then stops", "Missing odometry prevents navigation"]
+    notes: "Next step: create odometry relay from /model/jetbot/odometry to /odom"
+
+  test_nav2_minimal_v1.0.0.py:
+    status: ACTIVE
+    purpose: "Minimal Nav2 test with just controller and planner"
+    version: 1.0.0
+    last_updated: 2025-07-12
+    notes: "Simplest possible Nav2 configuration for testing"
+
+  nav2_minimal_params_v2.yaml:
+    status: ACTIVE
+    purpose: "Nav2 params without DWB critics (caused errors)"
+    version: 2.0.0
+    last_updated: 2025-07-12
+    notes: "Removed critics section that caused controller_server errors"
+
+  nav2_minimal_params_v3.yaml:
+    status: ACTIVE
+    purpose: "Nav2 params with proper DWB critics configuration"
+    version: 3.0.0
+    last_updated: 2025-07-12
+    working_status: VERIFIED
+    features: ["Includes required DWB critics", "Proper costmap configuration"]
+    notes: "Successfully configures controller_server with all required critics"
+
+  cmd_vel_relay.py:
+    status: DEPRECATED
     purpose: "Relay cmd_vel between different topics"
     version: 1.0.0
     last_updated: 2025-07-12
-    notes: "Helps with Nav2 topic mismatch"
+    replaced_by: "cmd_vel_relay_v2.0.0.py"
+    notes: "Original version - replaced with better logging version"
+
+  cmd_vel_relay_v2.0.0.py:
+    status: ACTIVE
+    purpose: "Relay Nav2 cmd_vel (Twist) to robot (TwistStamped)"
+    version: 2.0.0
+    last_updated: 2025-07-12
+    dependencies: ["ROS2 Humble", "geometry_msgs"]
+    working_status: VERIFIED
+    topics:
+      subscribes: ["/cmd_vel_nav"]
+      publishes: ["/jetbot_base_controller/cmd_vel"]
+    features: ["Type conversion Twist → TwistStamped", "Status logging every 5s", "Per-message logging"]
+    notes: "Successfully relays Nav2 commands with type conversion"
+    findings: "Relayed 793 messages during Nav2 test before stopping due to missing odometry"
 
 # Summary Statistics
 summary:

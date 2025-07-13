@@ -82,6 +82,16 @@ This document consolidates key technical insights, solutions, and lessons from t
 
 ## Development Workflow
 
+### 🚨 CRITICAL: Always Copy Working Files Before Editing
+- **Golden Rule**: NEVER edit a working file directly
+- **Pattern**: `cp working_file.py working_file_backup.py` BEFORE any changes
+- **Real Example**: Direct follower worked but moved backwards
+  - Copied to `yolo_3d_direct_follower_v1_working.py`
+  - Created v2 for coordinate fix attempts
+  - When v2 failed, v1 still worked perfectly
+- **Benefit**: Can always revert to last known good version in seconds
+- **Recovery**: `diff` to see what changed, copy backup to restore
+
 ### Thin Slice Development Success
 - **Pattern**: Break complex problems into very small, testable pieces
 - **Example**: Test package installation → Test basic launch → Test with camera → Test detection
