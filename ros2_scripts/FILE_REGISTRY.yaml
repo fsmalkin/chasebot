@@ -1,7 +1,7 @@
 # ROS2 Scripts File Registry
 # This file tracks the status, purpose, and metadata of all scripts
 # Status: ACTIVE, DEPRECATED, EXPERIMENTAL, ARCHIVE
-# Last Updated: 2025-01-12
+# Last Updated: 2025-07-12
 
 files:
   # ===== YOLO Detectors =====
@@ -9,7 +9,7 @@ files:
     status: ACTIVE
     purpose: "YOLO detector accepting frisbee class (29) for simulated balls"
     version: 1.0.0
-    last_updated: 2025-01-07
+    last_updated: 2025-07-07
     dependencies: ["ROS2 Humble", "OpenCV", "ultralytics", "cv_bridge"]
     working_status: VERIFIED
     test_command: "python ros2_scripts/test_sports_ball_detection_uat.py"
@@ -23,7 +23,7 @@ files:
     status: ACTIVE
     purpose: "Same as frisbee.py but with reduced logging (5s summaries)"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     dependencies: ["ROS2 Humble", "OpenCV", "ultralytics", "cv_bridge"]
     working_status: VERIFIED
     test_command: "python ros2_scripts/test_3d_position_extraction.py"
@@ -37,7 +37,7 @@ files:
     status: ACTIVE
     purpose: "Headless version of frisbee detector - no GUI display required"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     dependencies: ["ROS2 Humble", "OpenCV", "ultralytics", "cv_bridge"]
     working_status: VERIFIED
     test_command: "python ros2_scripts/test_existing_yolo_detector.py"
@@ -52,7 +52,7 @@ files:
     status: DEPRECATED
     purpose: "Original YOLO detector"
     version: 0.1.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     replaced_by: "ros2_yolo_detector_frisbee.py"
     issue: "Subscribes to wrong topic /camera/image_raw"
     archive_reason: "Wrong topic subscription"
@@ -61,7 +61,7 @@ files:
     status: DEPRECATED
     purpose: "Fixed topic subscription to /d415/image_raw"
     version: 0.2.0
-    last_updated: 2025-01-07
+    last_updated: 2025-07-07
     replaced_by: "ros2_yolo_detector_frisbee.py"
     issue: "Only looks for sports ball class, not frisbee"
     archive_reason: "Superseded by frisbee version"
@@ -70,7 +70,7 @@ files:
     status: DEPRECATED
     purpose: "Reduced logging version"
     version: 0.1.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     replaced_by: "ros2_yolo_detector_frisbee_quiet.py"
     issue: "Wrong topic + wrong class"
     archive_reason: "Multiple issues"
@@ -79,7 +79,7 @@ files:
     status: DEPRECATED
     purpose: "Even quieter logging"
     version: 0.1.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     replaced_by: "ros2_yolo_detector_frisbee_quiet.py"
     issue: "Wrong topic + wrong class"
     archive_reason: "Redundant with quiet version"
@@ -88,7 +88,7 @@ files:
     status: DEPRECATED
     purpose: "Looks for sports ball class (32)"
     version: 0.1.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     issue: "Simulated balls appear as frisbees, not sports balls"
     archive_reason: "Wrong detection class"
 
@@ -96,7 +96,7 @@ files:
     status: EXPERIMENTAL
     purpose: "Comprehensive debug output, multi-class detection"
     version: 0.5.0
-    last_updated: 2025-01-07
+    last_updated: 2025-07-07
     dependencies: ["ROS2 Humble", "OpenCV", "ultralytics", "cv_bridge"]
     features: ["Shows all detections", "Adjustable threshold", "Multi-class"]
     potential_use: "Could be updated for advanced debugging"
@@ -106,7 +106,7 @@ files:
     status: ACTIVE
     purpose: "Extracts 3D positions from YOLO detections + depth data"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     dependencies: ["ROS2 Humble", "numpy"]
     working_status: VERIFIED
     topics:
@@ -119,7 +119,7 @@ files:
     status: ACTIVE
     purpose: "Direct proportional control follower bypassing Nav2"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     dependencies: ["ROS2 Humble", "geometry_msgs", "nav_msgs"]
     working_status: "WORKING BUT BACKWARDS"
     topics:
@@ -138,7 +138,7 @@ files:
     status: EXPERIMENTAL
     purpose: "Attempted fix for coordinate transformation issue"
     version: 2.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     dependencies: ["ROS2 Humble", "geometry_msgs", "nav_msgs"]
     working_status: "STILL BACKWARDS"
     topics:
@@ -152,7 +152,7 @@ files:
     status: ACTIVE
     purpose: "GUI viewer for RGB + depth + detections + 3D positions"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     dependencies: ["ROS2 Humble", "OpenCV", "numpy", "X11 display"]
     working_status: VERIFIED
     known_issues: ["Display bugs noted but functional"]
@@ -162,7 +162,7 @@ files:
     status: EXPERIMENTAL
     purpose: "Simple D415 camera feed display"
     version: 0.5.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     notes: "May be redundant with d415_3d_debug_viewer.py"
 
   # ===== Test Scripts =====
@@ -170,7 +170,7 @@ files:
     status: ACTIVE
     purpose: "Complete test for direct follower - LAST KNOWN GOOD"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     working_status: "VERIFIED - Robot moves but backwards"
     what_it_tests: ["Simulation launch", "YOLO detection", "3D extraction", "Direct follower control"]
     run_from: "Windows PowerShell/CMD"
@@ -181,7 +181,7 @@ files:
     status: EXPERIMENTAL
     purpose: "Test for v2 follower with coordinate fix attempt"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     working_status: "STILL BACKWARDS"
     notes: "Tests the attempted coordinate transformation fix"
 
@@ -189,7 +189,7 @@ files:
     status: EXPERIMENTAL
     purpose: "Parameter tuning tool for direct follower gains"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     features: ["Interactive gain adjustment", "Multiple preset configurations"]
     notes: "Helps find optimal proportional gains"
 
@@ -197,7 +197,7 @@ files:
     status: ACTIVE
     purpose: "Test our existing YOLO detector to verify it still works"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     working_status: VERIFIED
     what_it_tests: ["Simulation launch", "YOLO headless detector", "Ball detection output"]
     output: "Confirmed detection at (0.499, 0.547) with 50.5% confidence"
@@ -207,7 +207,7 @@ files:
     status: ACTIVE
     purpose: "End-to-end test of 3D vision pipeline"
     version: 1.1.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     working_status: VERIFIED
     what_it_tests: ["Simulation launch", "YOLO detection", "3D extraction", "Debug viewer"]
     run_from: "Windows PowerShell/CMD (not WSL)"
@@ -217,7 +217,7 @@ files:
     status: ACTIVE
     purpose: "Complete working demo for YOLO detection"
     version: 1.0.0
-    last_updated: 2025-01-07
+    last_updated: 2025-07-07
     working_status: VERIFIED
     what_it_does: "Launches Gazebo, spawns robot, starts YOLO detector"
     notes: "Best demo script for showing system working"
@@ -226,7 +226,7 @@ files:
     status: ACTIVE
     purpose: "Diagnostic tool for camera topics"
     version: 1.0.0
-    last_updated: 2025-01-07
+    last_updated: 2025-07-07
     working_status: VERIFIED
     output: "Message rates for camera topics"
     notes: "Essential debugging tool"
@@ -236,7 +236,7 @@ files:
     status: ACTIVE
     purpose: "Complete Nav2 parameters with all required settings"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     key_settings: ["bond_timeout: 0.0", "use_sim_time: True"]
     notes: "Includes fix for lifecycle_manager hanging"
 
@@ -244,14 +244,14 @@ files:
     status: ACTIVE
     purpose: "Minimal Nav2 parameters for testing"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     notes: "Simplified configuration for debugging"
 
   test_nav2_manual_launch.py:
     status: EXPERIMENTAL
     purpose: "Launch Nav2 components manually without lifecycle_manager"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     working_status: "Identifies bt_navigator as blocking component"
     notes: "Bypasses lifecycle_manager to isolate issues"
 
@@ -259,7 +259,7 @@ files:
     status: EXPERIMENTAL
     purpose: "Manual lifecycle state transitions for Nav2 nodes"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     features: ["Step-by-step state transitions", "Error reporting"]
     notes: "Helps debug lifecycle_manager hanging"
 
@@ -267,7 +267,7 @@ files:
     status: EXPERIMENTAL
     purpose: "Debug lifecycle_manager hanging issue"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     findings: ["Hangs on bt_navigator/get_state"]
     notes: "Comprehensive lifecycle debugging"
 
@@ -275,21 +275,21 @@ files:
     status: EXPERIMENTAL
     purpose: "Test just the controller_server component"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     notes: "Minimal Nav2 component test"
 
   test_nav2_minimal_individual.py:
     status: EXPERIMENTAL
     purpose: "Test Nav2 components individually"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     notes: "Component isolation testing"
 
   blank_map_publisher_quiet.py:
     status: ACTIVE
     purpose: "Publish blank map for Nav2 testing"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     topics:
       publishes: ["/map"]
     notes: "Provides required map frame for Nav2"
@@ -299,7 +299,7 @@ files:
     status: ACTIVE
     purpose: "Test topics from ros2_vision_inference package"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     working_status: "PARTIAL"
     notes: "Vision inference node runs but no detections - model not trained on golf balls"
 
@@ -307,7 +307,7 @@ files:
     status: ACTIVE
     purpose: "Basic test of ros2_vision_inference package"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     working_status: "PARTIAL"
     notes: "Node runs but no ball detections"
 
@@ -315,21 +315,21 @@ files:
     status: ACTIVE
     purpose: "Debug why vision_inference won't detect balls"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     findings: "Model loads successfully but doesn't detect golf balls"
 
   test_vision_inference_direct.py:
     status: ACTIVE
     purpose: "Direct test of vision_inference with custom launch"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     notes: "Attempted custom launch file but still no detections"
 
   test_vision_inference_final.py:
     status: ACTIVE
     purpose: "Final test using correct launch file detect_seg_depth.launch.xml"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     working_status: "PARTIAL"
     output: "Node runs, publishes /mono3d/bbox but only empty MarkerArray messages"
     notes: "Correct launch configuration found but model doesn't detect golf balls"
@@ -338,14 +338,14 @@ files:
     status: ACTIVE
     purpose: "Monitor 3D detections from vision_inference node"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     findings: "Only empty MarkerArray messages on /mono3d/bbox"
 
   check_vision_topics.py:
     status: ACTIVE
     purpose: "Check all topics from vision_inference node"
     version: 1.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     findings: "Camera data flowing at 3-4 Hz but no Detection3DArray messages"
 
   # ===== Monitoring/Analysis Scripts =====
@@ -353,7 +353,7 @@ files:
     status: ACTIVE
     purpose: "Real-time monitoring of YOLO output"
     version: 1.0.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     topics:
       subscribes: ["/yolo/detections", "/yolo/ball_position"]
 
@@ -361,20 +361,20 @@ files:
     status: ACTIVE
     purpose: "Detailed analysis of YOLO raw data"
     version: 1.0.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
 
   discover_yolo_format.py:
     status: DEPRECATED
     purpose: "One-time discovery of YOLO output format"
     version: 0.1.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     archive_reason: "One-time use tool"
 
   check_depth_topics.py:
     status: ACTIVE
     purpose: "Verify depth data availability"
     version: 1.0.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     topics:
       monitors: ["/d415/depth/image_raw", "/d415/depth/camera_info"]
 
@@ -383,7 +383,7 @@ files:
     status: ACTIVE
     purpose: "Emergency cleanup of all ChaseBot processes"
     version: 1.0.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     working_status: VERIFIED
     notes: "Essential cleanup tool"
 
@@ -391,14 +391,14 @@ files:
     status: ACTIVE
     purpose: "Pre-launch cleanup of stale processes"
     version: 1.0.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     working_status: VERIFIED
 
   shutdown_manager.py:
     status: ACTIVE
     purpose: "Auto-shutdown after timeout"
     version: 1.0.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     notes: "Used in launch files"
 
   # ===== Navigation/Movement Scripts =====
@@ -406,7 +406,7 @@ files:
     status: ACTIVE
     purpose: "Test basic robot movement commands"
     version: 1.0.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     topics:
       publishes: ["/cmd_vel"]
 
@@ -414,7 +414,7 @@ files:
     status: ACTIVE
     purpose: "Publish odometry data for testing"
     version: 1.0.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     topics:
       publishes: ["/odom"]
 
@@ -422,39 +422,39 @@ files:
     status: EXPERIMENTAL
     purpose: "Minimal Nav2 stack testing"
     version: 0.5.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
 
   navigation_telemetry.py:
     status: EXPERIMENTAL
     purpose: "Navigation monitoring and telemetry"
     version: 0.5.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
 
   complete_nav2_uat_demo.py:
     status: EXPERIMENTAL
     purpose: "Full Nav2 demo"
     version: 0.5.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
 
   # ===== Other Vision Scripts =====
   headless_vision_analyzer.py:
     status: EXPERIMENTAL
     purpose: "Analyze vision without GUI"
     version: 0.5.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
     notes: "For headless operation"
 
   camera_orientation_viewer.py:
     status: EXPERIMENTAL
     purpose: "Debug camera orientation issues"
     version: 0.5.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
 
   ros2_fov_visualization.py:
     status: EXPERIMENTAL
     purpose: "Visualize camera field of view"
     version: 0.5.0
-    last_updated: 2025-01-06
+    last_updated: 2025-07-06
 
   # ===== Gazebo Control Tests =====
   test_gz_controller_movement.py:
@@ -497,7 +497,7 @@ files:
     status: ACTIVE
     purpose: "Run the last known good configuration"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     notes: "Currently runs test_direct_follower.py"
 
   run_single_ball_test.py:
@@ -549,14 +549,14 @@ files:
     status: EXPERIMENTAL
     purpose: "Test 3D position extraction with Nav2 integration"
     version: 0.5.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     notes: "Version 2 with Nav2 bridge"
 
   test_nav2_integration_headless.py:
     status: ACTIVE
     purpose: "Complete YOLO + Depth + Nav2 integration test (headless)"
     version: 1.0.0
-    last_updated: 2025-01-10
+    last_updated: 2025-07-10
     dependencies: ["ROS2 Humble", "Nav2", "No display required"]
     working_status: EXPERIMENTAL
     what_it_tests: ["Simulation launch", "YOLO headless detector", "3D extraction", "Nav2 navigation", "Autonomous ball following"]
@@ -568,20 +568,20 @@ files:
     status: ACTIVE
     purpose: "Bridge YOLO detections to Nav2 goals"
     version: 3.0.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
     notes: "Version 3 with improved coordinate handling"
 
   yolo_3d_to_nav2_bridge.py:
     status: EXPERIMENTAL
     purpose: "Bridge 3D YOLO positions to Nav2"
     version: 0.5.0
-    last_updated: 2025-01-09
+    last_updated: 2025-07-09
 
   test_nav2_slice1_basic_connectivity.py:
     status: ACTIVE
     purpose: "Slice 1: Nav2 Basic Connectivity Test"
     version: 1.0.0
-    last_updated: 2025-01-10
+    last_updated: 2025-07-10
     dependencies: ["ROS2 Humble", "Nav2", "Gazebo with GUI"]
     working_status: EXPERIMENTAL
     what_it_tests: ["Simulation launch", "Nav2 stack", "Simple navigation goal", "Robot movement"]
@@ -593,32 +593,32 @@ files:
     status: ACTIVE
     purpose: "Slice 1.5: Nav2 with blank map provider"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     notes: "Adds blank map to satisfy Nav2 requirements"
 
   test_nav2_slice1_5_with_map_backup.py:
     status: ACTIVE
     purpose: "Backup of slice 1.5 test"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
 
   test_nav2_slice4_vision_integration.py:
     status: EXPERIMENTAL
     purpose: "Slice 4: Nav2 with vision integration"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
 
   test_nav2_slice4_vision_integration_backup.py:
     status: EXPERIMENTAL
     purpose: "Backup of slice 4 test"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
 
   cmd_vel_relay.py:
     status: ACTIVE
     purpose: "Relay cmd_vel between different topics"
     version: 1.0.0
-    last_updated: 2025-01-12
+    last_updated: 2025-07-12
     notes: "Helps with Nav2 topic mismatch"
 
 # Summary Statistics
