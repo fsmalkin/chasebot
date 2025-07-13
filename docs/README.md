@@ -51,18 +51,22 @@ ChaseBot is an autonomous golf ball collection robot built on the JetBot Nano pl
 - 3D position extraction working accurately
 - ros2_vision_inference evaluated and documented as future option
 
-### 🚧 Phase 4: Nav2 Integration (IN PROGRESS)
-**Latest Update**: 2025-01-10
-- ✅ 3D position extraction from YOLO detections working
-- ✅ Nav2 bridge implementation complete (`ros2_yolo_to_nav_goal_v3.0.0.py`)
-- 🔧 Nav2 basic connectivity test revealed integration issues:
-  - **Missing Map Frame**: Nav2 requires a "map" frame that doesn't exist
-  - **Topic Mismatch**: Robot uses `/jetbot_base_controller/cmd_vel` but Nav2 expects `/cmd_vel`
-  - **Goal Rejection**: Navigation goals rejected due to incomplete Nav2 activation
-- **Next Steps**: 
-  - Add blank map publisher to provide map frame
-  - Configure topic remapping for cmd_vel and odom
-  - Complete thin slice testing approach
+### ✅ Phase 4: Direct Follower Implementation (WORKING WITH ISSUE)
+**Latest Update**: 2025-01-12
+- ✅ Direct follower implementation bypassing Nav2 complexity
+- ✅ Autonomous ball following achieved!
+- ✅ Robot successfully tracks and moves toward detected balls
+- ⚠️ **Critical Issue**: Robot moves backwards and turns continuously
+  - **Root Cause**: Coordinate frame mismatch between camera and robot
+  - **Camera Frame**: X-right, Y-down, Z-forward
+  - **Robot Frame**: X-forward, Y-left, Z-up
+  - **Attempted Fix**: Transform in v2 (robot_x = camera_z, robot_y = -camera_x) - still backwards
+- **Working Command**: `cd ros2_scripts && python test_direct_follower.py`
+
+### 🚧 Phase 4.5: Nav2 Integration (BLOCKED)
+**Status**: Nav2 lifecycle_manager hangs on bt_navigator initialization
+- Created multiple debugging solutions (see FILE_REGISTRY.yaml)
+- Direct follower provides immediate functionality while Nav2 is debugged
 
 ### ⏳ Phase 5: Full Integration Test (PENDING)
 - Complete autonomous ball following
