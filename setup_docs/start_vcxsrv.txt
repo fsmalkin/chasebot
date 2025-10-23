@@ -1,0 +1,13 @@
+To start VcXsrv:
+
+1. Open Windows Start Menu
+2. Search for "XLaunch" or "VcXsrv"
+3. Click to start it
+4. Use these settings:
+   - Multiple windows
+   - Display number: 0
+   - Start no client
+   - Disable access control (important!)
+5. Click through to finish
+
+You should see the VcXsrv icon in your system tray when it's running.

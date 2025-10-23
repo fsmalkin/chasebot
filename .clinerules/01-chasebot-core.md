@@ -16,6 +16,7 @@ ChaseBot is a ROS-based autonomous golf ball collection robot built on the JetBo
 - Custom development should only fill gaps that existing packages don't address
 - Document why existing solutions were chosen over custom implementation
 - **SUCCESS PATTERN**: This principle led to discovering darknet_ros and superior following packages
+- **SUCCESS PATTERN 2**: Found yolov8_ros with built-in 3D detection instead of adapting external packages
 
 ### 2. ROS-First Development
 - All functionality must be implemented as ROS nodes with proper topic/service interfaces

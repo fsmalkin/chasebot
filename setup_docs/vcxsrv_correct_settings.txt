@@ -1,0 +1,30 @@
+CRITICAL VcXsrv Settings for Gazebo GUI:
+
+1. Close any existing VcXsrv instances (check system tray)
+
+2. Start XLaunch again with these EXACT settings:
+
+   Screen 1: Display settings
+   - Select "Multiple windows"
+   - Display number: 0
+   - Click Next
+
+   Screen 2: Client startup
+   - Select "Start no client"
+   - Click Next
+
+   Screen 3: Extra settings
+   - ✓ CHECK "Disable access control" (CRITICAL!)
+   - Leave other options as default
+   - Click Next
+
+   Screen 4: Finish configuration
+   - Click Finish
+
+3. You should see the VcXsrv icon in system tray
+
+4. To verify it's working, in Windows CMD run:
+   echo %DISPLAY%
+   (It should show something like :0.0)
+
+The "Disable access control" checkbox is ESSENTIAL for WSL2 GUI apps!

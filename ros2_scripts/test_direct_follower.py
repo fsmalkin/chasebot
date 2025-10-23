@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""
+Direct Follower Test (No Nav2)
+Goal: Test YOLO + Depth pipeline with direct robot control for autonomous ball following
+UAT: Robot detects a ball and autonomously approaches within 15cm using simple proportional control
+Version: 1.0.0
+Based on: test_nav2_slice4_vision_integration.py
+"""
+
+import subprocess
+import time
+import sys
+import signal
+import os
+
+def run_command(cmd, name, shell=False):
+    """Run a command and return the process"""
+    print(f"Starting {name}...")
+    proc = subprocess.Popen(cmd)
+    time.sleep(2)
+    return proc
+
+def terminate_process_group(proc, name):
+    """Terminate a process and all its children"""
+    try:
+        print(f"Terminating {name}...")
+        if proc.poll() is None:
+            proc.terminate()
+            time.sleep(1)
+            # If still running, force kill
+            if proc.poll() is None:
+                proc.kill()
+    except Exception as e:
+        print(f"Error terminating {name}: {e}")
+
+def main():
+    print("=" * 80)
+    print("🎯 Direct Follower Test (No Nav2)")
+    print("=" * 80)
+    print("\n📋 Test Objective:")
+    print("  - Launch simulation with GUI and golf ball")
+    print("  - Start YOLO detector (headless)")
+    print("  - Start 3D position extractor")
+    print("  - Start Direct Follower (bypasses Nav2)")
+    print("  - Robot autonomously approaches ball using proportional control")
+    print("\n✅ Success Criteria:")
+    print("  - YOLO detects golf ball (as 'frisbee')")
+    print("  - 3D position is extracted from depth data")
+    print("  - Direct follower controls robot to approach ball")
+    print("  - Robot stops within 15cm of ball")
+    print("\n🔧 Control Parameters:")
+    print("  - Max linear speed: 0.2 m/s")
+    print("  - Max angular speed: 0.5 rad/s")
+    print("  - Proportional gains: 0.5 linear, 2.0 angular")
+    print("=" * 80)
+    
+    # Use static IP for stable display connection
+    # This uses the Windows Ethernet adapter IP which is static
+    # VcXsrv must be configured to accept connections from all interfaces
+    print("\nConfiguring display...")
+    display_ip = "192.168.86.237"
+    print(f"Using static Ethernet IP: {display_ip}")
+    
+    display_var = f"{display_ip}:0.0"
+    print(f"Using DISPLAY={display_var}")
+    print("=" * 60)
+    
+    processes = []
+    
+    try:
+        # Kill any existing processes
+        print("\nCleaning up existing processes...")
+        subprocess.run(['wsl', '-d', 'Ubuntu-22.04', '--', 'pkill', '-f', 'gazebo'], stderr=subprocess.DEVNULL)
+        subprocess.run(['wsl', '-d', 'Ubuntu-22.04', '--', 'pkill', '-f', 'ros2'], stderr=subprocess.DEVNULL)
+        subprocess.run(['wsl', '-d', 'Ubuntu-22.04', '--', 'pkill', '-f', 'nav2'], stderr=subprocess.DEVNULL)
+        time.sleep(3)
+        
+        # Step 1: Launch simulation with D415 camera (v5 with depth support)
+        print("\nStep 1: Launching simulation with D415 camera (v5 with depth)...")
+        sim_cmd = [
+            'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
+            'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
+            f'export DISPLAY={display_var} && '
+            'ros2 launch chasebot_sim jetbot_gz_control_camera_test_v5.launch.py'
+        ]
+        sim_proc = run_command(sim_cmd, "Simulation")
+        processes.append((sim_proc, "Simulation"))
+        
+        print("Waiting for simulation to start...")
+        time.sleep(10)
+        
+        # Verify robot control topics
+        print("\nVerifying robot control topics...")
+        verify_cmd = [
+            'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
+            'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
+            'ros2 topic list | grep -E "(cmd_vel|odom)"'
+        ]
+        result = subprocess.run(verify_cmd, capture_output=True, text=True)
+        print("Available control topics:")
+        print(result.stdout)
+        
+        # Step 2: Start YOLO detector (frisbee quiet version)
+        print("\n🎯️ Step 2: Starting YOLO detector (frisbee quiet)...")
+        yolo_cmd = [
+            'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
+            'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
+            'python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/ros2_yolo_detector_frisbee_quiet.py '
+            '--ros-args -p use_sim_time:=true -p confidence_threshold:=0.3'
+        ]
+        yolo_proc = run_command(yolo_cmd, "YOLO Detector")
+        processes.append((yolo_proc, "YOLO Detector"))
+        
+        # Step 7: Start 3D position extractor
+        print("\n� Step 7: Starting 3D position extractor...")
+        pos3d_cmd = [
+            'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
+            'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
+            'python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/yolo_3d_position_extractor.py'
+        ]
+        pos3d_proc = run_command(pos3d_cmd, "3D Position Extractor")
+        processes.append((pos3d_proc, "3D Position Extractor"))
+        
+        # Step 8: Start Direct Follower (bypasses Nav2)
+        print("\n🎯 Step 8: Starting Direct Follower...")
+        follower_cmd = [
+            'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
+            'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
+            'python3 ~/ros2_ws/src/chasebot_description/ros2_scripts/yolo_3d_direct_follower.py'
+        ]
+        follower_proc = run_command(follower_cmd, "Direct Follower")
+        processes.append((follower_proc, "Direct Follower"))
+        
+        print("\n" + "=" * 60)
+        print("🤖 AUTONOMOUS BALL FOLLOWING ACTIVE")
+        print("=" * 60)
+        print("\n🎾 Place a golf ball in front of the robot in Gazebo")
+        print("📏 Optimal detection distance: 1-3 meters")
+        print("⏳ The robot will automatically approach when ball is detected")
+        print("\n📊 Monitoring system status...")
+        
+        # Monitor YOLO detections
+        print("\n�️ Step 9: Monitoring YOLO detections...")
+        monitor_yolo_cmd = [
+            'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
+            'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
+            'timeout 10 ros2 topic echo /yolo/ball_position --once'
+        ]
+        subprocess.run(monitor_yolo_cmd)
+        
+        # Monitor 3D positions
+        print("\n� Step 10: Monitoring 3D positions...")
+        monitor_3d_cmd = [
+            'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
+            'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
+            'timeout 10 ros2 topic echo /yolo/ball_position_3d --once'
+        ]
+        subprocess.run(monitor_3d_cmd)
+        
+        # Let the system run for a while
+        print("\n⏱️ Running autonomous ball following for 30 seconds...")
+        print("Watch the robot in Gazebo GUI - it should approach any detected balls")
+        time.sleep(30)
+        
+        # Monitor robot movement
+        print("\n� Step 11: Checking robot movement...")
+        monitor_cmd = [
+            'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
+            'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
+            'timeout 5 ros2 topic echo /jetbot_base_controller/cmd_vel'
+        ]
+        subprocess.run(monitor_cmd)
+        
+        # Check final robot position
+        print("\n📍 Step 12: Checking robot position...")
+        odom_cmd = [
+            'wsl', '-d', 'Ubuntu-22.04', '--', 'bash', '-c',
+            'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
+            'timeout 2 ros2 topic echo /odom --once'
+        ]
+        subprocess.run(odom_cmd)
+        
+        print("\n" + "=" * 80)
+        print("✅ DIRECT FOLLOWER TEST COMPLETE!")
+        print("=" * 80)
+        print("\n📊 Expected Results:")
+        print("✓ YOLO detector should find golf balls (as 'frisbee' class)")
+        print("✓ 3D positions should be extracted from depth data")
+        print("✓ Direct follower should generate proportional control commands")
+        print("✓ Robot should autonomously approach detected balls")
+        print("✓ Robot should stop within 15cm of the ball")
+        print("\n🎯 Vision Pipeline:")
+        print("✓ Camera → YOLO Detector → 3D Position → Direct Follower → Robot Control")
+        print("✓ Topics: /d415/color/image_raw → /yolo/ball_position → /yolo/ball_position_3d → /jetbot_base_controller/cmd_vel")
+        print("\n🔍 Troubleshooting:")
+        print("- No detection: Check ball placement (1-3m in front)")
+        print("- No movement: Check direct follower logs for errors")
+        print("- Wrong direction: Verify 3D position calculations")
+        print("- Oscillation: Tune proportional gains (Kp_linear, Kp_angular)")
+        print("\n⏭️ Next Steps:")
+        print("- If successful: Debug Nav2 separately while using direct follower")
+        print("- Tune proportional control gains for smoother motion")
+        print("- Add safety limits and obstacle avoidance")
+        
+    except KeyboardInterrupt:
+        print("\n\nTest interrupted by user")
+    except Exception as e:
+        print(f"\nError during test: {e}")
+    finally:
+        print("\n\nCleaning up...")
+        for proc, name in reversed(processes):
+            terminate_process_group(proc, name)
+        
+        # Final cleanup
+        subprocess.run(['wsl', '-d', 'Ubuntu-22.04', '--', 'pkill', '-f', 'gazebo'], stderr=subprocess.DEVNULL)
+        subprocess.run(['wsl', '-d', 'Ubuntu-22.04', '--', 'pkill', '-f', 'ros2'], stderr=subprocess.DEVNULL)
+        subprocess.run(['wsl', '-d', 'Ubuntu-22.04', '--', 'pkill', '-f', 'nav2'], stderr=subprocess.DEVNULL)
+        
+        print("\nCleanup complete!")
+
+
+if __name__ == '__main__':
+    main()
