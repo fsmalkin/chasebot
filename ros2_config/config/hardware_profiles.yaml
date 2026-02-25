@@ -1,0 +1,56 @@
+runtime_profiles:
+  robot_fidelity:
+    description: >
+      UAT gating profile. Enforces physical robot limits and deterministic timing.
+    inference_device_default: cpu
+    require_gpu: false
+    gui_default: false
+    perf_profile: compat
+    enforce_robot_constraints: true
+    telemetry:
+      enabled: true
+      sample_window_s: 10
+      expected_camera_rate_hz: 30
+      max_allowed_dropped_frame_pct: 15
+
+  workstation_balanced:
+    description: >
+      Development profile for desktop iteration. Prefers GPU if available.
+    inference_device_default: auto
+    require_gpu: false
+    gui_default: true
+    perf_profile: balanced
+    enforce_robot_constraints: false
+    telemetry:
+      enabled: true
+      sample_window_s: 10
+      expected_camera_rate_hz: 30
+      max_allowed_dropped_frame_pct: 25
+
+  workstation_max:
+    description: >
+      Throughput profile for desktop. Requires GPU and minimizes debug overhead.
+    inference_device_default: cuda:0
+    require_gpu: true
+    gui_default: false
+    perf_profile: max
+    enforce_robot_constraints: false
+    telemetry:
+      enabled: true
+      sample_window_s: 10
+      expected_camera_rate_hz: 30
+      max_allowed_dropped_frame_pct: 35
+
+perf_profiles:
+  compat:
+    detector_log_interval_s: 5.0
+    show_debug_window: false
+    notes: CPU-friendly and stable under constrained resources.
+  balanced:
+    detector_log_interval_s: 3.0
+    show_debug_window: true
+    notes: Default profile for iterative development.
+  max:
+    detector_log_interval_s: 10.0
+    show_debug_window: false
+    notes: High throughput with reduced visualization overhead.

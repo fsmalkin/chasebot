@@ -1,0 +1,33 @@
+robot_hardware_constraints:
+  version: 1.0
+  physical_platform:
+    robot_name: jetbot_nano
+    onboard_compute:
+      model: jetson_nano_4gb
+      cpu: quad_core_arm_a57
+      memory_gb: 4
+      gpu: nvidia_maxwell_128_cuda_cores
+    primary_sensor:
+      model: intel_realsense_d415
+      rgb:
+        width: 640
+        height: 480
+        fps: 30
+      depth:
+        width: 640
+        height: 480
+        fps: 30
+        min_range_m: 0.165
+        max_range_m: 10.0
+  drivetrain:
+    wheel_separation_m: 0.16
+    wheel_radius_m: 0.032
+    max_linear_velocity_mps: 0.5
+    max_angular_velocity_radps: 2.0
+    cmd_vel_timeout_s: 0.5
+  controller:
+    update_rate_hz: 100
+  simulation_contract:
+    enforce_velocity_limits: true
+    enforce_camera_rate: true
+    enforce_depth_range: true
