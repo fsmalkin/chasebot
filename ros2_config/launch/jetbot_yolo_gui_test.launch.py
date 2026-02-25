@@ -9,9 +9,23 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
+    package_share = get_package_share_directory('chasebot_description')
+    world_file = os.path.join(
+        package_share,
+        'ros2_config',
+        'worlds',
+        'simple_golf_ball_world.world',
+    )
+    urdf_file = os.path.join(
+        package_share,
+        'ros2_config',
+        'urdf',
+        'ros2_jetbot.urdf',
+    )
+
     # Launch Gazebo with golf ball world
     gazebo = ExecuteProcess(
-        cmd=['gazebo', '--verbose', '-s', 'libgazebo_ros_factory.so', '/mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_config/worlds/simple_golf_ball_world.world'],
+        cmd=['gazebo', '--verbose', '-s', 'libgazebo_ros_factory.so', world_file],
         output='screen'
     )
     
@@ -20,7 +34,7 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         name='robot_state_publisher',
-        arguments=['/mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_config/urdf/ros2_jetbot.urdf']
+        arguments=[urdf_file]
     )
     
     # Spawn robot
@@ -28,7 +42,7 @@ def generate_launch_description():
         package='gazebo_ros',
         executable='spawn_entity.py',
         arguments=[
-            '-file', '/mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_config/urdf/ros2_jetbot.urdf',
+            '-file', urdf_file,
             '-entity', 'jetbot',
             '-x', '0',
             '-y', '0',

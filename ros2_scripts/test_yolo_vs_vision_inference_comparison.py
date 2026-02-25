@@ -139,7 +139,7 @@ def main():
             'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && '
             'ros2 launch ros2_vision_inference detect_seg_depth.launch.xml '
             'mono3d_flag:=true '
-            'mono3d_ckpt_file:=/home/macro2/ros2_ws/models/mono3d_yolox_576_768.onnx '
+            'mono3d_ckpt_file:=~/ros2_ws/models/mono3d_yolox_576_768.onnx '
             'seg_flag:=false '
             'monodepth_flag:=false '
             'camera_topic:=/d415/color/image_raw '

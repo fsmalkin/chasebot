@@ -8,6 +8,20 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 
 def generate_launch_description():
+    package_share = get_package_share_directory('chasebot_description')
+    world_file = os.path.join(
+        package_share,
+        'ros2_config',
+        'worlds',
+        'simple_golf_ball_world.world',
+    )
+    urdf_file = os.path.join(
+        package_share,
+        'ros2_config',
+        'urdf',
+        'ros2_jetbot.urdf',
+    )
+
     # Include the gazebo_ros package's gazebo.launch.py
     # This ensures all ROS plugins are loaded properly
     gazebo = IncludeLaunchDescription(
@@ -15,7 +29,7 @@ def generate_launch_description():
             os.path.join(get_package_share_directory('gazebo_ros'), 'launch', 'gazebo.launch.py')
         ]),
         launch_arguments={
-            'world': '/mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_config/worlds/simple_golf_ball_world.world',
+            'world': world_file,
             'verbose': 'true'
         }.items()
     )
@@ -25,7 +39,7 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         name='robot_state_publisher',
-        arguments=['/mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_config/urdf/ros2_jetbot.urdf']
+        arguments=[urdf_file]
     )
     
     # Spawn robot with delay to ensure Gazebo is ready
@@ -36,7 +50,7 @@ def generate_launch_description():
                 package='gazebo_ros',
                 executable='spawn_entity.py',
                 arguments=[
-                    '-file', '/mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_config/urdf/ros2_jetbot.urdf',
+                    '-file', urdf_file,
                     '-entity', 'jetbot',
                     '-x', '0',
                     '-y', '0',

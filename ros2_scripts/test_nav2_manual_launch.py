@@ -9,6 +9,15 @@ import subprocess
 import time
 import sys
 import signal
+from pathlib import Path
+
+
+def to_wsl_path(path: Path) -> str:
+    """Convert a Windows path to /mnt/<drive>/... for WSL."""
+    as_posix = path.resolve().as_posix()
+    if len(as_posix) >= 3 and as_posix[1] == ":":
+        return f"/mnt/{as_posix[0].lower()}{as_posix[2:]}"
+    return as_posix
 
 class Nav2ManualLauncher:
     def __init__(self):
@@ -55,9 +64,11 @@ class Nav2ManualLauncher:
         
         # Copy params file first
         print("[INFO] Copying parameters file to WSL...")
+        params_file = Path(__file__).resolve().parent / "nav2_complete_params.yaml"
+        params_file_wsl = to_wsl_path(params_file)
         subprocess.run([
             "wsl", "-d", "Ubuntu-22.04", "--", "bash", "-c",
-            "cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_scripts/nav2_complete_params.yaml ~/ros2_ws/src/chasebot_description/ros2_scripts/"
+            f"cp '{params_file_wsl}' ~/ros2_ws/src/chasebot_description/ros2_scripts/nav2_complete_params.yaml"
         ])
         
         # Step 1: Launch controller_server only

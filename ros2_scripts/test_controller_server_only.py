@@ -7,6 +7,15 @@ Minimal test to debug controller_server issues
 import subprocess
 import time
 import sys
+from pathlib import Path
+
+
+def to_wsl_path(path: Path) -> str:
+    """Convert a Windows path to /mnt/<drive>/... for WSL."""
+    as_posix = path.resolve().as_posix()
+    if len(as_posix) >= 3 and as_posix[1] == ":":
+        return f"/mnt/{as_posix[0].lower()}{as_posix[2:]}"
+    return as_posix
 
 def run_test():
     print("=== Testing Controller Server Only ===")
@@ -81,13 +90,15 @@ local_costmap:
 """
     
     # Write params file
-    with open("controller_minimal_params.yaml", "w") as f:
+    with open("controller_minimal_params.yaml", "w", encoding="utf-8") as f:
         f.write(minimal_params)
+
+    local_params_wsl = to_wsl_path(Path("controller_minimal_params.yaml"))
     
     # Copy to WSL
     subprocess.run([
         "wsl", "-d", "Ubuntu-22.04", "--", "bash", "-c",
-        "cp /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_scripts/controller_minimal_params.yaml ~/ros2_ws/src/chasebot_description/ros2_scripts/"
+        f"cp '{local_params_wsl}' ~/ros2_ws/src/chasebot_description/ros2_scripts/controller_minimal_params.yaml"
     ])
     
     # Launch controller_server

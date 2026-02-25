@@ -2,7 +2,7 @@
 <launch>
     <!-- Only enable mono3d detection for ball detection -->
     <arg name="mono3d_flag" default="true"/>
-    <arg name="mono3d_ckpt_file" default="/home/macro2/ros2_ws/models/mono3d_yolox_576_768.onnx"/>
+    <arg name="mono3d_ckpt_file" default="$(env HOME)/ros2_ws/models/mono3d_yolox_576_768.onnx"/>
     <arg name="mono3d_gpu_index" default="0"/>
 
     <!-- Disable segmentation and depth for now -->

@@ -61,7 +61,7 @@ def main():
     
     # Launch our YOLO detector
     print("\nStep 3: Launching our YOLO detector (headless version)...")
-    yolo_cmd = '''powershell -Command "wsl -d Ubuntu-22.04 -- bash -c 'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && python3 /mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_scripts/ros2_yolo_detector_headless.py'"'''
+    yolo_cmd = '''powershell -Command "wsl -d Ubuntu-22.04 -- bash -c 'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && python3 $(if [ -f ~/ros2_ws/src/chasecar/ros2_scripts/ros2_yolo_detector_headless.py ]; then echo ~/ros2_ws/src/chasecar/ros2_scripts/ros2_yolo_detector_headless.py; else echo ~/ros2_ws/src/chasebot_description/ros2_scripts/ros2_yolo_detector_headless.py; fi)'"'''
     
     yolo_proc = subprocess.Popen(yolo_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     
