@@ -11,9 +11,6 @@ find_package(ament_cmake_python REQUIRED)
 
 # Install ROS 2 launch files
 install(DIRECTORY ros2_config/launch
-  DESTINATION share/${PROJECT_NAME}/ros2_config/
-)
-install(DIRECTORY ros2_config/launch
   DESTINATION share/${PROJECT_NAME}/
 )
 

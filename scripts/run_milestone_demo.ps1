@@ -12,9 +12,13 @@ param(
 
     [Nullable[bool]]$Headless = $null,
 
-    [string]$Distro = "Ubuntu-22.04",
+    [string]$Distro = "Ubuntu-24.04",
 
-    [string]$WorkspacePath = "~/ros2_ws"
+    [string]$WorkspacePath = "~/ros2_ws",
+
+    [string]$WorldFile = "yolo_test_world_v6_clean_uat.world",
+
+    [string]$RosDistro = "auto"
 )
 
 Set-StrictMode -Version Latest
@@ -29,6 +33,33 @@ function Convert-ToWslPath {
         return "/mnt/$drive/$rest"
     }
     return $resolved
+}
+
+function Resolve-RosDistro {
+    param(
+        [Parameter(Mandatory = $true)][string]$Distro,
+        [string]$Requested = "auto"
+    )
+    if ($Requested -and $Requested -ne "auto") {
+        return $Requested
+    }
+
+    $resolveCmd = @'
+if [ -f /opt/ros/jazzy/setup.bash ]; then
+  echo jazzy
+elif [ -f /opt/ros/humble/setup.bash ]; then
+  echo humble
+elif [ -d /opt/ros ]; then
+  ls -1 /opt/ros | head -n1
+fi
+'@
+    $resolveCmd = $resolveCmd.Replace("`r`n", "`n")
+    $detectedRaw = wsl -d $Distro -- bash -lc $resolveCmd 2>$null
+    $detected = ($detectedRaw | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($detected)) {
+        throw "Unable to resolve ROS distro in $Distro. Install ROS first or pass -RosDistro explicitly."
+    }
+    return $detected
 }
 
 $defaults = @{
@@ -58,6 +89,7 @@ if (-not $PSBoundParameters.ContainsKey("InferenceDevice")) {
 if ($Headless -eq $null) {
     $Headless = [bool]$defaults[$RuntimeTarget].Headless
 }
+$RosDistro = Resolve-RosDistro -Distro $Distro -Requested $RosDistro
 
 $headlessStr = if ($Headless) { "true" } else { "false" }
 $includeExtractor = if ($Milestone -ge 2) { "true" } else { "false" }
@@ -76,7 +108,7 @@ if (-not $Headless) {
 }
 
 $bashTemplate = @'
-set -euo pipefail
+set -eo pipefail
 
 WORKSPACE="__WORKSPACE__"
 REPO_PATH="__REPO_PATH__"
@@ -88,6 +120,14 @@ HEADLESS="__HEADLESS__"
 DISPLAY_ENV="__DISPLAY_ENV__"
 INCLUDE_EXTRACTOR="__INCLUDE_EXTRACTOR__"
 INCLUDE_BRIDGE="__INCLUDE_BRIDGE__"
+WORLD_FILE="__WORLD_FILE__"
+ROS_DISTRO="__ROS_DISTRO__"
+
+if [[ "$WORKSPACE" == "~/"* ]]; then
+  WORKSPACE="$HOME/${WORKSPACE:2}"
+elif [[ "$WORKSPACE" == "~" ]]; then
+  WORKSPACE="$HOME"
+fi
 
 if [ -d "$REPO_PATH" ]; then
   PACKAGE_PATH="$REPO_PATH"
@@ -100,16 +140,14 @@ else
   exit 1
 fi
 
-source /opt/ros/humble/setup.bash
+if [ ! -f "/opt/ros/$ROS_DISTRO/setup.bash" ]; then
+  echo "ROS distro setup not found: /opt/ros/$ROS_DISTRO/setup.bash" >&2
+  exit 1
+fi
+source /opt/ros/$ROS_DISTRO/setup.bash
 cd "$WORKSPACE"
 if [ -f "install/setup.bash" ]; then
   source install/setup.bash
-fi
-
-if ros2 pkg prefix chasebot_sim >/dev/null 2>&1; then
-  LAUNCH_PACKAGE="chasebot_sim"
-else
-  LAUNCH_PACKAGE="chasebot_description"
 fi
 
 if [ "$HEADLESS" = "false" ] && [ -n "$DISPLAY_ENV" ]; then
@@ -119,6 +157,21 @@ fi
 if [ "$PERF_PROFILE" = "compat" ]; then
   export LIBGL_ALWAYS_SOFTWARE=1
 fi
+
+cleanup_stale_stack() {
+  pkill -f "jetbot_gz_control_camera_test_v5.launch.py" 2>/dev/null || true
+  pkill -f "ros2_yolo_detector_frisbee_quiet.py" 2>/dev/null || true
+  pkill -f "yolo_3d_position_extractor.py" 2>/dev/null || true
+  pkill -f "yolo_3d_to_nav2_bridge.py" 2>/dev/null || true
+  pkill -f "jetbot_nav2_complete.launch.py" 2>/dev/null || true
+  pkill -f "cmd_vel_relay.py" 2>/dev/null || true
+  pkill -f "gz sim -v" 2>/dev/null || true
+  pkill -f "gz sim server" 2>/dev/null || true
+  pkill -f "ign gazebo" 2>/dev/null || true
+}
+
+cleanup_stale_stack
+sleep 1
 
 RUN_ID=$(date -u +%Y%m%dT%H%M%SZ)
 ARTIFACT_DIR="$PACKAGE_PATH/artifacts/demos/milestone_${MILESTONE}_$RUN_ID"
@@ -131,24 +184,25 @@ start_bg() {
   echo $!
 }
 
-SIM_CMD="source /opt/ros/humble/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; ros2 launch $LAUNCH_PACKAGE jetbot_gz_control_camera_test_v5.launch.py headless:=$HEADLESS perf_profile:=$PERF_PROFILE inference_device:=$INFERENCE_DEVICE"
+SIM_LAUNCH_FILE="$PACKAGE_PATH/ros2_config/launch/jetbot_gz_control_camera_test_v5.launch.py"
+SIM_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; export CHASECAR_SOURCE_PATH=$PACKAGE_PATH; ros2 launch $SIM_LAUNCH_FILE world:=$WORLD_FILE headless:=$HEADLESS perf_profile:=$PERF_PROFILE inference_device:=$INFERENCE_DEVICE"
 SIM_PID=$(start_bg "sim" "$SIM_CMD")
 sleep 12
 
-DETECTOR_CMD="source /opt/ros/humble/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/ros2_yolo_detector_frisbee_quiet.py --ros-args -p use_sim_time:=true -p input_topic:=/d415/color/image_raw -p inference_device:=$INFERENCE_DEVICE -p perf_profile:=$PERF_PROFILE -p headless:=$HEADLESS"
+DETECTOR_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/ros2_yolo_detector_frisbee_quiet.py --ros-args -p use_sim_time:=true -p input_topic:=/d415/color/image_raw -p inference_device:=$INFERENCE_DEVICE -p perf_profile:=$PERF_PROFILE -p headless:=$HEADLESS"
 DETECTOR_PID=$(start_bg "detector" "$DETECTOR_CMD")
 
 EXTRACTOR_PID=""
 if [ "$INCLUDE_EXTRACTOR" = "true" ]; then
   sleep 3
-  EXTRACTOR_CMD="source /opt/ros/humble/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/yolo_3d_position_extractor.py --ros-args -p use_sim_time:=true"
+  EXTRACTOR_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/yolo_3d_position_extractor.py --ros-args -p use_sim_time:=true"
   EXTRACTOR_PID=$(start_bg "extractor" "$EXTRACTOR_CMD")
 fi
 
 BRIDGE_PID=""
 if [ "$INCLUDE_BRIDGE" = "true" ]; then
   sleep 3
-  BRIDGE_CMD="source /opt/ros/humble/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/yolo_3d_to_nav2_bridge.py --ros-args -p use_sim_time:=true"
+  BRIDGE_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/yolo_3d_to_nav2_bridge.py --ros-args -p use_sim_time:=true"
   BRIDGE_PID=$(start_bg "bridge" "$BRIDGE_CMD")
 fi
 
@@ -159,7 +213,7 @@ cat >"$ARTIFACT_DIR/demo_pids.json" <<JSON
   "perf_profile": "$PERF_PROFILE",
   "inference_device": "$INFERENCE_DEVICE",
   "headless": $HEADLESS,
-  "launch_package": "$LAUNCH_PACKAGE",
+  "launch_package": "source_path",
   "pids": {
     "sim": "$SIM_PID",
     "detector": "$DETECTOR_PID",
@@ -188,15 +242,35 @@ $bash = $bashTemplate.
     Replace("__DISPLAY_ENV__", $displayEnv).
     Replace("__INCLUDE_EXTRACTOR__", $includeExtractor).
     Replace("__INCLUDE_BRIDGE__", $includeBridge).
+    Replace("__WORLD_FILE__", $WorldFile).
+    Replace("__ROS_DISTRO__", $RosDistro).
     Replace("__DISTRO__", $Distro)
+$bash = $bash.Replace("`r`n", "`n")
 
 Write-Host "Launching milestone demo $Milestone..."
 Write-Host "  Runtime target: $RuntimeTarget"
 Write-Host "  Perf profile:   $PerfProfile"
 Write-Host "  Inference dev:  $InferenceDevice"
 Write-Host "  Headless:       $headlessStr"
+Write-Host "  World:          $WorldFile"
+Write-Host "  ROS distro:     $RosDistro"
 
-wsl -d $Distro -- bash -lc $bash
+$tempScriptWin = Join-Path $env:TEMP ("chasecar_run_milestone_demo_{0}.sh" -f ([Guid]::NewGuid().ToString("N")))
+[System.IO.File]::WriteAllText($tempScriptWin, $bash, [System.Text.Encoding]::ASCII)
+$tempScriptWsl = Convert-ToWslPath -WindowsPath $tempScriptWin
+
+try {
+    wsl -d $Distro -- bash $tempScriptWsl
+    $exitCode = $LASTEXITCODE
+}
+finally {
+    Remove-Item -LiteralPath $tempScriptWin -Force -ErrorAction SilentlyContinue
+}
+
+if ($exitCode -ne 0) {
+    Write-Error "Milestone demo launch failed with exit code $exitCode"
+    exit $exitCode
+}
 
 Write-Host ""
 if ($Milestone -eq 1) {
@@ -220,3 +294,9 @@ else {
     Write-Host "  3. Robot approaches selected target autonomously."
     Write-Host "Success criteria: robot reaches approach distance without controller failure."
 }
+
+exit 0
+
+
+
+

@@ -32,6 +32,17 @@ class YOLOFrisbeeDetectorNode(Node):
         self.declare_parameter('headless', False)
         self.declare_parameter('perf_profile', 'balanced')
         self.declare_parameter('performance_profile', 'balanced')
+        self.declare_parameter('target_classes', [29, 32])
+        self.declare_parameter('compat_include_stop_sign_class', False)
+        self.declare_parameter('bbox_vertical_anchor', 0.85)
+        self.declare_parameter('model_path', '')
+        self.declare_parameter('imgsz', 0)
+        self.declare_parameter('image_queue_depth', 10)
+        self.declare_parameter('cpu_num_threads', 0)
+        self.declare_parameter('cpu_num_interop_threads', 0)
+        self.declare_parameter('enable_sim_red_fallback', False)
+        self.declare_parameter('red_fallback_min_area_px', 8)
+        self.declare_parameter('red_fallback_confidence', 0.35)
         
         # Get parameters
         input_topic = self.get_parameter('input_topic').value
@@ -43,6 +54,28 @@ class YOLOFrisbeeDetectorNode(Node):
         headless = self.get_parameter('headless').value
         self.perf_profile = self.get_parameter('perf_profile').value
         legacy_perf_profile = self.get_parameter('performance_profile').value
+        target_classes_raw = self.get_parameter('target_classes').value
+        compat_include_stop_sign = bool(
+            self.get_parameter('compat_include_stop_sign_class').value
+        )
+        self.bbox_vertical_anchor = float(self.get_parameter('bbox_vertical_anchor').value)
+        model_path_override = str(self.get_parameter('model_path').value).strip()
+        requested_imgsz = int(self.get_parameter('imgsz').value)
+        queue_depth = int(self.get_parameter('image_queue_depth').value)
+        cpu_num_threads = int(self.get_parameter('cpu_num_threads').value)
+        cpu_num_interop_threads = int(self.get_parameter('cpu_num_interop_threads').value)
+        self.enable_sim_red_fallback = bool(
+            self.get_parameter('enable_sim_red_fallback').value
+        )
+        self.red_fallback_min_area_px = max(
+            1,
+            int(self.get_parameter('red_fallback_min_area_px').value),
+        )
+        self.red_fallback_confidence = max(
+            0.0,
+            min(1.0, float(self.get_parameter('red_fallback_confidence').value)),
+        )
+        self.bbox_vertical_anchor = max(0.0, min(self.bbox_vertical_anchor, 1.0))
         if not self.perf_profile:
             self.perf_profile = legacy_perf_profile
         if self.perf_profile not in ('compat', 'balanced', 'max'):
@@ -63,18 +96,65 @@ class YOLOFrisbeeDetectorNode(Node):
             self.inference_device = 'cpu'
         else:
             self.inference_device = requested_device
+
+        if requested_imgsz > 0:
+            self.inference_imgsz = requested_imgsz
+        elif self.perf_profile == 'compat':
+            self.inference_imgsz = 416
+        else:
+            self.inference_imgsz = 0
+
+        queue_depth = max(1, queue_depth)
+        if self.perf_profile == 'compat':
+            queue_depth = 1
+        self.image_queue_depth = queue_depth
+
+        if self.inference_device == 'cpu' and self.perf_profile == 'compat':
+            cpu_count = os.cpu_count() or 4
+            if cpu_num_threads <= 0:
+                cpu_num_threads = min(4, max(1, cpu_count // 2))
+            if cpu_num_interop_threads <= 0:
+                cpu_num_interop_threads = 1
+            try:
+                torch.set_num_threads(cpu_num_threads)
+            except Exception:
+                pass
+            try:
+                torch.set_num_interop_threads(cpu_num_interop_threads)
+            except Exception:
+                pass
+            self.get_logger().info(
+                f'Compat CPU threading: num_threads={cpu_num_threads}, '
+                f'num_interop_threads={cpu_num_interop_threads}'
+            )
         
         # Initialize CV Bridge
         self.bridge = CvBridge()
         
         # Load YOLO model
-        model_path = os.path.expanduser('~/ros2_ws/yolov8m.pt')
-        if not os.path.exists(model_path):
-            model_path = os.path.expanduser('~/ros2_ws/src/chasecar/yolov8m.pt')
-        if not os.path.exists(model_path):
-            model_path = os.path.expanduser('~/ros2_ws/src/chasebot_description/yolov8m.pt')
-        if not os.path.exists(model_path):
-            model_path = 'yolov8m.pt'
+        model_candidates = ['yolov8m.pt']
+        if self.perf_profile == 'compat':
+            model_candidates = ['yolov8m.pt', 'yolov8n.pt']
+
+        if model_path_override:
+            model_path = os.path.expanduser(model_path_override)
+        else:
+            model_path = ''
+            for model_name in model_candidates:
+                for candidate in (
+                    os.path.expanduser(f'~/ros2_ws/{model_name}'),
+                    os.path.expanduser(f'~/ros2_ws/src/chasecar_runtime/{model_name}'),
+                    os.path.expanduser(f'~/ros2_ws/src/chasecar/{model_name}'),
+                    os.path.expanduser(f'~/ros2_ws/src/chasebot_description/{model_name}'),
+                    model_name,
+                ):
+                    if os.path.exists(candidate):
+                        model_path = candidate
+                        break
+                if model_path:
+                    break
+            if not model_path:
+                model_path = model_candidates[0]
             
         self.get_logger().info(f'Loading YOLO model from: {model_path}')
         try:
@@ -85,7 +165,23 @@ class YOLOFrisbeeDetectorNode(Node):
             return
         
         # COCO class for frisbee (our simulated balls appear as frisbees)
-        self.FRISBEE_CLASS = 29
+        if isinstance(target_classes_raw, list):
+            classes = [int(c) for c in target_classes_raw]
+        else:
+            classes = [int(target_classes_raw)]
+        if not classes:
+            classes = [29, 32]
+        if self.perf_profile == 'compat':
+            # Optional compat override for occasional close-range class drift.
+            if compat_include_stop_sign and 11 not in classes:
+                classes.append(11)
+            if self.CONFIDENCE_THRESHOLD > 0.10:
+                self.get_logger().info(
+                    f'Compat profile lowering confidence threshold '
+                    f'from {self.CONFIDENCE_THRESHOLD:.2f} to 0.10'
+                )
+                self.CONFIDENCE_THRESHOLD = 0.10
+        self.target_classes = set(classes)
         
         # Publishers
         self.debug_image_pub = self.create_publisher(Image, '/yolo/debug_image', 10)
@@ -99,7 +195,7 @@ class YOLOFrisbeeDetectorNode(Node):
             Image,
             input_topic,
             self.image_callback,
-            10
+            self.image_queue_depth
         )
         
         # Debug window
@@ -123,13 +219,48 @@ class YOLOFrisbeeDetectorNode(Node):
         self.get_logger().info('YOLO Ball Detection Node Started (Quiet Mode)')
         self.get_logger().info(f'Subscribing to: {input_topic}')
         self.get_logger().info(f'Confidence threshold: {self.CONFIDENCE_THRESHOLD}')
-        self.get_logger().info(f'Looking for: Frisbee (class {self.FRISBEE_CLASS})')
+        self.get_logger().info(f'Looking for classes: {sorted(self.target_classes)}')
         self.get_logger().info(f'Summaries every {self.log_interval} seconds')
         self.get_logger().info(f'Inference device: {self.inference_device} (requested: {requested_device})')
         self.get_logger().info(f'Performance profile: {self.perf_profile}')
+        self.get_logger().info(f'Inference image size: {self.inference_imgsz if self.inference_imgsz > 0 else "default"}')
+        self.get_logger().info(f'Image queue depth: {self.image_queue_depth}')
+        self.get_logger().info(f'Sim red fallback: {self.enable_sim_red_fallback}')
         self.get_logger().info(f'Headless mode: {headless}')
         self.get_logger().info(f'Debug window enabled: {self.show_window}')
         self.get_logger().info('='*50)
+
+    def detect_red_blob(self, cv_image):
+        hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+        lower_red_1 = (0, 80, 60)
+        upper_red_1 = (12, 255, 255)
+        lower_red_2 = (170, 80, 60)
+        upper_red_2 = (180, 255, 255)
+        mask1 = cv2.inRange(hsv, lower_red_1, upper_red_1)
+        mask2 = cv2.inRange(hsv, lower_red_2, upper_red_2)
+        mask = cv2.bitwise_or(mask1, mask2)
+        mask = cv2.GaussianBlur(mask, (5, 5), 0)
+        _, mask = cv2.threshold(mask, 80, 255, cv2.THRESH_BINARY)
+
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+
+        best = max(contours, key=cv2.contourArea)
+        area = float(cv2.contourArea(best))
+        if area < float(self.red_fallback_min_area_px):
+            return None
+
+        x, y, w, h = cv2.boundingRect(best)
+        center_x = float(x + (w / 2.0))
+        center_y = float(y + (h * self.bbox_vertical_anchor))
+        return {
+            'bbox': (int(x), int(y), int(x + w), int(y + h)),
+            'center': (center_x, center_y),
+            'confidence': float(self.red_fallback_confidence),
+            'class_id': -1,
+            'class_name': 'sim_red_blob',
+        }
         
     def image_callback(self, msg):
         try:
@@ -147,11 +278,14 @@ class YOLOFrisbeeDetectorNode(Node):
             
             # Run YOLO detection
             inference_start = time.perf_counter()
-            results = self.model.predict(
-                source=cv_image,
-                verbose=False,
-                device=self.inference_device,
-            )
+            predict_kwargs = {
+                'source': cv_image,
+                'verbose': False,
+                'device': self.inference_device,
+            }
+            if self.inference_imgsz > 0:
+                predict_kwargs['imgsz'] = self.inference_imgsz
+            results = self.model.predict(**predict_kwargs)
             inference_ms = (time.perf_counter() - inference_start) * 1000.0
             self.total_inference_ms += inference_ms
             self.max_inference_ms = max(self.max_inference_ms, inference_ms)
@@ -170,19 +304,20 @@ class YOLOFrisbeeDetectorNode(Node):
                         class_id = int(box.cls)
                         confidence = float(box.conf)
                         
-                        # Check if detection is a frisbee with sufficient confidence
-                        if class_id == self.FRISBEE_CLASS and confidence >= self.CONFIDENCE_THRESHOLD:
+                        # Keep detections for configured target classes.
+                        if class_id in self.target_classes and confidence >= self.CONFIDENCE_THRESHOLD:
                             # Get bounding box coordinates
                             x1, y1, x2, y2 = box.xyxy[0].tolist()
                             
-                            # Calculate center point
+                            # Use bottom-biased anchor for depth sampling robustness.
                             center_x = (x1 + x2) / 2
-                            center_y = (y1 + y2) / 2
+                            center_y = y1 + ((y2 - y1) * self.bbox_vertical_anchor)
                             
                             detected_balls.append({
                                 'bbox': (int(x1), int(y1), int(x2), int(y2)),
                                 'center': (center_x, center_y),
-                                'confidence': confidence
+                                'confidence': confidence,
+                                'class_id': class_id,
                             })
                             
                             self.detection_count += 1
@@ -190,6 +325,15 @@ class YOLOFrisbeeDetectorNode(Node):
                             # Update confidence statistics
                             self.max_confidence_seen = max(self.max_confidence_seen, confidence)
                             self.min_confidence_seen = min(self.min_confidence_seen, confidence)
+
+            if not detected_balls and self.enable_sim_red_fallback:
+                fallback_ball = self.detect_red_blob(cv_image)
+                if fallback_ball is not None:
+                    detected_balls.append(fallback_ball)
+                    self.detection_count += 1
+                    confidence = float(fallback_ball['confidence'])
+                    self.max_confidence_seen = max(self.max_confidence_seen, confidence)
+                    self.min_confidence_seen = min(self.min_confidence_seen, confidence)
             
             # Track frames with detections
             if detected_balls:
@@ -202,6 +346,11 @@ class YOLOFrisbeeDetectorNode(Node):
             for ball in detected_balls:
                 x1, y1, x2, y2 = ball['bbox']
                 confidence = ball['confidence']
+                class_id = ball['class_id']
+                if class_id >= 0:
+                    class_name = self.model.names.get(class_id, str(class_id))
+                else:
+                    class_name = ball.get('class_name', str(class_id))
                 
                 # Draw green rectangle with thicker lines
                 cv2.rectangle(debug_image, (x1, y1), (x2, y2), (0, 255, 0), 3)
@@ -211,7 +360,7 @@ class YOLOFrisbeeDetectorNode(Node):
                 cv2.circle(debug_image, center, 5, (0, 0, 255), -1)
                 
                 # Add confidence text with background
-                label = f'Ball (Frisbee): {confidence:.2f}'
+                label = f'Ball ({class_name}): {confidence:.2f}'
                 label_size = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
                 cv2.rectangle(debug_image, 
                              (x1, y1 - label_size[1] - 10),
@@ -261,6 +410,11 @@ class YOLOFrisbeeDetectorNode(Node):
                         f'(was {self.last_confidence:.3f})'
                     )
                     self.last_confidence = current_confidence
+            else:
+                # Explicitly clear confidence when no detection is present.
+                confidence_msg = Float32()
+                confidence_msg.data = 0.0
+                self.confidence_pub.publish(confidence_msg)
             
             header_time_sec = msg.header.stamp.sec + (msg.header.stamp.nanosec / 1e9)
             camera_to_debug_ms = (now_sec - header_time_sec) * 1000.0

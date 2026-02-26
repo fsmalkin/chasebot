@@ -18,6 +18,7 @@ from std_msgs.msg import Float32
 from cv_bridge import CvBridge
 import numpy as np
 import message_filters
+import time
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
 
@@ -26,8 +27,14 @@ class YOLO3DPositionExtractor(Node):
         super().__init__('yolo_3d_position_extractor')
         
         # Parameters
-        self.declare_parameter('confidence_threshold', 0.1)  # Lowered to 0.1
+        self.declare_parameter('confidence_threshold', 0.1)
+        self.declare_parameter('detection_stale_timeout_s', 0.5)
+        self.declare_parameter('depth_sample_radius_px', 3)
         self.confidence_threshold = self.get_parameter('confidence_threshold').value
+        self.detection_stale_timeout_s = float(
+            self.get_parameter('detection_stale_timeout_s').value
+        )
+        self.depth_sample_radius_px = int(self.get_parameter('depth_sample_radius_px').value)
         
         # CV Bridge for image conversion
         self.bridge = CvBridge()
@@ -42,6 +49,8 @@ class YOLO3DPositionExtractor(Node):
         # Latest detection data
         self.latest_position_2d = None
         self.latest_confidence = 0.0
+        self.latest_position_mono = 0.0
+        self.latest_confidence_mono = 0.0
         
         # QoS profile for sensor data
         sensor_qos = QoSProfile(
@@ -88,7 +97,9 @@ class YOLO3DPositionExtractor(Node):
         )
         
         self.get_logger().info('3D Position Extractor initialized')
-        self.get_logger().info(f'Confidence threshold: {self.confidence_threshold} (VERY LOW)')
+        self.get_logger().info(f'Confidence threshold: {self.confidence_threshold}')
+        self.get_logger().info(f'Detection stale timeout: {self.detection_stale_timeout_s:.2f}s')
+        self.get_logger().info(f'Depth sample radius: {self.depth_sample_radius_px}px')
         self.get_logger().info('Waiting for camera info and detections...')
         
         # Debug counters
@@ -113,6 +124,7 @@ class YOLO3DPositionExtractor(Node):
     def position_callback(self, msg):
         """Store latest 2D position (normalized coordinates)"""
         self.latest_position_2d = msg
+        self.latest_position_mono = time.monotonic()
         self.position_received_count += 1
         if self.position_received_count % 10 == 1:  # Log every 10th
             self.get_logger().info(f'Position received #{self.position_received_count}: ({msg.x:.3f}, {msg.y:.3f})')
@@ -120,6 +132,7 @@ class YOLO3DPositionExtractor(Node):
     def confidence_callback(self, msg):
         """Store latest confidence"""
         self.latest_confidence = msg.data
+        self.latest_confidence_mono = time.monotonic()
         self.confidence_received_count += 1
         if self.confidence_received_count % 10 == 1:  # Log every 10th
             self.get_logger().info(f'Confidence received #{self.confidence_received_count}: {msg.data:.3f}')
@@ -137,6 +150,15 @@ class YOLO3DPositionExtractor(Node):
         if self.latest_position_2d is None:
             if self.depth_received_count % 30 == 1:
                 self.get_logger().info('Waiting for YOLO position...')
+            return
+
+        now_mono = time.monotonic()
+        if (
+            now_mono - self.latest_position_mono > self.detection_stale_timeout_s
+            or now_mono - self.latest_confidence_mono > self.detection_stale_timeout_s
+        ):
+            if self.depth_received_count % 30 == 1:
+                self.get_logger().info('Skipping stale YOLO detection sample')
             return
         
         if self.latest_confidence < self.confidence_threshold:
@@ -165,8 +187,18 @@ class YOLO3DPositionExtractor(Node):
             pixel_x = max(0, min(pixel_x, width - 1))
             pixel_y = max(0, min(pixel_y, height - 1))
             
-            # Get depth value at detection center
-            depth_value = depth_image[pixel_y, pixel_x] * depth_scale
+            # Use a small depth window median for robustness near edges/horizon.
+            radius = max(0, self.depth_sample_radius_px)
+            y0 = max(0, pixel_y - radius)
+            y1 = min(height - 1, pixel_y + radius)
+            x0 = max(0, pixel_x - radius)
+            x1 = min(width - 1, pixel_x + radius)
+            depth_window = depth_image[y0:y1 + 1, x0:x1 + 1]
+            valid_window = depth_window[np.isfinite(depth_window) & (depth_window > 0)]
+            if valid_window.size > 0:
+                depth_value = float(np.median(valid_window) * depth_scale)
+            else:
+                depth_value = float(depth_image[pixel_y, pixel_x] * depth_scale)
             
             # Get depth statistics for debugging
             valid_depths = depth_image[depth_image > 0]

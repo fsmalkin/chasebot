@@ -14,6 +14,7 @@ import csv
 import json
 import math
 import os
+import shutil
 import statistics
 import subprocess
 import sys
@@ -32,6 +33,7 @@ import rclpy
 from geometry_msgs.msg import PointStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 
 
 FAILURE_NO_DETECTION = 'no_detection'
@@ -105,20 +107,73 @@ def resolve_path(path_str: str, config_path: Path, repo_root: Path) -> Path:
     return (config_path.parent / path).resolve()
 
 
+def stamp_to_seconds(stamp) -> float:
+    return float(stamp.sec) + (float(stamp.nanosec) / 1e9)
+
+
 def run_command(cmd: List[str], timeout_s: float = 20.0) -> Tuple[int, str, str]:
-    completed = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=timeout_s,
-        check=False,
-    )
-    return completed.returncode, completed.stdout.strip(), completed.stderr.strip()
+    try:
+        completed = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            check=False,
+        )
+        return completed.returncode, completed.stdout.strip(), completed.stderr.strip()
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout.decode('utf-8', errors='ignore') if isinstance(exc.stdout, bytes) else (exc.stdout or '')
+        stderr = exc.stderr.decode('utf-8', errors='ignore') if isinstance(exc.stderr, bytes) else (exc.stderr or '')
+        return 124, stdout.strip(), stderr.strip()
+
+
+def sim_service_binary() -> Optional[str]:
+    for candidate in ('gz', 'ign'):
+        if shutil.which(candidate):
+            return candidate
+    return None
+
+
+def remove_model(
+    world_name: str,
+    model_name: str,
+    timeout_s: float = 5.0,
+    verbose: bool = False,
+) -> Tuple[bool, str]:
+    service_bin = sim_service_binary()
+    if service_bin is None:
+        return False, 'gz/ign service binary not found'
+
+    # Gazebo remove expects an Entity with model type; type 0 (NONE) won't remove by name.
+    req = f'name: "{model_name}" type: 2'
+    cmd = [
+        service_bin,
+        'service',
+        '-s',
+        f'/world/{world_name}/remove/blocking',
+        '--reqtype',
+        'gz.msgs.Entity',
+        '--reptype',
+        'gz.msgs.Boolean',
+        '--timeout',
+        str(max(1000, int(timeout_s * 1000))),
+        '--req',
+        req,
+    ]
+    rc, out, err = run_command(cmd, timeout_s=timeout_s)
+    if verbose and out:
+        print(out)
+    if rc != 0:
+        return False, err or out or f'remove command failed with exit code {rc}'
+    if 'data: true' not in (out or '').lower():
+        return False, out or 'remove returned false'
+    return True, out or 'remove requested'
 
 
 def spawn_target(
     model_sdf: Path,
     model_name: str,
+    world_name: str,
     scenario: Dict,
     verbose: bool = False,
 ) -> Tuple[bool, str]:
@@ -132,6 +187,8 @@ def spawn_target(
         'run',
         'ros_gz_sim',
         'create',
+        '-world',
+        world_name,
         '-file',
         str(model_sdf),
         '-name',
@@ -149,7 +206,100 @@ def spawn_target(
     if rc != 0:
         msg = err or out or f'create command failed with exit code {rc}'
         return False, msg
+    combined = f'{out}\n{err}'.lower()
+    if 'already exists' in combined:
+        return False, err or out or 'model already exists'
     return True, out or 'spawned'
+
+
+def set_model_pose(
+    world_name: str,
+    model_name: str,
+    scenario: Dict,
+    timeout_s: float = 5.0,
+) -> Tuple[bool, str]:
+    service_bin = sim_service_binary()
+    if service_bin is None:
+        return False, 'gz/ign service binary not found'
+
+    spawn = scenario.get('spawn_world', {})
+    x = float(spawn.get('x', 0.0))
+    y = float(spawn.get('y', 0.0))
+    z = float(spawn.get('z', 0.025))
+    yaw = float(spawn.get('yaw', 0.0))
+    half_yaw = 0.5 * yaw
+    qz = math.sin(half_yaw)
+    qw = math.cos(half_yaw)
+
+    req = (
+        f'name: "{model_name}" '
+        f'position {{ x: {x} y: {y} z: {z} }} '
+        f'orientation {{ x: 0 y: 0 z: {qz} w: {qw} }}'
+    )
+    cmd = [
+        service_bin,
+        'service',
+        '-s',
+        f'/world/{world_name}/set_pose/blocking',
+        '--reqtype',
+        'gz.msgs.Pose',
+        '--reptype',
+        'gz.msgs.Boolean',
+        '--timeout',
+        str(max(1000, int(timeout_s * 1000))),
+        '--req',
+        req,
+    ]
+    rc, out, err = run_command(cmd, timeout_s=timeout_s)
+    if rc != 0:
+        return False, err or out or f'set_pose failed with code {rc}'
+    if 'data: true' not in (out or '').lower():
+        return False, out or 'set_pose returned false'
+    return True, out or 'set_pose requested'
+
+
+def position_target_with_fallback(
+    world_name: str,
+    model_name: str,
+    scenario: Dict,
+    model_sdf: Path,
+    set_pose_timeout_s: float,
+    set_pose_retries: int,
+    set_pose_retry_sleep_s: float,
+    respawn_on_failure: bool,
+    remove_timeout_s: float,
+) -> Tuple[bool, str]:
+    retries = max(1, set_pose_retries)
+    messages: List[str] = []
+    for _ in range(retries):
+        ok, msg = set_model_pose(
+            world_name=world_name,
+            model_name=model_name,
+            scenario=scenario,
+            timeout_s=set_pose_timeout_s,
+        )
+        messages.append(msg)
+        if ok:
+            return True, msg
+        time.sleep(max(0.0, set_pose_retry_sleep_s))
+
+    if not respawn_on_failure:
+        return False, '; '.join(messages)
+
+    remove_ok, remove_msg = remove_model(
+        world_name=world_name,
+        model_name=model_name,
+        timeout_s=remove_timeout_s,
+    )
+    spawn_ok, spawn_msg = spawn_target(
+        model_sdf=model_sdf,
+        model_name=model_name,
+        world_name=world_name,
+        scenario=scenario,
+    )
+    if not spawn_ok:
+        return False, f'set_pose failed ({messages[-1]}), remove={remove_msg}, spawn={spawn_msg}'
+    return True, f'set_pose fallback respawn (remove_ok={remove_ok}): {spawn_msg}'
 
 
 def wait_for_stable_detection(
@@ -159,11 +309,15 @@ def wait_for_stable_detection(
     stabilization_samples: int,
     stabilization_window_s: float,
     expected_frame: str,
+    min_detection_mono: float,
+    min_detection_stamp_s: float,
 ) -> DetectionResult:
     start_mono = time.monotonic()
     samples: List[Tuple[float, float, float, str]] = []
     first_fresh_detection_mono: Optional[float] = None
     saw_detection = False
+    stamp_gate_enabled = min_detection_stamp_s > 0.0
+    stamp_domain_checked = False
 
     while time.monotonic() - start_mono < timeout_s and rclpy.ok():
         rclpy.spin_once(node, timeout_sec=0.1)
@@ -176,6 +330,18 @@ def wait_for_stable_detection(
         age_s = time.monotonic() - node.latest_detection_mono
         if age_s > stale_after_s:
             continue
+        if node.latest_detection_mono < min_detection_mono:
+            continue
+        if stamp_gate_enabled:
+            msg_stamp_s = stamp_to_seconds(msg.header.stamp)
+            if msg_stamp_s > 0.0:
+                if not stamp_domain_checked:
+                    stamp_domain_checked = True
+                    # Handle wall-clock vs sim-clock mismatch by falling back to monotonic freshness.
+                    if abs(msg_stamp_s - min_detection_stamp_s) > 300.0:
+                        stamp_gate_enabled = False
+                if stamp_gate_enabled and msg_stamp_s + 1e-6 < min_detection_stamp_s:
+                    continue
 
         if first_fresh_detection_mono is None:
             first_fresh_detection_mono = node.latest_detection_mono
@@ -448,6 +614,18 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='Enable verbose command output.',
     )
+    parser.add_argument(
+        '--use-sim-time',
+        action='store_true',
+        default=True,
+        help='Enable use_sim_time for this runner node (default: true).',
+    )
+    parser.add_argument(
+        '--no-use-sim-time',
+        dest='use_sim_time',
+        action='store_false',
+        help='Disable use_sim_time for this runner node.',
+    )
     return parser.parse_args()
 
 
@@ -466,6 +644,22 @@ def main() -> int:
     scenarios = cfg.get('scenarios', [])
     detection_topic = metadata.get('detection_topic', '/yolo/ball_position_3d')
     expected_frame = metadata.get('truth_frame', '')
+    world_name = str(metadata.get('world_name', 'yolo_test_world'))
+    cleanup_between_scenarios = bool(defaults.get('cleanup_between_scenarios', True))
+    cleanup_model_names = [
+        str(name)
+        for name in metadata.get(
+            'cleanup_model_names',
+            [
+                'red_ball_forward',
+                'blue_ball_left',
+                'yellow_ball_right',
+                'white_ball_behind',
+                'green_ball_behind',
+            ],
+        )
+    ]
+    target_model_name = str(metadata.get('target_model_name', 'uat_ball_target'))
 
     output_base = Path(args.output_base).resolve()
     output_dir = ensure_output_dir(output_base)
@@ -483,16 +677,79 @@ def main() -> int:
     print(f'Output: {output_dir}')
     print(f'Detection topic: {detection_topic}')
     print(f'Model SDF: {model_sdf}')
+    print(f'World: {world_name}')
 
     rclpy.init()
     node = TopicMonitor(detection_topic=detection_topic)
+    if args.use_sim_time:
+        node.set_parameters(
+            [Parameter('use_sim_time', Parameter.Type.BOOL, True)]
+        )
 
     rows: List[Dict] = []
     warmup_s = float(defaults.get('warmup_s', 2.0))
+    post_spawn_settle_s = float(defaults.get('post_spawn_settle_s', 0.75))
+    spawn_strategy = str(defaults.get('spawn_strategy', 'set_pose')).strip().lower()
+    if spawn_strategy not in {'set_pose', 'respawn'}:
+        spawn_strategy = 'set_pose'
+    remove_timeout_s = float(defaults.get('remove_timeout_s', 5.0))
+    set_pose_timeout_s = float(defaults.get('set_pose_timeout_s', 5.0))
+    set_pose_retries = int(defaults.get('set_pose_retries', 3))
+    set_pose_retry_sleep_s = float(defaults.get('set_pose_retry_sleep_s', 0.2))
+    respawn_on_set_pose_failure = bool(defaults.get('respawn_on_set_pose_failure', True))
+
     if warmup_s > 0:
         warmup_end = time.monotonic() + warmup_s
         while time.monotonic() < warmup_end and rclpy.ok():
             rclpy.spin_once(node, timeout_sec=0.1)
+
+    spawned_once_ok = True
+    spawned_once_message = 'skipped'
+    if not args.skip_spawn and spawn_strategy == 'set_pose':
+        if cleanup_between_scenarios:
+            remove_model(
+                world_name=world_name,
+                model_name=target_model_name,
+                timeout_s=remove_timeout_s,
+                verbose=args.verbose,
+            )
+            for cleanup_name in cleanup_model_names:
+                if cleanup_name != target_model_name:
+                    remove_model(
+                        world_name=world_name,
+                        model_name=cleanup_name,
+                        timeout_s=remove_timeout_s,
+                        verbose=args.verbose,
+                    )
+
+        initial_scenario: Dict = scenarios[0] if scenarios else {'spawn_world': {'x': 1.5, 'y': 0.0, 'z': 0.05}}
+        spawned_once_ok, spawned_once_message = spawn_target(
+            model_sdf=model_sdf,
+            model_name=target_model_name,
+            world_name=world_name,
+            scenario=initial_scenario,
+            verbose=args.verbose,
+        )
+        if (
+            not spawned_once_ok
+            and 'already exists' in (spawned_once_message or '').lower()
+            and cleanup_between_scenarios
+        ):
+            remove_model(
+                world_name=world_name,
+                model_name=target_model_name,
+                timeout_s=remove_timeout_s,
+                verbose=args.verbose,
+            )
+            spawned_once_ok, spawned_once_message = spawn_target(
+                model_sdf=model_sdf,
+                model_name=target_model_name,
+                world_name=world_name,
+                scenario=initial_scenario,
+                verbose=args.verbose,
+            )
+        if args.verbose:
+            print(f'initial spawn_ok={spawned_once_ok} message={spawned_once_message}')
 
     for index, scenario in enumerate(scenarios):
         scenario_id = scenario.get('id', f'scenario_{index + 1}')
@@ -510,13 +767,69 @@ def main() -> int:
         spawn_ok = True
         spawn_message = 'skipped'
         if not args.skip_spawn:
-            model_name = f"uat_ball_{scenario_id}_{int(time.time())}"
-            spawn_ok, spawn_message = spawn_target(
-                model_sdf=model_sdf,
-                model_name=model_name,
-                scenario=scenario,
-                verbose=args.verbose,
-            )
+            if spawn_strategy == 'set_pose':
+                if spawned_once_ok:
+                    spawn_ok, spawn_message = position_target_with_fallback(
+                        world_name=world_name,
+                        model_name=target_model_name,
+                        scenario=scenario,
+                        model_sdf=model_sdf,
+                        set_pose_timeout_s=set_pose_timeout_s,
+                        set_pose_retries=set_pose_retries,
+                        set_pose_retry_sleep_s=set_pose_retry_sleep_s,
+                        respawn_on_failure=respawn_on_set_pose_failure,
+                        remove_timeout_s=remove_timeout_s,
+                    )
+                else:
+                    spawn_ok = False
+                    spawn_message = f'initial spawn failed: {spawned_once_message}'
+                if args.verbose:
+                    print(f'  set_pose_ok={spawn_ok} message={spawn_message}')
+            else:
+                if cleanup_between_scenarios:
+                    # Keep only deterministic UAT targets active.
+                    remove_model(
+                        world_name=world_name,
+                        model_name=target_model_name,
+                        timeout_s=remove_timeout_s,
+                        verbose=args.verbose,
+                    )
+                    for cleanup_name in cleanup_model_names:
+                        if cleanup_name != target_model_name:
+                            remove_model(
+                                world_name=world_name,
+                                model_name=cleanup_name,
+                                timeout_s=remove_timeout_s,
+                                verbose=args.verbose,
+                            )
+
+                spawn_ok, spawn_message = spawn_target(
+                    model_sdf=model_sdf,
+                    model_name=target_model_name,
+                    world_name=world_name,
+                    scenario=scenario,
+                    verbose=args.verbose,
+                )
+                if (
+                    not spawn_ok
+                    and 'already exists' in (spawn_message or '').lower()
+                    and cleanup_between_scenarios
+                ):
+                    remove_model(
+                        world_name=world_name,
+                        model_name=target_model_name,
+                        timeout_s=remove_timeout_s,
+                        verbose=args.verbose,
+                    )
+                    spawn_ok, spawn_message = spawn_target(
+                        model_sdf=model_sdf,
+                        model_name=target_model_name,
+                        world_name=world_name,
+                        scenario=scenario,
+                        verbose=args.verbose,
+                    )
+                if args.verbose:
+                    print(f'  spawn_ok={spawn_ok} message={spawn_message}')
             if not spawn_ok:
                 print(f'  spawn failed: {spawn_message}')
 
@@ -546,6 +859,16 @@ def main() -> int:
             )
             continue
 
+        # Flush stale detections from the previous scenario before sampling.
+        node.latest_detection = None
+        node.latest_detection_mono = 0.0
+        if post_spawn_settle_s > 0.0:
+            settle_end = time.monotonic() + post_spawn_settle_s
+            while time.monotonic() < settle_end and rclpy.ok():
+                rclpy.spin_once(node, timeout_sec=0.05)
+        scenario_detection_min_mono = time.monotonic()
+        scenario_detection_min_stamp_s = node.get_clock().now().nanoseconds / 1e9
+
         detection = wait_for_stable_detection(
             node=node,
             timeout_s=timeout_s,
@@ -553,6 +876,8 @@ def main() -> int:
             stabilization_samples=stabilization_samples,
             stabilization_window_s=stabilization_window_s,
             expected_frame=expected_frame,
+            min_detection_mono=scenario_detection_min_mono,
+            min_detection_stamp_s=scenario_detection_min_stamp_s,
         )
 
         measured_x = detection.measured_x_m
@@ -597,6 +922,22 @@ def main() -> int:
                 'nav_min_distance_m': nav_min_distance,
                 'nav_success': nav_success,
             }
+        )
+
+        if cleanup_between_scenarios and not args.skip_spawn and spawn_strategy != 'set_pose':
+            remove_model(
+                world_name=world_name,
+                model_name=target_model_name,
+                timeout_s=remove_timeout_s,
+                verbose=args.verbose,
+            )
+
+    if cleanup_between_scenarios and not args.skip_spawn and spawn_strategy == 'set_pose':
+        remove_model(
+            world_name=world_name,
+            model_name=target_model_name,
+            timeout_s=remove_timeout_s,
+            verbose=args.verbose,
         )
 
     run_id = output_dir.name

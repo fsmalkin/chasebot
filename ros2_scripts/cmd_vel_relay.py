@@ -14,11 +14,23 @@ from std_msgs.msg import Header
 class CmdVelRelay(Node):
     def __init__(self):
         super().__init__('cmd_vel_relay')
+
+        self.declare_parameter('input_topic_primary', '/cmd_vel_nav')
+        self.declare_parameter('input_topic_secondary', '/cmd_vel')
+
+        input_topic_primary = str(self.get_parameter('input_topic_primary').value)
+        input_topic_secondary = str(self.get_parameter('input_topic_secondary').value)
         
-        # Create subscriber to Nav2's cmd_vel
-        self.cmd_vel_sub = self.create_subscription(
+        # Create subscriber(s) to Nav2 cmd_vel topics.
+        self.cmd_vel_primary_sub = self.create_subscription(
             Twist,
-            '/cmd_vel',
+            input_topic_primary,
+            self.cmd_vel_callback,
+            10
+        )
+        self.cmd_vel_secondary_sub = self.create_subscription(
+            Twist,
+            input_topic_secondary,
             self.cmd_vel_callback,
             10
         )
@@ -31,7 +43,10 @@ class CmdVelRelay(Node):
         )
         
         self.get_logger().info('CMD_VEL Relay started')
-        self.get_logger().info('Relaying /cmd_vel (Twist) -> /jetbot_base_controller/cmd_vel (TwistStamped)')
+        self.get_logger().info(
+            f'Relaying {input_topic_primary} and {input_topic_secondary} '
+            '-> /jetbot_base_controller/cmd_vel (TwistStamped)'
+        )
         
         # Message counter for debugging
         self.msg_count = 0
@@ -67,7 +82,8 @@ def main(args=None):
         relay.get_logger().info('Shutting down CMD_VEL relay...')
     finally:
         relay.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

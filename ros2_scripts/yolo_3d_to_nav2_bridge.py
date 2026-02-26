@@ -23,16 +23,21 @@ class Yolo3DToNav2Bridge(Node):
         self.declare_parameter('confidence_threshold', 0.4)
         self.declare_parameter('goal_tolerance', 0.05)  # 5cm tolerance
         self.declare_parameter('cooldown_time', 5.0)  # Seconds between goals
+        self.declare_parameter('action_server_wait_s', 30.0)
+        self.declare_parameter('goal_frame', 'odom')
         
         self.approach_distance = self.get_parameter('approach_distance').value
         self.confidence_threshold = self.get_parameter('confidence_threshold').value
         self.goal_tolerance = self.get_parameter('goal_tolerance').value
         self.cooldown_time = self.get_parameter('cooldown_time').value
+        self.action_server_wait_s = float(self.get_parameter('action_server_wait_s').value)
+        self.goal_frame = str(self.get_parameter('goal_frame').value)
         
         # State tracking
         self.last_goal_time = 0
         self.current_goal_handle = None
         self.goal_in_progress = False
+        self._last_server_warn_time = 0.0
         
         # Nav2 action client
         self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
@@ -52,13 +57,16 @@ class Yolo3DToNav2Bridge(Node):
         
         # Wait for Nav2
         self.get_logger().info('⏳ Waiting for Nav2 action server...')
-        if self.nav_client.wait_for_server(timeout_sec=30.0):
+        if self.nav_client.wait_for_server(timeout_sec=self.action_server_wait_s):
             self.get_logger().info('✅ Nav2 action server ready!')
         else:
             self.get_logger().error('❌ Nav2 action server not available!')
     
     def position_callback(self, msg):
         """Handle incoming 3D ball position."""
+        if not rclpy.ok():
+            return
+
         # Check if we should send a new goal
         current_time = time.time()
         if self.goal_in_progress:
@@ -66,11 +74,23 @@ class Yolo3DToNav2Bridge(Node):
             
         if (current_time - self.last_goal_time) < self.cooldown_time:
             return  # Still in cooldown
+
+        try:
+            if not self.nav_client.server_is_ready():
+                if not self.nav_client.wait_for_server(timeout_sec=0.2):
+                    if (current_time - self._last_server_warn_time) > 2.0:
+                        self.get_logger().warn('Nav2 action server still unavailable; skipping this detection.')
+                        self._last_server_warn_time = current_time
+                    return
+                self.get_logger().info('Nav2 action server became ready.')
+        except Exception as exc:
+            self.get_logger().warn(f'Action server check failed during shutdown/teardown: {exc}')
+            return
         
         # Extract position
-        ball_x = msg.point.x
-        ball_y = msg.point.y
-        ball_z = msg.point.z
+        ball_x = float(msg.point.z)    # forward range in camera frame
+        ball_y = float(-msg.point.x)   # base_link +y (left) from camera +x (right)
+        ball_z = float(msg.point.y)    # vertical component (unused for planning)
         
         self.get_logger().info(f'🎾 Ball detected at: [{ball_x:.3f}, {ball_y:.3f}, {ball_z:.3f}]m')
         
@@ -103,7 +123,7 @@ class Yolo3DToNav2Bridge(Node):
         """Send a navigation goal to Nav2."""
         # Create goal pose
         goal_pose = PoseStamped()
-        goal_pose.header.frame_id = 'base_link'  # Goals relative to robot
+        goal_pose.header.frame_id = self.goal_frame
         goal_pose.header.stamp = self.get_clock().now().to_msg()
         
         goal_pose.pose.position.x = x
@@ -191,7 +211,8 @@ def main(args=None):
         bridge.get_logger().info('🛑 Shutting down bridge...')
     finally:
         bridge.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':
