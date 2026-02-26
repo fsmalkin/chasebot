@@ -1,5 +1,10 @@
 # ChaseBot Documentation
 
+> **Status (2026 rebuild):** This file is historical context. Canonical operations and runtime contracts now live in:
+> - `docs/ACTIVE_WORKFLOW.md`
+> - `docs/STACK_DECISIONS_2026.md`
+> - `docs/ROBOT_HARDWARE_CONTRACT_ORIN_NANO.md`
+
 ## 🚨 CRITICAL DEVELOPMENT RULE
 
 **ALWAYS COPY WORKING FILES BEFORE EDITING!**

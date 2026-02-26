@@ -30,9 +30,9 @@ if ($ExpectedRosDistro -and $ExpectedRosDistro -ne "auto") {
     $expectedSetup = "/opt/ros/$ExpectedRosDistro/setup.bash"
 }
 $rosCheckParts = @(
-    "if [ -f '$expectedSetup' ]; then source '$expectedSetup'; elif [ -f /opt/ros/jazzy/setup.bash ]; then source /opt/ros/jazzy/setup.bash; elif [ -f /opt/ros/humble/setup.bash ]; then source /opt/ros/humble/setup.bash; fi; if command -v ros2 >/dev/null 2>&1; then echo '[OK] ros2 found'; ros2 --help >/dev/null 2>&1 && echo '[OK] ros2 executable healthy'; else echo '[MISSING] ros2 not found'; fi",
+    "if [ -f '$expectedSetup' ]; then source '$expectedSetup'; elif [ -f /opt/ros/kilted/setup.bash ]; then source /opt/ros/kilted/setup.bash; elif [ -f /opt/ros/lyrical/setup.bash ]; then source /opt/ros/lyrical/setup.bash; elif [ -f /opt/ros/jazzy/setup.bash ]; then source /opt/ros/jazzy/setup.bash; elif [ -f /opt/ros/humble/setup.bash ]; then source /opt/ros/humble/setup.bash; fi; if command -v ros2 >/dev/null 2>&1; then echo '[OK] ros2 found'; ros2 --help >/dev/null 2>&1 && echo '[OK] ros2 executable healthy'; else echo '[MISSING] ros2 not found'; fi",
     "if [ -d /opt/ros ]; then echo '[OK] /opt/ros exists'; ls /opt/ros; else echo '[MISSING] /opt/ros not found'; fi",
-    "if [ -f /opt/ros/jazzy/setup.bash ]; then echo '[OK] jazzy setup found'; elif [ -f /opt/ros/humble/setup.bash ]; then echo '[OK] humble setup found'; else echo '[MISSING] neither jazzy nor humble setup found'; fi"
+    "if [ -f /opt/ros/kilted/setup.bash ]; then echo '[OK] kilted setup found'; elif [ -f /opt/ros/lyrical/setup.bash ]; then echo '[OK] lyrical setup found'; elif [ -f /opt/ros/jazzy/setup.bash ]; then echo '[OK] jazzy setup found'; elif [ -f /opt/ros/humble/setup.bash ]; then echo '[OK] humble setup found'; else echo '[MISSING] no supported ROS setup found'; fi"
 )
 if (-not [string]::IsNullOrWhiteSpace($expectedSetup)) {
     $rosCheckParts += "if [ -f '$expectedSetup' ]; then echo '[OK] explicit setup path exists: $expectedSetup'; else echo '[MISSING] explicit setup path missing: $expectedSetup'; fi"
@@ -45,10 +45,12 @@ Write-Host ""
 Write-Host "[4/5] Critical repo files" -ForegroundColor Yellow
 $critical = @(
     "CMakeLists.txt",
-    "ros2_config/launch/jetbot_yolo_nav2_complete.launch.py",
-    "ros2_scripts/sync_manager.py",
-    "sync_direct_follower_files.ps1",
-    "start_chasecar_gazebo.sh"
+    "docker-compose.yml",
+    "launch/sim_gate.launch.py",
+    "launch/perception_stack.launch.py",
+    "launch/nav_acquire_plan_track.launch.py",
+    "ros2_scripts/chasecar_tensorrt_detector.py",
+    "runtime/profiles/runtime_targets.yaml"
 )
 foreach ($file in $critical) {
     if (Test-Path (Join-Path "$PSScriptRoot\.." $file)) {
@@ -67,5 +69,7 @@ Write-Host "2) Install distro (if missing):"
 Write-Host "   wsl --install -d $ExpectedDistro"
 Write-Host "3) Sync follower files:"
 Write-Host "   .\sync_direct_follower_files.ps1 -Distro $ExpectedDistro"
-Write-Host "4) Run Gazebo starter from WSL:"
-Write-Host "   bash start_chasecar_gazebo.sh"
+Write-Host "4) Bootstrap docker host checks:"
+Write-Host "   .\scripts\bootstrap_docker_host.ps1 -ExpectedDistro $ExpectedDistro"
+Write-Host "5) Bring up gate profile:"
+Write-Host "   .\scripts\run_compose_gate.ps1 -Action up -Build"

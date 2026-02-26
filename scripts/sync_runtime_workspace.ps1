@@ -36,7 +36,11 @@ function Resolve-RosDistro {
     }
 
     $resolveCmd = @'
-if [ -f /opt/ros/jazzy/setup.bash ]; then
+if [ -f /opt/ros/kilted/setup.bash ]; then
+  echo kilted
+elif [ -f /opt/ros/lyrical/setup.bash ]; then
+  echo lyrical
+elif [ -f /opt/ros/jazzy/setup.bash ]; then
   echo jazzy
 elif [ -f /opt/ros/humble/setup.bash ]; then
   echo humble
@@ -157,3 +161,4 @@ if ($exitCode -ne 0) {
     Write-Error "Runtime workspace sync failed with exit code $exitCode"
 }
 exit $exitCode
+

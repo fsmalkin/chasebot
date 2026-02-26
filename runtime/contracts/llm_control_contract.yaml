@@ -1,0 +1,36 @@
+version: 1
+intents:
+  - name: acquire_target
+    description: "Acquire and lock a target from current perception stream."
+    required_args:
+      - target_class
+    default_timeout_s: 5
+  - name: plan_to_target
+    description: "Plan navigation toward current tracked target."
+    required_args:
+      - approach_distance_m
+    default_timeout_s: 10
+  - name: track_target
+    description: "Maintain continuous pursuit using refreshed 3D updates."
+    required_args: []
+    default_timeout_s: 30
+  - name: abort
+    description: "Cancel active navigation and tracking actions."
+    required_args: []
+    default_timeout_s: 2
+  - name: safe_stop
+    description: "Immediate controlled stop with deadman override."
+    required_args: []
+    default_timeout_s: 1
+
+safety_contract:
+  deadman_timeout_s: 0.5
+  max_linear_velocity_mps: 0.6
+  max_angular_velocity_radps: 2.5
+  command_staleness_limit_s: 0.25
+  require_goal_freshness_s: 1.5
+
+transport:
+  command_topic: /chasecar/brain/intent
+  feedback_topic: /chasecar/brain/feedback
+  emergency_stop_topic: /chasecar/safety/stop

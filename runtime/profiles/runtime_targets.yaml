@@ -1,0 +1,31 @@
+runtime_targets:
+  robot_fidelity_orin:
+    description: "Authoritative UAT gate target constrained to Orin Nano 8GB limits."
+    perf_profile: compat
+    inference_device_default: cuda:0
+    inference_backend: tensorrt_int8
+    require_gpu: true
+    headless_default: true
+    sim_lane: jetty_gate
+    enforce_robot_constraints: true
+  workstation_balanced:
+    description: "Developer default target with moderate throughput and optional GUI."
+    perf_profile: balanced
+    inference_device_default: auto
+    inference_backend: tensorrt_int8
+    require_gpu: false
+    headless_default: false
+    sim_lane: isaac_fidelity
+    enforce_robot_constraints: false
+  workstation_max:
+    description: "Maximum throughput lane for workstation validation."
+    perf_profile: max
+    inference_device_default: cuda:0
+    inference_backend: tensorrt_int8
+    require_gpu: true
+    headless_default: true
+    sim_lane: isaac_fidelity
+    enforce_robot_constraints: false
+
+legacy_aliases:
+  robot_fidelity: robot_fidelity_orin

@@ -1,12 +1,18 @@
 robot_hardware_constraints:
-  version: 1.0
+  version: 2.0
   physical_platform:
-    robot_name: jetbot_nano
+    robot_name: chasecar_orin_nano
     onboard_compute:
-      model: jetson_nano_4gb
-      cpu: quad_core_arm_a57
-      memory_gb: 4
-      gpu: nvidia_maxwell_128_cuda_cores
+      model: jetson_orin_nano_8gb
+      cpu: 6_core_arm_a78ae
+      memory_gb: 8
+      gpu: nvidia_ampere_1024_cuda_cores
+      dl_accelerators:
+        tensor_cores: true
+        dlas: 1
+      software_stack:
+        preferred_inference_backend: tensorrt_int8
+        deployment_engine_format: plan
     primary_sensor:
       model: intel_realsense_d415
       rgb:
@@ -22,12 +28,16 @@ robot_hardware_constraints:
   drivetrain:
     wheel_separation_m: 0.16
     wheel_radius_m: 0.032
-    max_linear_velocity_mps: 0.5
-    max_angular_velocity_radps: 2.0
+    max_linear_velocity_mps: 0.6
+    max_angular_velocity_radps: 2.5
     cmd_vel_timeout_s: 0.5
   controller:
     update_rate_hz: 100
+  power_thermal:
+    max_power_budget_w: 25
+    throttle_protection_required: true
   simulation_contract:
     enforce_velocity_limits: true
     enforce_camera_rate: true
     enforce_depth_range: true
+    enforce_compute_budget: true

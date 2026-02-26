@@ -1,0 +1,142 @@
+name: ${COMPOSE_PROJECT_NAME:-chasecar}
+
+x-chasecar-env: &chasecar-env
+  CHASECAR_RUNTIME_TARGET: ${RUNTIME_TARGET:-robot_fidelity_orin}
+  CHASECAR_SIM_LANE: ${SIM_LANE:-jetty_gate}
+  CHASECAR_INFERENCE_BACKEND: ${INFERENCE_BACKEND:-tensorrt_int8}
+  ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-88}
+  RMW_IMPLEMENTATION: ${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp}
+  NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+  NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-all}
+
+services:
+  core-kilted:
+    build:
+      context: .
+      dockerfile: containers/core-kilted/Dockerfile
+      args:
+        ROS_DISTRO: ${CORE_ROS_DISTRO:-kilted}
+    image: chasecar/core-kilted:${CORE_ROS_DISTRO:-kilted}
+    profiles: ["uat"]
+    environment:
+      <<: *chasecar-env
+    volumes:
+      - ./:/workspaces/chasecar:rw
+      - chasecar_ws:/root/ros2_ws
+    working_dir: /workspaces/chasecar
+    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && sleep infinity"]
+
+  sim-gate:
+    build:
+      context: .
+      dockerfile: containers/sim-gate/Dockerfile
+      args:
+        ROS_DISTRO: ${CORE_ROS_DISTRO:-kilted}
+    image: chasecar/sim-gate:${CORE_ROS_DISTRO:-kilted}
+    profiles: ["gate"]
+    environment:
+      <<: *chasecar-env
+      CHASECAR_WORLD_FILE: ${WORLD_FILE:-yolo_test_world_v6_clean_uat.world}
+    volumes:
+      - ./:/workspaces/chasecar:rw
+      - chasecar_ws:/root/ros2_ws
+    working_dir: /workspaces/chasecar
+    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/sim_gate.launch.py world:=${CHASECAR_WORLD_FILE:-yolo_test_world_v6_clean_uat.world} headless:=true perf_profile:=compat inference_device:=${GATE_INFERENCE_DEVICE:-cuda:0}"]
+
+  gate-stack:
+    build:
+      context: .
+      dockerfile: containers/core-kilted/Dockerfile
+      args:
+        ROS_DISTRO: ${CORE_ROS_DISTRO:-kilted}
+    image: chasecar/core-kilted:${CORE_ROS_DISTRO:-kilted}
+    profiles: ["gate"]
+    depends_on:
+      - sim-gate
+    environment:
+      <<: *chasecar-env
+      CHASECAR_SOURCE_PATH: /workspaces/chasecar
+    volumes:
+      - ./:/workspaces/chasecar:rw
+      - chasecar_ws:/root/ros2_ws
+    working_dir: /workspaces/chasecar
+    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/nav_acquire_plan_track.launch.py use_sim_time:=true include_nav2_bringup:=false"]
+
+  bridge-jazzy:
+    build:
+      context: .
+      dockerfile: containers/bridge-jazzy/Dockerfile
+      args:
+        BRIDGE_ROS_DISTRO: ${BRIDGE_ROS_DISTRO:-jazzy}
+    image: chasecar/bridge-jazzy:${BRIDGE_ROS_DISTRO:-jazzy}
+    profiles: ["isaac"]
+    environment:
+      <<: *chasecar-env
+      CHASECAR_BRIDGE_CONTRACT: /workspaces/chasecar/runtime/contracts/isaac_bridge_allowlist.yaml
+    volumes:
+      - ./:/workspaces/chasecar:rw
+      - chasecar_ws:/root/ros2_ws
+    working_dir: /workspaces/chasecar
+    command: ["bash", "-lc", "source /opt/ros/${BRIDGE_ROS_DISTRO:-jazzy}/setup.bash && ros2 launch /workspaces/chasecar/launch/sim_isaac_bridge.launch.py allowlist_path:=/workspaces/chasecar/runtime/contracts/isaac_bridge_allowlist.yaml"]
+
+  sim-isaac:
+    build:
+      context: .
+      dockerfile: containers/sim-isaac/Dockerfile
+      args:
+        ISAAC_SIM_IMAGE: ${ISAAC_SIM_IMAGE:-nvcr.io/nvidia/isaac-sim:4.5.0}
+    image: chasecar/sim-isaac:${ISAAC_SIM_TAG:-4.5.0}
+    profiles: ["isaac"]
+    environment:
+      <<: *chasecar-env
+    volumes:
+      - ./:/workspaces/chasecar:rw
+      - isaac_cache:/isaac-sim/cache
+      - isaac_logs:/isaac-sim/logs
+    working_dir: /workspaces/chasecar
+    command: ["bash", "-lc", "/opt/chasecar/start_isaac_lane.sh"]
+
+  isaac-stack:
+    build:
+      context: .
+      dockerfile: containers/core-kilted/Dockerfile
+      args:
+        ROS_DISTRO: ${CORE_ROS_DISTRO:-kilted}
+    image: chasecar/core-kilted:${CORE_ROS_DISTRO:-kilted}
+    profiles: ["isaac"]
+    depends_on:
+      - sim-isaac
+      - bridge-jazzy
+    environment:
+      <<: *chasecar-env
+      CHASECAR_SOURCE_PATH: /workspaces/chasecar
+      CHASECAR_SIM_LANE: isaac_fidelity
+    volumes:
+      - ./:/workspaces/chasecar:rw
+      - chasecar_ws:/root/ros2_ws
+    working_dir: /workspaces/chasecar
+    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/nav_acquire_plan_track.launch.py use_sim_time:=true include_nav2_bringup:=false"]
+
+  uat-orchestrator:
+    build:
+      context: .
+      dockerfile: containers/uat-runner/Dockerfile
+      args:
+        ROS_DISTRO: ${CORE_ROS_DISTRO:-kilted}
+    image: chasecar/uat-runner:${CORE_ROS_DISTRO:-kilted}
+    profiles: ["uat"]
+    depends_on:
+      - core-kilted
+    environment:
+      <<: *chasecar-env
+      CHASECAR_UAT_MODE: ${CHASECAR_UAT_MODE:-full}
+    volumes:
+      - ./:/workspaces/chasecar:rw
+      - chasecar_ws:/root/ros2_ws
+    working_dir: /workspaces/chasecar
+    command: ["bash", "-lc", "bash /workspaces/chasecar/uat/orchestrator/run_uat_orchestrator.sh"]
+
+volumes:
+  chasecar_ws:
+  isaac_cache:
+  isaac_logs:

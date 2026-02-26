@@ -1,0 +1,16 @@
+version: 1
+profile: int8
+dataset_root: runtime/tensorrt/calibration/images
+cache_file: runtime/tensorrt/calibration/calibration.cache
+engine_output: runtime/tensorrt/engines/ball_detector_int8.engine
+input_tensor:
+  name: images
+  shape: [1, 3, 640, 640]
+  format: nchw
+precision:
+  target: int8
+  fallback: fp16
+build_flags:
+  workspace_mb: 4096
+  timing_cache: runtime/tensorrt/calibration/timing.cache
+  strict_types: true

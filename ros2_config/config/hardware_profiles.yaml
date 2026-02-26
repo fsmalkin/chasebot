@@ -1,55 +1,67 @@
 runtime_profiles:
-  robot_fidelity:
+  robot_fidelity_orin:
     description: >
-      UAT gating profile. Enforces physical robot limits and deterministic timing.
-    inference_device_default: cpu
-    require_gpu: false
+      Authoritative UAT gate profile bound to Orin Nano 8GB hardware limits.
+    inference_device_default: cuda:0
+    inference_backend_default: tensorrt_int8
+    require_gpu: true
     gui_default: false
     perf_profile: compat
+    sim_lane_default: jetty_gate
     enforce_robot_constraints: true
     telemetry:
       enabled: true
       sample_window_s: 10
       expected_camera_rate_hz: 30
       max_allowed_dropped_frame_pct: 15
+      max_detection_stall_s: 2.0
 
   workstation_balanced:
     description: >
-      Development profile for desktop iteration. Prefers GPU if available.
+      Development profile for desktop iteration with GPU preference.
     inference_device_default: auto
+    inference_backend_default: tensorrt_int8
     require_gpu: false
     gui_default: true
     perf_profile: balanced
+    sim_lane_default: isaac_fidelity
     enforce_robot_constraints: false
     telemetry:
       enabled: true
       sample_window_s: 10
       expected_camera_rate_hz: 30
       max_allowed_dropped_frame_pct: 25
+      max_detection_stall_s: 2.0
 
   workstation_max:
     description: >
       Throughput profile for desktop. Requires GPU and minimizes debug overhead.
     inference_device_default: cuda:0
+    inference_backend_default: tensorrt_int8
     require_gpu: true
     gui_default: false
     perf_profile: max
+    sim_lane_default: isaac_fidelity
     enforce_robot_constraints: false
     telemetry:
       enabled: true
       sample_window_s: 10
       expected_camera_rate_hz: 30
       max_allowed_dropped_frame_pct: 35
+      max_detection_stall_s: 2.0
+
+legacy_aliases:
+  robot_fidelity: robot_fidelity_orin
 
 perf_profiles:
   compat:
     detector_log_interval_s: 5.0
     show_debug_window: false
-    notes: CPU-friendly and stable under constrained resources.
+    notes: Deterministic and constrained for authoritative gate runs.
   balanced:
     detector_log_interval_s: 3.0
     show_debug_window: true
-    notes: Default profile for iterative development.
+    notes: Default profile for iterative development and GUI checks.
   max:
     detector_log_interval_s: 10.0
     show_debug_window: false

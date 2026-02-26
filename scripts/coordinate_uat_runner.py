@@ -586,7 +586,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--runtime-target',
-        default='robot_fidelity',
+        default='robot_fidelity_orin',
         help='Runtime target label included in summary output.',
     )
     parser.add_argument(

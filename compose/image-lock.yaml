@@ -1,0 +1,23 @@
+images:
+  core_kilted:
+    base: "osrf/ros:kilted-desktop-full"
+    digest: "pin-on-first-green-build"
+  bridge_jazzy:
+    base: "osrf/ros:jazzy-ros-base"
+    digest: "pin-on-first-green-build"
+  sim_gate:
+    base: "osrf/ros:kilted-desktop-full"
+    digest: "pin-on-first-green-build"
+  sim_isaac:
+    base: "nvcr.io/nvidia/isaac-sim:4.5.0"
+    digest: "pin-after-nvcr-authenticated-build"
+  uat_runner:
+    base: "osrf/ros:kilted-desktop-full"
+    digest: "pin-on-first-green-build"
+
+policy:
+  update_window: "weekly"
+  owner: "recovery/uat-full-robot-2026-02"
+  notes:
+    - "Lock this file after every successful release candidate."
+    - "Kilted remains primary runtime while Lyrical compatibility runs in CI."

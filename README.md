@@ -4,6 +4,24 @@ A ROS 2-based vision-guided autonomous robot for collecting golf balls, built on
 
 > **ðŸš€ Major Update (January 2025)**: Moving from problematic 2D vision to Intel RealSense D415 3D camera for direct world coordinate detection. See `docs/d415_implementation_plan.md` for details.
 
+## 2026 Rebuild Track (Active)
+
+The active rebuild path is now container-first and dual-lane:
+
+1. Authoritative gate lane: ROS 2 Kilted + Gazebo Jetty (`jetty_gate`).
+2. High-fidelity lane: Isaac + Jazzy bridge sidecar (`isaac_fidelity`).
+3. Physical robot contract: Jetson Orin Nano 8GB.
+4. Canonical inference backend: TensorRT INT8 (`tensorrt_int8`).
+
+Primary workflow entrypoints:
+
+1. `scripts/bootstrap_docker_host.ps1`
+2. `scripts/run_compose_gate.ps1`
+3. `scripts/run_compose_isaac.ps1`
+4. `scripts/run_compose_uat.ps1`
+
+See `docs/ACTIVE_WORKFLOW.md` for canonical commands and contracts.
+
 ## ðŸŽ¯ Project Overview
 
 **Ultimate Goal**: Full-sized autonomous golf ball collection robot for driving ranges and golf courses.

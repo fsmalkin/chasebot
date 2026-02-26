@@ -1,11 +1,14 @@
 param(
-    [ValidateSet("robot_fidelity", "workstation_balanced", "workstation_max")]
-    [string]$RuntimeTarget = "robot_fidelity",
+    [ValidateSet("robot_fidelity_orin", "robot_fidelity", "workstation_balanced", "workstation_max")]
+    [string]$RuntimeTarget = "robot_fidelity_orin",
 
     [ValidateSet("compat", "balanced", "max")]
     [string]$PerfProfile,
 
     [string]$InferenceDevice,
+
+    [ValidateSet("tensorrt_int8")]
+    [string]$InferenceBackend = "tensorrt_int8",
 
     [Nullable[bool]]$Headless = $null,
 
@@ -44,7 +47,11 @@ function Resolve-RosDistro {
     }
 
     $resolveCmd = @'
-if [ -f /opt/ros/jazzy/setup.bash ]; then
+if [ -f /opt/ros/kilted/setup.bash ]; then
+  echo kilted
+elif [ -f /opt/ros/lyrical/setup.bash ]; then
+  echo lyrical
+elif [ -f /opt/ros/jazzy/setup.bash ]; then
   echo jazzy
 elif [ -f /opt/ros/humble/setup.bash ]; then
   echo humble
@@ -61,10 +68,17 @@ fi
     return $detected
 }
 
+$runtimeAliases = @{
+    robot_fidelity = "robot_fidelity_orin"
+}
+if ($runtimeAliases.ContainsKey($RuntimeTarget)) {
+    $RuntimeTarget = $runtimeAliases[$RuntimeTarget]
+}
+
 $defaults = @{
-    robot_fidelity = @{
+    robot_fidelity_orin = @{
         PerfProfile = "compat"
-        InferenceDevice = "cpu"
+        InferenceDevice = "cuda:0"
         Headless = $true
     }
     workstation_balanced = @{
@@ -116,6 +130,7 @@ RUN_ID="__RUN_ID__"
 RUNTIME_TARGET="__RUNTIME_TARGET__"
 PERF_PROFILE="__PERF_PROFILE__"
 INFERENCE_DEVICE="__INFERENCE_DEVICE__"
+INFERENCE_BACKEND="__INFERENCE_BACKEND__"
 HEADLESS="__HEADLESS__"
 DISPLAY_ENV="__DISPLAY_ENV__"
 INCLUDE_NAV_BRIDGE="__INCLUDE_NAV_BRIDGE__"
@@ -165,7 +180,7 @@ fi
 
 cleanup_stale_stack() {
   pkill -f "jetbot_gz_control_camera_test_v5.launch.py" 2>/dev/null || true
-  pkill -f "ros2_yolo_detector_frisbee_quiet.py" 2>/dev/null || true
+  pkill -f "chasecar_tensorrt_detector.py" 2>/dev/null || true
   pkill -f "yolo_3d_position_extractor.py" 2>/dev/null || true
   pkill -f "yolo_3d_to_nav2_bridge.py" 2>/dev/null || true
   pkill -f "jetbot_nav2_complete.launch.py" 2>/dev/null || true
@@ -191,7 +206,7 @@ SIM_PID=$(start_bg "sim" "$SIM_CMD")
 
 sleep 12
 
-DETECTOR_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/ros2_yolo_detector_frisbee_quiet.py --ros-args -p use_sim_time:=true -p input_topic:=/d415/color/image_raw -p inference_device:=$INFERENCE_DEVICE -p perf_profile:=$PERF_PROFILE -p headless:=$HEADLESS"
+DETECTOR_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/chasecar_tensorrt_detector.py --ros-args -p use_sim_time:=true -p input_topic:=/d415/color/image_raw -p inference_device:=$INFERENCE_DEVICE -p perf_profile:=$PERF_PROFILE -p headless:=$HEADLESS -p inference_backend:=$INFERENCE_BACKEND"
 DETECTOR_PID=$(start_bg "detector" "$DETECTOR_CMD")
 
 sleep 4
@@ -212,6 +227,7 @@ cat >"$ARTIFACT_DIR/stack_pids.json" <<JSON
   "runtime_target": "$RUNTIME_TARGET",
   "perf_profile": "$PERF_PROFILE",
   "inference_device": "$INFERENCE_DEVICE",
+  "inference_backend": "$INFERENCE_BACKEND",
   "headless": $HEADLESS,
   "launch_package": "source_path",
   "pids": {
@@ -238,6 +254,7 @@ $bash = $bashTemplate.
     Replace("__RUNTIME_TARGET__", $RuntimeTarget).
     Replace("__PERF_PROFILE__", $PerfProfile).
     Replace("__INFERENCE_DEVICE__", $InferenceDevice).
+    Replace("__INFERENCE_BACKEND__", $InferenceBackend).
     Replace("__HEADLESS__", $headlessStr).
     Replace("__DISPLAY_ENV__", $displayEnv).
     Replace("__INCLUDE_NAV_BRIDGE__", $includeNavBridgeStr).
@@ -250,6 +267,7 @@ Write-Host "Starting canonical stack..."
 Write-Host "  Runtime target: $RuntimeTarget"
 Write-Host "  Perf profile:   $PerfProfile"
 Write-Host "  Inference dev:  $InferenceDevice"
+Write-Host "  Inference back: $InferenceBackend"
 Write-Host "  Headless:       $headlessStr"
 Write-Host "  World:          $WorldFile"
 Write-Host "  Distro:         $Distro"
@@ -271,6 +289,7 @@ if ($exitCode -ne 0) {
     Write-Error "Canonical stack launch failed with exit code $exitCode"
 }
 exit $exitCode
+
 
 
 

@@ -6,3 +6,12 @@ log/
 __pycache__/
 *.pyc
 artifacts/
+runtime/tensorrt/engines/*
+!runtime/tensorrt/engines/.gitkeep
+runtime/tensorrt/onnx/*
+!runtime/tensorrt/onnx/.gitkeep
+runtime/tensorrt/calibration/images/*
+!runtime/tensorrt/calibration/images/.gitkeep
+runtime/tensorrt/calibration/*.cache
+runtime/tensorrt/calibration/*.json
+.env

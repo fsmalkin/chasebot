@@ -20,7 +20,7 @@ function Resolve-RosDistro {
         return $Requested
     }
 
-    $resolveCmd = "if [ -f /opt/ros/jazzy/setup.bash ]; then echo jazzy; elif [ -f /opt/ros/humble/setup.bash ]; then echo humble; elif [ -d /opt/ros ]; then ls -1 /opt/ros | head -n1; fi"
+    $resolveCmd = "if [ -f /opt/ros/kilted/setup.bash ]; then echo kilted; elif [ -f /opt/ros/lyrical/setup.bash ]; then echo lyrical; elif [ -f /opt/ros/jazzy/setup.bash ]; then echo jazzy; elif [ -f /opt/ros/humble/setup.bash ]; then echo humble; elif [ -d /opt/ros ]; then ls -1 /opt/ros | head -n1; fi"
     $detectedRaw = wsl -d $Distro -- bash -lc $resolveCmd 2>$null
     $detected = ($detectedRaw | Out-String).Trim()
 
@@ -372,7 +372,7 @@ else {
 
 if ($m0.status -eq "pass") {
     Run-MilestoneScript -Milestone $milestones[1] -ScriptName "run_canonical_stack.ps1" -Args @(
-        "-RuntimeTarget", "robot_fidelity",
+        "-RuntimeTarget", "robot_fidelity_orin",
         "-Distro", $Distro,
         "-WorkspacePath", $WorkspacePath,
         "-RosDistro", $effectiveRosDistro
@@ -397,7 +397,7 @@ if ($m0.status -eq "pass") {
 
 if ($milestones[2].status -eq "pending") {
     Run-MilestoneScript -Milestone $milestones[2] -ScriptName "run_coordinate_uat.ps1" -Args @(
-        "-RuntimeTarget", "robot_fidelity",
+        "-RuntimeTarget", "robot_fidelity_orin",
         "-Distro", $Distro,
         "-WorkspacePath", $WorkspacePath,
         "-RosDistro", $effectiveRosDistro
@@ -409,7 +409,7 @@ if ($milestones[2].status -eq "pending") {
 
 if ($milestones[3].status -eq "pending") {
     Run-MilestoneScript -Milestone $milestones[3] -ScriptName "run_orientation_uat.ps1" -Args @(
-        "-RuntimeTarget", "robot_fidelity",
+        "-RuntimeTarget", "robot_fidelity_orin",
         "-Distro", $Distro,
         "-WorkspacePath", $WorkspacePath,
         "-RosDistro", $effectiveRosDistro
@@ -421,7 +421,7 @@ if ($milestones[3].status -eq "pending") {
 
 if ($milestones[4].status -eq "pending") {
     Run-MilestoneScript -Milestone $milestones[4] -ScriptName "run_nav2_readiness_uat.ps1" -Args @(
-        "-RuntimeTarget", "robot_fidelity",
+        "-RuntimeTarget", "robot_fidelity_orin",
         "-Distro", $Distro,
         "-WorkspacePath", $WorkspacePath,
         "-RosDistro", $effectiveRosDistro,
@@ -444,20 +444,20 @@ if ($milestones[5].status -eq "pending") {
     else {
         $m5a = Invoke-ScriptWithLog `
             -ScriptPath (Join-Path $repoRoot "scripts/run_coordinate_uat.ps1") `
-            -Args @("-RuntimeTarget", "robot_fidelity", "-Distro", $Distro, "-WorkspacePath", $WorkspacePath, "-RosDistro", $effectiveRosDistro) `
+            -Args @("-RuntimeTarget", "robot_fidelity_orin", "-Distro", $Distro, "-WorkspacePath", $WorkspacePath, "-RosDistro", $effectiveRosDistro) `
             -LogPath $m5.log_file
         if ($m5a.ArtifactDir) { $m5.notes += "coordinate artifact: $($m5a.ArtifactDir)" }
 
         $m5b = Invoke-ScriptWithLog `
             -ScriptPath (Join-Path $repoRoot "scripts/run_orientation_uat.ps1") `
-            -Args @("-RuntimeTarget", "robot_fidelity", "-Distro", $Distro, "-WorkspacePath", $WorkspacePath, "-RosDistro", $effectiveRosDistro) `
+            -Args @("-RuntimeTarget", "robot_fidelity_orin", "-Distro", $Distro, "-WorkspacePath", $WorkspacePath, "-RosDistro", $effectiveRosDistro) `
             -LogPath $m5.log_file `
             -AppendLog
         if ($m5b.ArtifactDir) { $m5.notes += "orientation artifact: $($m5b.ArtifactDir)" }
 
         $m5c = Invoke-ScriptWithLog `
             -ScriptPath (Join-Path $repoRoot "scripts/run_nav2_readiness_uat.ps1") `
-            -Args @("-RuntimeTarget", "robot_fidelity", "-Distro", $Distro, "-WorkspacePath", $WorkspacePath, "-RosDistro", $effectiveRosDistro, "-DurationSeconds", "120") `
+            -Args @("-RuntimeTarget", "robot_fidelity_orin", "-Distro", $Distro, "-WorkspacePath", $WorkspacePath, "-RosDistro", $effectiveRosDistro, "-DurationSeconds", "120") `
             -LogPath $m5.log_file `
             -AppendLog
         if ($m5c.ArtifactDir) { $m5.notes += "nav2 artifact: $($m5c.ArtifactDir)" }
@@ -558,4 +558,3 @@ if ((@($milestones | Where-Object { $_.status -in @("blocked", "fail") }).Count)
     exit 2
 }
 exit 0
-

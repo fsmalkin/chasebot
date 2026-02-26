@@ -1,0 +1,53 @@
+version: 1
+description: "Explicit ROS <-> simulator interface allowlist for the Isaac/Jazzy sidecar boundary."
+
+topics:
+  - ros_topic: /clock
+    ros_type: rosgraph_msgs/msg/Clock
+    sim_type: gz.msgs.Clock
+    direction: sim_to_ros
+
+  - ros_topic: /d415/color/image_raw
+    ros_type: sensor_msgs/msg/Image
+    sim_type: gz.msgs.Image
+    direction: sim_to_ros
+
+  - ros_topic: /d415/color/camera_info
+    ros_type: sensor_msgs/msg/CameraInfo
+    sim_type: gz.msgs.CameraInfo
+    direction: sim_to_ros
+
+  - ros_topic: /d415/depth/image_raw
+    ros_type: sensor_msgs/msg/Image
+    sim_type: gz.msgs.Image
+    direction: sim_to_ros
+
+  - ros_topic: /d415/depth/camera_info
+    ros_type: sensor_msgs/msg/CameraInfo
+    sim_type: gz.msgs.CameraInfo
+    direction: sim_to_ros
+
+  - ros_topic: /cmd_vel
+    ros_type: geometry_msgs/msg/Twist
+    sim_type: gz.msgs.Twist
+    direction: ros_to_sim
+
+  - ros_topic: /odom
+    ros_type: nav_msgs/msg/Odometry
+    sim_type: gz.msgs.Odometry
+    direction: sim_to_ros
+
+  - ros_topic: /tf
+    ros_type: tf2_msgs/msg/TFMessage
+    sim_type: gz.msgs.Pose_V
+    direction: sim_to_ros
+
+actions:
+  - name: /navigate_to_pose
+    action_type: nav2_msgs/action/NavigateToPose
+    owner: kilted_core
+
+services:
+  - name: /lifecycle_manager_navigation/manage_nodes
+    service_type: nav2_msgs/srv/ManageLifecycleNodes
+    owner: kilted_core

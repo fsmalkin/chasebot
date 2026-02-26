@@ -13,6 +13,9 @@ find_package(ament_cmake_python REQUIRED)
 install(DIRECTORY ros2_config/launch
   DESTINATION share/${PROJECT_NAME}/
 )
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME}/
+)
 
 # Install ROS 2 URDF files
 install(DIRECTORY ros2_config/urdf
@@ -65,6 +68,7 @@ install(PROGRAMS
   ros2_scripts/ros2_yolo_detector_silent.py
   ros2_scripts/ros2_yolo_detector_frisbee.py
   ros2_scripts/ros2_yolo_detector_frisbee_quiet.py
+  ros2_scripts/chasecar_tensorrt_detector.py
   ros2_scripts/ros2_yolo_detector_headless.py
   ros2_scripts/ros2_vision_to_laserscan_hsv.py
   ros2_scripts/ros2_ball_to_nav_goal.py

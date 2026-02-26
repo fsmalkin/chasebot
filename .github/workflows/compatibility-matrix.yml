@@ -1,0 +1,43 @@
+name: chasecar-compatibility-matrix
+
+on:
+  push:
+    branches: ["main", "recovery/**"]
+  pull_request:
+    branches: ["main", "recovery/**"]
+
+jobs:
+  ros-matrix-smoke:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        ros_distro: [kilted, lyrical]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python syntax smoke
+        run: |
+          python -m py_compile \
+            scripts/build_tensorrt_engine.py \
+            scripts/export_yolo_onnx.py \
+            scripts/generate_int8_calibration_manifest.py \
+            scripts/coordinate_uat_runner.py \
+            scripts/orientation_uat_runner.py \
+            scripts/nav2_readiness_runner.py \
+            ros2_scripts/chasecar_tensorrt_detector.py
+
+      - name: Compose config smoke
+        env:
+          CORE_ROS_DISTRO: ${{ matrix.ros_distro }}
+          BRIDGE_ROS_DISTRO: jazzy
+          RUNTIME_TARGET: robot_fidelity_orin
+          SIM_LANE: jetty_gate
+          INFERENCE_BACKEND: tensorrt_int8
+        run: docker compose config > /tmp/chasecar_compose_${{ matrix.ros_distro }}.yaml

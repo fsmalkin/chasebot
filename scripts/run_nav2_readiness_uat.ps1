@@ -1,11 +1,14 @@
 param(
-    [ValidateSet("robot_fidelity", "workstation_balanced", "workstation_max")]
-    [string]$RuntimeTarget = "robot_fidelity",
+    [ValidateSet("robot_fidelity_orin", "robot_fidelity", "workstation_balanced", "workstation_max")]
+    [string]$RuntimeTarget = "robot_fidelity_orin",
 
     [ValidateSet("compat", "balanced", "max")]
     [string]$PerfProfile,
 
     [string]$InferenceDevice,
+
+    [ValidateSet("tensorrt_int8")]
+    [string]$InferenceBackend = "tensorrt_int8",
 
     [Nullable[bool]]$Headless = $null,
 
@@ -52,7 +55,11 @@ function Resolve-RosDistro {
     }
 
     $resolveCmd = @'
-if [ -f /opt/ros/jazzy/setup.bash ]; then
+if [ -f /opt/ros/kilted/setup.bash ]; then
+  echo kilted
+elif [ -f /opt/ros/lyrical/setup.bash ]; then
+  echo lyrical
+elif [ -f /opt/ros/jazzy/setup.bash ]; then
   echo jazzy
 elif [ -f /opt/ros/humble/setup.bash ]; then
   echo humble
@@ -69,10 +76,17 @@ fi
     return $detected
 }
 
+$runtimeAliases = @{
+    robot_fidelity = "robot_fidelity_orin"
+}
+if ($runtimeAliases.ContainsKey($RuntimeTarget)) {
+    $RuntimeTarget = $runtimeAliases[$RuntimeTarget]
+}
+
 $defaults = @{
-    robot_fidelity = @{
+    robot_fidelity_orin = @{
         PerfProfile = "compat"
-        InferenceDevice = "cpu"
+        InferenceDevice = "cuda:0"
         Headless = $true
     }
     workstation_balanced = @{
@@ -127,6 +141,7 @@ CONFIG_PATH_INPUT="__CONFIG_PATH_INPUT__"
 RUNTIME_TARGET="__RUNTIME_TARGET__"
 PERF_PROFILE="__PERF_PROFILE__"
 INFERENCE_DEVICE="__INFERENCE_DEVICE__"
+INFERENCE_BACKEND="__INFERENCE_BACKEND__"
 HEADLESS="__HEADLESS__"
 DISPLAY_ENV="__DISPLAY_ENV__"
 DURATION_S="__DURATION_S__"
@@ -186,7 +201,7 @@ fi
 
 cleanup_stale_stack() {
   pkill -f "jetbot_gz_control_camera_test_v5.launch.py" 2>/dev/null || true
-  pkill -f "ros2_yolo_detector_frisbee_quiet.py" 2>/dev/null || true
+  pkill -f "chasecar_tensorrt_detector.py" 2>/dev/null || true
   pkill -f "yolo_3d_position_extractor.py" 2>/dev/null || true
   pkill -f "yolo_3d_to_nav2_bridge.py" 2>/dev/null || true
   pkill -f "jetbot_nav2_complete.launch.py" 2>/dev/null || true
@@ -215,7 +230,7 @@ SIM_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/
 SIM_PID=$(start_bg "sim" "$SIM_CMD")
 sleep 12
 
-DETECTOR_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/ros2_yolo_detector_frisbee_quiet.py --ros-args -p use_sim_time:=true -p input_topic:=/d415/color/image_raw -p inference_device:=$INFERENCE_DEVICE -p perf_profile:=$PERF_PROFILE -p headless:=$HEADLESS -p enable_sim_red_fallback:=true"
+DETECTOR_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/chasecar_tensorrt_detector.py --ros-args -p use_sim_time:=true -p input_topic:=/d415/color/image_raw -p inference_device:=$INFERENCE_DEVICE -p perf_profile:=$PERF_PROFILE -p headless:=$HEADLESS -p inference_backend:=$INFERENCE_BACKEND -p allow_red_fallback:=true"
 DETECTOR_PID=$(start_bg "detector" "$DETECTOR_CMD")
 sleep 4
 
@@ -270,6 +285,7 @@ $bash = $bashTemplate.
     Replace("__RUNTIME_TARGET__", $RuntimeTarget).
     Replace("__PERF_PROFILE__", $PerfProfile).
     Replace("__INFERENCE_DEVICE__", $InferenceDevice).
+    Replace("__INFERENCE_BACKEND__", $InferenceBackend).
     Replace("__HEADLESS__", $headlessStr).
     Replace("__DISPLAY_ENV__", $displayEnv).
     Replace("__DURATION_S__", $DurationSeconds.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
@@ -284,6 +300,7 @@ Write-Host "Running Nav2 readiness UAT..."
 Write-Host "  Runtime target: $RuntimeTarget"
 Write-Host "  Perf profile:   $PerfProfile"
 Write-Host "  Inference dev:  $InferenceDevice"
+Write-Host "  Inference back: $InferenceBackend"
 Write-Host "  Headless:       $headlessStr"
 Write-Host "  World:          $WorldFile"
 Write-Host "  ROS distro:     $RosDistro"
@@ -307,6 +324,7 @@ if ($exitCode -ne 0) {
     Write-Error "Nav2 readiness UAT failed with exit code $exitCode"
 }
 exit $exitCode
+
 
 
 
