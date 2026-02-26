@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     jq \
+    ros-${BRIDGE_ROS_DISTRO}-rmw-cyclonedds-cpp \
     python3-yaml \
     && \
     for pkg in \

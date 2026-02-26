@@ -11,16 +11,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     jq \
+    ros-${ROS_DISTRO}-nav2-bringup \
+    ros-${ROS_DISTRO}-nav2-msgs \
+    ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
     python3-pip \
-    python3-venv \
+    python3-opencv \
+    python3-typing-extensions \
     python3-yaml \
     python3-numpy \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --no-cache-dir --break-system-packages \
     onnx==1.17.0 \
-    onnxruntime==1.20.1 \
-    pyyaml==6.0.2
+    onnxruntime==1.20.1
 
 COPY containers/common/entrypoint.sh /opt/chasecar/entrypoint.sh
 RUN chmod +x /opt/chasecar/entrypoint.sh && mkdir -p /root/ros2_ws/src

@@ -34,15 +34,26 @@ def _resolve_source_root() -> str:
     raise RuntimeError("Unable to resolve source root for nav lane launch.")
 
 
-def _resolve_nav_launch() -> str:
+def _resolve_nav_launch(source_root: str) -> str:
+    for launch_name in (
+        "jetbot_nav2_rosgz_readiness.launch.py",
+        "nav2_complete_uat.launch.py",
+    ):
+        source_candidate = os.path.join(source_root, "ros2_config", "launch", launch_name)
+        if os.path.isfile(source_candidate):
+            return source_candidate
     for pkg in ("chasecar_description", "chasebot_description"):
         try:
             share_dir = get_package_share_directory(pkg)
         except PackageNotFoundError:
             continue
-        candidate = os.path.join(share_dir, "ros2_config", "launch", "nav2_complete_uat.launch.py")
-        if os.path.isfile(candidate):
-            return candidate
+        for launch_name in (
+            "jetbot_nav2_rosgz_readiness.launch.py",
+            "nav2_complete_uat.launch.py",
+        ):
+            candidate = os.path.join(share_dir, "ros2_config", "launch", launch_name)
+            if os.path.isfile(candidate):
+                return candidate
     return ""
 
 
@@ -53,10 +64,12 @@ def _as_bool(value: str) -> bool:
 def _build_actions(context):
     source_root = _resolve_source_root()
     nav_bridge_path = os.path.join(source_root, "ros2_scripts", "yolo_3d_to_nav2_bridge.py")
+    cmd_vel_relay_path = os.path.join(source_root, "ros2_scripts", "cmd_vel_relay.py")
 
     use_sim_time = LaunchConfiguration("use_sim_time").perform(context)
     include_bridge = _as_bool(LaunchConfiguration("include_bridge").perform(context))
     include_nav2_bringup = _as_bool(LaunchConfiguration("include_nav2_bringup").perform(context))
+    include_cmd_vel_relay = _as_bool(LaunchConfiguration("include_cmd_vel_relay").perform(context))
 
     actions = [
         LogInfo(msg=["[nav_lane] source root: ", source_root]),
@@ -69,8 +82,15 @@ def _build_actions(context):
         )
         actions.append(ExecuteProcess(cmd=["bash", "-lc", bridge_cmd], output="screen"))
 
+    if include_nav2_bringup and include_cmd_vel_relay:
+        relay_cmd = (
+            f"python3 {shlex.quote(cmd_vel_relay_path)} --ros-args "
+            f"-p use_sim_time:={use_sim_time}"
+        )
+        actions.append(ExecuteProcess(cmd=["bash", "-lc", relay_cmd], output="screen"))
+
     if include_nav2_bringup:
-        nav_launch = _resolve_nav_launch()
+        nav_launch = _resolve_nav_launch(source_root)
         if nav_launch:
             actions.append(
                 IncludeLaunchDescription(
@@ -79,7 +99,7 @@ def _build_actions(context):
                 )
             )
         else:
-            actions.append(LogInfo(msg="[nav_lane] nav2_complete_uat.launch.py not found; skipping Nav2 bringup."))
+            actions.append(LogInfo(msg="[nav_lane] Nav2 bringup launch not found; skipping Nav2 bringup."))
 
     return actions
 
@@ -92,6 +112,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("use_sim_time", default_value="true"),
             DeclareLaunchArgument("include_bridge", default_value="true"),
             DeclareLaunchArgument("include_nav2_bringup", default_value="false"),
+            DeclareLaunchArgument("include_cmd_vel_relay", default_value="true"),
             IncludeLaunchDescription(PythonLaunchDescriptionSource(perception_launch)),
             OpaqueFunction(function=_build_actions),
         ]

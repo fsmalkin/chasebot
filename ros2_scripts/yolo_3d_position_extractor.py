@@ -30,11 +30,18 @@ class YOLO3DPositionExtractor(Node):
         self.declare_parameter('confidence_threshold', 0.1)
         self.declare_parameter('detection_stale_timeout_s', 0.5)
         self.declare_parameter('depth_sample_radius_px', 3)
+        self.declare_parameter('position_units', 'auto')
         self.confidence_threshold = self.get_parameter('confidence_threshold').value
         self.detection_stale_timeout_s = float(
             self.get_parameter('detection_stale_timeout_s').value
         )
         self.depth_sample_radius_px = int(self.get_parameter('depth_sample_radius_px').value)
+        self.position_units = str(self.get_parameter('position_units').value).strip().lower()
+        if self.position_units not in ('auto', 'normalized', 'pixels'):
+            self.get_logger().warn(
+                f"Unsupported position_units='{self.position_units}', defaulting to 'auto'"
+            )
+            self.position_units = 'auto'
         
         # CV Bridge for image conversion
         self.bridge = CvBridge()
@@ -54,9 +61,9 @@ class YOLO3DPositionExtractor(Node):
         
         # QoS profile for sensor data
         sensor_qos = QoSProfile(
-            reliability=ReliabilityPolicy.BEST_EFFORT,
+            reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
-            depth=1,
+            depth=10,
             durability=DurabilityPolicy.VOLATILE
         )
         
@@ -100,12 +107,14 @@ class YOLO3DPositionExtractor(Node):
         self.get_logger().info(f'Confidence threshold: {self.confidence_threshold}')
         self.get_logger().info(f'Detection stale timeout: {self.detection_stale_timeout_s:.2f}s')
         self.get_logger().info(f'Depth sample radius: {self.depth_sample_radius_px}px')
+        self.get_logger().info(f'Position units mode: {self.position_units}')
         self.get_logger().info('Waiting for camera info and detections...')
         
         # Debug counters
         self.position_received_count = 0
         self.confidence_received_count = 0
         self.depth_received_count = 0
+        self.position_3d_count = 0
     
     def camera_info_callback(self, msg):
         """Extract camera intrinsics from camera info"""
@@ -178,10 +187,24 @@ class YOLO3DPositionExtractor(Node):
                 self.get_logger().error(f'Unsupported depth encoding: {msg.encoding}')
                 return
             
-            # Convert normalized coordinates to pixel coordinates
+            # Convert detector coordinates to pixel coordinates.
+            # Legacy detectors published normalized [0..1], current canonical detector publishes pixels.
             height, width = depth_image.shape
-            pixel_x = int(self.latest_position_2d.x * width)
-            pixel_y = int(self.latest_position_2d.y * height)
+            raw_x = float(self.latest_position_2d.x)
+            raw_y = float(self.latest_position_2d.y)
+            if self.position_units == 'normalized':
+                use_normalized = True
+            elif self.position_units == 'pixels':
+                use_normalized = False
+            else:
+                use_normalized = (-1.5 <= raw_x <= 1.5) and (-1.5 <= raw_y <= 1.5)
+
+            if use_normalized:
+                pixel_x = int(raw_x * width)
+                pixel_y = int(raw_y * height)
+            else:
+                pixel_x = int(raw_x)
+                pixel_y = int(raw_y)
             
             # Ensure pixel coordinates are within bounds
             pixel_x = max(0, min(pixel_x, width - 1))
@@ -201,7 +224,7 @@ class YOLO3DPositionExtractor(Node):
                 depth_value = float(depth_image[pixel_y, pixel_x] * depth_scale)
             
             # Get depth statistics for debugging
-            valid_depths = depth_image[depth_image > 0]
+            valid_depths = depth_image[np.isfinite(depth_image) & (depth_image > 0)]
             if len(valid_depths) > 0:
                 min_depth = np.min(valid_depths) * depth_scale
                 max_depth = np.max(valid_depths) * depth_scale
@@ -216,10 +239,11 @@ class YOLO3DPositionExtractor(Node):
             
             # Skip if depth is invalid (0 or very large)
             if depth_value <= 0.01 or depth_value > 10.0:
-                self.get_logger().warn(
-                    f'Invalid depth at ({pixel_x}, {pixel_y}): {depth_value:.3f}m '
-                    f'(encoding: {msg.encoding}, scale: {depth_scale})'
-                )
+                if self.depth_received_count % 30 == 1:
+                    self.get_logger().warn(
+                        f'Invalid depth at ({pixel_x}, {pixel_y}): {depth_value:.3f}m '
+                        f'(encoding: {msg.encoding}, scale: {depth_scale})'
+                    )
                 return
             
             # Convert pixel + depth to 3D point using camera intrinsics
@@ -237,12 +261,13 @@ class YOLO3DPositionExtractor(Node):
             position_3d.point.z = z
             
             self.position_3d_pub.publish(position_3d)
-            
-            self.get_logger().info(
-                f'3D Position: [{x:.3f}, {y:.3f}, {z:.3f}]m '
-                f'(from pixel [{pixel_x}, {pixel_y}], '
-                f'confidence: {self.latest_confidence:.3f})'
-            )
+            self.position_3d_count += 1
+            if self.position_3d_count % 10 == 1:
+                self.get_logger().info(
+                    f'3D Position: [{x:.3f}, {y:.3f}, {z:.3f}]m '
+                    f'(from pixel [{pixel_x}, {pixel_y}], '
+                    f'confidence: {self.latest_confidence:.3f})'
+                )
             
         except Exception as e:
             self.get_logger().error(f'Error processing depth: {str(e)}')

@@ -28,7 +28,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 if ([string]::IsNullOrWhiteSpace($ProjectName)) {
-    $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+    $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmss")
     $ProjectName = "chasecar_${Profile}_$timestamp"
 }
 
@@ -78,9 +78,29 @@ Write-Host "  ROS core:  $CoreRosDistro"
 Write-Host "  ROS bridge:$BridgeRosDistro"
 Write-Host ""
 
+$dockerCmd = $null
+$dockerResolved = Get-Command docker -ErrorAction SilentlyContinue
+if ($dockerResolved) {
+    $dockerCmd = $dockerResolved.Source
+}
+if (-not $dockerCmd) {
+    $fallbackDocker = "C:\Program Files\Docker\Docker\resources\bin\docker.exe"
+    if (Test-Path -LiteralPath $fallbackDocker) {
+        $dockerCmd = $fallbackDocker
+    }
+}
+if (-not $dockerCmd) {
+    throw "Unable to locate docker CLI. Install Docker Desktop or add docker.exe to PATH."
+}
+
+$dockerBinDir = Split-Path -Parent $dockerCmd
+if ($dockerBinDir -and -not (($env:Path -split ';') -contains $dockerBinDir)) {
+    $env:Path = "$dockerBinDir;$env:Path"
+}
+
 Push-Location $repoRoot
 try {
-    & docker @cmd
+    & $dockerCmd @cmd
 }
 finally {
     Pop-Location

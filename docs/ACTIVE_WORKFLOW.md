@@ -29,6 +29,12 @@ Windows wrappers:
 2. `scripts/run_compose_isaac.ps1`
 3. `scripts/run_compose_uat.ps1`
 
+Compose hygiene:
+
+1. Before a new run, stop stale gate projects sharing the same ROS domain:
+   - `docker ps --format "table {{.Names}}\t{{.Status}}"`
+   - `docker compose -p <stale_project> down --remove-orphans`
+
 ## Canonical Launch Surfaces
 
 1. `launch/sim_gate.launch.py`
@@ -49,11 +55,17 @@ Windows wrappers:
    - `scripts/bootstrap_docker_host.ps1`
 2. Runtime sync:
    - `scripts/sync_runtime_workspace.ps1 -Distro Ubuntu-24.04 -SkipBuild`
-3. Coordinate UAT:
+3. Start gate lane with Nav2 bringup disabled (deterministic perception/orientation):
+   - `scripts/run_compose_gate.ps1 -ProjectName chasecar_gate_nav2fix -Action up`
+4. Coordinate UAT:
    - `scripts/run_coordinate_uat.ps1 -RuntimeTarget robot_fidelity_orin`
-4. Orientation UAT:
+5. Orientation UAT:
    - `scripts/run_orientation_uat.ps1 -RuntimeTarget robot_fidelity_orin`
-5. Nav2 readiness UAT:
+6. Recreate gate lane with Nav2 bringup enabled:
+   - `$env:GATE_INCLUDE_NAV2_BRINGUP='true'`
+   - `scripts/run_compose_gate.ps1 -ProjectName chasecar_gate_nav2fix -Action up`
+7. Spawn deterministic nav readiness target if using raw nav runner.
+8. Nav2 readiness UAT:
    - `scripts/run_nav2_readiness_uat.ps1 -RuntimeTarget robot_fidelity_orin`
 
 ## Visual UAT Sequence
@@ -105,3 +117,4 @@ Compatibility wrappers:
 1. Gazebo Classic is non-canonical and not used in rebuilt promotion gates.
 2. Kilted is primary; Lyrical compatibility runs in CI.
 3. Isaac runs behind a Jazzy bridge sidecar contract until native Kilted support is validated.
+4. `ros2 action list` includes action clients; validate server availability with `ros2 action info /navigate_to_pose` and check `Action servers: 1`.

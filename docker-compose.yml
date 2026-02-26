@@ -60,7 +60,7 @@ services:
       - ./:/workspaces/chasecar:rw
       - chasecar_ws:/root/ros2_ws
     working_dir: /workspaces/chasecar
-    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/nav_acquire_plan_track.launch.py use_sim_time:=true include_nav2_bringup:=false"]
+    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/nav_acquire_plan_track.launch.py use_sim_time:=true include_nav2_bringup:=${GATE_INCLUDE_NAV2_BRINGUP:-false}"]
 
   bridge-jazzy:
     build:

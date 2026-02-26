@@ -14,20 +14,29 @@ This file captures repo-specific execution guidance for coding agents.
 ## First Steps Per Session
 
 1. Check repo state: `git status --short`.
-2. Run host bootstrap checks:
+2. Ensure no stale compose projects are running on the same ROS domain:
+   - `docker ps --format "table {{.Names}}\t{{.Status}}"`
+   - Stop stale gate stacks before starting a new session.
+3. Run host bootstrap checks:
    - `powershell -ExecutionPolicy Bypass -File scripts/bootstrap_docker_host.ps1 -ExpectedDistro Ubuntu-24.04`
-3. Sync source into runtime mirror:
+4. Sync source into runtime mirror:
    - `powershell -ExecutionPolicy Bypass -File scripts/sync_runtime_workspace.ps1 -Distro Ubuntu-24.04 -WorkspacePath '~/ros2_ws' -SkipBuild -RosDistro kilted`
-4. Bring up gate lane:
+5. Bring up gate lane:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_compose_gate.ps1 -Action up -Build`
 
 ## Canonical Headless UAT Path
 
-1. Coordinate UAT:
+1. Start gate lane for deterministic perception checks (Nav2 disabled):
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_compose_gate.ps1 -ProjectName chasecar_gate_nav2fix -Action up`
+2. Coordinate UAT:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_coordinate_uat.ps1 -RuntimeTarget robot_fidelity_orin -InferenceBackend tensorrt_int8 -Distro Ubuntu-24.04 -WorkspacePath '~/ros2_ws' -RosDistro kilted`
-2. Orientation UAT:
+3. Orientation UAT:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_orientation_uat.ps1 -RuntimeTarget robot_fidelity_orin -InferenceBackend tensorrt_int8 -Distro Ubuntu-24.04 -WorkspacePath '~/ros2_ws' -RosDistro kilted`
-3. Nav2 readiness UAT:
+4. Recreate gate lane with Nav2 enabled for navigation readiness:
+   - `$env:GATE_INCLUDE_NAV2_BRINGUP='true'`
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_compose_gate.ps1 -ProjectName chasecar_gate_nav2fix -Action up`
+5. Spawn deterministic target before Nav2 readiness run (if using raw runner).
+6. Nav2 readiness UAT:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_nav2_readiness_uat.ps1 -RuntimeTarget robot_fidelity_orin -InferenceBackend tensorrt_int8 -Distro Ubuntu-24.04 -WorkspacePath '~/ros2_ws' -RosDistro kilted`
 
 ## Compose Profiles
@@ -44,6 +53,8 @@ This file captures repo-specific execution guidance for coding agents.
 1. Isaac runtime container requires NVIDIA Container Toolkit and valid image access.
 2. `run_autonomous_uat.ps1` should be treated as orchestration glue; direct UAT scripts remain authoritative for triage.
 3. If a long run appears stuck in WSL-hosted mode, stop with `wsl --shutdown` and rerun from a clean session.
+4. `ros2 action list` includes clients and may show `/navigate_to_pose` even when no server is active. Use `ros2 action info /navigate_to_pose` and confirm `Action servers: 1` for readiness.
+5. `scripts/run_compose_profile.ps1` now auto-resolves Docker Desktop CLI path (`C:\Program Files\Docker\Docker\resources\bin\docker.exe`) when `docker` is not on PATH.
 
 ## Artifact Contracts
 
