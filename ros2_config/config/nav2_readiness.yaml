@@ -5,6 +5,11 @@ metadata:
   cmd_vel_topic_secondary: /cmd_vel
   detection_topic: /yolo/ball_position_3d
   rosout_topic: /rosout
+  world_name: yolo_test_world
+  model_sdf: ros2_config/frisbee_target_ball.sdf
+  target_model_name: uat_nav2_target
+  spawn_world: {x: 1.2, y: 0.0, z: 0.05}
+  bridge_mode: managed
 
 defaults:
   warmup_s: 15.0

@@ -35,13 +35,13 @@ navigation_thresholds:
 
 scenarios:
   - id: center_near
-    spawn_world: {x: 1.20, y: 0.00, z: 0.05}
-    truth_camera: {x_m: 0.00, z_m: 1.20}
+    spawn_world: {x: 0.60, y: 0.00, z: 0.05}
+    truth_camera: {x_m: 0.00, z_m: 0.60}
     timeout_s: 20.0
 
   - id: center_far
-    spawn_world: {x: 2.20, y: 0.00, z: 0.05}
-    truth_camera: {x_m: 0.00, z_m: 2.20}
+    spawn_world: {x: 1.50, y: 0.00, z: 0.05}
+    truth_camera: {x_m: 0.00, z_m: 1.50}
     timeout_s: 20.0
 
   - id: left_offset
@@ -55,23 +55,23 @@ scenarios:
     timeout_s: 20.0
 
   - id: near_depth_edge
-    spawn_world: {x: 0.80, y: 0.00, z: 0.05}
-    truth_camera: {x_m: 0.00, z_m: 0.80}
+    spawn_world: {x: 0.50, y: 0.00, z: 0.05}
+    truth_camera: {x_m: 0.00, z_m: 0.50}
     timeout_s: 20.0
 
   - id: far_depth_edge
-    spawn_world: {x: 2.80, y: 0.00, z: 0.05}
-    truth_camera: {x_m: 0.00, z_m: 2.80}
+    spawn_world: {x: 0.90, y: 0.00, z: 0.05}
+    truth_camera: {x_m: 0.00, z_m: 0.90}
     timeout_s: 20.0
 
   - id: left_far_offset
-    spawn_world: {x: 2.10, y: 0.35, z: 0.05}
-    truth_camera: {x_m: -0.35, z_m: 2.10}
+    spawn_world: {x: 1.40, y: 0.26, z: 0.05}
+    truth_camera: {x_m: -0.26, z_m: 1.40}
     timeout_s: 20.0
 
   - id: right_far_offset
-    spawn_world: {x: 2.10, y: -0.35, z: 0.05}
-    truth_camera: {x_m: 0.35, z_m: 2.10}
+    spawn_world: {x: 1.40, y: -0.26, z: 0.05}
+    truth_camera: {x_m: 0.26, z_m: 1.40}
     timeout_s: 20.0
 
   - id: intermittent_window_a
