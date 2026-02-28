@@ -4,6 +4,8 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, TwistStamped
+
+
 class CmdVelRelay(Node):
     def __init__(self):
         super().__init__('cmd_vel_relay')
@@ -13,33 +15,37 @@ class CmdVelRelay(Node):
 
         input_topic_primary = str(self.get_parameter('input_topic_primary').value)
         input_topic_secondary = str(self.get_parameter('input_topic_secondary').value)
-        
-        # Subscribe to both Twist and TwistStamped variants because Nav2 stacks
-        # can publish either type on these topics.
-        self.cmd_vel_primary_twist_sub = self.create_subscription(
-            Twist,
-            input_topic_primary,
-            self.cmd_vel_twist_callback,
-            10
+
+        # Subscribe defensively: DDS disallows mixed message types on one topic.
+        # Some stacks publish Twist, others TwistStamped.
+        self._relay_subs = []
+        self._relay_subs.append(
+            self._try_create_subscription(
+                Twist, input_topic_primary, self.cmd_vel_twist_callback, 'primary_twist'
+            )
         )
-        self.cmd_vel_secondary_twist_sub = self.create_subscription(
-            Twist,
-            input_topic_secondary,
-            self.cmd_vel_twist_callback,
-            10
+        self._relay_subs.append(
+            self._try_create_subscription(
+                TwistStamped,
+                input_topic_primary,
+                self.cmd_vel_stamped_callback,
+                'primary_stamped',
+            )
         )
-        self.cmd_vel_primary_stamped_sub = self.create_subscription(
-            TwistStamped,
-            input_topic_primary,
-            self.cmd_vel_stamped_callback,
-            10
+        self._relay_subs.append(
+            self._try_create_subscription(
+                Twist, input_topic_secondary, self.cmd_vel_twist_callback, 'secondary_twist'
+            )
         )
-        self.cmd_vel_secondary_stamped_sub = self.create_subscription(
-            TwistStamped,
-            input_topic_secondary,
-            self.cmd_vel_stamped_callback,
-            10
+        self._relay_subs.append(
+            self._try_create_subscription(
+                TwistStamped,
+                input_topic_secondary,
+                self.cmd_vel_stamped_callback,
+                'secondary_stamped',
+            )
         )
+        self._relay_subs = [sub for sub in self._relay_subs if sub is not None]
         
         # Create publisher to robot's cmd_vel (as TwistStamped)
         self.robot_cmd_vel_pub = self.create_publisher(
@@ -53,9 +59,22 @@ class CmdVelRelay(Node):
             f'Relaying {input_topic_primary} and {input_topic_secondary} '
             '-> /jetbot_base_controller/cmd_vel (TwistStamped, supports Twist/TwistStamped input)'
         )
+        if not self._relay_subs:
+            self.get_logger().error(
+                'No compatible cmd_vel subscriptions were created. Check topic types.'
+            )
         
         # Message counter for debugging
         self.msg_count = 0
+
+    def _try_create_subscription(self, msg_type, topic, callback, label):
+        try:
+            return self.create_subscription(msg_type, topic, callback, 10)
+        except Exception as exc:
+            self.get_logger().warn(
+                f'Skipping {label} subscription on {topic}: {exc}'
+            )
+            return None
     
     def cmd_vel_twist_callback(self, msg: Twist):
         """Convert Twist to TwistStamped and relay to the robot topic."""

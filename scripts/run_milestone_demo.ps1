@@ -54,7 +54,21 @@ param(
 
     [int]$ViewerStartupDelaySeconds = 3,
 
-    [int]$WorldReadyTimeoutSeconds = 45
+    [int]$WorldReadyTimeoutSeconds = 45,
+
+    [Nullable[bool]]$RequireMotion = $null,
+
+    [double]$MotionMinDistanceMeters = 0.40,
+
+    [int]$MotionWindowSeconds = 90,
+
+    [Nullable[bool]]$RequireNav2ActionServer = $null,
+
+    [string]$CmdVelTopicPrimary = "/jetbot_base_controller/cmd_vel",
+
+    [string]$CmdVelTopicSecondary = "/cmd_vel",
+
+    [string]$OdomTopic = "/odom"
 )
 
 Set-StrictMode -Version Latest
@@ -139,6 +153,12 @@ if ($Headless -eq $null) {
 if ($OpenFeedViewers -eq $null) {
     $OpenFeedViewers = -not [bool]$Headless
 }
+if ($RequireMotion -eq $null) {
+    $RequireMotion = ($Milestone -ge 3)
+}
+if ($RequireNav2ActionServer -eq $null) {
+    $RequireNav2ActionServer = ($Milestone -ge 3)
+}
 $RosDistro = Resolve-RosDistro -Distro $Distro -Requested $RosDistro
 
 $headlessStr = if ($Headless) { "true" } else { "false" }
@@ -146,6 +166,8 @@ $includeExtractor = if ($Milestone -ge 2) { "true" } else { "false" }
 $includeBridge = if ($Milestone -ge 3) { "true" } else { "false" }
 $ensureDemoTargetStr = if ([bool]$EnsureDemoTarget) { "true" } else { "false" }
 $openFeedViewersStr = if ([bool]$OpenFeedViewers) { "true" } else { "false" }
+$requireMotionStr = if ([bool]$RequireMotion) { "true" } else { "false" }
+$requireNav2ActionServerStr = if ([bool]$RequireNav2ActionServer) { "true" } else { "false" }
 
 $repoRootWin = Resolve-Path -LiteralPath (Join-Path $PSScriptRoot "..")
 $repoRootWsl = Convert-ToWslPath -WindowsPath $repoRootWin
@@ -218,6 +240,13 @@ MIN_DETECTION_CONFIDENCE="__MIN_DETECTION_CONFIDENCE__"
 OPEN_FEED_VIEWERS="__OPEN_FEED_VIEWERS__"
 VIEWER_START_DELAY_S="__VIEWER_START_DELAY_S__"
 WORLD_READY_TIMEOUT_S="__WORLD_READY_TIMEOUT_S__"
+REQUIRE_MOTION="__REQUIRE_MOTION__"
+MOTION_MIN_DISTANCE_M="__MOTION_MIN_DISTANCE_M__"
+MOTION_WINDOW_S="__MOTION_WINDOW_S__"
+REQUIRE_NAV2_ACTION_SERVER="__REQUIRE_NAV2_ACTION_SERVER__"
+CMD_VEL_TOPIC_PRIMARY="__CMD_VEL_TOPIC_PRIMARY__"
+CMD_VEL_TOPIC_SECONDARY="__CMD_VEL_TOPIC_SECONDARY__"
+ODOM_TOPIC="__ODOM_TOPIC__"
 
 if [[ "$WORKSPACE" == "~/"* ]]; then
   WORKSPACE="$HOME/${WORKSPACE:2}"
@@ -266,6 +295,7 @@ cleanup_stale_stack() {
   pkill -f "yolo_3d_position_extractor.py" 2>/dev/null || true
   pkill -f "yolo_3d_to_nav2_bridge.py" 2>/dev/null || true
   pkill -f "jetbot_nav2_complete.launch.py" 2>/dev/null || true
+  pkill -f "jetbot_nav2_rosgz_readiness.launch.py" 2>/dev/null || true
   pkill -f "cmd_vel_relay.py" 2>/dev/null || true
   pkill -f "gz sim -v" 2>/dev/null || true
   pkill -f "gz sim server" 2>/dev/null || true
@@ -449,9 +479,20 @@ if [ "$INCLUDE_EXTRACTOR" = "true" ]; then
 fi
 
 BRIDGE_PID=""
+NAV2_PID=""
+RELAY_PID=""
 if [ "$INCLUDE_BRIDGE" = "true" ]; then
+  NAV2_LAUNCH_FILE="$PACKAGE_PATH/ros2_config/launch/jetbot_nav2_rosgz_readiness.launch.py"
+  NAV2_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; export CHASECAR_SOURCE_PATH=$PACKAGE_PATH; ros2 launch $NAV2_LAUNCH_FILE use_sim_time:=true autostart:=true"
+  NAV2_PID=$(start_bg "nav2" "$NAV2_CMD")
+  sleep 8
+
+  RELAY_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/cmd_vel_relay.py"
+  RELAY_PID=$(start_bg "cmd_vel_relay" "$RELAY_CMD")
+  sleep 2
+
   sleep 3
-  BRIDGE_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/yolo_3d_to_nav2_bridge.py --ros-args -p use_sim_time:=true"
+  BRIDGE_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/yolo_3d_to_nav2_bridge.py --ros-args -p use_sim_time:=true -p action_server_wait_s:=90.0"
   BRIDGE_PID=$(start_bg "bridge" "$BRIDGE_CMD")
 fi
 
@@ -532,8 +573,16 @@ if [ "$RGB_CAPTURED" = "true" ] && [ "$DEBUG_CAPTURED" = "true" ]; then
   if [[ -z "$IMAGE_DIFF_MAX" ]]; then IMAGE_DIFF_MAX=0; fi
 fi
 
-DETECTION_CONFIDENCE_RAW=$(timeout 8s ros2 topic echo /yolo/confidence --once 2>/dev/null || true)
-DETECTION_CONFIDENCE=$(echo "$DETECTION_CONFIDENCE_RAW" | awk '/data:/{print $2}' | tail -n1)
+DETECTION_CONFIDENCE_RAW=""
+DETECTION_CONFIDENCE=""
+for attempt in 1 2 3 4 5; do
+  DETECTION_CONFIDENCE_RAW=$(timeout 6s ros2 topic echo /yolo/confidence --once 2>/dev/null || true)
+  DETECTION_CONFIDENCE=$(echo "$DETECTION_CONFIDENCE_RAW" | awk '/data:/{print $2}' | tail -n1)
+  if [ -n "$DETECTION_CONFIDENCE" ]; then
+    break
+  fi
+  sleep 1
+done
 DETECTION_SEEN=false
 DETECTION_ABOVE_THRESHOLD=false
 if [ -n "$DETECTION_CONFIDENCE" ]; then
@@ -550,10 +599,92 @@ if [ "$DETECTION_ABOVE_THRESHOLD" = "true" ]; then
   fi
 fi
 
+BALL_POSITION_3D_RAW=$(timeout 8s ros2 topic echo /yolo/ball_position_3d --once 2>/dev/null || true)
+BALL_POSITION_3D_SEEN=false
+BALL_POSITION_3D_X=0
+BALL_POSITION_3D_Y=0
+BALL_POSITION_3D_Z=0
+if [ -n "$BALL_POSITION_3D_RAW" ]; then
+  BALL_POSITION_3D_SEEN=true
+  BALL_POSITION_3D_X=$(echo "$BALL_POSITION_3D_RAW" | awk '/^[[:space:]]*x:/{print $2}' | tail -n1)
+  BALL_POSITION_3D_Y=$(echo "$BALL_POSITION_3D_RAW" | awk '/^[[:space:]]*y:/{print $2}' | tail -n1)
+  BALL_POSITION_3D_Z=$(echo "$BALL_POSITION_3D_RAW" | awk '/^[[:space:]]*z:/{print $2}' | tail -n1)
+  if [[ -z "$BALL_POSITION_3D_X" ]]; then BALL_POSITION_3D_X=0; fi
+  if [[ -z "$BALL_POSITION_3D_Y" ]]; then BALL_POSITION_3D_Y=0; fi
+  if [[ -z "$BALL_POSITION_3D_Z" ]]; then BALL_POSITION_3D_Z=0; fi
+fi
+
+NAV2_ACTION_INFO_RAW=$(timeout 8s ros2 action info /navigate_to_pose 2>/dev/null || true)
+NAV2_ACTION_SERVER_COUNT=$(echo "$NAV2_ACTION_INFO_RAW" | awk -F: '/Action servers:/{gsub(/[[:space:]]/, "", $2); print $2}' | tail -n1)
+if [[ -z "$NAV2_ACTION_SERVER_COUNT" ]]; then NAV2_ACTION_SERVER_COUNT=0; fi
+NAV2_ACTION_SERVER_READY=false
+if [ "$NAV2_ACTION_SERVER_COUNT" -ge 1 ] 2>/dev/null; then
+  NAV2_ACTION_SERVER_READY=true
+fi
+
+MOTION_CMD_VEL_MESSAGE_COUNT=0
+MOTION_ODOM_SEEN=false
+MOTION_ODOM_START_X=0
+MOTION_ODOM_START_Y=0
+MOTION_ODOM_START_Z=0
+MOTION_ODOM_END_X=0
+MOTION_ODOM_END_Y=0
+MOTION_ODOM_END_Z=0
+MOTION_ODOM_DISPLACEMENT_M=0
+MOTION_DETECTION_MESSAGE_COUNT=0
+MOTION_PROBE_ERROR="none"
+MOTION_PASS=false
+if [ "$INCLUDE_BRIDGE" = "true" ]; then
+  MOTION_RAW=$(python3 "$PACKAGE_PATH/scripts/motion_probe.py" \
+    --duration-s "$MOTION_WINDOW_S" \
+    --cmd-vel-topic-primary "$CMD_VEL_TOPIC_PRIMARY" \
+    --cmd-vel-topic-secondary "$CMD_VEL_TOPIC_SECONDARY" \
+    --odom-topic "$ODOM_TOPIC" \
+    --detection-topic "/yolo/ball_position_3d" \
+    --json-out "$ARTIFACT_DIR/motion_probe.json" \
+    --use-sim-time 2>&1 || true)
+  MOTION_CMD_VEL_MESSAGE_COUNT=$(echo "$MOTION_RAW" | awk -F= '/CMD_VEL_MESSAGE_COUNT=/{print $2}' | tail -n1)
+  if [[ -z "$MOTION_CMD_VEL_MESSAGE_COUNT" ]]; then MOTION_CMD_VEL_MESSAGE_COUNT=0; fi
+  if echo "$MOTION_RAW" | grep -q "ODOM_SEEN=true"; then
+    MOTION_ODOM_SEEN=true
+  fi
+  MOTION_ODOM_START_X=$(echo "$MOTION_RAW" | awk -F= '/ODOM_START_X=/{print $2}' | tail -n1)
+  MOTION_ODOM_START_Y=$(echo "$MOTION_RAW" | awk -F= '/ODOM_START_Y=/{print $2}' | tail -n1)
+  MOTION_ODOM_START_Z=$(echo "$MOTION_RAW" | awk -F= '/ODOM_START_Z=/{print $2}' | tail -n1)
+  MOTION_ODOM_END_X=$(echo "$MOTION_RAW" | awk -F= '/ODOM_END_X=/{print $2}' | tail -n1)
+  MOTION_ODOM_END_Y=$(echo "$MOTION_RAW" | awk -F= '/ODOM_END_Y=/{print $2}' | tail -n1)
+  MOTION_ODOM_END_Z=$(echo "$MOTION_RAW" | awk -F= '/ODOM_END_Z=/{print $2}' | tail -n1)
+  MOTION_ODOM_DISPLACEMENT_M=$(echo "$MOTION_RAW" | awk -F= '/ODOM_DISPLACEMENT_M=/{print $2}' | tail -n1)
+  MOTION_DETECTION_MESSAGE_COUNT=$(echo "$MOTION_RAW" | awk -F= '/DETECTION_MESSAGE_COUNT=/{print $2}' | tail -n1)
+  if [[ -z "$MOTION_ODOM_START_X" ]]; then MOTION_ODOM_START_X=0; fi
+  if [[ -z "$MOTION_ODOM_START_Y" ]]; then MOTION_ODOM_START_Y=0; fi
+  if [[ -z "$MOTION_ODOM_START_Z" ]]; then MOTION_ODOM_START_Z=0; fi
+  if [[ -z "$MOTION_ODOM_END_X" ]]; then MOTION_ODOM_END_X=0; fi
+  if [[ -z "$MOTION_ODOM_END_Y" ]]; then MOTION_ODOM_END_Y=0; fi
+  if [[ -z "$MOTION_ODOM_END_Z" ]]; then MOTION_ODOM_END_Z=0; fi
+  if [[ -z "$MOTION_ODOM_DISPLACEMENT_M" ]]; then MOTION_ODOM_DISPLACEMENT_M=0; fi
+  if [[ -z "$MOTION_DETECTION_MESSAGE_COUNT" ]]; then MOTION_DETECTION_MESSAGE_COUNT=0; fi
+  if awk -v d="$MOTION_DETECTION_MESSAGE_COUNT" 'BEGIN{exit !(d+0 > 0)}'; then
+    BALL_POSITION_3D_SEEN=true
+  fi
+  if awk -v c="$MOTION_CMD_VEL_MESSAGE_COUNT" -v d="$MOTION_ODOM_DISPLACEMENT_M" -v m="$MOTION_MIN_DISTANCE_M" 'BEGIN{exit !(c+0 > 0 && d+0 >= m+0)}'; then
+    MOTION_PASS=true
+  fi
+  if [ "$MOTION_ODOM_SEEN" != "true" ]; then
+    MOTION_PROBE_ERROR="odom_missing"
+  elif ! awk -v c="$MOTION_CMD_VEL_MESSAGE_COUNT" 'BEGIN{exit !(c+0 > 0)}'; then
+    MOTION_PROBE_ERROR="cmd_vel_inactive"
+  elif ! awk -v d="$MOTION_ODOM_DISPLACEMENT_M" -v m="$MOTION_MIN_DISTANCE_M" 'BEGIN{exit !(d+0 >= m+0)}'; then
+    MOTION_PROBE_ERROR="displacement_below_threshold"
+  fi
+fi
+
 SIM_RUNNING=false
 DETECTOR_RUNNING=false
 EXTRACTOR_RUNNING=false
 BRIDGE_RUNNING=false
+NAV2_RUNNING=false
+RELAY_RUNNING=false
 FEED_RAW_VIEWER_RUNNING=false
 FEED_DEBUG_VIEWER_RUNNING=false
 if kill -0 "$SIM_PID" 2>/dev/null; then
@@ -567,6 +698,12 @@ if [ -n "$EXTRACTOR_PID" ] && kill -0 "$EXTRACTOR_PID" 2>/dev/null; then
 fi
 if [ -n "$BRIDGE_PID" ] && kill -0 "$BRIDGE_PID" 2>/dev/null; then
   BRIDGE_RUNNING=true
+fi
+if [ -n "$NAV2_PID" ] && kill -0 "$NAV2_PID" 2>/dev/null; then
+  NAV2_RUNNING=true
+fi
+if [ -n "$RELAY_PID" ] && kill -0 "$RELAY_PID" 2>/dev/null; then
+  RELAY_RUNNING=true
 fi
 if [ -n "$FEED_RAW_VIEWER_PID" ] && kill -0 "$FEED_RAW_VIEWER_PID" 2>/dev/null; then
   FEED_RAW_VIEWER_RUNNING=true
@@ -583,8 +720,20 @@ fi
 DEMO_PASS=false
 EXTRACTOR_REQUIRED=false
 BRIDGE_REQUIRED=false
+NAV2_REQUIRED=false
+RELAY_REQUIRED=false
+BALL_POSITION_3D_REQUIRED=false
+NAV2_ACTION_REQUIRED=false
+MOTION_REQUIRED=false
+DETECTION_REQUIRED=true
+OVERLAY_REQUIRED=true
 EXTRACTOR_CHECK_PASS=true
 BRIDGE_CHECK_PASS=true
+NAV2_CHECK_PASS=true
+RELAY_CHECK_PASS=true
+BALL_POSITION_3D_CHECK_PASS=true
+NAV2_ACTION_CHECK_PASS=true
+MOTION_CHECK_PASS=true
 if [ "$MILESTONE" = "1" ]; then
   if [ "$WORLD_READY" = true ] \
     && [ "$SIM_RUNNING" = true ] \
@@ -598,16 +747,51 @@ if [ "$MILESTONE" = "1" ]; then
   fi
 elif [ "$MILESTONE" = "2" ]; then
   EXTRACTOR_REQUIRED=true
+  BALL_POSITION_3D_REQUIRED=true
   EXTRACTOR_CHECK_PASS=$EXTRACTOR_RUNNING
-  if [ "$SIM_RUNNING" = true ] && [ "$DETECTOR_RUNNING" = true ] && [ "$EXTRACTOR_RUNNING" = true ] && [ "$DEBUG_CAPTURED" = true ]; then
+  BALL_POSITION_3D_CHECK_PASS=$BALL_POSITION_3D_SEEN
+  if [ "$WORLD_READY" = true ] \
+    && [ "$SIM_RUNNING" = true ] \
+    && [ "$DETECTOR_RUNNING" = true ] \
+    && [ "$EXTRACTOR_RUNNING" = true ] \
+    && [ "$TARGET_SPAWN_OK" = true ] \
+    && [ "$DETECTION_ABOVE_THRESHOLD" = true ] \
+    && [ "$OVERLAY_DISTINCT" = true ] \
+    && [ "$BALL_POSITION_3D_SEEN" = true ] \
+    && [ "$DEBUG_CAPTURED" = true ] \
+    && [ "$FEED_VIEWERS_RUNNING" = true ]; then
     DEMO_PASS=true
   fi
 else
   EXTRACTOR_REQUIRED=true
   BRIDGE_REQUIRED=true
+  NAV2_REQUIRED=true
+  RELAY_REQUIRED=true
+  BALL_POSITION_3D_REQUIRED=true
+  NAV2_ACTION_REQUIRED=$REQUIRE_NAV2_ACTION_SERVER
+  MOTION_REQUIRED=$REQUIRE_MOTION
+  DETECTION_REQUIRED=false
+  OVERLAY_REQUIRED=false
   EXTRACTOR_CHECK_PASS=$EXTRACTOR_RUNNING
   BRIDGE_CHECK_PASS=$BRIDGE_RUNNING
-  if [ "$SIM_RUNNING" = true ] && [ "$DETECTOR_RUNNING" = true ] && [ "$EXTRACTOR_RUNNING" = true ] && [ "$BRIDGE_RUNNING" = true ] && [ "$DEBUG_CAPTURED" = true ]; then
+  NAV2_CHECK_PASS=$NAV2_RUNNING
+  RELAY_CHECK_PASS=$RELAY_RUNNING
+  BALL_POSITION_3D_CHECK_PASS=$BALL_POSITION_3D_SEEN
+  NAV2_ACTION_CHECK_PASS=$NAV2_ACTION_SERVER_READY
+  MOTION_CHECK_PASS=$MOTION_PASS
+  if [ "$WORLD_READY" = true ] \
+    && [ "$SIM_RUNNING" = true ] \
+    && [ "$DETECTOR_RUNNING" = true ] \
+    && [ "$EXTRACTOR_RUNNING" = true ] \
+    && [ "$BRIDGE_RUNNING" = true ] \
+    && [ "$NAV2_RUNNING" = true ] \
+    && [ "$RELAY_RUNNING" = true ] \
+    && [ "$TARGET_SPAWN_OK" = true ] \
+    && [ "$BALL_POSITION_3D_SEEN" = true ] \
+    && [ "$DEBUG_CAPTURED" = true ] \
+    && [ "$FEED_VIEWERS_RUNNING" = true ] \
+    && { [ "$REQUIRE_NAV2_ACTION_SERVER" != "true" ] || [ "$NAV2_ACTION_SERVER_READY" = true ]; } \
+    && { [ "$REQUIRE_MOTION" != "true" ] || [ "$MOTION_PASS" = true ]; }; then
     DEMO_PASS=true
   fi
 fi
@@ -641,13 +825,13 @@ cat >"$ARTIFACT_DIR/operator_checklist.json" <<JSON
     {
       "id": "detection_confidence",
       "description": "Detection confidence reached minimum threshold",
-      "required": true,
+      "required": $DETECTION_REQUIRED,
       "pass": $DETECTION_ABOVE_THRESHOLD
     },
     {
       "id": "overlay_distinct",
       "description": "Debug image differs from raw image when detection is above threshold",
-      "required": true,
+      "required": $OVERLAY_REQUIRED,
       "pass": $OVERLAY_DISTINCT
     },
     {
@@ -661,6 +845,42 @@ cat >"$ARTIFACT_DIR/operator_checklist.json" <<JSON
       "description": "Nav bridge process is running when required",
       "required": $BRIDGE_REQUIRED,
       "pass": $BRIDGE_CHECK_PASS
+    },
+    {
+      "id": "nav2_running",
+      "description": "Nav2 stack process is running when required",
+      "required": $NAV2_REQUIRED,
+      "pass": $NAV2_CHECK_PASS
+    },
+    {
+      "id": "cmd_vel_relay_running",
+      "description": "cmd_vel relay process is running when required",
+      "required": $RELAY_REQUIRED,
+      "pass": $RELAY_CHECK_PASS
+    },
+    {
+      "id": "ball_position_3d",
+      "description": "/yolo/ball_position_3d is active when required",
+      "required": $BALL_POSITION_3D_REQUIRED,
+      "pass": $BALL_POSITION_3D_CHECK_PASS
+    },
+    {
+      "id": "nav2_action_server_ready",
+      "description": "/navigate_to_pose action server is available when required",
+      "required": $NAV2_ACTION_REQUIRED,
+      "pass": $NAV2_ACTION_CHECK_PASS
+    },
+    {
+      "id": "cmd_vel_activity",
+      "description": "cmd_vel activity observed during motion probe",
+      "required": $MOTION_REQUIRED,
+      "pass": $(if awk -v c="$MOTION_CMD_VEL_MESSAGE_COUNT" 'BEGIN{exit !(c+0 > 0)}'; then echo true; else echo false; fi)
+    },
+    {
+      "id": "odom_displacement",
+      "description": "Odometry displacement reached minimum threshold when required",
+      "required": $MOTION_REQUIRED,
+      "pass": $MOTION_CHECK_PASS
     },
     {
       "id": "rgb_snapshot",
@@ -699,7 +919,9 @@ cat >"$ARTIFACT_DIR/demo_summary.json" <<JSON
     "sim": "$SIM_CMD",
     "detector": "$DETECTOR_CMD",
     "extractor": "${EXTRACTOR_CMD:-}",
-    "bridge": "${BRIDGE_CMD:-}"
+    "bridge": "${BRIDGE_CMD:-}",
+    "nav2": "${NAV2_CMD:-}",
+    "cmd_vel_relay": "${RELAY_CMD:-}"
   },
   "screenshots": {
     "rgb": "screenshots/d415_color.png",
@@ -725,7 +947,11 @@ cat >"$ARTIFACT_DIR/demo_summary.json" <<JSON
     "image_byte_identical": $IMAGE_BYTE_IDENTICAL,
     "image_diff_abs_mean": $IMAGE_DIFF_ABS_MEAN,
     "image_diff_max": $IMAGE_DIFF_MAX,
-    "image_diff_metrics_json": "screenshots/image_diff_metrics.json"
+    "image_diff_metrics_json": "screenshots/image_diff_metrics.json",
+    "ball_position_3d_seen": $BALL_POSITION_3D_SEEN,
+    "ball_position_3d_x": $BALL_POSITION_3D_X,
+    "ball_position_3d_y": $BALL_POSITION_3D_Y,
+    "ball_position_3d_z": $BALL_POSITION_3D_Z
   },
   "demo_target": {
     "ensure_demo_target": $ENSURE_DEMO_TARGET,
@@ -749,11 +975,42 @@ cat >"$ARTIFACT_DIR/demo_summary.json" <<JSON
     "feed_viewer_status": "$FEED_VIEWER_STATUS",
     "viewer_start_delay_s": $VIEWER_START_DELAY_S
   },
+  "nav2": {
+    "require_action_server": $REQUIRE_NAV2_ACTION_SERVER,
+    "action_server_ready": $NAV2_ACTION_SERVER_READY,
+    "action_server_count": $NAV2_ACTION_SERVER_COUNT
+  },
+  "motion": {
+    "required": $REQUIRE_MOTION,
+    "window_s": $MOTION_WINDOW_S,
+    "min_distance_m": $MOTION_MIN_DISTANCE_M,
+    "cmd_vel_topic_primary": "$CMD_VEL_TOPIC_PRIMARY",
+    "cmd_vel_topic_secondary": "$CMD_VEL_TOPIC_SECONDARY",
+    "cmd_vel_message_count": $MOTION_CMD_VEL_MESSAGE_COUNT,
+    "detection_message_count": $MOTION_DETECTION_MESSAGE_COUNT,
+    "odom_topic": "$ODOM_TOPIC",
+    "odom_seen": $MOTION_ODOM_SEEN,
+    "odom_start": {
+      "x": $MOTION_ODOM_START_X,
+      "y": $MOTION_ODOM_START_Y,
+      "z": $MOTION_ODOM_START_Z
+    },
+    "odom_end": {
+      "x": $MOTION_ODOM_END_X,
+      "y": $MOTION_ODOM_END_Y,
+      "z": $MOTION_ODOM_END_Z
+    },
+    "odom_displacement_m": $MOTION_ODOM_DISPLACEMENT_M,
+    "probe_error": "$MOTION_PROBE_ERROR",
+    "pass": $MOTION_PASS
+  },
   "process_health": {
     "sim_running": $SIM_RUNNING,
     "detector_running": $DETECTOR_RUNNING,
     "extractor_running": $EXTRACTOR_RUNNING,
     "bridge_running": $BRIDGE_RUNNING,
+    "nav2_running": $NAV2_RUNNING,
+    "cmd_vel_relay_running": $RELAY_RUNNING,
     "feed_raw_viewer_running": $FEED_RAW_VIEWER_RUNNING,
     "feed_debug_viewer_running": $FEED_DEBUG_VIEWER_RUNNING
   },
@@ -769,7 +1026,15 @@ if [[ "$MAX_RUN_SECONDS" =~ ^[0-9]+$ ]] && [ "$MAX_RUN_SECONDS" -gt 0 ]; then
   if [ "$REMAINING_S" -gt 0 ]; then
     sleep "$REMAINING_S"
   fi
-  kill "$SIM_PID" "$DETECTOR_PID" ${EXTRACTOR_PID:+$EXTRACTOR_PID} ${BRIDGE_PID:+$BRIDGE_PID} ${FEED_RAW_VIEWER_PID:+$FEED_RAW_VIEWER_PID} ${FEED_DEBUG_VIEWER_PID:+$FEED_DEBUG_VIEWER_PID} 2>/dev/null || true
+  SAFE_KILL_PIDS=()
+  for pid in "$SIM_PID" "$DETECTOR_PID" "$EXTRACTOR_PID" "$BRIDGE_PID" "$NAV2_PID" "$RELAY_PID" "$FEED_RAW_VIEWER_PID" "$FEED_DEBUG_VIEWER_PID"; do
+    if [ -n "$pid" ] && [ "$pid" != "$$" ]; then
+      SAFE_KILL_PIDS+=("$pid")
+    fi
+  done
+  if [ "${#SAFE_KILL_PIDS[@]}" -gt 0 ]; then
+    kill "${SAFE_KILL_PIDS[@]}" 2>/dev/null || true
+  fi
 fi
 
 cat >"$ARTIFACT_DIR/demo_pids.json" <<JSON
@@ -788,6 +1053,8 @@ cat >"$ARTIFACT_DIR/demo_pids.json" <<JSON
     "detector": "$DETECTOR_PID",
     "extractor": "$EXTRACTOR_PID",
     "bridge": "$BRIDGE_PID",
+    "nav2": "$NAV2_PID",
+    "cmd_vel_relay": "$RELAY_PID",
     "feed_rgb_viewer": "$FEED_RAW_VIEWER_PID",
     "feed_debug_viewer": "$FEED_DEBUG_VIEWER_PID"
   }
@@ -799,12 +1066,14 @@ echo "SIM_PID=$SIM_PID"
 echo "DETECTOR_PID=$DETECTOR_PID"
 echo "EXTRACTOR_PID=$EXTRACTOR_PID"
 echo "BRIDGE_PID=$BRIDGE_PID"
+echo "NAV2_PID=$NAV2_PID"
+echo "CMD_VEL_RELAY_PID=$RELAY_PID"
 echo "FEED_RGB_VIEWER_PID=$FEED_RAW_VIEWER_PID"
 echo "FEED_DEBUG_VIEWER_PID=$FEED_DEBUG_VIEWER_PID"
 echo "WATCHDOG_PID=$WATCHDOG_PID"
 echo "EVIDENCE_CAPTURE_RGB=$RGB_CAPTURED"
 echo "EVIDENCE_CAPTURE_DEBUG=$DEBUG_CAPTURED"
-echo "STOP_CMD=wsl -d __DISTRO__ -- bash -lc 'kill $SIM_PID $DETECTOR_PID ${EXTRACTOR_PID:-} ${BRIDGE_PID:-} ${FEED_RAW_VIEWER_PID:-} ${FEED_DEBUG_VIEWER_PID:-} 2>/dev/null || true'"
+echo "STOP_CMD=wsl -d __DISTRO__ -- bash -lc 'kill $SIM_PID $DETECTOR_PID ${EXTRACTOR_PID:-} ${BRIDGE_PID:-} ${NAV2_PID:-} ${RELAY_PID:-} ${FEED_RAW_VIEWER_PID:-} ${FEED_DEBUG_VIEWER_PID:-} 2>/dev/null || true'"
 '@
 
 $bash = $bashTemplate.
@@ -837,6 +1106,13 @@ $bash = $bashTemplate.
     Replace("__OPEN_FEED_VIEWERS__", $openFeedViewersStr).
     Replace("__VIEWER_START_DELAY_S__", ([Math]::Max($ViewerStartupDelaySeconds, 1)).ToString()).
     Replace("__WORLD_READY_TIMEOUT_S__", ([Math]::Max($WorldReadyTimeoutSeconds, 10)).ToString()).
+    Replace("__REQUIRE_MOTION__", $requireMotionStr).
+    Replace("__MOTION_MIN_DISTANCE_M__", $MotionMinDistanceMeters.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
+    Replace("__MOTION_WINDOW_S__", ([Math]::Max($MotionWindowSeconds, 10)).ToString()).
+    Replace("__REQUIRE_NAV2_ACTION_SERVER__", $requireNav2ActionServerStr).
+    Replace("__CMD_VEL_TOPIC_PRIMARY__", $CmdVelTopicPrimary).
+    Replace("__CMD_VEL_TOPIC_SECONDARY__", $CmdVelTopicSecondary).
+    Replace("__ODOM_TOPIC__", $OdomTopic).
     Replace("__DISTRO__", $Distro)
 $bash = $bash.Replace("`r`n", "`n")
 
@@ -852,6 +1128,10 @@ Write-Host "  World:          $WorldFile"
 Write-Host "  World name:     $WorldName"
 Write-Host "  Ensure target:  $([bool]$EnsureDemoTarget)"
 Write-Host "  Open viewers:   $([bool]$OpenFeedViewers)"
+Write-Host "  Require motion: $([bool]$RequireMotion)"
+Write-Host "  Motion min (m): $MotionMinDistanceMeters"
+Write-Host "  Motion win (s): $MotionWindowSeconds"
+Write-Host "  Require nav2 action server: $([bool]$RequireNav2ActionServer)"
 Write-Host "  ROS distro:     $RosDistro"
 
 $tempScriptWin = Join-Path $env:TEMP ("chasecar_run_milestone_demo_{0}.sh" -f ([Guid]::NewGuid().ToString("N")))
@@ -884,15 +1164,15 @@ elseif ($Milestone -eq 2) {
     Write-Host "Milestone 2 Checklist:"
     Write-Host "  1. Milestone 1 checks all pass."
     Write-Host "  2. /yolo/ball_position_3d publishes continuously."
-    Write-Host "  3. Error table updates during target movement."
-    Write-Host "Success criteria: truth-vs-estimate error remains within UAT thresholds."
+    Write-Host "  3. Overlay remains distinct from raw RGB once confidence gate passes."
+    Write-Host "Success criteria: stable 3D tracking evidence; no autonomous approach required."
 }
 else {
     Write-Host "Milestone 3 Checklist:"
     Write-Host "  1. Milestone 2 checks all pass."
-    Write-Host "  2. Nav2 bridge receives 3D positions."
-    Write-Host "  3. Robot approaches selected target autonomously."
-    Write-Host "Success criteria: robot reaches approach distance without controller failure."
+    Write-Host "  2. /navigate_to_pose action server is available."
+    Write-Host "  3. cmd_vel activity and odom displacement meet motion threshold."
+    Write-Host "Success criteria: measurable autonomous approach (motion pass=true)."
 }
 
 exit 0

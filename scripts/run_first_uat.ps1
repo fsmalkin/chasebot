@@ -276,6 +276,8 @@ function Get-DemoPids {
         $json.pids.detector,
         $json.pids.extractor,
         $json.pids.bridge,
+        $json.pids.nav2,
+        $json.pids.cmd_vel_relay,
         $json.pids.feed_rgb_viewer,
         $json.pids.feed_debug_viewer
     )
