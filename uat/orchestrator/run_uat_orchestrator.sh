@@ -11,6 +11,7 @@ STEP_TIMEOUT_S="${CHASECAR_STEP_TIMEOUT_S:-900}"
 NAV2_DURATION_S="${CHASECAR_NAV2_DURATION_S:-120}"
 UAT_PROFILE="${CHASECAR_UAT_PROFILE:-compat}"
 UAT_INFERENCE_DEVICE="${CHASECAR_UAT_INFERENCE_DEVICE:-cuda:0}"
+
 NAV2_WORLD_NAME="${CHASECAR_NAV2_WORLD_NAME:-yolo_test_world}"
 NAV2_MODEL_SDF="${CHASECAR_NAV2_MODEL_SDF:-ros2_config/frisbee_target_ball.sdf}"
 NAV2_MODEL_NAME="${CHASECAR_NAV2_MODEL_NAME:-uat_nav2_target}"
@@ -20,6 +21,21 @@ NAV2_TARGET_Z="${CHASECAR_NAV2_TARGET_Z:-0.05}"
 NAV2_START_BRIDGE="${CHASECAR_NAV2_START_BRIDGE:-true}"
 NAV2_BRIDGE_SCRIPT="${CHASECAR_NAV2_BRIDGE_SCRIPT:-ros2_scripts/yolo_3d_to_nav2_bridge.py}"
 NAV2_BRIDGE_START_DELAY_S="${CHASECAR_NAV2_BRIDGE_START_DELAY_S:-4}"
+
+SNAPSHOT_WORLD_NAME="${CHASECAR_SNAPSHOT_WORLD_NAME:-${NAV2_WORLD_NAME}}"
+SNAPSHOT_MODEL_SDF="${CHASECAR_SNAPSHOT_MODEL_SDF:-ros2_config/frisbee_target_ball.sdf}"
+SNAPSHOT_MODEL_NAME="${CHASECAR_SNAPSHOT_MODEL_NAME:-uat_snapshot_target}"
+SNAPSHOT_TARGET_X="${CHASECAR_SNAPSHOT_TARGET_X:-0.9}"
+SNAPSHOT_TARGET_Y="${CHASECAR_SNAPSHOT_TARGET_Y:-0.0}"
+SNAPSHOT_TARGET_Z="${CHASECAR_SNAPSHOT_TARGET_Z:-0.05}"
+SNAPSHOT_RGB_TOPIC="${CHASECAR_SNAPSHOT_RGB_TOPIC:-/d415/color/image_raw}"
+SNAPSHOT_DEBUG_TOPIC="${CHASECAR_SNAPSHOT_DEBUG_TOPIC:-/yolo/debug_image}"
+SNAPSHOT_TIMEOUT_S="${CHASECAR_SNAPSHOT_TIMEOUT_S:-12}"
+SNAPSHOT_MIN_MEAN_ABS_DIFF="${CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF:-1.5}"
+SNAPSHOT_MIN_FRAMES="${CHASECAR_SNAPSHOT_MIN_FRAMES:-2}"
+
+MULTI_TARGET_CONFIG="${CHASECAR_MULTI_TARGET_CONFIG:-ros2_config/config/multi_target_nav2.yaml}"
+MULTI_TARGET_GOAL_TIMEOUT_S="${CHASECAR_MULTI_TARGET_GOAL_TIMEOUT_S:-55}"
 
 if [[ ! -d "${REPO_ROOT}" ]]; then
   echo "[uat-orchestrator] Missing repo path: ${REPO_ROOT}" >&2
@@ -39,6 +55,7 @@ if [[ ! -f "/opt/ros/${CONTAINER_ROS_DISTRO}/setup.bash" ]]; then
   echo "[uat-orchestrator] Missing ROS setup: /opt/ros/${CONTAINER_ROS_DISTRO}/setup.bash" >&2
   exit 2
 fi
+
 set +u
 source "/opt/ros/${CONTAINER_ROS_DISTRO}/setup.bash"
 if [[ -f "/root/ros2_ws/install/setup.bash" ]]; then
@@ -73,9 +90,18 @@ append_step() {
   echo "STEP_RESULT=${id}:${status}:${artifact_dir}"
 }
 
+append_blocked_step() {
+  local id="$1"
+  local reason="$2"
+  local log_file="${LOG_DIR}/${id}_blocked.log"
+  echo "${reason}" > "${log_file}"
+  append_step "${id}" "blocked" "blocked_dependency" "" 2 "${log_file}"
+}
+
 run_cmd_with_timeout() {
   local log_file="$1"
   shift
+
   local rc=0
   if command -v timeout >/dev/null 2>&1; then
     timeout "${STEP_TIMEOUT_S}s" "$@" >"${log_file}" 2>&1 || rc=$?
@@ -95,14 +121,25 @@ has_world_create_service_error() {
   grep -Eq 'Waiting for service \[/world/.*/create\] to become available' "${log_file}" 2>/dev/null
 }
 
-remove_nav2_target() {
-  local log_file="$1"
+resolve_model_path() {
+  local model_path="$1"
+  if [[ "${model_path}" == /* ]]; then
+    echo "${model_path}"
+  else
+    echo "${REPO_ROOT}/${model_path}"
+  fi
+}
+
+remove_model_by_name() {
+  local world_name="$1"
+  local model_name="$2"
+  local log_file="$3"
   local req
-  req="name: \"${NAV2_MODEL_NAME}\" type: 2"
+  req="name: \"${model_name}\" type: 2"
 
   if command -v gz >/dev/null 2>&1; then
     gz service \
-      -s "/world/${NAV2_WORLD_NAME}/remove/blocking" \
+      -s "/world/${world_name}/remove/blocking" \
       --reqtype gz.msgs.Entity \
       --reptype gz.msgs.Boolean \
       --timeout 2000 \
@@ -112,7 +149,7 @@ remove_nav2_target() {
 
   if command -v ign >/dev/null 2>&1; then
     ign service \
-      -s "/world/${NAV2_WORLD_NAME}/remove/blocking" \
+      -s "/world/${world_name}/remove/blocking" \
       --reqtype ignition.msgs.Entity \
       --reptype ignition.msgs.Boolean \
       --timeout 2000 \
@@ -120,31 +157,35 @@ remove_nav2_target() {
     return 0
   fi
 
-  echo "[nav2] gz/ign service binary not found for cleanup" >>"${log_file}" 2>&1
+  echo "[orchestrator] gz/ign service binary not found for cleanup" >>"${log_file}" 2>&1
   return 0
 }
 
-spawn_nav2_target() {
-  local log_file="$1"
-  local model_path="${NAV2_MODEL_SDF}"
-  if [[ "${model_path}" != /* ]]; then
-    model_path="${REPO_ROOT}/${model_path}"
-  fi
+spawn_model() {
+  local world_name="$1"
+  local model_sdf="$2"
+  local model_name="$3"
+  local pos_x="$4"
+  local pos_y="$5"
+  local pos_z="$6"
+  local log_file="$7"
 
-  if [[ ! -f "${model_path}" ]]; then
-    echo "[nav2] Missing model SDF: ${model_path}" >>"${log_file}" 2>&1
+  local resolved_model
+  resolved_model="$(resolve_model_path "${model_sdf}")"
+  if [[ ! -f "${resolved_model}" ]]; then
+    echo "[orchestrator] Missing model SDF: ${resolved_model}" >>"${log_file}" 2>&1
     return 1
   fi
 
-  remove_nav2_target "${log_file}"
+  remove_model_by_name "${world_name}" "${model_name}" "${log_file}"
 
   ros2 run ros_gz_sim create \
-    -world "${NAV2_WORLD_NAME}" \
-    -file "${model_path}" \
-    -name "${NAV2_MODEL_NAME}" \
-    -x "${NAV2_TARGET_X}" \
-    -y "${NAV2_TARGET_Y}" \
-    -z "${NAV2_TARGET_Z}" >>"${log_file}" 2>&1
+    -world "${world_name}" \
+    -file "${resolved_model}" \
+    -name "${model_name}" \
+    -x "${pos_x}" \
+    -y "${pos_y}" \
+    -z "${pos_z}" >>"${log_file}" 2>&1
 }
 
 run_prepare() {
@@ -154,12 +195,15 @@ run_prepare() {
     scripts/coordinate_uat_runner.py \
     scripts/orientation_uat_runner.py \
     scripts/nav2_readiness_runner.py \
-    scripts/capture_topic_image.py)
+    scripts/multi_target_nav2_runner.py \
+    scripts/capture_topic_image.py \
+    scripts/image_diff_metrics.py)
 
   if [[ "${rc}" -eq 0 ]]; then
     append_step "prepare" "pass" "" "" 0 "${log_file}"
     return 0
   fi
+
   local failure_class="command_failed"
   if [[ "${rc}" -eq 124 ]]; then
     failure_class="timeout"
@@ -191,6 +235,7 @@ run_coordinate() {
       append_step "coordinate" "pass" "" "${artifact_dir}" 0 "${log_file}"
       return 0
     fi
+
     local failure_class="threshold_failed"
     if has_world_create_service_error "${log_file}"; then
       failure_class="service_unavailable"
@@ -208,6 +253,156 @@ run_coordinate() {
     failure_class="missing_artifact"
   fi
   append_step "coordinate" "fail" "${failure_class}" "${artifact_dir}" "${rc}" "${log_file}"
+  return 2
+}
+
+run_snapshot() {
+  local log_file="${LOG_DIR}/snapshot.log"
+  local prep_log="${LOG_DIR}/snapshot_prep.log"
+  local artifact_dir="artifacts/snapshots/${RUN_ID}"
+  local rgb_file="${artifact_dir}/d415_color.png"
+  local debug_file="${artifact_dir}/yolo_debug.png"
+  local diff_json="${artifact_dir}/image_diff.json"
+  local summary_json="${artifact_dir}/snapshot_summary.json"
+
+  mkdir -p "${artifact_dir}"
+  : > "${prep_log}"
+
+  if ! spawn_model \
+    "${SNAPSHOT_WORLD_NAME}" \
+    "${SNAPSHOT_MODEL_SDF}" \
+    "${SNAPSHOT_MODEL_NAME}" \
+    "${SNAPSHOT_TARGET_X}" \
+    "${SNAPSHOT_TARGET_Y}" \
+    "${SNAPSHOT_TARGET_Z}" \
+    "${prep_log}"; then
+    local failure_class="command_failed"
+    if has_world_create_service_error "${prep_log}"; then
+      failure_class="service_unavailable"
+    elif grep -Eq "Missing model SDF" "${prep_log}" 2>/dev/null; then
+      failure_class="missing_artifact"
+    fi
+    append_step "snapshot" "fail" "${failure_class}" "${artifact_dir}" 2 "${prep_log}"
+    return 2
+  fi
+
+  sleep 2
+
+  local rgb_log="${artifact_dir}/capture_rgb.log"
+  local debug_log="${artifact_dir}/capture_debug.log"
+  local diff_log="${artifact_dir}/image_diff.log"
+
+  local rgb_rc
+  rgb_rc=$(run_cmd_with_timeout "${rgb_log}" python3 scripts/capture_topic_image.py \
+    --topic "${SNAPSHOT_RGB_TOPIC}" \
+    --output "${rgb_file}" \
+    --timeout-s "${SNAPSHOT_TIMEOUT_S}" \
+    --use-sim-time \
+    --min-frames "${SNAPSHOT_MIN_FRAMES}" \
+    --placeholder-label "rgb_timeout")
+
+  local debug_rc
+  debug_rc=$(run_cmd_with_timeout "${debug_log}" python3 scripts/capture_topic_image.py \
+    --topic "${SNAPSHOT_DEBUG_TOPIC}" \
+    --output "${debug_file}" \
+    --timeout-s "${SNAPSHOT_TIMEOUT_S}" \
+    --use-sim-time \
+    --min-frames "${SNAPSHOT_MIN_FRAMES}" \
+    --placeholder-label "debug_timeout")
+
+  local diff_rc
+  diff_rc=$(run_cmd_with_timeout "${diff_log}" python3 scripts/image_diff_metrics.py \
+    --left "${rgb_file}" \
+    --right "${debug_file}" \
+    --json-out "${diff_json}")
+
+  remove_model_by_name "${SNAPSHOT_WORLD_NAME}" "${SNAPSHOT_MODEL_NAME}" "${prep_log}"
+
+  local capture_rgb_ok
+  local capture_debug_ok
+  capture_rgb_ok="$(grep -E '^CAPTURED=' "${rgb_log}" 2>/dev/null | tail -n1 | cut -d'=' -f2 | tr '[:upper:]' '[:lower:]' || true)"
+  capture_debug_ok="$(grep -E '^CAPTURED=' "${debug_log}" 2>/dev/null | tail -n1 | cut -d'=' -f2 | tr '[:upper:]' '[:lower:]' || true)"
+
+  local left_exists="false"
+  local right_exists="false"
+  local byte_identical="true"
+  local mean_abs_diff="0"
+  local shape_match="false"
+  if [[ -f "${diff_json}" ]]; then
+    left_exists="$(jq -r '.left_exists // false' "${diff_json}" 2>/dev/null || echo false)"
+    right_exists="$(jq -r '.right_exists // false' "${diff_json}" 2>/dev/null || echo false)"
+    byte_identical="$(jq -r 'if has("byte_identical") then .byte_identical else true end' "${diff_json}" 2>/dev/null || echo true)"
+    mean_abs_diff="$(jq -r '.mean_abs_diff // 0' "${diff_json}" 2>/dev/null || echo 0)"
+    shape_match="$(jq -r '.shape_match // false' "${diff_json}" 2>/dev/null || echo false)"
+  fi
+
+  local diff_pass="false"
+  if awk -v a="${mean_abs_diff}" -v b="${SNAPSHOT_MIN_MEAN_ABS_DIFF}" 'BEGIN{exit !(a+0 >= b+0)}'; then
+    diff_pass="true"
+  fi
+
+  local pass="false"
+  if [[ "${rgb_rc}" -eq 0 && "${debug_rc}" -eq 0 && "${diff_rc}" -eq 0 \
+     && "${capture_rgb_ok}" == "true" && "${capture_debug_ok}" == "true" \
+     && "${left_exists}" == "true" && "${right_exists}" == "true" \
+     && "${byte_identical}" != "true" && "${diff_pass}" == "true" ]]; then
+    pass="true"
+  fi
+
+  jq -n \
+    --arg run_id "${RUN_ID}" \
+    --arg timestamp_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg rgb_topic "${SNAPSHOT_RGB_TOPIC}" \
+    --arg debug_topic "${SNAPSHOT_DEBUG_TOPIC}" \
+    --arg rgb_file "${rgb_file}" \
+    --arg debug_file "${debug_file}" \
+    --argjson rgb_capture_ok "$( [[ "${capture_rgb_ok}" == "true" ]] && echo true || echo false )" \
+    --argjson debug_capture_ok "$( [[ "${capture_debug_ok}" == "true" ]] && echo true || echo false )" \
+    --argjson left_exists "$( [[ "${left_exists}" == "true" ]] && echo true || echo false )" \
+    --argjson right_exists "$( [[ "${right_exists}" == "true" ]] && echo true || echo false )" \
+    --argjson shape_match "$( [[ "${shape_match}" == "true" ]] && echo true || echo false )" \
+    --argjson byte_identical "$( [[ "${byte_identical}" == "true" ]] && echo true || echo false )" \
+    --argjson mean_abs_diff "${mean_abs_diff}" \
+    --argjson min_mean_abs_diff "${SNAPSHOT_MIN_MEAN_ABS_DIFF}" \
+    --argjson pass "$( [[ "${pass}" == "true" ]] && echo true || echo false )" \
+    '{
+      run_id: $run_id,
+      timestamp_utc: $timestamp_utc,
+      rgb_topic: $rgb_topic,
+      debug_topic: $debug_topic,
+      captures: {
+        rgb_path: $rgb_file,
+        debug_path: $debug_file,
+        rgb_capture_ok: $rgb_capture_ok,
+        debug_capture_ok: $debug_capture_ok
+      },
+      image_diff: {
+        left_exists: $left_exists,
+        right_exists: $right_exists,
+        shape_match: $shape_match,
+        byte_identical: $byte_identical,
+        mean_abs_diff: $mean_abs_diff,
+        min_mean_abs_diff: $min_mean_abs_diff
+      },
+      pass: $pass
+    }' > "${summary_json}"
+
+  if [[ "${pass}" == "true" ]]; then
+    append_step "snapshot" "pass" "" "${artifact_dir}" 0 "${log_file}"
+    cat "${rgb_log}" "${debug_log}" "${diff_log}" > "${log_file}" 2>/dev/null || true
+    return 0
+  fi
+
+  local failure_class="threshold_failed"
+  if [[ "${rgb_rc}" -eq 124 || "${debug_rc}" -eq 124 || "${diff_rc}" -eq 124 ]]; then
+    failure_class="timeout"
+  elif [[ "${rgb_rc}" -ne 0 || "${debug_rc}" -ne 0 || "${diff_rc}" -ne 0 ]]; then
+    failure_class="command_failed"
+  elif [[ ! -f "${diff_json}" ]]; then
+    failure_class="missing_artifact"
+  fi
+  cat "${rgb_log}" "${debug_log}" "${diff_log}" > "${log_file}" 2>/dev/null || true
+  append_step "snapshot" "fail" "${failure_class}" "${artifact_dir}" 2 "${log_file}"
   return 2
 }
 
@@ -266,11 +461,20 @@ run_nav2() {
     sleep "${NAV2_BRIDGE_START_DELAY_S}"
   fi
 
-  if ! spawn_nav2_target "${prep_log}"; then
+  if ! spawn_model \
+    "${NAV2_WORLD_NAME}" \
+    "${NAV2_MODEL_SDF}" \
+    "${NAV2_MODEL_NAME}" \
+    "${NAV2_TARGET_X}" \
+    "${NAV2_TARGET_Y}" \
+    "${NAV2_TARGET_Z}" \
+    "${prep_log}"; then
+
     if [[ -n "${bridge_pid}" ]]; then
       kill "${bridge_pid}" 2>/dev/null || true
       wait "${bridge_pid}" 2>/dev/null || true
     fi
+
     local failure_class="command_failed"
     if has_world_create_service_error "${prep_log}"; then
       failure_class="service_unavailable"
@@ -295,7 +499,7 @@ run_nav2() {
     kill "${bridge_pid}" 2>/dev/null || true
     wait "${bridge_pid}" 2>/dev/null || true
   fi
-  remove_nav2_target "${prep_log}"
+  remove_model_by_name "${NAV2_WORLD_NAME}" "${NAV2_MODEL_NAME}" "${prep_log}"
 
   local summary_path
   summary_path="$(latest_file "artifacts/nav2/*/nav_summary.json")"
@@ -327,6 +531,54 @@ run_nav2() {
   return 2
 }
 
+run_multi_target() {
+  local log_file="${LOG_DIR}/multi_target.log"
+  local cfg="${MULTI_TARGET_CONFIG}"
+  if [[ "${cfg}" != /* ]]; then
+    cfg="${REPO_ROOT}/${cfg}"
+  fi
+
+  if [[ ! -f "${cfg}" ]]; then
+    append_step "multi_target" "fail" "missing_artifact" "" 2 "${log_file}"
+    return 2
+  fi
+
+  local rc
+  rc=$(run_cmd_with_timeout "${log_file}" python3 scripts/multi_target_nav2_runner.py \
+    --runtime-target "${RUNTIME_TARGET}" \
+    --profile "${UAT_PROFILE}" \
+    --inference-device "${UAT_INFERENCE_DEVICE}" \
+    --config "${cfg}" \
+    --goal-timeout-s "${MULTI_TARGET_GOAL_TIMEOUT_S}")
+
+  local summary_path
+  summary_path="$(latest_file "artifacts/nav2_multi/*/multi_target_summary.json")"
+  local artifact_dir=""
+  if [[ -n "${summary_path}" ]]; then
+    artifact_dir="$(dirname "${summary_path}")"
+  fi
+
+  if [[ "${rc}" -eq 0 && -n "${summary_path}" ]]; then
+    local pass_value
+    pass_value="$(jq -r '.pass // false' "${summary_path}" 2>/dev/null || echo false)"
+    if [[ "${pass_value}" == "true" ]]; then
+      append_step "multi_target" "pass" "" "${artifact_dir}" 0 "${log_file}"
+      return 0
+    fi
+    append_step "multi_target" "fail" "threshold_failed" "${artifact_dir}" 2 "${log_file}"
+    return 2
+  fi
+
+  local failure_class="command_failed"
+  if [[ "${rc}" -eq 124 ]]; then
+    failure_class="timeout"
+  elif [[ -z "${summary_path}" ]]; then
+    failure_class="missing_artifact"
+  fi
+  append_step "multi_target" "fail" "${failure_class}" "${artifact_dir}" "${rc}" "${log_file}"
+  return 2
+}
+
 overall_status="pass"
 case "${MODE}" in
   prepare)
@@ -335,11 +587,17 @@ case "${MODE}" in
   coordinate)
     run_coordinate || overall_status="fail"
     ;;
+  snapshot)
+    run_snapshot || overall_status="fail"
+    ;;
   orientation)
     run_orientation || overall_status="fail"
     ;;
   nav2)
     run_nav2 || overall_status="fail"
+    ;;
+  multi_target)
+    run_multi_target || overall_status="fail"
     ;;
   first_uat)
     run_coordinate || overall_status="fail"
@@ -348,6 +606,44 @@ case "${MODE}" in
     run_coordinate || overall_status="fail"
     run_orientation || overall_status="fail"
     run_nav2 || overall_status="fail"
+    ;;
+  pre_llm)
+    coord_ok=true
+    snapshot_ok=true
+    orient_ok=true
+    nav2_ok=true
+
+    run_coordinate || coord_ok=false
+    if [[ "${coord_ok}" != "true" ]]; then
+      overall_status="fail"
+      append_blocked_step "snapshot" "Blocked: coordinate gate failed."
+      append_blocked_step "orientation" "Blocked: coordinate gate failed."
+      append_blocked_step "nav2" "Blocked: coordinate gate failed."
+      append_blocked_step "multi_target" "Blocked: coordinate gate failed."
+    else
+      run_snapshot || snapshot_ok=false
+      if [[ "${snapshot_ok}" != "true" ]]; then
+        overall_status="fail"
+        append_blocked_step "orientation" "Blocked: snapshot gate failed."
+        append_blocked_step "nav2" "Blocked: snapshot gate failed."
+        append_blocked_step "multi_target" "Blocked: snapshot gate failed."
+      else
+        run_orientation || orient_ok=false
+        if [[ "${orient_ok}" != "true" ]]; then
+          overall_status="fail"
+          append_blocked_step "nav2" "Blocked: orientation gate failed."
+          append_blocked_step "multi_target" "Blocked: orientation gate failed."
+        else
+          run_nav2 || nav2_ok=false
+          if [[ "${nav2_ok}" != "true" ]]; then
+            overall_status="fail"
+            append_blocked_step "multi_target" "Blocked: nav2 gate failed."
+          else
+            run_multi_target || overall_status="fail"
+          fi
+        fi
+      fi
+    fi
     ;;
   *)
     echo "[uat-orchestrator] Unsupported mode: ${MODE}" >&2
@@ -370,6 +666,9 @@ jq -n \
   --arg status "${overall_status}" \
   --arg step_timeout_s "${STEP_TIMEOUT_S}" \
   --arg nav2_duration_s "${NAV2_DURATION_S}" \
+  --arg snapshot_timeout_s "${SNAPSHOT_TIMEOUT_S}" \
+  --arg snapshot_min_mean_abs_diff "${SNAPSHOT_MIN_MEAN_ABS_DIFF}" \
+  --arg multi_target_goal_timeout_s "${MULTI_TARGET_GOAL_TIMEOUT_S}" \
   --arg generated_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson steps "${steps_json}" \
   '{
@@ -383,8 +682,12 @@ jq -n \
     container_core_ros_distro: $container_core_ros_distro,
     step_timeout_s: ($step_timeout_s | tonumber),
     nav2_duration_s: ($nav2_duration_s | tonumber),
+    snapshot_timeout_s: ($snapshot_timeout_s | tonumber),
+    snapshot_min_mean_abs_diff: ($snapshot_min_mean_abs_diff | tonumber),
+    multi_target_goal_timeout_s: ($multi_target_goal_timeout_s | tonumber),
     status: $status,
     pass: ($status == "pass"),
+    pre_llm_ready: ($mode == "pre_llm" and $status == "pass"),
     steps: $steps
   }' > "${readiness_path}"
 

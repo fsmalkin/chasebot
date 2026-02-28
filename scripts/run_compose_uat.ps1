@@ -8,15 +8,19 @@ param(
     [string]$SimLane = "jetty_gate",
     [string]$InferenceBackend = "tensorrt_int8",
     [string]$CoreRosDistro = "kilted",
-    [ValidateSet("prepare", "coordinate", "orientation", "nav2", "first_uat", "full_replay")]
+    [ValidateSet("prepare", "coordinate", "snapshot", "orientation", "nav2", "multi_target", "first_uat", "full_replay", "pre_llm")]
     [string]$UatMode = "prepare",
     [ValidateSet("sim_gate", "gate_stack", "uat_orchestrator")]
     [string]$UatExecutionContext = "sim_gate",
     [int]$StepTimeoutSeconds = 900,
     [int]$Nav2DurationSeconds = 120,
+    [int]$MultiTargetGoalTimeoutSeconds = 55,
+    [int]$SnapshotTimeoutSeconds = 12,
+    [double]$SnapshotMinMeanAbsDiff = 1.5,
     [ValidateSet("compat", "balanced", "max")]
     [string]$UatProfile = "compat",
-    [string]$UatInferenceDevice = "cuda:0"
+    [string]$UatInferenceDevice = "cuda:0",
+    [string]$MultiTargetConfig = "ros2_config/config/multi_target_nav2.yaml"
 )
 
 Set-StrictMode -Version Latest
@@ -25,6 +29,10 @@ $ErrorActionPreference = "Stop"
 $env:CHASECAR_UAT_MODE = $UatMode
 $env:CHASECAR_STEP_TIMEOUT_S = [Math]::Max($StepTimeoutSeconds, 30).ToString()
 $env:CHASECAR_NAV2_DURATION_S = [Math]::Max($Nav2DurationSeconds, 30).ToString()
+$env:CHASECAR_MULTI_TARGET_GOAL_TIMEOUT_S = [Math]::Max($MultiTargetGoalTimeoutSeconds, 10).ToString()
+$env:CHASECAR_SNAPSHOT_TIMEOUT_S = [Math]::Max($SnapshotTimeoutSeconds, 5).ToString()
+$env:CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF = [Math]::Max([double]$SnapshotMinMeanAbsDiff, 0.0).ToString("0.###", [System.Globalization.CultureInfo]::InvariantCulture)
+$env:CHASECAR_MULTI_TARGET_CONFIG = $MultiTargetConfig
 $env:CHASECAR_UAT_PROFILE = $UatProfile
 $env:CHASECAR_UAT_INFERENCE_DEVICE = $UatInferenceDevice
 
@@ -104,6 +112,10 @@ export CHASECAR_SIM_LANE="__SIM_LANE__"
 export CHASECAR_INFERENCE_BACKEND="__INFERENCE_BACKEND__"
 export CHASECAR_STEP_TIMEOUT_S="__STEP_TIMEOUT_S__"
 export CHASECAR_NAV2_DURATION_S="__NAV2_DURATION_S__"
+export CHASECAR_MULTI_TARGET_GOAL_TIMEOUT_S="__MULTI_TARGET_GOAL_TIMEOUT_S__"
+export CHASECAR_SNAPSHOT_TIMEOUT_S="__SNAPSHOT_TIMEOUT_S__"
+export CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF="__SNAPSHOT_MIN_MEAN_ABS_DIFF__"
+export CHASECAR_MULTI_TARGET_CONFIG="__MULTI_TARGET_CONFIG__"
 export CHASECAR_UAT_PROFILE="__UAT_PROFILE__"
 export CHASECAR_UAT_INFERENCE_DEVICE="__UAT_INFERENCE_DEVICE__"
 export REPO_ROOT="/workspaces/chasecar"
@@ -115,6 +127,10 @@ bash /workspaces/chasecar/uat/orchestrator/run_uat_orchestrator.sh
             Replace("__INFERENCE_BACKEND__", $InferenceBackend).
             Replace("__STEP_TIMEOUT_S__", $env:CHASECAR_STEP_TIMEOUT_S).
             Replace("__NAV2_DURATION_S__", $env:CHASECAR_NAV2_DURATION_S).
+            Replace("__MULTI_TARGET_GOAL_TIMEOUT_S__", $env:CHASECAR_MULTI_TARGET_GOAL_TIMEOUT_S).
+            Replace("__SNAPSHOT_TIMEOUT_S__", $env:CHASECAR_SNAPSHOT_TIMEOUT_S).
+            Replace("__SNAPSHOT_MIN_MEAN_ABS_DIFF__", $env:CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF).
+            Replace("__MULTI_TARGET_CONFIG__", $env:CHASECAR_MULTI_TARGET_CONFIG).
             Replace("__UAT_PROFILE__", $UatProfile).
             Replace("__UAT_INFERENCE_DEVICE__", $UatInferenceDevice)
         $script = $script.Replace("`r`n", "`n")

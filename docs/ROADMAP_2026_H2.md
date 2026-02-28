@@ -16,13 +16,16 @@ Current status as of February 27, 2026:
    - milestone 1 evidence bundle present
 4. Run headless replay gates in sequence:
    - coordinate
+   - snapshot verification
    - orientation
    - Nav2 readiness
+   - multi-target Nav2
 5. Run visual milestone progression:
    - milestone 1 (perception)
    - milestone 2 (3D estimate coherence)
    - milestone 3 (autonomous approach)
 6. Freeze operator docs only after one green first-UAT cycle and one green full headless replay cycle.
+7. Keep `scripts/run_headless_pre_llm.ps1` as the default developer push path with `Lane=dual` until LLM integration starts.
 
 ## Mid-Term (Dual-Lane Regression Hardening)
 

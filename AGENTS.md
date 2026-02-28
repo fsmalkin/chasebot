@@ -61,7 +61,18 @@ Behavior:
    - `scripts/run_compose_isaac.ps1`
 3. UAT orchestrator:
    - `scripts/run_compose_uat.ps1`
-   - modes: `prepare|coordinate|orientation|nav2|first_uat|full_replay`
+   - modes: `prepare|coordinate|snapshot|orientation|nav2|multi_target|first_uat|full_replay|pre_llm`
+
+## Pre-LLM Headless Push
+
+1. Preferred command:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane dual`
+2. Lane behavior:
+   - `fast`: shorter timeouts + fast-forward world (`yolo_test_world_v6_clean_uat_fast.world`)
+   - `fidelity`: authoritative `robot_fidelity_orin` replay on canonical world
+   - `dual`: fast first, fidelity second
+3. Stage order in `pre_llm`:
+   - `coordinate -> snapshot -> orientation -> nav2 -> multi_target`
 
 ## Current Caution
 
@@ -73,6 +84,7 @@ Behavior:
 6. For full replay, keep launch bridge disabled (`-IncludeBridge $false`) and rely on orchestrator-managed bridge startup during nav2 stage.
 7. For GUI milestones, keep `-OpenFeedViewers $true` unless intentionally running screenshot-only mode; inspect `demo_summary.json -> viewers.feed_viewer_status` when feeds are not visible.
 8. For headless milestone promotion, run M2 then M3 with `robot_fidelity_orin`; M3 pass now requires motion evidence (`nav2.action_server_ready`, `motion.cmd_vel_message_count`, `motion.odom_displacement_m`, `motion.pass`).
+9. `run_compose_gate.ps1` supports `-WorldFile`, `-GatePerfProfile`, and `-InferenceDevice`; use these for fast-lane acceleration while keeping fidelity lanes on canonical defaults.
 
 ## Artifact Contracts
 
@@ -85,10 +97,20 @@ Behavior:
    - `artifacts/orientation/<timestamp>/snapshots/*.png`
 3. Nav2 readiness:
    - `artifacts/nav2/<timestamp>/nav_summary.json`
-4. Session packaging:
+4. Snapshot verification:
+   - `artifacts/snapshots/<timestamp>/d415_color.png`
+   - `artifacts/snapshots/<timestamp>/yolo_debug.png`
+   - `artifacts/snapshots/<timestamp>/image_diff.json`
+   - `artifacts/snapshots/<timestamp>/snapshot_summary.json`
+5. Multi-target Nav2:
+   - `artifacts/nav2_multi/<timestamp>/multi_target_samples.csv`
+   - `artifacts/nav2_multi/<timestamp>/multi_target_summary.json`
+6. Session packaging:
    - `artifacts/session/<timestamp>/manifest.json`
    - `artifacts/session/<timestamp>/readiness_report.json`
-5. Milestone 1 visual evidence (when enabled):
+7. Headless pre-LLM summary:
+   - `artifacts/session/<timestamp>/pre_llm_headless_summary.json`
+8. Milestone 1 visual evidence (when enabled):
    - `artifacts/demos/milestone_1_<timestamp>/operator_checklist.json`
    - `artifacts/demos/milestone_1_<timestamp>/screenshots/d415_color.png`
    - `artifacts/demos/milestone_1_<timestamp>/screenshots/yolo_debug.png`

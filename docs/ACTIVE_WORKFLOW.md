@@ -77,10 +77,13 @@ Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:
 
 1. `prepare`
 2. `coordinate`
-3. `orientation`
-4. `nav2`
-5. `first_uat`
-6. `full_replay`
+3. `snapshot`
+4. `orientation`
+5. `nav2`
+6. `multi_target`
+7. `first_uat`
+8. `full_replay`
+9. `pre_llm`
 
 Machine-readable markers emitted by orchestrator:
 
@@ -119,8 +122,37 @@ Machine-readable markers emitted by orchestrator:
 6. Optional raw sequence (triage mode):
    - `scripts/run_compose_gate.ps1 -Action up -ProjectName <name> -IncludeNav2Bringup $true -IncludeBridge $false`
    - `scripts/run_compose_uat.ps1 -Action run -ProjectName <name> -UatMode coordinate`
+   - `scripts/run_compose_uat.ps1 -Action run -ProjectName <name> -UatMode snapshot`
    - `scripts/run_compose_uat.ps1 -Action run -ProjectName <name> -UatMode orientation`
    - `scripts/run_compose_uat.ps1 -Action run -ProjectName <name> -UatMode nav2`
+   - `scripts/run_compose_uat.ps1 -Action run -ProjectName <name> -UatMode multi_target`
+
+## Pre-LLM Headless Path (New Canonical Development Push)
+
+Use this to run everything up to LLM planner wiring with conservative timeouts and fast-lane acceleration:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane dual`
+
+`Lane` options:
+
+1. `fast`:
+   - `workstation_max`
+   - fast-forward world (`yolo_test_world_v6_clean_uat_fast.world`)
+   - short timeouts for quick iteration
+2. `fidelity`:
+   - `robot_fidelity_orin`
+   - canonical world (`yolo_test_world_v6_clean_uat.world`)
+   - stricter timing for authoritative gate confidence
+3. `dual`:
+   - runs `fast` then `fidelity` in one command
+
+Pre-LLM stage order (container lane):
+
+1. coordinate gate
+2. snapshot verification gate (raw vs debug image distinctness)
+3. orientation gate
+4. nav2 readiness gate
+5. multi-target nav2 gate
 
 Fallback lane (`host_ros`) is non-canonical and for troubleshooting only.
 
@@ -176,17 +208,27 @@ Milestone 3 pass criteria include:
    - `artifacts/orientation/<timestamp>/orientation_samples.csv`
    - `artifacts/orientation/<timestamp>/orientation_summary.json`
    - `artifacts/orientation/<timestamp>/snapshots/*.png`
-3. Nav2:
+3. Snapshot verification:
+   - `artifacts/snapshots/<timestamp>/d415_color.png`
+   - `artifacts/snapshots/<timestamp>/yolo_debug.png`
+   - `artifacts/snapshots/<timestamp>/image_diff.json`
+   - `artifacts/snapshots/<timestamp>/snapshot_summary.json`
+4. Nav2:
    - `artifacts/nav2/<timestamp>/nav_summary.json`
-4. Session:
+5. Multi-target Nav2:
+   - `artifacts/nav2_multi/<timestamp>/multi_target_samples.csv`
+   - `artifacts/nav2_multi/<timestamp>/multi_target_summary.json`
+6. Session:
    - `artifacts/session/<timestamp>/manifest.json`
    - `artifacts/session/<timestamp>/readiness_report.json`
-5. Milestone 1 visual evidence:
+7. Headless pre-LLM summary:
+   - `artifacts/session/<timestamp>/pre_llm_headless_summary.json`
+8. Milestone 1 visual evidence:
    - `artifacts/demos/milestone_1_<timestamp>/operator_checklist.json`
    - `artifacts/demos/milestone_1_<timestamp>/screenshots/*.png`
    - `artifacts/demos/milestone_1_<timestamp>/demo_summary.json`
    - `demo_summary.json` includes `capture.detection_confidence*` and `demo_target.*`
-6. Milestone 2/3 demo evidence:
+9. Milestone 2/3 demo evidence:
    - `artifacts/demos/milestone_<2|3>_<timestamp>/demo_summary.json`
    - `demo_summary.json` includes:
      - `nav2.action_server_ready`

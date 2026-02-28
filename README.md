@@ -71,6 +71,26 @@ Notes:
 1. Coordinate and orientation run with deterministic target snapshots while robot remains stationary.
 2. Nav2 stage uses managed bridge startup and deterministic target spawn before readiness monitoring.
 
+## Pre-LLM Headless Push (Fast + Fidelity)
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane dual
+```
+
+This runs all low-level gates before high-level LLM wiring:
+
+1. coordinate UAT
+2. snapshot verification (`/d415/color/image_raw` vs `/yolo/debug_image`)
+3. orientation UAT
+4. nav2 readiness UAT
+5. multi-target nav2 UAT
+
+Lane modes:
+
+1. `fast`: uses `workstation_max`, short timeouts, and fast-forward world `yolo_test_world_v6_clean_uat_fast.world`.
+2. `fidelity`: uses `robot_fidelity_orin` on canonical world `yolo_test_world_v6_clean_uat.world`.
+3. `dual`: runs `fast` then `fidelity`.
+
 ## Visual Milestones
 
 ```powershell
@@ -104,9 +124,11 @@ Milestone 3 now enforces measurable motion:
 
 1. Coordinate: `artifacts/uat/<timestamp>/{detections.csv,summary.json}`
 2. Orientation: `artifacts/orientation/<timestamp>/{orientation_samples.csv,orientation_summary.json,snapshots/*.png}`
-3. Nav2: `artifacts/nav2/<timestamp>/nav_summary.json`
-4. Session: `artifacts/session/<timestamp>/{manifest.json,readiness_report.json}`
-5. Milestone 1 evidence: `artifacts/demos/milestone_1_<timestamp>/{operator_checklist.json,demo_summary.json,screenshots/*.png}`
+3. Snapshot verification: `artifacts/snapshots/<timestamp>/{d415_color.png,yolo_debug.png,image_diff.json,snapshot_summary.json}`
+4. Nav2: `artifacts/nav2/<timestamp>/nav_summary.json`
+5. Multi-target Nav2: `artifacts/nav2_multi/<timestamp>/{multi_target_samples.csv,multi_target_summary.json}`
+6. Session: `artifacts/session/<timestamp>/{manifest.json,readiness_report.json,pre_llm_headless_summary.json}`
+7. Milestone 1 evidence: `artifacts/demos/milestone_1_<timestamp>/{operator_checklist.json,demo_summary.json,screenshots/*.png}`
 
 ## Reference Docs
 
