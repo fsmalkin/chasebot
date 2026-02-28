@@ -91,6 +91,27 @@ Lane modes:
 2. `fidelity`: uses `robot_fidelity_orin` on canonical world `yolo_test_world_v6_clean_uat.world`.
 3. `dual`: runs `fast` then `fidelity`.
 
+Lane-specific gate configs:
+
+1. Fast Nav2 readiness: `ros2_config/config/nav2_readiness_fast.yaml`
+2. Fidelity Nav2 readiness: `ros2_config/config/nav2_readiness_fidelity.yaml`
+3. Fast multi-target: `ros2_config/config/multi_target_nav2_fast.yaml`
+4. Fidelity multi-target: `ros2_config/config/multi_target_nav2_fidelity.yaml`
+5. Fidelity soak multi-target: `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
+
+Authoritative campaign command (3x dual + optional soak + RC package):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1
+```
+
+Campaign outputs:
+
+1. `artifacts/session/<timestamp>/pre_llm_campaign_trend.json`
+2. `artifacts/session/<timestamp>/campaign_run_summary.json`
+3. `artifacts/session/<timestamp>/rc/manifest.json` (when soak enabled)
+4. `artifacts/session/<timestamp>/rc/readiness_report.json` (when soak enabled)
+
 ## Visual Milestones
 
 ```powershell

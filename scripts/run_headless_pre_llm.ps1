@@ -10,6 +10,8 @@ param(
     [int]$FidelityStepTimeoutSeconds = 600,
     [int]$FastNav2DurationSeconds = 75,
     [int]$FidelityNav2DurationSeconds = 120,
+    [string]$FastNav2Config = "ros2_config/config/nav2_readiness_fast.yaml",
+    [string]$FidelityNav2Config = "ros2_config/config/nav2_readiness_fidelity.yaml",
     [int]$FastMultiTargetGoalTimeoutSeconds = 45,
     [int]$FidelityMultiTargetGoalTimeoutSeconds = 60,
     [string]$FastMultiTargetConfig = "ros2_config/config/multi_target_nav2_fast.yaml",
@@ -70,19 +72,20 @@ function Invoke-PSCapture {
 function Convert-OrchestratorPath {
     param([string]$Path, [string]$RepoRoot)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $Path }
-    if ($Path -match '^[A-Za-z]:\\') { return $Path }
-    if ($Path -match '^/mnt/([a-zA-Z])/(.*)$') {
+    $normalized = [regex]::Replace($Path, '\\\\+', '\')
+    if ($normalized -match '^[A-Za-z]:\\') { return $normalized }
+    if ($normalized -match '^/mnt/([a-zA-Z])/(.*)$') {
         $drive = $matches[1].ToUpper()
         $rest = $matches[2] -replace '/', '\\'
         return "$drive`:\$rest"
     }
-    if ($Path.StartsWith("/workspaces/chasecar/")) {
-        return Join-Path $RepoRoot ($Path.Substring("/workspaces/chasecar/".Length).Replace('/', '\\'))
+    if ($normalized.StartsWith("/workspaces/chasecar/")) {
+        return Join-Path $RepoRoot ($normalized.Substring("/workspaces/chasecar/".Length).Replace('/', '\\'))
     }
-    if ($Path.StartsWith("artifacts/")) {
-        return Join-Path $RepoRoot ($Path.Replace('/', '\\'))
+    if ($normalized.StartsWith("artifacts/")) {
+        return Join-Path $RepoRoot ($normalized.Replace('/', '\\'))
     }
-    return $Path
+    return $normalized
 }
 
 function Parse-Marker {
@@ -143,6 +146,7 @@ function Invoke-Lane {
         [string]$UatProfile,
         [int]$StepTimeoutSeconds,
         [int]$Nav2DurationSeconds,
+        [string]$Nav2Config,
         [int]$MultiTargetGoalTimeoutSeconds,
         [string]$MultiTargetConfig,
         [string]$WorldFile,
@@ -165,6 +169,7 @@ function Invoke-Lane {
         uat_profile = $UatProfile
         step_timeout_s = $StepTimeoutSeconds
         nav2_duration_s = $Nav2DurationSeconds
+        nav2_config = $Nav2Config
         multi_target_goal_timeout_s = $MultiTargetGoalTimeoutSeconds
         multi_target_config = $MultiTargetConfig
         world_file = $WorldFile
@@ -174,6 +179,17 @@ function Invoke-Lane {
         artifacts = [ordered]@{
             readiness_report = ""
             session_dir = ""
+        }
+        readiness = [ordered]@{
+            status = "unknown"
+            pass = $false
+            pre_llm_ready = $false
+            failure_class = $null
+            failure_class_counts = @{}
+            stage_timing_s = @{}
+            stage_retry_counts = @{}
+            evidence_complete = $false
+            unresolved_issues = @()
         }
         notes = @()
     }
@@ -212,6 +228,7 @@ function Invoke-Lane {
             "-UatExecutionContext", "sim_gate",
             "-StepTimeoutSeconds", $StepTimeoutSeconds,
             "-Nav2DurationSeconds", $Nav2DurationSeconds,
+            "-Nav2Config", $Nav2Config,
             "-MultiTargetGoalTimeoutSeconds", $MultiTargetGoalTimeoutSeconds,
             "-MultiTargetConfig", $MultiTargetConfig,
             "-SnapshotMinMeanAbsDiff", $SnapshotMinMeanAbsDiff,
@@ -227,12 +244,40 @@ function Invoke-Lane {
         $result.artifacts.session_dir = $sessionDir
         $result.artifacts.readiness_report = $readiness
 
-        if ($run.ExitCode -eq 0) {
+        $readinessPass = $false
+        if (-not [string]::IsNullOrWhiteSpace($readiness) -and (Test-Path -LiteralPath $readiness)) {
+            try {
+                $readinessObj = Get-Content -LiteralPath $readiness -Raw | ConvertFrom-Json
+                $result.readiness.status = [string]($readinessObj.status)
+                $result.readiness.pass = [bool]$readinessObj.pass
+                $result.readiness.pre_llm_ready = [bool]$readinessObj.pre_llm_ready
+                $result.readiness.failure_class = $readinessObj.failure_class
+                $result.readiness.failure_class_counts = if ($null -ne $readinessObj.failure_class_counts) { $readinessObj.failure_class_counts } else { @{} }
+                $result.readiness.stage_timing_s = if ($null -ne $readinessObj.stage_timing_s) { $readinessObj.stage_timing_s } else { @{} }
+                $result.readiness.stage_retry_counts = if ($null -ne $readinessObj.stage_retry_counts) { $readinessObj.stage_retry_counts } else { @{} }
+                $result.readiness.evidence_complete = [bool]$readinessObj.evidence_complete
+                $result.readiness.unresolved_issues = if ($null -ne $readinessObj.unresolved_issues) { @($readinessObj.unresolved_issues) } else { @() }
+                $readinessPass = [bool]$readinessObj.pass
+            }
+            catch {
+                $result.notes += "Failed to parse readiness report."
+            }
+        }
+        else {
+            $result.notes += "Readiness report missing."
+        }
+
+        if ($run.ExitCode -eq 0 -and $readinessPass) {
             $result.status = "pass"
             $result.notes += "pre_llm orchestrator run passed."
         }
         else {
-            $result.notes += "pre_llm orchestrator run failed."
+            if ($run.ExitCode -ne 0) {
+                $result.notes += "pre_llm orchestrator run failed."
+            }
+            if (-not $readinessPass) {
+                $result.notes += "readiness report indicates failure."
+            }
         }
         return [pscustomobject]$result
     }
@@ -271,13 +316,72 @@ $cleaned = Cleanup-StaleProjects -Prefix $ProjectNamePrefix -RepoRoot $repoRoot 
 
 $laneResults = @()
 if ($Lane -in @("fast", "dual")) {
-    $laneResults += Invoke-Lane -LaneName "fast" -RuntimeTarget $FastRuntimeTarget -UatProfile $FastUatProfile -StepTimeoutSeconds $FastStepTimeoutSeconds -Nav2DurationSeconds $FastNav2DurationSeconds -MultiTargetGoalTimeoutSeconds $FastMultiTargetGoalTimeoutSeconds -MultiTargetConfig $FastMultiTargetConfig -WorldFile $FastWorldFile -GatePerfProfile "max" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -Build:$Build
+    $laneResults += Invoke-Lane -LaneName "fast" -RuntimeTarget $FastRuntimeTarget -UatProfile $FastUatProfile -StepTimeoutSeconds $FastStepTimeoutSeconds -Nav2DurationSeconds $FastNav2DurationSeconds -Nav2Config $FastNav2Config -MultiTargetGoalTimeoutSeconds $FastMultiTargetGoalTimeoutSeconds -MultiTargetConfig $FastMultiTargetConfig -WorldFile $FastWorldFile -GatePerfProfile "max" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -Build:$Build
 }
 if ($Lane -in @("fidelity", "dual")) {
-    $laneResults += Invoke-Lane -LaneName "fidelity" -RuntimeTarget $FidelityRuntimeTarget -UatProfile $FidelityUatProfile -StepTimeoutSeconds $FidelityStepTimeoutSeconds -Nav2DurationSeconds $FidelityNav2DurationSeconds -MultiTargetGoalTimeoutSeconds $FidelityMultiTargetGoalTimeoutSeconds -MultiTargetConfig $FidelityMultiTargetConfig -WorldFile $FidelityWorldFile -GatePerfProfile "compat" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -Build:$Build
+    $laneResults += Invoke-Lane -LaneName "fidelity" -RuntimeTarget $FidelityRuntimeTarget -UatProfile $FidelityUatProfile -StepTimeoutSeconds $FidelityStepTimeoutSeconds -Nav2DurationSeconds $FidelityNav2DurationSeconds -Nav2Config $FidelityNav2Config -MultiTargetGoalTimeoutSeconds $FidelityMultiTargetGoalTimeoutSeconds -MultiTargetConfig $FidelityMultiTargetConfig -WorldFile $FidelityWorldFile -GatePerfProfile "compat" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -Build:$Build
 }
 
 $overallPass = (@($laneResults | Where-Object { $_.status -ne "pass" }).Count -eq 0)
+$failureClassCounts = @{}
+$stageTimingByLane = [ordered]@{}
+$stageRetryByLane = [ordered]@{}
+$unresolvedIssues = @()
+
+foreach ($laneResult in $laneResults) {
+    $laneName = [string]$laneResult.lane
+    $stageTimingByLane[$laneName] = if ($null -ne $laneResult.readiness.stage_timing_s) { $laneResult.readiness.stage_timing_s } else { @{} }
+    $stageRetryByLane[$laneName] = if ($null -ne $laneResult.readiness.stage_retry_counts) { $laneResult.readiness.stage_retry_counts } else { @{} }
+
+    if ($null -ne $laneResult.readiness.failure_class_counts) {
+        $counts = $laneResult.readiness.failure_class_counts
+        if ($counts -is [System.Collections.IDictionary]) {
+            foreach ($key in @($counts.Keys)) {
+                $name = [string]$key
+                $raw = $counts[$key]
+                $val = 0
+                if ($null -ne $raw -and [int]::TryParse($raw.ToString(), [ref]$val)) {
+                    if (-not $failureClassCounts.ContainsKey($name)) {
+                        $failureClassCounts[$name] = 0
+                    }
+                    $failureClassCounts[$name] += $val
+                }
+            }
+        }
+        else {
+            foreach ($prop in $counts.PSObject.Properties) {
+                $name = [string]$prop.Name
+                $val = 0
+                if ($null -ne $prop.Value -and [int]::TryParse($prop.Value.ToString(), [ref]$val)) {
+                    if (-not $failureClassCounts.ContainsKey($name)) {
+                        $failureClassCounts[$name] = 0
+                    }
+                    $failureClassCounts[$name] += $val
+                }
+            }
+        }
+    }
+
+    if ($laneResult.status -ne "pass") {
+        if ($laneResult.readiness.unresolved_issues -and @($laneResult.readiness.unresolved_issues).Count -gt 0) {
+            foreach ($issue in @($laneResult.readiness.unresolved_issues)) {
+                $unresolvedIssues += [ordered]@{
+                    lane = $laneName
+                    issue = $issue
+                }
+            }
+        }
+        else {
+            $unresolvedIssues += [ordered]@{
+                lane = $laneName
+                issue = "Unknown failure. Check readiness report."
+            }
+        }
+    }
+}
+
+$allowedFailureClasses = @("service_unavailable", "timeout", "missing_artifact", "threshold_failed", "blocked_dependency")
+$allFailureClassesObserved = @($failureClassCounts.Keys | Sort-Object)
 $summary = [ordered]@{
     run_id = $runId
     generated_utc = (Get-Date).ToUniversalTime().ToString("o")
@@ -287,6 +391,12 @@ $summary = [ordered]@{
     stale_projects_cleaned = $cleaned
     overall_status = if ($overallPass) { "pass" } else { "fail" }
     pre_llm_ready = $overallPass
+    failure_class_catalog = $allowedFailureClasses
+    failure_class_counts = $failureClassCounts
+    observed_failure_classes = $allFailureClassesObserved
+    stage_timing_s_by_lane = $stageTimingByLane
+    stage_retry_counts_by_lane = $stageRetryByLane
+    unresolved_issues = $unresolvedIssues
     lane_results = $laneResults
 }
 $summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8

@@ -1,4 +1,13 @@
-version: 1
+version: 2
+contract_status: frozen_pre_llm
+frozen_on_utc: "2026-02-28T16:46:54Z"
+freeze_basis:
+  campaign_trend_report: artifacts/session/20260228T164623Z/pre_llm_campaign_trend.json
+  soak_summary: artifacts/session/20260228T162201Z/pre_llm_headless_summary.json
+  rc_readiness_report: artifacts/session/20260228T164654Z/readiness_report.json
+  message_schema_manifest_version: 1
+  isaac_bridge_allowlist_version: 1
+
 intents:
   - name: acquire_target
     description: "Acquire and lock a target from current perception stream."
@@ -34,3 +43,15 @@ transport:
   command_topic: /chasecar/brain/intent
   feedback_topic: /chasecar/brain/feedback
   emergency_stop_topic: /chasecar/safety/stop
+
+low_level_boundary:
+  topics_consumed:
+    - /yolo/ball_position_3d
+    - /odom
+  topics_published:
+    - /cmd_vel
+    - /chasecar/brain/feedback
+  actions:
+    - /navigate_to_pose
+  services:
+    - /lifecycle_manager_navigation/manage_nodes

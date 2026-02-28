@@ -67,12 +67,20 @@ Behavior:
 
 1. Preferred command:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane dual`
+2. Full campaign command (3 dual runs + soak + RC package):
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1`
 2. Lane behavior:
    - `fast`: shorter timeouts + fast-forward world (`yolo_test_world_v6_clean_uat_fast.world`)
    - `fidelity`: authoritative `robot_fidelity_orin` replay on canonical world
    - `dual`: fast first, fidelity second
 3. Stage order in `pre_llm`:
    - `coordinate -> snapshot -> orientation -> nav2 -> multi_target`
+4. Lane-specific config defaults:
+   - fast nav2: `ros2_config/config/nav2_readiness_fast.yaml`
+   - fidelity nav2: `ros2_config/config/nav2_readiness_fidelity.yaml`
+   - fast multi-target: `ros2_config/config/multi_target_nav2_fast.yaml`
+   - fidelity multi-target: `ros2_config/config/multi_target_nav2_fidelity.yaml`
+   - fidelity soak multi-target: `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
 
 ## Current Caution
 
@@ -110,7 +118,12 @@ Behavior:
    - `artifacts/session/<timestamp>/readiness_report.json`
 7. Headless pre-LLM summary:
    - `artifacts/session/<timestamp>/pre_llm_headless_summary.json`
-8. Milestone 1 visual evidence (when enabled):
+8. Campaign and RC packaging:
+   - `artifacts/session/<timestamp>/pre_llm_campaign_trend.json`
+   - `artifacts/session/<timestamp>/campaign_run_summary.json`
+   - `artifacts/session/<timestamp>/rc/manifest.json`
+   - `artifacts/session/<timestamp>/rc/readiness_report.json`
+9. Milestone 1 visual evidence (when enabled):
    - `artifacts/demos/milestone_1_<timestamp>/operator_checklist.json`
    - `artifacts/demos/milestone_1_<timestamp>/screenshots/d415_color.png`
    - `artifacts/demos/milestone_1_<timestamp>/screenshots/yolo_debug.png`

@@ -132,6 +132,8 @@ Machine-readable markers emitted by orchestrator:
 Use this to run everything up to LLM planner wiring with conservative timeouts and fast-lane acceleration:
 
 1. `powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane dual`
+2. Campaign automation (3x dual + soak + RC package):
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1`
 
 `Lane` options:
 
@@ -145,6 +147,19 @@ Use this to run everything up to LLM planner wiring with conservative timeouts a
    - stricter timing for authoritative gate confidence
 3. `dual`:
    - runs `fast` then `fidelity` in one command
+
+Lane-specific gate config defaults:
+
+1. Fast Nav2 readiness config:
+   - `ros2_config/config/nav2_readiness_fast.yaml`
+2. Fidelity Nav2 readiness config:
+   - `ros2_config/config/nav2_readiness_fidelity.yaml`
+3. Fast multi-target config:
+   - `ros2_config/config/multi_target_nav2_fast.yaml`
+4. Fidelity multi-target config:
+   - `ros2_config/config/multi_target_nav2_fidelity.yaml`
+5. Fidelity soak multi-target config:
+   - `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
 
 Pre-LLM stage order (container lane):
 
@@ -223,12 +238,17 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<timestamp>/readiness_report.json`
 7. Headless pre-LLM summary:
    - `artifacts/session/<timestamp>/pre_llm_headless_summary.json`
-8. Milestone 1 visual evidence:
+8. Campaign + RC package:
+   - `artifacts/session/<timestamp>/pre_llm_campaign_trend.json`
+   - `artifacts/session/<timestamp>/campaign_run_summary.json`
+   - `artifacts/session/<timestamp>/rc/manifest.json`
+   - `artifacts/session/<timestamp>/rc/readiness_report.json`
+9. Milestone 1 visual evidence:
    - `artifacts/demos/milestone_1_<timestamp>/operator_checklist.json`
    - `artifacts/demos/milestone_1_<timestamp>/screenshots/*.png`
    - `artifacts/demos/milestone_1_<timestamp>/demo_summary.json`
    - `demo_summary.json` includes `capture.detection_confidence*` and `demo_target.*`
-9. Milestone 2/3 demo evidence:
+10. Milestone 2/3 demo evidence:
    - `artifacts/demos/milestone_<2|3>_<timestamp>/demo_summary.json`
    - `demo_summary.json` includes:
      - `nav2.action_server_ready`

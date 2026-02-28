@@ -125,3 +125,31 @@ Use `artifacts/demos/milestone_3_<timestamp>/demo_summary.json`:
 4. `motion.odom_displacement_m < motion.min_distance_m`
    - Robot moved insufficiently for pass gate.
    - Increase run duration or investigate controller/planner instability before lowering threshold.
+
+## LLM-Ready Handoff Checklist
+
+Run this only after first-UAT promotion is already green:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1`
+
+Required handoff artifacts:
+
+1. `artifacts/session/<timestamp>/pre_llm_campaign_trend.json`
+2. `artifacts/session/<timestamp>/campaign_run_summary.json`
+3. `artifacts/session/<timestamp>/rc/manifest.json`
+4. `artifacts/session/<timestamp>/rc/readiness_report.json`
+5. `runtime/contracts/llm_control_contract.yaml`
+
+Required pass criteria:
+
+1. Campaign report `campaign.all_green=true` for the 3 dual runs.
+2. Fidelity soak is green with Nav2 duration `>= 1200s`.
+3. Fidelity soak multi-target run has `goal_count >= 10`.
+4. RC readiness report has `pass=true`.
+5. `llm_control_contract.yaml` remains in `contract_status: frozen_pre_llm`.
+
+Known limitations before full LLM wiring:
+
+1. High-level behavior planning is not implemented in this phase.
+2. GUI milestone replay is still required before final operator handoff.
+3. Isaac lane remains parity-only and does not replace Jetty gate authority.

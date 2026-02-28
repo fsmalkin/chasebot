@@ -27,6 +27,21 @@ Current status as of February 27, 2026:
 6. Freeze operator docs only after one green first-UAT cycle and one green full headless replay cycle.
 7. Keep `scripts/run_headless_pre_llm.ps1` as the default developer push path with `Lane=dual` until LLM integration starts.
 
+Status update as of February 28, 2026:
+
+1. Pre-LLM dual-lane campaign achieved `3/3` green:
+   - `artifacts/session/20260228T155850Z/pre_llm_headless_summary.json`
+   - `artifacts/session/20260228T160643Z/pre_llm_headless_summary.json`
+   - `artifacts/session/20260228T161425Z/pre_llm_headless_summary.json`
+2. Fidelity soak gate is green:
+   - `artifacts/session/20260228T162201Z/pre_llm_headless_summary.json`
+   - includes Nav2 duration `1200s` and 12-goal multi-target sequence.
+3. Campaign trend report and RC package generated:
+   - `artifacts/session/20260228T164623Z/pre_llm_campaign_trend.json`
+   - `artifacts/session/20260228T164654Z/readiness_report.json` (`pass=true`)
+4. Pre-LLM contract freeze applied:
+   - `runtime/contracts/llm_control_contract.yaml` (`contract_status: frozen_pre_llm`)
+
 ## Mid-Term (Dual-Lane Regression Hardening)
 
 1. Keep Jetty gate lane as authoritative release lane.
