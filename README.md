@@ -79,6 +79,13 @@ powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 -Milesto
 powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 -Milestone 3 -RuntimeTarget workstation_balanced -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $true -MaxRunSeconds 150
 ```
 
+Headless milestone progression (current development default):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 -Milestone 2 -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -MaxRunSeconds 90
+powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 -Milestone 3 -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -MaxRunSeconds 150
+```
+
 Milestone 1 now enforces deterministic target acquisition:
 
 1. removes duplicate legacy ball models in-world
@@ -86,6 +93,12 @@ Milestone 1 now enforces deterministic target acquisition:
 3. requires `/yolo/confidence >= 0.50` to pass
 4. requires debug overlay to differ from raw RGB evidence when confidence gate passes
 5. in non-headless mode, verifies both feed viewers are running (`/d415/color/image_raw` and `/yolo/debug_image`)
+
+Milestone 3 now enforces measurable motion:
+
+1. `nav2.action_server_ready=true`
+2. `motion.cmd_vel_message_count > 0`
+3. `motion.odom_displacement_m >= MotionMinDistanceMeters` (default `0.40`)
 
 ## Artifact Contracts
 

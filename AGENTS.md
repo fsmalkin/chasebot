@@ -72,6 +72,7 @@ Behavior:
 5. `scripts/run_compose_profile.ps1` now auto-resolves Docker Desktop CLI path (`C:\Program Files\Docker\Docker\resources\bin\docker.exe`) when `docker` is not on PATH.
 6. For full replay, keep launch bridge disabled (`-IncludeBridge $false`) and rely on orchestrator-managed bridge startup during nav2 stage.
 7. For GUI milestones, keep `-OpenFeedViewers $true` unless intentionally running screenshot-only mode; inspect `demo_summary.json -> viewers.feed_viewer_status` when feeds are not visible.
+8. For headless milestone promotion, run M2 then M3 with `robot_fidelity_orin`; M3 pass now requires motion evidence (`nav2.action_server_ready`, `motion.cmd_vel_message_count`, `motion.odom_displacement_m`, `motion.pass`).
 
 ## Artifact Contracts
 

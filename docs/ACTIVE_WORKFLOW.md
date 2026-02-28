@@ -132,6 +132,20 @@ Run only after headless gates are green:
 2. `scripts/run_milestone_demo.ps1 -Milestone 2 -RuntimeTarget workstation_balanced -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $true -MaxRunSeconds 120`
 3. `scripts/run_milestone_demo.ps1 -Milestone 3 -RuntimeTarget workstation_balanced -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $true -MaxRunSeconds 150`
 
+## Headless Milestone Path (Current Preferred)
+
+Use this while iterating before operator-facing GUI rehearsal:
+
+1. `scripts/run_milestone_demo.ps1 -Milestone 2 -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -MaxRunSeconds 90`
+2. `scripts/run_milestone_demo.ps1 -Milestone 3 -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -MaxRunSeconds 150`
+
+M3 contract knobs:
+
+1. `-RequireMotion` (default true for M3)
+2. `-MotionMinDistanceMeters` (default `0.40`)
+3. `-MotionWindowSeconds` (default `90`)
+4. `-RequireNav2ActionServer` (default true for M3)
+
 Milestone 1 pass criteria include:
 
 1. deterministic target spawn succeeded
@@ -140,6 +154,18 @@ Milestone 1 pass criteria include:
 4. `/world/<name>/create` service became available before spawn
 5. debug image differs from raw image evidence when confidence gate is met
 6. non-headless feed viewers are alive when `-OpenFeedViewers $true`
+
+Milestone 2 pass criteria include:
+
+1. detector + extractor running
+2. `/yolo/ball_position_3d` active
+3. overlay distinctness maintained when confidence gate passes
+
+Milestone 3 pass criteria include:
+
+1. nav2 action server ready (`/navigate_to_pose`, `Action servers: 1`)
+2. cmd_vel activity observed during motion window
+3. odom displacement meets threshold (`>= MotionMinDistanceMeters`)
 
 ## Artifact Contracts
 
@@ -160,6 +186,15 @@ Milestone 1 pass criteria include:
    - `artifacts/demos/milestone_1_<timestamp>/screenshots/*.png`
    - `artifacts/demos/milestone_1_<timestamp>/demo_summary.json`
    - `demo_summary.json` includes `capture.detection_confidence*` and `demo_target.*`
+6. Milestone 2/3 demo evidence:
+   - `artifacts/demos/milestone_<2|3>_<timestamp>/demo_summary.json`
+   - `demo_summary.json` includes:
+     - `nav2.action_server_ready`
+     - `motion.cmd_vel_message_count`
+     - `motion.odom_start`
+     - `motion.odom_end`
+     - `motion.odom_displacement_m`
+     - `motion.pass`
 
 ## Failure Triage Path
 
@@ -184,6 +219,10 @@ Milestone 1 pass criteria include:
 10. Visual demo shows sim only with no camera windows:
    - Keep `-OpenFeedViewers $true` and check `demo_summary.json -> viewers.feed_viewer_status`.
    - If status is `rqt_image_view_missing`, install `rqt_image_view` in the active ROS distro.
+11. M3 fails with motion gate false:
+   - Check `demo_summary.json -> motion.*` and `operator_checklist.json`.
+   - If `cmd_vel_message_count=0`, inspect `logs/bridge.log` and `logs/cmd_vel_relay.log`.
+   - If `odom_seen=false`, verify odometry bridge topics in sim launch and rerun from a clean session.
 
 ## Interface Contracts
 

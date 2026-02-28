@@ -108,3 +108,20 @@ powershell -ExecutionPolicy Bypass -File scripts/run_first_uat.ps1 `
 7. Visual run shows Gazebo but no feed windows:
    - Check `demo_summary.json -> viewers.feed_viewer_status`.
    - If `rqt_image_view_missing`, install `rqt_image_view` for active ROS distro.
+
+## Milestone 3 Motion Triage (Headless-Compatible)
+
+Use `artifacts/demos/milestone_3_<timestamp>/demo_summary.json`:
+
+1. `nav2.action_server_ready=false`
+   - Nav2 stack is not fully ready.
+   - Check `logs/nav2.log` and verify `/navigate_to_pose` server availability.
+2. `motion.cmd_vel_message_count=0`
+   - Bridge/goal flow did not generate drive commands.
+   - Check `logs/bridge.log` and `logs/cmd_vel_relay.log`.
+3. `motion.odom_seen=false`
+   - Odometry topic bridging is missing.
+   - Validate `/odom` and `/model/jetbot/odometry` availability in the launch stack.
+4. `motion.odom_displacement_m < motion.min_distance_m`
+   - Robot moved insufficiently for pass gate.
+   - Increase run duration or investigate controller/planner instability before lowering threshold.
