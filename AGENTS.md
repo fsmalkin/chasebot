@@ -26,18 +26,32 @@ This file captures repo-specific execution guidance for coding agents.
 
 ## Canonical Headless UAT Path
 
-1. Start gate lane for deterministic perception checks (Nav2 disabled):
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_compose_gate.ps1 -ProjectName chasecar_gate_nav2fix -Action up`
-2. Coordinate UAT:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_coordinate_uat.ps1 -RuntimeTarget robot_fidelity_orin -InferenceBackend tensorrt_int8 -Distro Ubuntu-24.04 -WorkspacePath '~/ros2_ws' -RosDistro kilted`
-3. Orientation UAT:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_orientation_uat.ps1 -RuntimeTarget robot_fidelity_orin -InferenceBackend tensorrt_int8 -Distro Ubuntu-24.04 -WorkspacePath '~/ros2_ws' -RosDistro kilted`
-4. Recreate gate lane with Nav2 enabled for navigation readiness:
-   - `$env:GATE_INCLUDE_NAV2_BRINGUP='true'`
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_compose_gate.ps1 -ProjectName chasecar_gate_nav2fix -Action up`
-5. Spawn deterministic target before Nav2 readiness run (if using raw runner).
-6. Nav2 readiness UAT:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_nav2_readiness_uat.ps1 -RuntimeTarget robot_fidelity_orin -InferenceBackend tensorrt_int8 -Distro Ubuntu-24.04 -WorkspacePath '~/ros2_ws' -RosDistro kilted`
+1. Start gate lane:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_compose_gate.ps1 -ProjectName chasecar_gate_replay_<ts> -Action up -RuntimeTarget robot_fidelity_orin -IncludeNav2Bringup $true -IncludeBridge $false`
+2. Run full replay in one session:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_compose_uat.ps1 -Action run -ProjectName chasecar_gate_replay_<ts> -RuntimeTarget robot_fidelity_orin -InferenceBackend tensorrt_int8 -CoreRosDistro kilted -UatMode full_replay -UatExecutionContext sim_gate`
+3. Teardown:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_compose_gate.ps1 -ProjectName chasecar_gate_replay_<ts> -Action down -RuntimeTarget robot_fidelity_orin -IncludeNav2Bringup $true -IncludeBridge $false`
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_compose_uat.ps1 -ProjectName chasecar_gate_replay_<ts> -Action down -RuntimeTarget robot_fidelity_orin`
+4. Triage mode (individual phases):
+   - `-UatMode coordinate|orientation|nav2`
+
+## First Operator UAT Path
+
+Preferred operator entrypoint for first promotion gate:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_first_uat.ps1 -ExecutionLane container_kilted -Distro Ubuntu-24.04 -RuntimeTarget robot_fidelity_orin`
+
+Behavior:
+
+1. Scans and cleans stale `chasecar_gate_*` compose projects before bring-up.
+2. Uses compose project naming pattern `chasecar_gate_firstuat_<timestamp>` unless `-ProjectName` is supplied.
+3. Runs coordinate UAT first and blocks milestone 1 visual run if coordinate gate fails.
+   - Uses `-UatExecutionContext sim_gate` by default for deterministic create/remove service access.
+4. Writes session package:
+   - `artifacts/session/<timestamp>/manifest.json`
+   - `artifacts/session/<timestamp>/readiness_report.json`
+5. Uses `-ExecutionLane host_ros` only for fallback troubleshooting.
 
 ## Compose Profiles
 
@@ -47,6 +61,7 @@ This file captures repo-specific execution guidance for coding agents.
    - `scripts/run_compose_isaac.ps1`
 3. UAT orchestrator:
    - `scripts/run_compose_uat.ps1`
+   - modes: `prepare|coordinate|orientation|nav2|first_uat|full_replay`
 
 ## Current Caution
 
@@ -55,6 +70,8 @@ This file captures repo-specific execution guidance for coding agents.
 3. If a long run appears stuck in WSL-hosted mode, stop with `wsl --shutdown` and rerun from a clean session.
 4. `ros2 action list` includes clients and may show `/navigate_to_pose` even when no server is active. Use `ros2 action info /navigate_to_pose` and confirm `Action servers: 1` for readiness.
 5. `scripts/run_compose_profile.ps1` now auto-resolves Docker Desktop CLI path (`C:\Program Files\Docker\Docker\resources\bin\docker.exe`) when `docker` is not on PATH.
+6. For full replay, keep launch bridge disabled (`-IncludeBridge $false`) and rely on orchestrator-managed bridge startup during nav2 stage.
+7. For GUI milestones, keep `-OpenFeedViewers $true` unless intentionally running screenshot-only mode; inspect `demo_summary.json -> viewers.feed_viewer_status` when feeds are not visible.
 
 ## Artifact Contracts
 
@@ -70,3 +87,8 @@ This file captures repo-specific execution guidance for coding agents.
 4. Session packaging:
    - `artifacts/session/<timestamp>/manifest.json`
    - `artifacts/session/<timestamp>/readiness_report.json`
+5. Milestone 1 visual evidence (when enabled):
+   - `artifacts/demos/milestone_1_<timestamp>/operator_checklist.json`
+   - `artifacts/demos/milestone_1_<timestamp>/screenshots/d415_color.png`
+   - `artifacts/demos/milestone_1_<timestamp>/screenshots/yolo_debug.png`
+   - `artifacts/demos/milestone_1_<timestamp>/demo_summary.json`
