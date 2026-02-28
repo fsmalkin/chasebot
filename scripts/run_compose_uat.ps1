@@ -20,7 +20,7 @@ param(
     [ValidateSet("compat", "balanced", "max")]
     [string]$UatProfile = "compat",
     [string]$UatInferenceDevice = "cuda:0",
-    [string]$MultiTargetConfig = "ros2_config/config/multi_target_nav2.yaml"
+    [string]$MultiTargetConfig = "ros2_config/config/multi_target_nav2_fidelity.yaml"
 )
 
 Set-StrictMode -Version Latest

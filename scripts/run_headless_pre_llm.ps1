@@ -12,6 +12,8 @@ param(
     [int]$FidelityNav2DurationSeconds = 120,
     [int]$FastMultiTargetGoalTimeoutSeconds = 45,
     [int]$FidelityMultiTargetGoalTimeoutSeconds = 60,
+    [string]$FastMultiTargetConfig = "ros2_config/config/multi_target_nav2_fast.yaml",
+    [string]$FidelityMultiTargetConfig = "ros2_config/config/multi_target_nav2_fidelity.yaml",
     [double]$SnapshotMinMeanAbsDiff = 1.5,
     [string]$FastWorldFile = "yolo_test_world_v6_clean_uat_fast.world",
     [string]$FidelityWorldFile = "yolo_test_world_v6_clean_uat.world",
@@ -142,6 +144,7 @@ function Invoke-Lane {
         [int]$StepTimeoutSeconds,
         [int]$Nav2DurationSeconds,
         [int]$MultiTargetGoalTimeoutSeconds,
+        [string]$MultiTargetConfig,
         [string]$WorldFile,
         [string]$GatePerfProfile,
         [string]$RepoRoot,
@@ -163,6 +166,7 @@ function Invoke-Lane {
         step_timeout_s = $StepTimeoutSeconds
         nav2_duration_s = $Nav2DurationSeconds
         multi_target_goal_timeout_s = $MultiTargetGoalTimeoutSeconds
+        multi_target_config = $MultiTargetConfig
         world_file = $WorldFile
         gate_perf_profile = $GatePerfProfile
         started_utc = (Get-Date).ToUniversalTime().ToString("o")
@@ -209,6 +213,7 @@ function Invoke-Lane {
             "-StepTimeoutSeconds", $StepTimeoutSeconds,
             "-Nav2DurationSeconds", $Nav2DurationSeconds,
             "-MultiTargetGoalTimeoutSeconds", $MultiTargetGoalTimeoutSeconds,
+            "-MultiTargetConfig", $MultiTargetConfig,
             "-SnapshotMinMeanAbsDiff", $SnapshotMinMeanAbsDiff,
             "-UatProfile", $UatProfile,
             "-UatInferenceDevice", $InferenceDevice
@@ -266,10 +271,10 @@ $cleaned = Cleanup-StaleProjects -Prefix $ProjectNamePrefix -RepoRoot $repoRoot 
 
 $laneResults = @()
 if ($Lane -in @("fast", "dual")) {
-    $laneResults += Invoke-Lane -LaneName "fast" -RuntimeTarget $FastRuntimeTarget -UatProfile $FastUatProfile -StepTimeoutSeconds $FastStepTimeoutSeconds -Nav2DurationSeconds $FastNav2DurationSeconds -MultiTargetGoalTimeoutSeconds $FastMultiTargetGoalTimeoutSeconds -WorldFile $FastWorldFile -GatePerfProfile "max" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -Build:$Build
+    $laneResults += Invoke-Lane -LaneName "fast" -RuntimeTarget $FastRuntimeTarget -UatProfile $FastUatProfile -StepTimeoutSeconds $FastStepTimeoutSeconds -Nav2DurationSeconds $FastNav2DurationSeconds -MultiTargetGoalTimeoutSeconds $FastMultiTargetGoalTimeoutSeconds -MultiTargetConfig $FastMultiTargetConfig -WorldFile $FastWorldFile -GatePerfProfile "max" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -Build:$Build
 }
 if ($Lane -in @("fidelity", "dual")) {
-    $laneResults += Invoke-Lane -LaneName "fidelity" -RuntimeTarget $FidelityRuntimeTarget -UatProfile $FidelityUatProfile -StepTimeoutSeconds $FidelityStepTimeoutSeconds -Nav2DurationSeconds $FidelityNav2DurationSeconds -MultiTargetGoalTimeoutSeconds $FidelityMultiTargetGoalTimeoutSeconds -WorldFile $FidelityWorldFile -GatePerfProfile "compat" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -Build:$Build
+    $laneResults += Invoke-Lane -LaneName "fidelity" -RuntimeTarget $FidelityRuntimeTarget -UatProfile $FidelityUatProfile -StepTimeoutSeconds $FidelityStepTimeoutSeconds -Nav2DurationSeconds $FidelityNav2DurationSeconds -MultiTargetGoalTimeoutSeconds $FidelityMultiTargetGoalTimeoutSeconds -MultiTargetConfig $FidelityMultiTargetConfig -WorldFile $FidelityWorldFile -GatePerfProfile "compat" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -Build:$Build
 }
 
 $overallPass = (@($laneResults | Where-Object { $_.status -ne "pass" }).Count -eq 0)

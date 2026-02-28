@@ -1,0 +1,39 @@
+﻿metadata:
+  action_name: /navigate_to_pose
+  frame_id: odom
+  odom_topic: /odom
+  cmd_vel_topic_primary: /jetbot_base_controller/cmd_vel
+  cmd_vel_topic_secondary: /cmd_vel
+  rosout_topic: /rosout
+
+defaults:
+  warmup_s: 8.0
+  warmup_wait_for_odom_s: 10.0
+  goal_timeout_s: 60.0
+  goal_retry_count: 1
+  goal_retry_delay_s: 1.5
+  settle_after_goal_s: 1.5
+  sample_interval_s: 0.1
+  min_cmd_vel_hz: 1.0
+  max_cmd_vel_gap_s: 4.0
+
+thresholds:
+  goal_accept_rate_min: 0.90
+  goal_success_rate_min: 0.80
+  median_final_distance_max_m: 0.35
+  cmd_vel_publish_stability_min: 0.55
+  planner_errors_max: 0
+  controller_errors_max: 2
+
+scenarios:
+  - id: mt_01_center_near
+    goal: {x: 0.75, y: 0.00, yaw: 0.0}
+
+  - id: mt_02_left_offset
+    goal: {x: 0.95, y: 0.20, yaw: 0.0}
+
+  - id: mt_03_right_offset
+    goal: {x: 0.95, y: -0.20, yaw: 0.0}
+
+  - id: mt_04_center_far
+    goal: {x: 1.25, y: 0.00, yaw: 0.0}
