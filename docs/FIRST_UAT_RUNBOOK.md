@@ -131,6 +131,7 @@ Use `artifacts/demos/milestone_3_<timestamp>/demo_summary.json`:
 Run this only after first-UAT promotion is already green:
 
 1. `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1`
+2. `powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin`
 
 Required handoff artifacts:
 
@@ -139,6 +140,16 @@ Required handoff artifacts:
 3. `artifacts/session/<timestamp>/rc/manifest.json`
 4. `artifacts/session/<timestamp>/rc/readiness_report.json`
 5. `runtime/contracts/llm_control_contract.yaml`
+6. `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
+
+Current frozen baseline package:
+
+1. `artifacts/session/20260301T014018Z/pre_llm_campaign_trend.json`
+2. `artifacts/session/20260301T014018Z/campaign_run_summary.json`
+3. `artifacts/session/20260301T014018Z/rc/manifest.json`
+4. `artifacts/session/20260301T014018Z/rc/readiness_report.json`
+5. `artifacts/session/20260301T015545Z/pre_llm_headless_summary.json` (soak)
+6. `artifacts/session/20260301T022219Z/brain_adapter_smoke_summary.json` (adapter smoke)
 
 Required pass criteria:
 
@@ -147,6 +158,7 @@ Required pass criteria:
 3. Fidelity soak multi-target run has `goal_count >= 10`.
 4. RC readiness report has `pass=true`.
 5. `llm_control_contract.yaml` remains in `contract_status: frozen_pre_llm`.
+6. Brain adapter smoke report has `pass=true`.
 
 Known limitations before full LLM wiring:
 

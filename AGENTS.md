@@ -69,6 +69,8 @@ Behavior:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane dual`
 2. Full campaign command (3 dual runs + soak + RC package):
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1`
+3. Brain adapter smoke (post-campaign, pre-GUI):
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin`
 2. Lane behavior:
    - `fast`: shorter timeouts + fast-forward world (`yolo_test_world_v6_clean_uat_fast.world`)
    - `fidelity`: authoritative `robot_fidelity_orin` replay on canonical world
@@ -128,3 +130,5 @@ Behavior:
    - `artifacts/demos/milestone_1_<timestamp>/screenshots/d415_color.png`
    - `artifacts/demos/milestone_1_<timestamp>/screenshots/yolo_debug.png`
    - `artifacts/demos/milestone_1_<timestamp>/demo_summary.json`
+10. Brain adapter smoke:
+   - `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`

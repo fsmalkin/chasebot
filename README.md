@@ -112,6 +112,24 @@ Campaign outputs:
 3. `artifacts/session/<timestamp>/rc/manifest.json` (when soak enabled)
 4. `artifacts/session/<timestamp>/rc/readiness_report.json` (when soak enabled)
 
+Latest frozen pre-LLM package (post-green campaign):
+
+1. `artifacts/session/20260301T014018Z/pre_llm_campaign_trend.json`
+2. `artifacts/session/20260301T015545Z/pre_llm_headless_summary.json`
+3. `artifacts/session/20260301T014018Z/rc/manifest.json`
+4. `artifacts/session/20260301T014018Z/rc/readiness_report.json`
+
+Pre-LLM brain adapter smoke (no LLM planner yet):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin
+```
+
+Adapter smoke output:
+
+1. `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
+2. Latest validated smoke: `artifacts/session/20260301T022219Z/brain_adapter_smoke_summary.json`
+
 ## Visual Milestones
 
 ```powershell
