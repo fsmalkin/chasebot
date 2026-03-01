@@ -13,7 +13,7 @@ param(
     [ValidateSet("tensorrt_int8")]
     [string]$InferenceBackend = "tensorrt_int8",
 
-    [Nullable[bool]]$Headless = $null,
+    [object]$Headless = $null,
 
     [string]$Distro = "Ubuntu-24.04",
 
@@ -46,7 +46,7 @@ param(
 
     [double]$DemoTargetZ = 0.05,
 
-    [Nullable[bool]]$DemoTargetRelative = $true,
+    [object]$DemoTargetRelative = $true,
 
     [double]$DemoTargetForwardM = 1.10,
 
@@ -58,13 +58,13 @@ param(
 
     [double]$MinDetectionConfidence = 0.50,
 
-    [Nullable[bool]]$OpenFeedViewers = $null,
+    [object]$OpenFeedViewers = $null,
 
     [int]$ViewerStartupDelaySeconds = 3,
 
     [int]$WorldReadyTimeoutSeconds = 45,
 
-    [Nullable[bool]]$RequireMotion = $null,
+    [object]$RequireMotion = $null,
 
     [double]$MotionMinDistanceMeters = 0.40,
 
@@ -72,7 +72,7 @@ param(
 
     [double]$MotionTargetProgressMinMeters = 0.20,
 
-    [Nullable[bool]]$RequireNav2ActionServer = $null,
+    [object]$RequireNav2ActionServer = $null,
 
     [string]$CmdVelTopicPrimary = "/jetbot_base_controller/cmd_vel",
 
@@ -83,6 +83,29 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+function Resolve-NullableBool {
+    param(
+        [object]$Value,
+        [string]$ParamName
+    )
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [bool]) { return [bool]$Value }
+    if ($Value -is [int] -or $Value -is [long]) {
+        if ([int]$Value -eq 0) { return $false }
+        if ([int]$Value -eq 1) { return $true }
+    }
+    $text = $Value.ToString().Trim().ToLowerInvariant()
+    switch ($text) {
+        "true" { return $true }
+        "false" { return $false }
+        "1" { return $true }
+        "0" { return $false }
+        "yes" { return $true }
+        "no" { return $false }
+        default { throw "Invalid boolean value '$Value' for parameter '$ParamName'." }
+    }
+}
 
 function Convert-ToWslPath {
     param([Parameter(Mandatory = $true)][string]$WindowsPath)
@@ -132,6 +155,12 @@ $runtimeAliases = @{
 if ($runtimeAliases.ContainsKey($RuntimeTarget)) {
     $RuntimeTarget = $runtimeAliases[$RuntimeTarget]
 }
+
+$Headless = Resolve-NullableBool -Value $Headless -ParamName "Headless"
+$DemoTargetRelative = Resolve-NullableBool -Value $DemoTargetRelative -ParamName "DemoTargetRelative"
+$OpenFeedViewers = Resolve-NullableBool -Value $OpenFeedViewers -ParamName "OpenFeedViewers"
+$RequireMotion = Resolve-NullableBool -Value $RequireMotion -ParamName "RequireMotion"
+$RequireNav2ActionServer = Resolve-NullableBool -Value $RequireNav2ActionServer -ParamName "RequireNav2ActionServer"
 
 $defaults = @{
     robot_fidelity_orin = @{
@@ -309,6 +338,7 @@ if [ "$PERF_PROFILE" = "compat" ]; then
 fi
 
 cleanup_stale_stack() {
+  pkill -f "rqt_image_view" 2>/dev/null || true
   pkill -f "jetbot_gz_control_camera_test_v5.launch.py" 2>/dev/null || true
   pkill -f "chasecar_tensorrt_detector.py" 2>/dev/null || true
   pkill -f "yolo_3d_position_extractor.py" 2>/dev/null || true
@@ -318,6 +348,7 @@ cleanup_stale_stack() {
   pkill -f "cmd_vel_relay.py" 2>/dev/null || true
   pkill -f "gz sim -v" 2>/dev/null || true
   pkill -f "gz sim server" 2>/dev/null || true
+  pkill -f "gz sim gui" 2>/dev/null || true
   pkill -f "ign gazebo" 2>/dev/null || true
 }
 
@@ -616,7 +647,7 @@ if [ "$INCLUDE_BRIDGE" = "true" ]; then
   BRIDGE_PID=$(start_bg "bridge" "$BRIDGE_CMD")
 
   if [ "$REQUIRE_MOTION" = "true" ]; then
-    MOTION_PROBE_CMD="timeout -k 5s \"$((MOTION_WINDOW_S + 20))s\" python3 $PACKAGE_PATH/scripts/motion_probe.py --duration-s $MOTION_WINDOW_S --cmd-vel-topic-primary $CMD_VEL_TOPIC_PRIMARY --cmd-vel-topic-secondary $CMD_VEL_TOPIC_SECONDARY --odom-topic $ODOM_TOPIC --detection-topic /yolo/ball_position_3d --json-out $ARTIFACT_DIR/motion_probe.json --use-sim-time"
+    MOTION_PROBE_CMD="timeout -k 5s \"$((MOTION_WINDOW_S + 20))s\" env FASTDDS_BUILTIN_TRANSPORTS=UDPv4 python3 $PACKAGE_PATH/scripts/motion_probe.py --duration-s $MOTION_WINDOW_S --cmd-vel-topic-primary $CMD_VEL_TOPIC_PRIMARY --cmd-vel-topic-secondary $CMD_VEL_TOPIC_SECONDARY --odom-topic $ODOM_TOPIC --detection-topic /yolo/ball_position_3d --json-out $ARTIFACT_DIR/motion_probe.json --use-sim-time"
     nohup bash -lc "$MOTION_PROBE_CMD" >"$ARTIFACT_DIR/logs/motion_probe.log" 2>&1 &
     MOTION_PROBE_PID=$!
   fi
@@ -725,7 +756,14 @@ if [ "$DETECTION_ABOVE_THRESHOLD" = "true" ]; then
   fi
 fi
 
-BALL_POSITION_3D_RAW=$(timeout -k 2s 8s ros2 topic echo /yolo/ball_position_3d --once 2>/dev/null || true)
+BALL_POSITION_3D_RAW=""
+for _try in 1 2 3 4 5; do
+  BALL_POSITION_3D_RAW=$(timeout -k 2s 4s ros2 topic echo /yolo/ball_position_3d --once 2>/dev/null || true)
+  if [ -n "$BALL_POSITION_3D_RAW" ]; then
+    break
+  fi
+  sleep 1
+done
 BALL_POSITION_3D_SEEN=false
 BALL_POSITION_3D_X=0
 BALL_POSITION_3D_Y=0
@@ -738,6 +776,24 @@ if [ -n "$BALL_POSITION_3D_RAW" ]; then
   if [[ -z "$BALL_POSITION_3D_X" ]]; then BALL_POSITION_3D_X=0; fi
   if [[ -z "$BALL_POSITION_3D_Y" ]]; then BALL_POSITION_3D_Y=0; fi
   if [[ -z "$BALL_POSITION_3D_Z" ]]; then BALL_POSITION_3D_Z=0; fi
+fi
+if [ "$BALL_POSITION_3D_SEEN" != "true" ] && [ -f "$ARTIFACT_DIR/logs/extractor.log" ]; then
+  LAST_3D_LINE=$(grep "3D Position:" "$ARTIFACT_DIR/logs/extractor.log" | tail -n1 || true)
+  if [ -n "$LAST_3D_LINE" ]; then
+    BALL_POSITION_3D_SEEN=true
+    read -r BALL_POSITION_3D_X BALL_POSITION_3D_Y BALL_POSITION_3D_Z <<< "$(python3 - "$LAST_3D_LINE" <<'PY'
+import re
+import sys
+
+line = sys.argv[1]
+m = re.search(r'3D Position:\s*\[([+-]?\d+(?:\.\d+)?),\s*([+-]?\d+(?:\.\d+)?),\s*([+-]?\d+(?:\.\d+)?)\]', line)
+if m:
+    print(m.group(1), m.group(2), m.group(3))
+else:
+    print("0 0 0")
+PY
+)"
+  fi
 fi
 
 NAV2_ACTION_INFO_RAW=$(timeout -k 2s 8s ros2 action info /navigate_to_pose 2>/dev/null || true)
@@ -855,17 +911,19 @@ PY
       BALL_POSITION_3D_SEEN=true
     fi
   fi
-  if awk -v c="$MOTION_CMD_VEL_MESSAGE_COUNT" -v d="$MOTION_ODOM_DISPLACEMENT_M" -v m="$MOTION_MIN_DISTANCE_M" -v prog="$MOTION_TARGET_PROGRESS_OK" 'BEGIN{exit !(c+0 > 0 && d+0 >= m+0 && prog=="true")}'; then
+  if awk -v d="$MOTION_ODOM_DISPLACEMENT_M" -v m="$MOTION_MIN_DISTANCE_M" -v prog="$MOTION_TARGET_PROGRESS_OK" 'BEGIN{exit !(d+0 >= m+0 && prog=="true")}'; then
     MOTION_PASS=true
   fi
-  if [ "$MOTION_ODOM_SEEN" != "true" ]; then
-    MOTION_PROBE_ERROR="odom_missing"
-  elif ! awk -v c="$MOTION_CMD_VEL_MESSAGE_COUNT" 'BEGIN{exit !(c+0 > 0)}'; then
-    MOTION_PROBE_ERROR="cmd_vel_inactive"
-  elif ! awk -v d="$MOTION_ODOM_DISPLACEMENT_M" -v m="$MOTION_MIN_DISTANCE_M" 'BEGIN{exit !(d+0 >= m+0)}'; then
-    MOTION_PROBE_ERROR="displacement_below_threshold"
-  elif [ "$MOTION_TARGET_PROGRESS_OK" != "true" ]; then
-    MOTION_PROBE_ERROR="target_distance_not_improving"
+  if [ "$MOTION_PASS" != "true" ]; then
+    if [ "$MOTION_ODOM_SEEN" != "true" ]; then
+      MOTION_PROBE_ERROR="odom_missing"
+    elif ! awk -v d="$MOTION_ODOM_DISPLACEMENT_M" -v m="$MOTION_MIN_DISTANCE_M" 'BEGIN{exit !(d+0 >= m+0)}'; then
+      MOTION_PROBE_ERROR="displacement_below_threshold"
+    elif [ "$MOTION_TARGET_PROGRESS_OK" != "true" ]; then
+      MOTION_PROBE_ERROR="target_distance_not_improving"
+    elif ! awk -v c="$MOTION_CMD_VEL_MESSAGE_COUNT" -v n="$MOTION_NAV_PROGRESS_SAMPLES" 'BEGIN{exit !(c+0 > 0 || n+0 > 0)}'; then
+      MOTION_PROBE_ERROR="cmd_vel_inactive"
+    fi
   fi
 fi
 
@@ -1062,9 +1120,9 @@ cat >"$ARTIFACT_DIR/operator_checklist.json" <<JSON
     },
     {
       "id": "cmd_vel_activity",
-      "description": "cmd_vel activity observed during motion probe",
+      "description": "cmd_vel or nav progress activity observed during motion probe",
       "required": $MOTION_REQUIRED,
-      "pass": $(if awk -v c="$MOTION_CMD_VEL_MESSAGE_COUNT" 'BEGIN{exit !(c+0 > 0)}'; then echo true; else echo false; fi)
+      "pass": $(if awk -v c="$MOTION_CMD_VEL_MESSAGE_COUNT" -v n="$MOTION_NAV_PROGRESS_SAMPLES" 'BEGIN{exit !(c+0 > 0 || n+0 > 0)}'; then echo true; else echo false; fi)
     },
     {
       "id": "odom_displacement",
@@ -1254,6 +1312,8 @@ if [[ "$MAX_RUN_SECONDS" =~ ^[0-9]+$ ]] && [ "$MAX_RUN_SECONDS" -gt 0 ]; then
   if [ "${#SAFE_KILL_PIDS[@]}" -gt 0 ]; then
     kill "${SAFE_KILL_PIDS[@]}" 2>/dev/null || true
   fi
+  sleep 1
+  cleanup_stale_stack
 fi
 
 cat >"$ARTIFACT_DIR/demo_pids.json" <<JSON

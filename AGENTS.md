@@ -71,6 +71,10 @@ Behavior:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1`
 3. Brain adapter smoke (post-campaign, pre-GUI):
    - `powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin`
+4. Adversarial must-fail suite:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_adversarial.ps1 -RuntimeTarget robot_fidelity_orin`
+5. Final GUI rehearsal wrapper:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -RuntimeTarget workstation_balanced -OpenFeedViewers true`
 2. Lane behavior:
    - `fast`: shorter timeouts + fast-forward world (`yolo_test_world_v6_clean_uat_fast.world`)
    - `fidelity`: authoritative `robot_fidelity_orin` replay on canonical world
@@ -95,8 +99,10 @@ Behavior:
 5. `scripts/run_compose_profile.ps1` now auto-resolves Docker Desktop CLI path (`C:\Program Files\Docker\Docker\resources\bin\docker.exe`) when `docker` is not on PATH.
 6. For full replay, keep launch bridge disabled (`-IncludeBridge $false`) and rely on orchestrator-managed bridge startup during nav2 stage.
 7. For GUI milestones, keep `-OpenFeedViewers $true` unless intentionally running screenshot-only mode; inspect `demo_summary.json -> viewers.feed_viewer_status` when feeds are not visible.
-8. For headless milestone promotion, run M2 then M3 with `robot_fidelity_orin`; M3 pass now requires motion evidence (`nav2.action_server_ready`, `motion.cmd_vel_message_count`, `motion.odom_displacement_m`, `motion.pass`).
+8. For headless milestone promotion, run M2 then M3 with `robot_fidelity_orin`; M3 pass requires motion evidence (`nav2.action_server_ready`, `motion.odom_displacement_m`, `motion.target_progress_ok`, `motion.pass`).
 9. `run_compose_gate.ps1` supports `-WorldFile`, `-GatePerfProfile`, and `-InferenceDevice`; use these for fast-lane acceleration while keeping fidelity lanes on canonical defaults.
+10. `run_milestone_demo.ps1` and `run_pre_llm_gui_rehearsal.ps1` now sweep stale viewer/sim/nav processes before each run attempt.
+11. `run_pre_llm_gui_rehearsal.ps1` defaults to cleanup-on-exit; set `-KeepWindowsOpen true` only when an operator is actively watching.
 
 ## Artifact Contracts
 

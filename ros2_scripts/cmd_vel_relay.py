@@ -16,36 +16,13 @@ class CmdVelRelay(Node):
         input_topic_primary = str(self.get_parameter('input_topic_primary').value)
         input_topic_secondary = str(self.get_parameter('input_topic_secondary').value)
 
-        # Subscribe defensively: DDS disallows mixed message types on one topic.
-        # Some stacks publish Twist, others TwistStamped.
-        self._relay_subs = []
-        self._relay_subs.append(
-            self._try_create_subscription(
-                Twist, input_topic_primary, self.cmd_vel_twist_callback, 'primary_twist'
-            )
-        )
-        self._relay_subs.append(
-            self._try_create_subscription(
-                TwistStamped,
-                input_topic_primary,
-                self.cmd_vel_stamped_callback,
-                'primary_stamped',
-            )
-        )
-        self._relay_subs.append(
-            self._try_create_subscription(
-                Twist, input_topic_secondary, self.cmd_vel_twist_callback, 'secondary_twist'
-            )
-        )
-        self._relay_subs.append(
-            self._try_create_subscription(
-                TwistStamped,
-                input_topic_secondary,
-                self.cmd_vel_stamped_callback,
-                'secondary_stamped',
-            )
-        )
-        self._relay_subs = [sub for sub in self._relay_subs if sub is not None]
+        # Track one subscription per topic and adapt type if publishers indicate a mismatch.
+        self._topic_map = {
+            'primary': input_topic_primary,
+            'secondary': input_topic_secondary,
+        }
+        self._relay_subs = {}
+        self._relay_sub_types = {}
         
         # Create publisher to robot's cmd_vel (as TwistStamped)
         self.robot_cmd_vel_pub = self.create_publisher(
@@ -59,10 +36,8 @@ class CmdVelRelay(Node):
             f'Relaying {input_topic_primary} and {input_topic_secondary} '
             '-> /jetbot_base_controller/cmd_vel (TwistStamped, supports Twist/TwistStamped input)'
         )
-        if not self._relay_subs:
-            self.get_logger().error(
-                'No compatible cmd_vel subscriptions were created. Check topic types.'
-            )
+        self._refresh_subscriptions(force=True)
+        self._refresh_timer = self.create_timer(1.0, self._refresh_subscriptions)
         
         # Message counter for debugging
         self.msg_count = 0
@@ -75,6 +50,70 @@ class CmdVelRelay(Node):
                 f'Skipping {label} subscription on {topic}: {exc}'
             )
             return None
+
+    def _detect_topic_kind(self, topic: str):
+        topic_types = set()
+        try:
+            infos = self.get_publishers_info_by_topic(topic)
+            for info in infos:
+                if info.topic_type:
+                    topic_types.add(info.topic_type)
+        except Exception:
+            pass
+        if not topic_types:
+            try:
+                for known_topic, known_types in self.get_topic_names_and_types():
+                    if known_topic == topic:
+                        topic_types.update(known_types)
+                        break
+            except Exception:
+                pass
+
+        if 'geometry_msgs/msg/TwistStamped' in topic_types:
+            return 'stamped'
+        if 'geometry_msgs/msg/Twist' in topic_types:
+            return 'twist'
+        return None
+
+    def _refresh_subscriptions(self, force: bool = False):
+        for label, topic in self._topic_map.items():
+            detected_kind = self._detect_topic_kind(topic)
+            desired_kind = detected_kind if detected_kind in ('twist', 'stamped') else 'twist'
+            current_kind = self._relay_sub_types.get(label)
+
+            if (not force) and current_kind == desired_kind and label in self._relay_subs:
+                continue
+
+            current_sub = self._relay_subs.get(label)
+            if current_sub is not None:
+                try:
+                    self.destroy_subscription(current_sub)
+                except Exception:
+                    pass
+                self._relay_subs.pop(label, None)
+
+            if desired_kind == 'stamped':
+                sub = self._try_create_subscription(
+                    TwistStamped,
+                    topic,
+                    self.cmd_vel_stamped_callback,
+                    f'{label}_stamped',
+                )
+            else:
+                sub = self._try_create_subscription(
+                    Twist,
+                    topic,
+                    self.cmd_vel_twist_callback,
+                    f'{label}_twist',
+                )
+
+            if sub is not None:
+                self._relay_subs[label] = sub
+                self._relay_sub_types[label] = desired_kind
+                if force or current_kind != desired_kind:
+                    self.get_logger().info(
+                        f'Using {desired_kind} subscription for {label} topic {topic}'
+                    )
     
     def cmd_vel_twist_callback(self, msg: Twist):
         """Convert Twist to TwistStamped and relay to the robot topic."""

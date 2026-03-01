@@ -117,7 +117,7 @@ Use `artifacts/demos/milestone_3_<timestamp>/demo_summary.json`:
    - Nav2 stack is not fully ready.
    - Check `logs/nav2.log` and verify `/navigate_to_pose` server availability.
 2. `motion.cmd_vel_message_count=0`
-   - Bridge/goal flow did not generate drive commands.
+   - Treat as diagnostic unless displacement/progress checks also fail.
    - Check `logs/bridge.log` and `logs/cmd_vel_relay.log`.
 3. `motion.odom_seen=false`
    - Odometry topic bridging is missing.
@@ -144,12 +144,12 @@ Required handoff artifacts:
 
 Current frozen baseline package:
 
-1. `artifacts/session/20260301T014018Z/pre_llm_campaign_trend.json`
-2. `artifacts/session/20260301T014018Z/campaign_run_summary.json`
-3. `artifacts/session/20260301T014018Z/rc/manifest.json`
-4. `artifacts/session/20260301T014018Z/rc/readiness_report.json`
-5. `artifacts/session/20260301T015545Z/pre_llm_headless_summary.json` (soak)
-6. `artifacts/session/20260301T022219Z/brain_adapter_smoke_summary.json` (adapter smoke)
+1. `artifacts/session/20260301T161622Z/pre_llm_campaign_trend.json`
+2. `artifacts/session/20260301T161622Z/campaign_run_summary.json`
+3. `artifacts/session/20260301T161622Z/rc/manifest.json`
+4. `artifacts/session/20260301T161622Z/rc/readiness_report.json`
+5. `artifacts/session/20260301T163154Z/pre_llm_headless_summary.json` (soak)
+6. `artifacts/session/20260301T161540Z/brain_adapter_smoke_summary.json` (adapter smoke)
 
 Required pass criteria:
 

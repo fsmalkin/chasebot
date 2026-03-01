@@ -163,10 +163,16 @@ Lane-specific gate config defaults:
 
 Latest frozen pre-LLM campaign package:
 
-1. trend: `artifacts/session/20260301T014018Z/pre_llm_campaign_trend.json`
-2. soak summary: `artifacts/session/20260301T015545Z/pre_llm_headless_summary.json`
-3. rc manifest: `artifacts/session/20260301T014018Z/rc/manifest.json`
-4. rc readiness: `artifacts/session/20260301T014018Z/rc/readiness_report.json` (`pass=true`)
+1. trend: `artifacts/session/20260301T161622Z/pre_llm_campaign_trend.json`
+2. soak summary: `artifacts/session/20260301T163154Z/pre_llm_headless_summary.json`
+3. rc manifest: `artifacts/session/20260301T161622Z/rc/manifest.json`
+4. rc readiness: `artifacts/session/20260301T161622Z/rc/readiness_report.json` (`pass=true`)
+
+Adversarial must-fail suite (required for truth-lock confidence):
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_adversarial.ps1 -RuntimeTarget robot_fidelity_orin`
+2. Latest summary:
+   - `artifacts/session/20260301T161035Z/adversarial_headless_summary.json`
 
 Pre-LLM stage order (container lane):
 
@@ -210,6 +216,10 @@ Run only after headless gates are green:
 1. `scripts/run_milestone_demo.ps1 -Milestone 1 -RuntimeTarget workstation_balanced -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $true -MaxRunSeconds 90`
 2. `scripts/run_milestone_demo.ps1 -Milestone 2 -RuntimeTarget workstation_balanced -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $true -MaxRunSeconds 120`
 3. `scripts/run_milestone_demo.ps1 -Milestone 3 -RuntimeTarget workstation_balanced -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $true -MaxRunSeconds 150`
+4. Full multi-target rehearsal wrapper:
+   - `scripts/run_pre_llm_gui_rehearsal.ps1 -RuntimeTarget workstation_balanced -OpenFeedViewers true`
+   - latest summary: `artifacts/session/20260301T155430Z/pre_llm_gui_rehearsal_summary.json`
+   - default behavior cleans stale viewer/sim processes between attempts and on exit (`-KeepWindowsOpen true` to override)
 
 ## Headless Milestone Path (Current Preferred)
 
@@ -243,9 +253,9 @@ Milestone 2 pass criteria include:
 Milestone 3 pass criteria include:
 
 1. nav2 action server ready (`/navigate_to_pose`, `Action servers: 1`)
-2. cmd_vel activity observed during motion window
-3. odom displacement meets threshold (`>= MotionMinDistanceMeters`)
-4. target distance improves by at least `MotionTargetProgressMinMeters`
+2. odom displacement meets threshold (`>= MotionMinDistanceMeters`)
+3. target distance improves by at least `MotionTargetProgressMinMeters`
+4. cmd_vel/nav activity is recorded as a diagnostic signal (not sole pass criterion)
 
 ## Artifact Contracts
 

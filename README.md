@@ -119,10 +119,20 @@ Campaign outputs:
 
 Latest frozen pre-LLM package (post-green campaign):
 
-1. `artifacts/session/20260301T014018Z/pre_llm_campaign_trend.json`
-2. `artifacts/session/20260301T015545Z/pre_llm_headless_summary.json`
-3. `artifacts/session/20260301T014018Z/rc/manifest.json`
-4. `artifacts/session/20260301T014018Z/rc/readiness_report.json`
+1. `artifacts/session/20260301T161622Z/pre_llm_campaign_trend.json`
+2. `artifacts/session/20260301T163154Z/pre_llm_headless_summary.json`
+3. `artifacts/session/20260301T161622Z/rc/manifest.json`
+4. `artifacts/session/20260301T161622Z/rc/readiness_report.json`
+
+Adversarial must-fail verification:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_adversarial.ps1 -RuntimeTarget robot_fidelity_orin
+```
+
+Latest adversarial summary:
+
+1. `artifacts/session/20260301T161035Z/adversarial_headless_summary.json`
 
 Pre-LLM brain adapter smoke (no LLM planner yet):
 
@@ -133,7 +143,7 @@ powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -Ru
 Adapter smoke output:
 
 1. `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
-2. Latest validated smoke: `artifacts/session/20260301T022219Z/brain_adapter_smoke_summary.json`
+2. Latest validated smoke: `artifacts/session/20260301T161540Z/brain_adapter_smoke_summary.json`
 
 ## Visual Milestones
 
@@ -161,8 +171,21 @@ Milestone 1 now enforces deterministic target acquisition:
 Milestone 3 now enforces measurable motion:
 
 1. `nav2.action_server_ready=true`
-2. `motion.cmd_vel_message_count > 0`
-3. `motion.odom_displacement_m >= MotionMinDistanceMeters` (default `0.40`)
+2. `motion.odom_displacement_m >= MotionMinDistanceMeters` (default `0.40`)
+3. `motion.target_progress_ok=true` (target-distance improvement meets threshold)
+4. cmd_vel/nav progress activity is recorded for diagnostics
+
+Full GUI rehearsal wrapper (assistant-side pre-handoff):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -RuntimeTarget workstation_balanced -OpenFeedViewers true
+```
+
+Default behavior cleans stale viewer/sim processes between attempts and at exit. Use `-KeepWindowsOpen true` only for live operator observation.
+
+Latest GUI rehearsal summary:
+
+1. `artifacts/session/20260301T155430Z/pre_llm_gui_rehearsal_summary.json`
 
 ## Artifact Contracts
 

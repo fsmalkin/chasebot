@@ -9,11 +9,11 @@ import math
 import sys
 import time
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Set, Tuple
 
 import rclpy
 from geometry_msgs.msg import Twist, TwistStamped
-from geometry_msgs.msg import Point, PointStamped
+from geometry_msgs.msg import PointStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import QoSPresetProfiles
@@ -56,8 +56,7 @@ class MotionProbe(Node):
             if topic and topic not in cmd_vel_topics:
                 cmd_vel_topics.append(topic)
         for topic in cmd_vel_topics:
-            self._try_subscribe(TwistStamped, topic, self._on_twist_stamped, qos)
-            self._try_subscribe(Twist, topic, self._on_twist, qos)
+            self._subscribe_cmd_vel_topic(topic, qos)
         odom_candidates = []
         for topic in (
             args.odom_topic,
@@ -69,8 +68,50 @@ class MotionProbe(Node):
                 odom_candidates.append(topic)
         for topic in odom_candidates:
             self._try_subscribe(Odometry, topic, self._on_odom, qos)
-        self._try_subscribe(Point, args.detection_topic, self._on_detection_point, qos)
-        self._try_subscribe(PointStamped, args.detection_topic, self._on_detection_stamped, qos)
+
+        self._subscribe_detection_topic(args.detection_topic, qos)
+
+    def _topic_types(self, topic: str) -> Set[str]:
+        topic_types: Set[str] = set()
+        try:
+            for info in self.get_publishers_info_by_topic(topic):
+                if info.topic_type:
+                    topic_types.add(info.topic_type)
+        except Exception:
+            pass
+        if topic_types:
+            return topic_types
+        try:
+            for known_topic, known_types in self.get_topic_names_and_types():
+                if known_topic == topic:
+                    topic_types.update(known_types)
+                    break
+        except Exception:
+            pass
+        return topic_types
+
+    def _subscribe_cmd_vel_topic(self, topic: str, qos) -> None:
+        topic_types = self._topic_types(topic)
+        if "geometry_msgs/msg/TwistStamped" in topic_types:
+            self._try_subscribe(TwistStamped, topic, self._on_twist_stamped, qos)
+            return
+        if "geometry_msgs/msg/Twist" in topic_types:
+            self._try_subscribe(Twist, topic, self._on_twist, qos)
+            return
+
+        # If type is not discoverable yet, use a deterministic default per topic family.
+        if topic.endswith("_nav"):
+            self._try_subscribe(TwistStamped, topic, self._on_twist_stamped, qos)
+        else:
+            self._try_subscribe(Twist, topic, self._on_twist, qos)
+
+    def _subscribe_detection_topic(self, topic: str, qos) -> None:
+        topic_types = self._topic_types(topic)
+        if "geometry_msgs/msg/PointStamped" in topic_types:
+            self._try_subscribe(PointStamped, topic, self._on_detection_stamped, qos)
+            return
+        # Canonical detection contract is PointStamped.
+        self._try_subscribe(PointStamped, topic, self._on_detection_stamped, qos)
 
     def _try_subscribe(self, msg_type, topic: str, callback, qos) -> None:
         try:
@@ -92,9 +133,6 @@ class MotionProbe(Node):
             self.odom_start = pose
         self.odom_end = pose
         self.odom_count += 1
-
-    def _on_detection_point(self, _msg: Point) -> None:
-        self.detection_count += 1
 
     def _on_detection_stamped(self, _msg: PointStamped) -> None:
         self.detection_count += 1

@@ -18,6 +18,10 @@ param(
     [int]$SnapshotTimeoutSeconds = 12,
     [double]$SnapshotMinMeanAbsDiff = 1.0,
     [double]$SnapshotMinChangedPixelRatio = 0.001,
+    [int]$SnapshotMinFrames = 1,
+    [string]$SnapshotRgbTopic = "/d415/color/image_raw",
+    [string]$SnapshotDebugTopic = "/yolo/debug_image",
+    [int]$Nav2BridgeMaxGoals = 1,
     [string]$Nav2Config = "ros2_config/config/nav2_readiness_fidelity.yaml",
     [ValidateSet("compat", "balanced", "max")]
     [string]$UatProfile = "compat",
@@ -35,6 +39,10 @@ $env:CHASECAR_MULTI_TARGET_GOAL_TIMEOUT_S = [Math]::Max($MultiTargetGoalTimeoutS
 $env:CHASECAR_SNAPSHOT_TIMEOUT_S = [Math]::Max($SnapshotTimeoutSeconds, 5).ToString()
 $env:CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF = [Math]::Max([double]$SnapshotMinMeanAbsDiff, 0.0).ToString("0.###", [System.Globalization.CultureInfo]::InvariantCulture)
 $env:CHASECAR_SNAPSHOT_MIN_CHANGED_PIXEL_RATIO = [Math]::Max([double]$SnapshotMinChangedPixelRatio, 0.0).ToString("0.####", [System.Globalization.CultureInfo]::InvariantCulture)
+$env:CHASECAR_SNAPSHOT_MIN_FRAMES = [Math]::Max($SnapshotMinFrames, 1).ToString()
+$env:CHASECAR_SNAPSHOT_RGB_TOPIC = $SnapshotRgbTopic
+$env:CHASECAR_SNAPSHOT_DEBUG_TOPIC = $SnapshotDebugTopic
+$env:CHASECAR_NAV2_BRIDGE_MAX_GOALS = [Math]::Max($Nav2BridgeMaxGoals, 0).ToString()
 $env:CHASECAR_NAV2_CONFIG = $Nav2Config
 $env:CHASECAR_MULTI_TARGET_CONFIG = $MultiTargetConfig
 $env:CHASECAR_UAT_PROFILE = $UatProfile
@@ -120,6 +128,10 @@ export CHASECAR_MULTI_TARGET_GOAL_TIMEOUT_S="__MULTI_TARGET_GOAL_TIMEOUT_S__"
 export CHASECAR_SNAPSHOT_TIMEOUT_S="__SNAPSHOT_TIMEOUT_S__"
 export CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF="__SNAPSHOT_MIN_MEAN_ABS_DIFF__"
 export CHASECAR_SNAPSHOT_MIN_CHANGED_PIXEL_RATIO="__SNAPSHOT_MIN_CHANGED_PIXEL_RATIO__"
+export CHASECAR_SNAPSHOT_MIN_FRAMES="__SNAPSHOT_MIN_FRAMES__"
+export CHASECAR_SNAPSHOT_RGB_TOPIC="__SNAPSHOT_RGB_TOPIC__"
+export CHASECAR_SNAPSHOT_DEBUG_TOPIC="__SNAPSHOT_DEBUG_TOPIC__"
+export CHASECAR_NAV2_BRIDGE_MAX_GOALS="__NAV2_BRIDGE_MAX_GOALS__"
 export CHASECAR_NAV2_CONFIG="__NAV2_CONFIG__"
 export CHASECAR_MULTI_TARGET_CONFIG="__MULTI_TARGET_CONFIG__"
 export CHASECAR_UAT_PROFILE="__UAT_PROFILE__"
@@ -137,6 +149,10 @@ bash /workspaces/chasecar/uat/orchestrator/run_uat_orchestrator.sh
             Replace("__SNAPSHOT_TIMEOUT_S__", $env:CHASECAR_SNAPSHOT_TIMEOUT_S).
             Replace("__SNAPSHOT_MIN_MEAN_ABS_DIFF__", $env:CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF).
             Replace("__SNAPSHOT_MIN_CHANGED_PIXEL_RATIO__", $env:CHASECAR_SNAPSHOT_MIN_CHANGED_PIXEL_RATIO).
+            Replace("__SNAPSHOT_MIN_FRAMES__", $env:CHASECAR_SNAPSHOT_MIN_FRAMES).
+            Replace("__SNAPSHOT_RGB_TOPIC__", $env:CHASECAR_SNAPSHOT_RGB_TOPIC).
+            Replace("__SNAPSHOT_DEBUG_TOPIC__", $env:CHASECAR_SNAPSHOT_DEBUG_TOPIC).
+            Replace("__NAV2_BRIDGE_MAX_GOALS__", $env:CHASECAR_NAV2_BRIDGE_MAX_GOALS).
             Replace("__NAV2_CONFIG__", $env:CHASECAR_NAV2_CONFIG).
             Replace("__MULTI_TARGET_CONFIG__", $env:CHASECAR_MULTI_TARGET_CONFIG).
             Replace("__UAT_PROFILE__", $UatProfile).
