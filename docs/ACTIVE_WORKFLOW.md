@@ -161,6 +161,13 @@ Lane-specific gate config defaults:
 5. Fidelity soak multi-target config:
    - `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
 
+Latest frozen pre-LLM campaign package:
+
+1. trend: `artifacts/session/20260301T014018Z/pre_llm_campaign_trend.json`
+2. soak summary: `artifacts/session/20260301T015545Z/pre_llm_headless_summary.json`
+3. rc manifest: `artifacts/session/20260301T014018Z/rc/manifest.json`
+4. rc readiness: `artifacts/session/20260301T014018Z/rc/readiness_report.json` (`pass=true`)
+
 Pre-LLM stage order (container lane):
 
 1. coordinate gate
@@ -170,6 +177,15 @@ Pre-LLM stage order (container lane):
 5. multi-target nav2 gate
 
 Fallback lane (`host_ros`) is non-canonical and for troubleshooting only.
+
+Pre-LLM brain adapter smoke (post-campaign, pre-GUI):
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin`
+2. Required output:
+   - `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
+3. Pass intent:
+   - frozen contract intents are emitted on `/chasecar/brain/intent`
+   - low-level boundary checks pass for detection/odom/action/service readiness
 
 ## Visual UAT Sequence
 
@@ -213,6 +229,7 @@ Milestone 3 pass criteria include:
 1. nav2 action server ready (`/navigate_to_pose`, `Action servers: 1`)
 2. cmd_vel activity observed during motion window
 3. odom displacement meets threshold (`>= MotionMinDistanceMeters`)
+4. target distance improves by at least `MotionTargetProgressMinMeters`
 
 ## Artifact Contracts
 

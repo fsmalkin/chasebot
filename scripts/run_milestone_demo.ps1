@@ -46,6 +46,14 @@ param(
 
     [double]$DemoTargetZ = 0.05,
 
+    [Nullable[bool]]$DemoTargetRelative = $true,
+
+    [double]$DemoTargetForwardM = 1.10,
+
+    [double]$DemoTargetLateralM = 0.00,
+
+    [double]$DemoTargetVerticalOffsetM = 0.05,
+
     [int]$TargetSpawnTimeoutSeconds = 20,
 
     [double]$MinDetectionConfidence = 0.50,
@@ -61,6 +69,8 @@ param(
     [double]$MotionMinDistanceMeters = 0.40,
 
     [int]$MotionWindowSeconds = 90,
+
+    [double]$MotionTargetProgressMinMeters = 0.20,
 
     [Nullable[bool]]$RequireNav2ActionServer = $null,
 
@@ -159,12 +169,16 @@ if ($RequireMotion -eq $null) {
 if ($RequireNav2ActionServer -eq $null) {
     $RequireNav2ActionServer = ($Milestone -ge 3)
 }
+if ($DemoTargetRelative -eq $null) {
+    $DemoTargetRelative = $true
+}
 $RosDistro = Resolve-RosDistro -Distro $Distro -Requested $RosDistro
 
 $headlessStr = if ($Headless) { "true" } else { "false" }
 $includeExtractor = if ($Milestone -ge 2) { "true" } else { "false" }
 $includeBridge = if ($Milestone -ge 3) { "true" } else { "false" }
 $ensureDemoTargetStr = if ([bool]$EnsureDemoTarget) { "true" } else { "false" }
+$demoTargetRelativeStr = if ([bool]$DemoTargetRelative) { "true" } else { "false" }
 $openFeedViewersStr = if ([bool]$OpenFeedViewers) { "true" } else { "false" }
 $requireMotionStr = if ([bool]$RequireMotion) { "true" } else { "false" }
 $requireNav2ActionServerStr = if ([bool]$RequireNav2ActionServer) { "true" } else { "false" }
@@ -235,6 +249,10 @@ DEMO_TARGET_NAME="__DEMO_TARGET_NAME__"
 DEMO_TARGET_X="__DEMO_TARGET_X__"
 DEMO_TARGET_Y="__DEMO_TARGET_Y__"
 DEMO_TARGET_Z="__DEMO_TARGET_Z__"
+DEMO_TARGET_RELATIVE="__DEMO_TARGET_RELATIVE__"
+DEMO_TARGET_FORWARD_M="__DEMO_TARGET_FORWARD_M__"
+DEMO_TARGET_LATERAL_M="__DEMO_TARGET_LATERAL_M__"
+DEMO_TARGET_VERTICAL_OFFSET_M="__DEMO_TARGET_VERTICAL_OFFSET_M__"
 TARGET_SPAWN_TIMEOUT_S="__TARGET_SPAWN_TIMEOUT_S__"
 MIN_DETECTION_CONFIDENCE="__MIN_DETECTION_CONFIDENCE__"
 OPEN_FEED_VIEWERS="__OPEN_FEED_VIEWERS__"
@@ -243,6 +261,7 @@ WORLD_READY_TIMEOUT_S="__WORLD_READY_TIMEOUT_S__"
 REQUIRE_MOTION="__REQUIRE_MOTION__"
 MOTION_MIN_DISTANCE_M="__MOTION_MIN_DISTANCE_M__"
 MOTION_WINDOW_S="__MOTION_WINDOW_S__"
+MOTION_TARGET_PROGRESS_MIN_M="__MOTION_TARGET_PROGRESS_MIN_M__"
 REQUIRE_NAV2_ACTION_SERVER="__REQUIRE_NAV2_ACTION_SERVER__"
 CMD_VEL_TOPIC_PRIMARY="__CMD_VEL_TOPIC_PRIMARY__"
 CMD_VEL_TOPIC_SECONDARY="__CMD_VEL_TOPIC_SECONDARY__"
@@ -330,13 +349,16 @@ wait_for_world_services() {
   local timeout_s="$1"
   local deadline=$(( $(date +%s) + timeout_s ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
+    local service_list=""
     if command -v gz >/dev/null 2>&1; then
-      if gz service -l 2>/dev/null | grep -q "/world/${WORLD_NAME}/create"; then
+      service_list=$(timeout -k 1s 3s gz service -l 2>/dev/null || true)
+      if echo "$service_list" | grep -q "/world/${WORLD_NAME}/create"; then
         echo "world_ready"
         return 0
       fi
     elif command -v ign >/dev/null 2>&1; then
-      if ign service -l 2>/dev/null | grep -q "/world/${WORLD_NAME}/create"; then
+      service_list=$(timeout -k 1s 3s ign service -l 2>/dev/null || true)
+      if echo "$service_list" | grep -q "/world/${WORLD_NAME}/create"; then
         echo "world_ready"
         return 0
       fi
@@ -373,13 +395,95 @@ remove_model_by_name() {
   return 0
 }
 
+parse_odom_pose() {
+  local odom_raw="$1"
+  echo "$odom_raw" | awk '
+    BEGIN { pos=0; ori=0; }
+    /^[[:space:]]*position:/ && pos==0 { pos=1; next }
+    pos==1 && /^[[:space:]]*x:/ && x=="" { x=$2; next }
+    pos==1 && /^[[:space:]]*y:/ && y=="" { y=$2; next }
+    pos==1 && /^[[:space:]]*z:/ && z=="" { z=$2; next }
+    /^[[:space:]]*orientation:/ && ori==0 { ori=1; next }
+    ori==1 && /^[[:space:]]*x:/ && ox=="" { ox=$2; next }
+    ori==1 && /^[[:space:]]*y:/ && oy=="" { oy=$2; next }
+    ori==1 && /^[[:space:]]*z:/ && oz=="" { oz=$2; next }
+    ori==1 && /^[[:space:]]*w:/ && ow=="" { ow=$2; next }
+    END { print x, y, z, ox, oy, oz, ow }
+  '
+}
+
+resolve_demo_target_pose() {
+  local fallback_x="$DEMO_TARGET_X"
+  local fallback_y="$DEMO_TARGET_Y"
+  local fallback_z="$DEMO_TARGET_Z"
+
+  if [ "$DEMO_TARGET_RELATIVE" != "true" ]; then
+    echo "$fallback_x $fallback_y $fallback_z static_config"
+    return 0
+  fi
+
+  local odom_raw=""
+  local topic
+  for topic in "$ODOM_TOPIC" "/odom" "/model/jetbot/odometry" "/jetbot_base_controller/odom"; do
+    [ -z "$topic" ] && continue
+    odom_raw=$(timeout -k 2s 4s ros2 topic echo "$topic" --once 2>/dev/null || true)
+    if [ -n "$odom_raw" ]; then
+      ODOM_TOPIC="$topic"
+      break
+    fi
+  done
+  if [ -z "$odom_raw" ]; then
+    echo "$fallback_x $fallback_y $fallback_z odom_unavailable"
+    return 0
+  fi
+
+  local robot_x robot_y robot_z ox oy oz ow
+  read -r robot_x robot_y robot_z ox oy oz ow <<< "$(parse_odom_pose "$odom_raw")"
+  if [[ -z "$robot_x" || -z "$robot_y" || -z "$robot_z" || -z "$ox" || -z "$oy" || -z "$oz" || -z "$ow" ]]; then
+    echo "$fallback_x $fallback_y $fallback_z odom_parse_failed"
+    return 0
+  fi
+
+  local calc_out
+  calc_out=$(python3 - "$robot_x" "$robot_y" "$robot_z" "$ox" "$oy" "$oz" "$ow" "$DEMO_TARGET_FORWARD_M" "$DEMO_TARGET_LATERAL_M" "$DEMO_TARGET_VERTICAL_OFFSET_M" <<'PY'
+import math
+import sys
+
+rx, ry, rz, qx, qy, qz, qw, forward_m, lateral_m, z_offset = map(float, sys.argv[1:])
+siny_cosp = 2.0 * (qw * qz + qx * qy)
+cosy_cosp = 1.0 - 2.0 * (qy * qy + qz * qz)
+yaw = math.atan2(siny_cosp, cosy_cosp)
+target_x = rx + (math.cos(yaw) * forward_m) - (math.sin(yaw) * lateral_m)
+target_y = ry + (math.sin(yaw) * forward_m) + (math.cos(yaw) * lateral_m)
+target_z = max(0.02, rz + z_offset)
+print(f"{target_x:.6f} {target_y:.6f} {target_z:.6f}")
+PY
+  ) || {
+    echo "$fallback_x $fallback_y $fallback_z odom_transform_failed"
+    return 0
+  }
+
+  if [ -z "$calc_out" ]; then
+    echo "$fallback_x $fallback_y $fallback_z odom_transform_empty"
+    return 0
+  fi
+
+  echo "$calc_out relative_odom"
+  return 0
+}
+
+DEMO_TARGET_RESOLVED_X="$DEMO_TARGET_X"
+DEMO_TARGET_RESOLVED_Y="$DEMO_TARGET_Y"
+DEMO_TARGET_RESOLVED_Z="$DEMO_TARGET_Z"
+DEMO_TARGET_RESOLVE_STATUS="not_resolved"
+
 spawn_demo_target() {
   local model_path="$DEMO_TARGET_MODEL_SDF"
   if [[ "$model_path" != /* ]]; then
     model_path="$PACKAGE_PATH/$model_path"
   fi
   if [ ! -f "$model_path" ]; then
-    echo "missing_demo_target_sdf:$model_path"
+    TARGET_SPAWN_RESULT="missing_demo_target_sdf:$model_path"
     return 1
   fi
 
@@ -387,21 +491,31 @@ spawn_demo_target() {
   # Remove legacy baked model from yolo_test_world so demo shows one deterministic target.
   remove_model_by_name "golf_ball"
 
+  local resolved_pose
+  resolved_pose=$(resolve_demo_target_pose)
+  read -r DEMO_TARGET_RESOLVED_X DEMO_TARGET_RESOLVED_Y DEMO_TARGET_RESOLVED_Z DEMO_TARGET_RESOLVE_STATUS <<< "$resolved_pose"
+  if [[ -z "$DEMO_TARGET_RESOLVED_X" || -z "$DEMO_TARGET_RESOLVED_Y" || -z "$DEMO_TARGET_RESOLVED_Z" ]]; then
+    DEMO_TARGET_RESOLVED_X="$DEMO_TARGET_X"
+    DEMO_TARGET_RESOLVED_Y="$DEMO_TARGET_Y"
+    DEMO_TARGET_RESOLVED_Z="$DEMO_TARGET_Z"
+    DEMO_TARGET_RESOLVE_STATUS="resolve_empty_fallback"
+  fi
+
   for attempt in 1 2 3; do
-    if timeout "${TARGET_SPAWN_TIMEOUT_S}s" ros2 run ros_gz_sim create \
+    if timeout -k 3s "${TARGET_SPAWN_TIMEOUT_S}s" ros2 run ros_gz_sim create \
       -world "$WORLD_NAME" \
       -file "$model_path" \
       -name "$DEMO_TARGET_NAME" \
-      -x "$DEMO_TARGET_X" \
-      -y "$DEMO_TARGET_Y" \
-      -z "$DEMO_TARGET_Z" >/tmp/chasecar_demo_target_spawn.log 2>&1; then
-      echo "spawn_ok"
+      -x "$DEMO_TARGET_RESOLVED_X" \
+      -y "$DEMO_TARGET_RESOLVED_Y" \
+      -z "$DEMO_TARGET_RESOLVED_Z" >/tmp/chasecar_demo_target_spawn.log 2>&1; then
+      TARGET_SPAWN_RESULT="spawn_ok"
       return 0
     fi
     sleep 2
   done
 
-  echo "spawn_failed"
+  TARGET_SPAWN_RESULT="spawn_failed"
   return 1
 }
 
@@ -458,7 +572,7 @@ TARGET_SPAWN_STATUS="skipped"
 if [ "$ENSURE_DEMO_TARGET" = "true" ]; then
   sleep 4
   if [ "$WORLD_READY" = "true" ]; then
-    if TARGET_SPAWN_RESULT=$(spawn_demo_target); then
+    if spawn_demo_target; then
       TARGET_SPAWN_OK=true
       TARGET_SPAWN_STATUS="$TARGET_SPAWN_RESULT"
     else
@@ -481,7 +595,13 @@ fi
 BRIDGE_PID=""
 NAV2_PID=""
 RELAY_PID=""
+MOTION_PROBE_PID=""
 if [ "$INCLUDE_BRIDGE" = "true" ]; then
+  BRIDGE_MAX_GOAL_COUNT=0
+  if [ "$REQUIRE_MOTION" = "true" ]; then
+    BRIDGE_MAX_GOAL_COUNT=1
+  fi
+
   NAV2_LAUNCH_FILE="$PACKAGE_PATH/ros2_config/launch/jetbot_nav2_rosgz_readiness.launch.py"
   NAV2_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; export CHASECAR_SOURCE_PATH=$PACKAGE_PATH; ros2 launch $NAV2_LAUNCH_FILE use_sim_time:=true autostart:=true"
   NAV2_PID=$(start_bg "nav2" "$NAV2_CMD")
@@ -492,8 +612,14 @@ if [ "$INCLUDE_BRIDGE" = "true" ]; then
   sleep 2
 
   sleep 3
-  BRIDGE_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/yolo_3d_to_nav2_bridge.py --ros-args -p use_sim_time:=true -p action_server_wait_s:=90.0"
+  BRIDGE_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; python3 $PACKAGE_PATH/ros2_scripts/yolo_3d_to_nav2_bridge.py --ros-args -p use_sim_time:=true -p action_server_wait_s:=90.0 -p max_goal_count:=$BRIDGE_MAX_GOAL_COUNT"
   BRIDGE_PID=$(start_bg "bridge" "$BRIDGE_CMD")
+
+  if [ "$REQUIRE_MOTION" = "true" ]; then
+    MOTION_PROBE_CMD="timeout -k 5s \"$((MOTION_WINDOW_S + 20))s\" python3 $PACKAGE_PATH/scripts/motion_probe.py --duration-s $MOTION_WINDOW_S --cmd-vel-topic-primary $CMD_VEL_TOPIC_PRIMARY --cmd-vel-topic-secondary $CMD_VEL_TOPIC_SECONDARY --odom-topic $ODOM_TOPIC --detection-topic /yolo/ball_position_3d --json-out $ARTIFACT_DIR/motion_probe.json --use-sim-time"
+    nohup bash -lc "$MOTION_PROBE_CMD" >"$ARTIFACT_DIR/logs/motion_probe.log" 2>&1 &
+    MOTION_PROBE_PID=$!
+  fi
 fi
 
 CAPTURE_DELAY_S=4
@@ -505,7 +631,7 @@ if [ "$INCLUDE_BRIDGE" = "true" ]; then
 fi
 sleep "$CAPTURE_DELAY_S"
 
-RGB_CAPTURE_RAW=$(python3 "$PACKAGE_PATH/scripts/capture_topic_image.py" \
+RGB_CAPTURE_RAW=$(timeout -k 2s 14s python3 "$PACKAGE_PATH/scripts/capture_topic_image.py" \
   --topic /d415/color/image_raw \
   --output "$ARTIFACT_DIR/screenshots/d415_color.png" \
   --timeout-s 10.0 \
@@ -514,7 +640,7 @@ RGB_CAPTURE_RAW=$(python3 "$PACKAGE_PATH/scripts/capture_topic_image.py" \
   --min-frames "$CAPTURE_MIN_FRAMES" \
   --use-sim-time 2>&1 || true)
 
-DEBUG_CAPTURE_RAW=$(python3 "$PACKAGE_PATH/scripts/capture_topic_image.py" \
+DEBUG_CAPTURE_RAW=$(timeout -k 2s 14s python3 "$PACKAGE_PATH/scripts/capture_topic_image.py" \
   --topic /yolo/debug_image \
   --output "$ARTIFACT_DIR/screenshots/yolo_debug.png" \
   --timeout-s 10.0 \
@@ -558,7 +684,7 @@ IMAGE_DIFF_MAX=0
 IMAGE_BYTE_IDENTICAL=true
 IMAGE_DIFF_JSON="$ARTIFACT_DIR/screenshots/image_diff_metrics.json"
 if [ "$RGB_CAPTURED" = "true" ] && [ "$DEBUG_CAPTURED" = "true" ]; then
-  DIFF_RAW=$(python3 "$PACKAGE_PATH/scripts/image_diff_metrics.py" \
+  DIFF_RAW=$(timeout -k 2s 12s python3 "$PACKAGE_PATH/scripts/image_diff_metrics.py" \
     --left "$ARTIFACT_DIR/screenshots/d415_color.png" \
     --right "$ARTIFACT_DIR/screenshots/yolo_debug.png" \
     --json-out "$IMAGE_DIFF_JSON" 2>&1 || true)
@@ -576,7 +702,7 @@ fi
 DETECTION_CONFIDENCE_RAW=""
 DETECTION_CONFIDENCE=""
 for attempt in 1 2 3 4 5; do
-  DETECTION_CONFIDENCE_RAW=$(timeout 6s ros2 topic echo /yolo/confidence --once 2>/dev/null || true)
+  DETECTION_CONFIDENCE_RAW=$(timeout -k 2s 6s ros2 topic echo /yolo/confidence --once 2>/dev/null || true)
   DETECTION_CONFIDENCE=$(echo "$DETECTION_CONFIDENCE_RAW" | awk '/data:/{print $2}' | tail -n1)
   if [ -n "$DETECTION_CONFIDENCE" ]; then
     break
@@ -599,7 +725,7 @@ if [ "$DETECTION_ABOVE_THRESHOLD" = "true" ]; then
   fi
 fi
 
-BALL_POSITION_3D_RAW=$(timeout 8s ros2 topic echo /yolo/ball_position_3d --once 2>/dev/null || true)
+BALL_POSITION_3D_RAW=$(timeout -k 2s 8s ros2 topic echo /yolo/ball_position_3d --once 2>/dev/null || true)
 BALL_POSITION_3D_SEEN=false
 BALL_POSITION_3D_X=0
 BALL_POSITION_3D_Y=0
@@ -614,7 +740,7 @@ if [ -n "$BALL_POSITION_3D_RAW" ]; then
   if [[ -z "$BALL_POSITION_3D_Z" ]]; then BALL_POSITION_3D_Z=0; fi
 fi
 
-NAV2_ACTION_INFO_RAW=$(timeout 8s ros2 action info /navigate_to_pose 2>/dev/null || true)
+NAV2_ACTION_INFO_RAW=$(timeout -k 2s 8s ros2 action info /navigate_to_pose 2>/dev/null || true)
 NAV2_ACTION_SERVER_COUNT=$(echo "$NAV2_ACTION_INFO_RAW" | awk -F: '/Action servers:/{gsub(/[[:space:]]/, "", $2); print $2}' | tail -n1)
 if [[ -z "$NAV2_ACTION_SERVER_COUNT" ]]; then NAV2_ACTION_SERVER_COUNT=0; fi
 NAV2_ACTION_SERVER_READY=false
@@ -632,17 +758,32 @@ MOTION_ODOM_END_Y=0
 MOTION_ODOM_END_Z=0
 MOTION_ODOM_DISPLACEMENT_M=0
 MOTION_DETECTION_MESSAGE_COUNT=0
+MOTION_TARGET_START_DISTANCE_M=0
+MOTION_TARGET_END_DISTANCE_M=0
+MOTION_TARGET_DISTANCE_DELTA_M=0
+MOTION_TARGET_PROGRESS_OK=false
+MOTION_NAV_PROGRESS_START_M=0
+MOTION_NAV_PROGRESS_END_M=0
+MOTION_NAV_PROGRESS_DELTA_M=0
+MOTION_NAV_PROGRESS_SAMPLES=0
 MOTION_PROBE_ERROR="none"
 MOTION_PASS=false
 if [ "$INCLUDE_BRIDGE" = "true" ]; then
-  MOTION_RAW=$(python3 "$PACKAGE_PATH/scripts/motion_probe.py" \
-    --duration-s "$MOTION_WINDOW_S" \
-    --cmd-vel-topic-primary "$CMD_VEL_TOPIC_PRIMARY" \
-    --cmd-vel-topic-secondary "$CMD_VEL_TOPIC_SECONDARY" \
-    --odom-topic "$ODOM_TOPIC" \
-    --detection-topic "/yolo/ball_position_3d" \
-    --json-out "$ARTIFACT_DIR/motion_probe.json" \
-    --use-sim-time 2>&1 || true)
+  echo "[heartbeat] motion_probe_collect window_s=$MOTION_WINDOW_S"
+  if [ -n "$MOTION_PROBE_PID" ]; then
+    wait "$MOTION_PROBE_PID" 2>/dev/null || true
+    MOTION_RAW=$(cat "$ARTIFACT_DIR/logs/motion_probe.log" 2>/dev/null || true)
+  else
+    MOTION_RAW=$(timeout -k 5s "$((MOTION_WINDOW_S + 20))s" python3 "$PACKAGE_PATH/scripts/motion_probe.py" \
+      --duration-s "$MOTION_WINDOW_S" \
+      --cmd-vel-topic-primary "$CMD_VEL_TOPIC_PRIMARY" \
+      --cmd-vel-topic-secondary "$CMD_VEL_TOPIC_SECONDARY" \
+      --odom-topic "$ODOM_TOPIC" \
+      --detection-topic "/yolo/ball_position_3d" \
+      --json-out "$ARTIFACT_DIR/motion_probe.json" \
+      --use-sim-time 2>&1 || true)
+  fi
+  echo "[heartbeat] motion_probe_collected"
   MOTION_CMD_VEL_MESSAGE_COUNT=$(echo "$MOTION_RAW" | awk -F= '/CMD_VEL_MESSAGE_COUNT=/{print $2}' | tail -n1)
   if [[ -z "$MOTION_CMD_VEL_MESSAGE_COUNT" ]]; then MOTION_CMD_VEL_MESSAGE_COUNT=0; fi
   if echo "$MOTION_RAW" | grep -q "ODOM_SEEN=true"; then
@@ -664,10 +805,57 @@ if [ "$INCLUDE_BRIDGE" = "true" ]; then
   if [[ -z "$MOTION_ODOM_END_Z" ]]; then MOTION_ODOM_END_Z=0; fi
   if [[ -z "$MOTION_ODOM_DISPLACEMENT_M" ]]; then MOTION_ODOM_DISPLACEMENT_M=0; fi
   if [[ -z "$MOTION_DETECTION_MESSAGE_COUNT" ]]; then MOTION_DETECTION_MESSAGE_COUNT=0; fi
+
+  MOTION_TARGET_DISTANCE_RAW=$(python3 - "$MOTION_ODOM_START_X" "$MOTION_ODOM_START_Y" "$MOTION_ODOM_END_X" "$MOTION_ODOM_END_Y" "$DEMO_TARGET_RESOLVED_X" "$DEMO_TARGET_RESOLVED_Y" <<'PY'
+import math
+import sys
+
+sx, sy, ex, ey, tx, ty = map(float, sys.argv[1:])
+start_d = math.hypot(sx - tx, sy - ty)
+end_d = math.hypot(ex - tx, ey - ty)
+delta_d = end_d - start_d
+print(f"{start_d:.6f} {end_d:.6f} {delta_d:.6f}")
+PY
+  )
+  read -r MOTION_TARGET_START_DISTANCE_M MOTION_TARGET_END_DISTANCE_M MOTION_TARGET_DISTANCE_DELTA_M <<< "$MOTION_TARGET_DISTANCE_RAW"
+  if [[ -z "$MOTION_TARGET_START_DISTANCE_M" ]]; then MOTION_TARGET_START_DISTANCE_M=0; fi
+  if [[ -z "$MOTION_TARGET_END_DISTANCE_M" ]]; then MOTION_TARGET_END_DISTANCE_M=0; fi
+  if [[ -z "$MOTION_TARGET_DISTANCE_DELTA_M" ]]; then MOTION_TARGET_DISTANCE_DELTA_M=0; fi
+
+  if [ -f "$ARTIFACT_DIR/logs/bridge.log" ]; then
+    NAV_PROGRESS_VALUES=$(sed -n 's/.*Navigation progress: \([0-9.]*\)m remaining.*/\1/p' "$ARTIFACT_DIR/logs/bridge.log" || true)
+    if [ -n "$NAV_PROGRESS_VALUES" ]; then
+      MOTION_NAV_PROGRESS_SAMPLES=$(echo "$NAV_PROGRESS_VALUES" | wc -l | awk '{print $1}')
+      MOTION_NAV_PROGRESS_START_M=$(echo "$NAV_PROGRESS_VALUES" | head -n1)
+      MOTION_NAV_PROGRESS_END_M=$(echo "$NAV_PROGRESS_VALUES" | tail -n1)
+      MOTION_NAV_PROGRESS_DELTA_M=$(python3 - "$MOTION_NAV_PROGRESS_START_M" "$MOTION_NAV_PROGRESS_END_M" <<'PY'
+import sys
+start_m = float(sys.argv[1])
+end_m = float(sys.argv[2])
+print(f"{end_m - start_m:.6f}")
+PY
+      )
+      if awk -v s="$MOTION_NAV_PROGRESS_START_M" -v e="$MOTION_NAV_PROGRESS_END_M" -v m="$MOTION_TARGET_PROGRESS_MIN_M" 'BEGIN{exit !(e+0 <= (s+0 - m+0))}'; then
+        MOTION_TARGET_PROGRESS_OK=true
+      fi
+    fi
+  fi
+
+  if [ "$MOTION_TARGET_PROGRESS_OK" != "true" ]; then
+    if awk -v s="$MOTION_TARGET_START_DISTANCE_M" -v e="$MOTION_TARGET_END_DISTANCE_M" -v m="$MOTION_TARGET_PROGRESS_MIN_M" 'BEGIN{exit !(e+0 <= (s+0 - m+0))}'; then
+      MOTION_TARGET_PROGRESS_OK=true
+    fi
+  fi
+
   if awk -v d="$MOTION_DETECTION_MESSAGE_COUNT" 'BEGIN{exit !(d+0 > 0)}'; then
     BALL_POSITION_3D_SEEN=true
   fi
-  if awk -v c="$MOTION_CMD_VEL_MESSAGE_COUNT" -v d="$MOTION_ODOM_DISPLACEMENT_M" -v m="$MOTION_MIN_DISTANCE_M" 'BEGIN{exit !(c+0 > 0 && d+0 >= m+0)}'; then
+  if [ "$BALL_POSITION_3D_SEEN" != "true" ] && [ -f "$ARTIFACT_DIR/logs/bridge.log" ]; then
+    if grep -q "Ball detected at:" "$ARTIFACT_DIR/logs/bridge.log"; then
+      BALL_POSITION_3D_SEEN=true
+    fi
+  fi
+  if awk -v c="$MOTION_CMD_VEL_MESSAGE_COUNT" -v d="$MOTION_ODOM_DISPLACEMENT_M" -v m="$MOTION_MIN_DISTANCE_M" -v prog="$MOTION_TARGET_PROGRESS_OK" 'BEGIN{exit !(c+0 > 0 && d+0 >= m+0 && prog=="true")}'; then
     MOTION_PASS=true
   fi
   if [ "$MOTION_ODOM_SEEN" != "true" ]; then
@@ -676,6 +864,8 @@ if [ "$INCLUDE_BRIDGE" = "true" ]; then
     MOTION_PROBE_ERROR="cmd_vel_inactive"
   elif ! awk -v d="$MOTION_ODOM_DISPLACEMENT_M" -v m="$MOTION_MIN_DISTANCE_M" 'BEGIN{exit !(d+0 >= m+0)}'; then
     MOTION_PROBE_ERROR="displacement_below_threshold"
+  elif [ "$MOTION_TARGET_PROGRESS_OK" != "true" ]; then
+    MOTION_PROBE_ERROR="target_distance_not_improving"
   fi
 fi
 
@@ -880,7 +1070,19 @@ cat >"$ARTIFACT_DIR/operator_checklist.json" <<JSON
       "id": "odom_displacement",
       "description": "Odometry displacement reached minimum threshold when required",
       "required": $MOTION_REQUIRED,
-      "pass": $MOTION_CHECK_PASS
+      "pass": $(if awk -v d="$MOTION_ODOM_DISPLACEMENT_M" -v m="$MOTION_MIN_DISTANCE_M" 'BEGIN{exit !(d+0 >= m+0)}'; then echo true; else echo false; fi)
+    },
+    {
+      "id": "detection_activity",
+      "description": "3D detection stream remained active during motion probe",
+      "required": $MOTION_REQUIRED,
+      "pass": $(if awk -v d="$MOTION_DETECTION_MESSAGE_COUNT" 'BEGIN{exit !(d+0 > 0)}'; then echo true; else echo false; fi)
+    },
+    {
+      "id": "target_distance_improving",
+      "description": "Robot-to-target distance decreased by minimum progress threshold",
+      "required": $MOTION_REQUIRED,
+      "pass": $MOTION_TARGET_PROGRESS_OK
     },
     {
       "id": "rgb_snapshot",
@@ -955,12 +1157,20 @@ cat >"$ARTIFACT_DIR/demo_summary.json" <<JSON
   },
   "demo_target": {
     "ensure_demo_target": $ENSURE_DEMO_TARGET,
+    "target_spawn_relative_mode": $DEMO_TARGET_RELATIVE,
+    "target_spawn_forward_m": $DEMO_TARGET_FORWARD_M,
+    "target_spawn_lateral_m": $DEMO_TARGET_LATERAL_M,
+    "target_spawn_vertical_offset_m": $DEMO_TARGET_VERTICAL_OFFSET_M,
     "world_name": "$WORLD_NAME",
     "target_model_sdf": "$DEMO_TARGET_MODEL_SDF",
     "target_name": "$DEMO_TARGET_NAME",
-    "target_spawn_x": $DEMO_TARGET_X,
-    "target_spawn_y": $DEMO_TARGET_Y,
-    "target_spawn_z": $DEMO_TARGET_Z,
+    "target_spawn_requested_x": $DEMO_TARGET_X,
+    "target_spawn_requested_y": $DEMO_TARGET_Y,
+    "target_spawn_requested_z": $DEMO_TARGET_Z,
+    "target_spawn_x": $DEMO_TARGET_RESOLVED_X,
+    "target_spawn_y": $DEMO_TARGET_RESOLVED_Y,
+    "target_spawn_z": $DEMO_TARGET_RESOLVED_Z,
+    "target_spawn_resolve_status": "$DEMO_TARGET_RESOLVE_STATUS",
     "target_spawn_ok": $TARGET_SPAWN_OK,
     "target_spawn_status": "$TARGET_SPAWN_STATUS",
     "target_spawn_timeout_s": $TARGET_SPAWN_TIMEOUT_S,
@@ -984,6 +1194,7 @@ cat >"$ARTIFACT_DIR/demo_summary.json" <<JSON
     "required": $REQUIRE_MOTION,
     "window_s": $MOTION_WINDOW_S,
     "min_distance_m": $MOTION_MIN_DISTANCE_M,
+    "target_progress_min_m": $MOTION_TARGET_PROGRESS_MIN_M,
     "cmd_vel_topic_primary": "$CMD_VEL_TOPIC_PRIMARY",
     "cmd_vel_topic_secondary": "$CMD_VEL_TOPIC_SECONDARY",
     "cmd_vel_message_count": $MOTION_CMD_VEL_MESSAGE_COUNT,
@@ -1001,6 +1212,14 @@ cat >"$ARTIFACT_DIR/demo_summary.json" <<JSON
       "z": $MOTION_ODOM_END_Z
     },
     "odom_displacement_m": $MOTION_ODOM_DISPLACEMENT_M,
+    "target_start_distance_m": $MOTION_TARGET_START_DISTANCE_M,
+    "target_end_distance_m": $MOTION_TARGET_END_DISTANCE_M,
+    "target_distance_delta_m": $MOTION_TARGET_DISTANCE_DELTA_M,
+    "nav_progress_samples": $MOTION_NAV_PROGRESS_SAMPLES,
+    "nav_progress_start_remaining_m": $MOTION_NAV_PROGRESS_START_M,
+    "nav_progress_end_remaining_m": $MOTION_NAV_PROGRESS_END_M,
+    "nav_progress_delta_m": $MOTION_NAV_PROGRESS_DELTA_M,
+    "target_progress_ok": $MOTION_TARGET_PROGRESS_OK,
     "probe_error": "$MOTION_PROBE_ERROR",
     "pass": $MOTION_PASS
   },
@@ -1027,7 +1246,7 @@ if [[ "$MAX_RUN_SECONDS" =~ ^[0-9]+$ ]] && [ "$MAX_RUN_SECONDS" -gt 0 ]; then
     sleep "$REMAINING_S"
   fi
   SAFE_KILL_PIDS=()
-  for pid in "$SIM_PID" "$DETECTOR_PID" "$EXTRACTOR_PID" "$BRIDGE_PID" "$NAV2_PID" "$RELAY_PID" "$FEED_RAW_VIEWER_PID" "$FEED_DEBUG_VIEWER_PID"; do
+  for pid in "$SIM_PID" "$DETECTOR_PID" "$EXTRACTOR_PID" "$BRIDGE_PID" "$NAV2_PID" "$RELAY_PID" "$MOTION_PROBE_PID" "$FEED_RAW_VIEWER_PID" "$FEED_DEBUG_VIEWER_PID"; do
     if [ -n "$pid" ] && [ "$pid" != "$$" ]; then
       SAFE_KILL_PIDS+=("$pid")
     fi
@@ -1055,6 +1274,7 @@ cat >"$ARTIFACT_DIR/demo_pids.json" <<JSON
     "bridge": "$BRIDGE_PID",
     "nav2": "$NAV2_PID",
     "cmd_vel_relay": "$RELAY_PID",
+    "motion_probe": "$MOTION_PROBE_PID",
     "feed_rgb_viewer": "$FEED_RAW_VIEWER_PID",
     "feed_debug_viewer": "$FEED_DEBUG_VIEWER_PID"
   }
@@ -1068,12 +1288,13 @@ echo "EXTRACTOR_PID=$EXTRACTOR_PID"
 echo "BRIDGE_PID=$BRIDGE_PID"
 echo "NAV2_PID=$NAV2_PID"
 echo "CMD_VEL_RELAY_PID=$RELAY_PID"
+echo "MOTION_PROBE_PID=$MOTION_PROBE_PID"
 echo "FEED_RGB_VIEWER_PID=$FEED_RAW_VIEWER_PID"
 echo "FEED_DEBUG_VIEWER_PID=$FEED_DEBUG_VIEWER_PID"
 echo "WATCHDOG_PID=$WATCHDOG_PID"
 echo "EVIDENCE_CAPTURE_RGB=$RGB_CAPTURED"
 echo "EVIDENCE_CAPTURE_DEBUG=$DEBUG_CAPTURED"
-echo "STOP_CMD=wsl -d __DISTRO__ -- bash -lc 'kill $SIM_PID $DETECTOR_PID ${EXTRACTOR_PID:-} ${BRIDGE_PID:-} ${NAV2_PID:-} ${RELAY_PID:-} ${FEED_RAW_VIEWER_PID:-} ${FEED_DEBUG_VIEWER_PID:-} 2>/dev/null || true'"
+echo "STOP_CMD=wsl -d __DISTRO__ -- bash -lc 'kill $SIM_PID $DETECTOR_PID ${EXTRACTOR_PID:-} ${BRIDGE_PID:-} ${NAV2_PID:-} ${RELAY_PID:-} ${MOTION_PROBE_PID:-} ${FEED_RAW_VIEWER_PID:-} ${FEED_DEBUG_VIEWER_PID:-} 2>/dev/null || true'"
 '@
 
 $bash = $bashTemplate.
@@ -1101,6 +1322,10 @@ $bash = $bashTemplate.
     Replace("__DEMO_TARGET_X__", $DemoTargetX.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
     Replace("__DEMO_TARGET_Y__", $DemoTargetY.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
     Replace("__DEMO_TARGET_Z__", $DemoTargetZ.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
+    Replace("__DEMO_TARGET_RELATIVE__", $demoTargetRelativeStr).
+    Replace("__DEMO_TARGET_FORWARD_M__", $DemoTargetForwardM.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
+    Replace("__DEMO_TARGET_LATERAL_M__", $DemoTargetLateralM.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
+    Replace("__DEMO_TARGET_VERTICAL_OFFSET_M__", $DemoTargetVerticalOffsetM.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
     Replace("__TARGET_SPAWN_TIMEOUT_S__", ([Math]::Max($TargetSpawnTimeoutSeconds, 5)).ToString()).
     Replace("__MIN_DETECTION_CONFIDENCE__", $MinDetectionConfidence.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
     Replace("__OPEN_FEED_VIEWERS__", $openFeedViewersStr).
@@ -1109,6 +1334,7 @@ $bash = $bashTemplate.
     Replace("__REQUIRE_MOTION__", $requireMotionStr).
     Replace("__MOTION_MIN_DISTANCE_M__", $MotionMinDistanceMeters.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
     Replace("__MOTION_WINDOW_S__", ([Math]::Max($MotionWindowSeconds, 10)).ToString()).
+    Replace("__MOTION_TARGET_PROGRESS_MIN_M__", $MotionTargetProgressMinMeters.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
     Replace("__REQUIRE_NAV2_ACTION_SERVER__", $requireNav2ActionServerStr).
     Replace("__CMD_VEL_TOPIC_PRIMARY__", $CmdVelTopicPrimary).
     Replace("__CMD_VEL_TOPIC_SECONDARY__", $CmdVelTopicSecondary).
@@ -1127,10 +1353,12 @@ Write-Host "  Capture frames: $([Math]::Max($CaptureMinFrames, 1))"
 Write-Host "  World:          $WorldFile"
 Write-Host "  World name:     $WorldName"
 Write-Host "  Ensure target:  $([bool]$EnsureDemoTarget)"
+Write-Host "  Target relative: $([bool]$DemoTargetRelative) (fwd=$DemoTargetForwardM m, lat=$DemoTargetLateralM m, zoff=$DemoTargetVerticalOffsetM m)"
 Write-Host "  Open viewers:   $([bool]$OpenFeedViewers)"
 Write-Host "  Require motion: $([bool]$RequireMotion)"
 Write-Host "  Motion min (m): $MotionMinDistanceMeters"
 Write-Host "  Motion win (s): $MotionWindowSeconds"
+Write-Host "  Target progress min (m): $MotionTargetProgressMinMeters"
 Write-Host "  Require nav2 action server: $([bool]$RequireNav2ActionServer)"
 Write-Host "  ROS distro:     $RosDistro"
 
