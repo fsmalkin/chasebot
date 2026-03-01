@@ -9,7 +9,7 @@ from rclpy.node import Node
 from rclpy.action import ActionClient
 from nav2_msgs.action import NavigateToPose
 from geometry_msgs.msg import PoseStamped, PointStamped
-from std_msgs.msg import Header
+from nav_msgs.msg import Odometry
 import time
 import math
 
@@ -25,6 +25,9 @@ class Yolo3DToNav2Bridge(Node):
         self.declare_parameter('cooldown_time', 5.0)  # Seconds between goals
         self.declare_parameter('action_server_wait_s', 30.0)
         self.declare_parameter('goal_frame', 'odom')
+        self.declare_parameter('odom_topic', '/odom')
+        self.declare_parameter('odom_topics', '')
+        self.declare_parameter('max_goal_count', 0)
         
         self.approach_distance = self.get_parameter('approach_distance').value
         self.confidence_threshold = self.get_parameter('confidence_threshold').value
@@ -32,12 +35,19 @@ class Yolo3DToNav2Bridge(Node):
         self.cooldown_time = self.get_parameter('cooldown_time').value
         self.action_server_wait_s = float(self.get_parameter('action_server_wait_s').value)
         self.goal_frame = str(self.get_parameter('goal_frame').value)
+        self.odom_topic = str(self.get_parameter('odom_topic').value)
+        self.odom_topics = str(self.get_parameter('odom_topics').value)
+        self.max_goal_count = int(self.get_parameter('max_goal_count').value)
         
         # State tracking
         self.last_goal_time = 0
         self.current_goal_handle = None
         self.goal_in_progress = False
         self._last_server_warn_time = 0.0
+        self.latest_robot_pose = None
+        self._latest_odom_topic = None
+        self._odom_subs = []
+        self.goal_count_sent = 0
         
         # Nav2 action client
         self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
@@ -49,11 +59,24 @@ class Yolo3DToNav2Bridge(Node):
             self.position_callback,
             10
         )
+        for topic in self._build_odom_topic_candidates():
+            try:
+                sub = self.create_subscription(
+                    Odometry,
+                    topic,
+                    lambda msg, topic_name=topic: self.odom_callback(msg, topic_name),
+                    20
+                )
+                self._odom_subs.append(sub)
+            except Exception as exc:
+                self.get_logger().warn(f'Failed to subscribe to odom topic {topic}: {exc}')
         
         self.get_logger().info('🤖 YOLO 3D to Nav2 Bridge Started')
         self.get_logger().info(f'📏 Approach distance: {self.approach_distance}m')
         self.get_logger().info(f'🎯 Goal tolerance: {self.goal_tolerance}m')
         self.get_logger().info(f'⏱️  Cooldown time: {self.cooldown_time}s')
+        self.get_logger().info(f'🔢 Max goal count: {self.max_goal_count if self.max_goal_count > 0 else "unlimited"}')
+        self.get_logger().info(f'🧭 Odom topics: {", ".join(self._build_odom_topic_candidates())}')
         
         # Wait for Nav2
         self.get_logger().info('⏳ Waiting for Nav2 action server...')
@@ -61,6 +84,47 @@ class Yolo3DToNav2Bridge(Node):
             self.get_logger().info('✅ Nav2 action server ready!')
         else:
             self.get_logger().error('❌ Nav2 action server not available!')
+
+    def _build_odom_topic_candidates(self):
+        topics = []
+        raw = [self.odom_topic]
+        if self.odom_topics.strip():
+            raw.extend([t.strip() for t in self.odom_topics.split(',') if t.strip()])
+        raw.extend([
+            '/odom',
+            '/model/jetbot/odometry',
+            '/jetbot_base_controller/odom',
+        ])
+        for topic in raw:
+            if topic and topic not in topics:
+                topics.append(topic)
+        return topics
+
+    def odom_callback(self, msg, topic_name=''):
+        self.latest_robot_pose = msg.pose.pose
+        if topic_name and topic_name != self._latest_odom_topic:
+            self._latest_odom_topic = topic_name
+            self.get_logger().info(f'🧭 Odom source active: {topic_name}')
+
+    @staticmethod
+    def yaw_from_quaternion(q):
+        """Convert quaternion to planar yaw."""
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        return math.atan2(siny_cosp, cosy_cosp)
+
+    def local_to_world(self, local_x, local_y):
+        """Transform base_link-relative coordinates into goal_frame world coordinates."""
+        if self.latest_robot_pose is None:
+            return None
+        pose = self.latest_robot_pose
+        robot_x = float(pose.position.x)
+        robot_y = float(pose.position.y)
+        robot_yaw = self.yaw_from_quaternion(pose.orientation)
+
+        world_x = robot_x + (math.cos(robot_yaw) * local_x) - (math.sin(robot_yaw) * local_y)
+        world_y = robot_y + (math.sin(robot_yaw) * local_x) + (math.cos(robot_yaw) * local_y)
+        return world_x, world_y, robot_x, robot_y, robot_yaw
     
     def position_callback(self, msg):
         """Handle incoming 3D ball position."""
@@ -69,6 +133,9 @@ class Yolo3DToNav2Bridge(Node):
 
         # Check if we should send a new goal
         current_time = time.time()
+        if self.max_goal_count > 0 and self.goal_count_sent >= self.max_goal_count:
+            return
+
         if self.goal_in_progress:
             return  # Already navigating
             
@@ -108,18 +175,42 @@ class Yolo3DToNav2Bridge(Node):
         unit_y = ball_y / distance_to_ball
         
         # Calculate goal position (approach_distance before the ball)
-        goal_distance = distance_to_ball - self.approach_distance
-        goal_x = unit_x * goal_distance
-        goal_y = unit_y * goal_distance
-        
-        self.get_logger().info(f'🎯 Calculated approach goal: [{goal_x:.3f}, {goal_y:.3f}]m')
-        self.get_logger().info(f'📐 Distance to ball: {distance_to_ball:.3f}m, Goal distance: {goal_distance:.3f}m')
-        
-        # Send navigation goal
-        self.send_nav_goal(goal_x, goal_y)
+        goal_distance_local = distance_to_ball - self.approach_distance
+        goal_x_local = unit_x * goal_distance_local
+        goal_y_local = unit_y * goal_distance_local
+
+        # Ball position in local frame for orientation toward target.
+        ball_x_local = ball_x
+        ball_y_local = ball_y
+
+        transformed_goal = self.local_to_world(goal_x_local, goal_y_local)
+        transformed_ball = self.local_to_world(ball_x_local, ball_y_local)
+        if transformed_goal is None or transformed_ball is None:
+            self.get_logger().warn('No odometry pose yet; skipping goal publish until odom is available.')
+            return
+
+        goal_x_world, goal_y_world, robot_x, robot_y, robot_yaw = transformed_goal
+        ball_x_world, ball_y_world, _, _, _ = transformed_ball
+
+        self.get_logger().info(
+            f'🧭 Robot pose: [{robot_x:.3f}, {robot_y:.3f}] yaw={robot_yaw:.3f} rad'
+        )
+        self.get_logger().info(
+            f'🎯 Local approach goal: [{goal_x_local:.3f}, {goal_y_local:.3f}]m'
+        )
+        self.get_logger().info(
+            f'🌍 World approach goal: [{goal_x_world:.3f}, {goal_y_world:.3f}]m in {self.goal_frame}'
+        )
+        self.get_logger().info(
+            f'📐 Distance to ball: {distance_to_ball:.3f}m, Goal distance: {goal_distance_local:.3f}m'
+        )
+
+        # Send navigation goal in world frame.
+        self.send_nav_goal(goal_x_world, goal_y_world, ball_x_world, ball_y_world)
         self.last_goal_time = current_time
+        self.goal_count_sent += 1
     
-    def send_nav_goal(self, x, y):
+    def send_nav_goal(self, x, y, ball_x_world, ball_y_world):
         """Send a navigation goal to Nav2."""
         # Create goal pose
         goal_pose = PoseStamped()
@@ -130,8 +221,8 @@ class Yolo3DToNav2Bridge(Node):
         goal_pose.pose.position.y = y
         goal_pose.pose.position.z = 0.0
         
-        # Calculate orientation to face the ball
-        yaw = math.atan2(y, x)
+        # Calculate orientation to face the ball world position.
+        yaw = math.atan2(ball_y_world - y, ball_x_world - x)
         goal_pose.pose.orientation.z = math.sin(yaw / 2.0)
         goal_pose.pose.orientation.w = math.cos(yaw / 2.0)
         
@@ -189,8 +280,10 @@ class Yolo3DToNav2Bridge(Node):
         if status == 4:  # SUCCEEDED
             self.get_logger().info('🎉 Navigation goal reached successfully!')
             self.get_logger().info(f'✅ Robot is now within {self.approach_distance}m of the ball')
-        elif status == 6:  # CANCELED
+        elif status == 5:  # CANCELED
             self.get_logger().warn('⚠️  Navigation goal was canceled')
+        elif status == 6:  # ABORTED
+            self.get_logger().error('❌ Navigation goal aborted by Nav2')
         else:
             self.get_logger().error(f'❌ Navigation failed with status: {status}')
         

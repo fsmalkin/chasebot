@@ -58,6 +58,8 @@ class Nav2Monitor(Node):
         self.detection_times: List[float] = []
         self.planner_errors = 0
         self.controller_errors = 0
+        self.goal_accept_events = 0
+        self.goal_success_events = 0
 
         self.create_subscription(
             GoalStatusArray,
@@ -65,18 +67,23 @@ class Nav2Monitor(Node):
             self._on_status,
             20,
         )
-        self.create_subscription(
-            TwistStamped,
-            cmd_vel_topic_primary,
-            self._on_cmd_vel_stamped,
-            20,
-        )
-        self.create_subscription(
-            Twist,
-            cmd_vel_topic_secondary,
-            self._on_cmd_vel,
-            20,
-        )
+        cmd_vel_topics = []
+        for topic in (cmd_vel_topic_primary, cmd_vel_topic_secondary, '/cmd_vel_nav'):
+            if topic and topic not in cmd_vel_topics:
+                cmd_vel_topics.append(topic)
+        for topic in cmd_vel_topics:
+            self.create_subscription(
+                TwistStamped,
+                topic,
+                self._on_cmd_vel_stamped,
+                20,
+            )
+            self.create_subscription(
+                Twist,
+                topic,
+                self._on_cmd_vel,
+                20,
+            )
         self.create_subscription(
             PointStamped,
             detection_topic,
@@ -96,6 +103,8 @@ class Nav2Monitor(Node):
         self.detection_times = []
         self.planner_errors = 0
         self.controller_errors = 0
+        self.goal_accept_events = 0
+        self.goal_success_events = 0
 
     def _on_status(self, msg: GoalStatusArray) -> None:
         for status in msg.status_list:
@@ -119,6 +128,10 @@ class Nav2Monitor(Node):
     def _on_rosout(self, msg: Log) -> None:
         name = (msg.name or '').lower()
         text = (msg.msg or '').lower()
+        if 'goal accepted by nav2' in text:
+            self.goal_accept_events += 1
+        if 'navigation goal reached successfully' in text:
+            self.goal_success_events += 1
         # Treat only ERROR/FATAL as hard failures for readiness gating.
         if msg.level < Log.ERROR:
             return
@@ -229,11 +242,18 @@ def main() -> int:
     requested_goals = len(node.goal_statuses)
     accepted_goals = 0
     succeeded_goals = 0
+    goal_event_source = 'status_topic'
     for statuses in node.goal_statuses.values():
         if statuses:
             accepted_goals += 1
         if 4 in statuses:
             succeeded_goals += 1
+
+    if requested_goals == 0 and (node.goal_accept_events > 0 or node.goal_success_events > 0):
+        goal_event_source = 'bridge_rosout_fallback'
+        accepted_goals = int(max(node.goal_accept_events, node.goal_success_events))
+        succeeded_goals = int(min(node.goal_success_events, accepted_goals))
+        requested_goals = accepted_goals
 
     goal_accept_rate = accepted_goals / requested_goals if requested_goals else 0.0
     goal_success_rate = succeeded_goals / accepted_goals if accepted_goals else 0.0
@@ -264,6 +284,7 @@ def main() -> int:
         'goal_request_count': requested_goals,
         'goal_accept_count': accepted_goals,
         'goal_success_count': succeeded_goals,
+        'goal_event_source': goal_event_source,
         'goal_accept_rate': goal_accept_rate,
         'goal_success_rate': goal_success_rate,
         'cmd_vel_publish_stability': cmd_vel_publish_stability,

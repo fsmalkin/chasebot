@@ -21,6 +21,7 @@ NAV2_TARGET_Z="${CHASECAR_NAV2_TARGET_Z:-0.05}"
 NAV2_START_BRIDGE="${CHASECAR_NAV2_START_BRIDGE:-true}"
 NAV2_BRIDGE_SCRIPT="${CHASECAR_NAV2_BRIDGE_SCRIPT:-ros2_scripts/yolo_3d_to_nav2_bridge.py}"
 NAV2_BRIDGE_START_DELAY_S="${CHASECAR_NAV2_BRIDGE_START_DELAY_S:-4}"
+NAV2_BRIDGE_MAX_GOALS="${CHASECAR_NAV2_BRIDGE_MAX_GOALS:-1}"
 NAV2_CONFIG="${CHASECAR_NAV2_CONFIG:-ros2_config/config/nav2_readiness_fidelity.yaml}"
 
 SNAPSHOT_WORLD_NAME="${CHASECAR_SNAPSHOT_WORLD_NAME:-${NAV2_WORLD_NAME}}"
@@ -677,7 +678,10 @@ run_nav2() {
       append_step "nav2" "fail" "missing_artifact" "" 2 "${prep_log}" "${elapsed_s}" 0 "false" "bridge_script" "${step_started_utc}" "${step_ended_utc}"
       return 2
     fi
-    python3 "${REPO_ROOT}/${NAV2_BRIDGE_SCRIPT}" --ros-args -p use_sim_time:=true >"${bridge_log}" 2>&1 &
+    python3 "${REPO_ROOT}/${NAV2_BRIDGE_SCRIPT}" \
+      --ros-args \
+      -p use_sim_time:=true \
+      -p max_goal_count:="${NAV2_BRIDGE_MAX_GOALS}" >"${bridge_log}" 2>&1 &
     bridge_pid="$!"
     sleep "${NAV2_BRIDGE_START_DELAY_S}"
   fi

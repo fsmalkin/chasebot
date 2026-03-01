@@ -12,7 +12,7 @@ metadata:
   bridge_mode: managed
 
 defaults:
-  warmup_s: 15.0
+  warmup_s: 0.0
   duration_s: 120.0
   sample_interval_s: 0.1
   min_cmd_vel_hz: 1.0
