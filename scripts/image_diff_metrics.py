@@ -48,6 +48,8 @@ def main() -> int:
 
     mean_abs_diff = 0.0
     max_abs_diff = 0.0
+    changed_pixel_ratio = 0.0
+    strong_changed_pixel_ratio = 0.0
     shape_match = False
 
     left_img = load_image(left_path)
@@ -58,6 +60,9 @@ def main() -> int:
             diff = cv2.absdiff(left_img, right_img)
             mean_abs_diff = float(np.mean(diff))
             max_abs_diff = float(np.max(diff))
+            gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+            changed_pixel_ratio = float(np.mean(gray_diff > 0))
+            strong_changed_pixel_ratio = float(np.mean(gray_diff >= 16))
 
     result = {
         "left_path": str(left_path),
@@ -70,6 +75,8 @@ def main() -> int:
         "shape_match": shape_match,
         "mean_abs_diff": mean_abs_diff,
         "max_abs_diff": max_abs_diff,
+        "changed_pixel_ratio": changed_pixel_ratio,
+        "strong_changed_pixel_ratio": strong_changed_pixel_ratio,
     }
 
     if args.json_out:
@@ -83,9 +90,10 @@ def main() -> int:
     print(f"SHAPE_MATCH={'true' if shape_match else 'false'}")
     print(f"MEAN_ABS_DIFF={mean_abs_diff:.6f}")
     print(f"MAX_ABS_DIFF={max_abs_diff:.6f}")
+    print(f"CHANGED_PIXEL_RATIO={changed_pixel_ratio:.6f}")
+    print(f"STRONG_CHANGED_PIXEL_RATIO={strong_changed_pixel_ratio:.6f}")
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
-

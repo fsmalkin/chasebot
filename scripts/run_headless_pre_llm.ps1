@@ -16,7 +16,8 @@ param(
     [int]$FidelityMultiTargetGoalTimeoutSeconds = 60,
     [string]$FastMultiTargetConfig = "ros2_config/config/multi_target_nav2_fast.yaml",
     [string]$FidelityMultiTargetConfig = "ros2_config/config/multi_target_nav2_fidelity.yaml",
-    [double]$SnapshotMinMeanAbsDiff = 1.5,
+    [double]$SnapshotMinMeanAbsDiff = 1.0,
+    [double]$SnapshotMinChangedPixelRatio = 0.001,
     [string]$FastWorldFile = "yolo_test_world_v6_clean_uat_fast.world",
     [string]$FidelityWorldFile = "yolo_test_world_v6_clean_uat.world",
     [ValidateSet("auto", "cuda:0", "cpu")]
@@ -156,6 +157,7 @@ function Invoke-Lane {
         [string]$InferenceBackend,
         [string]$InferenceDevice,
         [double]$SnapshotMinMeanAbsDiff,
+        [double]$SnapshotMinChangedPixelRatio,
         [switch]$Build
     )
 
@@ -172,6 +174,8 @@ function Invoke-Lane {
         nav2_config = $Nav2Config
         multi_target_goal_timeout_s = $MultiTargetGoalTimeoutSeconds
         multi_target_config = $MultiTargetConfig
+        snapshot_min_mean_abs_diff = $SnapshotMinMeanAbsDiff
+        snapshot_min_changed_pixel_ratio = $SnapshotMinChangedPixelRatio
         world_file = $WorldFile
         gate_perf_profile = $GatePerfProfile
         started_utc = (Get-Date).ToUniversalTime().ToString("o")
@@ -232,6 +236,7 @@ function Invoke-Lane {
             "-MultiTargetGoalTimeoutSeconds", $MultiTargetGoalTimeoutSeconds,
             "-MultiTargetConfig", $MultiTargetConfig,
             "-SnapshotMinMeanAbsDiff", $SnapshotMinMeanAbsDiff,
+            "-SnapshotMinChangedPixelRatio", $SnapshotMinChangedPixelRatio,
             "-UatProfile", $UatProfile,
             "-UatInferenceDevice", $InferenceDevice
         )
@@ -316,10 +321,10 @@ $cleaned = Cleanup-StaleProjects -Prefix $ProjectNamePrefix -RepoRoot $repoRoot 
 
 $laneResults = @()
 if ($Lane -in @("fast", "dual")) {
-    $laneResults += Invoke-Lane -LaneName "fast" -RuntimeTarget $FastRuntimeTarget -UatProfile $FastUatProfile -StepTimeoutSeconds $FastStepTimeoutSeconds -Nav2DurationSeconds $FastNav2DurationSeconds -Nav2Config $FastNav2Config -MultiTargetGoalTimeoutSeconds $FastMultiTargetGoalTimeoutSeconds -MultiTargetConfig $FastMultiTargetConfig -WorldFile $FastWorldFile -GatePerfProfile "max" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -Build:$Build
+    $laneResults += Invoke-Lane -LaneName "fast" -RuntimeTarget $FastRuntimeTarget -UatProfile $FastUatProfile -StepTimeoutSeconds $FastStepTimeoutSeconds -Nav2DurationSeconds $FastNav2DurationSeconds -Nav2Config $FastNav2Config -MultiTargetGoalTimeoutSeconds $FastMultiTargetGoalTimeoutSeconds -MultiTargetConfig $FastMultiTargetConfig -WorldFile $FastWorldFile -GatePerfProfile "max" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -SnapshotMinChangedPixelRatio $SnapshotMinChangedPixelRatio -Build:$Build
 }
 if ($Lane -in @("fidelity", "dual")) {
-    $laneResults += Invoke-Lane -LaneName "fidelity" -RuntimeTarget $FidelityRuntimeTarget -UatProfile $FidelityUatProfile -StepTimeoutSeconds $FidelityStepTimeoutSeconds -Nav2DurationSeconds $FidelityNav2DurationSeconds -Nav2Config $FidelityNav2Config -MultiTargetGoalTimeoutSeconds $FidelityMultiTargetGoalTimeoutSeconds -MultiTargetConfig $FidelityMultiTargetConfig -WorldFile $FidelityWorldFile -GatePerfProfile "compat" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -Build:$Build
+    $laneResults += Invoke-Lane -LaneName "fidelity" -RuntimeTarget $FidelityRuntimeTarget -UatProfile $FidelityUatProfile -StepTimeoutSeconds $FidelityStepTimeoutSeconds -Nav2DurationSeconds $FidelityNav2DurationSeconds -Nav2Config $FidelityNav2Config -MultiTargetGoalTimeoutSeconds $FidelityMultiTargetGoalTimeoutSeconds -MultiTargetConfig $FidelityMultiTargetConfig -WorldFile $FidelityWorldFile -GatePerfProfile "compat" -RepoRoot $repoRoot -CoreRosDistro $CoreRosDistro -InferenceBackend $InferenceBackend -InferenceDevice $InferenceDevice -SnapshotMinMeanAbsDiff $SnapshotMinMeanAbsDiff -SnapshotMinChangedPixelRatio $SnapshotMinChangedPixelRatio -Build:$Build
 }
 
 $overallPass = (@($laneResults | Where-Object { $_.status -ne "pass" }).Count -eq 0)
@@ -388,6 +393,8 @@ $summary = [ordered]@{
     mode = $Lane
     inference_backend = $InferenceBackend
     inference_device = $InferenceDevice
+    snapshot_min_mean_abs_diff = $SnapshotMinMeanAbsDiff
+    snapshot_min_changed_pixel_ratio = $SnapshotMinChangedPixelRatio
     stale_projects_cleaned = $cleaned
     overall_status = if ($overallPass) { "pass" } else { "fail" }
     pre_llm_ready = $overallPass

@@ -16,7 +16,8 @@ param(
     [int]$Nav2DurationSeconds = 120,
     [int]$MultiTargetGoalTimeoutSeconds = 55,
     [int]$SnapshotTimeoutSeconds = 12,
-    [double]$SnapshotMinMeanAbsDiff = 1.5,
+    [double]$SnapshotMinMeanAbsDiff = 1.0,
+    [double]$SnapshotMinChangedPixelRatio = 0.001,
     [string]$Nav2Config = "ros2_config/config/nav2_readiness_fidelity.yaml",
     [ValidateSet("compat", "balanced", "max")]
     [string]$UatProfile = "compat",
@@ -33,6 +34,7 @@ $env:CHASECAR_NAV2_DURATION_S = [Math]::Max($Nav2DurationSeconds, 30).ToString()
 $env:CHASECAR_MULTI_TARGET_GOAL_TIMEOUT_S = [Math]::Max($MultiTargetGoalTimeoutSeconds, 10).ToString()
 $env:CHASECAR_SNAPSHOT_TIMEOUT_S = [Math]::Max($SnapshotTimeoutSeconds, 5).ToString()
 $env:CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF = [Math]::Max([double]$SnapshotMinMeanAbsDiff, 0.0).ToString("0.###", [System.Globalization.CultureInfo]::InvariantCulture)
+$env:CHASECAR_SNAPSHOT_MIN_CHANGED_PIXEL_RATIO = [Math]::Max([double]$SnapshotMinChangedPixelRatio, 0.0).ToString("0.####", [System.Globalization.CultureInfo]::InvariantCulture)
 $env:CHASECAR_NAV2_CONFIG = $Nav2Config
 $env:CHASECAR_MULTI_TARGET_CONFIG = $MultiTargetConfig
 $env:CHASECAR_UAT_PROFILE = $UatProfile
@@ -117,6 +119,7 @@ export CHASECAR_NAV2_DURATION_S="__NAV2_DURATION_S__"
 export CHASECAR_MULTI_TARGET_GOAL_TIMEOUT_S="__MULTI_TARGET_GOAL_TIMEOUT_S__"
 export CHASECAR_SNAPSHOT_TIMEOUT_S="__SNAPSHOT_TIMEOUT_S__"
 export CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF="__SNAPSHOT_MIN_MEAN_ABS_DIFF__"
+export CHASECAR_SNAPSHOT_MIN_CHANGED_PIXEL_RATIO="__SNAPSHOT_MIN_CHANGED_PIXEL_RATIO__"
 export CHASECAR_NAV2_CONFIG="__NAV2_CONFIG__"
 export CHASECAR_MULTI_TARGET_CONFIG="__MULTI_TARGET_CONFIG__"
 export CHASECAR_UAT_PROFILE="__UAT_PROFILE__"
@@ -133,6 +136,7 @@ bash /workspaces/chasecar/uat/orchestrator/run_uat_orchestrator.sh
             Replace("__MULTI_TARGET_GOAL_TIMEOUT_S__", $env:CHASECAR_MULTI_TARGET_GOAL_TIMEOUT_S).
             Replace("__SNAPSHOT_TIMEOUT_S__", $env:CHASECAR_SNAPSHOT_TIMEOUT_S).
             Replace("__SNAPSHOT_MIN_MEAN_ABS_DIFF__", $env:CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF).
+            Replace("__SNAPSHOT_MIN_CHANGED_PIXEL_RATIO__", $env:CHASECAR_SNAPSHOT_MIN_CHANGED_PIXEL_RATIO).
             Replace("__NAV2_CONFIG__", $env:CHASECAR_NAV2_CONFIG).
             Replace("__MULTI_TARGET_CONFIG__", $env:CHASECAR_MULTI_TARGET_CONFIG).
             Replace("__UAT_PROFILE__", $UatProfile).

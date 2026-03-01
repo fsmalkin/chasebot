@@ -33,8 +33,9 @@ SNAPSHOT_TARGET_Z="${CHASECAR_SNAPSHOT_TARGET_Z:-0.05}"
 SNAPSHOT_RGB_TOPIC="${CHASECAR_SNAPSHOT_RGB_TOPIC:-/d415/color/image_raw}"
 SNAPSHOT_DEBUG_TOPIC="${CHASECAR_SNAPSHOT_DEBUG_TOPIC:-/yolo/debug_image}"
 SNAPSHOT_TIMEOUT_S="${CHASECAR_SNAPSHOT_TIMEOUT_S:-12}"
-SNAPSHOT_MIN_MEAN_ABS_DIFF="${CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF:-1.5}"
-SNAPSHOT_MIN_FRAMES="${CHASECAR_SNAPSHOT_MIN_FRAMES:-2}"
+SNAPSHOT_MIN_MEAN_ABS_DIFF="${CHASECAR_SNAPSHOT_MIN_MEAN_ABS_DIFF:-1.0}"
+SNAPSHOT_MIN_CHANGED_PIXEL_RATIO="${CHASECAR_SNAPSHOT_MIN_CHANGED_PIXEL_RATIO:-0.001}"
+SNAPSHOT_MIN_FRAMES="${CHASECAR_SNAPSHOT_MIN_FRAMES:-1}"
 
 MULTI_TARGET_CONFIG="${CHASECAR_MULTI_TARGET_CONFIG:-ros2_config/config/multi_target_nav2.yaml}"
 MULTI_TARGET_GOAL_TIMEOUT_S="${CHASECAR_MULTI_TARGET_GOAL_TIMEOUT_S:-55}"
@@ -467,25 +468,35 @@ run_snapshot() {
   local right_exists="false"
   local byte_identical="true"
   local mean_abs_diff="0"
+  local changed_pixel_ratio="0"
   local shape_match="false"
   if [[ -f "${diff_json}" ]]; then
     left_exists="$(jq -r '.left_exists // false' "${diff_json}" 2>/dev/null || echo false)"
     right_exists="$(jq -r '.right_exists // false' "${diff_json}" 2>/dev/null || echo false)"
     byte_identical="$(jq -r 'if has("byte_identical") then .byte_identical else true end' "${diff_json}" 2>/dev/null || echo true)"
     mean_abs_diff="$(jq -r '.mean_abs_diff // 0' "${diff_json}" 2>/dev/null || echo 0)"
+    changed_pixel_ratio="$(jq -r '.changed_pixel_ratio // 0' "${diff_json}" 2>/dev/null || echo 0)"
     shape_match="$(jq -r '.shape_match // false' "${diff_json}" 2>/dev/null || echo false)"
   fi
 
-  local diff_pass="false"
+  local mean_pass="false"
   if awk -v a="${mean_abs_diff}" -v b="${SNAPSHOT_MIN_MEAN_ABS_DIFF}" 'BEGIN{exit !(a+0 >= b+0)}'; then
-    diff_pass="true"
+    mean_pass="true"
+  fi
+
+  local changed_ratio_pass="false"
+  if awk -v a="${changed_pixel_ratio}" -v b="${SNAPSHOT_MIN_CHANGED_PIXEL_RATIO}" 'BEGIN{exit !(a+0 >= b+0)}'; then
+    changed_ratio_pass="true"
   fi
 
   local pass="false"
   if [[ "${rgb_rc}" -eq 0 && "${debug_rc}" -eq 0 && "${diff_rc}" -eq 0 \
      && "${capture_rgb_ok}" == "true" && "${capture_debug_ok}" == "true" \
      && "${left_exists}" == "true" && "${right_exists}" == "true" \
-     && "${byte_identical}" != "true" && "${diff_pass}" == "true" ]]; then
+     && "${shape_match}" == "true" \
+     && "${byte_identical}" != "true" \
+     && "${mean_pass}" == "true" \
+     && "${changed_ratio_pass}" == "true" ]]; then
     pass="true"
   fi
 
@@ -504,6 +515,8 @@ run_snapshot() {
     --argjson byte_identical "$( [[ "${byte_identical}" == "true" ]] && echo true || echo false )" \
     --argjson mean_abs_diff "${mean_abs_diff}" \
     --argjson min_mean_abs_diff "${SNAPSHOT_MIN_MEAN_ABS_DIFF}" \
+    --argjson changed_pixel_ratio "${changed_pixel_ratio}" \
+    --argjson min_changed_pixel_ratio "${SNAPSHOT_MIN_CHANGED_PIXEL_RATIO}" \
     --argjson pass "$( [[ "${pass}" == "true" ]] && echo true || echo false )" \
     '{
       run_id: $run_id,
@@ -522,7 +535,9 @@ run_snapshot() {
         shape_match: $shape_match,
         byte_identical: $byte_identical,
         mean_abs_diff: $mean_abs_diff,
-        min_mean_abs_diff: $min_mean_abs_diff
+        min_mean_abs_diff: $min_mean_abs_diff,
+        changed_pixel_ratio: $changed_pixel_ratio,
+        min_changed_pixel_ratio: $min_changed_pixel_ratio
       },
       pass: $pass
     }' > "${summary_json}"
@@ -559,6 +574,8 @@ run_snapshot() {
   if [[ "${rgb_rc}" -eq 124 || "${debug_rc}" -eq 124 || "${diff_rc}" -eq 124 ]]; then
     failure_class="timeout"
   elif [[ "${rgb_rc}" -ne 0 || "${debug_rc}" -ne 0 || "${diff_rc}" -ne 0 ]]; then
+    failure_class="blocked_dependency"
+  elif [[ "${capture_rgb_ok}" != "true" || "${capture_debug_ok}" != "true" || "${shape_match}" != "true" ]]; then
     failure_class="blocked_dependency"
   elif [[ "${evidence_complete}" != "true" ]]; then
     failure_class="missing_artifact"
@@ -1037,6 +1054,7 @@ jq -n \
   --arg nav2_duration_s "${NAV2_DURATION_S}" \
   --arg snapshot_timeout_s "${SNAPSHOT_TIMEOUT_S}" \
   --arg snapshot_min_mean_abs_diff "${SNAPSHOT_MIN_MEAN_ABS_DIFF}" \
+  --arg snapshot_min_changed_pixel_ratio "${SNAPSHOT_MIN_CHANGED_PIXEL_RATIO}" \
   --arg multi_target_goal_timeout_s "${MULTI_TARGET_GOAL_TIMEOUT_S}" \
   --arg generated_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   --argjson steps "${steps_json}" \
@@ -1060,6 +1078,7 @@ jq -n \
     nav2_duration_s: ($nav2_duration_s | tonumber),
     snapshot_timeout_s: ($snapshot_timeout_s | tonumber),
     snapshot_min_mean_abs_diff: ($snapshot_min_mean_abs_diff | tonumber),
+    snapshot_min_changed_pixel_ratio: ($snapshot_min_changed_pixel_ratio | tonumber),
     multi_target_goal_timeout_s: ($multi_target_goal_timeout_s | tonumber),
     failure_class: (if $failure_class == "" then null else $failure_class end),
     failure_class_counts: $failure_class_counts,

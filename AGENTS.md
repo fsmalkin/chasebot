@@ -77,6 +77,8 @@ Behavior:
    - `dual`: fast first, fidelity second
 3. Stage order in `pre_llm`:
    - `coordinate -> snapshot -> orientation -> nav2 -> multi_target`
+   - Snapshot gate is two-signal: mean diff + changed-pixel ratio (not byte-identity alone).
+   - Nav2 gate requires target-distance progress truth checks (trend, away-ratio, retained progress, final distance).
 4. Lane-specific config defaults:
    - fast nav2: `ros2_config/config/nav2_readiness_fast.yaml`
    - fidelity nav2: `ros2_config/config/nav2_readiness_fidelity.yaml`
@@ -107,6 +109,7 @@ Behavior:
    - `artifacts/orientation/<timestamp>/snapshots/*.png`
 3. Nav2 readiness:
    - `artifacts/nav2/<timestamp>/nav_summary.json`
+   - `artifacts/nav2/<timestamp>/distance_samples.csv`
 4. Snapshot verification:
    - `artifacts/snapshots/<timestamp>/d415_color.png`
    - `artifacts/snapshots/<timestamp>/yolo_debug.png`

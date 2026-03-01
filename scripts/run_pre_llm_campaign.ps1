@@ -7,6 +7,7 @@ param(
     [int]$FastMultiTargetGoalTimeoutSeconds = 45,
     [int]$FidelityMultiTargetGoalTimeoutSeconds = 60,
     [double]$SnapshotMinMeanAbsDiff = 1.0,
+    [double]$SnapshotMinChangedPixelRatio = 0.001,
     [object]$IncludeSoak = $true,
     [int]$SoakStepTimeoutSeconds = 2100,
     [int]$SoakNav2DurationSeconds = 1200,
@@ -88,7 +89,8 @@ for ($i = 1; $i -le $Runs; $i++) {
         "-FidelityNav2DurationSeconds", $FidelityNav2DurationSeconds,
         "-FastMultiTargetGoalTimeoutSeconds", $FastMultiTargetGoalTimeoutSeconds,
         "-FidelityMultiTargetGoalTimeoutSeconds", $FidelityMultiTargetGoalTimeoutSeconds,
-        "-SnapshotMinMeanAbsDiff", $SnapshotMinMeanAbsDiff
+        "-SnapshotMinMeanAbsDiff", $SnapshotMinMeanAbsDiff,
+        "-SnapshotMinChangedPixelRatio", $SnapshotMinChangedPixelRatio
     )
 
     $summaryPath = Parse-SummaryPath -Output $run.Output
@@ -124,7 +126,8 @@ if ($includeSoakResolved) {
         "-FidelityNav2DurationSeconds", $SoakNav2DurationSeconds,
         "-FidelityMultiTargetGoalTimeoutSeconds", $SoakMultiTargetGoalTimeoutSeconds,
         "-FidelityMultiTargetConfig", $SoakMultiTargetConfig,
-        "-SnapshotMinMeanAbsDiff", $SnapshotMinMeanAbsDiff
+        "-SnapshotMinMeanAbsDiff", $SnapshotMinMeanAbsDiff,
+        "-SnapshotMinChangedPixelRatio", $SnapshotMinChangedPixelRatio
     )
 
     $soakSummary = Parse-SummaryPath -Output $soak.Output

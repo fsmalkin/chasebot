@@ -85,6 +85,11 @@ This runs all low-level gates before high-level LLM wiring:
 4. nav2 readiness UAT
 5. multi-target nav2 UAT
 
+Verification notes:
+
+1. Snapshot gate passes only when both feeds capture successfully, images are not byte-identical, mean diff meets threshold, and changed-pixel ratio meets threshold.
+2. Nav2 readiness gate includes target-distance truth checks (improvement, retained progress, final distance, away ratio, and trend slope), not just goal status.
+
 Lane modes:
 
 1. `fast`: uses `workstation_max`, short timeouts, and fast-forward world `yolo_test_world_v6_clean_uat_fast.world`.
@@ -165,9 +170,10 @@ Milestone 3 now enforces measurable motion:
 2. Orientation: `artifacts/orientation/<timestamp>/{orientation_samples.csv,orientation_summary.json,snapshots/*.png}`
 3. Snapshot verification: `artifacts/snapshots/<timestamp>/{d415_color.png,yolo_debug.png,image_diff.json,snapshot_summary.json}`
 4. Nav2: `artifacts/nav2/<timestamp>/nav_summary.json`
-5. Multi-target Nav2: `artifacts/nav2_multi/<timestamp>/{multi_target_samples.csv,multi_target_summary.json}`
-6. Session: `artifacts/session/<timestamp>/{manifest.json,readiness_report.json,pre_llm_headless_summary.json}`
-7. Milestone 1 evidence: `artifacts/demos/milestone_1_<timestamp>/{operator_checklist.json,demo_summary.json,screenshots/*.png}`
+5. Nav2 distance series: `artifacts/nav2/<timestamp>/distance_samples.csv`
+6. Multi-target Nav2: `artifacts/nav2_multi/<timestamp>/{multi_target_samples.csv,multi_target_summary.json}`
+7. Session: `artifacts/session/<timestamp>/{manifest.json,readiness_report.json,pre_llm_headless_summary.json}`
+8. Milestone 1 evidence: `artifacts/demos/milestone_1_<timestamp>/{operator_checklist.json,demo_summary.json,screenshots/*.png}`
 
 ## Reference Docs
 

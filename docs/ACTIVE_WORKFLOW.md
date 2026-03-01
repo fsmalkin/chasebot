@@ -176,6 +176,22 @@ Pre-LLM stage order (container lane):
 4. nav2 readiness gate
 5. multi-target nav2 gate
 
+Snapshot gate truth checks:
+
+1. captures must succeed on both topics
+2. raw/debug frames must not be byte-identical
+3. mean absolute diff must meet threshold
+4. changed-pixel ratio must meet threshold
+
+Nav2 readiness truth checks include:
+
+1. target distance improvement minimum
+2. retained end-of-window progress minimum
+3. improvement ratio minimum
+4. final distance maximum
+5. away-motion ratio maximum
+6. negative distance trend slope requirement
+
 Fallback lane (`host_ros`) is non-canonical and for troubleshooting only.
 
 Pre-LLM brain adapter smoke (post-campaign, pre-GUI):
@@ -247,6 +263,7 @@ Milestone 3 pass criteria include:
    - `artifacts/snapshots/<timestamp>/snapshot_summary.json`
 4. Nav2:
    - `artifacts/nav2/<timestamp>/nav_summary.json`
+   - `artifacts/nav2/<timestamp>/distance_samples.csv`
 5. Multi-target Nav2:
    - `artifacts/nav2_multi/<timestamp>/multi_target_samples.csv`
    - `artifacts/nav2_multi/<timestamp>/multi_target_summary.json`
