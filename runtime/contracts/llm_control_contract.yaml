@@ -1,10 +1,10 @@
-version: 5
+version: 6
 contract_status: frozen_pre_llm
-frozen_on_utc: "2026-03-01T16:53:00Z"
+frozen_on_utc: "2026-03-02T05:40:00Z"
 freeze_basis:
-  campaign_trend_report: artifacts/session/20260301T161622Z/pre_llm_campaign_trend.json
-  soak_summary: artifacts/session/20260301T163154Z/pre_llm_headless_summary.json
-  rc_readiness_report: artifacts/session/20260301T161622Z/rc/readiness_report.json
+  campaign_trend_report: artifacts/session/20260302T041321Z/pre_llm_campaign_trend.json
+  soak_summary: artifacts/session/20260302T045310Z/pre_llm_headless_summary.json
+  rc_readiness_report: artifacts/session/20260302T041321Z/rc/readiness_report.json
   message_schema_manifest_version: 1
   isaac_bridge_allowlist_version: 1
 

@@ -145,12 +145,12 @@ Required handoff artifacts:
 
 Current frozen baseline package:
 
-1. `artifacts/session/20260301T161622Z/pre_llm_campaign_trend.json`
-2. `artifacts/session/20260301T161622Z/campaign_run_summary.json`
-3. `artifacts/session/20260301T161622Z/rc/manifest.json`
-4. `artifacts/session/20260301T161622Z/rc/readiness_report.json`
-5. `artifacts/session/20260301T163154Z/pre_llm_headless_summary.json` (soak)
-6. `artifacts/session/20260301T161540Z/brain_adapter_smoke_summary.json` (adapter smoke)
+1. `artifacts/session/20260302T041321Z/pre_llm_campaign_trend.json`
+2. `artifacts/session/20260302T041321Z/campaign_run_summary.json`
+3. `artifacts/session/20260302T041321Z/rc/manifest.json`
+4. `artifacts/session/20260302T041321Z/rc/readiness_report.json`
+5. `artifacts/session/20260302T045310Z/pre_llm_headless_summary.json` (soak)
+6. `artifacts/session/20260302T052033Z/brain_adapter_smoke_summary.json` (adapter smoke)
 
 Parity-first GUI readiness (required before operator live view):
 

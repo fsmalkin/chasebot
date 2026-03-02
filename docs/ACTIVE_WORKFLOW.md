@@ -164,16 +164,16 @@ Lane-specific gate config defaults:
 
 Latest frozen pre-LLM campaign package:
 
-1. trend: `artifacts/session/20260301T161622Z/pre_llm_campaign_trend.json`
-2. soak summary: `artifacts/session/20260301T163154Z/pre_llm_headless_summary.json`
-3. rc manifest: `artifacts/session/20260301T161622Z/rc/manifest.json`
-4. rc readiness: `artifacts/session/20260301T161622Z/rc/readiness_report.json` (`pass=true`)
+1. trend: `artifacts/session/20260302T041321Z/pre_llm_campaign_trend.json`
+2. soak summary: `artifacts/session/20260302T045310Z/pre_llm_headless_summary.json`
+3. rc manifest: `artifacts/session/20260302T041321Z/rc/manifest.json`
+4. rc readiness: `artifacts/session/20260302T041321Z/rc/readiness_report.json` (`pass=true`)
 
 Adversarial must-fail suite (required for truth-lock confidence):
 
 1. `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_adversarial.ps1 -RuntimeTarget robot_fidelity_orin`
 2. Latest summary:
-   - `artifacts/session/20260301T161035Z/adversarial_headless_summary.json`
+   - `artifacts/session/20260302T051526Z/adversarial_headless_summary.json`
 
 Pre-LLM stage order (container lane):
 

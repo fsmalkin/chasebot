@@ -92,6 +92,15 @@ Behavior:
    - fast multi-target: `ros2_config/config/multi_target_nav2_fast.yaml`
    - fidelity multi-target: `ros2_config/config/multi_target_nav2_fidelity.yaml`
    - fidelity soak multi-target: `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
+5. Latest frozen campaign + soak + smoke package:
+   - campaign summary: `artifacts/session/20260302T041321Z/campaign_run_summary.json`
+   - campaign trend: `artifacts/session/20260302T041321Z/pre_llm_campaign_trend.json`
+   - soak summary: `artifacts/session/20260302T045310Z/pre_llm_headless_summary.json`
+   - rc readiness: `artifacts/session/20260302T041321Z/rc/readiness_report.json`
+   - adversarial summary: `artifacts/session/20260302T051526Z/adversarial_headless_summary.json`
+   - brain adapter smoke: `artifacts/session/20260302T052033Z/brain_adapter_smoke_summary.json`
+   - final same-session rehearsal: `artifacts/session/20260302T052157Z/pre_llm_gui_rehearsal_summary.json`
+   - final parity: `artifacts/session/20260302T052157Z/parity_summary.json`
 
 ## Current Caution
 
