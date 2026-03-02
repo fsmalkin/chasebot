@@ -202,7 +202,18 @@ foreach ($target in $m3Targets) {
     if (-not $targetPassed) { break }
 }
 
-$allPass = (@($results | Where-Object { -not $_.pass }).Count -eq 0)
+$m2Attempts = @($results | Where-Object { $_.milestone -eq 2 })
+$m2Final = $m2Attempts | Select-Object -Last 1
+$m3FinalByTarget = @()
+foreach ($target in $m3Targets) {
+    $targetAttempts = @($results | Where-Object { $_.milestone -eq 3 -and $_.target_id -eq $target.id })
+    if ($targetAttempts.Count -gt 0) {
+        $m3FinalByTarget += ($targetAttempts | Select-Object -Last 1)
+    }
+}
+$m3AllTargetsCovered = ($m3FinalByTarget.Count -eq $m3Targets.Count)
+$m3AllPassed = ($m3AllTargetsCovered -and (@($m3FinalByTarget | Where-Object { -not $_.pass }).Count -eq 0))
+$allPass = ([bool]$m2Final.pass -and $m3AllPassed)
 $summary = [ordered]@{
     run_id = $runId
     generated_utc = (Get-Date).ToUniversalTime().ToString("o")
@@ -211,10 +222,16 @@ $summary = [ordered]@{
     world_name = $WorldName
     open_feed_viewers = [bool]$openFeedViewersResolved
     pass = $allPass
-    milestone2_pass = [bool]$m2.pass
-    milestone2_attempts = @($results | Where-Object { $_.milestone -eq 2 }).Count
+    milestone2_pass = [bool]$m2Final.pass
+    milestone2_attempts = $m2Attempts.Count
     milestone3_target_count = $m3Targets.Count
-    milestone3_pass_count = @($results | Where-Object { $_.milestone -eq 3 -and $_.pass }).Count
+    milestone3_pass_count = @($m3FinalByTarget | Where-Object { $_.pass }).Count
+    milestone3_attempts = @($results | Where-Object { $_.milestone -eq 3 }).Count
+    milestone3_all_targets_covered = $m3AllTargetsCovered
+    final_outcomes = [ordered]@{
+        milestone2 = $m2Final
+        milestone3 = $m3FinalByTarget
+    }
     results = $results
 }
 $summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8
