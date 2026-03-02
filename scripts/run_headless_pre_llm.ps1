@@ -29,6 +29,7 @@ param(
     [string]$CoreRosDistro = "kilted",
     [ValidateSet("tensorrt_int8")]
     [string]$InferenceBackend = "tensorrt_int8",
+    [string]$SessionId = "",
     [switch]$Build
 )
 
@@ -312,7 +313,15 @@ function Invoke-Lane {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$runId = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+$runId = if ([string]::IsNullOrWhiteSpace($SessionId)) {
+    (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+}
+else {
+    if ($SessionId -notmatch '^\d{8}T\d{6}Z$') {
+        throw "SessionId must match YYYYMMDDTHHMMSSZ."
+    }
+    $SessionId
+}
 $sessionDir = Join-Path $repoRoot "artifacts/session/$runId"
 New-Item -ItemType Directory -Path $sessionDir -Force | Out-Null
 $summaryPath = Join-Path $sessionDir "pre_llm_headless_summary.json"
@@ -390,6 +399,8 @@ $allFailureClassesObserved = @($failureClassCounts.Keys | Sort-Object)
 $summary = [ordered]@{
     run_id = $runId
     generated_utc = (Get-Date).ToUniversalTime().ToString("o")
+    execution_lane = "container_kilted"
+    core_ros_distro = $CoreRosDistro
     mode = $Lane
     inference_backend = $InferenceBackend
     inference_device = $InferenceDevice

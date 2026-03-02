@@ -134,6 +134,7 @@ Use this to run everything up to LLM planner wiring with conservative timeouts a
 1. `powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane dual`
 2. Campaign automation (3x dual + soak + RC package):
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1`
+   - Default campaign now includes per-run GUI rehearsal + parity comparison on the same session ID (`-IncludeGuiParity true`).
 
 `Lane` options:
 
@@ -211,15 +212,20 @@ Pre-LLM brain adapter smoke (post-campaign, pre-GUI):
 
 ## Visual UAT Sequence
 
-Run only after headless gates are green:
+Run only after headless gates are green and on the same session ID:
 
-1. `scripts/run_milestone_demo.ps1 -Milestone 1 -RuntimeTarget workstation_balanced -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $true -MaxRunSeconds 90`
-2. `scripts/run_milestone_demo.ps1 -Milestone 2 -RuntimeTarget workstation_balanced -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $true -MaxRunSeconds 120`
-3. `scripts/run_milestone_demo.ps1 -Milestone 3 -RuntimeTarget workstation_balanced -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $true -MaxRunSeconds 150`
-4. Full multi-target rehearsal wrapper:
-   - `scripts/run_pre_llm_gui_rehearsal.ps1 -RuntimeTarget workstation_balanced -OpenFeedViewers true`
-   - latest summary: `artifacts/session/20260301T155430Z/pre_llm_gui_rehearsal_summary.json`
-   - default behavior cleans stale viewer/sim processes between attempts and on exit (`-KeepWindowsOpen true` to override)
+1. `scripts/run_milestone_demo.ps1 -Milestone 2 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $false -MaxRunSeconds 120`
+2. `scripts/run_milestone_demo.ps1 -Milestone 3 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $false -MaxRunSeconds 150`
+3. Full rehearsal wrapper (same-session parity check is mandatory):
+   - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false`
+4. Operator live-view replay (only after parity is green):
+   - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true`
+
+Parity gate:
+
+1. `artifacts/session/<session_id>/parity_summary.json` must exist and `pass=true`.
+2. Required checks: lane match, core ROS match, detection pipeline alive in both, `/yolo/ball_position_3d` active in both, nav action readiness in both, motion evidence in both.
+3. `host_ros` GUI runs are debug-only and cannot promote readiness.
 
 ## Headless Milestone Path (Current Preferred)
 
@@ -301,6 +307,9 @@ Milestone 3 pass criteria include:
      - `motion.odom_end`
      - `motion.odom_displacement_m`
      - `motion.pass`
+11. GUI rehearsal + parity:
+   - `artifacts/session/<timestamp>/pre_llm_gui_rehearsal_summary.json`
+   - `artifacts/session/<timestamp>/parity_summary.json`
 
 ## Failure Triage Path
 

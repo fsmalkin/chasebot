@@ -8,6 +8,15 @@ param(
     [int]$FidelityMultiTargetGoalTimeoutSeconds = 60,
     [double]$SnapshotMinMeanAbsDiff = 1.0,
     [double]$SnapshotMinChangedPixelRatio = 0.001,
+    [object]$IncludeGuiParity = $true,
+    [ValidateSet("robot_fidelity_orin", "workstation_balanced", "workstation_max")]
+    [string]$GuiRuntimeTarget = "robot_fidelity_orin",
+    [int]$GuiMilestone2MaxRunSeconds = 120,
+    [int]$GuiMilestone3MaxRunSeconds = 150,
+    [int]$GuiMilestone2MaxAttempts = 2,
+    [int]$GuiMilestone3MaxAttemptsPerTarget = 2,
+    [object]$GuiOpenFeedViewers = $false,
+    [string]$GuiCoreRosDistro = "kilted",
     [object]$IncludeSoak = $true,
     [int]$SoakStepTimeoutSeconds = 2100,
     [int]$SoakNav2DurationSeconds = 1200,
@@ -72,13 +81,23 @@ function Parse-SummaryPath {
     return [regex]::Replace($path, '\\\\+', '\')
 }
 
+function Parse-Marker {
+    param([string[]]$Output, [string]$Prefix)
+    $line = $Output | Where-Object { $_ -like "$Prefix*" } | Select-Object -Last 1
+    if (-not $line) { return "" }
+    return ($line -replace "^$Prefix", "").Trim()
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $includeSoakResolved = Resolve-Bool -Value $IncludeSoak -ParamName "IncludeSoak"
+$includeGuiParityResolved = Resolve-Bool -Value $IncludeGuiParity -ParamName "IncludeGuiParity"
+$guiOpenFeedViewersResolved = Resolve-Bool -Value $GuiOpenFeedViewers -ParamName "GuiOpenFeedViewers"
 $campaignStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
 $campaignDir = Join-Path $repoRoot "artifacts/session/$campaignStamp"
 New-Item -ItemType Directory -Path $campaignDir -Force | Out-Null
 
 $runSummaries = @()
+$guiRunSummaries = @()
 for ($i = 1; $i -le $Runs; $i++) {
     Write-Host ("[{0}/{1}] Running dual pre-LLM cycle..." -f $i, $Runs) -ForegroundColor Cyan
     $run = Invoke-PSCapture -ScriptPath (Join-Path $repoRoot "scripts/run_headless_pre_llm.ps1") -ScriptArgs @(
@@ -100,6 +119,66 @@ for ($i = 1; $i -le $Runs; $i++) {
 
     if ($run.ExitCode -ne 0) {
         throw "Dual run $i failed (exit=$($run.ExitCode))."
+    }
+
+    if ($includeGuiParityResolved) {
+        if ([string]::IsNullOrWhiteSpace($summaryPath) -or -not (Test-Path -LiteralPath $summaryPath)) {
+            throw "Dual run $i did not produce a headless summary for GUI parity."
+        }
+
+        $headlessObj = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+        $runId = [string]$headlessObj.run_id
+        if ([string]::IsNullOrWhiteSpace($runId)) {
+            throw "Dual run $i produced headless summary without run_id."
+        }
+
+        Write-Host ("[{0}/{1}] Running GUI rehearsal + parity for session {2}..." -f $i, $Runs, $runId) -ForegroundColor Cyan
+        $gui = Invoke-PSCapture -ScriptPath (Join-Path $repoRoot "scripts/run_pre_llm_gui_rehearsal.ps1") -ScriptArgs @(
+            "-SessionId", $runId,
+            "-HeadlessSummaryPath", $summaryPath,
+            "-RuntimeTarget", $GuiRuntimeTarget,
+            "-ExecutionLane", "container_kilted",
+            "-CoreRosDistro", $GuiCoreRosDistro,
+            "-OpenFeedViewers", ($(if ($guiOpenFeedViewersResolved) { "true" } else { "false" })),
+            "-RequireParityGreenForOperatorView", "false",
+            "-Milestone2MaxRunSeconds", $GuiMilestone2MaxRunSeconds,
+            "-Milestone3MaxRunSeconds", $GuiMilestone3MaxRunSeconds,
+            "-Milestone2MaxAttempts", $GuiMilestone2MaxAttempts,
+            "-Milestone3MaxAttemptsPerTarget", $GuiMilestone3MaxAttemptsPerTarget
+        )
+
+        $guiSummaryPath = Parse-Marker -Output $gui.Output -Prefix "GUI_REHEARSAL_SUMMARY="
+        if ([string]::IsNullOrWhiteSpace($guiSummaryPath)) {
+            $guiSummaryPath = Join-Path $repoRoot "artifacts/session/$runId/pre_llm_gui_rehearsal_summary.json"
+        }
+        if (-not [System.IO.Path]::IsPathRooted($guiSummaryPath)) {
+            $guiSummaryPath = Join-Path $repoRoot $guiSummaryPath
+        }
+        $paritySummaryPath = Join-Path $repoRoot "artifacts/session/$runId/parity_summary.json"
+        $parityPass = $false
+        if (Test-Path -LiteralPath $paritySummaryPath) {
+            try {
+                $parityObj = Get-Content -LiteralPath $paritySummaryPath -Raw | ConvertFrom-Json
+                $parityPass = [bool]$parityObj.pass
+            }
+            catch {
+                $parityPass = $false
+            }
+        }
+
+        $guiStatus = if ($gui.ExitCode -eq 0 -and $parityPass) { "pass" } else { "fail" }
+        $guiRunSummaries += [ordered]@{
+            run_index = $i
+            run_id = $runId
+            status = $guiStatus
+            headless_summary = $summaryPath
+            gui_summary = $guiSummaryPath
+            parity_summary = $paritySummaryPath
+        }
+
+        if ($gui.ExitCode -ne 0 -or -not $parityPass) {
+            throw "GUI parity rehearsal failed for dual run $i (session $runId)."
+        }
     }
 }
 
@@ -156,7 +235,10 @@ if (-not [string]::IsNullOrWhiteSpace($soakSummary)) {
 $summary = [ordered]@{
     generated_utc = (Get-Date).ToUniversalTime().ToString("o")
     campaign_dir = $campaignDir
+    include_gui_parity = $includeGuiParityResolved
     dual_runs = $runSummaries
+    gui_runs = $guiRunSummaries
+    gui_parity_all_green = if ($includeGuiParityResolved) { (@($guiRunSummaries | Where-Object { $_.status -ne "pass" }).Count -eq 0) } else { $null }
     campaign_report = $campaignReport
     soak_summary = $soakSummary
     rc_manifest = if ($includeSoakResolved) { Join-Path $campaignDir "rc/manifest.json" } else { "" }

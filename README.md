@@ -110,6 +110,12 @@ Authoritative campaign command (3x dual + optional soak + RC package):
 powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1
 ```
 
+Campaign defaults:
+
+1. Runs headless dual lanes (`fast` + `fidelity`).
+2. Runs same-session GUI rehearsal (`M2` then `M3`) in `container_kilted`.
+3. Requires `parity_summary.json pass=true` for each cycle.
+
 Campaign outputs:
 
 1. `artifacts/session/<timestamp>/pre_llm_campaign_trend.json`
@@ -178,10 +184,23 @@ Milestone 3 now enforces measurable motion:
 Full GUI rehearsal wrapper (assistant-side pre-handoff):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -RuntimeTarget workstation_balanced -OpenFeedViewers true
+powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 `
+  -ExecutionLane container_kilted `
+  -CoreRosDistro kilted `
+  -RuntimeTarget robot_fidelity_orin `
+  -SessionId <session_id> `
+  -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json `
+  -OpenFeedViewers false
 ```
 
-Default behavior cleans stale viewer/sim processes between attempts and at exit. Use `-KeepWindowsOpen true` only for live operator observation.
+Default behavior cleans stale viewer/sim processes between attempts and at exit.
+
+Parity-first rule:
+
+1. GUI rehearsal always runs on `container_kilted`.
+2. `host_ros` is debug-only and non-authoritative.
+3. Operator live-view mode (`-OpenFeedViewers true`) is blocked unless latest parity report is green.
+4. Required parity artifact: `artifacts/session/<session_id>/parity_summary.json` with `pass=true`.
 
 Latest GUI rehearsal summary:
 
@@ -197,6 +216,7 @@ Latest GUI rehearsal summary:
 6. Multi-target Nav2: `artifacts/nav2_multi/<timestamp>/{multi_target_samples.csv,multi_target_summary.json}`
 7. Session: `artifacts/session/<timestamp>/{manifest.json,readiness_report.json,pre_llm_headless_summary.json}`
 8. Milestone 1 evidence: `artifacts/demos/milestone_1_<timestamp>/{operator_checklist.json,demo_summary.json,screenshots/*.png}`
+9. GUI parity evidence: `artifacts/session/<timestamp>/{pre_llm_gui_rehearsal_summary.json,parity_summary.json}`
 
 ## Reference Docs
 

@@ -69,12 +69,15 @@ Behavior:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane dual`
 2. Full campaign command (3 dual runs + soak + RC package):
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1`
+   - Default now includes same-session GUI rehearsal + parity checks for each dual run (`-IncludeGuiParity true`).
 3. Brain adapter smoke (post-campaign, pre-GUI):
    - `powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin`
 4. Adversarial must-fail suite:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_adversarial.ps1 -RuntimeTarget robot_fidelity_orin`
 5. Final GUI rehearsal wrapper:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -RuntimeTarget workstation_balanced -OpenFeedViewers true`
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -OpenFeedViewers false`
+6. Visual/headless parity comparator:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_visual_parity_check.ps1 -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -GuiSummaryPath artifacts/session/<session_id>/pre_llm_gui_rehearsal_summary.json`
 2. Lane behavior:
    - `fast`: shorter timeouts + fast-forward world (`yolo_test_world_v6_clean_uat_fast.world`)
    - `fidelity`: authoritative `robot_fidelity_orin` replay on canonical world
@@ -98,11 +101,13 @@ Behavior:
 4. `ros2 action list` includes clients and may show `/navigate_to_pose` even when no server is active. Use `ros2 action info /navigate_to_pose` and confirm `Action servers: 1` for readiness.
 5. `scripts/run_compose_profile.ps1` now auto-resolves Docker Desktop CLI path (`C:\Program Files\Docker\Docker\resources\bin\docker.exe`) when `docker` is not on PATH.
 6. For full replay, keep launch bridge disabled (`-IncludeBridge $false`) and rely on orchestrator-managed bridge startup during nav2 stage.
-7. For GUI milestones, keep `-OpenFeedViewers $true` unless intentionally running screenshot-only mode; inspect `demo_summary.json -> viewers.feed_viewer_status` when feeds are not visible.
+7. For GUI milestones in parity campaigns, keep `-OpenFeedViewers $false` and use screenshot evidence; enable live viewers only for operator demo after parity is green.
 8. For headless milestone promotion, run M2 then M3 with `robot_fidelity_orin`; M3 pass requires motion evidence (`nav2.action_server_ready`, `motion.odom_displacement_m`, `motion.target_progress_ok`, `motion.pass`).
 9. `run_compose_gate.ps1` supports `-WorldFile`, `-GatePerfProfile`, and `-InferenceDevice`; use these for fast-lane acceleration while keeping fidelity lanes on canonical defaults.
 10. `run_milestone_demo.ps1` and `run_pre_llm_gui_rehearsal.ps1` now sweep stale viewer/sim/nav processes before each run attempt.
 11. `run_pre_llm_gui_rehearsal.ps1` defaults to cleanup-on-exit; set `-KeepWindowsOpen true` only when an operator is actively watching.
+12. GUI parity truth is authoritative only on `container_kilted`; `host_ros` is debug-only and non-authoritative.
+13. Operator-facing GUI (`-OpenFeedViewers true`) is blocked by default unless the latest `parity_summary.json` is green.
 
 ## Artifact Contracts
 
@@ -141,3 +146,6 @@ Behavior:
    - `artifacts/demos/milestone_1_<timestamp>/demo_summary.json`
 10. Brain adapter smoke:
    - `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
+11. GUI rehearsal + parity:
+   - `artifacts/session/<timestamp>/pre_llm_gui_rehearsal_summary.json`
+   - `artifacts/session/<timestamp>/parity_summary.json`

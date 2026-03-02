@@ -3,10 +3,17 @@ param(
     [string]$RuntimeTarget = "workstation_balanced",
     [string]$Distro = "Ubuntu-24.04",
     [string]$RosDistro = "auto",
+    [ValidateSet("container_kilted", "host_ros")]
+    [string]$ExecutionLane = "container_kilted",
+    [string]$CoreRosDistro = "kilted",
     [string]$WorldFile = "yolo_test_world_v6_clean_uat.world",
     [string]$WorldName = "yolo_test_world",
-    [object]$OpenFeedViewers = $true,
+    [object]$OpenFeedViewers = $false,
     [object]$KeepWindowsOpen = $false,
+    [string]$SessionId = "",
+    [string]$HeadlessSummaryPath = "",
+    [object]$RequireParityGreenForOperatorView = $true,
+    [switch]$BypassParityGuard,
     [int]$Milestone2MaxRunSeconds = 120,
     [int]$Milestone3MaxRunSeconds = 150,
     [int]$Milestone2MaxAttempts = 3,
@@ -46,9 +53,18 @@ if ($runtimeAliases.ContainsKey($RuntimeTarget)) {
 }
 $openFeedViewersResolved = Resolve-Bool -Value $OpenFeedViewers -ParamName "OpenFeedViewers"
 $keepWindowsOpenResolved = Resolve-Bool -Value $KeepWindowsOpen -ParamName "KeepWindowsOpen"
+$requireParityForViewResolved = Resolve-Bool -Value $RequireParityGreenForOperatorView -ParamName "RequireParityGreenForOperatorView"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$runId = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+$runId = if ([string]::IsNullOrWhiteSpace($SessionId)) {
+    (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+}
+else {
+    if ($SessionId -notmatch '^\d{8}T\d{6}Z$') {
+        throw "SessionId must match YYYYMMDDTHHMMSSZ."
+    }
+    $SessionId
+}
 $sessionDir = Join-Path $repoRoot "artifacts/session/$runId"
 $guiDir = Join-Path $sessionDir "gui_rehearsal"
 $summaryPath = Join-Path $sessionDir "pre_llm_gui_rehearsal_summary.json"
@@ -69,6 +85,64 @@ pkill -9 -f "[c]md_vel_relay.py" 2>/dev/null || true
     wsl -d $Distro -u root -- bash -lc $cleanup | Out-Null
 }
 
+function Resolve-RepoPath {
+    param([string]$PathValue, [string]$RepoRoot)
+    if ([string]::IsNullOrWhiteSpace($PathValue)) { return "" }
+    if ([System.IO.Path]::IsPathRooted($PathValue)) { return (Resolve-Path -LiteralPath $PathValue).Path }
+    $candidate = Join-Path $RepoRoot $PathValue
+    if (Test-Path -LiteralPath $candidate) { return (Resolve-Path -LiteralPath $candidate).Path }
+    return $candidate
+}
+
+function Get-LatestParitySummary {
+    param([string]$RepoRoot)
+    $root = Join-Path $RepoRoot "artifacts/session"
+    if (-not (Test-Path -LiteralPath $root)) { return $null }
+    $candidates = Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+    foreach ($dir in $candidates) {
+        $path = Join-Path $dir.FullName "parity_summary.json"
+        if (Test-Path -LiteralPath $path) {
+            try {
+                $obj = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+                return [pscustomobject]@{
+                    path = $path
+                    summary = $obj
+                }
+            }
+            catch {
+                continue
+            }
+        }
+    }
+    return $null
+}
+
+function Get-LatestHeadlessSummary {
+    param([string]$RepoRoot)
+    $root = Join-Path $RepoRoot "artifacts/session"
+    if (-not (Test-Path -LiteralPath $root)) { return "" }
+    $candidates = Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+    foreach ($dir in $candidates) {
+        $path = Join-Path $dir.FullName "pre_llm_headless_summary.json"
+        if (Test-Path -LiteralPath $path) {
+            return $path
+        }
+    }
+    return ""
+}
+
+function Parse-Marker {
+    param(
+        [string[]]$Output,
+        [string]$Prefix
+    )
+    $line = $Output | Where-Object { $_ -like "$Prefix*" } | Select-Object -Last 1
+    if (-not $line) { return "" }
+    return ($line -replace "^$Prefix", "").Trim()
+}
+
 function Invoke-MilestoneDemo {
     param(
         [int]$Milestone,
@@ -85,15 +159,22 @@ function Invoke-MilestoneDemo {
         "-File", $scriptPath,
         "-Milestone", $Milestone,
         "-RuntimeTarget", $RuntimeTarget,
+        "-ExecutionLane", $ExecutionLane,
+        "-CoreRosDistro", $CoreRosDistro,
         "-Distro", $Distro,
         "-RosDistro", $RosDistro,
+        "-SessionId", $runId,
         "-WorldFile", $WorldFile,
         "-WorldName", $WorldName,
         "-EnsureDemoTarget",
         "-OpenFeedViewers", ([string][bool]$openFeedViewersResolved),
+        "-RequireParityGreenForOperatorView", ([string][bool]$requireParityForViewResolved),
         "-EvidenceDir", $EvidenceDir,
         "-MaxRunSeconds", $MaxRunSeconds
     )
+    if ($BypassParityGuard.IsPresent) {
+        $args += "-BypassParityGuard"
+    }
     if ($Milestone -ge 3) {
         $args += @(
             "-DemoTargetRelative", "false",
@@ -141,6 +222,41 @@ function Invoke-MilestoneDemo {
 
 $results = @()
 
+if ($openFeedViewersResolved -and $requireParityForViewResolved -and -not $BypassParityGuard.IsPresent) {
+    $latestParity = Get-LatestParitySummary -RepoRoot $repoRoot
+    $parityPass = $false
+    $parityPath = ""
+    if ($latestParity) {
+        $parityPath = $latestParity.path
+        $parityPass = [bool]$latestParity.summary.pass
+    }
+    if (-not $parityPass) {
+        $summary = [ordered]@{
+            run_id = $runId
+            generated_utc = (Get-Date).ToUniversalTime().ToString("o")
+            runtime_target = $RuntimeTarget
+            execution_lane = $ExecutionLane
+            core_ros_distro = $CoreRosDistro
+            world_file = $WorldFile
+            world_name = $WorldName
+            open_feed_viewers = [bool]$openFeedViewersResolved
+            pass = $false
+            blocked_reason = "parity_guard_blocked"
+            parity_guard = [ordered]@{
+                required = $true
+                bypassed = $false
+                latest_parity_path = $parityPath
+                latest_parity_pass = $parityPass
+            }
+            results = @()
+        }
+        $summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8
+        Write-Host "GUI_REHEARSAL_SUMMARY=$summaryPath"
+        Write-Host "GUI_REHEARSAL_PASS=False"
+        exit 2
+    }
+}
+
 $m2 = $null
 for ($attempt = 1; $attempt -le [Math]::Max($Milestone2MaxAttempts, 1); $attempt++) {
     $m2Evidence = Join-Path $guiDir ("milestone_2_attempt_{0}" -f $attempt)
@@ -158,6 +274,8 @@ if (-not $m2.pass) {
         run_id = $runId
         generated_utc = (Get-Date).ToUniversalTime().ToString("o")
         runtime_target = $RuntimeTarget
+        execution_lane = $ExecutionLane
+        core_ros_distro = $CoreRosDistro
         world_file = $WorldFile
         world_name = $WorldName
         open_feed_viewers = [bool]$openFeedViewersResolved
@@ -218,6 +336,8 @@ $summary = [ordered]@{
     run_id = $runId
     generated_utc = (Get-Date).ToUniversalTime().ToString("o")
     runtime_target = $RuntimeTarget
+    execution_lane = $ExecutionLane
+    core_ros_distro = $CoreRosDistro
     world_file = $WorldFile
     world_name = $WorldName
     open_feed_viewers = [bool]$openFeedViewersResolved
@@ -233,6 +353,60 @@ $summary = [ordered]@{
         milestone3 = $m3FinalByTarget
     }
     results = $results
+}
+$summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8
+
+$resolvedHeadlessSummaryPath = ""
+if (-not [string]::IsNullOrWhiteSpace($HeadlessSummaryPath)) {
+    $resolvedHeadlessSummaryPath = Resolve-RepoPath -PathValue $HeadlessSummaryPath -RepoRoot $repoRoot
+}
+if ([string]::IsNullOrWhiteSpace($resolvedHeadlessSummaryPath)) {
+    $sessionHeadless = Join-Path $sessionDir "pre_llm_headless_summary.json"
+    if (Test-Path -LiteralPath $sessionHeadless) {
+        $resolvedHeadlessSummaryPath = $sessionHeadless
+    }
+}
+if ([string]::IsNullOrWhiteSpace($resolvedHeadlessSummaryPath)) {
+    $resolvedHeadlessSummaryPath = Get-LatestHeadlessSummary -RepoRoot $repoRoot
+}
+
+$parityScript = Join-Path $PSScriptRoot "run_visual_parity_check.ps1"
+$parityOutput = & powershell.exe -ExecutionPolicy Bypass -File $parityScript `
+    -SessionId $runId `
+    -HeadlessSummaryPath $resolvedHeadlessSummaryPath `
+    -GuiSummaryPath $summaryPath 2>&1
+$parityExitCode = $LASTEXITCODE
+foreach ($line in $parityOutput) {
+    Write-Host $line
+}
+$paritySummaryPath = Parse-Marker -Output $parityOutput -Prefix "PARITY_SUMMARY="
+$parityPassMarker = Parse-Marker -Output $parityOutput -Prefix "PARITY_PASS="
+$parityPass = ($parityExitCode -eq 0 -and $parityPassMarker.ToLowerInvariant() -eq "true")
+$parityFailureClass = ""
+if (-not [string]::IsNullOrWhiteSpace($paritySummaryPath) -and (Test-Path -LiteralPath $paritySummaryPath)) {
+    try {
+        $parityObj = Get-Content -LiteralPath $paritySummaryPath -Raw | ConvertFrom-Json
+        $parityPass = [bool]$parityObj.pass
+        $parityFailureClass = [string]$parityObj.failure_class
+    }
+    catch {
+        if (-not $parityPass) {
+            $parityFailureClass = "parity_summary_unreadable"
+        }
+    }
+}
+elseif (-not $parityPass) {
+    $parityFailureClass = "missing_parity_summary"
+}
+
+$allPass = ($allPass -and $parityPass)
+$summary.pass = $allPass
+$summary.parity = [ordered]@{
+    required = $true
+    pass = $parityPass
+    summary_path = $paritySummaryPath
+    headless_summary_path = $resolvedHeadlessSummaryPath
+    failure_class = if ($parityPass) { "" } else { $parityFailureClass }
 }
 $summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8
 

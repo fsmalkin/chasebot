@@ -570,7 +570,7 @@ try {
         $rosForVisual = if ($ExecutionLane -eq "host_ros") { $resolvedHostRos } else { "auto" }
         $m1 = Invoke-PSFile `
             -ScriptPath (Join-Path $repoRoot "scripts/run_milestone_demo.ps1") `
-            -ScriptArgs @("-Milestone", "1", "-RuntimeTarget", $RuntimeTarget, "-InferenceBackend", $InferenceBackend, "-Distro", $Distro, "-WorkspacePath", $WorkspacePath, "-RosDistro", $rosForVisual, "-EvidenceDir", $visualArtifactDir, "-MaxRunSeconds", $VisualMaxRunSeconds.ToString()) `
+            -ScriptArgs @("-Milestone", "1", "-RuntimeTarget", $RuntimeTarget, "-InferenceBackend", $InferenceBackend, "-ExecutionLane", $ExecutionLane, "-CoreRosDistro", $CoreRosDistro, "-Distro", $Distro, "-WorkspacePath", $WorkspacePath, "-RosDistro", $rosForVisual, "-SessionId", $timestamp, "-EvidenceDir", $visualArtifactDir, "-MaxRunSeconds", $VisualMaxRunSeconds.ToString()) `
             -LogPath $sessionLog `
             -TimeoutSeconds $stepTimeoutS `
             -HeartbeatSeconds $heartbeat `

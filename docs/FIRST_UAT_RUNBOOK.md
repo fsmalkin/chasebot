@@ -131,6 +131,7 @@ Use `artifacts/demos/milestone_3_<timestamp>/demo_summary.json`:
 Run this only after first-UAT promotion is already green:
 
 1. `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1`
+   - Default includes same-session GUI rehearsal + parity checks (`-IncludeGuiParity true`).
 2. `powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin`
 
 Required handoff artifacts:
@@ -151,6 +152,17 @@ Current frozen baseline package:
 5. `artifacts/session/20260301T163154Z/pre_llm_headless_summary.json` (soak)
 6. `artifacts/session/20260301T161540Z/brain_adapter_smoke_summary.json` (adapter smoke)
 
+Parity-first GUI readiness (required before operator live view):
+
+1. Run headless session:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane fidelity`
+2. Rehearse GUI on the same session:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false`
+3. Verify parity:
+   - `artifacts/session/<session_id>/parity_summary.json` with `pass=true`
+4. Only then run operator view:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true`
+
 Required pass criteria:
 
 1. Campaign report `campaign.all_green=true` for the 3 dual runs.
@@ -165,3 +177,12 @@ Known limitations before full LLM wiring:
 1. High-level behavior planning is not implemented in this phase.
 2. GUI milestone replay is still required before final operator handoff.
 3. Isaac lane remains parity-only and does not replace Jetty gate authority.
+
+Visual parity triage failure classes:
+
+1. `rgb_stream_timeout`
+2. `debug_stream_timeout`
+3. `odom_timeout`
+4. `nav2_action_unavailable`
+5. `target_distance_not_improving`
+6. `lane_mismatch`

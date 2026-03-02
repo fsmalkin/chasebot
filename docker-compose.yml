@@ -41,7 +41,7 @@ services:
       - ./:/workspaces/chasecar:rw
       - chasecar_ws:/root/ros2_ws
     working_dir: /workspaces/chasecar
-    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/sim_gate.launch.py world:=${CHASECAR_WORLD_FILE:-yolo_test_world_v6_clean_uat.world} headless:=true perf_profile:=${GATE_PERF_PROFILE:-compat} inference_device:=${GATE_INFERENCE_DEVICE:-cuda:0}"]
+    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/sim_gate.launch.py world:=${CHASECAR_WORLD_FILE:-yolo_test_world_v6_clean_uat.world} headless:=${GATE_HEADLESS:-true} perf_profile:=${GATE_PERF_PROFILE:-compat} inference_device:=${GATE_INFERENCE_DEVICE:-cuda:0}"]
 
   gate-stack:
     build:

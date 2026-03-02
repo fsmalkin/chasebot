@@ -11,6 +11,7 @@ param(
     [string]$GatePerfProfile = "compat",
     [ValidateSet("auto", "cuda:0", "cpu")]
     [string]$InferenceDevice = "cuda:0",
+    [object]$Headless = $null,
     [string]$WorldFile = "",
     [object]$IncludeNav2Bringup = $null,
     [object]$IncludeBridge = $null,
@@ -49,9 +50,16 @@ $originalBridge = $null
 $originalRelay = $null
 $originalPerfProfile = $env:GATE_PERF_PROFILE
 $originalInferenceDevice = $env:GATE_INFERENCE_DEVICE
+$originalHeadless = $env:GATE_HEADLESS
 $originalWorldFile = $env:WORLD_FILE
 $env:GATE_PERF_PROFILE = $GatePerfProfile
 $env:GATE_INFERENCE_DEVICE = $InferenceDevice
+if ($PSBoundParameters.ContainsKey("Headless")) {
+    $resolved = Resolve-NullableBool -Value $Headless -ParamName "Headless"
+    if ($null -ne $resolved) {
+        $env:GATE_HEADLESS = ($(if ($resolved) { "true" } else { "false" }))
+    }
+}
 if (-not [string]::IsNullOrWhiteSpace($WorldFile)) {
     $env:WORLD_FILE = $WorldFile
 }
@@ -96,6 +104,14 @@ finally {
     }
     else {
         $env:GATE_INFERENCE_DEVICE = $originalInferenceDevice
+    }
+    if ($PSBoundParameters.ContainsKey("Headless")) {
+        if ($null -eq $originalHeadless) {
+            Remove-Item Env:\GATE_HEADLESS -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GATE_HEADLESS = $originalHeadless
+        }
     }
     if (-not [string]::IsNullOrWhiteSpace($WorldFile)) {
         if ($null -eq $originalWorldFile) {

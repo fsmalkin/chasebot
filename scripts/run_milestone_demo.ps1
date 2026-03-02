@@ -64,6 +64,10 @@ param(
 
     [int]$WorldReadyTimeoutSeconds = 45,
 
+    [int]$StreamReadyTimeoutSeconds = 35,
+
+    [int]$StreamReadyMinFrames = 1,
+
     [object]$RequireMotion = $null,
 
     [double]$MotionMinDistanceMeters = 0.40,
@@ -78,11 +82,170 @@ param(
 
     [string]$CmdVelTopicSecondary = "/cmd_vel",
 
-    [string]$OdomTopic = "/odom"
+    [string]$OdomTopic = "/odom",
+
+    [ValidateSet("container_kilted", "host_ros")]
+    [string]$ExecutionLane = "container_kilted",
+
+    [string]$CoreRosDistro = "kilted",
+
+    [string]$SessionId = "",
+
+    [string]$ProjectName = "",
+
+    [int]$StepTimeoutSeconds = 900,
+
+    [object]$RequireParityGreenForOperatorView = $true,
+
+    [switch]$BypassParityGuard
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+function Resolve-StrictBool {
+    param(
+        [object]$Value,
+        [bool]$Default
+    )
+    if ($null -eq $Value) { return $Default }
+    if ($Value -is [bool]) { return [bool]$Value }
+    if ($Value -is [int] -or $Value -is [long]) {
+        return ([int]$Value -ne 0)
+    }
+    $text = $Value.ToString().Trim().ToLowerInvariant()
+    switch ($text) {
+        "true" { return $true }
+        "false" { return $false }
+        "1" { return $true }
+        "0" { return $false }
+        "yes" { return $true }
+        "no" { return $false }
+        default { return $Default }
+    }
+}
+
+function Get-LatestParityGate {
+    param([string]$RepoRoot)
+    $root = Join-Path $RepoRoot "artifacts/session"
+    if (-not (Test-Path -LiteralPath $root)) { return $null }
+    $dirs = Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+    foreach ($dir in $dirs) {
+        $path = Join-Path $dir.FullName "parity_summary.json"
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        try {
+            $obj = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+            return [pscustomobject]@{
+                path = $path
+                pass = [bool]$obj.pass
+            }
+        }
+        catch {
+            continue
+        }
+    }
+    return $null
+}
+
+if ($ExecutionLane -eq "container_kilted") {
+    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+    $openFeedRequested = Resolve-StrictBool -Value $OpenFeedViewers -Default $false
+    $requireParityGate = Resolve-StrictBool -Value $RequireParityGreenForOperatorView -Default $true
+    if ($openFeedRequested -and $requireParityGate -and -not $BypassParityGuard.IsPresent) {
+        $latestParity = Get-LatestParityGate -RepoRoot $repoRoot
+        if (-not $latestParity -or -not $latestParity.pass) {
+            $latestPath = if ($latestParity) { $latestParity.path } else { "" }
+            Write-Error "Blocked operator GUI run: latest parity gate is not green. parity_summary=$latestPath"
+            exit 2
+        }
+    }
+
+    $containerScript = Join-Path $PSScriptRoot "run_milestone_demo_container.ps1"
+    $argList = @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $containerScript,
+        "-Milestone",
+        $Milestone.ToString(),
+        "-RuntimeTarget",
+        $RuntimeTarget,
+        "-InferenceBackend",
+        $InferenceBackend,
+        "-WorldFile",
+        $WorldFile,
+        "-WorldName",
+        $WorldName,
+        "-MaxRunSeconds",
+        $MaxRunSeconds.ToString(),
+        "-DemoTargetModelSdf",
+        $DemoTargetModelSdf,
+        "-DemoTargetName",
+        $DemoTargetName,
+        "-DemoTargetX",
+        $DemoTargetX.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+        "-DemoTargetY",
+        $DemoTargetY.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+        "-DemoTargetZ",
+        $DemoTargetZ.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+        "-DemoTargetForwardM",
+        $DemoTargetForwardM.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+        "-DemoTargetLateralM",
+        $DemoTargetLateralM.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+        "-DemoTargetVerticalOffsetM",
+        $DemoTargetVerticalOffsetM.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+        "-MinDetectionConfidence",
+        $MinDetectionConfidence.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+        "-MotionMinDistanceMeters",
+        $MotionMinDistanceMeters.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+        "-MotionWindowSeconds",
+        $MotionWindowSeconds.ToString(),
+        "-MotionTargetProgressMinMeters",
+        $MotionTargetProgressMinMeters.ToString([System.Globalization.CultureInfo]::InvariantCulture),
+        "-CoreRosDistro",
+        $CoreRosDistro,
+        "-StepTimeoutSeconds",
+        $StepTimeoutSeconds.ToString()
+    )
+    if ($PSBoundParameters.ContainsKey("PerfProfile")) {
+        $argList += @("-PerfProfile", $PerfProfile)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($EvidenceDir)) {
+        $argList += @("-EvidenceDir", $EvidenceDir)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($SessionId)) {
+        $argList += @("-SessionId", $SessionId)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ProjectName)) {
+        $argList += @("-ProjectName", $ProjectName)
+    }
+    if ($PSBoundParameters.ContainsKey("InferenceDevice")) {
+        $argList += @("-InferenceDevice", $InferenceDevice)
+    }
+    if ($PSBoundParameters.ContainsKey("Headless")) {
+        $argList += @("-Headless", [string]$Headless)
+    }
+    if ($PSBoundParameters.ContainsKey("EnsureDemoTarget")) {
+        if ($EnsureDemoTarget) { $argList += "-EnsureDemoTarget" }
+    }
+    if ($PSBoundParameters.ContainsKey("DemoTargetRelative")) {
+        $argList += @("-DemoTargetRelative", [string]$DemoTargetRelative)
+    }
+    if ($PSBoundParameters.ContainsKey("OpenFeedViewers")) {
+        $argList += @("-OpenFeedViewers", [string]$OpenFeedViewers)
+    }
+    if ($PSBoundParameters.ContainsKey("RequireMotion")) {
+        $argList += @("-RequireMotion", [string]$RequireMotion)
+    }
+    if ($PSBoundParameters.ContainsKey("RequireNav2ActionServer")) {
+        $argList += @("-RequireNav2ActionServer", [string]$RequireNav2ActionServer)
+    }
+
+    & powershell.exe @argList
+    exit $LASTEXITCODE
+}
 
 function Resolve-NullableBool {
     param(
@@ -287,6 +450,8 @@ MIN_DETECTION_CONFIDENCE="__MIN_DETECTION_CONFIDENCE__"
 OPEN_FEED_VIEWERS="__OPEN_FEED_VIEWERS__"
 VIEWER_START_DELAY_S="__VIEWER_START_DELAY_S__"
 WORLD_READY_TIMEOUT_S="__WORLD_READY_TIMEOUT_S__"
+STREAM_READY_TIMEOUT_S="__STREAM_READY_TIMEOUT_S__"
+STREAM_READY_MIN_FRAMES="__STREAM_READY_MIN_FRAMES__"
 REQUIRE_MOTION="__REQUIRE_MOTION__"
 MOTION_MIN_DISTANCE_M="__MOTION_MIN_DISTANCE_M__"
 MOTION_WINDOW_S="__MOTION_WINDOW_S__"
@@ -321,6 +486,9 @@ source /opt/ros/$ROS_DISTRO/setup.bash
 cd "$WORKSPACE"
 if [ -f "install/setup.bash" ]; then
   source install/setup.bash
+fi
+if [ -z "${RMW_IMPLEMENTATION:-}" ] || [ "${RMW_IMPLEMENTATION}" = "rmw_fastrtps_cpp" ]; then
+  export FASTDDS_BUILTIN_TRANSPORTS=UDPv4
 fi
 
 if [ "$HEADLESS" = "false" ] && [ -n "$DISPLAY_ENV" ]; then
@@ -398,6 +566,49 @@ wait_for_world_services() {
     sleep 2
   done
   echo "world_service_timeout"
+  return 1
+}
+
+wait_for_ros_topic_once() {
+  local topic="$1"
+  local timeout_s="$2"
+  local deadline=$(( $(date +%s) + timeout_s ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    local sample
+    sample=$(timeout -k 2s 4s ros2 topic echo "$topic" --once 2>/dev/null || true)
+    if [ -n "$sample" ]; then
+      return 0
+    fi
+    echo "[heartbeat] waiting_for_topic_message $topic"
+    sleep 1
+  done
+  return 1
+}
+
+wait_for_image_topic() {
+  local topic="$1"
+  local timeout_s="$2"
+  local label="$3"
+  local probe_path="/tmp/chasecar_stream_probe_${RANDOM}.png"
+  local deadline=$(( $(date +%s) + timeout_s ))
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    local probe_raw
+    probe_raw=$(timeout -k 2s 8s python3 "$PACKAGE_PATH/scripts/capture_topic_image.py" \
+      --topic "$topic" \
+      --output "$probe_path" \
+      --timeout-s 2.0 \
+      --placeholder-label "$label" \
+      --qos-profile "$CAPTURE_QOS_PROFILE" \
+      --min-frames "$STREAM_READY_MIN_FRAMES" \
+      --use-sim-time 2>/dev/null || true)
+    if echo "$probe_raw" | grep -q "CAPTURED=true"; then
+      rm -f "$probe_path" 2>/dev/null || true
+      return 0
+    fi
+    echo "[heartbeat] waiting_for_image_topic $topic"
+    sleep 1
+  done
+  rm -f "$probe_path" 2>/dev/null || true
   return 1
 }
 
@@ -573,30 +784,13 @@ FEED_VIEWERS_RUNNING=true
 FEED_RAW_VIEWER_PID=""
 FEED_DEBUG_VIEWER_PID=""
 FEED_VIEWER_STATUS="skipped"
-if [ "$HEADLESS" = "false" ] && [ "$OPEN_FEED_VIEWERS" = "true" ]; then
-  FEED_VIEWERS_REQUIRED=true
-  if ! ros2 pkg executables rqt_image_view 2>/dev/null | grep -q "rqt_image_view"; then
-    FEED_VIEWERS_RUNNING=false
-    FEED_VIEWER_STATUS="rqt_image_view_missing"
-  else
-    VIEWER_RGB_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; ros2 run rqt_image_view rqt_image_view /d415/color/image_raw"
-    VIEWER_DEBUG_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; ros2 run rqt_image_view rqt_image_view /yolo/debug_image"
-    FEED_RAW_VIEWER_PID=$(start_bg "viewer_rgb" "$VIEWER_RGB_CMD")
-    FEED_DEBUG_VIEWER_PID=$(start_bg "viewer_debug" "$VIEWER_DEBUG_CMD")
-    sleep "$VIEWER_START_DELAY_S"
-    if [ -n "$FEED_RAW_VIEWER_PID" ] && ! kill -0 "$FEED_RAW_VIEWER_PID" 2>/dev/null; then
-      FEED_VIEWERS_RUNNING=false
-    fi
-    if [ -n "$FEED_DEBUG_VIEWER_PID" ] && ! kill -0 "$FEED_DEBUG_VIEWER_PID" 2>/dev/null; then
-      FEED_VIEWERS_RUNNING=false
-    fi
-    if [ "$FEED_VIEWERS_RUNNING" = "true" ]; then
-      FEED_VIEWER_STATUS="running"
-    else
-      FEED_VIEWER_STATUS="viewer_process_exit"
-    fi
-  fi
+STREAM_READY=true
+STREAM_READY_STATUS="not_checked"
+STREAM_ODOM_REQUIRED=false
+if [ "$INCLUDE_BRIDGE" = "true" ] || [ "$DEMO_TARGET_RELATIVE" = "true" ]; then
+  STREAM_ODOM_REQUIRED=true
 fi
+BRIDGE_LAUNCH_BLOCKED_REASON="none"
 
 TARGET_SPAWN_OK=true
 TARGET_SPAWN_STATUS="skipped"
@@ -623,11 +817,78 @@ if [ "$INCLUDE_EXTRACTOR" = "true" ]; then
   EXTRACTOR_PID=$(start_bg "extractor" "$EXTRACTOR_CMD")
 fi
 
+if [ "$WORLD_READY" = "true" ]; then
+  STREAM_READY=true
+  STREAM_READY_STATUS="ok"
+  if ! wait_for_ros_topic_once "/clock" "$STREAM_READY_TIMEOUT_S"; then
+    STREAM_READY=false
+    STREAM_READY_STATUS="clock_timeout"
+  fi
+  if [ "$STREAM_READY" = "true" ] && ! wait_for_image_topic "/d415/color/image_raw" "$STREAM_READY_TIMEOUT_S" "rgb_stream_probe"; then
+    STREAM_READY=false
+    STREAM_READY_STATUS="rgb_stream_timeout"
+  fi
+  if [ "$STREAM_READY" = "true" ] && [ "$INCLUDE_EXTRACTOR" = "true" ] && ! wait_for_image_topic "/yolo/debug_image" "$STREAM_READY_TIMEOUT_S" "debug_stream_probe"; then
+    STREAM_READY=false
+    STREAM_READY_STATUS="debug_stream_timeout"
+  fi
+  if [ "$STREAM_READY" = "true" ] && [ "$STREAM_ODOM_REQUIRED" = "true" ]; then
+    if ! wait_for_ros_topic_once "$ODOM_TOPIC" "$STREAM_READY_TIMEOUT_S"; then
+      ODOM_FALLBACK_FOUND=false
+      for odom_fallback in "/model/jetbot/odometry" "/jetbot_base_controller/odom" "/odom"; do
+        if [ "$odom_fallback" = "$ODOM_TOPIC" ]; then
+          continue
+        fi
+        if wait_for_ros_topic_once "$odom_fallback" 6; then
+          ODOM_TOPIC="$odom_fallback"
+          ODOM_FALLBACK_FOUND=true
+          break
+        fi
+      done
+      if [ "$ODOM_FALLBACK_FOUND" != "true" ]; then
+        STREAM_READY=false
+        STREAM_READY_STATUS="odom_timeout"
+      fi
+    fi
+  fi
+else
+  STREAM_READY=false
+  STREAM_READY_STATUS="blocked_world_not_ready"
+fi
+
+if [ "$HEADLESS" = "false" ] && [ "$OPEN_FEED_VIEWERS" = "true" ]; then
+  FEED_VIEWERS_REQUIRED=true
+  if [ "$STREAM_READY" != "true" ]; then
+    FEED_VIEWERS_RUNNING=false
+    FEED_VIEWER_STATUS="blocked_stream_not_ready"
+  elif ! ros2 pkg executables rqt_image_view 2>/dev/null | grep -q "rqt_image_view"; then
+    FEED_VIEWERS_RUNNING=false
+    FEED_VIEWER_STATUS="rqt_image_view_missing"
+  else
+    VIEWER_RGB_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; ros2 run rqt_image_view rqt_image_view /d415/color/image_raw"
+    VIEWER_DEBUG_CMD="source /opt/ros/$ROS_DISTRO/setup.bash; cd $WORKSPACE; if [ -f install/setup.bash ]; then source install/setup.bash; fi; ros2 run rqt_image_view rqt_image_view /yolo/debug_image"
+    FEED_RAW_VIEWER_PID=$(start_bg "viewer_rgb" "$VIEWER_RGB_CMD")
+    FEED_DEBUG_VIEWER_PID=$(start_bg "viewer_debug" "$VIEWER_DEBUG_CMD")
+    sleep "$VIEWER_START_DELAY_S"
+    if [ -n "$FEED_RAW_VIEWER_PID" ] && ! kill -0 "$FEED_RAW_VIEWER_PID" 2>/dev/null; then
+      FEED_VIEWERS_RUNNING=false
+    fi
+    if [ -n "$FEED_DEBUG_VIEWER_PID" ] && ! kill -0 "$FEED_DEBUG_VIEWER_PID" 2>/dev/null; then
+      FEED_VIEWERS_RUNNING=false
+    fi
+    if [ "$FEED_VIEWERS_RUNNING" = "true" ]; then
+      FEED_VIEWER_STATUS="running"
+    else
+      FEED_VIEWER_STATUS="viewer_process_exit"
+    fi
+  fi
+fi
+
 BRIDGE_PID=""
 NAV2_PID=""
 RELAY_PID=""
 MOTION_PROBE_PID=""
-if [ "$INCLUDE_BRIDGE" = "true" ]; then
+if [ "$INCLUDE_BRIDGE" = "true" ] && [ "$STREAM_READY" = "true" ]; then
   BRIDGE_MAX_GOAL_COUNT=0
   if [ "$REQUIRE_MOTION" = "true" ]; then
     BRIDGE_MAX_GOAL_COUNT=1
@@ -651,6 +912,8 @@ if [ "$INCLUDE_BRIDGE" = "true" ]; then
     nohup bash -lc "$MOTION_PROBE_CMD" >"$ARTIFACT_DIR/logs/motion_probe.log" 2>&1 &
     MOTION_PROBE_PID=$!
   fi
+elif [ "$INCLUDE_BRIDGE" = "true" ]; then
+  BRIDGE_LAUNCH_BLOCKED_REASON="stream_not_ready"
 fi
 
 CAPTURE_DELAY_S=4
@@ -984,6 +1247,7 @@ NAV2_ACTION_CHECK_PASS=true
 MOTION_CHECK_PASS=true
 if [ "$MILESTONE" = "1" ]; then
   if [ "$WORLD_READY" = true ] \
+    && [ "$STREAM_READY" = true ] \
     && [ "$SIM_RUNNING" = true ] \
     && [ "$DETECTOR_RUNNING" = true ] \
     && [ "$DEBUG_CAPTURED" = true ] \
@@ -999,6 +1263,7 @@ elif [ "$MILESTONE" = "2" ]; then
   EXTRACTOR_CHECK_PASS=$EXTRACTOR_RUNNING
   BALL_POSITION_3D_CHECK_PASS=$BALL_POSITION_3D_SEEN
   if [ "$WORLD_READY" = true ] \
+    && [ "$STREAM_READY" = true ] \
     && [ "$SIM_RUNNING" = true ] \
     && [ "$DETECTOR_RUNNING" = true ] \
     && [ "$EXTRACTOR_RUNNING" = true ] \
@@ -1028,6 +1293,7 @@ else
   NAV2_ACTION_CHECK_PASS=$NAV2_ACTION_SERVER_READY
   MOTION_CHECK_PASS=$MOTION_PASS
   if [ "$WORLD_READY" = true ] \
+    && [ "$STREAM_READY" = true ] \
     && [ "$SIM_RUNNING" = true ] \
     && [ "$DETECTOR_RUNNING" = true ] \
     && [ "$EXTRACTOR_RUNNING" = true ] \
@@ -1063,6 +1329,11 @@ cat >"$ARTIFACT_DIR/operator_checklist.json" <<JSON
       "id": "world_ready",
       "description": "World service became available",
       "pass": $WORLD_READY
+    },
+    {
+      "id": "stream_ready",
+      "description": "Required camera/clock/odom streams became active",
+      "pass": $STREAM_READY
     },
     {
       "id": "target_spawn",
@@ -1236,6 +1507,14 @@ cat >"$ARTIFACT_DIR/demo_summary.json" <<JSON
     "world_ready_status": "$WORLD_READY_STATUS",
     "world_ready_timeout_s": $WORLD_READY_TIMEOUT_S
   },
+  "stream_readiness": {
+    "ready": $STREAM_READY,
+    "status": "$STREAM_READY_STATUS",
+    "timeout_s": $STREAM_READY_TIMEOUT_S,
+    "min_frames": $STREAM_READY_MIN_FRAMES,
+    "odom_required": $STREAM_ODOM_REQUIRED,
+    "odom_topic": "$ODOM_TOPIC"
+  },
   "viewers": {
     "open_feed_viewers_requested": $OPEN_FEED_VIEWERS,
     "feed_viewers_required": $FEED_VIEWERS_REQUIRED,
@@ -1290,6 +1569,9 @@ cat >"$ARTIFACT_DIR/demo_summary.json" <<JSON
     "cmd_vel_relay_running": $RELAY_RUNNING,
     "feed_raw_viewer_running": $FEED_RAW_VIEWER_RUNNING,
     "feed_debug_viewer_running": $FEED_DEBUG_VIEWER_RUNNING
+  },
+  "failure_context": {
+    "bridge_launch_blocked_reason": "$BRIDGE_LAUNCH_BLOCKED_REASON"
   },
   "pass": $DEMO_PASS
 }
@@ -1391,6 +1673,8 @@ $bash = $bashTemplate.
     Replace("__OPEN_FEED_VIEWERS__", $openFeedViewersStr).
     Replace("__VIEWER_START_DELAY_S__", ([Math]::Max($ViewerStartupDelaySeconds, 1)).ToString()).
     Replace("__WORLD_READY_TIMEOUT_S__", ([Math]::Max($WorldReadyTimeoutSeconds, 10)).ToString()).
+    Replace("__STREAM_READY_TIMEOUT_S__", ([Math]::Max($StreamReadyTimeoutSeconds, 10)).ToString()).
+    Replace("__STREAM_READY_MIN_FRAMES__", ([Math]::Max($StreamReadyMinFrames, 1)).ToString()).
     Replace("__REQUIRE_MOTION__", $requireMotionStr).
     Replace("__MOTION_MIN_DISTANCE_M__", $MotionMinDistanceMeters.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
     Replace("__MOTION_WINDOW_S__", ([Math]::Max($MotionWindowSeconds, 10)).ToString()).
@@ -1415,6 +1699,8 @@ Write-Host "  World name:     $WorldName"
 Write-Host "  Ensure target:  $([bool]$EnsureDemoTarget)"
 Write-Host "  Target relative: $([bool]$DemoTargetRelative) (fwd=$DemoTargetForwardM m, lat=$DemoTargetLateralM m, zoff=$DemoTargetVerticalOffsetM m)"
 Write-Host "  Open viewers:   $([bool]$OpenFeedViewers)"
+Write-Host "  Stream timeout: $([Math]::Max($StreamReadyTimeoutSeconds, 10))"
+Write-Host "  Stream frames:  $([Math]::Max($StreamReadyMinFrames, 1))"
 Write-Host "  Require motion: $([bool]$RequireMotion)"
 Write-Host "  Motion min (m): $MotionMinDistanceMeters"
 Write-Host "  Motion win (s): $MotionWindowSeconds"
