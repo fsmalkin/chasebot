@@ -117,6 +117,7 @@ Behavior:
 11. `run_pre_llm_gui_rehearsal.ps1` defaults to cleanup-on-exit; set `-KeepWindowsOpen true` only when an operator is actively watching.
 12. GUI parity truth is authoritative only on `container_kilted`; `host_ros` is debug-only and non-authoritative.
 13. Operator-facing GUI (`-OpenFeedViewers true`) is blocked by default unless the latest `parity_summary.json` is green.
+14. Container-lane live feed viewers are currently strict-gated: if `-OpenFeedViewers true` is requested but viewer plumbing is unavailable, milestone runs fail with `failure_class=feed_viewer_unavailable` instead of reporting a false visual pass.
 
 ## Artifact Contracts
 

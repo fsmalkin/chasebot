@@ -220,6 +220,7 @@ Run only after headless gates are green and on the same session ID:
    - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false`
 4. Operator live-view replay (only after parity is green):
    - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true`
+   - Current strict behavior: if container-lane viewer plumbing is not available, this run fails with `failure_class=feed_viewer_unavailable` (no false visual pass).
 
 Parity gate:
 

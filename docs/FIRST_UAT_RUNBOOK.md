@@ -186,3 +186,4 @@ Visual parity triage failure classes:
 4. `nav2_action_unavailable`
 5. `target_distance_not_improving`
 6. `lane_mismatch`
+7. `feed_viewer_unavailable`

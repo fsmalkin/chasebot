@@ -183,6 +183,10 @@ if ($RequireMotion -eq $null) { $RequireMotion = ($Milestone -ge 3) }
 if ($RequireNav2ActionServer -eq $null) { $RequireNav2ActionServer = ($Milestone -ge 3) }
 if ($DemoTargetRelative -eq $null) { $DemoTargetRelative = $false }
 
+$feedViewersRunning = $false
+$feedViewerStatus = if ([bool]$OpenFeedViewers) { "container_lane_viewers_unavailable" } else { "skipped" }
+$feedViewersGatePass = (-not [bool]$OpenFeedViewers)
+
 $runId = if ([string]::IsNullOrWhiteSpace($SessionId)) { (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ") } else { $SessionId }
 if ($runId -notmatch '^\d{8}T\d{6}Z$') {
     throw "SessionId must match YYYYMMDDTHHMMSSZ."
@@ -406,25 +410,28 @@ try {
     }
 
     if ($Milestone -eq 1) {
-        $overallPass = ($snapshotPass -and $captureDebug -and $overlayDistinct -and $streamReady)
+        $overallPass = ($snapshotPass -and $captureDebug -and $overlayDistinct -and $streamReady -and $feedViewersGatePass)
         if (-not $overallPass) {
             if (-not $streamReady) { $demoFailureClass = $streamStatus }
+            elseif (-not $feedViewersGatePass) { $demoFailureClass = "feed_viewer_unavailable" }
             else { $demoFailureClass = "snapshot_gate_failed" }
         }
     } elseif ($Milestone -eq 2) {
-        $overallPass = ($coordinatePass -and $snapshotPass -and $ball3dSeen -and $captureDebug -and $overlayDistinct -and $streamReady)
+        $overallPass = ($coordinatePass -and $snapshotPass -and $ball3dSeen -and $captureDebug -and $overlayDistinct -and $streamReady -and $feedViewersGatePass)
         if (-not $overallPass) {
             if (-not $streamReady) { $demoFailureClass = $streamStatus }
+            elseif (-not $feedViewersGatePass) { $demoFailureClass = "feed_viewer_unavailable" }
             else { $demoFailureClass = "m2_tracking_gate_failed" }
         }
     } else {
         $requiredActionOk = ((-not $RequireNav2ActionServer) -or $navActionReady)
         $requiredMotionOk = ((-not $RequireMotion) -or $motionPass)
-        $overallPass = ($snapshotPass -and $navPass -and $requiredActionOk -and $requiredMotionOk -and $streamReady)
+        $overallPass = ($snapshotPass -and $navPass -and $requiredActionOk -and $requiredMotionOk -and $streamReady -and $feedViewersGatePass)
         if (-not $overallPass) {
             if (-not $streamReady) { $demoFailureClass = $streamStatus }
             elseif (-not $requiredActionOk) { $demoFailureClass = "nav2_action_unavailable" }
             elseif (-not $requiredMotionOk) { $demoFailureClass = $motionError }
+            elseif (-not $feedViewersGatePass) { $demoFailureClass = "feed_viewer_unavailable" }
             else { $demoFailureClass = "m3_nav_gate_failed" }
         }
     }
@@ -515,8 +522,8 @@ try {
         viewers = [ordered]@{
             open_feed_viewers_requested = [bool]$OpenFeedViewers
             feed_viewers_required = [bool]$OpenFeedViewers
-            feed_viewers_running = $false
-            feed_viewer_status = if ($OpenFeedViewers) { "container_lane_headless_visual_blocked" } else { "skipped" }
+            feed_viewers_running = $feedViewersRunning
+            feed_viewer_status = $feedViewerStatus
             viewer_start_delay_s = 0
         }
         nav2 = [ordered]@{
@@ -575,6 +582,7 @@ try {
             [ordered]@{ id = "overlay_distinct"; description = "Debug image differs from raw image"; required = ($Milestone -le 2); pass = $overlayDistinct },
             [ordered]@{ id = "ball_position_3d"; description = "/yolo/ball_position_3d active"; required = ($Milestone -ge 2); pass = $ball3dSeen },
             [ordered]@{ id = "nav2_action_server_ready"; description = "/navigate_to_pose action server ready"; required = ($Milestone -ge 3); pass = $navActionReady },
+            [ordered]@{ id = "feed_viewers_running"; description = "Feed viewer windows running when requested"; required = [bool]$OpenFeedViewers; pass = $feedViewersGatePass },
             [ordered]@{ id = "cmd_vel_activity"; description = "cmd_vel activity observed"; required = ($Milestone -ge 3); pass = ($cmdVelMessageCount -gt 0) },
             [ordered]@{ id = "odom_displacement"; description = "Target-distance retained progress reached threshold"; required = ($Milestone -ge 3); pass = ($odomDisplacementM -ge $MotionMinDistanceMeters) }
         )

@@ -200,7 +200,8 @@ Parity-first rule:
 1. GUI rehearsal always runs on `container_kilted`.
 2. `host_ros` is debug-only and non-authoritative.
 3. Operator live-view mode (`-OpenFeedViewers true`) is blocked unless latest parity report is green.
-4. Required parity artifact: `artifacts/session/<session_id>/parity_summary.json` with `pass=true`.
+4. Container lane enforces a strict viewer gate: if live viewers are requested but unavailable, runs fail with `failure_class=feed_viewer_unavailable` instead of reporting a visual pass.
+5. Required parity artifact: `artifacts/session/<session_id>/parity_summary.json` with `pass=true`.
 
 Latest GUI rehearsal summary:
 
