@@ -182,28 +182,50 @@ def spawn_target(
     y = float(spawn.get('y', 0.0))
     z = float(spawn.get('z', 0.025))
 
-    cmd = [
-        'ros2',
-        'run',
-        'ros_gz_sim',
-        'create',
-        '-world',
-        world_name,
-        '-file',
-        str(model_sdf),
-        '-name',
-        model_name,
-        '-x',
-        str(x),
-        '-y',
-        str(y),
-        '-z',
-        str(z),
-    ]
-    rc, out, err = run_command(cmd, timeout_s=20.0)
+    def build_cmd(include_world: bool) -> List[str]:
+        cmd_local = [
+            'ros2',
+            'run',
+            'ros_gz_sim',
+            'create',
+        ]
+        if include_world and world_name:
+            cmd_local += ['-world', world_name]
+        cmd_local += [
+            '-file',
+            str(model_sdf),
+            '-name',
+            model_name,
+            '-x',
+            str(x),
+            '-y',
+            str(y),
+            '-z',
+            str(z),
+        ]
+        return cmd_local
+
+    rc, out, err = run_command(build_cmd(include_world=True), timeout_s=20.0)
     if verbose and out:
         print(out)
     if rc != 0:
+        combined = f'{out}\n{err}'.lower()
+        if (
+            '/create] to become available' in combined
+            or 'service unavailable' in combined
+        ):
+            # Gazebo Sim 9 exposes /create_multiple services; retry without -world
+            rc_fb, out_fb, err_fb = run_command(build_cmd(include_world=False), timeout_s=20.0)
+            if verbose and out_fb:
+                print(out_fb)
+            if rc_fb == 0:
+                combined_fb = f'{out_fb}\n{err_fb}'.lower()
+                if 'already exists' in combined_fb:
+                    return False, err_fb or out_fb or 'model already exists'
+                return True, out_fb or 'spawned (fallback no-world)'
+            msg_fb = err_fb or out_fb or f'fallback create command failed with exit code {rc_fb}'
+            msg = err or out or f'create command failed with exit code {rc}'
+            return False, f'{msg}; fallback_no_world={msg_fb}'
         msg = err or out or f'create command failed with exit code {rc}'
         return False, msg
     combined = f'{out}\n{err}'.lower()

@@ -125,10 +125,10 @@ Campaign outputs:
 
 Latest frozen pre-LLM package (post-green campaign):
 
-1. `artifacts/session/20260302T041321Z/pre_llm_campaign_trend.json`
-2. `artifacts/session/20260302T045310Z/pre_llm_headless_summary.json`
-3. `artifacts/session/20260302T041321Z/rc/manifest.json`
-4. `artifacts/session/20260302T041321Z/rc/readiness_report.json`
+1. `artifacts/session/20260303T050659Z/pre_llm_campaign_trend.json`
+2. `artifacts/session/20260303T054851Z/pre_llm_headless_summary.json`
+3. `artifacts/session/20260303T050659Z/rc/manifest.json`
+4. `artifacts/session/20260303T050659Z/rc/readiness_report.json`
 
 Adversarial must-fail verification:
 
@@ -138,7 +138,7 @@ powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_adversarial.ps1 -Ru
 
 Latest adversarial summary:
 
-1. `artifacts/session/20260302T051526Z/adversarial_headless_summary.json`
+1. `artifacts/session/20260303T061055Z/adversarial_headless_summary.json`
 
 Pre-LLM brain adapter smoke (no LLM planner yet):
 
@@ -149,7 +149,7 @@ powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -Ru
 Adapter smoke output:
 
 1. `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
-2. Latest validated smoke: `artifacts/session/20260302T052033Z/brain_adapter_smoke_summary.json`
+2. Latest validated smoke: `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json`
 
 ## Visual Milestones
 
@@ -205,7 +205,8 @@ Parity-first rule:
 
 Latest GUI rehearsal summary:
 
-1. `artifacts/session/20260302T052157Z/pre_llm_gui_rehearsal_summary.json`
+1. `artifacts/session/20260303T061906Z/pre_llm_gui_rehearsal_summary.json`
+2. `artifacts/session/20260303T061906Z/parity_summary.json`
 
 ## Artifact Contracts
 

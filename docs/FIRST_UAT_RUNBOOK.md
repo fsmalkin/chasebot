@@ -145,12 +145,12 @@ Required handoff artifacts:
 
 Current frozen baseline package:
 
-1. `artifacts/session/20260302T041321Z/pre_llm_campaign_trend.json`
-2. `artifacts/session/20260302T041321Z/campaign_run_summary.json`
-3. `artifacts/session/20260302T041321Z/rc/manifest.json`
-4. `artifacts/session/20260302T041321Z/rc/readiness_report.json`
-5. `artifacts/session/20260302T045310Z/pre_llm_headless_summary.json` (soak)
-6. `artifacts/session/20260302T052033Z/brain_adapter_smoke_summary.json` (adapter smoke)
+1. `artifacts/session/20260303T050659Z/pre_llm_campaign_trend.json`
+2. `artifacts/session/20260303T050659Z/campaign_run_summary.json`
+3. `artifacts/session/20260303T050659Z/rc/manifest.json`
+4. `artifacts/session/20260303T050659Z/rc/readiness_report.json`
+5. `artifacts/session/20260303T054851Z/pre_llm_headless_summary.json` (soak)
+6. `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json` (adapter smoke)
 
 Parity-first GUI readiness (required before operator live view):
 
@@ -162,6 +162,9 @@ Parity-first GUI readiness (required before operator live view):
    - `artifacts/session/<session_id>/parity_summary.json` with `pass=true`
 4. Only then run operator view:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true`
+5. Latest validated same-session rehearsal:
+   - `artifacts/session/20260303T061906Z/pre_llm_gui_rehearsal_summary.json`
+   - `artifacts/session/20260303T061906Z/parity_summary.json`
 
 Required pass criteria:
 

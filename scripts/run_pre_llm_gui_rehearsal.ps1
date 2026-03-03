@@ -10,6 +10,13 @@ param(
     [string]$WorldName = "yolo_test_world",
     [object]$OpenFeedViewers = $false,
     [object]$KeepWindowsOpen = $false,
+    [ValidateSet("auto", "vcxsrv", "wslg")]
+    [string]$DisplayMode = "auto",
+    [string]$DisplayAddress = "",
+    [object]$AutoStartVcXsrv = $true,
+    [int]$DisplayPreflightTimeoutSeconds = 12,
+    [ValidateSet("rqt_image_view")]
+    [string]$ViewerBackend = "rqt_image_view",
     [string]$SessionId = "",
     [string]$HeadlessSummaryPath = "",
     [object]$RequireParityGreenForOperatorView = $true,
@@ -45,6 +52,130 @@ function Resolve-Bool {
     }
 }
 
+function Get-PropValue {
+    param(
+        [object]$Object,
+        [string[]]$Path,
+        [object]$Default = $null
+    )
+    $current = $Object
+    foreach ($segment in $Path) {
+        if ($null -eq $current) { return $Default }
+        if ($current -is [System.Collections.IDictionary]) {
+            if (-not $current.Contains($segment)) { return $Default }
+            $current = $current[$segment]
+            continue
+        }
+        $prop = $current.PSObject.Properties[$segment]
+        if ($null -eq $prop) { return $Default }
+        $current = $prop.Value
+    }
+    if ($null -eq $current) { return $Default }
+    return $current
+}
+
+function Test-LocalTcpListen {
+    param([int]$Port)
+    try {
+        $listeners = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
+        if ($listeners -and $listeners.Count -gt 0) { return $true }
+    }
+    catch {
+    }
+    $netstat = netstat -ano -p tcp 2>$null
+    if ($netstat) {
+        if ($netstat | Select-String -Pattern ("[:\.]{0}\s+.*LISTENING" -f $Port) -Quiet) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Resolve-VcXsrvExecutable {
+    $commandPath = ""
+    try {
+        $command = Get-Command "vcxsrv.exe" -ErrorAction Stop | Select-Object -First 1
+        if ($command -and -not [string]::IsNullOrWhiteSpace($command.Source)) {
+            $commandPath = [string]$command.Source
+        }
+    }
+    catch {
+        $commandPath = ""
+    }
+
+    $candidates = @(
+        $env:VCXSRV_EXE,
+        $env:VCXSRV_PATH,
+        $commandPath,
+        "$env:ProgramFiles\VcXsrv\vcxsrv.exe",
+        "$env:ProgramFiles(x86)\VcXsrv\vcxsrv.exe",
+        "$env:LOCALAPPDATA\Programs\VcXsrv\vcxsrv.exe"
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+    return ""
+}
+
+function Resolve-GuiDisplayPreflight {
+    param(
+        [string]$Mode,
+        [string]$DisplayAddress,
+        [bool]$AutoStartVcXsrv,
+        [int]$TimeoutSeconds
+    )
+
+    $result = [ordered]@{
+        pass = $false
+        status = "display_unresolved"
+        message = ""
+        selected_mode = "none"
+        display_address = ""
+        viewer_backend = $ViewerBackend
+    }
+
+    $timeout = [Math]::Max($TimeoutSeconds, 3)
+    $tryVcXsrv = ($Mode -eq "auto" -or $Mode -eq "vcxsrv")
+    if ($tryVcXsrv) {
+        $vcxProc = Get-Process -Name "vcxsrv" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $vcxProc -and $AutoStartVcXsrv) {
+            $exe = Resolve-VcXsrvExecutable
+            if ($exe) {
+                Start-Process -FilePath $exe -ArgumentList @(":0", "-multiwindow", "-clipboard", "-wgl", "-ac", "-silent-dup-error") | Out-Null
+            }
+        }
+
+        for ($i = 0; $i -lt $timeout; $i++) {
+            if (Test-LocalTcpListen -Port 6000) {
+                $result.pass = $true
+                $result.status = "ok"
+                $result.message = "vcxsrv_ready"
+                $result.selected_mode = "vcxsrv"
+                $result.display_address = if ([string]::IsNullOrWhiteSpace($DisplayAddress)) { "host.docker.internal:0.0" } else { $DisplayAddress }
+                return [pscustomobject]$result
+            }
+            Start-Sleep -Seconds 1
+        }
+        if ($Mode -eq "vcxsrv") {
+            $result.status = "vcxsrv_unavailable"
+            $result.message = "VcXsrv not listening on tcp/6000."
+            return [pscustomobject]$result
+        }
+    }
+
+    if ($Mode -eq "wslg" -or $Mode -eq "auto") {
+        $result.status = "wslg_unsupported_for_docker"
+        $result.message = "WSLg display forwarding is not validated for Docker Desktop containers on this host."
+        $result.selected_mode = "wslg"
+        return [pscustomobject]$result
+    }
+
+    return [pscustomobject]$result
+}
+
 $runtimeAliases = @{
     robot_fidelity = "robot_fidelity_orin"
 }
@@ -54,6 +185,7 @@ if ($runtimeAliases.ContainsKey($RuntimeTarget)) {
 $openFeedViewersResolved = Resolve-Bool -Value $OpenFeedViewers -ParamName "OpenFeedViewers"
 $keepWindowsOpenResolved = Resolve-Bool -Value $KeepWindowsOpen -ParamName "KeepWindowsOpen"
 $requireParityForViewResolved = Resolve-Bool -Value $RequireParityGreenForOperatorView -ParamName "RequireParityGreenForOperatorView"
+$autoStartVcXsrvResolved = Resolve-Bool -Value $AutoStartVcXsrv -ParamName "AutoStartVcXsrv"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $runId = if ([string]::IsNullOrWhiteSpace($SessionId)) {
@@ -69,6 +201,22 @@ $sessionDir = Join-Path $repoRoot "artifacts/session/$runId"
 $guiDir = Join-Path $sessionDir "gui_rehearsal"
 $summaryPath = Join-Path $sessionDir "pre_llm_gui_rehearsal_summary.json"
 New-Item -ItemType Directory -Path $guiDir -Force | Out-Null
+
+$displayPreflight = [ordered]@{
+    pass = $true
+    status = "not_required"
+    message = ""
+    selected_mode = "none"
+    display_address = ""
+    viewer_backend = $ViewerBackend
+}
+if ($openFeedViewersResolved) {
+    $displayPreflight = Resolve-GuiDisplayPreflight `
+        -Mode $DisplayMode `
+        -DisplayAddress $DisplayAddress `
+        -AutoStartVcXsrv $autoStartVcXsrvResolved `
+        -TimeoutSeconds $DisplayPreflightTimeoutSeconds
+}
 
 function Invoke-StaleCleanup {
     $cleanup = @'
@@ -169,6 +317,11 @@ function Invoke-MilestoneDemo {
         "-EnsureDemoTarget",
         "-OpenFeedViewers", ([string][bool]$openFeedViewersResolved),
         "-RequireParityGreenForOperatorView", ([string][bool]$requireParityForViewResolved),
+        "-DisplayMode", [string]$displayPreflight.selected_mode,
+        "-DisplayAddress", [string]$displayPreflight.display_address,
+        "-AutoStartVcXsrv", ([string][bool]$autoStartVcXsrvResolved),
+        "-DisplayPreflightTimeoutSeconds", [string]$DisplayPreflightTimeoutSeconds,
+        "-ViewerBackend", $ViewerBackend,
         "-EvidenceDir", $EvidenceDir,
         "-MaxRunSeconds", $MaxRunSeconds
     )
@@ -240,6 +393,7 @@ if ($openFeedViewersResolved -and $requireParityForViewResolved -and -not $Bypas
             world_file = $WorldFile
             world_name = $WorldName
             open_feed_viewers = [bool]$openFeedViewersResolved
+            display = $displayPreflight
             pass = $false
             blocked_reason = "parity_guard_blocked"
             parity_guard = [ordered]@{
@@ -255,6 +409,27 @@ if ($openFeedViewersResolved -and $requireParityForViewResolved -and -not $Bypas
         Write-Host "GUI_REHEARSAL_PASS=False"
         exit 2
     }
+}
+
+if ($openFeedViewersResolved -and -not [bool]$displayPreflight.pass) {
+    $summary = [ordered]@{
+        run_id = $runId
+        generated_utc = (Get-Date).ToUniversalTime().ToString("o")
+        runtime_target = $RuntimeTarget
+        execution_lane = $ExecutionLane
+        core_ros_distro = $CoreRosDistro
+        world_file = $WorldFile
+        world_name = $WorldName
+        open_feed_viewers = [bool]$openFeedViewersResolved
+        pass = $false
+        blocked_reason = "display_preflight_failed"
+        display = $displayPreflight
+        results = @()
+    }
+    $summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8
+    Write-Host "GUI_REHEARSAL_SUMMARY=$summaryPath"
+    Write-Host "GUI_REHEARSAL_PASS=False"
+    exit 2
 }
 
 $m2 = $null
@@ -279,6 +454,7 @@ if (-not $m2.pass) {
         world_file = $WorldFile
         world_name = $WorldName
         open_feed_viewers = [bool]$openFeedViewersResolved
+        display = $displayPreflight
         pass = $false
         blocked_reason = "milestone_2_failed"
         results = $results
@@ -331,7 +507,24 @@ foreach ($target in $m3Targets) {
 }
 $m3AllTargetsCovered = ($m3FinalByTarget.Count -eq $m3Targets.Count)
 $m3AllPassed = ($m3AllTargetsCovered -and (@($m3FinalByTarget | Where-Object { -not $_.pass }).Count -eq 0))
-$allPass = ([bool]$m2Final.pass -and $m3AllPassed)
+$m2DemoSummary = Get-PropValue -Object $m2Final -Path @("demo_summary") -Default $null
+$m2ViewersRunning = Resolve-Bool -Value (Get-PropValue -Object $m2DemoSummary -Path @("viewers", "feed_viewers_running") -Default $false) -ParamName "m2.feed_viewers_running"
+$m2DisplayMode = [string](Get-PropValue -Object $m2DemoSummary -Path @("display_mode") -Default [string]$displayPreflight.selected_mode)
+$m2DisplayAddress = [string](Get-PropValue -Object $m2DemoSummary -Path @("display_address") -Default [string]$displayPreflight.display_address)
+$m2ViewerBackend = [string](Get-PropValue -Object $m2DemoSummary -Path @("viewer_backend") -Default $ViewerBackend)
+$m2ViewerStartupElapsedS = [double](Get-PropValue -Object $m2DemoSummary -Path @("viewers", "viewer_startup_elapsed_s") -Default 0.0)
+$m2ViewerFrameCounts = Get-PropValue -Object $m2DemoSummary -Path @("viewers", "viewer_frame_counts") -Default ([ordered]@{ rgb = 0; yolo_debug = 0 })
+$m3ViewersRunningAll = $true
+foreach ($m3 in $m3FinalByTarget) {
+    $m3DemoSummary = Get-PropValue -Object $m3 -Path @("demo_summary") -Default $null
+    $m3ViewersRunning = Resolve-Bool -Value (Get-PropValue -Object $m3DemoSummary -Path @("viewers", "feed_viewers_running") -Default $false) -ParamName "m3.feed_viewers_running"
+    if (-not $m3ViewersRunning) {
+        $m3ViewersRunningAll = $false
+        break
+    }
+}
+$visualReady = if ($openFeedViewersResolved) { ($m2ViewersRunning -and $m3ViewersRunningAll) } else { $true }
+$allPass = ([bool]$m2Final.pass -and $m3AllPassed -and $visualReady)
 $summary = [ordered]@{
     run_id = $runId
     generated_utc = (Get-Date).ToUniversalTime().ToString("o")
@@ -341,6 +534,17 @@ $summary = [ordered]@{
     world_file = $WorldFile
     world_name = $WorldName
     open_feed_viewers = [bool]$openFeedViewersResolved
+    display = [ordered]@{
+        preflight = $displayPreflight
+        display_mode = $m2DisplayMode
+        display_address = $m2DisplayAddress
+        viewer_backend = $m2ViewerBackend
+    }
+    visual_ready = $visualReady
+    display_mode = $m2DisplayMode
+    viewer_backend = $m2ViewerBackend
+    viewer_frame_counts = $m2ViewerFrameCounts
+    viewer_startup_elapsed_s = $m2ViewerStartupElapsedS
     pass = $allPass
     milestone2_pass = [bool]$m2Final.pass
     milestone2_attempts = $m2Attempts.Count

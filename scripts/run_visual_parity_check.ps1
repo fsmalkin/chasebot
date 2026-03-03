@@ -189,6 +189,11 @@ $navSummary = if (Test-Path -LiteralPath $navSummaryPath) { Load-JsonFile -PathV
 $m2Outcome = Get-PropValue -Object $guiSummary -Path @("final_outcomes", "milestone2") -Default $null
 $m3OutcomesRaw = Get-PropValue -Object $guiSummary -Path @("final_outcomes", "milestone3") -Default @()
 $m3Outcomes = if ($m3OutcomesRaw -is [System.Array]) { @($m3OutcomesRaw) } elseif ($null -eq $m3OutcomesRaw) { @() } else { @($m3OutcomesRaw) }
+$guiOpenFeedViewers = To-Bool (Get-PropValue -Object $guiSummary -Path @("open_feed_viewers") -Default $false)
+$guiVisualReady = To-Bool (Get-PropValue -Object $guiSummary -Path @("visual_ready") -Default $false)
+$guiViewerFramesRgb = To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_frame_counts", "rgb") -Default 0.0)
+$guiViewerFramesDebug = To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_frame_counts", "yolo_debug") -Default 0.0)
+$guiViewerStartupElapsedS = To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_startup_elapsed_s") -Default 0.0)
 
 $headlessExecutionLane = [string](Get-PropValue -Object $headlessReadiness -Path @("execution_lane") -Default (Get-PropValue -Object $headlessSummary -Path @("execution_lane") -Default ""))
 $headlessCoreRos = [string](Get-PropValue -Object $headlessReadiness -Path @("container_core_ros_distro") -Default (Get-PropValue -Object $headlessSummary -Path @("core_ros_distro") -Default ""))
@@ -248,6 +253,7 @@ foreach ($m3 in $m3Outcomes) {
 $guiNavReady = ($m3CheckCount -gt 0 -and $m3NavReadyAll)
 $guiCmdVelActive = ($m3CheckCount -gt 0 -and $m3CmdVelAll)
 $guiMotionPass = ($m3CheckCount -gt 0 -and $m3MotionAll -and $m3PassCount -eq $m3CheckCount)
+$visualReadyConsistent = if ($guiOpenFeedViewers) { ($guiVisualReady -and $guiViewerFramesRgb -ge 1.0 -and $guiViewerFramesDebug -ge 1.0) } else { $true }
 $guiAvgImprovement = if ($m3ImprovementValues.Count -gt 0) { ($m3ImprovementValues | Measure-Object -Average).Average } else { 0.0 }
 $guiAvgFinalDistance = if ($m3FinalDistanceValues.Count -gt 0) { ($m3FinalDistanceValues | Measure-Object -Average).Average } else { 0.0 }
 $guiAvgCmdVelRate = if ($m3CmdVelRates.Count -gt 0) { ($m3CmdVelRates | Measure-Object -Average).Average } else { 0.0 }
@@ -262,7 +268,7 @@ $detectionPipelineMatch = ($headDetectionPipelineAlive -and $guiDetectionPipelin
 $topic3dMatch = ($head3dActive -and $gui3dActive)
 $navActionMatch = ($headNavActionReady -and $guiNavReady)
 $motionEvidenceMatch = ($headCmdVelActive -and $guiCmdVelActive -and $headTargetProgressPass -and $guiMotionPass)
-$graphMatch = ($detectionPipelineMatch -and $topic3dMatch -and $navActionMatch -and $motionEvidenceMatch)
+$graphMatch = ($detectionPipelineMatch -and $topic3dMatch -and $navActionMatch -and $motionEvidenceMatch -and $visualReadyConsistent)
 
 $targetImprovementDelta = [Math]::Abs($headTargetImprovement - $guiAvgImprovement)
 $finalDistanceDelta = [Math]::Abs($headTargetFinalDistance - $guiAvgFinalDistance)
@@ -289,6 +295,7 @@ $checks = [ordered]@{
     ball_position_3d_active = $topic3dMatch
     nav_action_server_ready = $navActionMatch
     motion_evidence = $motionEvidenceMatch
+    visual_ready_headless_gui_consistent = $visualReadyConsistent
     metric_parity = $metricParity
 }
 
@@ -322,6 +329,9 @@ elseif (-not $navActionMatch) {
 }
 elseif (-not $motionEvidenceMatch) {
     $failureClass = "target_distance_not_improving"
+}
+elseif (-not $visualReadyConsistent) {
+    $failureClass = "visual_not_ready"
 }
 elseif (-not $metricParity) {
     $failureClass = "metric_divergence"
@@ -370,6 +380,11 @@ $result = [ordered]@{
             cmd_vel_rate_hz_avg = $guiAvgCmdVelRate
             target_improvement_m_avg = $guiAvgImprovement
             target_final_distance_m_avg = $guiAvgFinalDistance
+            open_feed_viewers = $guiOpenFeedViewers
+            visual_ready = $guiVisualReady
+            viewer_frame_count_rgb = $guiViewerFramesRgb
+            viewer_frame_count_debug = $guiViewerFramesDebug
+            viewer_startup_elapsed_s = $guiViewerStartupElapsedS
         }
         deltas = [ordered]@{
             target_improvement_delta_m = $targetImprovementDelta

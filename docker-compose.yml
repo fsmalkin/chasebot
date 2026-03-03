@@ -37,6 +37,11 @@ services:
     environment:
       <<: *chasecar-env
       CHASECAR_WORLD_FILE: ${WORLD_FILE:-yolo_test_world_v6_clean_uat.world}
+      GATE_DISPLAY_MODE: ${GATE_DISPLAY_MODE:-auto}
+      DISPLAY: ${GATE_DISPLAY:-}
+      QT_QPA_PLATFORM: ${GATE_QPA_PLATFORM:-xcb}
+      QT_X11_NO_MITSHM: ${GATE_QT_X11_NO_MITSHM:-1}
+      LIBGL_ALWAYS_INDIRECT: ${GATE_LIBGL_ALWAYS_INDIRECT:-1}
     volumes:
       - ./:/workspaces/chasecar:rw
       - chasecar_ws:/root/ros2_ws
@@ -56,6 +61,11 @@ services:
     environment:
       <<: *chasecar-env
       CHASECAR_SOURCE_PATH: /workspaces/chasecar
+      GATE_DISPLAY_MODE: ${GATE_DISPLAY_MODE:-auto}
+      DISPLAY: ${GATE_DISPLAY:-}
+      QT_QPA_PLATFORM: ${GATE_QPA_PLATFORM:-xcb}
+      QT_X11_NO_MITSHM: ${GATE_QT_X11_NO_MITSHM:-1}
+      LIBGL_ALWAYS_INDIRECT: ${GATE_LIBGL_ALWAYS_INDIRECT:-1}
     volumes:
       - ./:/workspaces/chasecar:rw
       - chasecar_ws:/root/ros2_ws

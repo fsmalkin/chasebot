@@ -93,14 +93,14 @@ Behavior:
    - fidelity multi-target: `ros2_config/config/multi_target_nav2_fidelity.yaml`
    - fidelity soak multi-target: `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
 5. Latest frozen campaign + soak + smoke package:
-   - campaign summary: `artifacts/session/20260302T041321Z/campaign_run_summary.json`
-   - campaign trend: `artifacts/session/20260302T041321Z/pre_llm_campaign_trend.json`
-   - soak summary: `artifacts/session/20260302T045310Z/pre_llm_headless_summary.json`
-   - rc readiness: `artifacts/session/20260302T041321Z/rc/readiness_report.json`
-   - adversarial summary: `artifacts/session/20260302T051526Z/adversarial_headless_summary.json`
-   - brain adapter smoke: `artifacts/session/20260302T052033Z/brain_adapter_smoke_summary.json`
-   - final same-session rehearsal: `artifacts/session/20260302T052157Z/pre_llm_gui_rehearsal_summary.json`
-   - final parity: `artifacts/session/20260302T052157Z/parity_summary.json`
+   - campaign summary: `artifacts/session/20260303T050659Z/campaign_run_summary.json`
+   - campaign trend: `artifacts/session/20260303T050659Z/pre_llm_campaign_trend.json`
+   - soak summary: `artifacts/session/20260303T054851Z/pre_llm_headless_summary.json`
+   - rc readiness: `artifacts/session/20260303T050659Z/rc/readiness_report.json`
+   - adversarial summary: `artifacts/session/20260303T061055Z/adversarial_headless_summary.json`
+   - brain adapter smoke: `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json`
+   - final same-session rehearsal: `artifacts/session/20260303T061906Z/pre_llm_gui_rehearsal_summary.json`
+   - final parity: `artifacts/session/20260303T061906Z/parity_summary.json`
 
 ## Current Caution
 
@@ -110,7 +110,7 @@ Behavior:
 4. `ros2 action list` includes clients and may show `/navigate_to_pose` even when no server is active. Use `ros2 action info /navigate_to_pose` and confirm `Action servers: 1` for readiness.
 5. `scripts/run_compose_profile.ps1` now auto-resolves Docker Desktop CLI path (`C:\Program Files\Docker\Docker\resources\bin\docker.exe`) when `docker` is not on PATH.
 6. For full replay, keep launch bridge disabled (`-IncludeBridge $false`) and rely on orchestrator-managed bridge startup during nav2 stage.
-7. For GUI milestones in parity campaigns, keep `-OpenFeedViewers $false` and use screenshot evidence; enable live viewers only for operator demo after parity is green.
+7. For GUI parity campaigns, require at least one viewer-enabled rehearsal (`-OpenFeedViewers $true`) per cycle; if viewer plumbing fails, the run must fail closed (`failure_class=feed_viewer_unavailable`).
 8. For headless milestone promotion, run M2 then M3 with `robot_fidelity_orin`; M3 pass requires motion evidence (`nav2.action_server_ready`, `motion.odom_displacement_m`, `motion.target_progress_ok`, `motion.pass`).
 9. `run_compose_gate.ps1` supports `-WorldFile`, `-GatePerfProfile`, and `-InferenceDevice`; use these for fast-lane acceleration while keeping fidelity lanes on canonical defaults.
 10. `run_milestone_demo.ps1` and `run_pre_llm_gui_rehearsal.ps1` now sweep stale viewer/sim/nav processes before each run attempt.

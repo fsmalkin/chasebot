@@ -164,16 +164,16 @@ Lane-specific gate config defaults:
 
 Latest frozen pre-LLM campaign package:
 
-1. trend: `artifacts/session/20260302T041321Z/pre_llm_campaign_trend.json`
-2. soak summary: `artifacts/session/20260302T045310Z/pre_llm_headless_summary.json`
-3. rc manifest: `artifacts/session/20260302T041321Z/rc/manifest.json`
-4. rc readiness: `artifacts/session/20260302T041321Z/rc/readiness_report.json` (`pass=true`)
+1. trend: `artifacts/session/20260303T050659Z/pre_llm_campaign_trend.json`
+2. soak summary: `artifacts/session/20260303T054851Z/pre_llm_headless_summary.json`
+3. rc manifest: `artifacts/session/20260303T050659Z/rc/manifest.json`
+4. rc readiness: `artifacts/session/20260303T050659Z/rc/readiness_report.json` (`pass=true`)
 
 Adversarial must-fail suite (required for truth-lock confidence):
 
 1. `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_adversarial.ps1 -RuntimeTarget robot_fidelity_orin`
 2. Latest summary:
-   - `artifacts/session/20260302T051526Z/adversarial_headless_summary.json`
+   - `artifacts/session/20260303T061055Z/adversarial_headless_summary.json`
 
 Pre-LLM stage order (container lane):
 
@@ -206,6 +206,8 @@ Pre-LLM brain adapter smoke (post-campaign, pre-GUI):
 1. `powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin`
 2. Required output:
    - `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
+3. Latest validated smoke:
+   - `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json`
 3. Pass intent:
    - frozen contract intents are emitted on `/chasecar/brain/intent`
    - low-level boundary checks pass for detection/odom/action/service readiness
@@ -227,6 +229,9 @@ Parity gate:
 1. `artifacts/session/<session_id>/parity_summary.json` must exist and `pass=true`.
 2. Required checks: lane match, core ROS match, detection pipeline alive in both, `/yolo/ball_position_3d` active in both, nav action readiness in both, motion evidence in both.
 3. `host_ros` GUI runs are debug-only and cannot promote readiness.
+4. Latest validated same-session rehearsal:
+   - `artifacts/session/20260303T061906Z/pre_llm_gui_rehearsal_summary.json`
+   - `artifacts/session/20260303T061906Z/parity_summary.json`
 
 ## Headless Milestone Path (Current Preferred)
 

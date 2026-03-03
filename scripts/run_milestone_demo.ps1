@@ -89,11 +89,23 @@ param(
 
     [string]$CoreRosDistro = "kilted",
 
+    [ValidateSet("auto", "vcxsrv", "wslg")]
+    [string]$DisplayMode = "auto",
+
+    [string]$DisplayAddress = "",
+
+    [object]$AutoStartVcXsrv = $true,
+
+    [int]$DisplayPreflightTimeoutSeconds = 12,
+
+    [ValidateSet("rqt_image_view")]
+    [string]$ViewerBackend = "rqt_image_view",
+
     [string]$SessionId = "",
 
     [string]$ProjectName = "",
 
-    [int]$StepTimeoutSeconds = 900,
+    [int]$StepTimeoutSeconds = 300,
 
     [object]$RequireParityGreenForOperatorView = $true,
 
@@ -125,6 +137,131 @@ function Resolve-StrictBool {
     }
 }
 
+function Test-LocalTcpListen {
+    param([int]$Port)
+    try {
+        $listeners = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
+        if ($listeners -and $listeners.Count -gt 0) {
+            return $true
+        }
+    }
+    catch {
+    }
+    $netstat = netstat -ano -p tcp 2>$null
+    if ($netstat) {
+        $pattern = "[:\.]$Port\s+.*LISTENING"
+        if ($netstat | Select-String -Pattern $pattern -Quiet) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Resolve-DisplayNumber {
+    param([string]$Display)
+    if ([string]::IsNullOrWhiteSpace($Display)) { return 0 }
+    if ($Display -match ':(\d+)(\.\d+)?$') {
+        return [int]$matches[1]
+    }
+    return 0
+}
+
+function Resolve-VcXsrvExecutable {
+    $commandPath = ""
+    try {
+        $command = Get-Command "vcxsrv.exe" -ErrorAction Stop | Select-Object -First 1
+        if ($command -and -not [string]::IsNullOrWhiteSpace($command.Source)) {
+            $commandPath = [string]$command.Source
+        }
+    }
+    catch {
+        $commandPath = ""
+    }
+
+    $candidates = @(
+        $env:VCXSRV_EXE,
+        $env:VCXSRV_PATH,
+        $commandPath,
+        "$env:ProgramFiles\VcXsrv\vcxsrv.exe",
+        "$env:ProgramFiles(x86)\VcXsrv\vcxsrv.exe",
+        "$env:LOCALAPPDATA\Programs\VcXsrv\vcxsrv.exe"
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path -LiteralPath $candidate) {
+            return $candidate
+        }
+    }
+    return ""
+}
+
+function Resolve-ContainerGuiDisplay {
+    param(
+        [string]$Mode,
+        [string]$DisplayAddress,
+        [bool]$AutoStartVcXsrv,
+        [int]$TimeoutSeconds
+    )
+
+    $timeout = [Math]::Max($TimeoutSeconds, 3)
+    $result = [ordered]@{
+        pass = $false
+        status = "display_unresolved"
+        message = ""
+        selected_mode = "none"
+        display_address = ""
+        display_number = 0
+        vcxsrv_started = $false
+        viewer_backend = $ViewerBackend
+    }
+
+    $tryVcXsrv = ($Mode -eq "auto" -or $Mode -eq "vcxsrv")
+    if ($tryVcXsrv) {
+        $vcxProc = Get-Process -Name "vcxsrv" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $vcxProc -and $AutoStartVcXsrv) {
+            $exe = Resolve-VcXsrvExecutable
+            if ($exe) {
+                Start-Process -FilePath $exe -ArgumentList @(":0", "-multiwindow", "-clipboard", "-wgl", "-ac", "-silent-dup-error") | Out-Null
+                $result.vcxsrv_started = $true
+            }
+        }
+
+        $listenOk = $false
+        for ($i = 0; $i -lt $timeout; $i++) {
+            if (Test-LocalTcpListen -Port 6000) {
+                $listenOk = $true
+                break
+            }
+            Start-Sleep -Seconds 1
+        }
+
+        if ($listenOk) {
+            $resolvedDisplay = if ([string]::IsNullOrWhiteSpace($DisplayAddress)) { "host.docker.internal:0.0" } else { $DisplayAddress }
+            $result.pass = $true
+            $result.status = "ok"
+            $result.message = "vcxsrv_ready"
+            $result.selected_mode = "vcxsrv"
+            $result.display_address = $resolvedDisplay
+            $result.display_number = Resolve-DisplayNumber -Display $resolvedDisplay
+            return [pscustomobject]$result
+        }
+        if ($Mode -eq "vcxsrv") {
+            $result.status = "vcxsrv_unavailable"
+            $result.message = "VcXsrv not listening on tcp/6000."
+            return [pscustomobject]$result
+        }
+    }
+
+    if ($Mode -eq "wslg" -or $Mode -eq "auto") {
+        $result.status = "wslg_unsupported_for_docker"
+        $result.message = "WSLg display forwarding is not validated for Docker Desktop containers on this host."
+        $result.selected_mode = "wslg"
+        return [pscustomobject]$result
+    }
+
+    return [pscustomobject]$result
+}
+
 function Get-LatestParityGate {
     param([string]$RepoRoot)
     $root = Join-Path $RepoRoot "artifacts/session"
@@ -151,6 +288,33 @@ function Get-LatestParityGate {
 if ($ExecutionLane -eq "container_kilted") {
     $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
     $openFeedRequested = Resolve-StrictBool -Value $OpenFeedViewers -Default $false
+    $autoStartVcXsrvResolved = Resolve-StrictBool -Value $AutoStartVcXsrv -Default $true
+    $headlessRequested = $null
+    if ($PSBoundParameters.ContainsKey("Headless")) {
+        $headlessRequested = Resolve-StrictBool -Value $Headless -Default $true
+    }
+    $guiRequested = ($openFeedRequested -or ($headlessRequested -eq $false))
+    $displayConfig = [ordered]@{
+        pass = $true
+        status = "not_required"
+        message = ""
+        selected_mode = "none"
+        display_address = ""
+        display_number = 0
+        vcxsrv_started = $false
+        viewer_backend = $ViewerBackend
+    }
+    if ($guiRequested) {
+        $displayConfig = Resolve-ContainerGuiDisplay `
+            -Mode $DisplayMode `
+            -DisplayAddress $DisplayAddress `
+            -AutoStartVcXsrv $autoStartVcXsrvResolved `
+            -TimeoutSeconds $DisplayPreflightTimeoutSeconds
+    }
+    if ($openFeedRequested -and -not [bool]$displayConfig.pass) {
+        $headlessRequested = $true
+    }
+
     $requireParityGate = Resolve-StrictBool -Value $RequireParityGreenForOperatorView -Default $true
     if ($openFeedRequested -and $requireParityGate -and -not $BypassParityGuard.IsPresent) {
         $latestParity = Get-LatestParityGate -RepoRoot $repoRoot
@@ -206,6 +370,14 @@ if ($ExecutionLane -eq "container_kilted") {
         $MotionTargetProgressMinMeters.ToString([System.Globalization.CultureInfo]::InvariantCulture),
         "-CoreRosDistro",
         $CoreRosDistro,
+        "-DisplayMode",
+        [string]$displayConfig.selected_mode,
+        "-DisplayPreflightStatus",
+        [string]$displayConfig.status,
+        "-DisplayPreflightMessage",
+        [string]$displayConfig.message,
+        "-ViewerBackend",
+        $ViewerBackend,
         "-StepTimeoutSeconds",
         $StepTimeoutSeconds.ToString()
     )
@@ -224,8 +396,11 @@ if ($ExecutionLane -eq "container_kilted") {
     if ($PSBoundParameters.ContainsKey("InferenceDevice")) {
         $argList += @("-InferenceDevice", $InferenceDevice)
     }
-    if ($PSBoundParameters.ContainsKey("Headless")) {
-        $argList += @("-Headless", [string]$Headless)
+    if (-not [string]::IsNullOrWhiteSpace([string]$displayConfig.display_address)) {
+        $argList += @("-DisplayAddress", [string]$displayConfig.display_address)
+    }
+    if ($null -ne $headlessRequested) {
+        $argList += @("-Headless", [string][bool]$headlessRequested)
     }
     if ($PSBoundParameters.ContainsKey("EnsureDemoTarget")) {
         if ($EnsureDemoTarget) { $argList += "-EnsureDemoTarget" }

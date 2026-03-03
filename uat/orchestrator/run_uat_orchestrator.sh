@@ -39,6 +39,7 @@ SNAPSHOT_MIN_FRAMES="${CHASECAR_SNAPSHOT_MIN_FRAMES:-1}"
 
 MULTI_TARGET_CONFIG="${CHASECAR_MULTI_TARGET_CONFIG:-ros2_config/config/multi_target_nav2.yaml}"
 MULTI_TARGET_GOAL_TIMEOUT_S="${CHASECAR_MULTI_TARGET_GOAL_TIMEOUT_S:-55}"
+MODEL_SPAWN_TIMEOUT_S="${CHASECAR_MODEL_SPAWN_TIMEOUT_S:-20}"
 
 if [[ ! -d "${REPO_ROOT}" ]]; then
   echo "[uat-orchestrator] Missing repo path: ${REPO_ROOT}" >&2
@@ -259,13 +260,38 @@ spawn_model() {
 
   remove_model_by_name "${world_name}" "${model_name}" "${log_file}"
 
-  ros2 run ros_gz_sim create \
-    -world "${world_name}" \
-    -file "${resolved_model}" \
-    -name "${model_name}" \
-    -x "${pos_x}" \
-    -y "${pos_y}" \
-    -z "${pos_z}" >>"${log_file}" 2>&1
+  run_spawn_create() {
+    local include_world="$1"
+    local -a cmd=(ros2 run ros_gz_sim create)
+    if [[ "${include_world}" == "true" ]]; then
+      cmd+=(-world "${world_name}")
+    fi
+    cmd+=(
+      -file "${resolved_model}"
+      -name "${model_name}"
+      -x "${pos_x}"
+      -y "${pos_y}"
+      -z "${pos_z}"
+    )
+    local rc=0
+    if command -v timeout >/dev/null 2>&1; then
+      timeout "${MODEL_SPAWN_TIMEOUT_S}s" "${cmd[@]}" >>"${log_file}" 2>&1 || rc=$?
+    else
+      "${cmd[@]}" >>"${log_file}" 2>&1 || rc=$?
+    fi
+    return "${rc}"
+  }
+
+  local spawn_rc=0
+  run_spawn_create "true" || spawn_rc=$?
+  if [[ "${spawn_rc}" -ne 0 ]] && grep -Eq 'Waiting for service \[/world/.*/create\] to become available' "${log_file}" 2>/dev/null; then
+    echo "[orchestrator] fallback spawn without -world for create_multiple compatibility" >>"${log_file}" 2>&1
+    run_spawn_create "false" || spawn_rc=$?
+  fi
+  if [[ "${spawn_rc}" -eq 124 ]]; then
+    echo "[orchestrator] spawn timeout after ${MODEL_SPAWN_TIMEOUT_S}s for model=${model_name} world=${world_name}" >>"${log_file}" 2>&1
+  fi
+  return "${spawn_rc}"
 }
 
 run_prepare() {
@@ -407,23 +433,27 @@ run_snapshot() {
   mkdir -p "${artifact_dir}"
   : > "${prep_log}"
 
-  if ! spawn_model \
+  local spawn_rc=0
+  spawn_model \
     "${SNAPSHOT_WORLD_NAME}" \
     "${SNAPSHOT_MODEL_SDF}" \
     "${SNAPSHOT_MODEL_NAME}" \
     "${SNAPSHOT_TARGET_X}" \
     "${SNAPSHOT_TARGET_Y}" \
     "${SNAPSHOT_TARGET_Z}" \
-    "${prep_log}"; then
+    "${prep_log}" || spawn_rc=$?
+  if [[ "${spawn_rc}" -ne 0 ]]; then
     local failure_class="blocked_dependency"
-    if has_world_create_service_error "${prep_log}"; then
+    if [[ "${spawn_rc}" -eq 124 ]]; then
+      failure_class="timeout"
+    elif has_world_create_service_error "${prep_log}"; then
       failure_class="service_unavailable"
     elif grep -Eq "Missing model SDF" "${prep_log}" 2>/dev/null; then
       failure_class="missing_artifact"
     fi
     step_ended_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     elapsed_s="$(( $(date +%s) - step_started_epoch ))"
-    append_step "snapshot" "fail" "${failure_class}" "${artifact_dir}" 2 "${prep_log}" "${elapsed_s}" 0 "false" "spawn_target" "${step_started_utc}" "${step_ended_utc}"
+    append_step "snapshot" "fail" "${failure_class}" "${artifact_dir}" "${spawn_rc}" "${prep_log}" "${elapsed_s}" 0 "false" "spawn_target" "${step_started_utc}" "${step_ended_utc}"
     return 2
   fi
 
@@ -703,14 +733,16 @@ run_nav2() {
     sleep "${NAV2_BRIDGE_START_DELAY_S}"
   fi
 
-  if ! spawn_model \
+  local nav_spawn_rc=0
+  spawn_model \
     "${NAV2_WORLD_NAME}" \
     "${NAV2_MODEL_SDF}" \
     "${NAV2_MODEL_NAME}" \
     "${NAV2_TARGET_X}" \
     "${NAV2_TARGET_Y}" \
     "${NAV2_TARGET_Z}" \
-    "${prep_log}"; then
+    "${prep_log}" || nav_spawn_rc=$?
+  if [[ "${nav_spawn_rc}" -ne 0 ]]; then
 
     if [[ -n "${bridge_pid}" ]]; then
       kill "${bridge_pid}" 2>/dev/null || true
@@ -718,14 +750,16 @@ run_nav2() {
     fi
 
     local failure_class="blocked_dependency"
-    if has_world_create_service_error "${prep_log}"; then
+    if [[ "${nav_spawn_rc}" -eq 124 ]]; then
+      failure_class="timeout"
+    elif has_world_create_service_error "${prep_log}"; then
       failure_class="service_unavailable"
     elif grep -Eq "Missing model SDF" "${prep_log}" 2>/dev/null; then
       failure_class="missing_artifact"
     fi
     step_ended_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     elapsed_s="$(( $(date +%s) - step_started_epoch ))"
-    append_step "nav2" "fail" "${failure_class}" "" 2 "${prep_log}" "${elapsed_s}" 0 "false" "spawn_target" "${step_started_utc}" "${step_ended_utc}"
+    append_step "nav2" "fail" "${failure_class}" "" "${nav_spawn_rc}" "${prep_log}" "${elapsed_s}" 0 "false" "spawn_target" "${step_started_utc}" "${step_ended_utc}"
     return 2
   fi
 

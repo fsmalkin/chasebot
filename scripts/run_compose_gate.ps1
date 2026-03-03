@@ -11,6 +11,12 @@ param(
     [string]$GatePerfProfile = "compat",
     [ValidateSet("auto", "cuda:0", "cpu")]
     [string]$InferenceDevice = "cuda:0",
+    [ValidateSet("auto", "vcxsrv", "wslg", "none")]
+    [string]$DisplayMode = "auto",
+    [string]$DisplayAddress = "",
+    [string]$QtQpaPlatform = "xcb",
+    [string]$QtX11NoMitShm = "1",
+    [string]$LibglAlwaysIndirect = "1",
     [object]$Headless = $null,
     [string]$WorldFile = "",
     [object]$IncludeNav2Bringup = $null,
@@ -52,8 +58,48 @@ $originalPerfProfile = $env:GATE_PERF_PROFILE
 $originalInferenceDevice = $env:GATE_INFERENCE_DEVICE
 $originalHeadless = $env:GATE_HEADLESS
 $originalWorldFile = $env:WORLD_FILE
+$originalDisplayMode = $env:GATE_DISPLAY_MODE
+$originalDisplay = $env:GATE_DISPLAY
+$originalQtQpaPlatform = $env:GATE_QPA_PLATFORM
+$originalQtX11NoMitShm = $env:GATE_QT_X11_NO_MITSHM
+$originalLibglAlwaysIndirect = $env:GATE_LIBGL_ALWAYS_INDIRECT
 $env:GATE_PERF_PROFILE = $GatePerfProfile
 $env:GATE_INFERENCE_DEVICE = $InferenceDevice
+if ($PSBoundParameters.ContainsKey("DisplayMode")) {
+    $env:GATE_DISPLAY_MODE = $DisplayMode
+}
+if ($PSBoundParameters.ContainsKey("DisplayAddress")) {
+    if ([string]::IsNullOrWhiteSpace($DisplayAddress)) {
+        Remove-Item Env:\GATE_DISPLAY -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:GATE_DISPLAY = $DisplayAddress
+    }
+}
+if ($PSBoundParameters.ContainsKey("QtQpaPlatform")) {
+    if ([string]::IsNullOrWhiteSpace($QtQpaPlatform)) {
+        Remove-Item Env:\GATE_QPA_PLATFORM -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:GATE_QPA_PLATFORM = $QtQpaPlatform
+    }
+}
+if ($PSBoundParameters.ContainsKey("QtX11NoMitShm")) {
+    if ([string]::IsNullOrWhiteSpace($QtX11NoMitShm)) {
+        Remove-Item Env:\GATE_QT_X11_NO_MITSHM -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:GATE_QT_X11_NO_MITSHM = $QtX11NoMitShm
+    }
+}
+if ($PSBoundParameters.ContainsKey("LibglAlwaysIndirect")) {
+    if ([string]::IsNullOrWhiteSpace($LibglAlwaysIndirect)) {
+        Remove-Item Env:\GATE_LIBGL_ALWAYS_INDIRECT -ErrorAction SilentlyContinue
+    }
+    else {
+        $env:GATE_LIBGL_ALWAYS_INDIRECT = $LibglAlwaysIndirect
+    }
+}
 if ($PSBoundParameters.ContainsKey("Headless")) {
     $resolved = Resolve-NullableBool -Value $Headless -ParamName "Headless"
     if ($null -ne $resolved) {
@@ -119,6 +165,46 @@ finally {
         }
         else {
             $env:WORLD_FILE = $originalWorldFile
+        }
+    }
+    if ($PSBoundParameters.ContainsKey("DisplayMode")) {
+        if ($null -eq $originalDisplayMode) {
+            Remove-Item Env:\GATE_DISPLAY_MODE -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GATE_DISPLAY_MODE = $originalDisplayMode
+        }
+    }
+    if ($PSBoundParameters.ContainsKey("DisplayAddress")) {
+        if ($null -eq $originalDisplay) {
+            Remove-Item Env:\GATE_DISPLAY -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GATE_DISPLAY = $originalDisplay
+        }
+    }
+    if ($PSBoundParameters.ContainsKey("QtQpaPlatform")) {
+        if ($null -eq $originalQtQpaPlatform) {
+            Remove-Item Env:\GATE_QPA_PLATFORM -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GATE_QPA_PLATFORM = $originalQtQpaPlatform
+        }
+    }
+    if ($PSBoundParameters.ContainsKey("QtX11NoMitShm")) {
+        if ($null -eq $originalQtX11NoMitShm) {
+            Remove-Item Env:\GATE_QT_X11_NO_MITSHM -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GATE_QT_X11_NO_MITSHM = $originalQtX11NoMitShm
+        }
+    }
+    if ($PSBoundParameters.ContainsKey("LibglAlwaysIndirect")) {
+        if ($null -eq $originalLibglAlwaysIndirect) {
+            Remove-Item Env:\GATE_LIBGL_ALWAYS_INDIRECT -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:GATE_LIBGL_ALWAYS_INDIRECT = $originalLibglAlwaysIndirect
         }
     }
     if ($PSBoundParameters.ContainsKey("IncludeNav2Bringup")) {
