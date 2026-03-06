@@ -15,7 +15,7 @@ param(
     [string]$DisplayAddress = "",
     [object]$AutoStartVcXsrv = $true,
     [int]$DisplayPreflightTimeoutSeconds = 12,
-    [ValidateSet("rqt_image_view")]
+    [ValidateSet("rqt_image_view", "image_view")]
     [string]$ViewerBackend = "rqt_image_view",
     [string]$SessionId = "",
     [string]$HeadlessSummaryPath = "",
@@ -144,7 +144,7 @@ function Resolve-GuiDisplayPreflight {
         if (-not $vcxProc -and $AutoStartVcXsrv) {
             $exe = Resolve-VcXsrvExecutable
             if ($exe) {
-                Start-Process -FilePath $exe -ArgumentList @(":0", "-multiwindow", "-clipboard", "-wgl", "-ac", "-silent-dup-error") | Out-Null
+                Start-Process -FilePath $exe -ArgumentList @(":0", "-multiwindow", "-clipboard", "-nowgl", "-ac", "-silent-dup-error") | Out-Null
             }
         }
 

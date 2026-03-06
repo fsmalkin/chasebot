@@ -63,7 +63,7 @@ param(
 
     [string]$DisplayPreflightMessage = "",
 
-    [ValidateSet("rqt_image_view")]
+    [ValidateSet("rqt_image_view", "image_view")]
     [string]$ViewerBackend = "rqt_image_view",
 
     [int]$ViewerStartupDelaySeconds = 4,
@@ -236,10 +236,15 @@ function Start-FeedViewer {
         [string]$ViewerId,
         [string]$Topic,
         [string]$Display,
-        [string]$RosDistro
+        [string]$RosDistro,
+        [string]$ViewerBackend
     )
 
     $topicEsc = [regex]::Escape($Topic)
+    $viewerCommand = switch ($ViewerBackend) {
+        "image_view" { "ros2 run image_view image_view --ros-args -r image:=$Topic" }
+        default { "ros2 run rqt_image_view rqt_image_view $Topic" }
+    }
     $pidFile = "/tmp/chasecar_${ViewerId}.pid"
     $logFile = "/tmp/chasecar_${ViewerId}.log"
     $script = @'
@@ -247,12 +252,14 @@ set -euo pipefail
 PID_FILE="__PID_FILE__"
 LOG_FILE="__LOG_FILE__"
 pkill -f "rqt_image_view .*__TOPIC_ESC__" 2>/dev/null || true
+pkill -f "image_view .*image:=__TOPIC_ESC__" 2>/dev/null || true
 rm -f "$PID_FILE" "$LOG_FILE"
 export DISPLAY="__DISPLAY__"
 export QT_QPA_PLATFORM="xcb"
 export QT_X11_NO_MITSHM="1"
-export LIBGL_ALWAYS_INDIRECT="1"
-nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && ros2 run rqt_image_view rqt_image_view __TOPIC__' >"$LOG_FILE" 2>&1 &
+export LIBGL_ALWAYS_SOFTWARE="1"
+unset LIBGL_ALWAYS_INDIRECT
+nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && __VIEWER_COMMAND__' >"$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 sleep 1
 if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
@@ -269,7 +276,7 @@ echo "VIEWER_LOG=__LOG_FILE__"
         Replace("__TOPIC_ESC__", $topicEsc).
         Replace("__DISPLAY__", $Display).
         Replace("__ROS_DISTRO__", $RosDistro).
-        Replace("__TOPIC__", $Topic)
+        Replace("__VIEWER_COMMAND__", $viewerCommand)
     $script = $script.Replace("`r`n", "`n")
     $res = Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script
     $viewerPid = Parse-OutputMarker -Output $res.Output -Prefix "VIEWER_PID="
@@ -301,6 +308,7 @@ if [ -f "$PID_FILE" ]; then
   fi
 fi
 pkill -f "rqt_image_view" 2>/dev/null || true
+pkill -f "image_view" 2>/dev/null || true
 rm -f "$PID_FILE" "$LOG_FILE"
 '@
     $script = $script.Replace("__PID_FILE__", $pidFile).
@@ -326,8 +334,33 @@ rm -f "$PID_FILE" "$LOG_FILE"
 export DISPLAY="__DISPLAY__"
 export QT_QPA_PLATFORM="xcb"
 export QT_X11_NO_MITSHM="1"
-export LIBGL_ALWAYS_INDIRECT="1"
-nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && gz sim -g' >"$LOG_FILE" 2>&1 &
+export LIBGL_ALWAYS_SOFTWARE="1"
+unset LIBGL_ALWAYS_INDIRECT
+GUI_CONFIG="/tmp/chasecar_world_viewer_gui.config"
+if [ -f /root/.gz/sim/9/gui.config ]; then
+  sed 's#<engine>ogre2</engine>#<engine>ogre</engine>#g' /root/.gz/sim/9/gui.config > "$GUI_CONFIG"
+else
+  cat > "$GUI_CONFIG" <<'EOF'
+<?xml version="1.0"?>
+<window>
+  <width>1000</width>
+  <height>845</height>
+</window>
+<plugin filename="MinimalScene" name="3D View">
+  <gz-gui>
+    <title>3D View</title>
+    <property type="bool" key="showTitleBar">false</property>
+    <property type="string" key="state">docked</property>
+  </gz-gui>
+  <engine>ogre</engine>
+  <scene>scene</scene>
+  <ambient_light>0.4 0.4 0.4</ambient_light>
+  <background_color>0.8 0.8 0.8</background_color>
+  <camera_pose>-6 0 6 0 0.5 0</camera_pose>
+</plugin>
+EOF
+fi
+nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && gz sim -g --gui-config /tmp/chasecar_world_viewer_gui.config --render-engine-gui ogre' >"$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 sleep 2
 if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
@@ -683,25 +716,32 @@ try {
                 $feedViewersGatePass = $false
             }
             else {
-                $worldViewer = Start-WorldViewer -DockerCmd $dockerCmd -ContainerId $containerSimGateId -Display $DisplayAddress -RosDistro $CoreRosDistro
-                $worldViewerPid = [string]$worldViewer.Pid
-                $worldViewerLog = [string]$worldViewer.Log
-                $worldAlive = $false
-                for ($tick = 0; $tick -lt [Math]::Max($ViewerReadyTimeoutSeconds, 1); $tick++) {
-                    $worldAlive = Test-WorldViewerAlive -DockerCmd $dockerCmd -ContainerId $containerSimGateId -ViewerPid $worldViewerPid
-                    if ($worldAlive) { break }
-                    Start-Sleep -Seconds 1
-                }
-                if ($worldAlive) {
+                if (-not [bool]$gateHeadless) {
                     $worldViewerRunning = $true
-                    $worldViewerStatus = "viewer_ready"
+                    $worldViewerStatus = "integrated_sim_gui"
                 }
                 else {
-                    $worldViewerRunning = $false
-                    $worldViewerStatus = "world_viewer_unavailable"
+                    $worldViewer = Start-WorldViewer -DockerCmd $dockerCmd -ContainerId $containerSimGateId -Display $DisplayAddress -RosDistro $CoreRosDistro
+                    $worldViewerPid = [string]$worldViewer.Pid
+                    $worldViewerLog = [string]$worldViewer.Log
+                    $worldAlive = $false
+                    for ($tick = 0; $tick -lt [Math]::Max($ViewerReadyTimeoutSeconds, 1); $tick++) {
+                        $worldAlive = Test-WorldViewerAlive -DockerCmd $dockerCmd -ContainerId $containerSimGateId -ViewerPid $worldViewerPid
+                        if ($worldAlive) { break }
+                        Start-Sleep -Seconds 1
+                    }
+                    if ($worldAlive) {
+                        $worldViewerRunning = $true
+                        $worldViewerStatus = "viewer_ready"
+                    }
+                    else {
+                        $worldViewerRunning = $false
+                        $worldViewerStatus = "world_viewer_unavailable"
+                    }
                 }
 
-                $backendCheck = Invoke-ContainerScript -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Script ("source /opt/ros/$CoreRosDistro/setup.bash && ros2 pkg executables rqt_image_view 2>/dev/null | grep -q '^rqt_image_view '")
+                $viewerPackage = if ($ViewerBackend -eq "image_view") { "image_view" } else { "rqt_image_view" }
+                $backendCheck = Invoke-ContainerScript -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Script ("source /opt/ros/$CoreRosDistro/setup.bash && ros2 pkg executables $viewerPackage 2>/dev/null | grep -q '^$viewerPackage '")
                 if ($backendCheck.ExitCode -ne 0) {
                     $feedViewerStatus = "viewer_backend_missing"
                     $feedViewersRunning = $false
@@ -709,8 +749,8 @@ try {
                 }
                 else {
                     $viewerStart = Get-Date
-                    $rgbViewer = Start-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Display $DisplayAddress -Topic "/d415/color/image_raw" -ViewerId "viewer_rgb" -RosDistro $CoreRosDistro
-                    $dbgViewer = Start-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Display $DisplayAddress -Topic "/yolo/debug_image" -ViewerId "viewer_debug" -RosDistro $CoreRosDistro
+                    $rgbViewer = Start-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Display $DisplayAddress -Topic "/d415/color/image_raw" -ViewerId "viewer_rgb" -RosDistro $CoreRosDistro -ViewerBackend $ViewerBackend
+                    $dbgViewer = Start-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Display $DisplayAddress -Topic "/yolo/debug_image" -ViewerId "viewer_debug" -RosDistro $CoreRosDistro -ViewerBackend $ViewerBackend
                     $feedRgbViewerPid = [string]$rgbViewer.Pid
                     $feedDebugViewerPid = [string]$dbgViewer.Pid
                     Start-Sleep -Seconds ([Math]::Max($ViewerStartupDelaySeconds, 1))
@@ -864,33 +904,40 @@ try {
                 $feedViewersGatePass = $false
             }
             else {
-                $worldViewer = Start-WorldViewer -DockerCmd $dockerCmd -ContainerId $containerSimGateId -Display $DisplayAddress -RosDistro $CoreRosDistro
-                $worldViewerPid = [string]$worldViewer.Pid
-                $worldViewerLog = [string]$worldViewer.Log
-                $worldAlive = $false
-                for ($tick = 0; $tick -lt [Math]::Max($ViewerReadyTimeoutSeconds, 1); $tick++) {
-                    $worldAlive = Test-WorldViewerAlive -DockerCmd $dockerCmd -ContainerId $containerSimGateId -ViewerPid $worldViewerPid
-                    if ($worldAlive) { break }
-                    Start-Sleep -Seconds 1
-                }
-                if ($worldAlive) {
+                if (-not [bool]$gateHeadless) {
                     $worldViewerRunning = $true
-                    $worldViewerStatus = "viewer_ready"
+                    $worldViewerStatus = "integrated_sim_gui"
                 }
                 else {
-                    $worldViewerRunning = $false
-                    $worldViewerStatus = "world_viewer_unavailable"
+                    $worldViewer = Start-WorldViewer -DockerCmd $dockerCmd -ContainerId $containerSimGateId -Display $DisplayAddress -RosDistro $CoreRosDistro
+                    $worldViewerPid = [string]$worldViewer.Pid
+                    $worldViewerLog = [string]$worldViewer.Log
+                    $worldAlive = $false
+                    for ($tick = 0; $tick -lt [Math]::Max($ViewerReadyTimeoutSeconds, 1); $tick++) {
+                        $worldAlive = Test-WorldViewerAlive -DockerCmd $dockerCmd -ContainerId $containerSimGateId -ViewerPid $worldViewerPid
+                        if ($worldAlive) { break }
+                        Start-Sleep -Seconds 1
+                    }
+                    if ($worldAlive) {
+                        $worldViewerRunning = $true
+                        $worldViewerStatus = "viewer_ready"
+                    }
+                    else {
+                        $worldViewerRunning = $false
+                        $worldViewerStatus = "world_viewer_unavailable"
+                    }
                 }
 
-                $backendCheck = Invoke-ContainerScript -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Script ("source /opt/ros/$CoreRosDistro/setup.bash && ros2 pkg executables rqt_image_view 2>/dev/null | grep -q '^rqt_image_view '")
+                $viewerPackage = if ($ViewerBackend -eq "image_view") { "image_view" } else { "rqt_image_view" }
+                $backendCheck = Invoke-ContainerScript -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Script ("source /opt/ros/$CoreRosDistro/setup.bash && ros2 pkg executables $viewerPackage 2>/dev/null | grep -q '^$viewerPackage '")
                 if ($backendCheck.ExitCode -ne 0) {
                     $feedViewerStatus = "viewer_backend_missing"
                     $feedViewersRunning = $false
                 }
                 else {
                     $viewerWatch = [System.Diagnostics.Stopwatch]::StartNew()
-                    $rgbViewer = Start-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerId "viewer_rgb" -Topic "/d415/color/image_raw" -Display $DisplayAddress -RosDistro $CoreRosDistro
-                    $dbgViewer = Start-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerId "viewer_debug" -Topic "/yolo/debug_image" -Display $DisplayAddress -RosDistro $CoreRosDistro
+                    $rgbViewer = Start-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerId "viewer_rgb" -Topic "/d415/color/image_raw" -Display $DisplayAddress -RosDistro $CoreRosDistro -ViewerBackend $ViewerBackend
+                    $dbgViewer = Start-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerId "viewer_debug" -Topic "/yolo/debug_image" -Display $DisplayAddress -RosDistro $CoreRosDistro -ViewerBackend $ViewerBackend
                     $feedRgbViewerPid = [string]$rgbViewer.Pid
                     $feedDebugViewerPid = [string]$dbgViewer.Pid
                     Start-Sleep -Seconds ([Math]::Max($ViewerStartupDelaySeconds, 0))
