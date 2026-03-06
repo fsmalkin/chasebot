@@ -60,6 +60,8 @@ param(
 
     [object]$OpenFeedViewers = $null,
 
+    [object]$KeepWindowsOpen = $false,
+
     [int]$ViewerStartupDelaySeconds = 3,
 
     [int]$WorldReadyTimeoutSeconds = 45,
@@ -288,6 +290,7 @@ function Get-LatestParityGate {
 if ($ExecutionLane -eq "container_kilted") {
     $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
     $openFeedRequested = Resolve-StrictBool -Value $OpenFeedViewers -Default $false
+    $keepWindowsOpenRequested = Resolve-StrictBool -Value $KeepWindowsOpen -Default $false
     $autoStartVcXsrvResolved = Resolve-StrictBool -Value $AutoStartVcXsrv -Default $true
     $headlessRequested = $null
     if ($PSBoundParameters.ContainsKey("Headless")) {
@@ -297,7 +300,7 @@ if ($ExecutionLane -eq "container_kilted") {
     $displayConfig = [ordered]@{
         pass = $true
         status = "not_required"
-        message = ""
+        message = "none"
         selected_mode = "none"
         display_address = ""
         display_number = 0
@@ -324,6 +327,9 @@ if ($ExecutionLane -eq "container_kilted") {
             exit 2
         }
     }
+
+    $displayStatusArg = if ([string]::IsNullOrWhiteSpace([string]$displayConfig.status)) { "not_required" } else { [string]$displayConfig.status }
+    $displayMessageArg = if ([string]::IsNullOrWhiteSpace([string]$displayConfig.message)) { "none" } else { [string]$displayConfig.message }
 
     $containerScript = Join-Path $PSScriptRoot "run_milestone_demo_container.ps1"
     $argList = @(
@@ -373,11 +379,13 @@ if ($ExecutionLane -eq "container_kilted") {
         "-DisplayMode",
         [string]$displayConfig.selected_mode,
         "-DisplayPreflightStatus",
-        [string]$displayConfig.status,
+        $displayStatusArg,
         "-DisplayPreflightMessage",
-        [string]$displayConfig.message,
+        $displayMessageArg,
         "-ViewerBackend",
         $ViewerBackend,
+        "-KeepWindowsOpen",
+        ([string][bool]$keepWindowsOpenRequested),
         "-StepTimeoutSeconds",
         $StepTimeoutSeconds.ToString()
     )

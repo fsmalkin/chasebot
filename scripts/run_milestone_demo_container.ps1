@@ -52,6 +52,8 @@ param(
 
     [object]$OpenFeedViewers = $false,
 
+    [object]$KeepWindowsOpen = $false,
+
     [ValidateSet("none", "vcxsrv", "wslg")]
     [string]$DisplayMode = "none",
 
@@ -421,6 +423,47 @@ fi
     return ((Parse-OutputMarker -Output $res.Output -Prefix "ALIVE=").ToLowerInvariant() -eq "true")
 }
 
+function Wait-FeedFrames {
+    param(
+        [string]$DockerCmd,
+        [string]$ContainerId,
+        [string]$Topic,
+        [int]$TimeoutSeconds,
+        [string]$RosDistro
+    )
+
+    $timeout = [Math]::Max($TimeoutSeconds, 1)
+    $script = @'
+set +e
+source /opt/ros/__ROS_DISTRO__/setup.bash
+count=0
+i=1
+while [ $i -le __TIMEOUT__ ]; do
+  if timeout 2s ros2 topic echo "__TOPIC__" --once --qos-profile sensor_data >/dev/null 2>&1; then
+    count=$((count + 1))
+    break
+  fi
+  i=$((i + 1))
+  sleep 1
+done
+echo $count
+'@
+    $escapedTopic = $Topic.Replace('\', '\\').Replace('"', '\"')
+    $script = $script.Replace("__ROS_DISTRO__", $RosDistro).
+        Replace("__TIMEOUT__", $timeout.ToString()).
+        Replace("__TOPIC__", $escapedTopic)
+    $script = $script.Replace("`r`n", "`n")
+    $res = Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script
+    if ($res.ExitCode -ne 0) { return 0 }
+    $last = ($res.Output | Select-Object -Last 1)
+    if ($null -eq $last) { return 0 }
+    $parsed = 0
+    if ([int]::TryParse($last.ToString().Trim(), [ref]$parsed)) {
+        return $parsed
+    }
+    return 0
+}
+
 function Read-ViewerLogTail {
     param(
         [string]$DockerCmd,
@@ -446,6 +489,7 @@ if ($runtimeAliases.ContainsKey($RuntimeTarget)) {
 
 $DemoTargetRelative = Resolve-NullableBool -Value $DemoTargetRelative -ParamName "DemoTargetRelative"
 $OpenFeedViewers = Resolve-NullableBool -Value $OpenFeedViewers -ParamName "OpenFeedViewers"
+$KeepWindowsOpen = Resolve-NullableBool -Value $KeepWindowsOpen -ParamName "KeepWindowsOpen"
 $Headless = Resolve-NullableBool -Value $Headless -ParamName "Headless"
 $RequireMotion = Resolve-NullableBool -Value $RequireMotion -ParamName "RequireMotion"
 $RequireNav2ActionServer = Resolve-NullableBool -Value $RequireNav2ActionServer -ParamName "RequireNav2ActionServer"
@@ -460,6 +504,7 @@ if (-not $PSBoundParameters.ContainsKey("PerfProfile")) { $PerfProfile = $defaul
 if (-not $PSBoundParameters.ContainsKey("InferenceDevice")) { $InferenceDevice = $defaults[$RuntimeTarget].InferenceDevice }
 if ($Headless -eq $null) { $Headless = $true }
 if ($OpenFeedViewers -eq $null) { $OpenFeedViewers = $false }
+if ($KeepWindowsOpen -eq $null) { $KeepWindowsOpen = $false }
 if ($RequireMotion -eq $null) { $RequireMotion = ($Milestone -ge 3) }
 if ($RequireNav2ActionServer -eq $null) { $RequireNav2ActionServer = ($Milestone -ge 3) }
 if ($DemoTargetRelative -eq $null) { $DemoTargetRelative = $false }
@@ -542,6 +587,7 @@ $env:CHASECAR_SNAPSHOT_MODEL_NAME = "${DemoTargetName}_snapshot"
 $stageRuns = @()
 $overallPass = $false
 $demoFailureClass = ""
+$runStartUtc = (Get-Date).ToUniversalTime()
 
 try {
     $dockerCmd = Resolve-DockerCli
@@ -613,6 +659,82 @@ try {
         $artifactDir = if ($stage) { Convert-OrchestratorPath -Path $stage.Artifact -RepoRoot $repoRoot } else { Convert-OrchestratorPath -Path (Parse-Marker -Output $run.Output -Prefix "ARTIFACT_DIR=") -RepoRoot $repoRoot }
         $readiness = Convert-OrchestratorPath -Path (Parse-Marker -Output $run.Output -Prefix "READINESS_REPORT=") -RepoRoot $repoRoot
         [pscustomobject]@{ mode=$Mode; exit_code=$run.ExitCode; marker=$stage; artifact_dir=$artifactDir; readiness_report=$readiness; output=$run.Output; status=$(if($stage){$stage.Status}else{""}); pass=($run.ExitCode -eq 0 -and $stage -and $stage.Status -eq "pass") }
+    }
+
+    # In operator hold-open mode, start viewers immediately after stack bring-up so
+    # the user can observe the run while UAT stages are executing.
+    if ([bool]$OpenFeedViewers -and [bool]$KeepWindowsOpen) {
+        Write-Host "VIEWER_LAUNCH_PHASE=pre_uat"
+        if (-not $displayPreflightOk) {
+            $feedViewerStatus = if ([string]::IsNullOrWhiteSpace($DisplayPreflightStatus)) { "display_preflight_failed" } else { $DisplayPreflightStatus }
+            $worldViewerStatus = $feedViewerStatus
+            $feedViewersRunning = $false
+            $worldViewerRunning = $false
+            $feedViewersGatePass = $false
+        }
+        else {
+            $containerSimGateId = Get-ContainerServiceId -DockerCmd $dockerCmd -ProjectName $resolvedProjectName -ServiceName "sim-gate"
+            $containerGateStackId = Get-ContainerServiceId -DockerCmd $dockerCmd -ProjectName $resolvedProjectName -ServiceName "gate-stack"
+            if ([string]::IsNullOrWhiteSpace($containerSimGateId) -or [string]::IsNullOrWhiteSpace($containerGateStackId)) {
+                $feedViewerStatus = "viewer_container_unavailable"
+                $worldViewerStatus = "world_viewer_unavailable"
+                $feedViewersRunning = $false
+                $worldViewerRunning = $false
+                $feedViewersGatePass = $false
+            }
+            else {
+                $worldViewer = Start-WorldViewer -DockerCmd $dockerCmd -ContainerId $containerSimGateId -Display $DisplayAddress -RosDistro $CoreRosDistro
+                $worldViewerPid = [string]$worldViewer.Pid
+                $worldViewerLog = [string]$worldViewer.Log
+                $worldAlive = $false
+                for ($tick = 0; $tick -lt [Math]::Max($ViewerReadyTimeoutSeconds, 1); $tick++) {
+                    $worldAlive = Test-WorldViewerAlive -DockerCmd $dockerCmd -ContainerId $containerSimGateId -ViewerPid $worldViewerPid
+                    if ($worldAlive) { break }
+                    Start-Sleep -Seconds 1
+                }
+                if ($worldAlive) {
+                    $worldViewerRunning = $true
+                    $worldViewerStatus = "viewer_ready"
+                }
+                else {
+                    $worldViewerRunning = $false
+                    $worldViewerStatus = "world_viewer_unavailable"
+                }
+
+                $backendCheck = Invoke-ContainerScript -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Script ("source /opt/ros/$CoreRosDistro/setup.bash && ros2 pkg executables rqt_image_view 2>/dev/null | grep -q '^rqt_image_view '")
+                if ($backendCheck.ExitCode -ne 0) {
+                    $feedViewerStatus = "viewer_backend_missing"
+                    $feedViewersRunning = $false
+                    $feedViewersGatePass = $false
+                }
+                else {
+                    $viewerStart = Get-Date
+                    $rgbViewer = Start-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Display $DisplayAddress -Topic "/d415/color/image_raw" -ViewerId "viewer_rgb" -RosDistro $CoreRosDistro
+                    $dbgViewer = Start-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Display $DisplayAddress -Topic "/yolo/debug_image" -ViewerId "viewer_debug" -RosDistro $CoreRosDistro
+                    $feedRgbViewerPid = [string]$rgbViewer.Pid
+                    $feedDebugViewerPid = [string]$dbgViewer.Pid
+                    Start-Sleep -Seconds ([Math]::Max($ViewerStartupDelaySeconds, 1))
+
+                    $rgbAlive = Test-FeedViewerAlive -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerPid $feedRgbViewerPid
+                    $dbgAlive = Test-FeedViewerAlive -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerPid $feedDebugViewerPid
+                    $feedViewersRunning = ($rgbAlive -and $dbgAlive)
+                    if (-not $feedViewersRunning) {
+                        $feedViewerStatus = "feed_viewer_unavailable"
+                        $feedViewersGatePass = $false
+                    }
+                    else {
+                        $rgbFrames = Wait-FeedFrames -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Topic "/d415/color/image_raw" -TimeoutSeconds ([Math]::Max($ViewerReadyTimeoutSeconds, 1)) -RosDistro $CoreRosDistro
+                        $dbgFrames = Wait-FeedFrames -DockerCmd $dockerCmd -ContainerId $containerGateStackId -Topic "/yolo/debug_image" -TimeoutSeconds ([Math]::Max($ViewerReadyTimeoutSeconds, 1)) -RosDistro $CoreRosDistro
+                        $feedViewerFrameCounts = [ordered]@{ rgb = $rgbFrames; yolo_debug = $dbgFrames }
+                        $feedViewerStartupElapsedS = [Math]::Round(((Get-Date) - $viewerStart).TotalSeconds, 3)
+                        $framesOk = ($rgbFrames -ge 1 -and $dbgFrames -ge 1)
+                        $feedViewersGatePass = $framesOk
+                        $feedViewerStatus = if ($framesOk) { "viewer_ready" } else { "viewer_frame_timeout" }
+                    }
+                }
+            }
+        }
+        Write-Host ("VIEWER_LAUNCH_STATUS={0}" -f $feedViewerStatus)
     }
 
     if ($Milestone -eq 1) {
@@ -723,7 +845,7 @@ try {
         }
     }
 
-    if ([bool]$OpenFeedViewers) {
+    if ([bool]$OpenFeedViewers -and ((-not $feedViewersRunning) -or (-not $worldViewerRunning) -or (-not $feedViewersGatePass))) {
         if (-not $displayPreflightOk) {
             $feedViewerStatus = if ([string]::IsNullOrWhiteSpace($DisplayPreflightStatus)) { "display_preflight_failed" } else { $DisplayPreflightStatus }
             $worldViewerStatus = $feedViewerStatus
@@ -861,7 +983,7 @@ try {
         execution_lane = "container_kilted"
         core_ros_distro = $CoreRosDistro
         session_id = $runId
-        start_utc = (Get-Date).ToUniversalTime().ToString("o")
+        start_utc = $runStartUtc.ToString("o")
         end_utc = (Get-Date).ToUniversalTime().ToString("o")
         max_run_seconds = [Math]::Max($MaxRunSeconds, 0)
         auto_stop_enabled = ($MaxRunSeconds -gt 0)
@@ -873,6 +995,7 @@ try {
         display_preflight_status = $DisplayPreflightStatus
         display_preflight_message = $DisplayPreflightMessage
         viewer_backend = $ViewerBackend
+        keep_windows_open = [bool]$KeepWindowsOpen
         commands = [ordered]@{
             gate_up = "scripts/run_compose_gate.ps1 -Action up -ProjectName $resolvedProjectName"
             uat_stages = @($stageRuns | ForEach-Object { $_.mode })
@@ -1042,7 +1165,7 @@ try {
     Write-Host "WATCHDOG_PID="
     Write-Host "EVIDENCE_CAPTURE_RGB=$captureRgb"
     Write-Host "EVIDENCE_CAPTURE_DEBUG=$captureDebug"
-    Write-Host "STOP_CMD=powershell -ExecutionPolicy Bypass -File scripts/run_compose_gate.ps1 -Action down -ProjectName $resolvedProjectName"
+    Write-Host "STOP_CMD=powershell -ExecutionPolicy Bypass -File scripts/run_compose_gate.ps1 -Action down -ProjectName $resolvedProjectName; powershell -ExecutionPolicy Bypass -File scripts/run_compose_uat.ps1 -Action down -ProjectName $resolvedProjectName -RuntimeTarget $RuntimeTarget"
 }
 finally {
     foreach ($k in $envBackupKeys) {
@@ -1051,29 +1174,34 @@ finally {
         else { Set-Item -Path "Env:$k" -Value $value }
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($dockerCmd) -and -not [string]::IsNullOrWhiteSpace($containerGateStackId)) {
-        Stop-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerId "viewer_rgb"
-        Stop-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerId "viewer_debug"
-    }
-    if (-not [string]::IsNullOrWhiteSpace($dockerCmd) -and -not [string]::IsNullOrWhiteSpace($containerSimGateId)) {
-        Stop-WorldViewer -DockerCmd $dockerCmd -ContainerId $containerSimGateId
-    }
+    if (-not [bool]$KeepWindowsOpen) {
+        if (-not [string]::IsNullOrWhiteSpace($dockerCmd) -and -not [string]::IsNullOrWhiteSpace($containerGateStackId)) {
+            Stop-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerId "viewer_rgb"
+            Stop-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerId "viewer_debug"
+        }
+        if (-not [string]::IsNullOrWhiteSpace($dockerCmd) -and -not [string]::IsNullOrWhiteSpace($containerSimGateId)) {
+            Stop-WorldViewer -DockerCmd $dockerCmd -ContainerId $containerSimGateId
+        }
 
-    Invoke-PSCapture -ScriptPath $composeGateScript -ScriptArgs @(
-        "-Action","down","-ProjectName",$resolvedProjectName,
-        "-RuntimeTarget",$RuntimeTarget,
-        "-InferenceBackend",$InferenceBackend,
-        "-CoreRosDistro",$CoreRosDistro,
-        "-IncludeNav2Bringup",($(if($includeNav2){"true"}else{"false"})),
-        "-IncludeBridge","false",
-        "-IncludeCmdVelRelay",($(if($includeRelay){"true"}else{"false"}))
-    ) | Out-Null
-    Invoke-PSCapture -ScriptPath $composeUatScript -ScriptArgs @(
-        "-Action","down","-ProjectName",$resolvedProjectName,
-        "-RuntimeTarget",$RuntimeTarget,
-        "-InferenceBackend",$InferenceBackend,
-        "-CoreRosDistro",$CoreRosDistro
-    ) | Out-Null
+        Invoke-PSCapture -ScriptPath $composeGateScript -ScriptArgs @(
+            "-Action","down","-ProjectName",$resolvedProjectName,
+            "-RuntimeTarget",$RuntimeTarget,
+            "-InferenceBackend",$InferenceBackend,
+            "-CoreRosDistro",$CoreRosDistro,
+            "-IncludeNav2Bringup",($(if($includeNav2){"true"}else{"false"})),
+            "-IncludeBridge","false",
+            "-IncludeCmdVelRelay",($(if($includeRelay){"true"}else{"false"}))
+        ) | Out-Null
+        Invoke-PSCapture -ScriptPath $composeUatScript -ScriptArgs @(
+            "-Action","down","-ProjectName",$resolvedProjectName,
+            "-RuntimeTarget",$RuntimeTarget,
+            "-InferenceBackend",$InferenceBackend,
+            "-CoreRosDistro",$CoreRosDistro
+        ) | Out-Null
+    }
+    else {
+        Write-Host "KEEP_WINDOWS_OPEN=true; preserving active stack and viewer processes."
+    }
 }
 
 if ($overallPass) { exit 0 }

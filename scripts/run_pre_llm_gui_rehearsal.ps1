@@ -316,6 +316,7 @@ function Invoke-MilestoneDemo {
         "-WorldName", $WorldName,
         "-EnsureDemoTarget",
         "-OpenFeedViewers", ([string][bool]$openFeedViewersResolved),
+        "-KeepWindowsOpen", ([string][bool]$keepWindowsOpenResolved),
         "-RequireParityGreenForOperatorView", ([string][bool]$requireParityForViewResolved),
         "-DisplayMode", [string]$displayPreflight.selected_mode,
         "-DisplayAddress", [string]$displayPreflight.display_address,
