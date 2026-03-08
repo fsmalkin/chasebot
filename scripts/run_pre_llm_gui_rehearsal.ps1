@@ -395,7 +395,117 @@ function Invoke-MilestoneDemo {
     }
 }
 
+function New-GuiRehearsalSummary {
+    param(
+        [string]$FailureClass = "",
+        [string]$BlockedReason = "",
+        [string]$ErrorMessage = ""
+    )
+    return [ordered]@{
+        run_id = $runId
+        generated_utc = (Get-Date).ToUniversalTime().ToString("o")
+        runtime_target = $RuntimeTarget
+        execution_lane = $ExecutionLane
+        core_ros_distro = $CoreRosDistro
+        world_file = $WorldFile
+        world_name = $WorldName
+        open_feed_viewers = [bool]$openFeedViewersResolved
+        visual_surface = $VisualSurface
+        world_surface = $WorldSurface
+        display = $displayPreflight
+        pass = $false
+        blocked_reason = $BlockedReason
+        failure_class = $FailureClass
+        error_message = $ErrorMessage
+        parity = [ordered]@{
+            required = $true
+            pass = $false
+            summary_path = ""
+            headless_summary_path = ""
+            failure_class = ""
+        }
+        results = @()
+    }
+}
+
+function Write-GuiRehearsalSummaryArtifact {
+    param([object]$SummaryObject)
+    if ($null -eq $SummaryObject) {
+        $SummaryObject = New-GuiRehearsalSummary -FailureClass "missing_gui_summary" -BlockedReason "missing_gui_summary"
+    }
+    if (-not ($SummaryObject.PSObject.Properties.Name -contains "generated_utc")) {
+        $SummaryObject | Add-Member -NotePropertyName generated_utc -NotePropertyValue ((Get-Date).ToUniversalTime().ToString("o")) -Force
+    }
+    else {
+        $SummaryObject.generated_utc = (Get-Date).ToUniversalTime().ToString("o")
+    }
+    if (-not ($SummaryObject.PSObject.Properties.Name -contains "results")) {
+        $SummaryObject | Add-Member -NotePropertyName results -NotePropertyValue @($results) -Force
+    }
+    else {
+        $SummaryObject.results = @($results)
+    }
+    $SummaryObject | ConvertTo-Json -Depth 12 | Set-Content -Path $summaryPath -Encoding UTF8
+}
+
+function New-SubrunFailureResult {
+    param(
+        [int]$Milestone,
+        [string]$EvidenceDir,
+        [string]$ErrorMessage,
+        [string]$TargetId = "",
+        [int]$Attempt = 0
+    )
+    $result = [ordered]@{
+        milestone = $Milestone
+        command = ""
+        exit_code = -1
+        evidence_dir = $EvidenceDir
+        demo_summary_path = (Join-Path $EvidenceDir "demo_summary.json")
+        demo_summary = $null
+        pass = $false
+        failure_class = "subrun_exception"
+        error_message = $ErrorMessage
+    }
+    if (-not [string]::IsNullOrWhiteSpace($TargetId)) {
+        $result.target_id = $TargetId
+    }
+    if ($Attempt -gt 0) {
+        $result.attempt = $Attempt
+    }
+    return [pscustomobject]$result
+}
+
+$summary = $null
 $results = @()
+
+trap {
+    $message = $_.Exception.Message
+    if ($null -eq $summary) {
+        $summary = New-GuiRehearsalSummary -FailureClass "wrapper_exception" -BlockedReason "wrapper_exception" -ErrorMessage $message
+    }
+    else {
+        if (-not ($summary.PSObject.Properties.Name -contains "failure_class") -or [string]::IsNullOrWhiteSpace([string]$summary.failure_class)) {
+            $summary | Add-Member -NotePropertyName failure_class -NotePropertyValue "wrapper_exception" -Force
+        }
+        if (-not ($summary.PSObject.Properties.Name -contains "blocked_reason") -or [string]::IsNullOrWhiteSpace([string]$summary.blocked_reason)) {
+            $summary | Add-Member -NotePropertyName blocked_reason -NotePropertyValue "wrapper_exception" -Force
+        }
+        $summary | Add-Member -NotePropertyName error_message -NotePropertyValue $message -Force
+        $summary | Add-Member -NotePropertyName pass -NotePropertyValue $false -Force
+    }
+    Write-GuiRehearsalSummaryArtifact -SummaryObject $summary
+    if (-not $keepWindowsOpenResolved) {
+        try {
+            Invoke-StaleCleanup
+        }
+        catch {
+        }
+    }
+    Write-Host "GUI_REHEARSAL_SUMMARY=$summaryPath"
+    Write-Host "GUI_REHEARSAL_PASS=False"
+    exit 2
+}
 
 if ($openFeedViewersResolved -and $requireParityForViewResolved -and -not $BypassParityGuard.IsPresent) {
     $latestParity = Get-LatestParitySummary -RepoRoot $repoRoot
@@ -406,27 +516,15 @@ if ($openFeedViewersResolved -and $requireParityForViewResolved -and -not $Bypas
         $parityPass = [bool]$latestParity.summary.pass
     }
     if (-not $parityPass) {
-        $summary = [ordered]@{
-            run_id = $runId
-            generated_utc = (Get-Date).ToUniversalTime().ToString("o")
-            runtime_target = $RuntimeTarget
-            execution_lane = $ExecutionLane
-            core_ros_distro = $CoreRosDistro
-            world_file = $WorldFile
-            world_name = $WorldName
-            open_feed_viewers = [bool]$openFeedViewersResolved
-            display = $displayPreflight
-            pass = $false
-            blocked_reason = "parity_guard_blocked"
-            parity_guard = [ordered]@{
-                required = $true
-                bypassed = $false
-                latest_parity_path = $parityPath
-                latest_parity_pass = $parityPass
-            }
-            results = @()
+        $summary = New-GuiRehearsalSummary -FailureClass "parity_guard_blocked" -BlockedReason "parity_guard_blocked"
+        $summary.display = $displayPreflight
+        $summary.parity_guard = [ordered]@{
+            required = $true
+            bypassed = $false
+            latest_parity_path = $parityPath
+            latest_parity_pass = $parityPass
         }
-        $summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8
+        Write-GuiRehearsalSummaryArtifact -SummaryObject $summary
         Write-Host "GUI_REHEARSAL_SUMMARY=$summaryPath"
         Write-Host "GUI_REHEARSAL_PASS=False"
         exit 2
@@ -434,21 +532,9 @@ if ($openFeedViewersResolved -and $requireParityForViewResolved -and -not $Bypas
 }
 
 if ($openFeedViewersResolved -and -not [bool]$displayPreflight.pass) {
-    $summary = [ordered]@{
-        run_id = $runId
-        generated_utc = (Get-Date).ToUniversalTime().ToString("o")
-        runtime_target = $RuntimeTarget
-        execution_lane = $ExecutionLane
-        core_ros_distro = $CoreRosDistro
-        world_file = $WorldFile
-        world_name = $WorldName
-        open_feed_viewers = [bool]$openFeedViewersResolved
-        pass = $false
-        blocked_reason = "display_preflight_failed"
-        display = $displayPreflight
-        results = @()
-    }
-    $summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8
+    $summary = New-GuiRehearsalSummary -FailureClass "display_preflight_failed" -BlockedReason "display_preflight_failed"
+    $summary.display = $displayPreflight
+    Write-GuiRehearsalSummaryArtifact -SummaryObject $summary
     Write-Host "GUI_REHEARSAL_SUMMARY=$summaryPath"
     Write-Host "GUI_REHEARSAL_PASS=False"
     exit 2
@@ -459,33 +545,30 @@ for ($attempt = 1; $attempt -le [Math]::Max($Milestone2MaxAttempts, 1); $attempt
     $m2Evidence = Join-Path $guiDir ("milestone_2_attempt_{0}" -f $attempt)
     New-Item -ItemType Directory -Path $m2Evidence -Force | Out-Null
     Write-Host ("Running GUI rehearsal Milestone 2 (attempt {0}/{1})..." -f $attempt, [Math]::Max($Milestone2MaxAttempts, 1)) -ForegroundColor Cyan
-    $run = Invoke-MilestoneDemo -Milestone 2 -EvidenceDir $m2Evidence -ForwardM 1.10 -LateralM 0.00 -MaxRunSeconds $Milestone2MaxRunSeconds
+    try {
+        $run = Invoke-MilestoneDemo -Milestone 2 -EvidenceDir $m2Evidence -ForwardM 1.10 -LateralM 0.00 -MaxRunSeconds $Milestone2MaxRunSeconds
+    }
+    catch {
+        $run = New-SubrunFailureResult -Milestone 2 -EvidenceDir $m2Evidence -ErrorMessage $_.Exception.Message -Attempt $attempt
+    }
     $run | Add-Member -NotePropertyName attempt -NotePropertyValue $attempt -Force
+    if (-not ($run.PSObject.Properties.Name -contains "failure_class")) {
+        $run | Add-Member -NotePropertyName failure_class -NotePropertyValue "" -Force
+    }
     $results += $run
     $m2 = $run
     if ($run.pass) { break }
 }
 
 if (-not $m2.pass) {
-    $summary = [ordered]@{
-        run_id = $runId
-        generated_utc = (Get-Date).ToUniversalTime().ToString("o")
-        runtime_target = $RuntimeTarget
-        execution_lane = $ExecutionLane
-        core_ros_distro = $CoreRosDistro
-        world_file = $WorldFile
-        world_name = $WorldName
-        open_feed_viewers = [bool]$openFeedViewersResolved
-        display = $displayPreflight
-        pass = $false
-        blocked_reason = "milestone_2_failed"
-        results = $results
-    }
-    $summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8
+    $summary = New-GuiRehearsalSummary -FailureClass $(if (@($results | Where-Object { $_.milestone -eq 2 -and $_.failure_class -eq "subrun_exception" }).Count -gt 0) { "subrun_exception" } else { "milestone_2_failed" }) -BlockedReason "milestone_2_failed"
+    $summary.display = $displayPreflight
+    Write-GuiRehearsalSummaryArtifact -SummaryObject $summary
     if (-not $keepWindowsOpenResolved) {
         Invoke-StaleCleanup
     }
     Write-Host "GUI_REHEARSAL_SUMMARY=$summaryPath"
+    Write-Host "GUI_REHEARSAL_PASS=False"
     exit 2
 }
 
@@ -501,14 +584,22 @@ foreach ($target in $m3Targets) {
         $evidence = Join-Path $guiDir ("milestone_3_{0}_attempt_{1}" -f $target.id, $attempt)
         New-Item -ItemType Directory -Path $evidence -Force | Out-Null
         Write-Host ("Running GUI rehearsal Milestone 3 target={0} (attempt {1}/{2})..." -f $target.id, $attempt, [Math]::Max($Milestone3MaxAttemptsPerTarget, 1)) -ForegroundColor Cyan
-        $res = Invoke-MilestoneDemo `
-            -Milestone 3 `
-            -EvidenceDir $evidence `
-            -ForwardM ([double]$target.forward_m) `
-            -LateralM ([double]$target.lateral_m) `
-            -MaxRunSeconds $Milestone3MaxRunSeconds
+        try {
+            $res = Invoke-MilestoneDemo `
+                -Milestone 3 `
+                -EvidenceDir $evidence `
+                -ForwardM ([double]$target.forward_m) `
+                -LateralM ([double]$target.lateral_m) `
+                -MaxRunSeconds $Milestone3MaxRunSeconds
+        }
+        catch {
+            $res = New-SubrunFailureResult -Milestone 3 -EvidenceDir $evidence -ErrorMessage $_.Exception.Message -TargetId $target.id -Attempt $attempt
+        }
         $res | Add-Member -NotePropertyName target_id -NotePropertyValue $target.id -Force
         $res | Add-Member -NotePropertyName attempt -NotePropertyValue $attempt -Force
+        if (-not ($res.PSObject.Properties.Name -contains "failure_class")) {
+            $res | Add-Member -NotePropertyName failure_class -NotePropertyValue "" -Force
+        }
         $results += $res
         if ($res.pass) {
             $targetPassed = $true
@@ -610,6 +701,8 @@ $summary = [ordered]@{
         milestone3 = @($m3FinalByTarget | ForEach-Object { Get-PropValue -Object $_ -Path @("demo_summary", "visual") -Default $null })
     }
     pass = $allPass
+    failure_class = ""
+    error_message = ""
     milestone2_pass = [bool]$m2Final.pass
     milestone2_attempts = $m2Attempts.Count
     milestone3_target_count = $m3Targets.Count
@@ -622,7 +715,16 @@ $summary = [ordered]@{
     }
     results = $results
 }
-$summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8
+if (-not [bool]$m2Final.pass) {
+    $summary.failure_class = if (@($m2Attempts | Where-Object { $_.failure_class -eq "subrun_exception" }).Count -gt 0) { "subrun_exception" } else { "milestone_2_failed" }
+}
+elseif (-not $m3AllPassed) {
+    $summary.failure_class = if (@($m3FinalByTarget | Where-Object { $_.failure_class -eq "subrun_exception" }).Count -gt 0) { "subrun_exception" } else { "milestone_3_failed" }
+}
+elseif (-not $visualReady) {
+    $summary.failure_class = "visual_gate_failed"
+}
+Write-GuiRehearsalSummaryArtifact -SummaryObject $summary
 
 $resolvedHeadlessSummaryPath = ""
 if (-not [string]::IsNullOrWhiteSpace($HeadlessSummaryPath)) {
@@ -669,6 +771,9 @@ elseif (-not $parityPass) {
 
 $allPass = ($allPass -and $parityPass)
 $summary.pass = $allPass
+if (-not $parityPass -and [string]::IsNullOrWhiteSpace($summary.failure_class)) {
+    $summary.failure_class = if ([string]::IsNullOrWhiteSpace($parityFailureClass)) { "parity_failed" } else { $parityFailureClass }
+}
 $summary.parity = [ordered]@{
     required = $true
     pass = $parityPass
@@ -676,7 +781,7 @@ $summary.parity = [ordered]@{
     headless_summary_path = $resolvedHeadlessSummaryPath
     failure_class = if ($parityPass) { "" } else { $parityFailureClass }
 }
-$summary | ConvertTo-Json -Depth 10 | Set-Content -Path $summaryPath -Encoding UTF8
+Write-GuiRehearsalSummaryArtifact -SummaryObject $summary
 
 if (-not $keepWindowsOpenResolved) {
     Invoke-StaleCleanup

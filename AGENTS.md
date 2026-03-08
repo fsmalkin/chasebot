@@ -95,18 +95,16 @@ Behavior:
    - fidelity multi-target: `ros2_config/config/multi_target_nav2_fidelity.yaml`
    - fidelity soak multi-target: `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
 5. Latest frozen campaign + soak + smoke package:
-   - campaign summary: `artifacts/session/20260303T050659Z/campaign_run_summary.json`
-   - campaign trend: `artifacts/session/20260303T050659Z/pre_llm_campaign_trend.json`
-   - soak summary: `artifacts/session/20260303T054851Z/pre_llm_headless_summary.json`
-   - rc readiness: `artifacts/session/20260303T050659Z/rc/readiness_report.json`
+   - campaign summary: `artifacts/session/20260308T042822Z/campaign_run_summary.json`
+   - campaign trend: `artifacts/session/20260308T042822Z/pre_llm_campaign_trend.json`
+   - soak summary: `artifacts/session/20260308T052630Z/pre_llm_headless_summary.json`
+   - rc readiness: `artifacts/session/20260308T042822Z/rc/readiness_report.json`
    - adversarial summary: `artifacts/session/20260303T061055Z/adversarial_headless_summary.json`
    - brain adapter smoke: `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json`
-   - current post-fix checkpoint headless: `artifacts/session/20260307T142310Z/pre_llm_headless_summary.json`
-   - current post-fix checkpoint recorded visual: `artifacts/session/20260307T142310Z/visual/visual_demo_summary_recorded.json`
-   - current post-fix checkpoint GUI rehearsal: `artifacts/session/20260307T142310Z/pre_llm_gui_rehearsal_summary.json`
-   - current post-fix checkpoint parity: `artifacts/session/20260307T142310Z/parity_summary.json`
-   - current post-fix checkpoint campaign trend: `artifacts/session/20260307T142310Z/pre_llm_campaign_trend.json`
-   - current post-fix checkpoint campaign summary: `artifacts/session/20260307T142310Z/campaign_run_summary.json`
+   - latest same-session headless: `artifacts/session/20260308T050710Z/pre_llm_headless_summary.json`
+   - latest same-session recorded visual: `artifacts/session/20260308T050710Z/visual/visual_demo_summary_recorded.json`
+   - latest same-session GUI rehearsal: `artifacts/session/20260308T050710Z/pre_llm_gui_rehearsal_summary.json`
+   - latest same-session parity: `artifacts/session/20260308T050710Z/parity_summary.json`
 
 ## Current Caution
 

@@ -152,23 +152,21 @@ Required handoff artifacts:
 5. `runtime/contracts/llm_control_contract.yaml`
 6. `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
 
-Current full campaign baseline (pre diff-drive sign fix):
+Current full campaign baseline (post diff-drive sign fix):
 
-1. `artifacts/session/20260303T050659Z/pre_llm_campaign_trend.json`
-2. `artifacts/session/20260303T050659Z/campaign_run_summary.json`
-3. `artifacts/session/20260303T050659Z/rc/manifest.json`
-4. `artifacts/session/20260303T050659Z/rc/readiness_report.json`
-5. `artifacts/session/20260303T054851Z/pre_llm_headless_summary.json` (soak)
+1. `artifacts/session/20260308T042822Z/pre_llm_campaign_trend.json`
+2. `artifacts/session/20260308T042822Z/campaign_run_summary.json`
+3. `artifacts/session/20260308T042822Z/rc/manifest.json`
+4. `artifacts/session/20260308T042822Z/rc/readiness_report.json`
+5. `artifacts/session/20260308T052630Z/pre_llm_headless_summary.json` (soak)
 6. `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json` (adapter smoke)
 
-Current post-fix checkpoint baseline (one-cycle same-session package):
+Latest same-session visual package from that campaign:
 
-1. `artifacts/session/20260307T142310Z/pre_llm_headless_summary.json`
-2. `artifacts/session/20260307T142310Z/visual/visual_demo_summary_recorded.json`
-3. `artifacts/session/20260307T142310Z/pre_llm_gui_rehearsal_summary.json`
-4. `artifacts/session/20260307T142310Z/parity_summary.json`
-5. `artifacts/session/20260307T142310Z/pre_llm_campaign_trend.json`
-6. `artifacts/session/20260307T142310Z/campaign_run_summary.json`
+1. `artifacts/session/20260308T050710Z/pre_llm_headless_summary.json`
+2. `artifacts/session/20260308T050710Z/visual/visual_demo_summary_recorded.json`
+3. `artifacts/session/20260308T050710Z/pre_llm_gui_rehearsal_summary.json`
+4. `artifacts/session/20260308T050710Z/parity_summary.json`
 
 Parity-first GUI readiness (required before operator live view):
 
@@ -180,10 +178,10 @@ Parity-first GUI readiness (required before operator live view):
    - `artifacts/session/<session_id>/parity_summary.json` with `pass=true`
 4. Only then run operator view:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true -VisualSurface browser_dashboard -WorldSurface streamed_sim -AutoOpenVisualSurface true`
-5. Current validated same-session checkpoint:
-   - `artifacts/session/20260307T142310Z/visual/visual_demo_summary_recorded.json`
-   - `artifacts/session/20260307T142310Z/pre_llm_gui_rehearsal_summary.json`
-   - `artifacts/session/20260307T142310Z/parity_summary.json`
+5. Current validated same-session baseline:
+   - `artifacts/session/20260308T050710Z/visual/visual_demo_summary_recorded.json`
+   - `artifacts/session/20260308T050710Z/pre_llm_gui_rehearsal_summary.json`
+   - `artifacts/session/20260308T050710Z/parity_summary.json`
 
 Required pass criteria:
 

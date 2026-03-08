@@ -104,6 +104,44 @@ $campaignStamp = (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
 $campaignDir = Join-Path $repoRoot "artifacts/session/$campaignStamp"
 New-Item -ItemType Directory -Path $campaignDir -Force | Out-Null
 
+$campaignReport = ""
+$soakSummary = ""
+$campaignFailureClass = ""
+$campaignFailureMessage = ""
+$campaignSummaryPath = Join-Path $campaignDir "campaign_run_summary.json"
+
+function Write-CampaignSummaryArtifact {
+    $summary = [ordered]@{
+        generated_utc = (Get-Date).ToUniversalTime().ToString("o")
+        campaign_dir = $campaignDir
+        include_gui_parity = $includeGuiParityResolved
+        gui_open_feed_viewers = $guiOpenFeedViewersResolved
+        gui_display_mode = $GuiDisplayMode
+        gui_viewer_backend = $GuiViewerBackend
+        dual_runs = @($runSummaries)
+        gui_runs = @($guiRunSummaries)
+        gui_parity_all_green = if ($includeGuiParityResolved) { (@($guiRunSummaries | Where-Object { $_.status -ne "pass" }).Count -eq 0) } else { $null }
+        campaign_report = $campaignReport
+        soak_summary = $soakSummary
+        rc_manifest = if ($includeSoakResolved) { Join-Path $campaignDir "rc/manifest.json" } else { "" }
+        rc_readiness = if ($includeSoakResolved) { Join-Path $campaignDir "rc/readiness_report.json" } else { "" }
+        pass = [string]::IsNullOrWhiteSpace($campaignFailureClass)
+        failure_class = $campaignFailureClass
+        failure_message = $campaignFailureMessage
+    }
+    $summary | ConvertTo-Json -Depth 8 | Set-Content -Path $campaignSummaryPath -Encoding UTF8
+}
+
+trap {
+    if ([string]::IsNullOrWhiteSpace($campaignFailureClass)) {
+        $campaignFailureClass = "wrapper_exception"
+    }
+    $campaignFailureMessage = $_.Exception.Message
+    Write-CampaignSummaryArtifact
+    Write-Host "Campaign summary: $campaignSummaryPath"
+    exit 2
+}
+
 $runSummaries = @()
 $guiRunSummaries = @()
 for ($i = 1; $i -le $Runs; $i++) {
@@ -156,16 +194,39 @@ for ($i = 1; $i -le $Runs; $i++) {
             $recordedSummaryPath = Join-Path $repoRoot $recordedSummaryPath
         }
         $recordedPass = $false
+        $recordedFailureClass = ""
         if (Test-Path -LiteralPath $recordedSummaryPath) {
             try {
                 $recordedObj = Get-Content -LiteralPath $recordedSummaryPath -Raw | ConvertFrom-Json
                 $recordedPass = [bool]$recordedObj.pass
+                if (-not $recordedPass) {
+                    $recordedFailureClass = [string]$recordedObj.failure_class
+                }
             }
             catch {
                 $recordedPass = $false
+                $recordedFailureClass = "recorded_summary_unreadable"
             }
         }
+        else {
+            $recordedFailureClass = "recorded_visual_summary_missing"
+        }
         if ($recorded.ExitCode -ne 0 -or -not $recordedPass) {
+            if ([string]::IsNullOrWhiteSpace($recordedFailureClass)) {
+                $recordedFailureClass = "recorded_visual_failed"
+            }
+            $guiRunSummaries += [ordered]@{
+                run_index = $i
+                run_id = $runId
+                status = "fail"
+                headless_summary = $summaryPath
+                recorded_visual_summary = $recordedSummaryPath
+                gui_summary = ""
+                parity_summary = ""
+                visual_ready = $false
+                failure_class = $recordedFailureClass
+            }
+            $campaignFailureClass = $recordedFailureClass
             throw "Recorded visual bundle failed for dual run $i (session $runId)."
         }
 
@@ -202,25 +263,48 @@ for ($i = 1; $i -le $Runs; $i++) {
         $paritySummaryPath = Join-Path $repoRoot "artifacts/session/$runId/parity_summary.json"
         $parityPass = $false
         $guiVisualReady = $false
+        $guiFailureClass = ""
         if (Test-Path -LiteralPath $paritySummaryPath) {
             try {
                 $parityObj = Get-Content -LiteralPath $paritySummaryPath -Raw | ConvertFrom-Json
                 $parityPass = [bool]$parityObj.pass
+                if (-not $parityPass) {
+                    $guiFailureClass = [string]$parityObj.failure_class
+                }
             }
             catch {
                 $parityPass = $false
+                $guiFailureClass = "parity_summary_unreadable"
             }
         }
         if (Test-Path -LiteralPath $guiSummaryPath) {
             try {
                 $guiObj = Get-Content -LiteralPath $guiSummaryPath -Raw | ConvertFrom-Json
                 $guiVisualReady = [bool]$guiObj.visual_ready
+                if (-not $parityPass -and [string]::IsNullOrWhiteSpace($guiFailureClass)) {
+                    $guiFailureClass = [string]$guiObj.failure_class
+                }
             }
             catch {
                 $guiVisualReady = $false
+                if ([string]::IsNullOrWhiteSpace($guiFailureClass)) {
+                    $guiFailureClass = "gui_summary_unreadable"
+                }
             }
         }
+        elseif ([string]::IsNullOrWhiteSpace($guiFailureClass)) {
+            $guiFailureClass = "missing_gui_summary"
+        }
         $visualGatePass = if ($guiOpenFeedViewersResolved) { $guiVisualReady } else { $true }
+        if (-not $parityPass -and -not (Test-Path -LiteralPath $paritySummaryPath) -and [string]::IsNullOrWhiteSpace($guiFailureClass)) {
+            $guiFailureClass = "missing_parity_summary"
+        }
+        if ($gui.ExitCode -ne 0 -and [string]::IsNullOrWhiteSpace($guiFailureClass)) {
+            $guiFailureClass = "wrapper_exception"
+        }
+        if (-not $visualGatePass -and [string]::IsNullOrWhiteSpace($guiFailureClass)) {
+            $guiFailureClass = "visual_not_ready"
+        }
 
         $guiStatus = if ($gui.ExitCode -eq 0 -and $parityPass -and $visualGatePass) { "pass" } else { "fail" }
         $guiRunSummaries += [ordered]@{
@@ -232,9 +316,11 @@ for ($i = 1; $i -le $Runs; $i++) {
             gui_summary = $guiSummaryPath
             parity_summary = $paritySummaryPath
             visual_ready = $guiVisualReady
+            failure_class = $guiFailureClass
         }
 
         if ($gui.ExitCode -ne 0 -or -not $parityPass -or -not $visualGatePass) {
+            $campaignFailureClass = if ([string]::IsNullOrWhiteSpace($guiFailureClass)) { "gui_rehearsal_failed" } else { $guiFailureClass }
             throw "GUI parity rehearsal failed for dual run $i (session $runId)."
         }
     }
@@ -254,7 +340,6 @@ finally {
     Pop-Location
 }
 
-$soakSummary = ""
 if ($includeSoakResolved) {
     Write-Host "Running fidelity soak cycle..." -ForegroundColor Cyan
     $soak = Invoke-PSCapture -ScriptPath (Join-Path $repoRoot "scripts/run_headless_pre_llm.ps1") -ScriptArgs @(
@@ -290,23 +375,5 @@ if (-not [string]::IsNullOrWhiteSpace($soakSummary)) {
     }
 }
 
-$summary = [ordered]@{
-    generated_utc = (Get-Date).ToUniversalTime().ToString("o")
-    campaign_dir = $campaignDir
-    include_gui_parity = $includeGuiParityResolved
-    gui_open_feed_viewers = $guiOpenFeedViewersResolved
-    gui_display_mode = $GuiDisplayMode
-    gui_viewer_backend = $GuiViewerBackend
-    dual_runs = $runSummaries
-    gui_runs = $guiRunSummaries
-    gui_parity_all_green = if ($includeGuiParityResolved) { (@($guiRunSummaries | Where-Object { $_.status -ne "pass" }).Count -eq 0) } else { $null }
-    campaign_report = $campaignReport
-    soak_summary = $soakSummary
-    rc_manifest = if ($includeSoakResolved) { Join-Path $campaignDir "rc/manifest.json" } else { "" }
-    rc_readiness = if ($includeSoakResolved) { Join-Path $campaignDir "rc/readiness_report.json" } else { "" }
-}
-
-$campaignSummaryPath = Join-Path $campaignDir "campaign_run_summary.json"
-$summary | ConvertTo-Json -Depth 8 | Set-Content -Path $campaignSummaryPath -Encoding UTF8
-
+Write-CampaignSummaryArtifact
 Write-Host "Campaign summary: $campaignSummaryPath"
