@@ -140,6 +140,35 @@ for ($i = 1; $i -le $Runs; $i++) {
             throw "Dual run $i produced headless summary without run_id."
         }
 
+        Write-Host ("[{0}/{1}] Running recorded visual bundle for session {2}..." -f $i, $Runs, $runId) -ForegroundColor Cyan
+        $recorded = Invoke-PSCapture -ScriptPath (Join-Path $repoRoot "scripts/run_recorded_visual_demo.ps1") -ScriptArgs @(
+            "-Milestone", 3,
+            "-RuntimeTarget", $GuiRuntimeTarget,
+            "-CoreRosDistro", $GuiCoreRosDistro,
+            "-SessionId", $runId,
+            "-MaxRunSeconds", $GuiMilestone3MaxRunSeconds
+        )
+        $recordedSummaryPath = Parse-Marker -Output $recorded.Output -Prefix "RECORDED_VISUAL_SUMMARY="
+        if ([string]::IsNullOrWhiteSpace($recordedSummaryPath)) {
+            $recordedSummaryPath = Join-Path $repoRoot "artifacts/session/$runId/visual/visual_demo_summary_recorded.json"
+        }
+        if (-not [System.IO.Path]::IsPathRooted($recordedSummaryPath)) {
+            $recordedSummaryPath = Join-Path $repoRoot $recordedSummaryPath
+        }
+        $recordedPass = $false
+        if (Test-Path -LiteralPath $recordedSummaryPath) {
+            try {
+                $recordedObj = Get-Content -LiteralPath $recordedSummaryPath -Raw | ConvertFrom-Json
+                $recordedPass = [bool]$recordedObj.pass
+            }
+            catch {
+                $recordedPass = $false
+            }
+        }
+        if ($recorded.ExitCode -ne 0 -or -not $recordedPass) {
+            throw "Recorded visual bundle failed for dual run $i (session $runId)."
+        }
+
         Write-Host ("[{0}/{1}] Running GUI rehearsal + parity for session {2}..." -f $i, $Runs, $runId) -ForegroundColor Cyan
         $guiArgs = @(
             "-SessionId", $runId,
@@ -199,6 +228,7 @@ for ($i = 1; $i -le $Runs; $i++) {
             run_id = $runId
             status = $guiStatus
             headless_summary = $summaryPath
+            recorded_visual_summary = $recordedSummaryPath
             gui_summary = $guiSummaryPath
             parity_summary = $paritySummaryPath
             visual_ready = $guiVisualReady

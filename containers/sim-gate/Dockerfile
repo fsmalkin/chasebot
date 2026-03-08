@@ -9,9 +9,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
     curl \
+    ffmpeg \
+    fluxbox \
     jq \
+    libgl1-mesa-dri \
+    mesa-utils \
+    novnc \
+    websockify \
     ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
     python3-pip \
+    python3-opencv \
+    x11vnc \
+    xauth \
+    xvfb \
     && \
     for pkg in \
       "ros-${ROS_DISTRO}-nav2-bringup" \

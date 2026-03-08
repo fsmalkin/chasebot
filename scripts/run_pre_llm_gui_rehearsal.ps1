@@ -9,6 +9,12 @@ param(
     [string]$WorldFile = "yolo_test_world_v6_clean_uat.world",
     [string]$WorldName = "yolo_test_world",
     [object]$OpenFeedViewers = $false,
+    [ValidateSet("none", "recorded", "browser_dashboard")]
+    [string]$VisualSurface = "",
+    [ValidateSet("streamed_sim", "none", "x11_debug")]
+    [string]$WorldSurface = "",
+    [object]$AutoOpenVisualSurface = $false,
+    [int]$DashboardPort = 0,
     [object]$KeepWindowsOpen = $false,
     [ValidateSet("auto", "vcxsrv", "wslg")]
     [string]$DisplayMode = "auto",
@@ -183,9 +189,16 @@ if ($runtimeAliases.ContainsKey($RuntimeTarget)) {
     $RuntimeTarget = $runtimeAliases[$RuntimeTarget]
 }
 $openFeedViewersResolved = Resolve-Bool -Value $OpenFeedViewers -ParamName "OpenFeedViewers"
+$autoOpenVisualSurfaceResolved = Resolve-Bool -Value $AutoOpenVisualSurface -ParamName "AutoOpenVisualSurface"
 $keepWindowsOpenResolved = Resolve-Bool -Value $KeepWindowsOpen -ParamName "KeepWindowsOpen"
 $requireParityForViewResolved = Resolve-Bool -Value $RequireParityGreenForOperatorView -ParamName "RequireParityGreenForOperatorView"
 $autoStartVcXsrvResolved = Resolve-Bool -Value $AutoStartVcXsrv -ParamName "AutoStartVcXsrv"
+if ([string]::IsNullOrWhiteSpace($VisualSurface)) {
+    $VisualSurface = if ($openFeedViewersResolved) { "browser_dashboard" } else { "none" }
+}
+if ([string]::IsNullOrWhiteSpace($WorldSurface)) {
+    $WorldSurface = if ($VisualSurface -ne "none") { "streamed_sim" } else { "none" }
+}
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $runId = if ([string]::IsNullOrWhiteSpace($SessionId)) {
@@ -210,7 +223,7 @@ $displayPreflight = [ordered]@{
     display_address = ""
     viewer_backend = $ViewerBackend
 }
-if ($openFeedViewersResolved) {
+if ($openFeedViewersResolved -and $VisualSurface -eq "none" -and $WorldSurface -eq "x11_debug") {
     $displayPreflight = Resolve-GuiDisplayPreflight `
         -Mode $DisplayMode `
         -DisplayAddress $DisplayAddress `
@@ -316,10 +329,12 @@ function Invoke-MilestoneDemo {
         "-WorldName", $WorldName,
         "-EnsureDemoTarget",
         "-OpenFeedViewers", ([string][bool]$openFeedViewersResolved),
+        "-VisualSurface", $VisualSurface,
+        "-WorldSurface", $WorldSurface,
+        "-AutoOpenVisualSurface", ([string][bool]$autoOpenVisualSurfaceResolved),
+        "-DashboardPort", $DashboardPort.ToString(),
         "-KeepWindowsOpen", ([string][bool]$keepWindowsOpenResolved),
         "-RequireParityGreenForOperatorView", ([string][bool]$requireParityForViewResolved),
-        "-DisplayMode", [string]$displayPreflight.selected_mode,
-        "-DisplayAddress", [string]$displayPreflight.display_address,
         "-AutoStartVcXsrv", ([string][bool]$autoStartVcXsrvResolved),
         "-DisplayPreflightTimeoutSeconds", [string]$DisplayPreflightTimeoutSeconds,
         "-ViewerBackend", $ViewerBackend,
@@ -328,6 +343,12 @@ function Invoke-MilestoneDemo {
     )
     if ($BypassParityGuard.IsPresent) {
         $args += "-BypassParityGuard"
+    }
+    if ([string]$displayPreflight.selected_mode -in @("auto", "vcxsrv", "wslg")) {
+        $args += @("-DisplayMode", [string]$displayPreflight.selected_mode)
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$displayPreflight.display_address)) {
+        $args += @("-DisplayAddress", [string]$displayPreflight.display_address)
     }
     if ($Milestone -ge 3) {
         $args += @(
@@ -510,21 +531,47 @@ $m3AllTargetsCovered = ($m3FinalByTarget.Count -eq $m3Targets.Count)
 $m3AllPassed = ($m3AllTargetsCovered -and (@($m3FinalByTarget | Where-Object { -not $_.pass }).Count -eq 0))
 $m2DemoSummary = Get-PropValue -Object $m2Final -Path @("demo_summary") -Default $null
 $m2ViewersRunning = Resolve-Bool -Value (Get-PropValue -Object $m2DemoSummary -Path @("viewers", "feed_viewers_running") -Default $false) -ParamName "m2.feed_viewers_running"
+$m2Visual = Get-PropValue -Object $m2DemoSummary -Path @("visual") -Default $null
+$m2WorldSurface = [string](Get-PropValue -Object $m2DemoSummary -Path @("world_surface") -Default $WorldSurface)
+$m2WorldStream = Get-PropValue -Object $m2Visual -Path @("world_stream") -Default $null
 $m2DisplayMode = [string](Get-PropValue -Object $m2DemoSummary -Path @("display_mode") -Default [string]$displayPreflight.selected_mode)
 $m2DisplayAddress = [string](Get-PropValue -Object $m2DemoSummary -Path @("display_address") -Default [string]$displayPreflight.display_address)
 $m2ViewerBackend = [string](Get-PropValue -Object $m2DemoSummary -Path @("viewer_backend") -Default $ViewerBackend)
 $m2ViewerStartupElapsedS = [double](Get-PropValue -Object $m2DemoSummary -Path @("viewers", "viewer_startup_elapsed_s") -Default 0.0)
 $m2ViewerFrameCounts = Get-PropValue -Object $m2DemoSummary -Path @("viewers", "viewer_frame_counts") -Default ([ordered]@{ rgb = 0; yolo_debug = 0 })
+$m2VisualFrameCounts = [ordered]@{
+    raw = [int](Get-PropValue -Object $m2Visual -Path @("raw_frame_count") -Default 0)
+    debug = [int](Get-PropValue -Object $m2Visual -Path @("debug_frame_count") -Default 0)
+    telemetry = [int](Get-PropValue -Object $m2Visual -Path @("telemetry_frame_count") -Default 0)
+}
+$m2VisualReady = Resolve-Bool -Value (Get-PropValue -Object $m2Visual -Path @("visual_ready") -Default $false) -ParamName "m2.visual.visual_ready"
+$m2DashboardUrl = [string](Get-PropValue -Object $m2Visual -Path @("dashboard_url") -Default "")
+$m2WorldStreamReady = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("ready") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.ready"
+$m2WorldStreamNonblank = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("nonblank") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.nonblank"
+$m2WorldStreamInteractive = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("interactive") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.interactive"
+$m2WorldStreamSameSession = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("same_session_partition") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.same_session_partition"
+$m2TruthReady = Resolve-Bool -Value (Get-PropValue -Object $m2Visual -Path @("truth_ready") -Default $false) -ParamName "m2.visual.truth_ready"
+$m2TruthAlignmentOk = Resolve-Bool -Value (Get-PropValue -Object $m2Visual -Path @("truth_alignment_ok") -Default $false) -ParamName "m2.visual.truth_alignment_ok"
 $m3ViewersRunningAll = $true
+$m3VisualReadyAll = $true
 foreach ($m3 in $m3FinalByTarget) {
     $m3DemoSummary = Get-PropValue -Object $m3 -Path @("demo_summary") -Default $null
     $m3ViewersRunning = Resolve-Bool -Value (Get-PropValue -Object $m3DemoSummary -Path @("viewers", "feed_viewers_running") -Default $false) -ParamName "m3.feed_viewers_running"
+    $m3Visual = Get-PropValue -Object $m3DemoSummary -Path @("visual") -Default $null
+    $m3VisualReady = Resolve-Bool -Value (Get-PropValue -Object $m3Visual -Path @("visual_ready") -Default $false) -ParamName "m3.visual.visual_ready"
     if (-not $m3ViewersRunning) {
         $m3ViewersRunningAll = $false
-        break
+    }
+    if (-not $m3VisualReady) {
+        $m3VisualReadyAll = $false
     }
 }
-$visualReady = if ($openFeedViewersResolved) { ($m2ViewersRunning -and $m3ViewersRunningAll) } else { $true }
+$visualReady = if ($VisualSurface -eq "none") {
+    if ($openFeedViewersResolved) { ($m2ViewersRunning -and $m3ViewersRunningAll) } else { $true }
+}
+else {
+    ($m2VisualReady -and $m3VisualReadyAll -and $m2TruthReady -and $m2TruthAlignmentOk -and $m2WorldStreamReady -and $m2WorldStreamNonblank -and $m2WorldStreamInteractive -and $m2WorldStreamSameSession)
+}
 $allPass = ([bool]$m2Final.pass -and $m3AllPassed -and $visualReady)
 $summary = [ordered]@{
     run_id = $runId
@@ -535,6 +582,8 @@ $summary = [ordered]@{
     world_file = $WorldFile
     world_name = $WorldName
     open_feed_viewers = [bool]$openFeedViewersResolved
+    visual_surface = $VisualSurface
+    world_surface = $m2WorldSurface
     display = [ordered]@{
         preflight = $displayPreflight
         display_mode = $m2DisplayMode
@@ -544,8 +593,22 @@ $summary = [ordered]@{
     visual_ready = $visualReady
     display_mode = $m2DisplayMode
     viewer_backend = $m2ViewerBackend
-    viewer_frame_counts = $m2ViewerFrameCounts
+    viewer_frame_counts = if ($VisualSurface -eq "none") { $m2ViewerFrameCounts } else { $m2VisualFrameCounts }
     viewer_startup_elapsed_s = $m2ViewerStartupElapsedS
+    visual = [ordered]@{
+        surface = $VisualSurface
+        world_surface = $m2WorldSurface
+        dashboard_url = $m2DashboardUrl
+        world_stream_url = [string](Get-PropValue -Object $m2WorldStream -Path @("url") -Default "")
+        world_stream_ready = $m2WorldStreamReady
+        world_stream_nonblank = $m2WorldStreamNonblank
+        world_stream_interactive = $m2WorldStreamInteractive
+        same_session_partition = $m2WorldStreamSameSession
+        truth_ready = $m2TruthReady
+        truth_alignment_ok = $m2TruthAlignmentOk
+        milestone2 = $m2Visual
+        milestone3 = @($m3FinalByTarget | ForEach-Object { Get-PropValue -Object $_ -Path @("demo_summary", "visual") -Default $null })
+    }
     pass = $allPass
     milestone2_pass = [bool]$m2Final.pass
     milestone2_attempts = $m2Attempts.Count

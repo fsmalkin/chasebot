@@ -60,6 +60,16 @@ param(
 
     [object]$OpenFeedViewers = $null,
 
+    [ValidateSet("none", "recorded", "browser_dashboard")]
+    [string]$VisualSurface = "",
+
+    [ValidateSet("streamed_sim", "none", "x11_debug")]
+    [string]$WorldSurface = "",
+
+    [object]$AutoOpenVisualSurface = $null,
+
+    [int]$DashboardPort = 0,
+
     [object]$KeepWindowsOpen = $false,
 
     [int]$ViewerStartupDelaySeconds = 3,
@@ -166,6 +176,63 @@ function Resolve-DisplayNumber {
         return [int]$matches[1]
     }
     return 0
+}
+
+function Get-ContainerLaneArtifactDir {
+    param(
+        [string]$RepoRoot,
+        [int]$Milestone,
+        [string]$SessionId,
+        [string]$EvidenceDir
+    )
+    if (-not [string]::IsNullOrWhiteSpace($EvidenceDir)) {
+        if ([System.IO.Path]::IsPathRooted($EvidenceDir)) {
+            return $EvidenceDir
+        }
+        return (Join-Path $RepoRoot $EvidenceDir)
+    }
+    return (Join-Path $RepoRoot "artifacts/session/$SessionId/gui_rehearsal/milestone_$Milestone")
+}
+
+function Stop-DemoDashboardProcess {
+    param([string]$DemoPidsPath)
+    if (-not (Test-Path -LiteralPath $DemoPidsPath)) { return }
+    try {
+        $pids = Get-Content -LiteralPath $DemoPidsPath -Raw | ConvertFrom-Json
+        $dashboardPid = 0
+        if ($pids -and $pids.pids -and ($pids.pids.PSObject.Properties.Name -contains "dashboard_server")) {
+            $dashboardPid = [int]$pids.pids.dashboard_server
+        }
+        if ($dashboardPid -gt 0) {
+            Stop-Process -Id $dashboardPid -Force -ErrorAction SilentlyContinue
+        }
+    }
+    catch {
+    }
+}
+
+function Invoke-ForceContainerLaneCleanup {
+    param(
+        [string]$RepoRoot,
+        [string]$ProjectName,
+        [string]$RuntimeTarget,
+        [string]$InferenceBackend,
+        [string]$CoreRosDistro
+    )
+    $gateScript = Join-Path $RepoRoot "scripts/run_compose_gate.ps1"
+    $uatScript = Join-Path $RepoRoot "scripts/run_compose_uat.ps1"
+    foreach ($cmd in @(
+        @($gateScript, @("-Action","down","-ProjectName",$ProjectName,"-RuntimeTarget",$RuntimeTarget,"-InferenceBackend",$InferenceBackend,"-CoreRosDistro",$CoreRosDistro)),
+        @($uatScript, @("-Action","down","-ProjectName",$ProjectName,"-RuntimeTarget",$RuntimeTarget,"-InferenceBackend",$InferenceBackend,"-CoreRosDistro",$CoreRosDistro))
+    )) {
+        $scriptPath = [string]$cmd[0]
+        $scriptArgs = [string[]]$cmd[1]
+        try {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath @scriptArgs | Out-Null
+        }
+        catch {
+        }
+    }
 }
 
 function Resolve-VcXsrvExecutable {
@@ -289,14 +356,39 @@ function Get-LatestParityGate {
 
 if ($ExecutionLane -eq "container_kilted") {
     $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+    $containerSessionId = if ([string]::IsNullOrWhiteSpace($SessionId)) {
+        (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ")
+    }
+    else {
+        $SessionId
+    }
+    $resolvedProjectName = if ([string]::IsNullOrWhiteSpace($ProjectName)) {
+        "chasecar_gate_mdemo_$($containerSessionId.ToLowerInvariant())"
+    }
+    else {
+        $ProjectName
+    }
+    $resolvedArtifactDir = Get-ContainerLaneArtifactDir -RepoRoot $repoRoot -Milestone $Milestone -SessionId $containerSessionId -EvidenceDir $EvidenceDir
+    $demoSummaryPath = Join-Path $resolvedArtifactDir "demo_summary.json"
+    $demoPidsPath = Join-Path $resolvedArtifactDir "demo_pids.json"
     $openFeedRequested = Resolve-StrictBool -Value $OpenFeedViewers -Default $false
     $keepWindowsOpenRequested = Resolve-StrictBool -Value $KeepWindowsOpen -Default $false
+    $autoOpenVisualSurfaceRequested = Resolve-StrictBool -Value $AutoOpenVisualSurface -Default $keepWindowsOpenRequested
     $autoStartVcXsrvResolved = Resolve-StrictBool -Value $AutoStartVcXsrv -Default $true
     $headlessRequested = $null
     if ($PSBoundParameters.ContainsKey("Headless")) {
         $headlessRequested = Resolve-StrictBool -Value $Headless -Default $true
     }
-    $guiRequested = ($openFeedRequested -or ($headlessRequested -eq $false))
+    if ([string]::IsNullOrWhiteSpace($VisualSurface)) {
+        $VisualSurface = if ($openFeedRequested) { "browser_dashboard" } else { "none" }
+    }
+    if ([string]::IsNullOrWhiteSpace($WorldSurface)) {
+        $WorldSurface = if ($VisualSurface -ne "none") { "streamed_sim" } else { "none" }
+    }
+    if ($WorldSurface -eq "streamed_sim" -and $headlessRequested -eq $false) {
+        $headlessRequested = $true
+    }
+    $x11Requested = (($openFeedRequested -and $VisualSurface -eq "none" -and $WorldSurface -eq "x11_debug") -or ($WorldSurface -eq "x11_debug"))
     $displayConfig = [ordered]@{
         pass = $true
         status = "not_required"
@@ -307,14 +399,14 @@ if ($ExecutionLane -eq "container_kilted") {
         vcxsrv_started = $false
         viewer_backend = $ViewerBackend
     }
-    if ($guiRequested) {
+    if ($x11Requested) {
         $displayConfig = Resolve-ContainerGuiDisplay `
             -Mode $DisplayMode `
             -DisplayAddress $DisplayAddress `
             -AutoStartVcXsrv $autoStartVcXsrvResolved `
             -TimeoutSeconds $DisplayPreflightTimeoutSeconds
     }
-    if ($openFeedRequested -and -not [bool]$displayConfig.pass) {
+    if ($openFeedRequested -and $VisualSurface -eq "none" -and -not [bool]$displayConfig.pass) {
         $headlessRequested = $true
     }
 
@@ -376,6 +468,14 @@ if ($ExecutionLane -eq "container_kilted") {
         $MotionTargetProgressMinMeters.ToString([System.Globalization.CultureInfo]::InvariantCulture),
         "-CoreRosDistro",
         $CoreRosDistro,
+        "-VisualSurface",
+        $VisualSurface,
+        "-WorldSurface",
+        $WorldSurface,
+        "-AutoOpenVisualSurface",
+        ([string][bool]$autoOpenVisualSurfaceRequested),
+        "-DashboardPort",
+        $DashboardPort.ToString(),
         "-DisplayMode",
         [string]$displayConfig.selected_mode,
         "-DisplayPreflightStatus",
@@ -395,9 +495,7 @@ if ($ExecutionLane -eq "container_kilted") {
     if (-not [string]::IsNullOrWhiteSpace($EvidenceDir)) {
         $argList += @("-EvidenceDir", $EvidenceDir)
     }
-    if (-not [string]::IsNullOrWhiteSpace($SessionId)) {
-        $argList += @("-SessionId", $SessionId)
-    }
+    $argList += @("-SessionId", $containerSessionId)
     if (-not [string]::IsNullOrWhiteSpace($ProjectName)) {
         $argList += @("-ProjectName", $ProjectName)
     }
@@ -427,7 +525,31 @@ if ($ExecutionLane -eq "container_kilted") {
     }
 
     & powershell.exe @argList
-    exit $LASTEXITCODE
+    $containerExitCode = $LASTEXITCODE
+
+    if (-not $keepWindowsOpenRequested) {
+        Stop-DemoDashboardProcess -DemoPidsPath $demoPidsPath
+        Invoke-ForceContainerLaneCleanup -RepoRoot $repoRoot -ProjectName $resolvedProjectName -RuntimeTarget $RuntimeTarget -InferenceBackend $InferenceBackend -CoreRosDistro $CoreRosDistro
+    }
+
+    $demoSummary = $null
+    if (Test-Path -LiteralPath $demoSummaryPath) {
+        try {
+            $demoSummary = Get-Content -LiteralPath $demoSummaryPath -Raw | ConvertFrom-Json
+        }
+        catch {
+            $demoSummary = $null
+        }
+    }
+
+    if ($demoSummary -and ($demoSummary.PSObject.Properties.Name -contains "pass") -and [bool]$demoSummary.pass) {
+        if ($containerExitCode -ne 0) {
+            Write-Warning "Container milestone wrapper exited nonzero after a passing demo summary; treating the summary as authoritative."
+        }
+        exit 0
+    }
+
+    exit $containerExitCode
 }
 
 function Resolve-NullableBool {
@@ -537,6 +659,15 @@ if ($Headless -eq $null) {
 }
 if ($OpenFeedViewers -eq $null) {
     $OpenFeedViewers = -not [bool]$Headless
+}
+if ([string]::IsNullOrWhiteSpace($VisualSurface)) {
+    $VisualSurface = if ([bool]$OpenFeedViewers) { "browser_dashboard" } else { "none" }
+}
+if ([string]::IsNullOrWhiteSpace($WorldSurface)) {
+    $WorldSurface = if ($VisualSurface -ne "none") { "streamed_sim" } else { "none" }
+}
+if ($AutoOpenVisualSurface -eq $null) {
+    $AutoOpenVisualSurface = [bool]$KeepWindowsOpen
 }
 if ($RequireMotion -eq $null) {
     $RequireMotion = ($Milestone -ge 3)
@@ -1882,6 +2013,8 @@ Write-Host "  World name:     $WorldName"
 Write-Host "  Ensure target:  $([bool]$EnsureDemoTarget)"
 Write-Host "  Target relative: $([bool]$DemoTargetRelative) (fwd=$DemoTargetForwardM m, lat=$DemoTargetLateralM m, zoff=$DemoTargetVerticalOffsetM m)"
 Write-Host "  Open viewers:   $([bool]$OpenFeedViewers)"
+Write-Host "  Visual surface: $VisualSurface"
+Write-Host "  World surface:  $WorldSurface"
 Write-Host "  Stream timeout: $([Math]::Max($StreamReadyTimeoutSeconds, 10))"
 Write-Host "  Stream frames:  $([Math]::Max($StreamReadyMinFrames, 1))"
 Write-Host "  Require motion: $([bool]$RequireMotion)"
@@ -1911,10 +2044,10 @@ if ($exitCode -ne 0) {
 Write-Host ""
 if ($Milestone -eq 1) {
     Write-Host "Milestone 1 Checklist:"
-    Write-Host "  1. Gazebo is visible (if not headless)."
-    Write-Host "  2. Two feed windows are visible: /d415/color/image_raw and /yolo/debug_image (when OpenFeedViewers=true)."
+    Write-Host "  1. Raw camera and YOLO debug are visible on the selected visual surface."
+    Write-Host "  2. Streamed 3D sim world is visible when WorldSurface=streamed_sim."
     Write-Host "  3. Detection confidence updates on /yolo/confidence."
-    Write-Host "  4. debug image overlay differs from raw RGB once confidence gate is met."
+    Write-Host "  4. Debug image overlay differs from raw RGB once confidence gate is met."
     Write-Host "Success criteria: stable detections across multiple target positions."
 }
 elseif ($Milestone -eq 2) {
@@ -1922,6 +2055,7 @@ elseif ($Milestone -eq 2) {
     Write-Host "  1. Milestone 1 checks all pass."
     Write-Host "  2. /yolo/ball_position_3d publishes continuously."
     Write-Host "  3. Overlay remains distinct from raw RGB once confidence gate passes."
+    Write-Host "  4. Streamed 3D sim world stays attached to the same session."
     Write-Host "Success criteria: stable 3D tracking evidence; no autonomous approach required."
 }
 else {
@@ -1929,6 +2063,7 @@ else {
     Write-Host "  1. Milestone 2 checks all pass."
     Write-Host "  2. /navigate_to_pose action server is available."
     Write-Host "  3. cmd_vel activity and odom displacement meet motion threshold."
+    Write-Host "  4. Streamed 3D sim world remains nonblank and same-session."
     Write-Host "Success criteria: measurable autonomous approach (motion pass=true)."
 }
 

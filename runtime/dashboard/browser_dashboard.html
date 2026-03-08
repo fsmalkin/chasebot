@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chasecar Visual Dashboard</title>
+  <style>
+    :root {
+      --bg: #eef2f4;
+      --panel: #fbfcfd;
+      --ink: #172026;
+      --muted: #596771;
+      --line: #cfd8de;
+      --ok: #0f8f4b;
+      --warn: #b56f00;
+      --bad: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Tahoma", sans-serif;
+      background: linear-gradient(180deg, #eef2f4 0%, #e1e9ee 100%);
+      color: var(--ink);
+    }
+    header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(251, 252, 253, 0.92);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+    .meta, .status-grid, .debug-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
+    }
+    .chip, .status {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+    .chip strong, .status strong {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    main {
+      padding: 18px;
+      display: grid;
+      grid-template-columns: 1.7fr 1fr 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+    .pane, details.debug-panel {
+      background: rgba(251, 252, 253, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(23, 32, 38, 0.08);
+    }
+    .pane header {
+      position: static;
+      border-bottom: 1px solid var(--line);
+      padding: 12px 14px;
+      background: transparent;
+      backdrop-filter: none;
+    }
+    .pane h2 {
+      margin: 0;
+      font-size: 15px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .pane img {
+      width: 100%;
+      display: block;
+      background: #d8dee3;
+      min-height: 240px;
+      object-fit: contain;
+    }
+    .pane iframe {
+      width: 100%;
+      display: block;
+      min-height: 520px;
+      border: 0;
+      background: #101418;
+    }
+    .foot {
+      padding: 10px 14px 14px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    details.debug-panel {
+      margin: 0 18px 18px;
+    }
+    details.debug-panel summary {
+      padding: 12px 14px;
+      cursor: pointer;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: 1px solid var(--line);
+      list-style: none;
+    }
+    .debug-body {
+      padding: 18px;
+    }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    @media (max-width: 1400px) {
+      main { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Chasecar Pre-LLM Visual Dashboard</h1>
+    <div class="meta">
+      <div class="chip"><strong>Session</strong><span id="session-id">waiting</span></div>
+      <div class="chip"><strong>Mode</strong><span id="visual-mode">waiting</span></div>
+      <div class="chip"><strong>Execution Lane</strong><span id="execution-lane">waiting</span></div>
+      <div class="chip"><strong>Runtime Target</strong><span id="runtime-target">waiting</span></div>
+    </div>
+    <div class="status-grid" style="margin-top: 10px;">
+      <div class="status"><strong>World Stream</strong><span id="world-stream-status">waiting</span></div>
+      <div class="status"><strong>Raw Frames</strong><span id="raw-frames">0</span></div>
+      <div class="status"><strong>Debug Frames</strong><span id="debug-frames">0</span></div>
+      <div class="status"><strong>True Target</strong><span id="true-target">waiting</span></div>
+      <div class="status"><strong>Truth Alignment</strong><span id="truth-alignment">waiting</span></div>
+      <div class="status"><strong>Target Visible</strong><span id="target-visible">0.000</span></div>
+      <div class="status"><strong>Overlay Diff</strong><span id="overlay-diff">waiting</span></div>
+      <div class="status"><strong>Telemetry Frames</strong><span id="telemetry-frames">0</span></div>
+    </div>
+  </header>
+  <main>
+    <section class="pane">
+      <header><h2>3D Sim World</h2></header>
+      <iframe id="world-frame" src="about:blank" title="Streamed Gazebo world"></iframe>
+      <div class="foot">
+        Real Gazebo 3D world from the same authoritative session.
+        <a id="world-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open in a separate window</a>
+      </div>
+    </section>
+    <section class="pane">
+      <header><h2>Raw Camera</h2></header>
+      <img id="raw-image" src="live/raw_camera.jpg" alt="Raw camera">
+      <div class="foot">Authoritative RGB feed from the live container session.</div>
+    </section>
+    <section class="pane">
+      <header><h2>YOLO Debug</h2></header>
+      <img id="debug-image" src="live/yolo_debug.jpg" alt="YOLO debug">
+      <div class="foot">Detector/debug view. This should visibly diverge from the raw image when detection is active.</div>
+    </section>
+  </main>
+  <details class="debug-panel">
+    <summary>Engineering Telemetry</summary>
+    <div class="debug-body">
+      <div class="debug-grid" style="margin-bottom: 14px;">
+        <div class="status"><strong>Vision vs Truth</strong><span id="vision-truth">waiting</span></div>
+        <div class="status"><strong>Waypoint vs Truth</strong><span id="waypoint-truth">waiting</span></div>
+        <div class="status"><strong>Waypoint vs Vision</strong><span id="waypoint-vision">waiting</span></div>
+      </div>
+      <img id="telemetry-image" src="live/topdown_telemetry.jpg" alt="Engineering telemetry">
+      <div class="foot">Debug-only engineering telemetry. This pane is not the primary operator world surface.</div>
+    </div>
+  </details>
+  <script>
+    const ids = {
+      sessionId: document.getElementById('session-id'),
+      visualMode: document.getElementById('visual-mode'),
+      executionLane: document.getElementById('execution-lane'),
+      runtimeTarget: document.getElementById('runtime-target'),
+      worldStreamStatus: document.getElementById('world-stream-status'),
+      rawFrames: document.getElementById('raw-frames'),
+      debugFrames: document.getElementById('debug-frames'),
+      telemetryFrames: document.getElementById('telemetry-frames'),
+      trueTarget: document.getElementById('true-target'),
+      truthAlignment: document.getElementById('truth-alignment'),
+      targetVisible: document.getElementById('target-visible'),
+      overlayDiff: document.getElementById('overlay-diff'),
+      visionTruth: document.getElementById('vision-truth'),
+      waypointTruth: document.getElementById('waypoint-truth'),
+      waypointVision: document.getElementById('waypoint-vision'),
+      rawImage: document.getElementById('raw-image'),
+      debugImage: document.getElementById('debug-image'),
+      telemetryImage: document.getElementById('telemetry-image'),
+      worldFrame: document.getElementById('world-frame'),
+      worldLink: document.getElementById('world-link'),
+    };
+
+    let worldFrameLoaded = false;
+
+    function stampSrc(el, path) {
+      el.src = `${path}?t=${Date.now()}`;
+    }
+
+    function statusText(ok, trueText, falseText) {
+      return `<span class="${ok ? 'ok' : 'bad'}">${ok ? trueText : falseText}</span>`;
+    }
+
+    function scalarText(value) {
+      if (value === null || value === undefined || value === '') {
+        return 'n/a';
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed.toFixed(3) : String(value);
+    }
+
+    async function refreshState() {
+      try {
+        const response = await fetch(`state.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`state_http_${response.status}`);
+        }
+        const state = await response.json();
+        ids.sessionId.textContent = state.session_id || 'unknown';
+        ids.visualMode.textContent = state.visual_mode || 'unknown';
+        ids.executionLane.textContent = state.execution_lane || 'unknown';
+        ids.runtimeTarget.textContent = state.runtime_target || 'unknown';
+        ids.rawFrames.textContent = String(state.raw_frame_count ?? 0);
+        ids.debugFrames.textContent = String(state.debug_frame_count ?? 0);
+        ids.telemetryFrames.textContent = String(state.telemetry_frame_count ?? 0);
+        ids.trueTarget.innerHTML = statusText(Boolean(state.true_target_seen), 'seen', 'not seen');
+        ids.truthAlignment.innerHTML = statusText(Boolean(state.truth_alignment_ok), 'aligned', state.truth_failure_class || 'diverged');
+        ids.targetVisible.textContent = Number(state.target_visible_ratio ?? 0).toFixed(3);
+        ids.overlayDiff.innerHTML = statusText(Boolean(state.overlay_difference_ok), 'ok', 'insufficient');
+        ids.visionTruth.textContent = scalarText(state.vision_vs_truth_m);
+        ids.waypointTruth.textContent = scalarText(state.waypoint_vs_truth_m);
+        ids.waypointVision.textContent = scalarText(state.waypoint_vs_vision_m);
+        stampSrc(ids.rawImage, 'live/raw_camera.jpg');
+        stampSrc(ids.debugImage, 'live/yolo_debug.jpg');
+        stampSrc(ids.telemetryImage, 'live/topdown_telemetry.jpg');
+      } catch (err) {
+        ids.overlayDiff.innerHTML = '<span class="warn">waiting</span>';
+      }
+
+      try {
+        const worldResp = await fetch(`world_stream_state.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (!worldResp.ok) {
+          throw new Error(`world_http_${worldResp.status}`);
+        }
+        const worldState = await worldResp.json();
+        ids.worldStreamStatus.innerHTML = statusText(Boolean(worldState.world_stream_ready), 'ready', 'not ready');
+        if (worldState.world_stream_url) {
+          ids.worldLink.href = worldState.world_stream_url;
+          ids.worldLink.style.display = 'inline';
+          if (!worldFrameLoaded || ids.worldFrame.src !== worldState.world_stream_url) {
+            ids.worldFrame.src = worldState.world_stream_url;
+            worldFrameLoaded = true;
+          }
+        }
+      } catch (err) {
+        ids.worldStreamStatus.innerHTML = '<span class="warn">waiting</span>';
+      }
+    }
+
+    refreshState();
+    setInterval(refreshState, 1000);
+  </script>
+</body>
+</html>

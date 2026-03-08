@@ -52,6 +52,18 @@ param(
 
     [object]$OpenFeedViewers = $false,
 
+    [ValidateSet("none", "recorded", "browser_dashboard")]
+    [string]$VisualSurface = "none",
+
+    [ValidateSet("streamed_sim", "none", "x11_debug")]
+    [string]$WorldSurface = "none",
+
+    [object]$AutoOpenVisualSurface = $false,
+
+    [int]$DashboardPort = 0,
+
+    [int]$PersistentVisualHoldSeconds = 12,
+
     [object]$KeepWindowsOpen = $false,
 
     [ValidateSet("none", "vcxsrv", "wslg")]
@@ -153,6 +165,82 @@ function Convert-OrchestratorPath {
     return $normalized
 }
 
+function Get-VisualModeSuffix {
+    param([string]$VisualSurface)
+    switch ($VisualSurface) {
+        "recorded" { return "recorded" }
+        "browser_dashboard" { return "browser_dashboard" }
+        default { return "" }
+    }
+}
+
+function Save-ModeSpecificVisualArtifacts {
+    param(
+        [string]$VisualDir,
+        [string]$VisualSurface,
+        [string]$RepoRoot,
+        [object]$VisualSummary,
+        [object]$WorldStreamSummary
+    )
+
+    $suffix = Get-VisualModeSuffix -VisualSurface $VisualSurface
+    $result = [ordered]@{
+        suffix = $suffix
+        summary_path = ""
+        raw_video = ""
+        debug_video = ""
+        topdown_video = ""
+        world_stream_summary_path = ""
+        world_stream_video_path = ""
+        world_stream_screenshot_path = ""
+    }
+    if ([string]::IsNullOrWhiteSpace($suffix)) {
+        return [pscustomobject]$result
+    }
+
+    if ($VisualSummary) {
+        $modeSummaryPath = Join-Path $VisualDir ("visual_demo_summary_{0}.json" -f $suffix)
+        ($VisualSummary | ConvertTo-Json -Depth 12) | Set-Content -LiteralPath $modeSummaryPath -Encoding UTF8
+        $result.summary_path = $modeSummaryPath
+
+        $artifactMap = [ordered]@{
+            raw_video = "raw_camera_{0}.mp4"
+            debug_video = "yolo_debug_{0}.mp4"
+            topdown_video = "topdown_telemetry_{0}.mp4"
+        }
+        foreach ($propertyName in $artifactMap.Keys) {
+            $source = Convert-OrchestratorPath -Path ([string]$VisualSummary.$propertyName) -RepoRoot $RepoRoot
+            if (-not [string]::IsNullOrWhiteSpace($source) -and (Test-Path -LiteralPath $source)) {
+                $dest = Join-Path $VisualDir ($artifactMap[$propertyName] -f $suffix)
+                Copy-Item -LiteralPath $source -Destination $dest -Force
+                $result[$propertyName] = $dest
+            }
+        }
+    }
+
+    if ($WorldStreamSummary) {
+        $worldSummaryPath = Join-Path $VisualDir ("world_stream_summary_{0}.json" -f $suffix)
+        ($WorldStreamSummary | ConvertTo-Json -Depth 12) | Set-Content -LiteralPath $worldSummaryPath -Encoding UTF8
+        $result.world_stream_summary_path = $worldSummaryPath
+
+        $worldVideo = Convert-OrchestratorPath -Path ([string]$WorldStreamSummary.video_path) -RepoRoot $RepoRoot
+        if (-not [string]::IsNullOrWhiteSpace($worldVideo) -and (Test-Path -LiteralPath $worldVideo)) {
+            $dest = Join-Path $VisualDir ("world_stream_{0}.mp4" -f $suffix)
+            Copy-Item -LiteralPath $worldVideo -Destination $dest -Force
+            $result.world_stream_video_path = $dest
+        }
+
+        $worldScreenshot = Convert-OrchestratorPath -Path ([string]$WorldStreamSummary.screenshot_path) -RepoRoot $RepoRoot
+        if (-not [string]::IsNullOrWhiteSpace($worldScreenshot) -and (Test-Path -LiteralPath $worldScreenshot)) {
+            $dest = Join-Path $VisualDir ("world_stream_{0}.jpg" -f $suffix)
+            Copy-Item -LiteralPath $worldScreenshot -Destination $dest -Force
+            $result.world_stream_screenshot_path = $dest
+        }
+    }
+
+    return [pscustomobject]$result
+}
+
 function Parse-Marker {
     param([string[]]$Output, [string]$Prefix)
     $line = $Output | Where-Object { $_ -like "$Prefix*" } | Select-Object -Last 1
@@ -212,7 +300,14 @@ function Invoke-ContainerScript {
     }
     $encoded = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($Script))
     $wrapper = "echo '$encoded' | base64 -d | bash"
-    $out = & $DockerCmd exec $ContainerId bash -lc $wrapper 2>&1
+    $previous = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $out = & $DockerCmd exec $ContainerId bash -lc $wrapper 2>&1 | ForEach-Object { $_.ToString() }
+    }
+    finally {
+        $ErrorActionPreference = $previous
+    }
     return [pscustomobject]@{
         ExitCode = [int]$LASTEXITCODE
         Output = @($out)
@@ -513,6 +608,623 @@ tail -n 40 "$LogPath" 2>/dev/null || true
     return @($res.Output)
 }
 
+function Resolve-PythonExecutable {
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if ($python) { return $python.Source }
+    $py = Get-Command py -ErrorAction SilentlyContinue
+    if ($py) { return $py.Source }
+    throw "Unable to locate a Python interpreter on Windows host."
+}
+
+function Convert-ToWslPath {
+    param([string]$WindowsPath)
+    $resolved = (Resolve-Path -LiteralPath $WindowsPath).Path
+    if ($resolved -match '^([A-Za-z]):\\(.*)$') {
+        $drive = $matches[1].ToLowerInvariant()
+        $rest = $matches[2] -replace '\\', '/'
+        return "/mnt/$drive/$rest"
+    }
+    return $resolved
+}
+
+function Convert-ToContainerRepoPath {
+    param(
+        [string]$WindowsPath,
+        [string]$RepoRoot
+    )
+    $resolved = (Resolve-Path -LiteralPath $WindowsPath).Path
+    $repoResolved = (Resolve-Path -LiteralPath $RepoRoot).Path.TrimEnd('\')
+    if ($resolved.StartsWith($repoResolved, [System.StringComparison]::OrdinalIgnoreCase)) {
+        $relative = $resolved.Substring($repoResolved.Length).TrimStart('\')
+        if ([string]::IsNullOrWhiteSpace($relative)) {
+            return "/workspaces/chasecar"
+        }
+        return "/workspaces/chasecar/" + ($relative -replace '\\', '/')
+    }
+    return Convert-ToWslPath -WindowsPath $WindowsPath
+}
+
+function Test-LocalTcpListen {
+    param([int]$Port)
+    try {
+        $listeners = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue
+        if ($listeners -and $listeners.Count -gt 0) { return $true }
+    }
+    catch {
+    }
+    $netstat = netstat -ano -p tcp 2>$null
+    if ($netstat -and ($netstat | Select-String -Pattern "[:\.]$Port\s+.*LISTENING" -Quiet)) {
+        return $true
+    }
+    return $false
+}
+
+function Get-FreeDashboardPort {
+    param([int]$RequestedPort)
+    if ($RequestedPort -gt 0 -and -not (Test-LocalTcpListen -Port $RequestedPort)) {
+        return $RequestedPort
+    }
+    for ($port = 8860; $port -lt 8890; $port++) {
+        if (-not (Test-LocalTcpListen -Port $port)) {
+            return $port
+        }
+    }
+    throw "Unable to find a free localhost port for dashboard server."
+}
+
+function Get-FreeWorldStreamPort {
+    param([int]$RequestedPort)
+    if ($RequestedPort -gt 0 -and -not (Test-LocalTcpListen -Port $RequestedPort)) {
+        return $RequestedPort
+    }
+    for ($port = 8891; $port -lt 8921; $port++) {
+        if (-not (Test-LocalTcpListen -Port $port)) {
+            return $port
+        }
+    }
+    throw "Unable to find a free localhost port for world stream."
+}
+
+function Write-DashboardHtml {
+    param(
+        [string]$RepoRoot,
+        [string]$VisualDir
+    )
+    $template = Join-Path $RepoRoot "runtime/dashboard/browser_dashboard.html"
+    if (-not (Test-Path -LiteralPath $template)) {
+        throw "Missing dashboard template: $template"
+    }
+    Copy-Item -LiteralPath $template -Destination (Join-Path $VisualDir "dashboard.html") -Force
+}
+
+function Start-DashboardServer {
+    param(
+        [string]$VisualDir,
+        [int]$RequestedPort,
+        [bool]$AutoOpen
+    )
+    $pythonExe = Resolve-PythonExecutable
+    $port = Get-FreeDashboardPort -RequestedPort $RequestedPort
+    $stdout = Join-Path $VisualDir "dashboard_server_stdout.log"
+    $stderr = Join-Path $VisualDir "dashboard_server_stderr.log"
+
+    if ((Split-Path -Leaf $pythonExe).ToLowerInvariant() -eq "py.exe") {
+        $args = @("-3", "-m", "http.server", $port.ToString(), "--bind", "127.0.0.1")
+    }
+    else {
+        $args = @("-m", "http.server", $port.ToString(), "--bind", "127.0.0.1")
+    }
+
+    $proc = Start-Process -FilePath $pythonExe -ArgumentList $args -WorkingDirectory $VisualDir -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    $ready = $false
+    for ($i = 0; $i -lt 10; $i++) {
+        if (Test-LocalTcpListen -Port $port) {
+            $ready = $true
+            break
+        }
+        Start-Sleep -Seconds 1
+    }
+
+    $url = "http://127.0.0.1:$port/dashboard.html"
+    if ($ready -and $AutoOpen) {
+        Start-Process $url | Out-Null
+    }
+
+    return [pscustomobject]@{
+        Port = $port
+        Url = $url
+        Pid = [int]$proc.Id
+        Ready = $ready
+        Stdout = $stdout
+        Stderr = $stderr
+    }
+}
+
+function Stop-DashboardServer {
+    param([object]$ServerInfo)
+    if ($null -eq $ServerInfo) { return }
+    $dashboardPid = 0
+    if ($ServerInfo.PSObject.Properties.Name -contains "Pid") {
+        $dashboardPid = [int]$ServerInfo.Pid
+    }
+    if ($dashboardPid -le 0) { return }
+    try {
+        Stop-Process -Id $dashboardPid -Force -ErrorAction SilentlyContinue
+    }
+    catch {
+    }
+}
+
+function Start-VisualObserver {
+    param(
+        [string]$DockerCmd,
+        [string]$ContainerId,
+        [string]$RosDistro,
+        [string]$SessionId,
+        [string]$OutputDir,
+        [string]$RuntimeTarget,
+        [string]$VisualMode,
+        [int]$DurationSeconds,
+        [bool]$RequireMotion,
+        [double]$TargetVisibleMinRatio,
+        [double]$MotionProgressMinM,
+        [string]$TruthStatePath
+    )
+
+    $pidFile = "/tmp/chasecar_visual_observer.pid"
+    $logFile = "/tmp/chasecar_visual_observer.log"
+    $outputDirWsl = Convert-ToContainerRepoPath -WindowsPath $OutputDir -RepoRoot (Join-Path $PSScriptRoot "..")
+    $truthStateContainer = ""
+    if (-not [string]::IsNullOrWhiteSpace($TruthStatePath) -and (Test-Path -LiteralPath $TruthStatePath)) {
+        $truthStateContainer = Convert-ToContainerRepoPath -WindowsPath $TruthStatePath -RepoRoot (Join-Path $PSScriptRoot "..")
+    }
+    $requireMotionArg = if ($RequireMotion) { "--require-motion" } else { "" }
+    $truthArg = if ([string]::IsNullOrWhiteSpace($truthStateContainer)) { "" } else { "--truth-state-path `"$truthStateContainer`"" }
+    $script = @'
+set -euo pipefail
+PID_FILE="__PID_FILE__"
+LOG_FILE="__LOG_FILE__"
+pkill -f "visual_demo_observer.py" 2>/dev/null || true
+rm -f "$PID_FILE" "$LOG_FILE"
+nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/visual_demo_observer.py --session-id "__SESSION_ID__" --output-dir "__OUTPUT_DIR__" --execution-lane "container_kilted" --runtime-target "__RUNTIME_TARGET__" --visual-mode "__VISUAL_MODE__" --duration-s "__DURATION_S__" --target-visible-min-ratio "__TARGET_VISIBLE_MIN_RATIO__" --motion-progress-min-m "__MOTION_PROGRESS_MIN_M__" __REQUIRE_MOTION__ __TRUTH_STATE_ARG__ --use-sim-time' >"$LOG_FILE" 2>&1 &
+echo $! > "$PID_FILE"
+sleep 1
+if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+  echo "VISUAL_START_FAIL=true"
+  echo "VISUAL_LOG=__LOG_FILE__"
+  tail -n 40 "$LOG_FILE" || true
+  exit 7
+fi
+echo "VISUAL_PID=$(cat "$PID_FILE")"
+echo "VISUAL_LOG=__LOG_FILE__"
+'@
+    $script = $script.Replace("__PID_FILE__", $pidFile).
+        Replace("__LOG_FILE__", $logFile).
+        Replace("__ROS_DISTRO__", $RosDistro).
+        Replace("__SESSION_ID__", $SessionId).
+        Replace("__OUTPUT_DIR__", $outputDirWsl).
+        Replace("__RUNTIME_TARGET__", $RuntimeTarget).
+        Replace("__VISUAL_MODE__", $VisualMode).
+        Replace("__DURATION_S__", ([Math]::Max($DurationSeconds, 30)).ToString()).
+        Replace("__TARGET_VISIBLE_MIN_RATIO__", $TargetVisibleMinRatio.ToString("0.###", [System.Globalization.CultureInfo]::InvariantCulture)).
+        Replace("__MOTION_PROGRESS_MIN_M__", $MotionProgressMinM.ToString("0.###", [System.Globalization.CultureInfo]::InvariantCulture)).
+        Replace("__REQUIRE_MOTION__", $requireMotionArg).
+        Replace("__TRUTH_STATE_ARG__", $truthArg)
+    $script = $script.Replace("`r`n", "`n")
+    $res = Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script
+    [pscustomobject]@{
+        ExitCode = $res.ExitCode
+        Pid = (Parse-OutputMarker -Output $res.Output -Prefix "VISUAL_PID=")
+        Log = (Parse-OutputMarker -Output $res.Output -Prefix "VISUAL_LOG=")
+        Output = $res.Output
+    }
+}
+
+function Stop-VisualObserver {
+    param(
+        [string]$DockerCmd,
+        [string]$ContainerId
+    )
+    if ([string]::IsNullOrWhiteSpace($ContainerId)) { return }
+    $script = @'
+set +e
+if [ -f /tmp/chasecar_visual_observer.pid ]; then
+  PID="$(cat /tmp/chasecar_visual_observer.pid 2>/dev/null || true)"
+  if [ -n "$PID" ]; then
+    kill "$PID" 2>/dev/null || true
+    sleep 1
+    kill -9 "$PID" 2>/dev/null || true
+  fi
+fi
+pkill -f "visual_demo_observer.py" 2>/dev/null || true
+'@
+    $script = $script.Replace("`r`n", "`n")
+    Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script | Out-Null
+}
+
+function Wait-VisualObserverReady {
+    param(
+        [string]$VisualDir,
+        [int]$TimeoutSeconds
+    )
+    $statePath = Join-Path $VisualDir "state.json"
+    $rawPath = Join-Path $VisualDir "live/raw_camera.jpg"
+    $debugPath = Join-Path $VisualDir "live/yolo_debug.jpg"
+    $deadline = (Get-Date).AddSeconds([Math]::Max($TimeoutSeconds, 1))
+    while ((Get-Date) -lt $deadline) {
+        if ((Test-Path -LiteralPath $statePath) -and (Test-Path -LiteralPath $rawPath) -and (Test-Path -LiteralPath $debugPath)) {
+            try {
+                $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+                $rawFrames = [int]$state.raw_frame_count
+                $debugFrames = [int]$state.debug_frame_count
+                if ($rawFrames -ge 1 -and $debugFrames -ge 1) {
+                    return [pscustomobject]@{
+                        Ready = $true
+                        State = $state
+                        StatePath = $statePath
+                    }
+                }
+            }
+            catch {
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return [pscustomobject]@{
+        Ready = $false
+        State = $null
+        StatePath = $statePath
+    }
+}
+
+function Wait-VisualObserverSummary {
+    param(
+        [string]$VisualDir,
+        [int]$TimeoutSeconds
+    )
+    $summaryPath = Join-Path $VisualDir "visual_demo_summary.json"
+    $deadline = (Get-Date).AddSeconds([Math]::Max($TimeoutSeconds, 1))
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path -LiteralPath $summaryPath) {
+            try {
+                $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+                return [pscustomobject]@{
+                    Ready = $true
+                    Summary = $summary
+                    SummaryPath = $summaryPath
+                }
+            }
+            catch {
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return [pscustomobject]@{
+        Ready = $false
+        Summary = $null
+        SummaryPath = $summaryPath
+    }
+}
+
+function Start-TruthProbe {
+    param(
+        [string]$DockerCmd,
+        [string]$ContainerId,
+        [string]$SessionId,
+        [string]$OutputDir,
+        [string]$WorldName,
+        [string]$TargetModelNames
+    )
+    $pidFile = "/tmp/chasecar_truth_probe.pid"
+    $logFile = "/tmp/chasecar_truth_probe.log"
+    $outputDirContainer = Convert-ToContainerRepoPath -WindowsPath $OutputDir -RepoRoot (Join-Path $PSScriptRoot "..")
+    $script = @'
+set -euo pipefail
+PID_FILE="__PID_FILE__"
+LOG_FILE="__LOG_FILE__"
+pkill -f "sim_truth_probe.py" 2>/dev/null || true
+rm -f "$PID_FILE" "$LOG_FILE"
+nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/sim_truth_probe.py --session-id "__SESSION_ID__" --output-dir "__OUTPUT_DIR__" --world-name "__WORLD_NAME__" --target-model-names "__TARGET_MODEL_NAMES__" --duration-s 240' >"$LOG_FILE" 2>&1 &
+echo $! > "$PID_FILE"
+sleep 1
+if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+  echo "TRUTH_START_FAIL=true"
+  echo "TRUTH_LOG=__LOG_FILE__"
+  tail -n 40 "$LOG_FILE" || true
+  exit 7
+fi
+echo "TRUTH_PID=$(cat "$PID_FILE")"
+echo "TRUTH_LOG=__LOG_FILE__"
+'@
+    $script = $script.Replace("__PID_FILE__", $pidFile).
+        Replace("__LOG_FILE__", $logFile).
+        Replace("__ROS_DISTRO__", $CoreRosDistro).
+        Replace("__SESSION_ID__", $SessionId).
+        Replace("__OUTPUT_DIR__", $outputDirContainer).
+        Replace("__WORLD_NAME__", $WorldName).
+        Replace("__TARGET_MODEL_NAMES__", $TargetModelNames)
+    $script = $script.Replace("`r`n", "`n")
+    $res = Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script
+    [pscustomobject]@{
+        ExitCode = $res.ExitCode
+        Pid = (Parse-OutputMarker -Output $res.Output -Prefix "TRUTH_PID=")
+        Log = (Parse-OutputMarker -Output $res.Output -Prefix "TRUTH_LOG=")
+        Output = $res.Output
+    }
+}
+
+function Stop-TruthProbe {
+    param(
+        [string]$DockerCmd,
+        [string]$ContainerId
+    )
+    if ([string]::IsNullOrWhiteSpace($ContainerId)) { return }
+    $script = @'
+set +e
+if [ -f /tmp/chasecar_truth_probe.pid ]; then
+  PID="$(cat /tmp/chasecar_truth_probe.pid 2>/dev/null || true)"
+  if [ -n "$PID" ]; then
+    kill "$PID" 2>/dev/null || true
+    for i in $(seq 1 10); do
+      if ! kill -0 "$PID" 2>/dev/null; then
+        break
+      fi
+      sleep 1
+    done
+    kill -9 "$PID" 2>/dev/null || true
+  fi
+fi
+pkill -f "sim_truth_probe.py" 2>/dev/null || true
+'@
+    $script = $script.Replace("`r`n", "`n")
+    Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script | Out-Null
+}
+
+function Wait-TruthProbeReady {
+    param(
+        [string]$VisualDir,
+        [int]$TimeoutSeconds
+    )
+    $statePath = Join-Path $VisualDir "truth_state.json"
+    $deadline = (Get-Date).AddSeconds([Math]::Max($TimeoutSeconds, 1))
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path -LiteralPath $statePath) {
+            try {
+                $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+                if ($state.true_target_seen -and $state.robot_truth_seen) {
+                    return [pscustomobject]@{
+                        Ready = $true
+                        State = $state
+                        StatePath = $statePath
+                    }
+                }
+            }
+            catch {
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return [pscustomobject]@{
+        Ready = $false
+        State = $null
+        StatePath = $statePath
+    }
+}
+
+function Wait-TruthSummary {
+    param(
+        [string]$VisualDir,
+        [int]$TimeoutSeconds
+    )
+    $summaryPath = Join-Path $VisualDir "truth_summary.json"
+    $deadline = (Get-Date).AddSeconds([Math]::Max($TimeoutSeconds, 1))
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path -LiteralPath $summaryPath) {
+            try {
+                $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+                return [pscustomobject]@{
+                    Ready = $true
+                    Summary = $summary
+                    SummaryPath = $summaryPath
+                }
+            }
+            catch {
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return [pscustomobject]@{
+        Ready = $false
+        Summary = $null
+        SummaryPath = $summaryPath
+    }
+}
+
+function Start-WorldStream {
+    param(
+        [string]$DockerCmd,
+        [string]$ContainerId,
+        [string]$SessionId,
+        [string]$OutputDir,
+        [int]$PublicPort
+    )
+    $pidFile = "/tmp/chasecar_world_stream.pid"
+    $logFile = "/tmp/chasecar_world_stream.log"
+    $outputDirContainer = Convert-ToContainerRepoPath -WindowsPath $OutputDir -RepoRoot (Join-Path $PSScriptRoot "..")
+    $publicUrl = "http://127.0.0.1:$PublicPort/vnc.html?autoconnect=1&resize=scale&path=websockify"
+    $script = @'
+set -euo pipefail
+PID_FILE="__PID_FILE__"
+LOG_FILE="__LOG_FILE__"
+pkill -f "world_stream_controller.py" 2>/dev/null || true
+rm -f "$PID_FILE" "$LOG_FILE"
+nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/world_stream_controller.py --session-id "__SESSION_ID__" --output-dir "__OUTPUT_DIR__" --public-url "__PUBLIC_URL__" --duration-s 240' >"$LOG_FILE" 2>&1 &
+echo $! > "$PID_FILE"
+sleep 1
+if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+  echo "WORLD_STREAM_START_FAIL=true"
+  echo "WORLD_STREAM_LOG=__LOG_FILE__"
+  tail -n 40 "$LOG_FILE" || true
+  exit 7
+fi
+echo "WORLD_STREAM_PID=$(cat "$PID_FILE")"
+echo "WORLD_STREAM_LOG=__LOG_FILE__"
+'@
+    $script = $script.Replace("__PID_FILE__", $pidFile).
+        Replace("__LOG_FILE__", $logFile).
+        Replace("__ROS_DISTRO__", $CoreRosDistro).
+        Replace("__SESSION_ID__", $SessionId).
+        Replace("__OUTPUT_DIR__", $outputDirContainer).
+        Replace("__PUBLIC_URL__", $publicUrl)
+    $script = $script.Replace("`r`n", "`n")
+    $res = Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script
+    [pscustomobject]@{
+        ExitCode = $res.ExitCode
+        Pid = (Parse-OutputMarker -Output $res.Output -Prefix "WORLD_STREAM_PID=")
+        Log = (Parse-OutputMarker -Output $res.Output -Prefix "WORLD_STREAM_LOG=")
+        Output = $res.Output
+        Url = $publicUrl
+    }
+}
+
+function Stop-WorldStream {
+    param(
+        [string]$DockerCmd,
+        [string]$ContainerId
+    )
+    if ([string]::IsNullOrWhiteSpace($ContainerId)) { return }
+    $script = @'
+set +e
+if [ -f /tmp/chasecar_world_stream.pid ]; then
+  PID="$(cat /tmp/chasecar_world_stream.pid 2>/dev/null || true)"
+  if [ -n "$PID" ]; then
+    kill "$PID" 2>/dev/null || true
+    for i in $(seq 1 12); do
+      if ! kill -0 "$PID" 2>/dev/null; then
+        break
+      fi
+      sleep 1
+    done
+    kill -9 "$PID" 2>/dev/null || true
+  fi
+fi
+pkill -f "world_stream_controller.py" 2>/dev/null || true
+pkill -f "websockify .* 6080" 2>/dev/null || true
+pkill -f "x11vnc .*5900" 2>/dev/null || true
+pkill -f "Xvfb :99" 2>/dev/null || true
+pkill -f "fluxbox" 2>/dev/null || true
+pkill -f "gz sim -g" 2>/dev/null || true
+'@
+    $script = $script.Replace("`r`n", "`n")
+    Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script | Out-Null
+}
+
+function Wait-WorldStreamReady {
+    param(
+        [string]$VisualDir,
+        [int]$TimeoutSeconds
+    )
+    $statePath = Join-Path $VisualDir "world_stream_state.json"
+    $deadline = (Get-Date).AddSeconds([Math]::Max($TimeoutSeconds, 1))
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path -LiteralPath $statePath) {
+            try {
+                $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+                if ($state.world_stream_ready -and $state.world_stream_nonblank -and $state.world_stream_interactive) {
+                    return [pscustomobject]@{
+                        Ready = $true
+                        State = $state
+                        StatePath = $statePath
+                    }
+                }
+            }
+            catch {
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return [pscustomobject]@{
+        Ready = $false
+        State = $null
+        StatePath = $statePath
+    }
+}
+
+function Wait-WorldStreamSummary {
+    param(
+        [string]$VisualDir,
+        [int]$TimeoutSeconds
+    )
+    $summaryPath = Join-Path $VisualDir "world_stream_summary.json"
+    $deadline = (Get-Date).AddSeconds([Math]::Max($TimeoutSeconds, 1))
+    while ((Get-Date) -lt $deadline) {
+        if (Test-Path -LiteralPath $summaryPath) {
+            try {
+                $summary = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
+                return [pscustomobject]@{
+                    Ready = $true
+                    Summary = $summary
+                    SummaryPath = $summaryPath
+                }
+            }
+            catch {
+            }
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return [pscustomobject]@{
+        Ready = $false
+        Summary = $null
+        SummaryPath = $summaryPath
+    }
+}
+
+function Invoke-SpawnModel {
+    param(
+        [string]$DockerCmd,
+        [string]$ContainerId,
+        [string]$WorldName,
+        [string]$ModelName,
+        [string]$ModelSdfWindowsPath,
+        [double]$X,
+        [double]$Y,
+        [double]$Z
+    )
+    $modelPath = Convert-ToContainerRepoPath -WindowsPath $ModelSdfWindowsPath -RepoRoot (Join-Path $PSScriptRoot "..")
+    $script = @'
+set +e
+source /opt/ros/__ROS_DISTRO__/setup.bash
+ros2 run ros_gz_sim create -world "__WORLD__" -file "__MODEL_PATH__" -name "__MODEL_NAME__" -x "__X__" -y "__Y__" -z "__Z__"
+'@
+    $script = $script.Replace("__ROS_DISTRO__", $CoreRosDistro).
+        Replace("__WORLD__", $WorldName).
+        Replace("__MODEL_PATH__", $modelPath).
+        Replace("__MODEL_NAME__", $ModelName).
+        Replace("__X__", $X.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
+        Replace("__Y__", $Y.ToString([System.Globalization.CultureInfo]::InvariantCulture)).
+        Replace("__Z__", $Z.ToString([System.Globalization.CultureInfo]::InvariantCulture))
+    $script = $script.Replace("`r`n", "`n")
+    return (Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script)
+}
+
+function Invoke-RemoveModel {
+    param(
+        [string]$DockerCmd,
+        [string]$ContainerId,
+        [string]$WorldName,
+        [string]$ModelName
+    )
+    $script = @'
+set +e
+if command -v gz >/dev/null 2>&1; then
+  gz service -s "/world/__WORLD__/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \"__MODEL_NAME__\" type: 2" >/dev/null 2>&1 || true
+fi
+'@
+    $script = $script.Replace("__WORLD__", $WorldName).Replace("__MODEL_NAME__", $ModelName)
+    $script = $script.Replace("`r`n", "`n")
+    Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script | Out-Null
+}
+
 $runtimeAliases = @{
     robot_fidelity = "robot_fidelity_orin"
 }
@@ -522,6 +1234,7 @@ if ($runtimeAliases.ContainsKey($RuntimeTarget)) {
 
 $DemoTargetRelative = Resolve-NullableBool -Value $DemoTargetRelative -ParamName "DemoTargetRelative"
 $OpenFeedViewers = Resolve-NullableBool -Value $OpenFeedViewers -ParamName "OpenFeedViewers"
+$AutoOpenVisualSurface = Resolve-NullableBool -Value $AutoOpenVisualSurface -ParamName "AutoOpenVisualSurface"
 $KeepWindowsOpen = Resolve-NullableBool -Value $KeepWindowsOpen -ParamName "KeepWindowsOpen"
 $Headless = Resolve-NullableBool -Value $Headless -ParamName "Headless"
 $RequireMotion = Resolve-NullableBool -Value $RequireMotion -ParamName "RequireMotion"
@@ -537,12 +1250,15 @@ if (-not $PSBoundParameters.ContainsKey("PerfProfile")) { $PerfProfile = $defaul
 if (-not $PSBoundParameters.ContainsKey("InferenceDevice")) { $InferenceDevice = $defaults[$RuntimeTarget].InferenceDevice }
 if ($Headless -eq $null) { $Headless = $true }
 if ($OpenFeedViewers -eq $null) { $OpenFeedViewers = $false }
+if ($AutoOpenVisualSurface -eq $null) { $AutoOpenVisualSurface = $false }
 if ($KeepWindowsOpen -eq $null) { $KeepWindowsOpen = $false }
 if ($RequireMotion -eq $null) { $RequireMotion = ($Milestone -ge 3) }
 if ($RequireNav2ActionServer -eq $null) { $RequireNav2ActionServer = ($Milestone -ge 3) }
 if ($DemoTargetRelative -eq $null) { $DemoTargetRelative = $false }
 if ([string]::IsNullOrWhiteSpace($DisplayPreflightStatus)) { $DisplayPreflightStatus = "not_required" }
 if ([string]::IsNullOrWhiteSpace($DisplayMode)) { $DisplayMode = "none" }
+if ([string]::IsNullOrWhiteSpace($VisualSurface)) { $VisualSurface = "none" }
+if ([string]::IsNullOrWhiteSpace($WorldSurface)) { $WorldSurface = if ($VisualSurface -ne "none") { "streamed_sim" } else { "none" } }
 if ($DisplayAddress -match '^:(\d+)(\.\d+)?$') {
     $DisplayAddress = "host.docker.internal$DisplayAddress"
 }
@@ -558,10 +1274,37 @@ $worldViewerRunning = $false
 $worldViewerStatus = if ([bool]$OpenFeedViewers) { "pending" } else { "skipped" }
 $worldViewerPid = ""
 $worldViewerLog = ""
+$worldStreamReady = ($WorldSurface -eq "none")
+$worldStreamStatus = if ($WorldSurface -eq "none") { "skipped" } else { "pending" }
+$worldStreamUrl = ""
+$worldStreamPort = 0
+$worldStreamStatePath = ""
+$worldStreamSummaryPath = ""
+$worldStreamNonblank = $false
+$worldStreamInteractive = $false
+$worldStreamSameSessionPartition = ($WorldSurface -ne "streamed_sim")
+$worldStreamContainerId = ""
+$worldStreamPid = ""
+$worldStreamLog = ""
+$truthStatePath = ""
+$truthSummaryPath = ""
+$truthReady = $false
+$truthStatus = if ($VisualSurface -ne "none") { "pending" } else { "skipped" }
+$truthProbePid = ""
+$truthProbeLog = ""
 $containerGateStackId = ""
 $containerSimGateId = ""
 $dockerCmd = ""
 $displayPreflightOk = (($DisplayPreflightStatus -eq "ok") -or ($DisplayPreflightStatus -eq "not_required"))
+$visualSurfaceRequested = ($VisualSurface -ne "none")
+$visualReady = (-not $visualSurfaceRequested)
+$visualStatus = if ($visualSurfaceRequested) { "pending" } else { "skipped" }
+$visualGatePass = (-not $visualSurfaceRequested)
+$visualObserverPid = ""
+$visualObserverLog = ""
+$visualStatePath = ""
+$visualSummaryPath = ""
+$dashboardInfo = $null
 
 $runId = if ([string]::IsNullOrWhiteSpace($SessionId)) { (Get-Date).ToUniversalTime().ToString("yyyyMMddTHHmmssZ") } else { $SessionId }
 if ($runId -notmatch '^\d{8}T\d{6}Z$') {
@@ -578,15 +1321,27 @@ $artifactDir = if (-not [string]::IsNullOrWhiteSpace($EvidenceDir)) {
 }
 New-Item -ItemType Directory -Path (Join-Path $artifactDir "logs") -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $artifactDir "screenshots") -Force | Out-Null
+$sessionVisualDir = if (-not [string]::IsNullOrWhiteSpace($SessionId)) {
+    Join-Path $repoRoot "artifacts/session/$runId/visual"
+} else {
+    Join-Path $artifactDir "visual"
+}
+New-Item -ItemType Directory -Path $sessionVisualDir -Force | Out-Null
 
 $resolvedProjectName = if ([string]::IsNullOrWhiteSpace($ProjectName)) { "chasecar_gate_mdemo_$($runId.ToLowerInvariant())" } else { $ProjectName }
 $composeGateScript = Join-Path $PSScriptRoot "run_compose_gate.ps1"
 $composeUatScript = Join-Path $PSScriptRoot "run_compose_uat.ps1"
 
+$originalGazeboPartition = $env:GAZEBO_PARTITION
+$originalWorldStreamPort = $env:WORLD_STREAM_PORT
+
 $includeNav2 = ($Milestone -ge 3)
 $includeBridge = $false
 $includeRelay = ($Milestone -ge 3)
 $gateHeadless = $Headless
+if ($WorldSurface -eq "streamed_sim") {
+    $gateHeadless = $true
+}
 
 $snapshotTargetX = $DemoTargetX
 $snapshotTargetY = $DemoTargetY
@@ -616,6 +1371,11 @@ $env:CHASECAR_SNAPSHOT_TARGET_Z = $snapshotTargetZ.ToString([System.Globalizatio
 $env:CHASECAR_SNAPSHOT_WORLD_NAME = $WorldName
 $env:CHASECAR_SNAPSHOT_MODEL_SDF = $DemoTargetModelSdf
 $env:CHASECAR_SNAPSHOT_MODEL_NAME = "${DemoTargetName}_snapshot"
+$env:GAZEBO_PARTITION = $runId
+if ($WorldSurface -eq "streamed_sim") {
+    $worldStreamPort = Get-FreeWorldStreamPort -RequestedPort 0
+    $env:WORLD_STREAM_PORT = $worldStreamPort.ToString()
+}
 
 $stageRuns = @()
 $overallPass = $false
@@ -644,11 +1404,129 @@ try {
         "-QtX11NoMitShm","1",
         "-LibglAlwaysIndirect","1"
     )
+    if ($WorldSurface -eq "streamed_sim") {
+        $upArgs += "-Build"
+    }
     if (-not [string]::IsNullOrWhiteSpace($DisplayAddress)) {
         $upArgs += @("-DisplayAddress", $DisplayAddress)
     }
     $up = Invoke-PSCapture -ScriptPath $composeGateScript -ScriptArgs $upArgs
     if ($up.ExitCode -ne 0) { throw "Gate bring-up failed for project '$resolvedProjectName'." }
+
+    $containerSimGateId = Get-ContainerServiceId -DockerCmd $dockerCmd -ProjectName $resolvedProjectName -ServiceName "sim-gate"
+    $containerGateStackId = Get-ContainerServiceId -DockerCmd $dockerCmd -ProjectName $resolvedProjectName -ServiceName "gate-stack"
+    $worldStreamContainerId = Get-ContainerServiceId -DockerCmd $dockerCmd -ProjectName $resolvedProjectName -ServiceName "world-viewer"
+
+    if ($visualSurfaceRequested) {
+        if ([string]::IsNullOrWhiteSpace($containerGateStackId) -or [string]::IsNullOrWhiteSpace($containerSimGateId)) {
+            $visualStatus = "visual_container_unavailable"
+            $visualGatePass = $false
+            $visualReady = $false
+        }
+        else {
+            Write-DashboardHtml -RepoRoot $repoRoot -VisualDir $sessionVisualDir
+            $truthProbe = Start-TruthProbe `
+                -DockerCmd $dockerCmd `
+                -ContainerId $containerSimGateId `
+                -SessionId $runId `
+                -OutputDir $sessionVisualDir `
+                -WorldName $WorldName `
+                -TargetModelNames ($DemoTargetName + "," + $DemoTargetName + "_viewer," + $DemoTargetName + "_snapshot,uat_nav2_target")
+            $truthProbePid = [string]$truthProbe.Pid
+            $truthProbeLog = [string]$truthProbe.Log
+            if ($truthProbe.ExitCode -ne 0) {
+                $truthStatus = "truth_probe_failed"
+            }
+            else {
+                $truthWait = Wait-TruthProbeReady -VisualDir $sessionVisualDir -TimeoutSeconds 15
+                $truthStatePath = [string]$truthWait.StatePath
+                $truthReady = [bool]$truthWait.Ready
+                $truthStatus = if ($truthReady) { "truth_ready" } else { "truth_timeout" }
+                $truthSummaryPath = Join-Path $sessionVisualDir "truth_summary.json"
+            }
+
+            if ($WorldSurface -eq "streamed_sim") {
+                if ([string]::IsNullOrWhiteSpace($worldStreamContainerId)) {
+                    $worldStreamStatus = "world_stream_container_unavailable"
+                }
+                else {
+                    $stream = Start-WorldStream `
+                        -DockerCmd $dockerCmd `
+                        -ContainerId $worldStreamContainerId `
+                        -SessionId $runId `
+                        -OutputDir $sessionVisualDir `
+                        -PublicPort $worldStreamPort
+                    $worldStreamPid = [string]$stream.Pid
+                    $worldStreamLog = [string]$stream.Log
+                    $worldStreamUrl = [string]$stream.Url
+                    if ($stream.ExitCode -ne 0) {
+                        $worldStreamStatus = "world_stream_start_failed"
+                    }
+                    else {
+                        $worldWait = Wait-WorldStreamReady -VisualDir $sessionVisualDir -TimeoutSeconds 35
+                        $worldStreamStatePath = [string]$worldWait.StatePath
+                        $worldStreamReady = [bool]$worldWait.Ready
+                        $worldStreamStatus = if ($worldStreamReady) { "world_stream_ready" } else { "world_stream_timeout" }
+                        if ($worldWait.State) {
+                            $worldStreamNonblank = [bool]$worldWait.State.world_stream_nonblank
+                            $worldStreamInteractive = [bool]$worldWait.State.world_stream_interactive
+                            $worldStreamSameSessionPartition = [bool]$worldWait.State.same_session_partition
+                        }
+                        $worldStreamSummaryPath = Join-Path $sessionVisualDir "world_stream_summary.json"
+                    }
+                }
+            }
+
+            $observerDuration = if ($MaxRunSeconds -gt 0) { [Math]::Max($MaxRunSeconds + 90, 120) } else { 180 }
+            $observer = Start-VisualObserver `
+                -DockerCmd $dockerCmd `
+                -ContainerId $containerGateStackId `
+                -RosDistro $CoreRosDistro `
+                -SessionId $runId `
+                -OutputDir $sessionVisualDir `
+                -RuntimeTarget $RuntimeTarget `
+                -VisualMode $VisualSurface `
+                -DurationSeconds $observerDuration `
+                -RequireMotion ([bool]$RequireMotion) `
+                -TargetVisibleMinRatio $(if ($Milestone -ge 3) { 0.04 } elseif ($Milestone -eq 2) { 0.10 } else { 0.05 }) `
+                -MotionProgressMinM $MotionTargetProgressMinMeters `
+                -TruthStatePath $truthStatePath
+            $visualObserverPid = [string]$observer.Pid
+            $visualObserverLog = [string]$observer.Log
+
+            if ($observer.ExitCode -ne 0) {
+                $visualStatus = "visual_observer_failed"
+                $visualGatePass = $false
+                $visualReady = $false
+            }
+            else {
+                $visualWait = Wait-VisualObserverReady -VisualDir $sessionVisualDir -TimeoutSeconds ([Math]::Max($ViewerReadyTimeoutSeconds, 10))
+                $visualStatePath = [string]$visualWait.StatePath
+                $visualReady = [bool]$visualWait.Ready
+                $visualGatePass = [bool]$visualWait.Ready
+                $visualStatus = if ($visualReady) { "visual_ready" } else { "visual_timeout" }
+            }
+
+            if ($VisualSurface -eq "browser_dashboard") {
+                $dashboardInfo = Start-DashboardServer -VisualDir $sessionVisualDir -RequestedPort $DashboardPort -AutoOpen ([bool]$AutoOpenVisualSurface)
+                if (-not [bool]$dashboardInfo.Ready) {
+                    $visualReady = $false
+                    $visualGatePass = $false
+                    $visualStatus = "dashboard_server_unavailable"
+                }
+            }
+            if (-not $truthReady) {
+                $visualReady = $false
+                $visualGatePass = $false
+                $visualStatus = $truthStatus
+            }
+            if ($WorldSurface -eq "streamed_sim" -and -not $worldStreamReady) {
+                $visualReady = $false
+                $visualGatePass = $false
+                $visualStatus = $worldStreamStatus
+            }
+        }
+    }
 
     $stageTimeout = [Math]::Max($StepTimeoutSeconds, 120)
     if ($MaxRunSeconds -gt 0) {
@@ -696,7 +1574,7 @@ try {
 
     # In operator hold-open mode, start viewers immediately after stack bring-up so
     # the user can observe the run while UAT stages are executing.
-    if ([bool]$OpenFeedViewers -and [bool]$KeepWindowsOpen) {
+    if ([bool]$OpenFeedViewers -and [bool]$KeepWindowsOpen -and -not $visualSurfaceRequested) {
         Write-Host "VIEWER_LAUNCH_PHASE=pre_uat"
         if (-not $displayPreflightOk) {
             $feedViewerStatus = if ([string]::IsNullOrWhiteSpace($DisplayPreflightStatus)) { "display_preflight_failed" } else { $DisplayPreflightStatus }
@@ -811,6 +1689,17 @@ try {
         if (Test-Path -LiteralPath $navSummaryPath) { $navSummary = Get-Content -LiteralPath $navSummaryPath -Raw | ConvertFrom-Json }
     }
 
+    if ($visualSurfaceRequested -and $Milestone -eq 2 -and -not [string]::IsNullOrWhiteSpace($containerSimGateId)) {
+        $viewerModelSdf = if ([System.IO.Path]::IsPathRooted($DemoTargetModelSdf)) { $DemoTargetModelSdf } else { Join-Path $repoRoot $DemoTargetModelSdf }
+        $viewerModelName = "${DemoTargetName}_viewer"
+        Invoke-RemoveModel -DockerCmd $dockerCmd -ContainerId $containerSimGateId -WorldName $WorldName -ModelName $viewerModelName
+        $spawnRes = Invoke-SpawnModel -DockerCmd $dockerCmd -ContainerId $containerSimGateId -WorldName $WorldName -ModelName $viewerModelName -ModelSdfWindowsPath $viewerModelSdf -X $snapshotTargetX -Y $snapshotTargetY -Z $snapshotTargetZ
+        if ($spawnRes.ExitCode -eq 0) {
+            Start-Sleep -Seconds ([Math]::Max($PersistentVisualHoldSeconds, 1))
+            Invoke-RemoveModel -DockerCmd $dockerCmd -ContainerId $containerSimGateId -WorldName $WorldName -ModelName $viewerModelName
+        }
+    }
+
     $snapshotPass = ($snapshotSummary -and [bool]$snapshotSummary.pass)
     $coordinatePass = ($coordinateSummary -and [bool]$coordinateSummary.pass)
     $navPass = ($navSummary -and [bool]$navSummary.pass)
@@ -885,7 +1774,7 @@ try {
         }
     }
 
-    if ([bool]$OpenFeedViewers -and ((-not $feedViewersRunning) -or (-not $worldViewerRunning) -or (-not $feedViewersGatePass))) {
+    if ([bool]$OpenFeedViewers -and -not $visualSurfaceRequested -and ((-not $feedViewersRunning) -or (-not $worldViewerRunning) -or (-not $feedViewersGatePass))) {
         if (-not $displayPreflightOk) {
             $feedViewerStatus = if ([string]::IsNullOrWhiteSpace($DisplayPreflightStatus)) { "display_preflight_failed" } else { $DisplayPreflightStatus }
             $worldViewerStatus = $feedViewerStatus
@@ -979,41 +1868,149 @@ try {
         }
     }
 
+    $visualSummary = $null
+    $worldStreamSummary = $null
+    $truthSummary = $null
+    $modeSpecificVisualArtifacts = [pscustomobject]@{
+        suffix = ""
+        summary_path = ""
+        raw_video = ""
+        debug_video = ""
+        topdown_video = ""
+        world_stream_summary_path = ""
+        world_stream_video_path = ""
+        world_stream_screenshot_path = ""
+    }
+    if ($visualSurfaceRequested -and -not [string]::IsNullOrWhiteSpace($containerGateStackId)) {
+        if (-not [string]::IsNullOrWhiteSpace($worldStreamContainerId)) {
+            Stop-WorldStream -DockerCmd $dockerCmd -ContainerId $worldStreamContainerId
+        }
+        if (-not [string]::IsNullOrWhiteSpace($containerSimGateId)) {
+            Stop-TruthProbe -DockerCmd $dockerCmd -ContainerId $containerSimGateId
+        }
+        Stop-VisualObserver -DockerCmd $dockerCmd -ContainerId $containerGateStackId
+        $visualSummaryWait = Wait-VisualObserverSummary -VisualDir $sessionVisualDir -TimeoutSeconds 15
+        $visualSummaryPath = [string]$visualSummaryWait.SummaryPath
+        if ([bool]$visualSummaryWait.Ready) {
+            $visualSummary = $visualSummaryWait.Summary
+        }
+        $truthSummaryWait = Wait-TruthSummary -VisualDir $sessionVisualDir -TimeoutSeconds 12
+        $truthSummaryPath = [string]$truthSummaryWait.SummaryPath
+        if ([bool]$truthSummaryWait.Ready) {
+            try {
+                $truthSummary = $truthSummaryWait.Summary
+                $truthReady = [bool]$truthSummary.pass
+                $truthStatus = if ($truthReady) { "truth_ready" } else { "truth_content_failed" }
+            }
+            catch {
+            }
+        }
+        $worldStreamSummaryWait = Wait-WorldStreamSummary -VisualDir $sessionVisualDir -TimeoutSeconds 12
+        $worldStreamSummaryPath = [string]$worldStreamSummaryWait.SummaryPath
+        if ([bool]$worldStreamSummaryWait.Ready) {
+            try {
+                $worldStreamSummary = $worldStreamSummaryWait.Summary
+                $worldStreamReady = [bool]$worldStreamSummary.pass
+                $worldStreamNonblank = [bool]$worldStreamSummary.world_stream_nonblank
+                $worldStreamInteractive = [bool]$worldStreamSummary.world_stream_interactive
+                $worldStreamUrl = [string]$worldStreamSummary.world_stream_url
+                $worldStreamSameSessionPartition = [bool]$worldStreamSummary.same_session_partition
+                if (-not $worldStreamSameSessionPartition) {
+                    $worldStreamStatus = "world_stream_partition_mismatch"
+                }
+                else {
+                    $worldStreamStatus = if ($worldStreamReady) { "world_stream_ready" } else { "world_stream_content_failed" }
+                }
+            }
+            catch {
+            }
+        }
+
+        $modeSpecificVisualArtifacts = Save-ModeSpecificVisualArtifacts `
+            -VisualDir $sessionVisualDir `
+            -VisualSurface $VisualSurface `
+            -RepoRoot $repoRoot `
+            -VisualSummary $visualSummary `
+            -WorldStreamSummary $worldStreamSummary
+
+        $visualReady = (
+            $visualSummaryWait.Ready -and
+            ($null -ne $visualSummary) -and
+            [bool]$visualSummary.pass -and
+            ($truthReady -or -not $visualSurfaceRequested) -and
+            ($WorldSurface -ne "streamed_sim" -or $worldStreamReady)
+        )
+        $visualGatePass = $visualReady
+        if ($visualReady) {
+            $visualStatus = "visual_ready"
+        }
+        elseif (-not $visualSummaryWait.Ready) {
+            $visualStatus = "visual_summary_missing"
+        }
+        elseif (-not $truthReady) {
+            $visualStatus = $truthStatus
+        }
+        elseif ($WorldSurface -eq "streamed_sim" -and -not $worldStreamReady) {
+            $visualStatus = $worldStreamStatus
+        }
+        else {
+            $visualStatus = "visual_content_failed"
+        }
+    }
+
     if ($captureRgb) { $feedViewerFrameCounts.rgb = 1 }
     if ($captureDebug) { $feedViewerFrameCounts.yolo_debug = 1 }
-    $visualReady = ($streamReady -and ((-not [bool]$OpenFeedViewers) -or $feedViewersGatePass))
+    $presentationGatePass = if ($visualSurfaceRequested) { $visualGatePass } else { $feedViewersGatePass }
+    if (-not $visualSurfaceRequested) {
+        $visualReady = ($streamReady -and ((-not [bool]$OpenFeedViewers) -or $feedViewersGatePass))
+    }
 
     if ($Milestone -eq 1) {
-        $overallPass = ($snapshotPass -and $captureDebug -and $overlayDistinct -and $streamReady -and $feedViewersGatePass -and $visualReady)
+        $overallPass = ($snapshotPass -and $captureDebug -and $overlayDistinct -and $streamReady -and $presentationGatePass -and $visualReady)
         if (-not $overallPass) {
             if (-not $streamReady) { $demoFailureClass = $streamStatus }
-            elseif (-not $visualReady) { $demoFailureClass = "visual_not_ready" }
-            elseif (-not $feedViewersGatePass) {
-                $demoFailureClass = if ($worldViewerStatus -and $worldViewerStatus -ne "viewer_ready" -and $worldViewerStatus -ne "skipped") { $worldViewerStatus } else { "feed_viewer_unavailable" }
+            elseif (-not $visualReady) { $demoFailureClass = if ($visualSurfaceRequested -and -not [string]::IsNullOrWhiteSpace($visualStatus) -and $visualStatus -ne "visual_ready") { $visualStatus } else { "visual_not_ready" } }
+            elseif (-not $presentationGatePass) {
+                if ($visualSurfaceRequested) {
+                    $demoFailureClass = $visualStatus
+                }
+                else {
+                    $demoFailureClass = if ($worldViewerStatus -and $worldViewerStatus -ne "viewer_ready" -and $worldViewerStatus -ne "skipped") { $worldViewerStatus } else { "feed_viewer_unavailable" }
+                }
             }
             else { $demoFailureClass = "snapshot_gate_failed" }
         }
     } elseif ($Milestone -eq 2) {
-        $overallPass = ($ball3dSeen -and $captureDebug -and $overlayDistinct -and $streamReady -and $feedViewersGatePass -and $visualReady)
+        $overallPass = ($ball3dSeen -and $captureDebug -and $overlayDistinct -and $streamReady -and $presentationGatePass -and $visualReady)
         if (-not $overallPass) {
             if (-not $streamReady) { $demoFailureClass = $streamStatus }
-            elseif (-not $visualReady) { $demoFailureClass = "visual_not_ready" }
-            elseif (-not $feedViewersGatePass) {
-                $demoFailureClass = if ($worldViewerStatus -and $worldViewerStatus -ne "viewer_ready" -and $worldViewerStatus -ne "skipped") { $worldViewerStatus } else { "feed_viewer_unavailable" }
+            elseif (-not $visualReady) { $demoFailureClass = if ($visualSurfaceRequested -and -not [string]::IsNullOrWhiteSpace($visualStatus) -and $visualStatus -ne "visual_ready") { $visualStatus } else { "visual_not_ready" } }
+            elseif (-not $presentationGatePass) {
+                if ($visualSurfaceRequested) {
+                    $demoFailureClass = $visualStatus
+                }
+                else {
+                    $demoFailureClass = if ($worldViewerStatus -and $worldViewerStatus -ne "viewer_ready" -and $worldViewerStatus -ne "skipped") { $worldViewerStatus } else { "feed_viewer_unavailable" }
+                }
             }
             else { $demoFailureClass = "m2_tracking_gate_failed" }
         }
     } else {
         $requiredActionOk = ((-not $RequireNav2ActionServer) -or $navActionReady)
         $requiredMotionOk = ((-not $RequireMotion) -or $motionPass)
-        $overallPass = ($snapshotPass -and $navPass -and $requiredActionOk -and $requiredMotionOk -and $streamReady -and $feedViewersGatePass -and $visualReady)
+        $overallPass = ($snapshotPass -and $navPass -and $requiredActionOk -and $requiredMotionOk -and $streamReady -and $presentationGatePass -and $visualReady)
         if (-not $overallPass) {
             if (-not $streamReady) { $demoFailureClass = $streamStatus }
             elseif (-not $requiredActionOk) { $demoFailureClass = "nav2_action_unavailable" }
             elseif (-not $requiredMotionOk) { $demoFailureClass = $motionError }
-            elseif (-not $visualReady) { $demoFailureClass = "visual_not_ready" }
-            elseif (-not $feedViewersGatePass) {
-                $demoFailureClass = if ($worldViewerStatus -and $worldViewerStatus -ne "viewer_ready" -and $worldViewerStatus -ne "skipped") { $worldViewerStatus } else { "feed_viewer_unavailable" }
+            elseif (-not $visualReady) { $demoFailureClass = if ($visualSurfaceRequested -and -not [string]::IsNullOrWhiteSpace($visualStatus) -and $visualStatus -ne "visual_ready") { $visualStatus } else { "visual_not_ready" } }
+            elseif (-not $presentationGatePass) {
+                if ($visualSurfaceRequested) {
+                    $demoFailureClass = $visualStatus
+                }
+                else {
+                    $demoFailureClass = if ($worldViewerStatus -and $worldViewerStatus -ne "viewer_ready" -and $worldViewerStatus -ne "skipped") { $worldViewerStatus } else { "feed_viewer_unavailable" }
+                }
             }
             else { $demoFailureClass = "m3_nav_gate_failed" }
         }
@@ -1037,8 +2034,11 @@ try {
         compose_project = $resolvedProjectName
         world_file = $WorldFile
         world_name = $WorldName
+        gazebo_partition = $runId
         display_mode = $DisplayMode
         display_address = $DisplayAddress
+        visual_surface = $VisualSurface
+        world_surface = $WorldSurface
         display_preflight_status = $DisplayPreflightStatus
         display_preflight_message = $DisplayPreflightMessage
         viewer_backend = $ViewerBackend
@@ -1110,8 +2110,8 @@ try {
         }
         viewers = [ordered]@{
             open_feed_viewers_requested = [bool]$OpenFeedViewers
-            feed_viewers_required = [bool]$OpenFeedViewers
-            world_viewer_required = [bool]$OpenFeedViewers
+            feed_viewers_required = ([bool]$OpenFeedViewers -and -not $visualSurfaceRequested)
+            world_viewer_required = ([bool]$OpenFeedViewers -and -not $visualSurfaceRequested -and $WorldSurface -eq "x11_debug")
             world_viewer_running = $worldViewerRunning
             world_viewer_status = $worldViewerStatus
             world_viewer_pid = $worldViewerPid
@@ -1122,6 +2122,73 @@ try {
             viewer_startup_elapsed_s = $feedViewerStartupElapsedS
             viewer_frame_counts = $feedViewerFrameCounts
             visual_ready = $visualReady
+        }
+        visual = [ordered]@{
+            requested = $visualSurfaceRequested
+            surface = $VisualSurface
+            world_surface = $WorldSurface
+            status = $visualStatus
+            visual_ready = $visualReady
+            pass = $visualGatePass
+            observer_pid = $visualObserverPid
+            observer_log = $visualObserverLog
+            state_path = if ([string]::IsNullOrWhiteSpace($visualStatePath)) { "" } else { $visualStatePath }
+            summary_path = if ([string]::IsNullOrWhiteSpace($visualSummaryPath)) { "" } else { $visualSummaryPath }
+            raw_video = if ($visualSummary) { Convert-OrchestratorPath -Path ([string]$visualSummary.raw_video) -RepoRoot $repoRoot } else { "" }
+            debug_video = if ($visualSummary) { Convert-OrchestratorPath -Path ([string]$visualSummary.debug_video) -RepoRoot $repoRoot } else { "" }
+            topdown_video = if ($visualSummary) { Convert-OrchestratorPath -Path ([string]$visualSummary.topdown_video) -RepoRoot $repoRoot } else { "" }
+            keyframes_dir = if ($visualSummary) { Convert-OrchestratorPath -Path ([string]$visualSummary.keyframes_dir) -RepoRoot $repoRoot } else { "" }
+            timeline_path = if ($visualSummary) { Convert-OrchestratorPath -Path ([string]$visualSummary.timeline_path) -RepoRoot $repoRoot } else { "" }
+            raw_frame_count = if ($visualSummary) { [int]$visualSummary.raw_frame_count } else { 0 }
+            debug_frame_count = if ($visualSummary) { [int]$visualSummary.debug_frame_count } else { 0 }
+            telemetry_frame_count = if ($visualSummary) { [int]$visualSummary.telemetry_frame_count } else { 0 }
+            target_visible_ratio = if ($visualSummary) { [double]$visualSummary.target_visible_ratio } else { 0.0 }
+            overlay_difference_ok = if ($visualSummary) { [bool]$visualSummary.overlay_difference_ok } else { $false }
+            target_persistence_ok = if ($visualSummary) { [bool]$visualSummary.target_persistence_ok } else { $false }
+            motion_progress_ok = if ($visualSummary) { [bool]$visualSummary.motion_progress_ok } else { $false }
+            true_target_seen = if ($visualSummary) { [bool]$visualSummary.true_target_seen } else { $false }
+            truth_alignment_ok = if ($visualSummary) { [bool]$visualSummary.truth_alignment_ok } else { $false }
+            truth_failure_class = if ($visualSummary) { [string]$visualSummary.truth_failure_class } else { "" }
+            vision_vs_truth_m_median = if ($visualSummary) { $visualSummary.vision_vs_truth_m_median } else { $null }
+            waypoint_vs_truth_m_median = if ($visualSummary) { $visualSummary.waypoint_vs_truth_m_median } else { $null }
+            waypoint_vs_vision_m_median = if ($visualSummary) { $visualSummary.waypoint_vs_vision_m_median } else { $null }
+            dashboard_url = if ($dashboardInfo) { [string]$dashboardInfo.Url } else { "" }
+            dashboard_port = if ($dashboardInfo) { [int]$dashboardInfo.Port } else { 0 }
+            dashboard_ready = if ($dashboardInfo) { [bool]$dashboardInfo.Ready } else { ($VisualSurface -ne "browser_dashboard") }
+            auto_open = [bool]$AutoOpenVisualSurface
+            truth_state_path = if ([string]::IsNullOrWhiteSpace($truthStatePath)) { "" } else { $truthStatePath }
+            truth_summary_path = if ([string]::IsNullOrWhiteSpace($truthSummaryPath)) { "" } else { $truthSummaryPath }
+            truth_ready = $truthReady
+            truth_status = $truthStatus
+            mode_artifacts = [ordered]@{
+                suffix = [string]$modeSpecificVisualArtifacts.suffix
+                summary_path = [string]$modeSpecificVisualArtifacts.summary_path
+                raw_video = [string]$modeSpecificVisualArtifacts.raw_video
+                debug_video = [string]$modeSpecificVisualArtifacts.debug_video
+                topdown_video = [string]$modeSpecificVisualArtifacts.topdown_video
+                world_stream_summary_path = [string]$modeSpecificVisualArtifacts.world_stream_summary_path
+                world_stream_video_path = [string]$modeSpecificVisualArtifacts.world_stream_video_path
+                world_stream_screenshot_path = [string]$modeSpecificVisualArtifacts.world_stream_screenshot_path
+            }
+            world_stream = [ordered]@{
+                requested = ($WorldSurface -eq "streamed_sim")
+                url = $worldStreamUrl
+                port = $worldStreamPort
+                ready = $worldStreamReady
+                status = $worldStreamStatus
+                nonblank = $worldStreamNonblank
+                interactive = $worldStreamInteractive
+                state_path = if ([string]::IsNullOrWhiteSpace($worldStreamStatePath)) { "" } else { $worldStreamStatePath }
+                summary_path = if ([string]::IsNullOrWhiteSpace($worldStreamSummaryPath)) { "" } else { $worldStreamSummaryPath }
+                video_path = if ($worldStreamSummary) { Convert-OrchestratorPath -Path ([string]$worldStreamSummary.video_path) -RepoRoot $repoRoot } else { "" }
+                screenshot_path = if ($worldStreamSummary) { Convert-OrchestratorPath -Path ([string]$worldStreamSummary.screenshot_path) -RepoRoot $repoRoot } else { "" }
+                same_session_partition = $worldStreamSameSessionPartition
+                mode_artifacts = [ordered]@{
+                    summary_path = [string]$modeSpecificVisualArtifacts.world_stream_summary_path
+                    video_path = [string]$modeSpecificVisualArtifacts.world_stream_video_path
+                    screenshot_path = [string]$modeSpecificVisualArtifacts.world_stream_screenshot_path
+                }
+            }
         }
         nav2 = [ordered]@{
             require_action_server = [bool]$RequireNav2ActionServer
@@ -1160,7 +2227,7 @@ try {
             bridge_running = ($Milestone -ge 3)
             nav2_running = ($Milestone -ge 3)
             cmd_vel_relay_running = ($Milestone -ge 3)
-            world_viewer_running = $worldViewerRunning
+            world_viewer_running = if ($WorldSurface -eq "streamed_sim") { $worldStreamReady } else { $worldViewerRunning }
             feed_raw_viewer_running = $feedViewersRunning
             feed_debug_viewer_running = $feedViewersRunning
         }
@@ -1180,11 +2247,16 @@ try {
         items = @(
             [ordered]@{ id = "world_ready"; description = "World service became available"; pass = $true },
             [ordered]@{ id = "stream_ready"; description = "Required camera/odom streams became active"; pass = $streamReady },
+            [ordered]@{ id = "truth_ready"; description = "Sim truth target became available"; required = $visualSurfaceRequested; pass = $truthReady },
+            [ordered]@{ id = "truth_alignment_ok"; description = "Vision target stayed aligned with sim truth"; required = $visualSurfaceRequested; pass = if ($visualSummary) { [bool]$visualSummary.truth_alignment_ok } else { $false } },
             [ordered]@{ id = "overlay_distinct"; description = "Debug image differs from raw image"; required = ($Milestone -le 2); pass = $overlayDistinct },
             [ordered]@{ id = "ball_position_3d"; description = "/yolo/ball_position_3d active"; required = ($Milestone -ge 2); pass = $ball3dSeen },
             [ordered]@{ id = "nav2_action_server_ready"; description = "/navigate_to_pose action server ready"; required = ($Milestone -ge 3); pass = $navActionReady },
-            [ordered]@{ id = "world_viewer_running"; description = "World viewer window running when requested"; required = [bool]$OpenFeedViewers; pass = $worldViewerRunning },
-            [ordered]@{ id = "feed_viewers_running"; description = "Feed viewer windows running when requested"; required = [bool]$OpenFeedViewers; pass = $feedViewersGatePass },
+            [ordered]@{ id = "world_viewer_running"; description = "World viewer window running when requested"; required = ([bool]$OpenFeedViewers -and -not $visualSurfaceRequested); pass = $worldViewerRunning },
+            [ordered]@{ id = "feed_viewers_running"; description = "Feed viewer windows running when requested"; required = ([bool]$OpenFeedViewers -and -not $visualSurfaceRequested); pass = $feedViewersGatePass },
+            [ordered]@{ id = "visual_surface_ready"; description = "Recorded/dashboard surface captured nonblank content"; required = $visualSurfaceRequested; pass = $visualGatePass },
+            [ordered]@{ id = "world_stream_ready"; description = "Streamed 3D Gazebo world ready"; required = ($WorldSurface -eq "streamed_sim"); pass = $worldStreamReady },
+            [ordered]@{ id = "world_stream_same_session"; description = "Streamed 3D Gazebo world attached to the same session partition"; required = ($WorldSurface -eq "streamed_sim"); pass = $worldStreamSameSessionPartition },
             [ordered]@{ id = "cmd_vel_activity"; description = "cmd_vel activity observed"; required = ($Milestone -ge 3); pass = ($cmdVelMessageCount -gt 0) },
             [ordered]@{ id = "odom_displacement"; description = "Target-distance retained progress reached threshold"; required = ($Milestone -ge 3); pass = ($odomDisplacementM -ge $MotionMinDistanceMeters) }
         )
@@ -1196,7 +2268,7 @@ try {
 
     $demoSummary | ConvertTo-Json -Depth 12 | Set-Content -Path $demoSummaryPath -Encoding UTF8
     $operatorChecklist | ConvertTo-Json -Depth 8 | Set-Content -Path $checklistPath -Encoding UTF8
-    ([ordered]@{ milestone="$Milestone"; execution_lane="container_kilted"; core_ros_distro=$CoreRosDistro; compose_project=$resolvedProjectName; pids=[ordered]@{ sim=""; detector=""; extractor=""; bridge=""; nav2=""; cmd_vel_relay=""; motion_probe=""; world_viewer=$worldViewerPid; feed_rgb_viewer=$feedRgbViewerPid; feed_debug_viewer=$feedDebugViewerPid } } | ConvertTo-Json -Depth 6) | Set-Content -Path $demoPidsPath -Encoding UTF8
+    ([ordered]@{ milestone="$Milestone"; execution_lane="container_kilted"; core_ros_distro=$CoreRosDistro; compose_project=$resolvedProjectName; pids=[ordered]@{ sim=""; detector=""; extractor=""; bridge=""; nav2=""; cmd_vel_relay=""; motion_probe=""; world_viewer=$worldViewerPid; world_stream=$worldStreamPid; truth_probe=$truthProbePid; feed_rgb_viewer=$feedRgbViewerPid; feed_debug_viewer=$feedDebugViewerPid; visual_observer=$visualObserverPid; dashboard_server=$(if($dashboardInfo){$dashboardInfo.Pid}else{0}) } } | ConvertTo-Json -Depth 6) | Set-Content -Path $demoPidsPath -Encoding UTF8
 
     Write-Host "ARTIFACT_DIR=$artifactDir"
     Write-Host "SIM_PID="
@@ -1209,6 +2281,9 @@ try {
     Write-Host "WORLD_VIEWER_PID=$worldViewerPid"
     Write-Host "FEED_RGB_VIEWER_PID=$feedRgbViewerPid"
     Write-Host "FEED_DEBUG_VIEWER_PID=$feedDebugViewerPid"
+    Write-Host "VISUAL_OBSERVER_PID=$visualObserverPid"
+    Write-Host ("VISUAL_SUMMARY={0}" -f $visualSummaryPath)
+    Write-Host ("DASHBOARD_URL={0}" -f $(if($dashboardInfo){$dashboardInfo.Url}else{""}))
     Write-Host "WATCHDOG_PID="
     Write-Host "EVIDENCE_CAPTURE_RGB=$captureRgb"
     Write-Host "EVIDENCE_CAPTURE_DEBUG=$captureDebug"
@@ -1220,8 +2295,17 @@ finally {
         if ($null -eq $value) { Remove-Item -Path "Env:$k" -ErrorAction SilentlyContinue }
         else { Set-Item -Path "Env:$k" -Value $value }
     }
+    if ($null -eq $originalGazeboPartition) { Remove-Item -Path "Env:GAZEBO_PARTITION" -ErrorAction SilentlyContinue }
+    else { Set-Item -Path "Env:GAZEBO_PARTITION" -Value $originalGazeboPartition }
+    if ($null -eq $originalWorldStreamPort) { Remove-Item -Path "Env:WORLD_STREAM_PORT" -ErrorAction SilentlyContinue }
+    else { Set-Item -Path "Env:WORLD_STREAM_PORT" -Value $originalWorldStreamPort }
+
+    if (-not [string]::IsNullOrWhiteSpace($dockerCmd) -and -not [string]::IsNullOrWhiteSpace($containerGateStackId)) {
+        Stop-VisualObserver -DockerCmd $dockerCmd -ContainerId $containerGateStackId
+    }
 
     if (-not [bool]$KeepWindowsOpen) {
+        Stop-DashboardServer -ServerInfo $dashboardInfo
         if (-not [string]::IsNullOrWhiteSpace($dockerCmd) -and -not [string]::IsNullOrWhiteSpace($containerGateStackId)) {
             Stop-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerId "viewer_rgb"
             Stop-FeedViewer -DockerCmd $dockerCmd -ContainerId $containerGateStackId -ViewerId "viewer_debug"
@@ -1247,7 +2331,7 @@ finally {
         ) | Out-Null
     }
     else {
-        Write-Host "KEEP_WINDOWS_OPEN=true; preserving active stack and viewer processes."
+        Write-Host "KEEP_WINDOWS_OPEN=true; preserving compose stack after artifact capture."
     }
 }
 

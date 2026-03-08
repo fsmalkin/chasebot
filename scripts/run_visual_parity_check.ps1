@@ -101,6 +101,18 @@ function Find-LatestFile {
     return ""
 }
 
+function Test-NonEmptyFile {
+    param([string]$PathValue)
+    if ([string]::IsNullOrWhiteSpace($PathValue)) { return $false }
+    if (-not (Test-Path -LiteralPath $PathValue)) { return $false }
+    try {
+        return ((Get-Item -LiteralPath $PathValue).Length -gt 0)
+    }
+    catch {
+        return $false
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $requestedSessionId = Resolve-SessionId -Value $SessionId
 
@@ -190,10 +202,56 @@ $m2Outcome = Get-PropValue -Object $guiSummary -Path @("final_outcomes", "milest
 $m3OutcomesRaw = Get-PropValue -Object $guiSummary -Path @("final_outcomes", "milestone3") -Default @()
 $m3Outcomes = if ($m3OutcomesRaw -is [System.Array]) { @($m3OutcomesRaw) } elseif ($null -eq $m3OutcomesRaw) { @() } else { @($m3OutcomesRaw) }
 $guiOpenFeedViewers = To-Bool (Get-PropValue -Object $guiSummary -Path @("open_feed_viewers") -Default $false)
+$guiVisualSurface = [string](Get-PropValue -Object $guiSummary -Path @("visual_surface") -Default "none")
+$guiWorldSurface = [string](Get-PropValue -Object $guiSummary -Path @("world_surface") -Default "none")
+$guiVisualBlock = Get-PropValue -Object $guiSummary -Path @("visual") -Default $null
+$guiM2VisualBlock = Get-PropValue -Object $guiVisualBlock -Path @("milestone2") -Default $null
+$guiWorldStreamBlock = Get-PropValue -Object $guiM2VisualBlock -Path @("world_stream") -Default $null
 $guiVisualReady = To-Bool (Get-PropValue -Object $guiSummary -Path @("visual_ready") -Default $false)
-$guiViewerFramesRgb = To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_frame_counts", "rgb") -Default 0.0)
-$guiViewerFramesDebug = To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_frame_counts", "yolo_debug") -Default 0.0)
+$guiViewerFramesRgb = if ($guiVisualSurface -eq "none") {
+    To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_frame_counts", "rgb") -Default 0.0)
+} else {
+    To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_frame_counts", "raw") -Default 0.0)
+}
+$guiViewerFramesDebug = if ($guiVisualSurface -eq "none") {
+    To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_frame_counts", "yolo_debug") -Default 0.0)
+} else {
+    To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_frame_counts", "debug") -Default 0.0)
+}
+$guiTelemetryFrames = To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_frame_counts", "telemetry") -Default 0.0)
 $guiViewerStartupElapsedS = To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_startup_elapsed_s") -Default 0.0)
+$guiOverlayDifferenceOk = To-Bool (Get-PropValue -Object $guiM2VisualBlock -Path @("overlay_difference_ok") -Default $false)
+$guiTargetPersistenceOk = To-Bool (Get-PropValue -Object $guiM2VisualBlock -Path @("target_persistence_ok") -Default $false)
+$guiDashboardReady = To-Bool (Get-PropValue -Object $guiM2VisualBlock -Path @("dashboard_ready") -Default ($guiVisualSurface -ne "browser_dashboard"))
+$guiTruthAlignmentOk = To-Bool (Get-PropValue -Object $guiM2VisualBlock -Path @("truth_alignment_ok") -Default $false)
+$guiTrueTargetSeen = To-Bool (Get-PropValue -Object $guiM2VisualBlock -Path @("true_target_seen") -Default $false)
+$guiWorldStreamReady = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("ready") -Default ($guiWorldSurface -ne "streamed_sim"))
+$guiWorldStreamNonblank = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("nonblank") -Default ($guiWorldSurface -ne "streamed_sim"))
+$guiWorldStreamInteractive = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("interactive") -Default ($guiWorldSurface -ne "streamed_sim"))
+$guiWorldStreamSameSession = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("same_session_partition") -Default ($guiWorldSurface -ne "streamed_sim"))
+$guiWorldStreamSummaryPath = Resolve-RepoPath -PathValue ([string](Get-PropValue -Object $guiWorldStreamBlock -Path @("summary_path") -Default "")) -RepoRoot $repoRoot
+$guiWorldStreamVideoPath = Resolve-RepoPath -PathValue ([string](Get-PropValue -Object $guiWorldStreamBlock -Path @("video_path") -Default "")) -RepoRoot $repoRoot
+$guiVisualSummaryPath = Resolve-RepoPath -PathValue ([string](Get-PropValue -Object $guiM2VisualBlock -Path @("summary_path") -Default "")) -RepoRoot $repoRoot
+$guiVisualSummary = if (-not [string]::IsNullOrWhiteSpace($guiVisualSummaryPath) -and (Test-Path -LiteralPath $guiVisualSummaryPath)) { Load-JsonFile -PathValue $guiVisualSummaryPath } else { $null }
+$sessionVisualDir = Join-Path $repoRoot "artifacts/session/$effectiveSessionId/visual"
+$recordedVisualSummaryPath = Join-Path $sessionVisualDir "visual_demo_summary_recorded.json"
+if (-not (Test-Path -LiteralPath $recordedVisualSummaryPath) -and $guiVisualSurface -eq "recorded" -and -not [string]::IsNullOrWhiteSpace($guiVisualSummaryPath)) {
+    $recordedVisualSummaryPath = $guiVisualSummaryPath
+}
+$recordedVisualSummary = if (Test-Path -LiteralPath $recordedVisualSummaryPath) { Load-JsonFile -PathValue $recordedVisualSummaryPath } else { $null }
+$recordedWorldStreamSummaryPath = Join-Path $sessionVisualDir "world_stream_summary_recorded.json"
+$recordedWorldStreamVideoPath = Join-Path $sessionVisualDir "world_stream_recorded.mp4"
+$guiRecordedVisualPass = To-Bool (Get-PropValue -Object $recordedVisualSummary -Path @("pass") -Default $false)
+$guiRecordedRawVideoPath = if (Test-Path -LiteralPath (Join-Path $sessionVisualDir "raw_camera_recorded.mp4")) { Join-Path $sessionVisualDir "raw_camera_recorded.mp4" } else { Resolve-RepoPath -PathValue ([string](Get-PropValue -Object $recordedVisualSummary -Path @("raw_video") -Default "")) -RepoRoot $repoRoot }
+$guiRecordedDebugVideoPath = if (Test-Path -LiteralPath (Join-Path $sessionVisualDir "yolo_debug_recorded.mp4")) { Join-Path $sessionVisualDir "yolo_debug_recorded.mp4" } else { Resolve-RepoPath -PathValue ([string](Get-PropValue -Object $recordedVisualSummary -Path @("debug_video") -Default "")) -RepoRoot $repoRoot }
+$guiRecordedTelemetryVideoPath = if (Test-Path -LiteralPath (Join-Path $sessionVisualDir "topdown_telemetry_recorded.mp4")) { Join-Path $sessionVisualDir "topdown_telemetry_recorded.mp4" } else { Resolve-RepoPath -PathValue ([string](Get-PropValue -Object $recordedVisualSummary -Path @("topdown_video") -Default "")) -RepoRoot $repoRoot }
+$guiRecordedBundleReady = (
+    $guiRecordedVisualPass -and
+    (Test-NonEmptyFile -PathValue $guiRecordedRawVideoPath) -and
+    (Test-NonEmptyFile -PathValue $guiRecordedDebugVideoPath) -and
+    (Test-NonEmptyFile -PathValue $guiRecordedTelemetryVideoPath) -and
+    (($guiWorldSurface -ne "streamed_sim") -or ((Test-NonEmptyFile -PathValue $recordedWorldStreamVideoPath) -and (Test-Path -LiteralPath $recordedWorldStreamSummaryPath)))
+)
 
 $headlessExecutionLane = [string](Get-PropValue -Object $headlessReadiness -Path @("execution_lane") -Default (Get-PropValue -Object $headlessSummary -Path @("execution_lane") -Default ""))
 $headlessCoreRos = [string](Get-PropValue -Object $headlessReadiness -Path @("container_core_ros_distro") -Default (Get-PropValue -Object $headlessSummary -Path @("core_ros_distro") -Default ""))
@@ -253,7 +311,15 @@ foreach ($m3 in $m3Outcomes) {
 $guiNavReady = ($m3CheckCount -gt 0 -and $m3NavReadyAll)
 $guiCmdVelActive = ($m3CheckCount -gt 0 -and $m3CmdVelAll)
 $guiMotionPass = ($m3CheckCount -gt 0 -and $m3MotionAll -and $m3PassCount -eq $m3CheckCount)
-$visualReadyConsistent = if ($guiOpenFeedViewers) { ($guiVisualReady -and $guiViewerFramesRgb -ge 1.0 -and $guiViewerFramesDebug -ge 1.0) } else { $true }
+$worldSurfaceAuthoritative = if ($guiVisualSurface -eq "none") { $true } else { ($guiWorldSurface -eq "streamed_sim") }
+$worldStreamReadyConsistent = if ($guiWorldSurface -eq "streamed_sim") { ($guiWorldStreamReady -and $guiWorldStreamNonblank -and $guiWorldStreamInteractive -and $guiWorldStreamSameSession) } else { $true }
+$truthConsistent = if ($guiVisualSurface -eq "none") { $true } else { ($guiTrueTargetSeen -and $guiTruthAlignmentOk) }
+$visualReadyConsistent = if ($guiVisualSurface -eq "none") {
+    if ($guiOpenFeedViewers) { ($guiVisualReady -and $guiViewerFramesRgb -ge 1.0 -and $guiViewerFramesDebug -ge 1.0) } else { $true }
+}
+else {
+    ($guiVisualReady -and $guiViewerFramesRgb -ge 1.0 -and $guiViewerFramesDebug -ge 1.0 -and $guiTelemetryFrames -ge 1.0 -and $guiOverlayDifferenceOk -and $guiTargetPersistenceOk -and $guiDashboardReady -and $guiRecordedBundleReady -and $worldSurfaceAuthoritative -and $worldStreamReadyConsistent -and $truthConsistent)
+}
 $guiAvgImprovement = if ($m3ImprovementValues.Count -gt 0) { ($m3ImprovementValues | Measure-Object -Average).Average } else { 0.0 }
 $guiAvgFinalDistance = if ($m3FinalDistanceValues.Count -gt 0) { ($m3FinalDistanceValues | Measure-Object -Average).Average } else { 0.0 }
 $guiAvgCmdVelRate = if ($m3CmdVelRates.Count -gt 0) { ($m3CmdVelRates | Measure-Object -Average).Average } else { 0.0 }
@@ -296,6 +362,14 @@ $checks = [ordered]@{
     nav_action_server_ready = $navActionMatch
     motion_evidence = $motionEvidenceMatch
     visual_ready_headless_gui_consistent = $visualReadyConsistent
+    recorded_visual_bundle_ready = $guiRecordedBundleReady
+    world_surface_authoritative = $worldSurfaceAuthoritative
+    world_stream_ready = $worldStreamReadyConsistent
+    same_session_partition = $guiWorldStreamSameSession
+    truth_alignment_ok = $truthConsistent
+    overlay_difference_ok = $guiOverlayDifferenceOk
+    target_persistence_ok = $guiTargetPersistenceOk
+    browser_dashboard_ready = $guiDashboardReady
     metric_parity = $metricParity
 }
 
@@ -330,6 +404,18 @@ elseif (-not $navActionMatch) {
 elseif (-not $motionEvidenceMatch) {
     $failureClass = "target_distance_not_improving"
 }
+elseif (-not $worldSurfaceAuthoritative) {
+    $failureClass = "world_surface_not_authoritative"
+}
+elseif (-not $worldStreamReadyConsistent) {
+    $failureClass = if (-not $guiWorldStreamSameSession) { "session_partition_mismatch" } else { "world_stream_unavailable" }
+}
+elseif (-not $truthConsistent) {
+    $failureClass = "truth_alignment_failed"
+}
+elseif (-not $guiRecordedBundleReady) {
+    $failureClass = "visual_bundle_missing"
+}
 elseif (-not $visualReadyConsistent) {
     $failureClass = "visual_not_ready"
 }
@@ -354,6 +440,15 @@ $result = [ordered]@{
         coordinate_summary = $coordinateSummaryPath
         snapshot_summary = $snapshotSummaryPath
         nav_summary = $navSummaryPath
+        visual_demo_summary = $guiVisualSummaryPath
+        recorded_visual_summary = $recordedVisualSummaryPath
+        visual_raw_video = $guiRecordedRawVideoPath
+        visual_debug_video = $guiRecordedDebugVideoPath
+        visual_topdown_video = $guiRecordedTelemetryVideoPath
+        world_stream_summary = $guiWorldStreamSummaryPath
+        world_stream_video = $guiWorldStreamVideoPath
+        recorded_world_stream_summary = $recordedWorldStreamSummaryPath
+        recorded_world_stream_video = $recordedWorldStreamVideoPath
         parity_summary = $resolvedOutputPath
     }
     session = [ordered]@{
@@ -381,10 +476,19 @@ $result = [ordered]@{
             target_improvement_m_avg = $guiAvgImprovement
             target_final_distance_m_avg = $guiAvgFinalDistance
             open_feed_viewers = $guiOpenFeedViewers
+            visual_surface = $guiVisualSurface
+            world_surface = $guiWorldSurface
             visual_ready = $guiVisualReady
             viewer_frame_count_rgb = $guiViewerFramesRgb
             viewer_frame_count_debug = $guiViewerFramesDebug
+            telemetry_frame_count = $guiTelemetryFrames
             viewer_startup_elapsed_s = $guiViewerStartupElapsedS
+            recorded_visual_pass = $guiRecordedVisualPass
+            world_stream_ready = $guiWorldStreamReady
+            world_stream_nonblank = $guiWorldStreamNonblank
+            world_stream_interactive = $guiWorldStreamInteractive
+            same_session_partition = $guiWorldStreamSameSession
+            truth_alignment_ok = $guiTruthAlignmentOk
         }
         deltas = [ordered]@{
             target_improvement_delta_m = $targetImprovementDelta

@@ -75,9 +75,11 @@ Behavior:
 4. Adversarial must-fail suite:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_adversarial.ps1 -RuntimeTarget robot_fidelity_orin`
 5. Final GUI rehearsal wrapper:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -OpenFeedViewers false`
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -OpenFeedViewers false -VisualSurface browser_dashboard`
 6. Visual/headless parity comparator:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_visual_parity_check.ps1 -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -GuiSummaryPath artifacts/session/<session_id>/pre_llm_gui_rehearsal_summary.json`
+7. Recorded visual evidence wrapper:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_recorded_visual_demo.ps1 -Milestone 3 -RuntimeTarget robot_fidelity_orin -SessionId <session_id>`
 2. Lane behavior:
    - `fast`: shorter timeouts + fast-forward world (`yolo_test_world_v6_clean_uat_fast.world`)
    - `fidelity`: authoritative `robot_fidelity_orin` replay on canonical world
@@ -99,8 +101,12 @@ Behavior:
    - rc readiness: `artifacts/session/20260303T050659Z/rc/readiness_report.json`
    - adversarial summary: `artifacts/session/20260303T061055Z/adversarial_headless_summary.json`
    - brain adapter smoke: `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json`
-   - final same-session rehearsal: `artifacts/session/20260303T061906Z/pre_llm_gui_rehearsal_summary.json`
-   - final parity: `artifacts/session/20260303T061906Z/parity_summary.json`
+   - current post-fix checkpoint headless: `artifacts/session/20260307T142310Z/pre_llm_headless_summary.json`
+   - current post-fix checkpoint recorded visual: `artifacts/session/20260307T142310Z/visual/visual_demo_summary_recorded.json`
+   - current post-fix checkpoint GUI rehearsal: `artifacts/session/20260307T142310Z/pre_llm_gui_rehearsal_summary.json`
+   - current post-fix checkpoint parity: `artifacts/session/20260307T142310Z/parity_summary.json`
+   - current post-fix checkpoint campaign trend: `artifacts/session/20260307T142310Z/pre_llm_campaign_trend.json`
+   - current post-fix checkpoint campaign summary: `artifacts/session/20260307T142310Z/campaign_run_summary.json`
 
 ## Current Caution
 
@@ -118,6 +124,14 @@ Behavior:
 12. GUI parity truth is authoritative only on `container_kilted`; `host_ros` is debug-only and non-authoritative.
 13. Operator-facing GUI (`-OpenFeedViewers true`) is blocked by default unless the latest `parity_summary.json` is green.
 14. Container-lane live feed viewers are currently strict-gated: if `-OpenFeedViewers true` is requested but viewer plumbing is unavailable, milestone runs fail with `failure_class=feed_viewer_unavailable` instead of reporting a false visual pass.
+15. Native Windows X11 / Gazebo windows are `debug_only` and non-promoting. Authoritative visual review is now:
+   - recorded bundle under `artifacts/session/<session_id>/visual/`
+   - streamed-sim browser dashboard via `-VisualSurface browser_dashboard -WorldSurface streamed_sim`
+16. Browser-dashboard and recorded visual review must stay on the same `container_kilted` session ID as the headless run. Promotion requires same-session visual bundle + dashboard + parity pass.
+17. Diff-drive sign parity is now fixed in:
+   - `ros2_config/config/jetbot_diff_drive_v1.0.0.yaml`
+   - `ros2_config/config/jetbot_controllers.yaml`
+   Both use negative wheel radius multipliers so Gazebo world motion and ROS odom agree. If the robot appears to drive backward again, compare `/jetbot_base_controller/odom` against `/world/<world>/dynamic_pose/info` before trusting nav results.
 
 ## Artifact Contracts
 
@@ -159,3 +173,25 @@ Behavior:
 11. GUI rehearsal + parity:
    - `artifacts/session/<timestamp>/pre_llm_gui_rehearsal_summary.json`
    - `artifacts/session/<timestamp>/parity_summary.json`
+12. Recorded/browser visual bundle:
+   - `artifacts/session/<timestamp>/visual/raw_camera.mp4`
+   - `artifacts/session/<timestamp>/visual/raw_camera_recorded.mp4`
+   - `artifacts/session/<timestamp>/visual/raw_camera_browser_dashboard.mp4`
+   - `artifacts/session/<timestamp>/visual/yolo_debug.mp4`
+   - `artifacts/session/<timestamp>/visual/yolo_debug_recorded.mp4`
+   - `artifacts/session/<timestamp>/visual/yolo_debug_browser_dashboard.mp4`
+   - `artifacts/session/<timestamp>/visual/topdown_telemetry.mp4`
+   - `artifacts/session/<timestamp>/visual/topdown_telemetry_recorded.mp4`
+   - `artifacts/session/<timestamp>/visual/topdown_telemetry_browser_dashboard.mp4`
+   - `artifacts/session/<timestamp>/visual/world_stream.mp4`
+   - `artifacts/session/<timestamp>/visual/world_stream_recorded.mp4`
+   - `artifacts/session/<timestamp>/visual/world_stream_browser_dashboard.mp4`
+   - `artifacts/session/<timestamp>/visual/world_stream_summary.json`
+   - `artifacts/session/<timestamp>/visual/world_stream_summary_recorded.json`
+   - `artifacts/session/<timestamp>/visual/world_stream_summary_browser_dashboard.json`
+   - `artifacts/session/<timestamp>/visual/keyframes/*.png`
+   - `artifacts/session/<timestamp>/visual/timeline.json`
+   - `artifacts/session/<timestamp>/visual/state.json`
+   - `artifacts/session/<timestamp>/visual/visual_demo_summary.json`
+   - `artifacts/session/<timestamp>/visual/visual_demo_summary_recorded.json`
+   - `artifacts/session/<timestamp>/visual/visual_demo_summary_browser_dashboard.json`

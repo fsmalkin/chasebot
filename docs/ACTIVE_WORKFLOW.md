@@ -162,12 +162,21 @@ Lane-specific gate config defaults:
 5. Fidelity soak multi-target config:
    - `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
 
-Latest frozen pre-LLM campaign package:
+Latest full pre-LLM campaign package (pre diff-drive sign fix):
 
 1. trend: `artifacts/session/20260303T050659Z/pre_llm_campaign_trend.json`
 2. soak summary: `artifacts/session/20260303T054851Z/pre_llm_headless_summary.json`
 3. rc manifest: `artifacts/session/20260303T050659Z/rc/manifest.json`
 4. rc readiness: `artifacts/session/20260303T050659Z/rc/readiness_report.json` (`pass=true`)
+
+Current post-fix checkpoint baseline (one-cycle same-session package):
+
+1. headless: `artifacts/session/20260307T142310Z/pre_llm_headless_summary.json`
+2. recorded visual: `artifacts/session/20260307T142310Z/visual/visual_demo_summary_recorded.json`
+3. GUI rehearsal: `artifacts/session/20260307T142310Z/pre_llm_gui_rehearsal_summary.json`
+4. parity: `artifacts/session/20260307T142310Z/parity_summary.json`
+5. campaign trend: `artifacts/session/20260307T142310Z/pre_llm_campaign_trend.json`
+6. campaign summary: `artifacts/session/20260307T142310Z/campaign_run_summary.json`
 
 Adversarial must-fail suite (required for truth-lock confidence):
 
@@ -214,24 +223,35 @@ Pre-LLM brain adapter smoke (post-campaign, pre-GUI):
 
 ## Visual UAT Sequence
 
-Run only after headless gates are green and on the same session ID:
+Run only after headless gates are green and on the same session ID.
+
+Authoritative visual surfaces:
+
+1. Recorded bundle first:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_recorded_visual_demo.ps1 -Milestone 3 -RuntimeTarget robot_fidelity_orin -SessionId <session_id>`
+2. Browser dashboard second:
+   - `scripts/run_milestone_demo.ps1 ... -VisualSurface browser_dashboard -WorldSurface streamed_sim -OpenFeedViewers true`
+3. Native Gazebo/X11 is debug-only and non-promoting.
+
+Canonical sequence:
 
 1. `scripts/run_milestone_demo.ps1 -Milestone 2 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $false -MaxRunSeconds 120`
 2. `scripts/run_milestone_demo.ps1 -Milestone 3 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $false -MaxRunSeconds 150`
 3. Full rehearsal wrapper (same-session parity check is mandatory):
-   - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false`
+   - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false -VisualSurface browser_dashboard -WorldSurface streamed_sim`
 4. Operator live-view replay (only after parity is green):
-   - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true`
-   - Current strict behavior: if container-lane viewer plumbing is not available, this run fails with `failure_class=feed_viewer_unavailable` (no false visual pass).
+   - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true -VisualSurface browser_dashboard -WorldSurface streamed_sim -AutoOpenVisualSurface true`
+   - Current strict behavior: if browser dashboard or visual bundle readiness is unavailable, this run fails closed.
 
 Parity gate:
 
 1. `artifacts/session/<session_id>/parity_summary.json` must exist and `pass=true`.
-2. Required checks: lane match, core ROS match, detection pipeline alive in both, `/yolo/ball_position_3d` active in both, nav action readiness in both, motion evidence in both.
+2. Required checks: lane match, core ROS match, detection pipeline alive in both, `/yolo/ball_position_3d` active in both, nav action readiness in both, motion evidence in both, same-session recorded visual bundle ready, browser dashboard ready, streamed sim world ready, truth alignment OK.
 3. `host_ros` GUI runs are debug-only and cannot promote readiness.
-4. Latest validated same-session rehearsal:
-   - `artifacts/session/20260303T061906Z/pre_llm_gui_rehearsal_summary.json`
-   - `artifacts/session/20260303T061906Z/parity_summary.json`
+4. Current validated same-session checkpoint:
+   - `artifacts/session/20260307T142310Z/visual/visual_demo_summary_recorded.json`
+   - `artifacts/session/20260307T142310Z/pre_llm_gui_rehearsal_summary.json`
+   - `artifacts/session/20260307T142310Z/parity_summary.json`
 
 ## Headless Milestone Path (Current Preferred)
 
@@ -316,6 +336,14 @@ Milestone 3 pass criteria include:
 11. GUI rehearsal + parity:
    - `artifacts/session/<timestamp>/pre_llm_gui_rehearsal_summary.json`
    - `artifacts/session/<timestamp>/parity_summary.json`
+12. Recorded/browser visual bundle:
+   - `artifacts/session/<timestamp>/visual/raw_camera.mp4`
+   - `artifacts/session/<timestamp>/visual/yolo_debug.mp4`
+   - `artifacts/session/<timestamp>/visual/topdown_telemetry.mp4`
+   - `artifacts/session/<timestamp>/visual/keyframes/*.png`
+   - `artifacts/session/<timestamp>/visual/timeline.json`
+   - `artifacts/session/<timestamp>/visual/state.json`
+   - `artifacts/session/<timestamp>/visual/visual_demo_summary.json`
 
 ## Failure Triage Path
 
@@ -338,8 +366,8 @@ Milestone 3 pass criteria include:
 9. Visual demo raw/debug windows look identical:
    - Check `demo_summary.json -> capture.detection_above_threshold`; if false, detector has no valid target yet.
 10. Visual demo shows sim only with no camera windows:
-   - Keep `-OpenFeedViewers $true` and check `demo_summary.json -> viewers.feed_viewer_status`.
-   - If status is `rqt_image_view_missing`, install `rqt_image_view` in the active ROS distro.
+   - Prefer `-VisualSurface browser_dashboard` and inspect `demo_summary.json -> visual.*`.
+   - Native X11/Gazebo windows are debug-only and not part of the promotion path.
 11. M3 fails with motion gate false:
    - Check `demo_summary.json -> motion.*` and `operator_checklist.json`.
    - If `cmd_vel_message_count=0`, inspect `logs/bridge.log` and `logs/cmd_vel_relay.log`.

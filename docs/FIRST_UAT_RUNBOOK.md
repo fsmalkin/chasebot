@@ -106,8 +106,11 @@ powershell -ExecutionPolicy Bypass -File scripts/run_first_uat.ps1 `
    - `capture.overlay_distinct`
    - If confidence gate is false, reposition camera/target and rerun.
 7. Visual run shows Gazebo but no feed windows:
-   - Check `demo_summary.json -> viewers.feed_viewer_status`.
-   - If `rqt_image_view_missing`, install `rqt_image_view` for active ROS distro.
+    - Do not treat native Gazebo/X11 as authoritative.
+    - Prefer recorded-first review:
+    - `powershell -ExecutionPolicy Bypass -File scripts/run_recorded_visual_demo.ps1 -Milestone 3 -RuntimeTarget robot_fidelity_orin -SessionId <session_id>`
+    - For live review, use:
+    - `powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 -Milestone 2 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -Headless true -VisualSurface browser_dashboard -WorldSurface streamed_sim -OpenFeedViewers true -AutoOpenVisualSurface true -RequireParityGreenForOperatorView false`
 
 ## Milestone 3 Motion Triage (Headless-Compatible)
 
@@ -125,6 +128,12 @@ Use `artifacts/demos/milestone_3_<timestamp>/demo_summary.json`:
 4. `motion.odom_displacement_m < motion.min_distance_m`
    - Robot moved insufficiently for pass gate.
    - Increase run duration or investigate controller/planner instability before lowering threshold.
+5. Robot appears to drive backward in the streamed sim world:
+   - Treat this as a hard trust failure, not a cosmetic issue.
+   - Compare `/jetbot_base_controller/odom` against `/world/<world>/dynamic_pose/info`.
+   - Confirm negative wheel radius multipliers are still present in:
+   - `ros2_config/config/jetbot_diff_drive_v1.0.0.yaml`
+   - `ros2_config/config/jetbot_controllers.yaml`
 
 ## LLM-Ready Handoff Checklist
 
@@ -143,7 +152,7 @@ Required handoff artifacts:
 5. `runtime/contracts/llm_control_contract.yaml`
 6. `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
 
-Current frozen baseline package:
+Current full campaign baseline (pre diff-drive sign fix):
 
 1. `artifacts/session/20260303T050659Z/pre_llm_campaign_trend.json`
 2. `artifacts/session/20260303T050659Z/campaign_run_summary.json`
@@ -152,19 +161,29 @@ Current frozen baseline package:
 5. `artifacts/session/20260303T054851Z/pre_llm_headless_summary.json` (soak)
 6. `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json` (adapter smoke)
 
+Current post-fix checkpoint baseline (one-cycle same-session package):
+
+1. `artifacts/session/20260307T142310Z/pre_llm_headless_summary.json`
+2. `artifacts/session/20260307T142310Z/visual/visual_demo_summary_recorded.json`
+3. `artifacts/session/20260307T142310Z/pre_llm_gui_rehearsal_summary.json`
+4. `artifacts/session/20260307T142310Z/parity_summary.json`
+5. `artifacts/session/20260307T142310Z/pre_llm_campaign_trend.json`
+6. `artifacts/session/20260307T142310Z/campaign_run_summary.json`
+
 Parity-first GUI readiness (required before operator live view):
 
 1. Run headless session:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane fidelity`
 2. Rehearse GUI on the same session:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false`
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false -VisualSurface browser_dashboard -WorldSurface streamed_sim`
 3. Verify parity:
    - `artifacts/session/<session_id>/parity_summary.json` with `pass=true`
 4. Only then run operator view:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true`
-5. Latest validated same-session rehearsal:
-   - `artifacts/session/20260303T061906Z/pre_llm_gui_rehearsal_summary.json`
-   - `artifacts/session/20260303T061906Z/parity_summary.json`
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true -VisualSurface browser_dashboard -WorldSurface streamed_sim -AutoOpenVisualSurface true`
+5. Current validated same-session checkpoint:
+   - `artifacts/session/20260307T142310Z/visual/visual_demo_summary_recorded.json`
+   - `artifacts/session/20260307T142310Z/pre_llm_gui_rehearsal_summary.json`
+   - `artifacts/session/20260307T142310Z/parity_summary.json`
 
 Required pass criteria:
 
@@ -190,3 +209,4 @@ Visual parity triage failure classes:
 5. `target_distance_not_improving`
 6. `lane_mismatch`
 7. `feed_viewer_unavailable`
+8. `visual_bundle_missing`

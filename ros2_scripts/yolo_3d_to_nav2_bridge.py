@@ -51,6 +51,7 @@ class Yolo3DToNav2Bridge(Node):
         
         # Nav2 action client
         self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
+        self.goal_pose_pub = self.create_publisher(PoseStamped, '/chasecar/nav_goal_pose', 10)
         
         # Subscribe to 3D ball positions
         self.position_sub = self.create_subscription(
@@ -229,6 +230,7 @@ class Yolo3DToNav2Bridge(Node):
         # Create Nav2 goal
         goal_msg = NavigateToPose.Goal()
         goal_msg.pose = goal_pose
+        self.goal_pose_pub.publish(goal_pose)
         
         # Set behavior tree (optional)
         goal_msg.behavior_tree = ''
