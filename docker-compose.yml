@@ -56,6 +56,7 @@ services:
     profiles: ["gate"]
     depends_on:
       - sim-gate
+    gpus: all
     environment:
       <<: *chasecar-env
       CHASECAR_WORLD_FILE: ${WORLD_FILE:-yolo_test_world_v6_clean_uat.world}

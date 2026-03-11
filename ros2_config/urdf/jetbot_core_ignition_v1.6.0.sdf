@@ -146,6 +146,45 @@ Changes:
       </sensor>
     </link>
 
+    <!-- Observer Camera Link for operator-facing world stream -->
+    <link name="observer_camera_link">
+      <!-- Elevated rear-quarter chase camera that follows the robot -->
+      <pose>-2.25 0 1.55 0 0.38 0</pose>
+
+      <inertial>
+        <mass>0.015</mass>
+        <inertia>
+          <ixx>0.00001</ixx>
+          <iyy>0.00001</iyy>
+          <izz>0.00001</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+
+      <sensor name="observer_world" type="camera">
+        <pose>0 0 0 0 0 0</pose>
+        <update_rate>15</update_rate>
+        <always_on>true</always_on>
+        <visualize>false</visualize>
+        <topic>observer/image_raw</topic>
+
+        <camera>
+          <horizontal_fov>1.70</horizontal_fov>
+          <image>
+            <width>960</width>
+            <height>540</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>100.0</far>
+          </clip>
+        </camera>
+      </sensor>
+    </link>
+
     <!-- Left Wheel -->
     <link name="left_wheel">
       <pose>0 0.08 0.032 1.5708 0 0</pose>
@@ -339,6 +378,12 @@ Changes:
       <parent>base_link</parent>
       <child>d415_camera_link</child>
     </joint>
+
+    <!-- Observer Camera Joint -->
+    <joint name="observer_camera_joint" type="fixed">
+      <parent>base_link</parent>
+      <child>observer_camera_link</child>
+    </joint>
     
     <!-- Left Wheel Joint -->
     <joint name="left_wheel_joint" type="revolute">
@@ -404,11 +449,6 @@ Changes:
       <ros>
         <remapping>/controller_manager/robot_description:=/robot_description</remapping>
       </ros>
-    </plugin>
-
-    <!-- Camera Sensor Plugin for Ignition - CRITICAL FOR SENSOR FUNCTIONALITY! -->
-    <plugin filename="libignition-gazebo-sensors-system.so" name="ignition::gazebo::systems::Sensors">
-      <render_engine>ogre2</render_engine>
     </plugin>
 
     <!-- Pose Publisher Plugin for Ignition -->

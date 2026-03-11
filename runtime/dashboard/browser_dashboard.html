@@ -90,12 +90,9 @@
       min-height: 240px;
       object-fit: contain;
     }
-    .pane iframe {
-      width: 100%;
-      display: block;
+    #world-image {
       min-height: 520px;
-      border: 0;
-      background: #101418;
+      background: #d6dce1;
     }
     .foot {
       padding: 10px 14px 14px;
@@ -148,10 +145,10 @@
   <main>
     <section class="pane">
       <header><h2>3D Sim World</h2></header>
-      <iframe id="world-frame" src="about:blank" title="Streamed Gazebo world"></iframe>
+      <img id="world-image" src="live/world_stream.jpg" alt="Streamed Gazebo world">
       <div class="foot">
         Real Gazebo 3D world from the same authoritative session.
-        <a id="world-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open in a separate window</a>
+        <a id="world-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open interactive Gazebo</a>
       </div>
     </section>
     <section class="pane">
@@ -197,11 +194,9 @@
       rawImage: document.getElementById('raw-image'),
       debugImage: document.getElementById('debug-image'),
       telemetryImage: document.getElementById('telemetry-image'),
-      worldFrame: document.getElementById('world-frame'),
+      worldImage: document.getElementById('world-image'),
       worldLink: document.getElementById('world-link'),
     };
-
-    let worldFrameLoaded = false;
 
     function stampSrc(el, path) {
       el.src = `${path}?t=${Date.now()}`;
@@ -253,14 +248,17 @@
           throw new Error(`world_http_${worldResp.status}`);
         }
         const worldState = await worldResp.json();
-        ids.worldStreamStatus.innerHTML = statusText(Boolean(worldState.world_stream_ready), 'ready', 'not ready');
-        if (worldState.world_stream_url) {
+        const worldReady = Boolean(worldState.world_stream_ready);
+        const worldFailure = worldState.failure_class || 'not_ready';
+        ids.worldStreamStatus.innerHTML = worldReady
+          ? '<span class="ok">ready</span>'
+          : `<span class="bad">${worldFailure}</span>`;
+        stampSrc(ids.worldImage, 'live/world_stream.jpg');
+        if (worldReady && worldState.world_stream_url && Boolean(worldState.world_stream_interactive)) {
           ids.worldLink.href = worldState.world_stream_url;
           ids.worldLink.style.display = 'inline';
-          if (!worldFrameLoaded || ids.worldFrame.src !== worldState.world_stream_url) {
-            ids.worldFrame.src = worldState.world_stream_url;
-            worldFrameLoaded = true;
-          }
+        } else {
+          ids.worldLink.style.display = 'none';
         }
       } catch (err) {
         ids.worldStreamStatus.innerHTML = '<span class="warn">waiting</span>';

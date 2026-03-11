@@ -206,7 +206,10 @@ $guiVisualSurface = [string](Get-PropValue -Object $guiSummary -Path @("visual_s
 $guiWorldSurface = [string](Get-PropValue -Object $guiSummary -Path @("world_surface") -Default "none")
 $guiVisualBlock = Get-PropValue -Object $guiSummary -Path @("visual") -Default $null
 $guiM2VisualBlock = Get-PropValue -Object $guiVisualBlock -Path @("milestone2") -Default $null
-$guiWorldStreamBlock = Get-PropValue -Object $guiM2VisualBlock -Path @("world_stream") -Default $null
+$guiWorldStreamBlock = Get-PropValue -Object $guiVisualBlock -Path @("world_stream") -Default $null
+if ($null -eq $guiWorldStreamBlock) {
+    $guiWorldStreamBlock = Get-PropValue -Object $guiM2VisualBlock -Path @("world_stream") -Default $null
+}
 $guiVisualReady = To-Bool (Get-PropValue -Object $guiSummary -Path @("visual_ready") -Default $false)
 $guiViewerFramesRgb = if ($guiVisualSurface -eq "none") {
     To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_frame_counts", "rgb") -Default 0.0)
@@ -222,13 +225,18 @@ $guiTelemetryFrames = To-Double (Get-PropValue -Object $guiSummary -Path @("view
 $guiViewerStartupElapsedS = To-Double (Get-PropValue -Object $guiSummary -Path @("viewer_startup_elapsed_s") -Default 0.0)
 $guiOverlayDifferenceOk = To-Bool (Get-PropValue -Object $guiM2VisualBlock -Path @("overlay_difference_ok") -Default $false)
 $guiTargetPersistenceOk = To-Bool (Get-PropValue -Object $guiM2VisualBlock -Path @("target_persistence_ok") -Default $false)
-$guiDashboardReady = To-Bool (Get-PropValue -Object $guiM2VisualBlock -Path @("dashboard_ready") -Default ($guiVisualSurface -ne "browser_dashboard"))
-$guiTruthAlignmentOk = To-Bool (Get-PropValue -Object $guiM2VisualBlock -Path @("truth_alignment_ok") -Default $false)
-$guiTrueTargetSeen = To-Bool (Get-PropValue -Object $guiM2VisualBlock -Path @("true_target_seen") -Default $false)
+$guiDashboardReady = To-Bool (Get-PropValue -Object $guiVisualBlock -Path @("dashboard_ready") -Default (Get-PropValue -Object $guiM2VisualBlock -Path @("dashboard_ready") -Default ($guiVisualSurface -ne "browser_dashboard")))
+$guiTruthAlignmentOk = To-Bool (Get-PropValue -Object $guiVisualBlock -Path @("truth_alignment_ok") -Default (Get-PropValue -Object $guiM2VisualBlock -Path @("truth_alignment_ok") -Default $false))
+$guiTrueTargetSeen = To-Bool (Get-PropValue -Object $guiVisualBlock -Path @("truth_ready") -Default (Get-PropValue -Object $guiM2VisualBlock -Path @("true_target_seen") -Default $false))
 $guiWorldStreamReady = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("ready") -Default ($guiWorldSurface -ne "streamed_sim"))
 $guiWorldStreamNonblank = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("nonblank") -Default ($guiWorldSurface -ne "streamed_sim"))
 $guiWorldStreamInteractive = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("interactive") -Default ($guiWorldSurface -ne "streamed_sim"))
+$guiWorldStreamSceneContent = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("scene_content_ok") -Default ($guiWorldSurface -ne "streamed_sim"))
+$guiWorldStreamRobotVisible = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("robot_visible_ok") -Default ($guiWorldSurface -ne "streamed_sim"))
+$guiWorldStreamTargetVisible = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("target_visible_ok") -Default ($guiWorldSurface -ne "streamed_sim"))
+$guiWorldStreamViewerHealthy = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("viewer_process_healthy") -Default ($guiWorldSurface -ne "streamed_sim"))
 $guiWorldStreamSameSession = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("same_session_partition") -Default ($guiWorldSurface -ne "streamed_sim"))
+$guiWorldStreamSoftwareRenderOnly = To-Bool (Get-PropValue -Object $guiWorldStreamBlock -Path @("software_render_only") -Default $false)
 $guiWorldStreamSummaryPath = Resolve-RepoPath -PathValue ([string](Get-PropValue -Object $guiWorldStreamBlock -Path @("summary_path") -Default "")) -RepoRoot $repoRoot
 $guiWorldStreamVideoPath = Resolve-RepoPath -PathValue ([string](Get-PropValue -Object $guiWorldStreamBlock -Path @("video_path") -Default "")) -RepoRoot $repoRoot
 $guiVisualSummaryPath = Resolve-RepoPath -PathValue ([string](Get-PropValue -Object $guiM2VisualBlock -Path @("summary_path") -Default "")) -RepoRoot $repoRoot
@@ -312,7 +320,7 @@ $guiNavReady = ($m3CheckCount -gt 0 -and $m3NavReadyAll)
 $guiCmdVelActive = ($m3CheckCount -gt 0 -and $m3CmdVelAll)
 $guiMotionPass = ($m3CheckCount -gt 0 -and $m3MotionAll -and $m3PassCount -eq $m3CheckCount)
 $worldSurfaceAuthoritative = if ($guiVisualSurface -eq "none") { $true } else { ($guiWorldSurface -eq "streamed_sim") }
-$worldStreamReadyConsistent = if ($guiWorldSurface -eq "streamed_sim") { ($guiWorldStreamReady -and $guiWorldStreamNonblank -and $guiWorldStreamInteractive -and $guiWorldStreamSameSession) } else { $true }
+$worldStreamReadyConsistent = if ($guiWorldSurface -eq "streamed_sim") { ($guiWorldStreamReady -and $guiWorldStreamNonblank -and $guiWorldStreamSceneContent -and $guiWorldStreamRobotVisible -and $guiWorldStreamTargetVisible -and $guiWorldStreamViewerHealthy -and $guiWorldStreamSameSession) } else { $true }
 $truthConsistent = if ($guiVisualSurface -eq "none") { $true } else { ($guiTrueTargetSeen -and $guiTruthAlignmentOk) }
 $visualReadyConsistent = if ($guiVisualSurface -eq "none") {
     if ($guiOpenFeedViewers) { ($guiVisualReady -and $guiViewerFramesRgb -ge 1.0 -and $guiViewerFramesDebug -ge 1.0) } else { $true }
@@ -365,6 +373,10 @@ $checks = [ordered]@{
     recorded_visual_bundle_ready = $guiRecordedBundleReady
     world_surface_authoritative = $worldSurfaceAuthoritative
     world_stream_ready = $worldStreamReadyConsistent
+    world_stream_scene_content = $guiWorldStreamSceneContent
+    world_stream_robot_visible = $guiWorldStreamRobotVisible
+    world_stream_target_visible = $guiWorldStreamTargetVisible
+    world_stream_viewer_process_healthy = $guiWorldStreamViewerHealthy
     same_session_partition = $guiWorldStreamSameSession
     truth_alignment_ok = $truthConsistent
     overlay_difference_ok = $guiOverlayDifferenceOk
@@ -408,7 +420,30 @@ elseif (-not $worldSurfaceAuthoritative) {
     $failureClass = "world_surface_not_authoritative"
 }
 elseif (-not $worldStreamReadyConsistent) {
-    $failureClass = if (-not $guiWorldStreamSameSession) { "session_partition_mismatch" } else { "world_stream_unavailable" }
+    if (-not $guiWorldStreamSameSession) {
+        $failureClass = "world_stream_partition_mismatch"
+    }
+    elseif (-not $guiWorldStreamViewerHealthy) {
+        $failureClass = "world_stream_client_crash"
+    }
+    elseif ($guiWorldStreamSoftwareRenderOnly) {
+        $failureClass = "world_stream_software_render_only"
+    }
+    elseif (-not $guiWorldStreamNonblank) {
+        $failureClass = "world_stream_blank"
+    }
+    elseif (-not $guiWorldStreamSceneContent) {
+        $failureClass = "world_stream_scene_missing"
+    }
+    elseif (-not $guiWorldStreamRobotVisible) {
+        $failureClass = "world_stream_robot_not_visible"
+    }
+    elseif (-not $guiWorldStreamTargetVisible) {
+        $failureClass = "world_stream_target_not_visible"
+    }
+    else {
+        $failureClass = "world_stream_unavailable"
+    }
 }
 elseif (-not $truthConsistent) {
     $failureClass = "truth_alignment_failed"
@@ -487,6 +522,11 @@ $result = [ordered]@{
             world_stream_ready = $guiWorldStreamReady
             world_stream_nonblank = $guiWorldStreamNonblank
             world_stream_interactive = $guiWorldStreamInteractive
+            world_stream_scene_content = $guiWorldStreamSceneContent
+            world_stream_robot_visible = $guiWorldStreamRobotVisible
+            world_stream_target_visible = $guiWorldStreamTargetVisible
+            world_stream_viewer_process_healthy = $guiWorldStreamViewerHealthy
+            world_stream_software_render_only = $guiWorldStreamSoftwareRenderOnly
             same_session_partition = $guiWorldStreamSameSession
             truth_alignment_ok = $guiTruthAlignmentOk
         }

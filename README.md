@@ -123,20 +123,20 @@ Campaign outputs:
 3. `artifacts/session/<timestamp>/rc/manifest.json` (when soak enabled)
 4. `artifacts/session/<timestamp>/rc/readiness_report.json` (when soak enabled)
 
-Latest full pre-LLM campaign package (post diff-drive sign fix):
+Latest full pre-LLM campaign package (post world-stream recovery):
 
-1. `artifacts/session/20260308T042822Z/pre_llm_campaign_trend.json`
-2. `artifacts/session/20260308T052630Z/pre_llm_headless_summary.json`
-3. `artifacts/session/20260308T042822Z/rc/manifest.json`
-4. `artifacts/session/20260308T042822Z/rc/readiness_report.json`
-5. `artifacts/session/20260308T042822Z/campaign_run_summary.json`
+1. `artifacts/session/20260309T063355Z/pre_llm_campaign_trend.json`
+2. `artifacts/session/20260309T073224Z/pre_llm_headless_summary.json`
+3. `artifacts/session/20260309T063355Z/rc/manifest.json`
+4. `artifacts/session/20260309T063355Z/rc/readiness_report.json`
+5. `artifacts/session/20260309T063355Z/campaign_run_summary.json`
 
 Latest validated same-session visual package from that campaign:
 
-1. `artifacts/session/20260308T050710Z/pre_llm_headless_summary.json`
-2. `artifacts/session/20260308T050710Z/visual/visual_demo_summary_recorded.json`
-3. `artifacts/session/20260308T050710Z/pre_llm_gui_rehearsal_summary.json`
-4. `artifacts/session/20260308T050710Z/parity_summary.json`
+1. `artifacts/session/20260309T071255Z/pre_llm_headless_summary.json`
+2. `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
+3. `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
+4. `artifacts/session/20260309T071255Z/parity_summary.json`
 
 Adversarial must-fail verification:
 
@@ -190,6 +190,7 @@ powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 `
 ```
 
 3. Native Gazebo/X11 remains debug-only and does not count toward promotion.
+4. The browser world pane is the live Gazebo world from the world camera sensor (`/observer_world/image_raw`), not the old noVNC/X11 path.
 
 Headless milestone progression (current development default):
 
@@ -247,9 +248,9 @@ Parity-first rule:
 
 Current same-session visual baseline:
 
-1. `artifacts/session/20260308T050710Z/pre_llm_gui_rehearsal_summary.json`
-2. `artifacts/session/20260308T050710Z/visual/visual_demo_summary_recorded.json`
-3. `artifacts/session/20260308T050710Z/parity_summary.json`
+1. `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
+2. `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
+3. `artifacts/session/20260309T071255Z/parity_summary.json`
 
 ## Artifact Contracts
 

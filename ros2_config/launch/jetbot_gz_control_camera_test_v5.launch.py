@@ -231,6 +231,10 @@ def generate_launch_description():
             '/d415/color/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
             '/d415/depth/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image',
             '/d415/depth/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
+            '/observer/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image',
+            '/observer/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
+            '/observer_world/image_raw@sensor_msgs/msg/Image[ignition.msgs.Image',
+            '/observer_world/camera_info@sensor_msgs/msg/CameraInfo[ignition.msgs.CameraInfo',
         ],
         remappings=[
             ('/model/jetbot/odometry', '/odom'),

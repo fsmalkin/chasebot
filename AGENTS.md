@@ -95,16 +95,16 @@ Behavior:
    - fidelity multi-target: `ros2_config/config/multi_target_nav2_fidelity.yaml`
    - fidelity soak multi-target: `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
 5. Latest frozen campaign + soak + smoke package:
-   - campaign summary: `artifacts/session/20260308T042822Z/campaign_run_summary.json`
-   - campaign trend: `artifacts/session/20260308T042822Z/pre_llm_campaign_trend.json`
-   - soak summary: `artifacts/session/20260308T052630Z/pre_llm_headless_summary.json`
-   - rc readiness: `artifacts/session/20260308T042822Z/rc/readiness_report.json`
+   - campaign summary: `artifacts/session/20260309T063355Z/campaign_run_summary.json`
+   - campaign trend: `artifacts/session/20260309T063355Z/pre_llm_campaign_trend.json`
+   - soak summary: `artifacts/session/20260309T073224Z/pre_llm_headless_summary.json`
+   - rc readiness: `artifacts/session/20260309T063355Z/rc/readiness_report.json`
    - adversarial summary: `artifacts/session/20260303T061055Z/adversarial_headless_summary.json`
    - brain adapter smoke: `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json`
-   - latest same-session headless: `artifacts/session/20260308T050710Z/pre_llm_headless_summary.json`
-   - latest same-session recorded visual: `artifacts/session/20260308T050710Z/visual/visual_demo_summary_recorded.json`
-   - latest same-session GUI rehearsal: `artifacts/session/20260308T050710Z/pre_llm_gui_rehearsal_summary.json`
-   - latest same-session parity: `artifacts/session/20260308T050710Z/parity_summary.json`
+   - latest same-session headless: `artifacts/session/20260309T071255Z/pre_llm_headless_summary.json`
+   - latest same-session recorded visual: `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
+   - latest same-session GUI rehearsal: `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
+   - latest same-session parity: `artifacts/session/20260309T071255Z/parity_summary.json`
 
 ## Current Caution
 
@@ -125,8 +125,10 @@ Behavior:
 15. Native Windows X11 / Gazebo windows are `debug_only` and non-promoting. Authoritative visual review is now:
    - recorded bundle under `artifacts/session/<session_id>/visual/`
    - streamed-sim browser dashboard via `-VisualSurface browser_dashboard -WorldSurface streamed_sim`
+   - the browser world pane comes from the Gazebo world camera sensor topic `/observer_world/image_raw`, not the old noVNC/X11 path
 16. Browser-dashboard and recorded visual review must stay on the same `container_kilted` session ID as the headless run. Promotion requires same-session visual bundle + dashboard + parity pass.
-17. Diff-drive sign parity is now fixed in:
+17. World-stream promotion requires `world_stream_ready=true`, `scene_content_ok=true`, `robot_visible_ok=true`, `target_visible_ok=true`, and `same_session_partition=true`.
+18. Diff-drive sign parity is now fixed in:
    - `ros2_config/config/jetbot_diff_drive_v1.0.0.yaml`
    - `ros2_config/config/jetbot_controllers.yaml`
    Both use negative wheel radius multipliers so Gazebo world motion and ROS odom agree. If the robot appears to drive backward again, compare `/jetbot_base_controller/odom` against `/world/<world>/dynamic_pose/info` before trusting nav results.

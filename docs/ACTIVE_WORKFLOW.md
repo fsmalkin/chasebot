@@ -162,20 +162,20 @@ Lane-specific gate config defaults:
 5. Fidelity soak multi-target config:
    - `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
 
-Latest full pre-LLM campaign package (post diff-drive sign fix):
+Latest full pre-LLM campaign package (post world-stream recovery):
 
-1. trend: `artifacts/session/20260308T042822Z/pre_llm_campaign_trend.json`
-2. soak summary: `artifacts/session/20260308T052630Z/pre_llm_headless_summary.json`
-3. rc manifest: `artifacts/session/20260308T042822Z/rc/manifest.json`
-4. rc readiness: `artifacts/session/20260308T042822Z/rc/readiness_report.json` (`pass=true`)
-5. campaign summary: `artifacts/session/20260308T042822Z/campaign_run_summary.json`
+1. trend: `artifacts/session/20260309T063355Z/pre_llm_campaign_trend.json`
+2. soak summary: `artifacts/session/20260309T073224Z/pre_llm_headless_summary.json`
+3. rc manifest: `artifacts/session/20260309T063355Z/rc/manifest.json`
+4. rc readiness: `artifacts/session/20260309T063355Z/rc/readiness_report.json` (`pass=true`)
+5. campaign summary: `artifacts/session/20260309T063355Z/campaign_run_summary.json`
 
 Latest same-session visual package from that campaign:
 
-1. headless: `artifacts/session/20260308T050710Z/pre_llm_headless_summary.json`
-2. recorded visual: `artifacts/session/20260308T050710Z/visual/visual_demo_summary_recorded.json`
-3. GUI rehearsal: `artifacts/session/20260308T050710Z/pre_llm_gui_rehearsal_summary.json`
-4. parity: `artifacts/session/20260308T050710Z/parity_summary.json`
+1. headless: `artifacts/session/20260309T071255Z/pre_llm_headless_summary.json`
+2. recorded visual: `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
+3. GUI rehearsal: `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
+4. parity: `artifacts/session/20260309T071255Z/parity_summary.json`
 
 Adversarial must-fail suite (required for truth-lock confidence):
 
@@ -231,6 +231,7 @@ Authoritative visual surfaces:
 2. Browser dashboard second:
    - `scripts/run_milestone_demo.ps1 ... -VisualSurface browser_dashboard -WorldSurface streamed_sim -OpenFeedViewers true`
 3. Native Gazebo/X11 is debug-only and non-promoting.
+4. The authoritative world pane is the live Gazebo world from the world camera sensor and is surfaced through the browser dashboard `live/world_stream.jpg`.
 
 Canonical sequence:
 
@@ -248,9 +249,9 @@ Parity gate:
 2. Required checks: lane match, core ROS match, detection pipeline alive in both, `/yolo/ball_position_3d` active in both, nav action readiness in both, motion evidence in both, same-session recorded visual bundle ready, browser dashboard ready, streamed sim world ready, truth alignment OK.
 3. `host_ros` GUI runs are debug-only and cannot promote readiness.
 4. Current validated same-session baseline:
-   - `artifacts/session/20260308T050710Z/visual/visual_demo_summary_recorded.json`
-   - `artifacts/session/20260308T050710Z/pre_llm_gui_rehearsal_summary.json`
-   - `artifacts/session/20260308T050710Z/parity_summary.json`
+   - `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
+   - `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
+   - `artifacts/session/20260309T071255Z/parity_summary.json`
 
 ## Headless Milestone Path (Current Preferred)
 

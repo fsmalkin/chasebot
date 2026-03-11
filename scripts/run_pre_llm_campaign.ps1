@@ -15,7 +15,7 @@ param(
     [int]$GuiMilestone3MaxRunSeconds = 150,
     [int]$GuiMilestone2MaxAttempts = 2,
     [int]$GuiMilestone3MaxAttemptsPerTarget = 2,
-    [object]$GuiOpenFeedViewers = $true,
+    [object]$GuiOpenFeedViewers = $false,
     [ValidateSet("auto", "vcxsrv", "wslg")]
     [string]$GuiDisplayMode = "auto",
     [string]$GuiDisplayAddress = "",
@@ -238,6 +238,8 @@ for ($i = 1; $i -le $Runs; $i++) {
             "-ExecutionLane", "container_kilted",
             "-CoreRosDistro", $GuiCoreRosDistro,
             "-OpenFeedViewers", ($(if ($guiOpenFeedViewersResolved) { "true" } else { "false" })),
+            "-VisualSurface", "browser_dashboard",
+            "-WorldSurface", "streamed_sim",
             "-DisplayMode", $GuiDisplayMode,
             "-AutoStartVcXsrv", ($(if ($guiAutoStartVcXsrvResolved) { "true" } else { "false" })),
             "-DisplayPreflightTimeoutSeconds", $GuiDisplayPreflightTimeoutSeconds,

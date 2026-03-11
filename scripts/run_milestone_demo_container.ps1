@@ -432,10 +432,7 @@ export QT_X11_NO_MITSHM="1"
 export LIBGL_ALWAYS_SOFTWARE="1"
 unset LIBGL_ALWAYS_INDIRECT
 GUI_CONFIG="/tmp/chasecar_world_viewer_gui.config"
-if [ -f /root/.gz/sim/9/gui.config ]; then
-  sed 's#<engine>ogre2</engine>#<engine>ogre</engine>#g' /root/.gz/sim/9/gui.config > "$GUI_CONFIG"
-else
-  cat > "$GUI_CONFIG" <<'EOF'
+cat > "$GUI_CONFIG" <<'EOF'
 <?xml version="1.0"?>
 <window>
   <width>1000</width>
@@ -451,11 +448,46 @@ else
   <scene>scene</scene>
   <ambient_light>0.4 0.4 0.4</ambient_light>
   <background_color>0.8 0.8 0.8</background_color>
-  <camera_pose>-6 0 6 0 0.5 0</camera_pose>
+  <camera_pose>-4.0 -1.4 2.6 0 0.95 0.40</camera_pose>
+</plugin>
+<plugin filename="TransportSceneManager" name="Scene Manager">
+  <gz-gui>
+    <property key="resizable" type="bool">false</property>
+    <property key="width" type="double">5</property>
+    <property key="height" type="double">5</property>
+    <property key="state" type="string">floating</property>
+    <property key="showTitleBar" type="bool">false</property>
+  </gz-gui>
+</plugin>
+<plugin filename="InteractiveViewControl" name="Interactive view control">
+  <gz-gui>
+    <property key="resizable" type="bool">false</property>
+    <property key="width" type="double">5</property>
+    <property key="height" type="double">5</property>
+    <property key="state" type="string">floating</property>
+    <property key="showTitleBar" type="bool">false</property>
+  </gz-gui>
+</plugin>
+<plugin filename="CameraTracking" name="Camera Tracking">
+  <gz-gui>
+    <property key="resizable" type="bool">false</property>
+    <property key="width" type="double">5</property>
+    <property key="height" type="double">5</property>
+    <property key="state" type="string">floating</property>
+    <property key="showTitleBar" type="bool">false</property>
+  </gz-gui>
+</plugin>
+<plugin filename="MarkerManager" name="Marker manager">
+  <gz-gui>
+    <property key="resizable" type="bool">false</property>
+    <property key="width" type="double">5</property>
+    <property key="height" type="double">5</property>
+    <property key="state" type="string">floating</property>
+    <property key="showTitleBar" type="bool">false</property>
+  </gz-gui>
 </plugin>
 EOF
-fi
-nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && gz sim -g --gui-config /tmp/chasecar_world_viewer_gui.config --render-engine-gui ogre' >"$LOG_FILE" 2>&1 &
+nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && gz gui -c /tmp/chasecar_world_viewer_gui.config -v 3' >"$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 sleep 2
 if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
@@ -500,7 +532,8 @@ if [ -f "$PID_FILE" ]; then
     kill "$PID" 2>/dev/null || true
   fi
 fi
-pkill -f "gz sim -g" 2>/dev/null || true
+pkill -f "gz gui -c" 2>/dev/null || true
+pkill -f "gz gui" 2>/dev/null || true
 rm -f "$PID_FILE" "$LOG_FILE"
 '@
     $script = $script.Replace("__PID_FILE__", $pidFile).
@@ -1046,11 +1079,17 @@ function Start-WorldStream {
         [string]$ContainerId,
         [string]$SessionId,
         [string]$OutputDir,
+        [string]$WorldName,
+        [string]$TruthStatePath,
         [int]$PublicPort
     )
     $pidFile = "/tmp/chasecar_world_stream.pid"
     $logFile = "/tmp/chasecar_world_stream.log"
     $outputDirContainer = Convert-ToContainerRepoPath -WindowsPath $OutputDir -RepoRoot (Join-Path $PSScriptRoot "..")
+    $truthStateContainer = ""
+    if (-not [string]::IsNullOrWhiteSpace($TruthStatePath)) {
+        $truthStateContainer = Convert-ToContainerRepoPath -WindowsPath $TruthStatePath -RepoRoot (Join-Path $PSScriptRoot "..")
+    }
     $publicUrl = "http://127.0.0.1:$PublicPort/vnc.html?autoconnect=1&resize=scale&path=websockify"
     $script = @'
 set -euo pipefail
@@ -1058,7 +1097,7 @@ PID_FILE="__PID_FILE__"
 LOG_FILE="__LOG_FILE__"
 pkill -f "world_stream_controller.py" 2>/dev/null || true
 rm -f "$PID_FILE" "$LOG_FILE"
-nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/world_stream_controller.py --session-id "__SESSION_ID__" --output-dir "__OUTPUT_DIR__" --public-url "__PUBLIC_URL__" --duration-s 240' >"$LOG_FILE" 2>&1 &
+nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/world_stream_controller.py --session-id "__SESSION_ID__" --output-dir "__OUTPUT_DIR__" --public-url "__PUBLIC_URL__" --world-name "__WORLD_NAME__" --image-topic /observer_world/image_raw --camera-profile overview_fixed __TRUTH_STATE_ARG__ --require-target-visible --duration-s 240' >"$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 sleep 1
 if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
@@ -1075,6 +1114,8 @@ echo "WORLD_STREAM_LOG=__LOG_FILE__"
         Replace("__ROS_DISTRO__", $CoreRosDistro).
         Replace("__SESSION_ID__", $SessionId).
         Replace("__OUTPUT_DIR__", $outputDirContainer).
+        Replace("__WORLD_NAME__", $WorldName).
+        Replace("__TRUTH_STATE_ARG__", $(if ([string]::IsNullOrWhiteSpace($truthStateContainer)) { "" } else { "--truth-state-path `"$truthStateContainer`"" })).
         Replace("__PUBLIC_URL__", $publicUrl)
     $script = $script.Replace("`r`n", "`n")
     $res = Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script
@@ -1113,7 +1154,8 @@ pkill -f "websockify .* 6080" 2>/dev/null || true
 pkill -f "x11vnc .*5900" 2>/dev/null || true
 pkill -f "Xvfb :99" 2>/dev/null || true
 pkill -f "fluxbox" 2>/dev/null || true
-pkill -f "gz sim -g" 2>/dev/null || true
+pkill -f "gz gui -c" 2>/dev/null || true
+pkill -f "gz gui" 2>/dev/null || true
 '@
     $script = $script.Replace("`r`n", "`n")
     Invoke-ContainerScript -DockerCmd $DockerCmd -ContainerId $ContainerId -Script $script | Out-Null
@@ -1126,11 +1168,18 @@ function Wait-WorldStreamReady {
     )
     $statePath = Join-Path $VisualDir "world_stream_state.json"
     $deadline = (Get-Date).AddSeconds([Math]::Max($TimeoutSeconds, 1))
+    $lastState = $null
     while ((Get-Date) -lt $deadline) {
         if (Test-Path -LiteralPath $statePath) {
             try {
                 $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
-                if ($state.world_stream_ready -and $state.world_stream_nonblank -and $state.world_stream_interactive) {
+                $lastState = $state
+                if ($state.world_stream_ready -and
+                    $state.scene_content_ok -and
+                    $state.robot_visible_ok -and
+                    $state.target_visible_ok -and
+                    $state.viewer_process_healthy -and
+                    $state.same_session_partition) {
                     return [pscustomobject]@{
                         Ready = $true
                         State = $state
@@ -1145,7 +1194,7 @@ function Wait-WorldStreamReady {
     }
     return [pscustomobject]@{
         Ready = $false
-        State = $null
+        State = $lastState
         StatePath = $statePath
     }
 }
@@ -1282,6 +1331,15 @@ $worldStreamStatePath = ""
 $worldStreamSummaryPath = ""
 $worldStreamNonblank = $false
 $worldStreamInteractive = $false
+$worldStreamSceneContent = $false
+$worldStreamRobotVisible = $false
+$worldStreamTargetVisible = ($WorldSurface -ne "streamed_sim")
+$worldStreamViewerHealthy = $false
+$worldStreamFailureClass = ""
+$worldStreamRenderBackend = ""
+$worldStreamViewerClientMode = ""
+$worldStreamCameraProfile = ""
+$worldStreamSoftwareRenderOnly = $false
 $worldStreamSameSessionPartition = ($WorldSurface -ne "streamed_sim")
 $worldStreamContainerId = ""
 $worldStreamPid = ""
@@ -1455,6 +1513,8 @@ try {
                         -ContainerId $worldStreamContainerId `
                         -SessionId $runId `
                         -OutputDir $sessionVisualDir `
+                        -WorldName $WorldName `
+                        -TruthStatePath $truthStatePath `
                         -PublicPort $worldStreamPort
                     $worldStreamPid = [string]$stream.Pid
                     $worldStreamLog = [string]$stream.Log
@@ -1466,11 +1526,28 @@ try {
                         $worldWait = Wait-WorldStreamReady -VisualDir $sessionVisualDir -TimeoutSeconds 35
                         $worldStreamStatePath = [string]$worldWait.StatePath
                         $worldStreamReady = [bool]$worldWait.Ready
-                        $worldStreamStatus = if ($worldStreamReady) { "world_stream_ready" } else { "world_stream_timeout" }
                         if ($worldWait.State) {
                             $worldStreamNonblank = [bool]$worldWait.State.world_stream_nonblank
                             $worldStreamInteractive = [bool]$worldWait.State.world_stream_interactive
+                            $worldStreamSceneContent = [bool]$worldWait.State.scene_content_ok
+                            $worldStreamRobotVisible = [bool]$worldWait.State.robot_visible_ok
+                            $worldStreamTargetVisible = [bool]$worldWait.State.target_visible_ok
+                            $worldStreamViewerHealthy = [bool]$worldWait.State.viewer_process_healthy
                             $worldStreamSameSessionPartition = [bool]$worldWait.State.same_session_partition
+                            $worldStreamFailureClass = [string]$worldWait.State.failure_class
+                            $worldStreamRenderBackend = [string]$worldWait.State.render_backend
+                            $worldStreamViewerClientMode = [string]$worldWait.State.viewer_client_mode
+                            $worldStreamCameraProfile = [string]$worldWait.State.camera_profile
+                            $worldStreamSoftwareRenderOnly = [bool]$worldWait.State.software_render_only
+                        }
+                        if ($worldStreamReady) {
+                            $worldStreamStatus = "world_stream_ready"
+                        }
+                        elseif (-not [string]::IsNullOrWhiteSpace($worldStreamFailureClass)) {
+                            $worldStreamStatus = $worldStreamFailureClass
+                        }
+                        else {
+                            $worldStreamStatus = "world_stream_timeout"
                         }
                         $worldStreamSummaryPath = Join-Path $sessionVisualDir "world_stream_summary.json"
                     }
@@ -1913,16 +1990,51 @@ try {
                 $worldStreamReady = [bool]$worldStreamSummary.pass
                 $worldStreamNonblank = [bool]$worldStreamSummary.world_stream_nonblank
                 $worldStreamInteractive = [bool]$worldStreamSummary.world_stream_interactive
+                $worldStreamSceneContent = [bool]$worldStreamSummary.scene_content_ok
+                $worldStreamRobotVisible = [bool]$worldStreamSummary.robot_visible_ok
+                $worldStreamTargetVisible = [bool]$worldStreamSummary.target_visible_ok
+                $worldStreamViewerHealthy = [bool]$worldStreamSummary.viewer_process_healthy
                 $worldStreamUrl = [string]$worldStreamSummary.world_stream_url
                 $worldStreamSameSessionPartition = [bool]$worldStreamSummary.same_session_partition
-                if (-not $worldStreamSameSessionPartition) {
+                $worldStreamFailureClass = [string]$worldStreamSummary.failure_class
+                $worldStreamRenderBackend = [string]$worldStreamSummary.render_backend
+                $worldStreamViewerClientMode = [string]$worldStreamSummary.viewer_client_mode
+                $worldStreamCameraProfile = [string]$worldStreamSummary.camera_profile
+                $worldStreamSoftwareRenderOnly = [bool]$worldStreamSummary.software_render_only
+                if ($worldStreamReady) {
+                    $worldStreamStatus = "world_stream_ready"
+                }
+                elseif (-not [string]::IsNullOrWhiteSpace($worldStreamFailureClass)) {
+                    $worldStreamStatus = $worldStreamFailureClass
+                }
+                elseif (-not $worldStreamSameSessionPartition) {
                     $worldStreamStatus = "world_stream_partition_mismatch"
                 }
                 else {
-                    $worldStreamStatus = if ($worldStreamReady) { "world_stream_ready" } else { "world_stream_content_failed" }
+                    $worldStreamStatus = "world_stream_content_failed"
                 }
             }
             catch {
+            }
+        }
+
+        if ($visualSummary) {
+            $visualSummary | Add-Member -NotePropertyName world_stream_ready -NotePropertyValue $worldStreamReady -Force
+            $visualSummary | Add-Member -NotePropertyName world_stream_summary_path -NotePropertyValue $worldStreamSummaryPath -Force
+            $visualSummary | Add-Member -NotePropertyName world_stream_failure_class -NotePropertyValue $worldStreamFailureClass -Force
+            $visualSummary | Add-Member -NotePropertyName world_stream_viewer_process_healthy -NotePropertyValue $worldStreamViewerHealthy -Force
+            $visualSummary | Add-Member -NotePropertyName world_stream_scene_content_ok -NotePropertyValue $worldStreamSceneContent -Force
+            $visualSummary | Add-Member -NotePropertyName world_stream_robot_visible_ok -NotePropertyValue $worldStreamRobotVisible -Force
+            $visualSummary | Add-Member -NotePropertyName world_stream_target_visible_ok -NotePropertyValue $worldStreamTargetVisible -Force
+            $visualSummary | Add-Member -NotePropertyName world_stream_same_session_partition -NotePropertyValue $worldStreamSameSessionPartition -Force
+            if ($WorldSurface -eq "streamed_sim" -and -not $worldStreamReady) {
+                $visualSummary.pass = $false
+                if (-not ($visualSummary.PSObject.Properties.Name -contains "failure_class") -or [string]::IsNullOrWhiteSpace([string]$visualSummary.failure_class)) {
+                    $visualSummary | Add-Member -NotePropertyName failure_class -NotePropertyValue $worldStreamStatus -Force
+                }
+                else {
+                    $visualSummary.failure_class = $worldStreamStatus
+                }
             }
         }
 
@@ -2178,6 +2290,15 @@ try {
                 status = $worldStreamStatus
                 nonblank = $worldStreamNonblank
                 interactive = $worldStreamInteractive
+                scene_content_ok = $worldStreamSceneContent
+                robot_visible_ok = $worldStreamRobotVisible
+                target_visible_ok = $worldStreamTargetVisible
+                viewer_process_healthy = $worldStreamViewerHealthy
+                viewer_client_mode = $worldStreamViewerClientMode
+                camera_profile = $worldStreamCameraProfile
+                render_backend = $worldStreamRenderBackend
+                software_render_only = $worldStreamSoftwareRenderOnly
+                failure_class = $worldStreamFailureClass
                 state_path = if ([string]::IsNullOrWhiteSpace($worldStreamStatePath)) { "" } else { $worldStreamStatePath }
                 summary_path = if ([string]::IsNullOrWhiteSpace($worldStreamSummaryPath)) { "" } else { $worldStreamSummaryPath }
                 video_path = if ($worldStreamSummary) { Convert-OrchestratorPath -Path ([string]$worldStreamSummary.video_path) -RepoRoot $repoRoot } else { "" }
@@ -2257,6 +2378,9 @@ try {
             [ordered]@{ id = "visual_surface_ready"; description = "Recorded/dashboard surface captured nonblank content"; required = $visualSurfaceRequested; pass = $visualGatePass },
             [ordered]@{ id = "world_stream_ready"; description = "Streamed 3D Gazebo world ready"; required = ($WorldSurface -eq "streamed_sim"); pass = $worldStreamReady },
             [ordered]@{ id = "world_stream_same_session"; description = "Streamed 3D Gazebo world attached to the same session partition"; required = ($WorldSurface -eq "streamed_sim"); pass = $worldStreamSameSessionPartition },
+            [ordered]@{ id = "world_stream_scene_content"; description = "Streamed 3D Gazebo world contains a rendered scene"; required = ($WorldSurface -eq "streamed_sim"); pass = $worldStreamSceneContent },
+            [ordered]@{ id = "world_stream_robot_visible"; description = "Streamed 3D Gazebo world shows the robot"; required = ($WorldSurface -eq "streamed_sim"); pass = $worldStreamRobotVisible },
+            [ordered]@{ id = "world_stream_target_visible"; description = "Streamed 3D Gazebo world shows the target"; required = ($WorldSurface -eq "streamed_sim"); pass = $worldStreamTargetVisible },
             [ordered]@{ id = "cmd_vel_activity"; description = "cmd_vel activity observed"; required = ($Milestone -ge 3); pass = ($cmdVelMessageCount -gt 0) },
             [ordered]@{ id = "odom_displacement"; description = "Target-distance retained progress reached threshold"; required = ($Milestone -ge 3); pass = ($odomDisplacementM -ge $MotionMinDistanceMeters) }
         )

@@ -640,15 +640,24 @@ $m2DashboardUrl = [string](Get-PropValue -Object $m2Visual -Path @("dashboard_ur
 $m2WorldStreamReady = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("ready") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.ready"
 $m2WorldStreamNonblank = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("nonblank") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.nonblank"
 $m2WorldStreamInteractive = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("interactive") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.interactive"
+$m2WorldStreamSceneContent = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("scene_content_ok") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.scene_content_ok"
+$m2WorldStreamRobotVisible = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("robot_visible_ok") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.robot_visible_ok"
+$m2WorldStreamTargetVisible = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("target_visible_ok") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.target_visible_ok"
+$m2WorldStreamViewerHealthy = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("viewer_process_healthy") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.viewer_process_healthy"
 $m2WorldStreamSameSession = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("same_session_partition") -Default ($m2WorldSurface -ne "streamed_sim")) -ParamName "m2.visual.world_stream.same_session_partition"
+$m2WorldStreamSoftwareRenderOnly = Resolve-Bool -Value (Get-PropValue -Object $m2WorldStream -Path @("software_render_only") -Default $false) -ParamName "m2.visual.world_stream.software_render_only"
 $m2TruthReady = Resolve-Bool -Value (Get-PropValue -Object $m2Visual -Path @("truth_ready") -Default $false) -ParamName "m2.visual.truth_ready"
 $m2TruthAlignmentOk = Resolve-Bool -Value (Get-PropValue -Object $m2Visual -Path @("truth_alignment_ok") -Default $false) -ParamName "m2.visual.truth_alignment_ok"
+$m3VisualBlocks = @()
 $m3ViewersRunningAll = $true
 $m3VisualReadyAll = $true
 foreach ($m3 in $m3FinalByTarget) {
     $m3DemoSummary = Get-PropValue -Object $m3 -Path @("demo_summary") -Default $null
     $m3ViewersRunning = Resolve-Bool -Value (Get-PropValue -Object $m3DemoSummary -Path @("viewers", "feed_viewers_running") -Default $false) -ParamName "m3.feed_viewers_running"
     $m3Visual = Get-PropValue -Object $m3DemoSummary -Path @("visual") -Default $null
+    if ($null -ne $m3Visual) {
+        $m3VisualBlocks += $m3Visual
+    }
     $m3VisualReady = Resolve-Bool -Value (Get-PropValue -Object $m3Visual -Path @("visual_ready") -Default $false) -ParamName "m3.visual.visual_ready"
     if (-not $m3ViewersRunning) {
         $m3ViewersRunningAll = $false
@@ -657,11 +666,151 @@ foreach ($m3 in $m3FinalByTarget) {
         $m3VisualReadyAll = $false
     }
 }
+$allVisualBlocks = @()
+if ($null -ne $m2Visual) {
+    $allVisualBlocks += $m2Visual
+}
+$allVisualBlocks += $m3VisualBlocks
+$allWorldStreamBlocks = @()
+foreach ($visualBlock in $allVisualBlocks) {
+    $worldStreamBlock = Get-PropValue -Object $visualBlock -Path @("world_stream") -Default $null
+    if ($null -ne $worldStreamBlock) {
+        $allWorldStreamBlocks += $worldStreamBlock
+    }
+}
+$visualTruthReadyAll = ($allVisualBlocks.Count -gt 0)
+$visualTruthAlignmentAll = ($allVisualBlocks.Count -gt 0)
+$worldStreamReadyAll = ($WorldSurface -ne "streamed_sim")
+$worldStreamNonblankAll = ($WorldSurface -ne "streamed_sim")
+$worldStreamInteractiveAny = $false
+$worldStreamSceneContentAll = ($WorldSurface -ne "streamed_sim")
+$worldStreamRobotVisibleAll = ($WorldSurface -ne "streamed_sim")
+$worldStreamTargetVisibleAll = ($WorldSurface -ne "streamed_sim")
+$worldStreamViewerHealthyAll = ($WorldSurface -ne "streamed_sim")
+$worldStreamSameSessionAll = ($WorldSurface -ne "streamed_sim")
+$worldStreamSoftwareRenderOnlyAny = $false
+$aggregatedDashboardUrl = $m2DashboardUrl
+$aggregatedWorldStreamUrl = ""
+$aggregatedWorldStreamClientMode = ""
+$aggregatedWorldStreamCameraProfile = ""
+$aggregatedWorldStreamRenderBackend = ""
+$aggregatedWorldStreamSummaryPath = ""
+$aggregatedWorldStreamVideoPath = ""
+$aggregatedWorldStreamScreenshotPath = ""
+$aggregatedVisualFrameCounts = [ordered]@{
+    raw = 0
+    debug = 0
+    telemetry = 0
+}
+foreach ($visualBlock in $allVisualBlocks) {
+    $visualTruthReady = Resolve-Bool -Value (Get-PropValue -Object $visualBlock -Path @("truth_ready") -Default $false) -ParamName "visual.truth_ready"
+    $visualTruthAlignment = Resolve-Bool -Value (Get-PropValue -Object $visualBlock -Path @("truth_alignment_ok") -Default $false) -ParamName "visual.truth_alignment_ok"
+    if (-not $visualTruthReady) {
+        $visualTruthReadyAll = $false
+    }
+    if (-not $visualTruthAlignment) {
+        $visualTruthAlignmentAll = $false
+    }
+    $rawFrames = [int](Get-PropValue -Object $visualBlock -Path @("raw_frame_count") -Default 0)
+    $debugFrames = [int](Get-PropValue -Object $visualBlock -Path @("debug_frame_count") -Default 0)
+    $telemetryFrames = [int](Get-PropValue -Object $visualBlock -Path @("telemetry_frame_count") -Default 0)
+    $aggregatedVisualFrameCounts.raw += $rawFrames
+    $aggregatedVisualFrameCounts.debug += $debugFrames
+    $aggregatedVisualFrameCounts.telemetry += $telemetryFrames
+    if ([string]::IsNullOrWhiteSpace($aggregatedDashboardUrl)) {
+        $candidateDashboardUrl = [string](Get-PropValue -Object $visualBlock -Path @("dashboard_url") -Default "")
+        if (-not [string]::IsNullOrWhiteSpace($candidateDashboardUrl)) {
+            $aggregatedDashboardUrl = $candidateDashboardUrl
+        }
+    }
+}
+if ($WorldSurface -eq "streamed_sim") {
+    if ($allWorldStreamBlocks.Count -eq 0) {
+        $worldStreamReadyAll = $false
+        $worldStreamNonblankAll = $false
+        $worldStreamSceneContentAll = $false
+        $worldStreamRobotVisibleAll = $false
+        $worldStreamTargetVisibleAll = $false
+        $worldStreamViewerHealthyAll = $false
+        $worldStreamSameSessionAll = $false
+    }
+    else {
+        $worldStreamReadyAll = $true
+        $worldStreamNonblankAll = $true
+        $worldStreamSceneContentAll = $true
+        $worldStreamRobotVisibleAll = $true
+        $worldStreamTargetVisibleAll = $true
+        $worldStreamViewerHealthyAll = $true
+        $worldStreamSameSessionAll = $true
+        foreach ($worldStreamBlock in $allWorldStreamBlocks) {
+            $worldStreamReady = Resolve-Bool -Value (Get-PropValue -Object $worldStreamBlock -Path @("ready") -Default $false) -ParamName "visual.world_stream.ready"
+            $worldStreamNonblank = Resolve-Bool -Value (Get-PropValue -Object $worldStreamBlock -Path @("nonblank") -Default $false) -ParamName "visual.world_stream.nonblank"
+            $worldStreamInteractive = Resolve-Bool -Value (Get-PropValue -Object $worldStreamBlock -Path @("interactive") -Default $false) -ParamName "visual.world_stream.interactive"
+            $worldStreamSceneContent = Resolve-Bool -Value (Get-PropValue -Object $worldStreamBlock -Path @("scene_content_ok") -Default $false) -ParamName "visual.world_stream.scene_content_ok"
+            $worldStreamRobotVisible = Resolve-Bool -Value (Get-PropValue -Object $worldStreamBlock -Path @("robot_visible_ok") -Default $false) -ParamName "visual.world_stream.robot_visible_ok"
+            $worldStreamTargetVisible = Resolve-Bool -Value (Get-PropValue -Object $worldStreamBlock -Path @("target_visible_ok") -Default $false) -ParamName "visual.world_stream.target_visible_ok"
+            $worldStreamViewerHealthy = Resolve-Bool -Value (Get-PropValue -Object $worldStreamBlock -Path @("viewer_process_healthy") -Default $false) -ParamName "visual.world_stream.viewer_process_healthy"
+            $worldStreamSameSession = Resolve-Bool -Value (Get-PropValue -Object $worldStreamBlock -Path @("same_session_partition") -Default $false) -ParamName "visual.world_stream.same_session_partition"
+            $worldStreamSoftwareRenderOnly = Resolve-Bool -Value (Get-PropValue -Object $worldStreamBlock -Path @("software_render_only") -Default $false) -ParamName "visual.world_stream.software_render_only"
+            if (-not $worldStreamReady) { $worldStreamReadyAll = $false }
+            if (-not $worldStreamNonblank) { $worldStreamNonblankAll = $false }
+            if (-not $worldStreamSceneContent) { $worldStreamSceneContentAll = $false }
+            if (-not $worldStreamRobotVisible) { $worldStreamRobotVisibleAll = $false }
+            if (-not $worldStreamTargetVisible) { $worldStreamTargetVisibleAll = $false }
+            if (-not $worldStreamViewerHealthy) { $worldStreamViewerHealthyAll = $false }
+            if (-not $worldStreamSameSession) { $worldStreamSameSessionAll = $false }
+            if ($worldStreamInteractive) { $worldStreamInteractiveAny = $true }
+            if ($worldStreamSoftwareRenderOnly) { $worldStreamSoftwareRenderOnlyAny = $true }
+            if ([string]::IsNullOrWhiteSpace($aggregatedWorldStreamUrl)) {
+                $candidateWorldStreamUrl = [string](Get-PropValue -Object $worldStreamBlock -Path @("url") -Default "")
+                if (-not [string]::IsNullOrWhiteSpace($candidateWorldStreamUrl)) {
+                    $aggregatedWorldStreamUrl = $candidateWorldStreamUrl
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($aggregatedWorldStreamClientMode)) {
+                $candidateViewerClientMode = [string](Get-PropValue -Object $worldStreamBlock -Path @("viewer_client_mode") -Default "")
+                if (-not [string]::IsNullOrWhiteSpace($candidateViewerClientMode)) {
+                    $aggregatedWorldStreamClientMode = $candidateViewerClientMode
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($aggregatedWorldStreamCameraProfile)) {
+                $candidateCameraProfile = [string](Get-PropValue -Object $worldStreamBlock -Path @("camera_profile") -Default "")
+                if (-not [string]::IsNullOrWhiteSpace($candidateCameraProfile)) {
+                    $aggregatedWorldStreamCameraProfile = $candidateCameraProfile
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($aggregatedWorldStreamRenderBackend)) {
+                $candidateRenderBackend = [string](Get-PropValue -Object $worldStreamBlock -Path @("render_backend") -Default "")
+                if (-not [string]::IsNullOrWhiteSpace($candidateRenderBackend)) {
+                    $aggregatedWorldStreamRenderBackend = $candidateRenderBackend
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($aggregatedWorldStreamSummaryPath)) {
+                $candidateWorldStreamSummaryPath = [string](Get-PropValue -Object $worldStreamBlock -Path @("summary_path") -Default "")
+                if (-not [string]::IsNullOrWhiteSpace($candidateWorldStreamSummaryPath)) {
+                    $aggregatedWorldStreamSummaryPath = $candidateWorldStreamSummaryPath
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($aggregatedWorldStreamVideoPath)) {
+                $candidateWorldStreamVideoPath = [string](Get-PropValue -Object $worldStreamBlock -Path @("video_path") -Default "")
+                if (-not [string]::IsNullOrWhiteSpace($candidateWorldStreamVideoPath)) {
+                    $aggregatedWorldStreamVideoPath = $candidateWorldStreamVideoPath
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($aggregatedWorldStreamScreenshotPath)) {
+                $candidateWorldStreamScreenshotPath = [string](Get-PropValue -Object $worldStreamBlock -Path @("screenshot_path") -Default "")
+                if (-not [string]::IsNullOrWhiteSpace($candidateWorldStreamScreenshotPath)) {
+                    $aggregatedWorldStreamScreenshotPath = $candidateWorldStreamScreenshotPath
+                }
+            }
+        }
+    }
+}
 $visualReady = if ($VisualSurface -eq "none") {
     if ($openFeedViewersResolved) { ($m2ViewersRunning -and $m3ViewersRunningAll) } else { $true }
 }
 else {
-    ($m2VisualReady -and $m3VisualReadyAll -and $m2TruthReady -and $m2TruthAlignmentOk -and $m2WorldStreamReady -and $m2WorldStreamNonblank -and $m2WorldStreamInteractive -and $m2WorldStreamSameSession)
+    ($m2VisualReady -and $m3VisualReadyAll -and $visualTruthReadyAll -and $visualTruthAlignmentAll -and $worldStreamReadyAll -and $worldStreamNonblankAll -and $worldStreamSceneContentAll -and $worldStreamRobotVisibleAll -and $worldStreamTargetVisibleAll -and $worldStreamViewerHealthyAll -and $worldStreamSameSessionAll)
 }
 $allPass = ([bool]$m2Final.pass -and $m3AllPassed -and $visualReady)
 $summary = [ordered]@{
@@ -684,21 +833,44 @@ $summary = [ordered]@{
     visual_ready = $visualReady
     display_mode = $m2DisplayMode
     viewer_backend = $m2ViewerBackend
-    viewer_frame_counts = if ($VisualSurface -eq "none") { $m2ViewerFrameCounts } else { $m2VisualFrameCounts }
+    viewer_frame_counts = if ($VisualSurface -eq "none") { $m2ViewerFrameCounts } else { $aggregatedVisualFrameCounts }
     viewer_startup_elapsed_s = $m2ViewerStartupElapsedS
     visual = [ordered]@{
         surface = $VisualSurface
         world_surface = $m2WorldSurface
-        dashboard_url = $m2DashboardUrl
-        world_stream_url = [string](Get-PropValue -Object $m2WorldStream -Path @("url") -Default "")
-        world_stream_ready = $m2WorldStreamReady
-        world_stream_nonblank = $m2WorldStreamNonblank
-        world_stream_interactive = $m2WorldStreamInteractive
-        same_session_partition = $m2WorldStreamSameSession
-        truth_ready = $m2TruthReady
-        truth_alignment_ok = $m2TruthAlignmentOk
+        dashboard_url = $aggregatedDashboardUrl
+        world_stream_url = $aggregatedWorldStreamUrl
+        world_stream_ready = $worldStreamReadyAll
+        world_stream_nonblank = $worldStreamNonblankAll
+        world_stream_interactive = $worldStreamInteractiveAny
+        world_stream_scene_content = $worldStreamSceneContentAll
+        world_stream_robot_visible = $worldStreamRobotVisibleAll
+        world_stream_target_visible = $worldStreamTargetVisibleAll
+        world_stream_viewer_process_healthy = $worldStreamViewerHealthyAll
+        world_stream_software_render_only = $worldStreamSoftwareRenderOnlyAny
+        same_session_partition = $worldStreamSameSessionAll
+        truth_ready = $visualTruthReadyAll
+        truth_alignment_ok = $visualTruthAlignmentAll
+        world_stream = [ordered]@{
+            url = $aggregatedWorldStreamUrl
+            ready = $worldStreamReadyAll
+            nonblank = $worldStreamNonblankAll
+            interactive = $worldStreamInteractiveAny
+            scene_content_ok = $worldStreamSceneContentAll
+            robot_visible_ok = $worldStreamRobotVisibleAll
+            target_visible_ok = $worldStreamTargetVisibleAll
+            viewer_process_healthy = $worldStreamViewerHealthyAll
+            viewer_client_mode = $aggregatedWorldStreamClientMode
+            camera_profile = $aggregatedWorldStreamCameraProfile
+            render_backend = $aggregatedWorldStreamRenderBackend
+            software_render_only = $worldStreamSoftwareRenderOnlyAny
+            same_session_partition = $worldStreamSameSessionAll
+            summary_path = $aggregatedWorldStreamSummaryPath
+            video_path = $aggregatedWorldStreamVideoPath
+            screenshot_path = $aggregatedWorldStreamScreenshotPath
+        }
         milestone2 = $m2Visual
-        milestone3 = @($m3FinalByTarget | ForEach-Object { Get-PropValue -Object $_ -Path @("demo_summary", "visual") -Default $null })
+        milestone3 = $m3VisualBlocks
     }
     pass = $allPass
     failure_class = ""

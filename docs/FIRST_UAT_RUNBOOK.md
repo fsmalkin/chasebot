@@ -152,21 +152,21 @@ Required handoff artifacts:
 5. `runtime/contracts/llm_control_contract.yaml`
 6. `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
 
-Current full campaign baseline (post diff-drive sign fix):
+Current full campaign baseline (post world-stream recovery):
 
-1. `artifacts/session/20260308T042822Z/pre_llm_campaign_trend.json`
-2. `artifacts/session/20260308T042822Z/campaign_run_summary.json`
-3. `artifacts/session/20260308T042822Z/rc/manifest.json`
-4. `artifacts/session/20260308T042822Z/rc/readiness_report.json`
-5. `artifacts/session/20260308T052630Z/pre_llm_headless_summary.json` (soak)
+1. `artifacts/session/20260309T063355Z/pre_llm_campaign_trend.json`
+2. `artifacts/session/20260309T063355Z/campaign_run_summary.json`
+3. `artifacts/session/20260309T063355Z/rc/manifest.json`
+4. `artifacts/session/20260309T063355Z/rc/readiness_report.json`
+5. `artifacts/session/20260309T073224Z/pre_llm_headless_summary.json` (soak)
 6. `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json` (adapter smoke)
 
 Latest same-session visual package from that campaign:
 
-1. `artifacts/session/20260308T050710Z/pre_llm_headless_summary.json`
-2. `artifacts/session/20260308T050710Z/visual/visual_demo_summary_recorded.json`
-3. `artifacts/session/20260308T050710Z/pre_llm_gui_rehearsal_summary.json`
-4. `artifacts/session/20260308T050710Z/parity_summary.json`
+1. `artifacts/session/20260309T071255Z/pre_llm_headless_summary.json`
+2. `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
+3. `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
+4. `artifacts/session/20260309T071255Z/parity_summary.json`
 
 Parity-first GUI readiness (required before operator live view):
 
@@ -178,10 +178,11 @@ Parity-first GUI readiness (required before operator live view):
    - `artifacts/session/<session_id>/parity_summary.json` with `pass=true`
 4. Only then run operator view:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true -VisualSurface browser_dashboard -WorldSurface streamed_sim -AutoOpenVisualSurface true`
+   - The authoritative browser world pane is the live Gazebo world from `/observer_world/image_raw`, not native X11/noVNC.
 5. Current validated same-session baseline:
-   - `artifacts/session/20260308T050710Z/visual/visual_demo_summary_recorded.json`
-   - `artifacts/session/20260308T050710Z/pre_llm_gui_rehearsal_summary.json`
-   - `artifacts/session/20260308T050710Z/parity_summary.json`
+   - `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
+   - `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
+   - `artifacts/session/20260309T071255Z/parity_summary.json`
 
 Required pass criteria:
 
@@ -208,3 +209,9 @@ Visual parity triage failure classes:
 6. `lane_mismatch`
 7. `feed_viewer_unavailable`
 8. `visual_bundle_missing`
+9. `world_stream_client_crash`
+10. `world_stream_blank`
+11. `world_stream_scene_missing`
+12. `world_stream_robot_not_visible`
+13. `world_stream_target_not_visible`
+14. `world_stream_partition_mismatch`

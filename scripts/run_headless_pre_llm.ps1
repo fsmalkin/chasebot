@@ -71,6 +71,17 @@ function Invoke-PSCapture {
     }
 }
 
+function Get-FreeTcpPort {
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+    try {
+        $listener.Start()
+        return ([int]($listener.LocalEndpoint.Port))
+    }
+    finally {
+        $listener.Stop()
+    }
+}
+
 function Convert-OrchestratorPath {
     param([string]$Path, [string]$RepoRoot)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $Path }
@@ -200,7 +211,10 @@ function Invoke-Lane {
     }
 
     $gateUpOk = $false
+    $originalWorldStreamPort = $env:WORLD_STREAM_PORT
+    $worldStreamPort = Get-FreeTcpPort
     try {
+        $env:WORLD_STREAM_PORT = [string]$worldStreamPort
         $gateArgs = @(
             "-Action", "up",
             "-ProjectName", $project,
@@ -307,6 +321,12 @@ function Invoke-Lane {
                 "-InferenceBackend", $InferenceBackend,
                 "-CoreRosDistro", $CoreRosDistro
             ) | Out-Null
+        }
+        if ($null -eq $originalWorldStreamPort) {
+            Remove-Item Env:\WORLD_STREAM_PORT -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:WORLD_STREAM_PORT = $originalWorldStreamPort
         }
         $result.ended_utc = (Get-Date).ToUniversalTime().ToString("o")
     }

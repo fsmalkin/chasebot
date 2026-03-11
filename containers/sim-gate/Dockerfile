@@ -19,8 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
     python3-pip \
     python3-opencv \
+    x11-xserver-utils \
     x11vnc \
     xauth \
+    xserver-xorg-core \
+    xserver-xorg-video-dummy \
     xvfb \
     && \
     for pkg in \
