@@ -72,13 +72,15 @@ Behavior:
    - Default now includes same-session GUI rehearsal + parity checks for each dual run (`-IncludeGuiParity true`).
 3. Brain adapter smoke (post-campaign, pre-GUI):
    - `powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin`
-4. Adversarial must-fail suite:
+4. Deterministic planner shell smoke (first post-freeze integration step):
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_brain_intent_shell.ps1 -RuntimeTarget robot_fidelity_orin`
+5. Adversarial must-fail suite:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_adversarial.ps1 -RuntimeTarget robot_fidelity_orin`
-5. Final GUI rehearsal wrapper:
+6. Final GUI rehearsal wrapper:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -OpenFeedViewers false -VisualSurface browser_dashboard`
-6. Visual/headless parity comparator:
+7. Visual/headless parity comparator:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_visual_parity_check.ps1 -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -GuiSummaryPath artifacts/session/<session_id>/pre_llm_gui_rehearsal_summary.json`
-7. Recorded visual evidence wrapper:
+8. Recorded visual evidence wrapper:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_recorded_visual_demo.ps1 -Milestone 3 -RuntimeTarget robot_fidelity_orin -SessionId <session_id>`
 2. Lane behavior:
    - `fast`: shorter timeouts + fast-forward world (`yolo_test_world_v6_clean_uat_fast.world`)
@@ -100,11 +102,12 @@ Behavior:
    - soak summary: `artifacts/session/20260309T073224Z/pre_llm_headless_summary.json`
    - rc readiness: `artifacts/session/20260309T063355Z/rc/readiness_report.json`
    - adversarial summary: `artifacts/session/20260303T061055Z/adversarial_headless_summary.json`
-   - brain adapter smoke: `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json`
-   - latest same-session headless: `artifacts/session/20260309T071255Z/pre_llm_headless_summary.json`
-   - latest same-session recorded visual: `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
-   - latest same-session GUI rehearsal: `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
-   - latest same-session parity: `artifacts/session/20260309T071255Z/parity_summary.json`
+   - brain adapter smoke: `artifacts/session/20260312T001204Z/brain_adapter_smoke_summary.json`
+   - deterministic planner shell: `artifacts/session/20260312T001244Z/brain_intent_shell_summary.json`
+   - latest same-session headless: `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
+   - latest same-session recorded visual: `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
+   - latest same-session GUI rehearsal: `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
+   - latest same-session parity: `artifacts/session/20260312T013442Z/parity_summary.json`
 
 ## Current Caution
 
@@ -132,6 +135,15 @@ Behavior:
    - `ros2_config/config/jetbot_diff_drive_v1.0.0.yaml`
    - `ros2_config/config/jetbot_controllers.yaml`
    Both use negative wheel radius multipliers so Gazebo world motion and ROS odom agree. If the robot appears to drive backward again, compare `/jetbot_base_controller/odom` against `/world/<world>/dynamic_pose/info` before trusting nav results.
+19. Operator visual signoff sequence is:
+   - single-target M3 browser run first (`phase=M3`, `target_id=single_target`)
+   - multi-target GUI rehearsal second (`phase=multi_target_rehearsal`)
+   - do not use the full rehearsal wrapper as the first human-facing demo.
+20. Browser dashboard status chips now surface:
+   - `phase`
+   - `target_id`
+   - `target_transition_active`
+   Use these to distinguish real target resets from faults during multi-target rehearsal.
 
 ## Artifact Contracts
 
@@ -170,10 +182,12 @@ Behavior:
    - `artifacts/demos/milestone_1_<timestamp>/demo_summary.json`
 10. Brain adapter smoke:
    - `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
-11. GUI rehearsal + parity:
+11. Deterministic planner shell:
+   - `artifacts/session/<timestamp>/brain_intent_shell_summary.json`
+12. GUI rehearsal + parity:
    - `artifacts/session/<timestamp>/pre_llm_gui_rehearsal_summary.json`
    - `artifacts/session/<timestamp>/parity_summary.json`
-12. Recorded/browser visual bundle:
+13. Recorded/browser visual bundle:
    - `artifacts/session/<timestamp>/visual/raw_camera.mp4`
    - `artifacts/session/<timestamp>/visual/raw_camera_recorded.mp4`
    - `artifacts/session/<timestamp>/visual/raw_camera_browser_dashboard.mp4`

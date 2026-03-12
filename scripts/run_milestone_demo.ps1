@@ -70,6 +70,12 @@ param(
 
     [int]$DashboardPort = 0,
 
+    [string]$OperatorPhase = "",
+
+    [string]$TargetId = "",
+
+    [object]$TargetTransitionActive = $false,
+
     [object]$KeepWindowsOpen = $false,
 
     [int]$ViewerStartupDelaySeconds = 3,
@@ -385,6 +391,13 @@ if ($ExecutionLane -eq "container_kilted") {
     if ([string]::IsNullOrWhiteSpace($WorldSurface)) {
         $WorldSurface = if ($VisualSurface -ne "none") { "streamed_sim" } else { "none" }
     }
+    if ([string]::IsNullOrWhiteSpace($OperatorPhase)) {
+        $OperatorPhase = "M$Milestone"
+    }
+    if ([string]::IsNullOrWhiteSpace($TargetId)) {
+        $TargetId = if ($Milestone -ge 2) { "single_target" } else { "detection_only" }
+    }
+    $targetTransitionActiveResolved = Resolve-StrictBool -Value $TargetTransitionActive -Default $false
     if ($WorldSurface -eq "streamed_sim" -and $headlessRequested -eq $false) {
         $headlessRequested = $true
     }
@@ -476,6 +489,12 @@ if ($ExecutionLane -eq "container_kilted") {
         ([string][bool]$autoOpenVisualSurfaceRequested),
         "-DashboardPort",
         $DashboardPort.ToString(),
+        "-OperatorPhase",
+        $OperatorPhase,
+        "-TargetId",
+        $TargetId,
+        "-TargetTransitionActive",
+        ([string][bool]$targetTransitionActiveResolved),
         "-DisplayMode",
         [string]$displayConfig.selected_mode,
         "-DisplayPreflightStatus",
@@ -678,6 +697,13 @@ if ($RequireNav2ActionServer -eq $null) {
 if ($DemoTargetRelative -eq $null) {
     $DemoTargetRelative = $true
 }
+if ([string]::IsNullOrWhiteSpace($OperatorPhase)) {
+    $OperatorPhase = "M$Milestone"
+}
+if ([string]::IsNullOrWhiteSpace($TargetId)) {
+    $TargetId = if ($Milestone -ge 2) { "single_target" } else { "detection_only" }
+}
+$targetTransitionActiveResolved = Resolve-StrictBool -Value $TargetTransitionActive -Default $false
 $RosDistro = Resolve-RosDistro -Distro $Distro -Requested $RosDistro
 
 $headlessStr = if ($Headless) { "true" } else { "false" }

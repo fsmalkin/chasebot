@@ -142,6 +142,7 @@ Run this only after first-UAT promotion is already green:
 1. `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1`
    - Default includes same-session GUI rehearsal + parity checks (`-IncludeGuiParity true`).
 2. `powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin`
+3. `powershell -ExecutionPolicy Bypass -File scripts/run_brain_intent_shell.ps1 -RuntimeTarget robot_fidelity_orin`
 
 Required handoff artifacts:
 
@@ -151,6 +152,7 @@ Required handoff artifacts:
 4. `artifacts/session/<timestamp>/rc/readiness_report.json`
 5. `runtime/contracts/llm_control_contract.yaml`
 6. `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
+7. `artifacts/session/<timestamp>/brain_intent_shell_summary.json`
 
 Current full campaign baseline (post world-stream recovery):
 
@@ -159,14 +161,27 @@ Current full campaign baseline (post world-stream recovery):
 3. `artifacts/session/20260309T063355Z/rc/manifest.json`
 4. `artifacts/session/20260309T063355Z/rc/readiness_report.json`
 5. `artifacts/session/20260309T073224Z/pre_llm_headless_summary.json` (soak)
-6. `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json` (adapter smoke)
+6. `artifacts/session/20260312T001204Z/brain_adapter_smoke_summary.json` (adapter smoke)
+7. `artifacts/session/20260312T001244Z/brain_intent_shell_summary.json` (deterministic planner shell)
 
-Latest same-session visual package from that campaign:
+Latest validated same-session visual package:
 
-1. `artifacts/session/20260309T071255Z/pre_llm_headless_summary.json`
-2. `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
-3. `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
-4. `artifacts/session/20260309T071255Z/parity_summary.json`
+1. `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
+2. `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
+3. `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
+4. `artifacts/session/20260312T013442Z/parity_summary.json`
+
+Operator visual signoff order:
+
+1. Single-target M3 browser run first:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 -Milestone 3 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -Headless true -VisualSurface browser_dashboard -WorldSurface streamed_sim -OpenFeedViewers true -AutoOpenVisualSurface true -RequireParityGreenForOperatorView false -OperatorPhase M3 -TargetId single_target -DemoTargetRelative false -DemoTargetX 1.10 -DemoTargetY 0.00 -DemoTargetZ 0.05 -MaxRunSeconds 150`
+2. Multi-target GUI rehearsal second:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false -VisualSurface browser_dashboard -WorldSurface streamed_sim`
+3. Dashboard now shows:
+   - `phase`
+   - `target_id`
+   - `target_transition_active`
+   Use these fields to explain target resets during multi-target rehearsal.
 
 Parity-first GUI readiness (required before operator live view):
 
@@ -180,9 +195,10 @@ Parity-first GUI readiness (required before operator live view):
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true -VisualSurface browser_dashboard -WorldSurface streamed_sim -AutoOpenVisualSurface true`
    - The authoritative browser world pane is the live Gazebo world from `/observer_world/image_raw`, not native X11/noVNC.
 5. Current validated same-session baseline:
-   - `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
-   - `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
-   - `artifacts/session/20260309T071255Z/parity_summary.json`
+   - `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
+   - `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
+   - `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
+   - `artifacts/session/20260312T013442Z/parity_summary.json`
 
 Required pass criteria:
 

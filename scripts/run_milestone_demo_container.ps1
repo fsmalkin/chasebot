@@ -62,6 +62,12 @@ param(
 
     [int]$DashboardPort = 0,
 
+    [string]$OperatorPhase = "",
+
+    [string]$TargetId = "",
+
+    [object]$TargetTransitionActive = $false,
+
     [int]$PersistentVisualHoldSeconds = 12,
 
     [object]$KeepWindowsOpen = $false,
@@ -797,6 +803,9 @@ function Start-VisualObserver {
         [string]$OutputDir,
         [string]$RuntimeTarget,
         [string]$VisualMode,
+        [string]$Phase,
+        [string]$TargetId,
+        [bool]$TargetTransitionActive,
         [int]$DurationSeconds,
         [bool]$RequireMotion,
         [double]$TargetVisibleMinRatio,
@@ -813,13 +822,14 @@ function Start-VisualObserver {
     }
     $requireMotionArg = if ($RequireMotion) { "--require-motion" } else { "" }
     $truthArg = if ([string]::IsNullOrWhiteSpace($truthStateContainer)) { "" } else { "--truth-state-path `"$truthStateContainer`"" }
+    $targetTransitionArg = if ($TargetTransitionActive) { "--target-transition-active" } else { "" }
     $script = @'
 set -euo pipefail
 PID_FILE="__PID_FILE__"
 LOG_FILE="__LOG_FILE__"
 pkill -f "visual_demo_observer.py" 2>/dev/null || true
 rm -f "$PID_FILE" "$LOG_FILE"
-nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/visual_demo_observer.py --session-id "__SESSION_ID__" --output-dir "__OUTPUT_DIR__" --execution-lane "container_kilted" --runtime-target "__RUNTIME_TARGET__" --visual-mode "__VISUAL_MODE__" --duration-s "__DURATION_S__" --target-visible-min-ratio "__TARGET_VISIBLE_MIN_RATIO__" --motion-progress-min-m "__MOTION_PROGRESS_MIN_M__" __REQUIRE_MOTION__ __TRUTH_STATE_ARG__ --use-sim-time' >"$LOG_FILE" 2>&1 &
+nohup bash -lc 'source /opt/ros/__ROS_DISTRO__/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/visual_demo_observer.py --session-id "__SESSION_ID__" --output-dir "__OUTPUT_DIR__" --execution-lane "container_kilted" --runtime-target "__RUNTIME_TARGET__" --visual-mode "__VISUAL_MODE__" --phase "__PHASE__" --target-id "__TARGET_ID__" __TARGET_TRANSITION_ARG__ --duration-s "__DURATION_S__" --target-visible-min-ratio "__TARGET_VISIBLE_MIN_RATIO__" --motion-progress-min-m "__MOTION_PROGRESS_MIN_M__" __REQUIRE_MOTION__ __TRUTH_STATE_ARG__ --use-sim-time' >"$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 sleep 1
 if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
@@ -838,6 +848,9 @@ echo "VISUAL_LOG=__LOG_FILE__"
         Replace("__OUTPUT_DIR__", $outputDirWsl).
         Replace("__RUNTIME_TARGET__", $RuntimeTarget).
         Replace("__VISUAL_MODE__", $VisualMode).
+        Replace("__PHASE__", $Phase).
+        Replace("__TARGET_ID__", $TargetId).
+        Replace("__TARGET_TRANSITION_ARG__", $targetTransitionArg).
         Replace("__DURATION_S__", ([Math]::Max($DurationSeconds, 30)).ToString()).
         Replace("__TARGET_VISIBLE_MIN_RATIO__", $TargetVisibleMinRatio.ToString("0.###", [System.Globalization.CultureInfo]::InvariantCulture)).
         Replace("__MOTION_PROGRESS_MIN_M__", $MotionProgressMinM.ToString("0.###", [System.Globalization.CultureInfo]::InvariantCulture)).
@@ -937,6 +950,39 @@ function Wait-VisualObserverSummary {
         Summary = $null
         SummaryPath = $summaryPath
     }
+}
+
+function Write-OperatorStatusFile {
+    param(
+        [string]$VisualDir,
+        [string]$SessionId,
+        [string]$Phase,
+        [string]$TargetId,
+        [bool]$TargetTransitionActive,
+        [string]$ExecutionLane,
+        [string]$RuntimeTarget,
+        [string]$VisualSurface,
+        [string]$WorldSurface,
+        [string]$StatusText = ""
+    )
+
+    if ([string]::IsNullOrWhiteSpace($VisualDir)) { return "" }
+    New-Item -ItemType Directory -Path $VisualDir -Force | Out-Null
+    $statusPath = Join-Path $VisualDir "operator_status.json"
+    $payload = [ordered]@{
+        session_id = $SessionId
+        phase = $Phase
+        target_id = $TargetId
+        target_transition_active = [bool]$TargetTransitionActive
+        execution_lane = $ExecutionLane
+        runtime_target = $RuntimeTarget
+        visual_surface = $VisualSurface
+        world_surface = $WorldSurface
+        status_text = if ([string]::IsNullOrWhiteSpace($StatusText)) { "$Phase $TargetId" } else { $StatusText }
+        updated_utc = (Get-Date).ToUniversalTime().ToString("o")
+    }
+    $payload | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $statusPath -Encoding UTF8
+    return $statusPath
 }
 
 function Start-TruthProbe {
@@ -1304,6 +1350,10 @@ if ($KeepWindowsOpen -eq $null) { $KeepWindowsOpen = $false }
 if ($RequireMotion -eq $null) { $RequireMotion = ($Milestone -ge 3) }
 if ($RequireNav2ActionServer -eq $null) { $RequireNav2ActionServer = ($Milestone -ge 3) }
 if ($DemoTargetRelative -eq $null) { $DemoTargetRelative = $false }
+if ([string]::IsNullOrWhiteSpace($OperatorPhase)) { $OperatorPhase = "M$Milestone" }
+if ([string]::IsNullOrWhiteSpace($TargetId)) { $TargetId = if ($Milestone -ge 2) { "single_target" } else { "detection_only" } }
+$TargetTransitionActive = Resolve-NullableBool -Value $TargetTransitionActive -ParamName "TargetTransitionActive"
+if ($null -eq $TargetTransitionActive) { $TargetTransitionActive = $false }
 if ([string]::IsNullOrWhiteSpace($DisplayPreflightStatus)) { $DisplayPreflightStatus = "not_required" }
 if ([string]::IsNullOrWhiteSpace($DisplayMode)) { $DisplayMode = "none" }
 if ([string]::IsNullOrWhiteSpace($VisualSurface)) { $VisualSurface = "none" }
@@ -1385,6 +1435,17 @@ $sessionVisualDir = if (-not [string]::IsNullOrWhiteSpace($SessionId)) {
     Join-Path $artifactDir "visual"
 }
 New-Item -ItemType Directory -Path $sessionVisualDir -Force | Out-Null
+$operatorStatusPath = Write-OperatorStatusFile `
+    -VisualDir $sessionVisualDir `
+    -SessionId $runId `
+    -Phase $OperatorPhase `
+    -TargetId $TargetId `
+    -TargetTransitionActive ([bool]$TargetTransitionActive) `
+    -ExecutionLane "container_kilted" `
+    -RuntimeTarget $RuntimeTarget `
+    -VisualSurface $VisualSurface `
+    -WorldSurface $WorldSurface `
+    -StatusText $(if ([bool]$TargetTransitionActive) { "Transitioning to target $TargetId" } else { "Running $OperatorPhase for $TargetId" })
 
 $resolvedProjectName = if ([string]::IsNullOrWhiteSpace($ProjectName)) { "chasecar_gate_mdemo_$($runId.ToLowerInvariant())" } else { $ProjectName }
 $composeGateScript = Join-Path $PSScriptRoot "run_compose_gate.ps1"
@@ -1563,6 +1624,9 @@ try {
                 -OutputDir $sessionVisualDir `
                 -RuntimeTarget $RuntimeTarget `
                 -VisualMode $VisualSurface `
+                -Phase $OperatorPhase `
+                -TargetId $TargetId `
+                -TargetTransitionActive ([bool]$TargetTransitionActive) `
                 -DurationSeconds $observerDuration `
                 -RequireMotion ([bool]$RequireMotion) `
                 -TargetVisibleMinRatio $(if ($Milestone -ge 3) { 0.04 } elseif ($Milestone -eq 2) { 0.10 } else { 0.05 }) `
@@ -1604,6 +1668,30 @@ try {
             }
         }
     }
+
+    $operatorStatusText = if ([bool]$TargetTransitionActive) {
+        "Transitioning to target $TargetId"
+    }
+    elseif ($visualSurfaceRequested -and $visualReady) {
+        "Visual surface ready for $OperatorPhase target $TargetId"
+    }
+    elseif ($visualSurfaceRequested) {
+        "Preparing $OperatorPhase target $TargetId"
+    }
+    else {
+        "Running $OperatorPhase target $TargetId"
+    }
+    $operatorStatusPath = Write-OperatorStatusFile `
+        -VisualDir $sessionVisualDir `
+        -SessionId $runId `
+        -Phase $OperatorPhase `
+        -TargetId $TargetId `
+        -TargetTransitionActive ([bool]$TargetTransitionActive) `
+        -ExecutionLane "container_kilted" `
+        -RuntimeTarget $RuntimeTarget `
+        -VisualSurface $VisualSurface `
+        -WorldSurface $WorldSurface `
+        -StatusText $operatorStatusText
 
     $stageTimeout = [Math]::Max($StepTimeoutSeconds, 120)
     if ($MaxRunSeconds -gt 0) {
@@ -2139,6 +2227,9 @@ try {
         execution_lane = "container_kilted"
         core_ros_distro = $CoreRosDistro
         session_id = $runId
+        phase = $OperatorPhase
+        target_id = $TargetId
+        target_transition_active = [bool]$TargetTransitionActive
         start_utc = $runStartUtc.ToString("o")
         end_utc = (Get-Date).ToUniversalTime().ToString("o")
         max_run_seconds = [Math]::Max($MaxRunSeconds, 0)
@@ -2239,6 +2330,9 @@ try {
             requested = $visualSurfaceRequested
             surface = $VisualSurface
             world_surface = $WorldSurface
+            phase = $OperatorPhase
+            target_id = $TargetId
+            target_transition_active = [bool]$TargetTransitionActive
             status = $visualStatus
             visual_ready = $visualReady
             pass = $visualGatePass
@@ -2268,6 +2362,7 @@ try {
             dashboard_port = if ($dashboardInfo) { [int]$dashboardInfo.Port } else { 0 }
             dashboard_ready = if ($dashboardInfo) { [bool]$dashboardInfo.Ready } else { ($VisualSurface -ne "browser_dashboard") }
             auto_open = [bool]$AutoOpenVisualSurface
+            operator_status_path = if ([string]::IsNullOrWhiteSpace($operatorStatusPath)) { "" } else { $operatorStatusPath }
             truth_state_path = if ([string]::IsNullOrWhiteSpace($truthStatePath)) { "" } else { $truthStatePath }
             truth_summary_path = if ([string]::IsNullOrWhiteSpace($truthSummaryPath)) { "" } else { $truthSummaryPath }
             truth_ready = $truthReady
@@ -2385,6 +2480,18 @@ try {
             [ordered]@{ id = "odom_displacement"; description = "Target-distance retained progress reached threshold"; required = ($Milestone -ge 3); pass = ($odomDisplacementM -ge $MotionMinDistanceMeters) }
         )
     }
+
+    $operatorStatusPath = Write-OperatorStatusFile `
+        -VisualDir $sessionVisualDir `
+        -SessionId $runId `
+        -Phase $OperatorPhase `
+        -TargetId $TargetId `
+        -TargetTransitionActive ([bool]$TargetTransitionActive) `
+        -ExecutionLane "container_kilted" `
+        -RuntimeTarget $RuntimeTarget `
+        -VisualSurface $VisualSurface `
+        -WorldSurface $WorldSurface `
+        -StatusText $(if ($overallPass) { "$OperatorPhase $TargetId complete" } else { "$OperatorPhase $TargetId blocked: $demoFailureClass" })
 
     $demoSummaryPath = Join-Path $artifactDir "demo_summary.json"
     $checklistPath = Join-Path $artifactDir "operator_checklist.json"

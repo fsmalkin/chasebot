@@ -30,6 +30,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--execution-lane", default="container_kilted")
     parser.add_argument("--runtime-target", default="robot_fidelity_orin")
     parser.add_argument("--visual-mode", choices=("recorded", "browser_dashboard"), default="recorded")
+    parser.add_argument("--phase", default="")
+    parser.add_argument("--target-id", default="")
+    parser.add_argument("--target-transition-active", action="store_true")
     parser.add_argument("--duration-s", type=float, default=120.0)
     parser.add_argument("--fps", type=float, default=5.0)
     parser.add_argument("--raw-topic", default="/d415/color/image_raw")
@@ -576,6 +579,9 @@ class VisualDemoObserver(Node):
 
         record = {
             "t_s": round(elapsed, 3),
+            "phase": self.args.phase or "",
+            "target_id": self.args.target_id or "",
+            "target_transition_active": bool(self.args.target_transition_active),
             "raw_nonblank": raw_nonblank,
             "debug_nonblank": debug_nonblank,
             "target_visible": target_visible,
@@ -629,6 +635,9 @@ class VisualDemoObserver(Node):
             "visual_mode": self.args.visual_mode,
             "execution_lane": self.args.execution_lane,
             "runtime_target": self.args.runtime_target,
+            "phase": self.args.phase or "",
+            "target_id": self.args.target_id or "",
+            "target_transition_active": bool(self.args.target_transition_active),
             "raw_frame_count": self.raw_frame_count,
             "debug_frame_count": self.debug_frame_count,
             "telemetry_frame_count": self.telemetry_frame_count,
@@ -698,6 +707,9 @@ class VisualDemoObserver(Node):
             "execution_lane": self.args.execution_lane,
             "runtime_target": self.args.runtime_target,
             "visual_mode": self.args.visual_mode,
+            "phase": self.args.phase or "",
+            "target_id": self.args.target_id or "",
+            "target_transition_active": bool(self.args.target_transition_active),
             "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "raw_nonblank": self.raw_nonblank_count > 0,
             "debug_nonblank": self.debug_nonblank_count > 0,

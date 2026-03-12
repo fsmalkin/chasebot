@@ -310,7 +310,10 @@ function Invoke-MilestoneDemo {
         [string]$EvidenceDir,
         [double]$ForwardM,
         [double]$LateralM,
-        [int]$MaxRunSeconds
+        [int]$MaxRunSeconds,
+        [string]$OperatorPhase,
+        [string]$TargetId,
+        [bool]$TargetTransitionActive
     )
 
     Invoke-StaleCleanup
@@ -333,6 +336,9 @@ function Invoke-MilestoneDemo {
         "-WorldSurface", $WorldSurface,
         "-AutoOpenVisualSurface", ([string][bool]$autoOpenVisualSurfaceResolved),
         "-DashboardPort", $DashboardPort.ToString(),
+        "-OperatorPhase", $OperatorPhase,
+        "-TargetId", $TargetId,
+        "-TargetTransitionActive", ([string][bool]$TargetTransitionActive),
         "-KeepWindowsOpen", ([string][bool]$keepWindowsOpenResolved),
         "-RequireParityGreenForOperatorView", ([string][bool]$requireParityForViewResolved),
         "-AutoStartVcXsrv", ([string][bool]$autoStartVcXsrvResolved),
@@ -546,7 +552,15 @@ for ($attempt = 1; $attempt -le [Math]::Max($Milestone2MaxAttempts, 1); $attempt
     New-Item -ItemType Directory -Path $m2Evidence -Force | Out-Null
     Write-Host ("Running GUI rehearsal Milestone 2 (attempt {0}/{1})..." -f $attempt, [Math]::Max($Milestone2MaxAttempts, 1)) -ForegroundColor Cyan
     try {
-        $run = Invoke-MilestoneDemo -Milestone 2 -EvidenceDir $m2Evidence -ForwardM 1.10 -LateralM 0.00 -MaxRunSeconds $Milestone2MaxRunSeconds
+        $run = Invoke-MilestoneDemo `
+            -Milestone 2 `
+            -EvidenceDir $m2Evidence `
+            -ForwardM 1.10 `
+            -LateralM 0.00 `
+            -MaxRunSeconds $Milestone2MaxRunSeconds `
+            -OperatorPhase "M2" `
+            -TargetId "single_target" `
+            -TargetTransitionActive $false
     }
     catch {
         $run = New-SubrunFailureResult -Milestone 2 -EvidenceDir $m2Evidence -ErrorMessage $_.Exception.Message -Attempt $attempt
@@ -590,7 +604,10 @@ foreach ($target in $m3Targets) {
                 -EvidenceDir $evidence `
                 -ForwardM ([double]$target.forward_m) `
                 -LateralM ([double]$target.lateral_m) `
-                -MaxRunSeconds $Milestone3MaxRunSeconds
+                -MaxRunSeconds $Milestone3MaxRunSeconds `
+                -OperatorPhase "M3" `
+                -TargetId $target.id `
+                -TargetTransitionActive $false
         }
         catch {
             $res = New-SubrunFailureResult -Milestone 3 -EvidenceDir $evidence -ErrorMessage $_.Exception.Message -TargetId $target.id -Attempt $attempt
@@ -824,6 +841,9 @@ $summary = [ordered]@{
     open_feed_viewers = [bool]$openFeedViewersResolved
     visual_surface = $VisualSurface
     world_surface = $m2WorldSurface
+    phase = "multi_target_rehearsal"
+    target_id = "multi_target"
+    target_transition_active = $false
     display = [ordered]@{
         preflight = $displayPreflight
         display_mode = $m2DisplayMode
@@ -838,6 +858,11 @@ $summary = [ordered]@{
     visual = [ordered]@{
         surface = $VisualSurface
         world_surface = $m2WorldSurface
+        operator_status = [ordered]@{
+            phase = "multi_target_rehearsal"
+            target_id = "multi_target"
+            target_transition_active = $false
+        }
         dashboard_url = $aggregatedDashboardUrl
         world_stream_url = $aggregatedWorldStreamUrl
         world_stream_ready = $worldStreamReadyAll

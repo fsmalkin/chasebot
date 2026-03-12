@@ -1,13 +1,14 @@
-version: 7
+version: 8
 contract_status: frozen_pre_llm
-frozen_on_utc: "2026-03-03T06:30:00Z"
+frozen_on_utc: "2026-03-11T00:00:00Z"
 freeze_basis:
-  campaign_trend_report: artifacts/session/20260303T050659Z/pre_llm_campaign_trend.json
-  soak_summary: artifacts/session/20260303T054851Z/pre_llm_headless_summary.json
-  rc_readiness_report: artifacts/session/20260303T050659Z/rc/readiness_report.json
+  campaign_summary: artifacts/session/20260309T063355Z/campaign_run_summary.json
+  campaign_trend_report: artifacts/session/20260309T063355Z/pre_llm_campaign_trend.json
+  soak_summary: artifacts/session/20260309T073224Z/pre_llm_headless_summary.json
+  rc_readiness_report: artifacts/session/20260309T063355Z/rc/readiness_report.json
   adversarial_summary: artifacts/session/20260303T061055Z/adversarial_headless_summary.json
-  adapter_smoke_summary: artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json
-  parity_summary: artifacts/session/20260303T061906Z/parity_summary.json
+  adapter_smoke_summary: artifacts/session/20260312T001204Z/brain_adapter_smoke_summary.json
+  parity_summary: artifacts/session/20260309T071255Z/parity_summary.json
   message_schema_manifest_version: 1
   isaac_bridge_allowlist_version: 1
 

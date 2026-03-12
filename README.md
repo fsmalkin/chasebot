@@ -131,12 +131,12 @@ Latest full pre-LLM campaign package (post world-stream recovery):
 4. `artifacts/session/20260309T063355Z/rc/readiness_report.json`
 5. `artifacts/session/20260309T063355Z/campaign_run_summary.json`
 
-Latest validated same-session visual package from that campaign:
+Latest validated same-session visual package:
 
-1. `artifacts/session/20260309T071255Z/pre_llm_headless_summary.json`
-2. `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
-3. `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
-4. `artifacts/session/20260309T071255Z/parity_summary.json`
+1. `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
+2. `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
+3. `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
+4. `artifacts/session/20260312T013442Z/parity_summary.json`
 
 Adversarial must-fail verification:
 
@@ -157,7 +157,18 @@ powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -Ru
 Adapter smoke output:
 
 1. `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
-2. Latest validated smoke: `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json`
+2. Latest validated smoke: `artifacts/session/20260312T001204Z/brain_adapter_smoke_summary.json`
+
+Deterministic planner shell (first post-freeze LLM-integration smoke):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_brain_intent_shell.ps1 -RuntimeTarget robot_fidelity_orin
+```
+
+Planner shell output:
+
+1. `artifacts/session/<timestamp>/brain_intent_shell_summary.json`
+2. Latest validated shell: `artifacts/session/20260312T001244Z/brain_intent_shell_summary.json`
 
 ## Visual Milestones
 
@@ -191,6 +202,39 @@ powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 `
 
 3. Native Gazebo/X11 remains debug-only and does not count toward promotion.
 4. The browser world pane is the live Gazebo world from the world camera sensor (`/observer_world/image_raw`), not the old noVNC/X11 path.
+
+Operator visual signoff sequence:
+
+1. Single-target M3 browser run first:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 `
+  -Milestone 3 `
+  -ExecutionLane container_kilted `
+  -CoreRosDistro kilted `
+  -RuntimeTarget robot_fidelity_orin `
+  -Headless true `
+  -VisualSurface browser_dashboard `
+  -WorldSurface streamed_sim `
+  -OpenFeedViewers true `
+  -AutoOpenVisualSurface true `
+  -RequireParityGreenForOperatorView false `
+  -OperatorPhase M3 `
+  -TargetId single_target `
+  -DemoTargetRelative false `
+  -DemoTargetX 1.10 `
+  -DemoTargetY 0.00 `
+  -DemoTargetZ 0.05 `
+  -MaxRunSeconds 150
+```
+
+2. Multi-target GUI rehearsal second:
+   - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true -VisualSurface browser_dashboard -WorldSurface streamed_sim -AutoOpenVisualSurface true`
+3. Dashboard now surfaces plain-English operator state:
+   - `phase`
+   - `target_id`
+   - `target_transition_active`
+   Use this to distinguish expected target resets during multi-target rehearsal from faults.
 
 Headless milestone progression (current development default):
 
@@ -248,9 +292,10 @@ Parity-first rule:
 
 Current same-session visual baseline:
 
-1. `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
-2. `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
-3. `artifacts/session/20260309T071255Z/parity_summary.json`
+1. `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
+2. `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
+3. `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
+4. `artifacts/session/20260312T013442Z/parity_summary.json`
 
 ## Artifact Contracts
 

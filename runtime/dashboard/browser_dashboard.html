@@ -130,6 +130,10 @@
       <div class="chip"><strong>Mode</strong><span id="visual-mode">waiting</span></div>
       <div class="chip"><strong>Execution Lane</strong><span id="execution-lane">waiting</span></div>
       <div class="chip"><strong>Runtime Target</strong><span id="runtime-target">waiting</span></div>
+      <div class="chip"><strong>Phase</strong><span id="phase">waiting</span></div>
+      <div class="chip"><strong>Target</strong><span id="target-id">waiting</span></div>
+      <div class="chip"><strong>Transition</strong><span id="target-transition">steady</span></div>
+      <div class="chip"><strong>Status</strong><span id="status-text">waiting</span></div>
     </div>
     <div class="status-grid" style="margin-top: 10px;">
       <div class="status"><strong>World Stream</strong><span id="world-stream-status">waiting</span></div>
@@ -180,6 +184,10 @@
       visualMode: document.getElementById('visual-mode'),
       executionLane: document.getElementById('execution-lane'),
       runtimeTarget: document.getElementById('runtime-target'),
+      phase: document.getElementById('phase'),
+      targetId: document.getElementById('target-id'),
+      targetTransition: document.getElementById('target-transition'),
+      statusText: document.getElementById('status-text'),
       worldStreamStatus: document.getElementById('world-stream-status'),
       rawFrames: document.getElementById('raw-frames'),
       debugFrames: document.getElementById('debug-frames'),
@@ -215,16 +223,23 @@
     }
 
     async function refreshState() {
+      let state = null;
       try {
         const response = await fetch(`state.json?t=${Date.now()}`, { cache: 'no-store' });
         if (!response.ok) {
           throw new Error(`state_http_${response.status}`);
         }
-        const state = await response.json();
+        state = await response.json();
         ids.sessionId.textContent = state.session_id || 'unknown';
         ids.visualMode.textContent = state.visual_mode || 'unknown';
         ids.executionLane.textContent = state.execution_lane || 'unknown';
         ids.runtimeTarget.textContent = state.runtime_target || 'unknown';
+        ids.phase.textContent = state.phase || 'unspecified';
+        ids.targetId.textContent = state.target_id || 'unspecified';
+        ids.targetTransition.innerHTML = statusText(Boolean(state.target_transition_active), 'active', 'steady');
+        ids.statusText.textContent = state.target_transition_active
+          ? `Transitioning to ${state.target_id || 'next target'}`
+          : `${state.phase || 'phase'} ${state.target_id || 'target'}`;
         ids.rawFrames.textContent = String(state.raw_frame_count ?? 0);
         ids.debugFrames.textContent = String(state.debug_frame_count ?? 0);
         ids.telemetryFrames.textContent = String(state.telemetry_frame_count ?? 0);
@@ -240,6 +255,18 @@
         stampSrc(ids.telemetryImage, 'live/topdown_telemetry.jpg');
       } catch (err) {
         ids.overlayDiff.innerHTML = '<span class="warn">waiting</span>';
+      }
+
+      try {
+        const operatorResp = await fetch(`operator_status.json?t=${Date.now()}`, { cache: 'no-store' });
+        if (operatorResp.ok) {
+          const operatorState = await operatorResp.json();
+          ids.phase.textContent = operatorState.phase || state?.phase || 'unspecified';
+          ids.targetId.textContent = operatorState.target_id || state?.target_id || 'unspecified';
+          ids.targetTransition.innerHTML = statusText(Boolean(operatorState.target_transition_active), 'active', 'steady');
+          ids.statusText.textContent = operatorState.status_text || `${operatorState.phase || state?.phase || 'phase'} ${operatorState.target_id || state?.target_id || 'target'}`;
+        }
+      } catch (err) {
       }
 
       try {

@@ -170,12 +170,12 @@ Latest full pre-LLM campaign package (post world-stream recovery):
 4. rc readiness: `artifacts/session/20260309T063355Z/rc/readiness_report.json` (`pass=true`)
 5. campaign summary: `artifacts/session/20260309T063355Z/campaign_run_summary.json`
 
-Latest same-session visual package from that campaign:
+Latest same-session visual package:
 
-1. headless: `artifacts/session/20260309T071255Z/pre_llm_headless_summary.json`
-2. recorded visual: `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
-3. GUI rehearsal: `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
-4. parity: `artifacts/session/20260309T071255Z/parity_summary.json`
+1. headless: `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
+2. recorded visual: `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
+3. GUI rehearsal: `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
+4. parity: `artifacts/session/20260312T013442Z/parity_summary.json`
 
 Adversarial must-fail suite (required for truth-lock confidence):
 
@@ -215,10 +215,21 @@ Pre-LLM brain adapter smoke (post-campaign, pre-GUI):
 2. Required output:
    - `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
 3. Latest validated smoke:
-   - `artifacts/session/20260303T061602Z/brain_adapter_smoke_summary.json`
-3. Pass intent:
+   - `artifacts/session/20260312T001204Z/brain_adapter_smoke_summary.json`
+4. Pass intent:
    - frozen contract intents are emitted on `/chasecar/brain/intent`
    - low-level boundary checks pass for detection/odom/action/service readiness
+
+Deterministic planner shell (first post-freeze integration smoke):
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_brain_intent_shell.ps1 -RuntimeTarget robot_fidelity_orin`
+2. Required output:
+   - `artifacts/session/<timestamp>/brain_intent_shell_summary.json`
+3. Latest validated shell:
+   - `artifacts/session/20260312T001244Z/brain_intent_shell_summary.json`
+4. Pass intent:
+   - emits `acquire_target -> plan_to_target -> track_target -> safe_stop`
+   - verifies boundary feedback without changing low-level autonomy code paths
 
 ## Visual UAT Sequence
 
@@ -235,13 +246,18 @@ Authoritative visual surfaces:
 
 Canonical sequence:
 
-1. `scripts/run_milestone_demo.ps1 -Milestone 2 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $false -MaxRunSeconds 120`
-2. `scripts/run_milestone_demo.ps1 -Milestone 3 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -OpenFeedViewers $false -MaxRunSeconds 150`
-3. Full rehearsal wrapper (same-session parity check is mandatory):
+1. Single-target M3 operator signoff:
+   - `scripts/run_milestone_demo.ps1 -Milestone 3 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -Headless true -VisualSurface browser_dashboard -WorldSurface streamed_sim -OpenFeedViewers true -AutoOpenVisualSurface true -RequireParityGreenForOperatorView false -OperatorPhase M3 -TargetId single_target -DemoTargetRelative false -DemoTargetX 1.10 -DemoTargetY 0.00 -DemoTargetZ 0.05 -MaxRunSeconds 150`
+2. Multi-target GUI rehearsal (same-session parity check is mandatory):
    - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false -VisualSurface browser_dashboard -WorldSurface streamed_sim`
-4. Operator live-view replay (only after parity is green):
+3. Operator live-view replay of the same multi-target session (only after parity is green):
    - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true -VisualSurface browser_dashboard -WorldSurface streamed_sim -AutoOpenVisualSurface true`
    - Current strict behavior: if browser dashboard or visual bundle readiness is unavailable, this run fails closed.
+4. Dashboard operator strip now exposes:
+   - `phase`
+   - `target_id`
+   - `target_transition_active`
+   Use this to distinguish expected target transitions from faults during multi-target rehearsal.
 
 Parity gate:
 
@@ -249,9 +265,10 @@ Parity gate:
 2. Required checks: lane match, core ROS match, detection pipeline alive in both, `/yolo/ball_position_3d` active in both, nav action readiness in both, motion evidence in both, same-session recorded visual bundle ready, browser dashboard ready, streamed sim world ready, truth alignment OK.
 3. `host_ros` GUI runs are debug-only and cannot promote readiness.
 4. Current validated same-session baseline:
-   - `artifacts/session/20260309T071255Z/visual/visual_demo_summary_recorded.json`
-   - `artifacts/session/20260309T071255Z/pre_llm_gui_rehearsal_summary.json`
-   - `artifacts/session/20260309T071255Z/parity_summary.json`
+   - `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
+   - `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
+   - `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
+   - `artifacts/session/20260312T013442Z/parity_summary.json`
 
 ## Headless Milestone Path (Current Preferred)
 
