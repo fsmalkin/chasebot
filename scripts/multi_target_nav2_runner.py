@@ -276,6 +276,55 @@ def ensure_output_dir(base_output_dir: Path) -> Path:
     return out_dir
 
 
+def write_progress(
+    path: Optional[Path],
+    *,
+    run_id: str,
+    phase: str,
+    goal_count: int,
+    goal_index: int,
+    current_scenario_id: str,
+    completed_goal_count: int,
+    target_transition_active: bool,
+    last_result: Optional[GoalRunResult],
+) -> None:
+    if path is None:
+        return
+
+    payload = {
+        'run_id': run_id,
+        'updated_utc': datetime.now(timezone.utc).isoformat(),
+        'phase': phase,
+        'goal_count': int(goal_count),
+        'goal_index': int(goal_index),
+        'current_scenario_id': current_scenario_id,
+        'completed_goal_count': int(completed_goal_count),
+        'target_transition_active': bool(target_transition_active),
+        'last_result': None,
+    }
+    if last_result is not None:
+        payload['last_result'] = {
+            'scenario_id': last_result.scenario_id,
+            'accepted': bool(last_result.accepted),
+            'success': bool(last_result.success),
+            'status_code': int(last_result.status_code),
+            'elapsed_s': float(last_result.elapsed_s),
+            'final_distance_m': last_result.final_distance_m,
+            'cmd_vel_message_count': int(last_result.cmd_vel_message_count),
+            'attempts': int(last_result.attempts),
+            'error': last_result.error,
+        }
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+
+
+def spin_for_duration(node: Node, duration_s: float, sample_interval_s: float) -> None:
+    deadline = time.monotonic() + max(duration_s, 0.0)
+    while time.monotonic() < deadline and rclpy.ok():
+        rclpy.spin_once(node, timeout_sec=max(sample_interval_s, 0.05))
+
+
 def parse_args() -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description='Run deterministic multi-target Nav2 readiness checks.')
@@ -322,6 +371,17 @@ def parse_args() -> argparse.Namespace:
         action='store_false',
         help='Disable use_sim_time for this runner node.',
     )
+    parser.add_argument(
+        '--progress-json',
+        default='',
+        help='Optional progress JSON path updated as each target runs.',
+    )
+    parser.add_argument(
+        '--transition-hold-s',
+        type=float,
+        default=0.0,
+        help='Optional hold time after each goal transition to surface dashboard state changes.',
+    )
     return parser.parse_args()
 
 
@@ -357,6 +417,7 @@ def main() -> int:
     out_dir = ensure_output_dir(out_base)
     samples_csv = out_dir / 'multi_target_samples.csv'
     summary_json = out_dir / 'multi_target_summary.json'
+    progress_json = Path(args.progress_json).resolve() if args.progress_json else None
 
     rclpy.init()
     node = MultiTargetRunner(
@@ -372,6 +433,17 @@ def main() -> int:
         node.set_parameters([Parameter('use_sim_time', Parameter.Type.BOOL, True)])
 
     warmup_deadline = time.monotonic() + max(warmup_s, 0.0)
+    write_progress(
+        progress_json,
+        run_id=out_dir.name,
+        phase='warming_up',
+        goal_count=len(scenarios),
+        goal_index=0,
+        current_scenario_id='',
+        completed_goal_count=0,
+        target_transition_active=False,
+        last_result=None,
+    )
     while time.monotonic() < warmup_deadline and rclpy.ok():
         rclpy.spin_once(node, timeout_sec=sample_interval_s)
 
@@ -398,12 +470,24 @@ def main() -> int:
     node.wait_for_odom(timeout_s=warmup_wait_for_odom_s, sample_interval_s=sample_interval_s)
 
     results: List[GoalRunResult] = []
-    for scenario in scenarios:
+    for index, scenario in enumerate(scenarios, start=1):
         scenario_id = str(scenario.get('id', f'target_{len(results)+1}'))
         goal = scenario.get('goal', {})
         goal_x = float(goal.get('x', 0.0))
         goal_y = float(goal.get('y', 0.0))
         goal_yaw = float(goal.get('yaw', 0.0))
+
+        write_progress(
+            progress_json,
+            run_id=out_dir.name,
+            phase='running',
+            goal_count=len(scenarios),
+            goal_index=index,
+            current_scenario_id=scenario_id,
+            completed_goal_count=len(results),
+            target_transition_active=False,
+            last_result=results[-1] if results else None,
+        )
 
         attempts = 0
         run_result: Optional[GoalRunResult] = None
@@ -442,9 +526,38 @@ def main() -> int:
             )
         results.append(run_result)
 
+        write_progress(
+            progress_json,
+            run_id=out_dir.name,
+            phase='goal_complete',
+            goal_count=len(scenarios),
+            goal_index=index,
+            current_scenario_id=scenario_id,
+            completed_goal_count=len(results),
+            target_transition_active=False,
+            last_result=run_result,
+        )
+
         settle_end = time.monotonic() + max(settle_after_goal_s, 0.0)
         while time.monotonic() < settle_end and rclpy.ok():
             rclpy.spin_once(node, timeout_sec=sample_interval_s)
+
+        if index < len(scenarios):
+            next_scenario = scenarios[index]
+            next_id = str(next_scenario.get('id', f'target_{index+1}'))
+            write_progress(
+                progress_json,
+                run_id=out_dir.name,
+                phase='transition',
+                goal_count=len(scenarios),
+                goal_index=index + 1,
+                current_scenario_id=next_id,
+                completed_goal_count=len(results),
+                target_transition_active=True,
+                last_result=run_result,
+            )
+            if args.transition_hold_s > 0:
+                spin_for_duration(node, duration_s=args.transition_hold_s, sample_interval_s=sample_interval_s)
 
     with samples_csv.open('w', newline='', encoding='utf-8') as fp:
         writer = csv.DictWriter(
@@ -544,6 +657,18 @@ def main() -> int:
     with summary_json.open('w', encoding='utf-8') as fp:
         json.dump(summary, fp, indent=2, sort_keys=True)
         fp.write('\n')
+
+    write_progress(
+        progress_json,
+        run_id=out_dir.name,
+        phase='completed' if summary['pass'] else 'failed',
+        goal_count=len(scenarios),
+        goal_index=len(scenarios),
+        current_scenario_id='',
+        completed_goal_count=len(results),
+        target_transition_active=False,
+        last_result=results[-1] if results else None,
+    )
 
     print(f'Wrote {samples_csv}')
     print(f'Wrote {summary_json}')

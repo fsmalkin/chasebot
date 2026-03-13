@@ -12,7 +12,53 @@ x-chasecar-env: &chasecar-env
   NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
   NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-all}
 
+x-chasecar-repo-volume: &chasecar-repo-volume
+  type: bind
+  source: ${HOST_REPO_MOUNT_SOURCE:-.}
+  target: /workspaces/chasecar
+  bind:
+    create_host_path: true
+
 services:
+  dashboard-control:
+    build:
+      context: .
+      dockerfile: containers/dashboard-control/Dockerfile
+    image: chasecar/dashboard-control:latest
+    depends_on:
+      - dashboard-utility
+    environment:
+      PYTHONUNBUFFERED: "1"
+      CHASECAR_DASHBOARD_CONTROL_MODE: docker_socket
+      CHASECAR_DASHBOARD_WARM_SERVICES: dashboard-control,dashboard-utility
+    volumes:
+      - *chasecar-repo-volume
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /workspaces/chasecar
+    command: ["python3", "scripts/dashboard_service.py", "--host", "0.0.0.0", "--port", "8860"]
+    ports:
+      - "127.0.0.1:8860:8860"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8860/api/state', timeout=5).read()"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  dashboard-utility:
+    build:
+      context: .
+      dockerfile: containers/core-kilted/Dockerfile
+      args:
+        ROS_DISTRO: ${CORE_ROS_DISTRO:-kilted}
+    image: chasecar/core-kilted:${CORE_ROS_DISTRO:-kilted}
+    environment:
+      <<: *chasecar-env
+    volumes:
+      - *chasecar-repo-volume
+      - chasecar_ws:/root/ros2_ws
+    working_dir: /workspaces/chasecar
+    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && sleep infinity"]
+
   core-kilted:
     build:
       context: .
@@ -24,7 +70,7 @@ services:
     environment:
       <<: *chasecar-env
     volumes:
-      - ./:/workspaces/chasecar:rw
+      - *chasecar-repo-volume
       - chasecar_ws:/root/ros2_ws
     working_dir: /workspaces/chasecar
     command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && sleep infinity"]
@@ -46,7 +92,7 @@ services:
       QT_X11_NO_MITSHM: ${GATE_QT_X11_NO_MITSHM:-1}
       LIBGL_ALWAYS_INDIRECT: ${GATE_LIBGL_ALWAYS_INDIRECT:-1}
     volumes:
-      - ./:/workspaces/chasecar:rw
+      - *chasecar-repo-volume
       - chasecar_ws:/root/ros2_ws
     working_dir: /workspaces/chasecar
     command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/sim_gate.launch.py world:=${CHASECAR_WORLD_FILE:-yolo_test_world_v6_clean_uat.world} headless:=${GATE_HEADLESS:-true} perf_profile:=${GATE_PERF_PROFILE:-compat} inference_device:=${GATE_INFERENCE_DEVICE:-cuda:0}"]
@@ -61,7 +107,7 @@ services:
       <<: *chasecar-env
       CHASECAR_WORLD_FILE: ${WORLD_FILE:-yolo_test_world_v6_clean_uat.world}
     volumes:
-      - ./:/workspaces/chasecar:rw
+      - *chasecar-repo-volume
       - chasecar_ws:/root/ros2_ws
     working_dir: /workspaces/chasecar
     command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && sleep infinity"]
@@ -87,7 +133,7 @@ services:
       QT_X11_NO_MITSHM: ${GATE_QT_X11_NO_MITSHM:-1}
       LIBGL_ALWAYS_INDIRECT: ${GATE_LIBGL_ALWAYS_INDIRECT:-1}
     volumes:
-      - ./:/workspaces/chasecar:rw
+      - *chasecar-repo-volume
       - chasecar_ws:/root/ros2_ws
     working_dir: /workspaces/chasecar
     command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/nav_acquire_plan_track.launch.py use_sim_time:=true include_bridge:=${GATE_INCLUDE_BRIDGE:-true} include_nav2_bringup:=${GATE_INCLUDE_NAV2_BRINGUP:-false} include_cmd_vel_relay:=${GATE_INCLUDE_CMD_VEL_RELAY:-true}"]
@@ -104,7 +150,7 @@ services:
       <<: *chasecar-env
       CHASECAR_BRIDGE_CONTRACT: /workspaces/chasecar/runtime/contracts/isaac_bridge_allowlist.yaml
     volumes:
-      - ./:/workspaces/chasecar:rw
+      - *chasecar-repo-volume
       - chasecar_ws:/root/ros2_ws
     working_dir: /workspaces/chasecar
     command: ["bash", "-lc", "source /opt/ros/${BRIDGE_ROS_DISTRO:-jazzy}/setup.bash && ros2 launch /workspaces/chasecar/launch/sim_isaac_bridge.launch.py allowlist_path:=/workspaces/chasecar/runtime/contracts/isaac_bridge_allowlist.yaml"]
@@ -120,7 +166,7 @@ services:
     environment:
       <<: *chasecar-env
     volumes:
-      - ./:/workspaces/chasecar:rw
+      - *chasecar-repo-volume
       - isaac_cache:/isaac-sim/cache
       - isaac_logs:/isaac-sim/logs
     working_dir: /workspaces/chasecar
@@ -142,7 +188,7 @@ services:
       CHASECAR_SOURCE_PATH: /workspaces/chasecar
       CHASECAR_SIM_LANE: isaac_fidelity
     volumes:
-      - ./:/workspaces/chasecar:rw
+      - *chasecar-repo-volume
       - chasecar_ws:/root/ros2_ws
     working_dir: /workspaces/chasecar
     command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/nav_acquire_plan_track.launch.py use_sim_time:=true include_nav2_bringup:=false"]
@@ -161,12 +207,13 @@ services:
       <<: *chasecar-env
       CHASECAR_UAT_MODE: ${CHASECAR_UAT_MODE:-prepare}
     volumes:
-      - ./:/workspaces/chasecar:rw
+      - *chasecar-repo-volume
       - chasecar_ws:/root/ros2_ws
     working_dir: /workspaces/chasecar
     command: ["bash", "-lc", "bash /workspaces/chasecar/uat/orchestrator/run_uat_orchestrator.sh"]
 
 volumes:
   chasecar_ws:
+    name: chasecar_ws
   isaac_cache:
   isaac_logs:

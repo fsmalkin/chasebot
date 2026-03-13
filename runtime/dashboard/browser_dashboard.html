@@ -3,294 +3,637 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Chasecar Visual Dashboard</title>
+  <title>Chasecar Operator Dashboard</title>
   <style>
     :root {
-      --bg: #eef2f4;
-      --panel: #fbfcfd;
-      --ink: #172026;
-      --muted: #596771;
-      --line: #cfd8de;
-      --ok: #0f8f4b;
-      --warn: #b56f00;
-      --bad: #b42318;
+      --bg: #e7ece7;
+      --bg-accent: #d5ddd4;
+      --panel: rgba(248, 250, 247, 0.92);
+      --panel-strong: rgba(252, 253, 251, 0.98);
+      --ink: #12201b;
+      --muted: #5a6c65;
+      --line: rgba(18, 32, 27, 0.12);
+      --line-strong: rgba(18, 32, 27, 0.22);
+      --ok: #0d8a51;
+      --warn: #9a6500;
+      --bad: #bb2e28;
+      --accent: #174f43;
+      --accent-soft: #edf5f2;
+      --shadow: 0 18px 42px rgba(18, 32, 27, 0.12);
+      --radius: 18px;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Segoe UI", "Tahoma", sans-serif;
-      background: linear-gradient(180deg, #eef2f4 0%, #e1e9ee 100%);
+      min-height: 100vh;
       color: var(--ink);
+      font-family: "Bahnschrift", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(23, 79, 67, 0.14), transparent 28%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-accent) 100%);
     }
-    header {
-      padding: 16px 20px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(251, 252, 253, 0.92);
-      backdrop-filter: blur(8px);
-      position: sticky;
-      top: 0;
-      z-index: 2;
+    a { color: var(--accent); }
+    .shell {
+      display: grid;
+      gap: 18px;
+      padding: 18px;
+    }
+    .masthead {
+      display: grid;
+      gap: 14px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: calc(var(--radius) + 4px);
+      background: linear-gradient(135deg, rgba(248, 250, 247, 0.98), rgba(240, 245, 240, 0.95));
+      box-shadow: var(--shadow);
+    }
+    .masthead-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
     }
     h1 {
-      margin: 0 0 6px;
-      font-size: 24px;
-      font-weight: 700;
+      margin: 0;
+      font-size: clamp(24px, 3vw, 34px);
       letter-spacing: 0.02em;
     }
-    .meta, .status-grid, .debug-grid {
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      max-width: 780px;
+    }
+    .mode-pill {
+      padding: 8px 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: var(--panel-strong);
+    }
+    .status-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
       gap: 10px;
     }
-    .chip, .status {
-      padding: 10px 12px;
+    .status-card {
+      padding: 12px 14px;
       border: 1px solid var(--line);
-      border-radius: 10px;
+      border-radius: 14px;
       background: var(--panel);
     }
-    .chip strong, .status strong {
+    .status-card strong {
       display: block;
-      font-size: 12px;
-      color: var(--muted);
       margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
     }
-    main {
-      padding: 18px;
+    .status-card span {
+      font-size: 14px;
+      font-weight: 600;
+      word-break: break-word;
+    }
+    .layout {
       display: grid;
-      grid-template-columns: 1.7fr 1fr 1fr;
+      grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.95fr);
       gap: 18px;
       align-items: start;
     }
-    .pane, details.debug-panel {
-      background: rgba(251, 252, 253, 0.92);
+    .panel {
       border: 1px solid var(--line);
-      border-radius: 14px;
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
       overflow: hidden;
-      box-shadow: 0 10px 30px rgba(23, 32, 38, 0.08);
     }
-    .pane header {
-      position: static;
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
       border-bottom: 1px solid var(--line);
-      padding: 12px 14px;
-      background: transparent;
-      backdrop-filter: none;
+      background: rgba(255, 255, 255, 0.35);
     }
-    .pane h2 {
+    .panel-head h2 {
       margin: 0;
-      font-size: 15px;
+      font-size: 14px;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
     }
-    .pane img {
+    .panel-body {
+      padding: 16px;
+    }
+    .visual-stack {
+      display: grid;
+      gap: 18px;
+    }
+    .world-image, .camera-image {
       width: 100%;
       display: block;
-      background: #d8dee3;
-      min-height: 240px;
+      background: #ced7cf;
       object-fit: contain;
     }
-    #world-image {
-      min-height: 520px;
-      background: #d6dce1;
+    .world-image {
+      min-height: 420px;
+      max-height: 620px;
     }
-    .foot {
-      padding: 10px 14px 14px;
+    .camera-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+    .camera-image {
+      min-height: 250px;
+    }
+    .controls {
+      display: grid;
+      gap: 18px;
+    }
+    .control-group {
+      display: grid;
+      gap: 12px;
+    }
+    .control-group h3 {
+      margin: 0;
       font-size: 13px;
-      color: var(--muted);
-    }
-    details.debug-panel {
-      margin: 0 18px 18px;
-    }
-    details.debug-panel summary {
-      padding: 12px 14px;
-      cursor: pointer;
-      font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      border-bottom: 1px solid var(--line);
-      list-style: none;
+      letter-spacing: 0.08em;
     }
-    .debug-body {
-      padding: 18px;
+    .control-copy {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .button-row, .field-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    button, select, input {
+      font: inherit;
+    }
+    button, select, input[type="text"], input[type="number"] {
+      border-radius: 12px;
+      border: 1px solid var(--line-strong);
+      background: var(--panel-strong);
+      color: var(--ink);
+    }
+    button {
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+    button:hover:enabled {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 22px rgba(23, 79, 67, 0.14);
+      border-color: rgba(23, 79, 67, 0.34);
+    }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+      box-shadow: none;
+    }
+    .primary {
+      background: linear-gradient(135deg, #174f43, #236857);
+      border-color: #174f43;
+      color: #f7fbf8;
+    }
+    .secondary {
+      background: var(--accent-soft);
+    }
+    .danger {
+      background: rgba(187, 46, 40, 0.10);
+      border-color: rgba(187, 46, 40, 0.34);
+      color: #7f1c18;
+    }
+    select, input[type="text"], input[type="number"] {
+      width: 100%;
+      padding: 10px 12px;
+      min-height: 42px;
+    }
+    .log-line {
+      min-height: 44px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(23, 79, 67, 0.06);
+      border: 1px solid rgba(23, 79, 67, 0.12);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--muted);
     }
     .ok { color: var(--ok); }
     .warn { color: var(--warn); }
     .bad { color: var(--bad); }
-    @media (max-width: 1400px) {
-      main { grid-template-columns: 1fr; }
+    .footnote {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 740px) {
+      .camera-grid { grid-template-columns: 1fr; }
+      .shell { padding: 12px; }
+      .masthead, .panel-body { padding: 14px; }
     }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Chasecar Pre-LLM Visual Dashboard</h1>
-    <div class="meta">
-      <div class="chip"><strong>Session</strong><span id="session-id">waiting</span></div>
-      <div class="chip"><strong>Mode</strong><span id="visual-mode">waiting</span></div>
-      <div class="chip"><strong>Execution Lane</strong><span id="execution-lane">waiting</span></div>
-      <div class="chip"><strong>Runtime Target</strong><span id="runtime-target">waiting</span></div>
-      <div class="chip"><strong>Phase</strong><span id="phase">waiting</span></div>
-      <div class="chip"><strong>Target</strong><span id="target-id">waiting</span></div>
-      <div class="chip"><strong>Transition</strong><span id="target-transition">steady</span></div>
-      <div class="chip"><strong>Status</strong><span id="status-text">waiting</span></div>
-    </div>
-    <div class="status-grid" style="margin-top: 10px;">
-      <div class="status"><strong>World Stream</strong><span id="world-stream-status">waiting</span></div>
-      <div class="status"><strong>Raw Frames</strong><span id="raw-frames">0</span></div>
-      <div class="status"><strong>Debug Frames</strong><span id="debug-frames">0</span></div>
-      <div class="status"><strong>True Target</strong><span id="true-target">waiting</span></div>
-      <div class="status"><strong>Truth Alignment</strong><span id="truth-alignment">waiting</span></div>
-      <div class="status"><strong>Target Visible</strong><span id="target-visible">0.000</span></div>
-      <div class="status"><strong>Overlay Diff</strong><span id="overlay-diff">waiting</span></div>
-      <div class="status"><strong>Telemetry Frames</strong><span id="telemetry-frames">0</span></div>
-    </div>
-  </header>
-  <main>
-    <section class="pane">
-      <header><h2>3D Sim World</h2></header>
-      <img id="world-image" src="live/world_stream.jpg" alt="Streamed Gazebo world">
-      <div class="foot">
-        Real Gazebo 3D world from the same authoritative session.
-        <a id="world-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open interactive Gazebo</a>
+  <div class="shell">
+    <section class="masthead">
+      <div class="masthead-top">
+        <div>
+          <h1>Chasecar Operator Dashboard</h1>
+          <p class="subtitle">Authoritative `container_kilted` control plane for environment lifecycle, preset scenarios, and frozen low-level intents. Docker Desktop can keep the dashboard warm while the session-scoped sim project starts and stops underneath it.</p>
+        </div>
+        <div class="mode-pill" id="api-mode" data-testid="api-mode">Control Mode</div>
+      </div>
+      <div class="status-grid">
+        <div class="status-card"><strong>Session ID</strong><span id="session-id" data-testid="session-id">n/a</span></div>
+        <div class="status-card"><strong>Phase</strong><span id="phase" data-testid="phase">stopped</span></div>
+        <div class="status-card"><strong>Target ID</strong><span id="target-id" data-testid="target-id">n/a</span></div>
+        <div class="status-card"><strong>Target Transition</strong><span id="target-transition" data-testid="target-transition">steady</span></div>
+        <div class="status-card"><strong>Environment</strong><span id="environment-state" data-testid="environment-state">stopped</span></div>
+        <div class="status-card"><strong>Scenario</strong><span id="scenario-state" data-testid="scenario-state">idle</span></div>
+        <div class="status-card"><strong>Last Intent</strong><span id="last-intent" data-testid="last-intent">none</span></div>
+        <div class="status-card"><strong>Last Feedback/Result</strong><span id="last-result" data-testid="last-result">none</span></div>
+        <div class="status-card"><strong>World Stream</strong><span id="world-stream-ready" data-testid="world-stream-ready">waiting</span></div>
+        <div class="status-card"><strong>Truth Alignment</strong><span id="truth-alignment" data-testid="truth-alignment">waiting</span></div>
+        <div class="status-card"><strong>Motion Evidence</strong><span id="motion-evidence" data-testid="motion-evidence">waiting</span></div>
+        <div class="status-card"><strong>Warm Services</strong><span id="warm-services" data-testid="warm-services">n/a</span></div>
+        <div class="status-card"><strong>Compose Project</strong><span id="compose-project" data-testid="compose-project">n/a</span></div>
       </div>
     </section>
-    <section class="pane">
-      <header><h2>Raw Camera</h2></header>
-      <img id="raw-image" src="live/raw_camera.jpg" alt="Raw camera">
-      <div class="foot">Authoritative RGB feed from the live container session.</div>
-    </section>
-    <section class="pane">
-      <header><h2>YOLO Debug</h2></header>
-      <img id="debug-image" src="live/yolo_debug.jpg" alt="YOLO debug">
-      <div class="foot">Detector/debug view. This should visibly diverge from the raw image when detection is active.</div>
-    </section>
-  </main>
-  <details class="debug-panel">
-    <summary>Engineering Telemetry</summary>
-    <div class="debug-body">
-      <div class="debug-grid" style="margin-bottom: 14px;">
-        <div class="status"><strong>Vision vs Truth</strong><span id="vision-truth">waiting</span></div>
-        <div class="status"><strong>Waypoint vs Truth</strong><span id="waypoint-truth">waiting</span></div>
-        <div class="status"><strong>Waypoint vs Vision</strong><span id="waypoint-vision">waiting</span></div>
+
+    <section class="layout">
+      <div class="visual-stack">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>World Surface</h2>
+            <a id="world-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open Interactive Stream</a>
+          </div>
+          <div class="panel-body">
+            <img class="world-image" id="world-image" data-testid="world-image" src="live/world_stream.jpg" alt="World stream">
+            <p class="footnote">The world pane must stay in the same authoritative session as the dashboard state and the scenario artifacts.</p>
+          </div>
+        </article>
+        <div class="camera-grid">
+          <article class="panel">
+            <div class="panel-head"><h2>Raw Camera</h2><span id="raw-count">0 frames</span></div>
+            <div class="panel-body">
+              <img class="camera-image" id="raw-image" data-testid="raw-image" src="live/raw_camera.jpg" alt="Raw camera feed">
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><h2>YOLO Debug</h2><span id="debug-count">0 frames</span></div>
+            <div class="panel-body">
+              <img class="camera-image" id="debug-image" data-testid="debug-image" src="live/yolo_debug.jpg" alt="Debug camera feed">
+            </div>
+          </article>
+        </div>
       </div>
-      <img id="telemetry-image" src="live/topdown_telemetry.jpg" alt="Engineering telemetry">
-      <div class="foot">Debug-only engineering telemetry. This pane is not the primary operator world surface.</div>
-    </div>
-  </details>
+
+      <aside class="controls">
+        <article class="panel">
+          <div class="panel-head"><h2>Environment Controls</h2></div>
+          <div class="panel-body control-group">
+            <p class="control-copy">The dashboard owns one compose project and one active session at a time. `Start`, `Stop`, and `Refresh` always target the authoritative session project instead of the warm launcher services.</p>
+            <div class="button-row">
+              <button class="primary" id="btn-start" data-testid="btn-start">Start</button>
+              <button class="secondary" id="btn-refresh" data-testid="btn-refresh">Refresh</button>
+              <button class="danger" id="btn-stop" data-testid="btn-stop">Stop</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head"><h2>Scenario Controls</h2></div>
+          <div class="panel-body control-group">
+            <p class="control-copy">Only fixed presets are exposed in this pass. `Reset Sim` creates a new session ID while keeping the warm dashboard services alive.</p>
+            <div class="field-row">
+              <select id="scenario-select" data-testid="scenario-select"></select>
+            </div>
+            <div class="button-row">
+              <button class="primary" id="btn-run-scenario" data-testid="btn-run-scenario">Run Scenario</button>
+              <button class="secondary" id="btn-reset-sim" data-testid="btn-reset-sim">Reset Sim</button>
+              <button class="danger" id="btn-stop-scenario" data-testid="btn-stop-scenario">Stop Scenario</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head"><h2>Frozen Intents</h2></div>
+          <div class="panel-body control-group">
+            <p class="control-copy">Frozen low-level intents are accepted only from the published contract. The service launches the in-session publisher inside the active environment and records command history under the current session.</p>
+            <div class="field-row">
+              <input id="target-class" data-testid="target-class" type="text" value="ball" aria-label="Target class">
+              <input id="approach-distance" data-testid="approach-distance" type="number" value="0.25" step="0.05" min="0.05" aria-label="Approach distance">
+            </div>
+            <div class="button-row">
+              <button class="primary" id="btn-acquire-target" data-testid="btn-acquire-target">acquire_target</button>
+              <button class="secondary" id="btn-plan-to-target" data-testid="btn-plan-to-target">plan_to_target</button>
+              <button class="secondary" id="btn-track-target" data-testid="btn-track-target">track_target</button>
+            </div>
+            <div class="button-row">
+              <button class="danger" id="btn-abort" data-testid="btn-abort">abort</button>
+              <button class="danger" id="btn-safe-stop" data-testid="btn-safe-stop">safe_stop</button>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head"><h2>Operator Log</h2></div>
+          <div class="panel-body control-group">
+            <div class="log-line" id="operator-log" data-testid="operator-log">Waiting for dashboard state.</div>
+            <p class="footnote" id="operator-footnote">Legacy visual mode disables controls until the API-backed service is reachable on `127.0.0.1:8860`.</p>
+          </div>
+        </article>
+      </aside>
+    </section>
+  </div>
+
   <script>
-    const ids = {
+    const stateEls = {
+      apiMode: document.getElementById('api-mode'),
       sessionId: document.getElementById('session-id'),
-      visualMode: document.getElementById('visual-mode'),
-      executionLane: document.getElementById('execution-lane'),
-      runtimeTarget: document.getElementById('runtime-target'),
       phase: document.getElementById('phase'),
       targetId: document.getElementById('target-id'),
       targetTransition: document.getElementById('target-transition'),
-      statusText: document.getElementById('status-text'),
-      worldStreamStatus: document.getElementById('world-stream-status'),
-      rawFrames: document.getElementById('raw-frames'),
-      debugFrames: document.getElementById('debug-frames'),
-      telemetryFrames: document.getElementById('telemetry-frames'),
-      trueTarget: document.getElementById('true-target'),
+      environmentState: document.getElementById('environment-state'),
+      scenarioState: document.getElementById('scenario-state'),
+      lastIntent: document.getElementById('last-intent'),
+      lastResult: document.getElementById('last-result'),
+      worldStreamReady: document.getElementById('world-stream-ready'),
       truthAlignment: document.getElementById('truth-alignment'),
-      targetVisible: document.getElementById('target-visible'),
-      overlayDiff: document.getElementById('overlay-diff'),
-      visionTruth: document.getElementById('vision-truth'),
-      waypointTruth: document.getElementById('waypoint-truth'),
-      waypointVision: document.getElementById('waypoint-vision'),
+      motionEvidence: document.getElementById('motion-evidence'),
+      warmServices: document.getElementById('warm-services'),
+      composeProject: document.getElementById('compose-project'),
+      rawCount: document.getElementById('raw-count'),
+      debugCount: document.getElementById('debug-count'),
+      worldLink: document.getElementById('world-link'),
+      operatorLog: document.getElementById('operator-log'),
+      operatorFootnote: document.getElementById('operator-footnote'),
       rawImage: document.getElementById('raw-image'),
       debugImage: document.getElementById('debug-image'),
-      telemetryImage: document.getElementById('telemetry-image'),
-      worldImage: document.getElementById('world-image'),
-      worldLink: document.getElementById('world-link'),
+      worldImage: document.getElementById('world-image')
     };
 
-    function stampSrc(el, path) {
+    const controls = {
+      start: document.getElementById('btn-start'),
+      refresh: document.getElementById('btn-refresh'),
+      stop: document.getElementById('btn-stop'),
+      runScenario: document.getElementById('btn-run-scenario'),
+      resetSim: document.getElementById('btn-reset-sim'),
+      stopScenario: document.getElementById('btn-stop-scenario'),
+      acquireTarget: document.getElementById('btn-acquire-target'),
+      planToTarget: document.getElementById('btn-plan-to-target'),
+      trackTarget: document.getElementById('btn-track-target'),
+      abort: document.getElementById('btn-abort'),
+      safeStop: document.getElementById('btn-safe-stop'),
+      scenarioSelect: document.getElementById('scenario-select'),
+      targetClass: document.getElementById('target-class'),
+      approachDistance: document.getElementById('approach-distance')
+    };
+
+    const fallbackScenarios = [
+      'm2_single_target',
+      'm3_single_target',
+      'm3_center',
+      'm3_left',
+      'm3_right',
+      'multi_target_rehearsal'
+    ];
+
+    let apiMode = true;
+    let cachedScenarios = [];
+
+    function stampImage(el, path) {
       el.src = `${path}?t=${Date.now()}`;
     }
 
-    function statusText(ok, trueText, falseText) {
-      return `<span class="${ok ? 'ok' : 'bad'}">${ok ? trueText : falseText}</span>`;
+    function boolText(value, okText, badText) {
+      return `<span class="${value ? 'ok' : 'bad'}">${value ? okText : badText}</span>`;
     }
 
-    function scalarText(value) {
-      if (value === null || value === undefined || value === '') {
-        return 'n/a';
+    function selectText(value, fallback = 'n/a') {
+      return value === undefined || value === null || value === '' ? fallback : String(value);
+    }
+
+    function populateScenarioOptions(items) {
+      if (!Array.isArray(items) || items.length === 0) {
+        items = fallbackScenarios.map((id) => ({ id, label: id }));
       }
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed.toFixed(3) : String(value);
+      if (cachedScenarios.length === items.length && cachedScenarios.every((item, index) => item.id === items[index].id)) {
+        return;
+      }
+      cachedScenarios = items;
+      const previous = controls.scenarioSelect.value;
+      controls.scenarioSelect.innerHTML = '';
+      items.forEach((item) => {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = item.label || item.id;
+        controls.scenarioSelect.appendChild(option);
+      });
+      if (previous && items.some((item) => item.id === previous)) {
+        controls.scenarioSelect.value = previous;
+      }
+    }
+
+    function renderState(state) {
+      const controlMode = selectText(state.control_mode, 'control');
+      const warmStatus = selectText(state.warm_services_status, 'n/a');
+      stateEls.sessionId.textContent = selectText(state.session_id);
+      stateEls.phase.textContent = selectText(state.phase, 'stopped');
+      stateEls.targetId.textContent = selectText(state.target_id);
+      stateEls.targetTransition.innerHTML = boolText(Boolean(state.target_transition_active), 'active', 'steady');
+      stateEls.environmentState.textContent = selectText(state.environment_state, 'stopped');
+      stateEls.scenarioState.textContent = selectText(state.scenario_state, 'idle');
+      stateEls.lastIntent.textContent = selectText(state.last_intent, 'none');
+      stateEls.lastResult.textContent = selectText(state.last_feedback || state.last_result, 'none');
+      stateEls.composeProject.textContent = selectText(state.compose_project);
+      stateEls.rawCount.textContent = `${Number(state.raw_frame_count || 0)} frames`;
+      stateEls.debugCount.textContent = `${Number(state.debug_frame_count || 0)} frames`;
+      stateEls.worldStreamReady.innerHTML = boolText(Boolean(state.world_stream_ready), 'ready', selectText(state.world_stream_failure_class, 'waiting'));
+      stateEls.truthAlignment.innerHTML = boolText(Boolean(state.truth_alignment_ok), 'aligned', selectText(state.truth_failure_class, 'waiting'));
+      stateEls.motionEvidence.innerHTML = boolText(Boolean(state.motion_evidence), 'true', 'false');
+      if (state.control_mode === 'docker_socket') {
+        stateEls.warmServices.innerHTML = boolText(Boolean(state.warm_services_ready), 'ready', warmStatus);
+      } else {
+        stateEls.warmServices.textContent = warmStatus;
+      }
+      stateEls.operatorLog.textContent = selectText(
+        state.control_plane_error || state.status_text || state.environment_message || state.scenario_message,
+        'Waiting for dashboard state.'
+      );
+      stateEls.operatorFootnote.textContent = apiMode
+        ? (
+            state.control_plane_ready === false
+              ? `Control plane unavailable: ${selectText(state.control_plane_error, 'unknown error')}.`
+              : state.control_mode === 'docker_socket'
+                ? `Launcher mode: ${controlMode}. Warm services: ${warmStatus}.`
+                : 'Host fallback mode is active for engineering use.'
+          )
+        : 'Read-only fallback mode detected. Controls stay disabled until the API-backed service is reachable.';
+
+      if (state.world_stream_url) {
+        stateEls.worldLink.href = state.world_stream_url;
+        stateEls.worldLink.style.display = 'inline';
+      } else {
+        stateEls.worldLink.style.display = 'none';
+      }
+
+      if (apiMode && state.controls) {
+        controls.start.disabled = !state.controls.can_start;
+        controls.refresh.disabled = !state.controls.can_refresh;
+        controls.stop.disabled = !state.controls.can_stop;
+        controls.runScenario.disabled = !state.controls.can_run_scenario;
+        controls.resetSim.disabled = !state.controls.can_reset_sim;
+        controls.stopScenario.disabled = !state.controls.can_stop_scenario;
+        controls.acquireTarget.disabled = !state.controls.can_issue_intent;
+        controls.planToTarget.disabled = !state.controls.can_issue_intent;
+        controls.trackTarget.disabled = !state.controls.can_issue_intent;
+        controls.abort.disabled = !state.controls.can_issue_intent;
+        controls.safeStop.disabled = !state.controls.can_issue_intent;
+        controls.targetClass.disabled = false;
+        controls.approachDistance.disabled = false;
+        controls.scenarioSelect.disabled = false;
+      } else {
+        Object.values(controls).forEach((control) => {
+          if ('disabled' in control) {
+            control.disabled = true;
+          }
+        });
+        controls.targetClass.disabled = true;
+        controls.approachDistance.disabled = true;
+        controls.scenarioSelect.disabled = true;
+      }
+
+      stampImage(stateEls.rawImage, 'live/raw_camera.jpg');
+      stampImage(stateEls.debugImage, 'live/yolo_debug.jpg');
+      stampImage(stateEls.worldImage, 'live/world_stream.jpg');
+    }
+
+    async function fetchJson(path, options = {}) {
+      const response = await fetch(path, {
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      if (!response.ok) {
+        throw new Error(`http_${response.status}`);
+      }
+      return await response.json();
+    }
+
+    async function postJson(path, payload = {}) {
+      const body = JSON.stringify(payload);
+      const response = await fetch(path, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(json.error || `http_${response.status}`);
+      }
+      return json;
+    }
+
+    async function refreshApiState() {
+      const [state, scenarios] = await Promise.all([
+        fetchJson('/api/state'),
+        fetchJson('/api/scenarios').catch(() => ({ scenarios: fallbackScenarios.map((id) => ({ id, label: id })) }))
+      ]);
+      apiMode = true;
+      stateEls.apiMode.textContent = selectText(state.control_mode, 'control');
+      populateScenarioOptions(scenarios.scenarios || []);
+      renderState(state);
+    }
+
+    async function refreshLegacyState() {
+      const [visualState, operatorState, worldState] = await Promise.all([
+        fetchJson(`state.json?t=${Date.now()}`).catch(() => ({})),
+        fetchJson(`operator_status.json?t=${Date.now()}`).catch(() => ({})),
+        fetchJson(`world_stream_state.json?t=${Date.now()}`).catch(() => ({}))
+      ]);
+      apiMode = false;
+      stateEls.apiMode.textContent = 'read_only';
+      populateScenarioOptions([]);
+      renderState({
+        control_mode: 'read_only',
+        control_plane_ready: false,
+        control_plane_error: '',
+        warm_services_status: 'n/a',
+        session_id: operatorState.session_id || visualState.session_id || '',
+        phase: operatorState.phase || visualState.phase || 'visual_only',
+        target_id: operatorState.target_id || visualState.target_id || '',
+        target_transition_active: operatorState.target_transition_active || visualState.target_transition_active || false,
+        environment_state: 'legacy_visual_only',
+        scenario_state: 'external_control',
+        last_intent: '',
+        last_result: '',
+        compose_project: '',
+        raw_frame_count: visualState.raw_frame_count || 0,
+        debug_frame_count: visualState.debug_frame_count || 0,
+        truth_alignment_ok: visualState.truth_alignment_ok || false,
+        truth_failure_class: visualState.truth_failure_class || '',
+        motion_evidence: false,
+        world_stream_ready: worldState.world_stream_ready || false,
+        world_stream_failure_class: worldState.failure_class || '',
+        world_stream_url: worldState.world_stream_url || '',
+        controls: {
+          can_start: false,
+          can_refresh: false,
+          can_stop: false,
+          can_run_scenario: false,
+          can_reset_sim: false,
+          can_stop_scenario: false,
+          can_issue_intent: false
+        }
+      });
     }
 
     async function refreshState() {
-      let state = null;
       try {
-        const response = await fetch(`state.json?t=${Date.now()}`, { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`state_http_${response.status}`);
-        }
-        state = await response.json();
-        ids.sessionId.textContent = state.session_id || 'unknown';
-        ids.visualMode.textContent = state.visual_mode || 'unknown';
-        ids.executionLane.textContent = state.execution_lane || 'unknown';
-        ids.runtimeTarget.textContent = state.runtime_target || 'unknown';
-        ids.phase.textContent = state.phase || 'unspecified';
-        ids.targetId.textContent = state.target_id || 'unspecified';
-        ids.targetTransition.innerHTML = statusText(Boolean(state.target_transition_active), 'active', 'steady');
-        ids.statusText.textContent = state.target_transition_active
-          ? `Transitioning to ${state.target_id || 'next target'}`
-          : `${state.phase || 'phase'} ${state.target_id || 'target'}`;
-        ids.rawFrames.textContent = String(state.raw_frame_count ?? 0);
-        ids.debugFrames.textContent = String(state.debug_frame_count ?? 0);
-        ids.telemetryFrames.textContent = String(state.telemetry_frame_count ?? 0);
-        ids.trueTarget.innerHTML = statusText(Boolean(state.true_target_seen), 'seen', 'not seen');
-        ids.truthAlignment.innerHTML = statusText(Boolean(state.truth_alignment_ok), 'aligned', state.truth_failure_class || 'diverged');
-        ids.targetVisible.textContent = Number(state.target_visible_ratio ?? 0).toFixed(3);
-        ids.overlayDiff.innerHTML = statusText(Boolean(state.overlay_difference_ok), 'ok', 'insufficient');
-        ids.visionTruth.textContent = scalarText(state.vision_vs_truth_m);
-        ids.waypointTruth.textContent = scalarText(state.waypoint_vs_truth_m);
-        ids.waypointVision.textContent = scalarText(state.waypoint_vs_vision_m);
-        stampSrc(ids.rawImage, 'live/raw_camera.jpg');
-        stampSrc(ids.debugImage, 'live/yolo_debug.jpg');
-        stampSrc(ids.telemetryImage, 'live/topdown_telemetry.jpg');
+        await refreshApiState();
       } catch (err) {
-        ids.overlayDiff.innerHTML = '<span class="warn">waiting</span>';
-      }
-
-      try {
-        const operatorResp = await fetch(`operator_status.json?t=${Date.now()}`, { cache: 'no-store' });
-        if (operatorResp.ok) {
-          const operatorState = await operatorResp.json();
-          ids.phase.textContent = operatorState.phase || state?.phase || 'unspecified';
-          ids.targetId.textContent = operatorState.target_id || state?.target_id || 'unspecified';
-          ids.targetTransition.innerHTML = statusText(Boolean(operatorState.target_transition_active), 'active', 'steady');
-          ids.statusText.textContent = operatorState.status_text || `${operatorState.phase || state?.phase || 'phase'} ${operatorState.target_id || state?.target_id || 'target'}`;
-        }
-      } catch (err) {
-      }
-
-      try {
-        const worldResp = await fetch(`world_stream_state.json?t=${Date.now()}`, { cache: 'no-store' });
-        if (!worldResp.ok) {
-          throw new Error(`world_http_${worldResp.status}`);
-        }
-        const worldState = await worldResp.json();
-        const worldReady = Boolean(worldState.world_stream_ready);
-        const worldFailure = worldState.failure_class || 'not_ready';
-        ids.worldStreamStatus.innerHTML = worldReady
-          ? '<span class="ok">ready</span>'
-          : `<span class="bad">${worldFailure}</span>`;
-        stampSrc(ids.worldImage, 'live/world_stream.jpg');
-        if (worldReady && worldState.world_stream_url && Boolean(worldState.world_stream_interactive)) {
-          ids.worldLink.href = worldState.world_stream_url;
-          ids.worldLink.style.display = 'inline';
-        } else {
-          ids.worldLink.style.display = 'none';
-        }
-      } catch (err) {
-        ids.worldStreamStatus.innerHTML = '<span class="warn">waiting</span>';
+        await refreshLegacyState();
       }
     }
+
+    controls.start.addEventListener('click', async () => { await postJson('/api/env/start'); await refreshState(); });
+    controls.refresh.addEventListener('click', async () => { await postJson('/api/env/refresh'); await refreshState(); });
+    controls.stop.addEventListener('click', async () => { await postJson('/api/env/stop'); await refreshState(); });
+    controls.resetSim.addEventListener('click', async () => { await postJson('/api/sim/reset'); await refreshState(); });
+    controls.runScenario.addEventListener('click', async () => {
+      await postJson('/api/scenario/run', { scenario_id: controls.scenarioSelect.value });
+      await refreshState();
+    });
+    controls.stopScenario.addEventListener('click', async () => { await postJson('/api/scenario/stop'); await refreshState(); });
+    controls.acquireTarget.addEventListener('click', async () => {
+      await postJson('/api/intents/acquire_target', { target_class: controls.targetClass.value || 'ball' });
+      await refreshState();
+    });
+    controls.planToTarget.addEventListener('click', async () => {
+      await postJson('/api/intents/plan_to_target', { approach_distance_m: Number(controls.approachDistance.value || 0.25) });
+      await refreshState();
+    });
+    controls.trackTarget.addEventListener('click', async () => { await postJson('/api/intents/track_target'); await refreshState(); });
+    controls.abort.addEventListener('click', async () => { await postJson('/api/intents/abort'); await refreshState(); });
+    controls.safeStop.addEventListener('click', async () => { await postJson('/api/intents/safe_stop'); await refreshState(); });
 
     refreshState();
     setInterval(refreshState, 1000);

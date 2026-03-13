@@ -5,6 +5,7 @@ install/
 log/
 __pycache__/
 *.pyc
+.pytest_cache/
 artifacts/
 runtime/tensorrt/engines/*
 !runtime/tensorrt/engines/.gitkeep
@@ -14,4 +15,9 @@ runtime/tensorrt/calibration/images/*
 !runtime/tensorrt/calibration/images/.gitkeep
 runtime/tensorrt/calibration/*.cache
 runtime/tensorrt/calibration/*.json
+runtime/dashboard/dashboard_service_state.json
+runtime/dashboard/dashboard_session.lock.json
+dashboard_validation/node_modules/
+dashboard_validation/test-results/
+dashboard_validation/playwright-report/
 .env
