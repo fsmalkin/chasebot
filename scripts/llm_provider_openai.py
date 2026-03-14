@@ -43,9 +43,10 @@ def decision_schema(contract: Dict[str, Any]) -> Dict[str, Any]:
             "args": {
                 "type": "object",
                 "additionalProperties": False,
+                "required": ["target_class", "approach_distance_m"],
                 "properties": {
-                    "target_class": {"type": "string", "enum": ["ball"]},
-                    "approach_distance_m": {"type": "number", "enum": [0.25]},
+                    "target_class": {"type": ["string", "null"], "enum": ["ball", None]},
+                    "approach_distance_m": {"type": ["number", "null"], "enum": [0.25, None]},
                 },
             },
             "rationale_short": {"type": "string"},
@@ -80,8 +81,8 @@ def build_openai_request(
         "name": TOOL_NAME,
         "description": (
             "Emit exactly one bounded frozen robot decision. "
-            "Allowed recommendations are acquire_target(ball), plan_to_target(0.25), "
-            "track_target(), abort(), safe_stop(), or blocked."
+            "Allowed recommendations are search_for_target(ball), acquire_target(ball), "
+            "plan_to_target(0.25), track_target(), abort(), safe_stop(), or blocked."
         ),
         "strict": True,
         "parameters": decision_schema(contract),

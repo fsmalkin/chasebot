@@ -207,7 +207,7 @@ def main() -> int:
     actions_expected = [str(a) for a in list(boundary.get("actions", []))]
     services_expected = [str(s) for s in list(boundary.get("services", []))]
 
-    required_intents = {"acquire_target", "plan_to_target", "track_target", "abort", "safe_stop"}
+    required_intents = {"search_for_target", "acquire_target", "plan_to_target", "track_target", "abort", "safe_stop"}
     available_intents = {str(intent.get("name", "")) for intent in intents}
     required_intents_present = required_intents.issubset(available_intents)
 

@@ -46,6 +46,7 @@ DEFAULT_NAV2_CONFIG = "ros2_config/config/nav2_readiness_fidelity.yaml"
 TARGET_MODEL_SDF = "ros2_config/frisbee_target_ball.sdf"
 TARGET_MODEL_NAME_NAV2 = "uat_nav2_target"
 TARGET_MODEL_NAME_SNAPSHOT = "uat_snapshot_target"
+TARGET_MODEL_NAME_PROOF = "llm_turn_then_go_target"
 DEFAULT_CONTROL_MODE = "host_powershell"
 DEFAULT_SIM_LANE = "jetty_gate"
 DEFAULT_BRIDGE_ROS_DISTRO = "jazzy"
@@ -684,6 +685,7 @@ class DashboardController:
 
         visual_dir = self._current_visual_dir()
         visual_state = read_json(visual_dir / "state.json") if visual_dir else {}
+        brain_state = read_json(visual_dir / "brain_state.json") if visual_dir else {}
         operator_state = read_json(visual_dir / "operator_status.json") if visual_dir else {}
         world_state = read_json(visual_dir / "world_stream_state.json") if visual_dir else {}
         truth_state = read_json(visual_dir / "truth_state.json") if visual_dir else {}
@@ -746,6 +748,18 @@ class DashboardController:
             "phase": snapshot.get("phase", ""),
             "target_id": snapshot.get("target_id", ""),
             "target_transition_active": bool(snapshot.get("target_transition_active", False)),
+        }
+        brain = {
+            "search_active": bool(brain_state.get("search_active", False)),
+            "search_state": str(brain_state.get("search_state", "idle") or "idle"),
+            "search_rotation_accum_rad": float(brain_state.get("search_rotation_accum_rad", 0.0) or 0.0),
+            "target_visible_recent": bool(brain_state.get("target_visible_recent", False)),
+            "target_locked": bool(brain_state.get("target_locked", False)),
+            "target_locked_class": str(brain_state.get("target_locked_class", "") or ""),
+            "track_active": bool(brain_state.get("track_active", False)),
+            "goal_in_progress": bool(brain_state.get("goal_in_progress", False)),
+            "last_feedback_text": str(brain_state.get("last_feedback_text", "") or ""),
+            "last_goal_dispatched_utc": str(brain_state.get("last_goal_dispatched_utc", "") or ""),
         }
         decision = {
             "available_intents": sorted(self.frozen_intents.keys()),
@@ -813,6 +827,7 @@ class DashboardController:
 
         snapshot["perception"] = perception
         snapshot["belief"] = belief
+        snapshot["brain"] = brain
         snapshot["decision"] = decision
         snapshot["outcome"] = outcome
         snapshot["demo_story"] = demo_story
@@ -1122,6 +1137,8 @@ class DashboardController:
         return payload.get("intent") == intent_name and payload.get("args") == args_payload
 
     def _intent_expected_activity(self, intent_name: str) -> list[str]:
+        if intent_name == "search_for_target":
+            return ["turn-in-place cmd_vel activity", "feedback on /chasecar/brain/feedback"]
         if intent_name == "acquire_target":
             return ["feedback on /chasecar/brain/feedback", "fresh detection/odom boundary activity"]
         if intent_name == "plan_to_target":
@@ -1137,6 +1154,7 @@ class DashboardController:
     def _intent_readiness_snapshot(self, intent_name: str, state: Dict[str, Any]) -> Dict[str, Any]:
         perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
         belief = state.get("belief", {}) if isinstance(state.get("belief"), dict) else {}
+        brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
         outcome = state.get("outcome", {}) if isinstance(state.get("outcome"), dict) else {}
 
         readiness = {
@@ -1147,13 +1165,16 @@ class DashboardController:
             "detection_seen": bool(perception.get("detection_topic_seen", False)),
             "target_visible_now": bool(perception.get("target_visible_now", False)),
             "robot_pose_available": bool(belief.get("robot_pose_available", False)),
+            "target_locked": bool(brain.get("target_locked", False)),
             "nav_goal_recent": bool(outcome.get("nav_goal_recent", False)),
             "feedback_recent": bool(outcome.get("feedback_recent", False)),
             "cmd_vel_recent": bool(outcome.get("cmd_vel_recent", False)),
         }
 
         required_keys = ["control_plane_ready", "environment_ready", "session_active", "sim_gate_ready"]
-        if intent_name in {"acquire_target", "plan_to_target", "track_target"}:
+        if intent_name == "search_for_target":
+            required_keys.append("robot_pose_available")
+        elif intent_name in {"acquire_target", "plan_to_target", "track_target"}:
             required_keys.extend(["detection_seen", "robot_pose_available"])
         missing = [name for name in required_keys if not readiness.get(name, False)]
         readiness["required_keys"] = required_keys
@@ -1267,6 +1288,7 @@ class DashboardController:
         env.setdefault("GATE_INCLUDE_NAV2_BRINGUP", "true")
         env.setdefault("GATE_INCLUDE_BRIDGE", "false")
         env.setdefault("GATE_INCLUDE_CMD_VEL_RELAY", "true")
+        env.setdefault("GATE_INCLUDE_BRAIN_EXECUTOR", "true")
         env.setdefault("GATE_PERF_PROFILE", DEFAULT_GATE_PROFILE)
         env.setdefault("GATE_INFERENCE_DEVICE", DEFAULT_INFERENCE_DEVICE)
         if self.host_repo_mount_source:
@@ -1429,6 +1451,9 @@ class DashboardController:
         env = self._compose_env()
         env["GAZEBO_PARTITION"] = session_id
         env["WORLD_STREAM_PORT"] = str(world_stream_port)
+        env["CHASECAR_SESSION_ID"] = session_id
+        env["CHASECAR_BRAIN_STATE_PATH"] = to_container_repo_path(SESSION_ROOT / session_id / "visual" / "brain_state.json")
+        env["CHASECAR_BRAIN_FEEDBACK_PATH"] = to_container_repo_path(SESSION_ROOT / session_id / "visual" / "brain_feedback.jsonl")
         return env
 
     def _refresh_session_container_ids(self, project_name: str) -> None:

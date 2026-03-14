@@ -118,10 +118,15 @@ class IntentProbeNode(Node):
         self.cmd_vel_count += 1
 
 
-def wait_for_data(node: IntentProbeNode, timeout_s: float) -> Dict[str, bool]:
+def wait_for_data(node: IntentProbeNode, intent_name: str, timeout_s: float) -> Dict[str, bool]:
     deadline = time.monotonic() + max(timeout_s, 0.1)
     while time.monotonic() < deadline and rclpy.ok():
-        if node.detection_count > 0 and node.odom_count > 0:
+        if intent_name == "search_for_target":
+            if node.odom_count > 0:
+                break
+        elif intent_name in {"abort", "safe_stop"}:
+            break
+        elif node.detection_count > 0 and node.odom_count > 0:
             break
         rclpy.spin_once(node, timeout_sec=0.1)
     return {
@@ -176,7 +181,7 @@ def main() -> int:
     rclpy.init()
     node = IntentProbeNode(use_sim_time=args.use_sim_time)
     node.subscribe(detection_topic=detection_topic, odom_topic=odom_topic, feedback_topic=feedback_topic)
-    readiness = wait_for_data(node, timeout_s=args.wait_timeout_s)
+    readiness = wait_for_data(node, args.intent, timeout_s=args.wait_timeout_s)
 
     publisher = node.create_publisher(String, command_topic, 20)
     payload = {

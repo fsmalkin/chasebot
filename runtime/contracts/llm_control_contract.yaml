@@ -1,4 +1,4 @@
-version: 8
+version: 9
 contract_status: frozen_pre_llm
 frozen_on_utc: "2026-03-11T00:00:00Z"
 freeze_basis:
@@ -13,6 +13,11 @@ freeze_basis:
   isaac_bridge_allowlist_version: 1
 
 intents:
+  - name: search_for_target
+    description: "Rotate in place until the requested target becomes visible and locked."
+    required_args:
+      - target_class
+    default_timeout_s: 30
   - name: acquire_target
     description: "Acquire and lock a target from current perception stream."
     required_args:

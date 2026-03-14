@@ -150,6 +150,9 @@ services:
     environment:
       <<: *chasecar-env
       CHASECAR_SOURCE_PATH: /workspaces/chasecar
+      CHASECAR_SESSION_ID: ${CHASECAR_SESSION_ID:-}
+      CHASECAR_BRAIN_STATE_PATH: ${CHASECAR_BRAIN_STATE_PATH:-}
+      CHASECAR_BRAIN_FEEDBACK_PATH: ${CHASECAR_BRAIN_FEEDBACK_PATH:-}
       GATE_DISPLAY_MODE: ${GATE_DISPLAY_MODE:-auto}
       DISPLAY: ${GATE_DISPLAY:-}
       QT_QPA_PLATFORM: ${GATE_QPA_PLATFORM:-xcb}
@@ -159,7 +162,7 @@ services:
       - *chasecar-repo-volume
       - chasecar_ws:/root/ros2_ws
     working_dir: /workspaces/chasecar
-    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/nav_acquire_plan_track.launch.py use_sim_time:=true include_bridge:=${GATE_INCLUDE_BRIDGE:-true} include_nav2_bringup:=${GATE_INCLUDE_NAV2_BRINGUP:-false} include_cmd_vel_relay:=${GATE_INCLUDE_CMD_VEL_RELAY:-true}"]
+    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && export CHASECAR_SOURCE_PATH=/workspaces/chasecar && ros2 launch /workspaces/chasecar/launch/nav_acquire_plan_track.launch.py use_sim_time:=true include_bridge:=${GATE_INCLUDE_BRIDGE:-true} include_nav2_bringup:=${GATE_INCLUDE_NAV2_BRINGUP:-false} include_cmd_vel_relay:=${GATE_INCLUDE_CMD_VEL_RELAY:-true} include_brain_executor:=${GATE_INCLUDE_BRAIN_EXECUTOR:-false}"]
 
   bridge-jazzy:
     build:

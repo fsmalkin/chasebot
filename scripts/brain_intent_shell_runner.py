@@ -231,7 +231,7 @@ def main() -> int:
     boundary = dict(contract.get("low_level_boundary", {}))
     freeze_basis = dict(contract.get("freeze_basis", {}))
 
-    required_sequence = ["acquire_target", "plan_to_target", "track_target", "safe_stop"]
+    required_sequence = ["search_for_target", "acquire_target", "plan_to_target", "track_target", "safe_stop"]
     intents_by_name = {str(intent.get("name", "")): intent for intent in intents}
     required_intents_present = all(name in intents_by_name for name in required_sequence)
 

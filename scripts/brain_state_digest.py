@@ -9,6 +9,7 @@ from typing import Any, Dict
 
 
 CANONICAL_ARGS_BY_INTENT: dict[str, dict[str, object]] = {
+    "search_for_target": {"target_class": "ball"},
     "acquire_target": {"target_class": "ball"},
     "plan_to_target": {"approach_distance_m": 0.25},
     "track_target": {},
@@ -21,6 +22,7 @@ def capability_limits() -> Dict[str, list[str]]:
     return {
         "has_now": [
             "perception from the current target pipeline",
+            "bounded search-turn until a target becomes visible",
             "goal creation and motion execution through the frozen control path",
             "track, abort, and safe_stop through the fixed intent boundary",
         ],
@@ -95,6 +97,10 @@ def _gate_hints(state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     boundary_seen = _clean_bool(outcome.get("boundary_activity_seen"))
 
     return {
+        "search_for_target": {
+            "ready": environment_ready and bool(belief.get("latest_robot_pose")),
+            "summary": "Use search_for_target(ball) when the environment is ready but the target is not yet visible.",
+        },
         "acquire_target": {
             "ready": environment_ready and target_visible,
             "summary": "Target should be visible before acquire_target(ball).",
@@ -167,6 +173,12 @@ def build_state_digest(state: Dict[str, Any], contract: Dict[str, Any]) -> Dict[
             "latest_goal_pose": _clean_pose(belief.get("latest_goal_pose")),
             "latest_target_distance_m": _clean_number(belief.get("latest_target_distance_m")),
             "distance_trend": _clean_text(belief.get("distance_trend"), "unknown"),
+        },
+        "brain": {
+            "search_state": _clean_text(state.get("brain", {}).get("search_state") if isinstance(state.get("brain"), dict) else "", "unknown"),
+            "target_locked": _clean_bool(state.get("brain", {}).get("target_locked") if isinstance(state.get("brain"), dict) else False),
+            "goal_in_progress": _clean_bool(state.get("brain", {}).get("goal_in_progress") if isinstance(state.get("brain"), dict) else False),
+            "track_active": _clean_bool(state.get("brain", {}).get("track_active") if isinstance(state.get("brain"), dict) else False),
         },
         "outcome": {
             "motion_evidence": _clean_bool(state.get("motion_evidence")),

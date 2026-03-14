@@ -19,6 +19,20 @@ from rclpy.node import Node
 from rclpy.qos import QoSPresetProfiles
 
 
+def yaw_from_quaternion(q) -> float:
+    siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+    cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
+def normalize_angle(value: float) -> float:
+    while value > math.pi:
+        value -= 2.0 * math.pi
+    while value < -math.pi:
+        value += 2.0 * math.pi
+    return value
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Capture cmd_vel and odom motion evidence.")
     parser.add_argument("--duration-s", type=float, default=90.0, help="Sampling window in seconds.")
@@ -44,6 +58,10 @@ class MotionProbe(Node):
         self.detection_count = 0
         self.odom_start: Optional[Tuple[float, float, float]] = None
         self.odom_end: Optional[Tuple[float, float, float]] = None
+        self.odom_start_yaw: Optional[float] = None
+        self.odom_end_yaw: Optional[float] = None
+        self._last_yaw: Optional[float] = None
+        self.cumulative_yaw_change_rad = 0.0
 
         qos = QoSPresetProfiles.SENSOR_DATA.value
         self._probe_subs = []
@@ -129,9 +147,15 @@ class MotionProbe(Node):
     def _on_odom(self, msg: Odometry) -> None:
         p = msg.pose.pose.position
         pose = (float(p.x), float(p.y), float(p.z))
+        yaw = yaw_from_quaternion(msg.pose.pose.orientation)
         if self.odom_start is None:
             self.odom_start = pose
+            self.odom_start_yaw = yaw
+        if self._last_yaw is not None:
+            self.cumulative_yaw_change_rad += abs(normalize_angle(yaw - self._last_yaw))
+        self._last_yaw = yaw
         self.odom_end = pose
+        self.odom_end_yaw = yaw
         self.odom_count += 1
 
     def _on_detection_stamped(self, _msg: PointStamped) -> None:
@@ -165,11 +189,14 @@ def main() -> int:
             "y": float(node.odom_start[1]) if node.odom_start else 0.0,
             "z": float(node.odom_start[2]) if node.odom_start else 0.0,
         },
+        "odom_start_yaw_rad": float(node.odom_start_yaw) if node.odom_start_yaw is not None else 0.0,
         "odom_end": {
             "x": float(node.odom_end[0]) if node.odom_end else 0.0,
             "y": float(node.odom_end[1]) if node.odom_end else 0.0,
             "z": float(node.odom_end[2]) if node.odom_end else 0.0,
         },
+        "odom_end_yaw_rad": float(node.odom_end_yaw) if node.odom_end_yaw is not None else 0.0,
+        "cumulative_yaw_change_rad": float(node.cumulative_yaw_change_rad),
         "odom_displacement_m": float(displacement),
         "detection_message_count": int(node.detection_count),
     }
@@ -188,6 +215,9 @@ def main() -> int:
     print(f"ODOM_END_X={result['odom_end']['x']:.6f}")
     print(f"ODOM_END_Y={result['odom_end']['y']:.6f}")
     print(f"ODOM_END_Z={result['odom_end']['z']:.6f}")
+    print(f"ODOM_START_YAW_RAD={result['odom_start_yaw_rad']:.6f}")
+    print(f"ODOM_END_YAW_RAD={result['odom_end_yaw_rad']:.6f}")
+    print(f"CUMULATIVE_YAW_CHANGE_RAD={result['cumulative_yaw_change_rad']:.6f}")
     print(f"ODOM_DISPLACEMENT_M={result['odom_displacement_m']:.6f}")
     print(f"DETECTION_MESSAGE_COUNT={result['detection_message_count']}")
 

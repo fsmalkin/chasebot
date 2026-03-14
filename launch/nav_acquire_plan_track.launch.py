@@ -65,11 +65,15 @@ def _build_actions(context):
     source_root = _resolve_source_root()
     nav_bridge_path = os.path.join(source_root, "ros2_scripts", "yolo_3d_to_nav2_bridge.py")
     cmd_vel_relay_path = os.path.join(source_root, "ros2_scripts", "cmd_vel_relay.py")
+    brain_executor_path = os.path.join(source_root, "scripts", "brain_intent_executor.py")
+    brain_state_path = os.environ.get("CHASECAR_BRAIN_STATE_PATH", "").strip()
+    brain_feedback_path = os.environ.get("CHASECAR_BRAIN_FEEDBACK_PATH", "").strip()
 
     use_sim_time = LaunchConfiguration("use_sim_time").perform(context)
     include_bridge = _as_bool(LaunchConfiguration("include_bridge").perform(context))
     include_nav2_bringup = _as_bool(LaunchConfiguration("include_nav2_bringup").perform(context))
     include_cmd_vel_relay = _as_bool(LaunchConfiguration("include_cmd_vel_relay").perform(context))
+    include_brain_executor = _as_bool(LaunchConfiguration("include_brain_executor").perform(context))
 
     actions = [
         LogInfo(msg=["[nav_lane] source root: ", source_root]),
@@ -88,6 +92,15 @@ def _build_actions(context):
             f"-p use_sim_time:={use_sim_time}"
         )
         actions.append(ExecuteProcess(cmd=["bash", "-lc", relay_cmd], output="screen"))
+
+    if include_brain_executor:
+        brain_cmd = [f"python3 {shlex.quote(brain_executor_path)}"]
+        if brain_state_path:
+            brain_cmd.append(f"--state-json {shlex.quote(brain_state_path)}")
+        if brain_feedback_path:
+            brain_cmd.append(f"--feedback-jsonl {shlex.quote(brain_feedback_path)}")
+        brain_cmd.append("--use-sim-time" if _as_bool(use_sim_time) else "--no-use-sim-time")
+        actions.append(ExecuteProcess(cmd=["bash", "-lc", " ".join(brain_cmd)], output="screen"))
 
     if include_nav2_bringup:
         nav_launch = _resolve_nav_launch(source_root)
@@ -113,6 +126,7 @@ def generate_launch_description() -> LaunchDescription:
             DeclareLaunchArgument("include_bridge", default_value="true"),
             DeclareLaunchArgument("include_nav2_bringup", default_value="false"),
             DeclareLaunchArgument("include_cmd_vel_relay", default_value="true"),
+            DeclareLaunchArgument("include_brain_executor", default_value="false"),
             IncludeLaunchDescription(PythonLaunchDescriptionSource(perception_launch)),
             OpaqueFunction(function=_build_actions),
         ]
