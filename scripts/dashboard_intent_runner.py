@@ -36,6 +36,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--intent", required=True, help="Frozen intent name.")
     parser.add_argument("--args-json", default="{}", help="JSON object with intent args.")
     parser.add_argument("--output", required=True, help="Output JSON summary path.")
+    parser.add_argument("--seq", type=int, default=0, help="Optional fixed sequence number for the published payload.")
+    parser.add_argument("--planner", default="dashboard_service", help="Planner label to embed in the published payload.")
+    parser.add_argument("--timestamp-utc", default="", help="Optional fixed UTC timestamp for the published payload.")
     parser.add_argument("--wait-timeout-s", type=float, default=12.0, help="Readiness timeout in seconds.")
     parser.add_argument("--observe-time-s", type=float, default=3.0, help="Observation window after publish.")
     parser.add_argument(
@@ -178,9 +181,9 @@ def main() -> int:
     publisher = node.create_publisher(String, command_topic, 20)
     payload = {
         "intent": args.intent,
-        "seq": int(time.time() * 1000),
-        "planner": "dashboard_service",
-        "timestamp_utc": utc_now(),
+        "seq": int(args.seq or int(time.time() * 1000)),
+        "planner": str(args.planner or "dashboard_service"),
+        "timestamp_utc": str(args.timestamp_utc or utc_now()),
         "args": provided_args,
     }
 

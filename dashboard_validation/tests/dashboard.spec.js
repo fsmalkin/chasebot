@@ -55,7 +55,7 @@ test.describe.serial('dashboard operator flow', () => {
     await page.goto('/');
     await ensureStopped(page);
 
-    await page.getByTestId('btn-start').click();
+    await page.getByTestId('btn-next-step').click();
     await observeStateTransition(page, 'environment_state', 'starting', 'environment_ready', 5 * 60 * 1000);
     await expect(page.getByTestId('environment-state')).toHaveText('environment_ready');
 
@@ -63,7 +63,7 @@ test.describe.serial('dashboard operator flow', () => {
     await observeStateTransition(page, 'environment_state', 'stopping', 'stopped', 3 * 60 * 1000);
     await expect(page.getByTestId('environment-state')).toHaveText('stopped');
 
-    await page.getByTestId('btn-start').click();
+    await page.getByTestId('btn-next-step').click();
     await observeStateTransition(page, 'environment_state', 'starting', 'environment_ready', 5 * 60 * 1000);
     await expect(page.getByTestId('environment-state')).toHaveText('environment_ready');
   });
@@ -82,14 +82,15 @@ test.describe.serial('dashboard operator flow', () => {
     );
     expect(resetState.session_id).not.toBe(oldSession);
 
-    await page.getByTestId('scenario-select').selectOption('m3_single_target');
-    await page.getByTestId('btn-run-scenario').click();
+    await page.getByTestId('btn-demo-m3_single_target').click();
     await waitForCondition(page, (state) => state.scenario_state === 'running', 30_000, 'Scenario did not enter running state.');
     await expect(page.getByTestId('phase')).toHaveText(/M3/);
     await expect(page.getByTestId('target-id')).toHaveText(/single_target/);
 
     await waitForImageLoaded(page, 'world-image');
+    await page.getByTestId('camera-tab-raw').click();
     await waitForImageLoaded(page, 'raw-image');
+    await page.getByTestId('camera-tab-debug').click();
     await waitForImageLoaded(page, 'debug-image');
 
     const finalState = await waitForCondition(
@@ -104,8 +105,7 @@ test.describe.serial('dashboard operator flow', () => {
   test('multi-target rehearsal surfaces transition state', async ({ page }) => {
     await page.goto('/');
 
-    await page.getByTestId('scenario-select').selectOption('multi_target_rehearsal');
-    await page.getByTestId('btn-run-scenario').click();
+    await page.getByTestId('btn-demo-multi_target_rehearsal').click();
     await waitForCondition(page, (state) => state.scenario_state === 'running', 30_000, 'Multi-target scenario did not start.');
 
     await waitForCondition(
@@ -126,6 +126,7 @@ test.describe.serial('dashboard operator flow', () => {
 
   test('intent controls update status strip', async ({ page }) => {
     await page.goto('/');
+    await page.getByTestId('advanced-toggle').click();
     await expect(page.getByTestId('btn-acquire-target')).toBeEnabled();
 
     await page.getByTestId('btn-acquire-target').click();

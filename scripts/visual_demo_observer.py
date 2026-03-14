@@ -21,6 +21,7 @@ from nav_msgs.msg import Odometry
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, QoSPresetProfiles, ReliabilityPolicy
 from sensor_msgs.msg import Image
+from std_msgs.msg import String
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,6 +41,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--detection-topic", default="/yolo/ball_position_3d")
     parser.add_argument("--goal-topic", default="/chasecar/nav_goal_pose")
     parser.add_argument("--goal-fallback-topic", default="/goal_pose")
+    parser.add_argument("--feedback-topic", default="/chasecar/brain/feedback")
+    parser.add_argument("--operator-status-path", default="")
     parser.add_argument("--truth-state-path", default="")
     parser.add_argument("--odom-topic", default="/odom")
     parser.add_argument("--cmd-vel-topic-primary", default="/jetbot_base_controller/cmd_vel")
@@ -146,6 +149,7 @@ class VisualDemoObserver(Node):
         self.live_dir = visual_dir / "live"
         self.keyframes_dir = visual_dir / "keyframes"
         self.truth_state_path = Path(args.truth_state_path).resolve() if args.truth_state_path else None
+        self.operator_status_path = Path(args.operator_status_path).resolve() if args.operator_status_path else (visual_dir / "operator_status.json")
         self.live_dir.mkdir(parents=True, exist_ok=True)
         self.keyframes_dir.mkdir(parents=True, exist_ok=True)
 
@@ -168,6 +172,7 @@ class VisualDemoObserver(Node):
         self.create_subscription(PoseStamped, args.goal_topic, self._on_goal, default_qos)
         if args.goal_fallback_topic and args.goal_fallback_topic != args.goal_topic:
             self.create_subscription(PoseStamped, args.goal_fallback_topic, self._on_goal, default_qos)
+        self.create_subscription(String, args.feedback_topic, self._on_feedback, default_qos)
         self.create_subscription(Odometry, args.odom_topic, self._on_odom, sensor_qos)
         self.create_subscription(Odometry, "/model/jetbot/odometry", self._on_odom, sensor_qos)
         self.create_subscription(Odometry, "/jetbot_base_controller/odom", self._on_odom, sensor_qos)
@@ -181,7 +186,9 @@ class VisualDemoObserver(Node):
         self.latest_detection_local: Optional[PointStamped] = None
         self.latest_goal: Optional[PoseStamped] = None
         self.latest_goal_source: str = ""
+        self.latest_feedback_text = ""
         self.cmd_vel_count = 0
+        self.feedback_count = 0
 
         self.raw_frame_count = 0
         self.debug_frame_count = 0
@@ -197,6 +204,8 @@ class VisualDemoObserver(Node):
         self.first_pose: Optional[Pose2D] = None
         self.latest_pose: Optional[Pose2D] = None
         self.timeline: list[dict[str, object]] = []
+        self.timeline_events: list[dict[str, object]] = []
+        self._event_keys: set[str] = set()
         self.distance_history: list[tuple[float, float]] = []
         self.detection_world_history: list[tuple[float, float]] = []
         self.vision_truth_deltas: list[float] = []
@@ -204,12 +213,18 @@ class VisualDemoObserver(Node):
         self.waypoint_vision_deltas: list[float] = []
         self.started_monotonic = time.monotonic()
         self.last_keyframe_written = 0.0
+        self.last_detection_monotonic = 0.0
+        self.last_goal_monotonic = 0.0
+        self.last_cmd_vel_monotonic = 0.0
+        self.last_feedback_monotonic = 0.0
+        self._last_transition_active = False
         self.finalized = False
 
         self.raw_video_path = visual_dir / "raw_camera.mp4"
         self.debug_video_path = visual_dir / "yolo_debug.mp4"
         self.topdown_video_path = visual_dir / "topdown_telemetry.mp4"
         self.timeline_path = visual_dir / "timeline.json"
+        self.timeline_events_path = visual_dir / "timeline_events.jsonl"
         self.summary_path = visual_dir / "visual_demo_summary.json"
         self.state_path = visual_dir / "state.json"
 
@@ -233,10 +248,33 @@ class VisualDemoObserver(Node):
 
     def _on_detection(self, msg: PointStamped) -> None:
         self.latest_detection_local = msg
+        self.last_detection_monotonic = time.monotonic()
 
     def _on_goal(self, msg: PoseStamped) -> None:
         self.latest_goal = msg
         self.latest_goal_source = msg.header.frame_id or "goal_topic"
+        self.last_goal_monotonic = time.monotonic()
+        self._record_event(
+            "nav_goal_observed",
+            f"goal:{float(msg.pose.position.x):.3f}:{float(msg.pose.position.y):.3f}:{self.latest_goal_source}",
+            {
+                "goal_pose": {
+                    "x": round(float(msg.pose.position.x), 6),
+                    "y": round(float(msg.pose.position.y), 6),
+                    "frame_id": self.latest_goal_source,
+                }
+            },
+        )
+
+    def _on_feedback(self, msg: String) -> None:
+        self.feedback_count += 1
+        self.latest_feedback_text = msg.data
+        self.last_feedback_monotonic = time.monotonic()
+        self._record_event(
+            "feedback_observed",
+            f"feedback:{self.feedback_count}:{msg.data[:96]}",
+            {"feedback": msg.data[:240]},
+        )
 
     def _on_odom(self, msg: Odometry) -> None:
         self.latest_odom = msg
@@ -244,10 +282,57 @@ class VisualDemoObserver(Node):
     def _on_cmd_vel_stamped(self, msg: TwistStamped) -> None:
         _ = msg
         self.cmd_vel_count += 1
+        self.last_cmd_vel_monotonic = time.monotonic()
 
     def _on_cmd_vel(self, msg: Twist) -> None:
         _ = msg
         self.cmd_vel_count += 1
+        self.last_cmd_vel_monotonic = time.monotonic()
+
+    def _record_event(self, event_type: str, unique_key: str, details: Optional[dict[str, object]] = None) -> None:
+        if unique_key in self._event_keys:
+            return
+        self._event_keys.add(unique_key)
+        payload: dict[str, object] = {
+            "event_type": event_type,
+            "t_s": round(time.monotonic() - self.started_monotonic, 3),
+            "timestamp_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        if details:
+            payload.update(details)
+        self.timeline_events.append(payload)
+
+    def _load_operator_status(self) -> dict[str, object]:
+        if not self.operator_status_path.exists():
+            return {}
+        try:
+            payload = json.loads(self.operator_status_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _operator_state(self) -> dict[str, object]:
+        state = self._load_operator_status()
+        return {
+            "phase": str(state.get("phase") or self.args.phase or ""),
+            "target_id": str(state.get("target_id") or self.args.target_id or ""),
+            "target_transition_active": bool(state.get("target_transition_active", self.args.target_transition_active)),
+            "status_text": str(state.get("status_text") or ""),
+        }
+
+    def _distance_trend(self) -> tuple[str, Optional[float]]:
+        if len(self.distance_history) < 2:
+            return "unknown", None
+        chart = self.distance_history[-12:]
+        delta = float(chart[0][1] - chart[-1][1])
+        if delta >= 0.05:
+            return "shrinking", delta
+        if delta <= -0.05:
+            return "growing", delta
+        return "flat", delta
+
+    def _recent(self, last_seen_monotonic: float, *, window_s: float = 3.0) -> bool:
+        return last_seen_monotonic > 0.0 and (time.monotonic() - last_seen_monotonic) <= window_s
 
     def _pose_from_odom(self) -> Optional[Pose2D]:
         if self.latest_odom is None:
@@ -313,10 +398,31 @@ class VisualDemoObserver(Node):
         frame = np.full((height, width, 3), 250, dtype=np.uint8)
         cv2.rectangle(frame, (0, 0), (width - 1, height - 1), (205, 210, 220), 2)
 
+        operator_state = self._operator_state()
+        phase = str(operator_state.get("phase", ""))
+        target_id = str(operator_state.get("target_id", ""))
+        target_transition_active = bool(operator_state.get("target_transition_active", False))
+        status_text = str(operator_state.get("status_text", ""))
         pose = self._pose_from_odom()
         detection_world = self._transform_detection_world()
         goal = self.latest_goal
         truth_target = self._truth_target_world()
+        distance_trend, distance_progress = self._distance_trend()
+        target_visible_now = self._recent(self.last_detection_monotonic, window_s=2.5)
+        nav_goal_recent = self._recent(self.last_goal_monotonic, window_s=4.0)
+        feedback_recent = self._recent(self.last_feedback_monotonic, window_s=5.0)
+        cmd_vel_recent = self._recent(self.last_cmd_vel_monotonic, window_s=3.0)
+        capability_stage = "WAIT"
+        if target_transition_active or phase == "multi_target_rehearsal":
+            capability_stage = "MULTI-STEP"
+        elif feedback_recent and ("abort" in self.latest_feedback_text.lower() or "stop" in self.latest_feedback_text.lower()):
+            capability_stage = "INTERRUPT"
+        elif cmd_vel_recent and nav_goal_recent:
+            capability_stage = "ACT"
+        elif nav_goal_recent:
+            capability_stage = "PLAN"
+        elif target_visible_now:
+            capability_stage = "SEE"
 
         world_points: list[tuple[float, float]] = []
         if pose:
@@ -396,7 +502,7 @@ class VisualDemoObserver(Node):
             if goal:
                 gx_px, gy_px = world_to_px(float(goal.pose.position.x), float(goal.pose.position.y))
                 cv2.line(frame, (rx, ry), (gx_px, gy_px), (40, 120, 200), 2)
-            elif detection_world:
+            if detection_world:
                 dx_px, dy_px = world_to_px(*detection_world)
                 cv2.line(frame, (rx, ry), (dx_px, dy_px), (80, 80, 200), 2)
 
@@ -416,7 +522,10 @@ class VisualDemoObserver(Node):
         if detection_world:
             det_text = f"VisionTarget=({detection_world[0]:.2f},{detection_world[1]:.2f})"
         cv2.putText(frame, f"{pose_text}  {truth_text}  {goal_text}", (32, panel_y + 24), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (60, 65, 75), 1, cv2.LINE_AA)
-        cv2.putText(frame, det_text, (32, panel_y + 48), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (60, 65, 75), 1, cv2.LINE_AA)
+        trend_suffix = ""
+        if distance_progress is not None:
+            trend_suffix = f"  DistanceTrend={distance_trend} ({distance_progress:+.2f}m)"
+        cv2.putText(frame, det_text + trend_suffix, (32, panel_y + 48), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (60, 65, 75), 1, cv2.LINE_AA)
 
         if len(self.distance_history) >= 2:
             chart = self.distance_history[-60:]
@@ -440,16 +549,38 @@ class VisualDemoObserver(Node):
                 cv2.polylines(frame, [np.array(points, dtype=np.int32)], False, (40, 90, 210), 2)
             cv2.putText(frame, "distance trend", (base_x0, base_y0 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (80, 85, 90), 1, cv2.LINE_AA)
 
+        badge_x, badge_y = 24, 42
+        cv2.rectangle(frame, (badge_x, badge_y), (badge_x + 140, badge_y + 34), (22, 70, 61), -1)
+        cv2.putText(frame, capability_stage, (badge_x + 12, badge_y + 23), cv2.FONT_HERSHEY_SIMPLEX, 0.68, (245, 250, 248), 2, cv2.LINE_AA)
+        chip_specs = [
+            (f"phase={phase or 'waiting'}", (68, 72, 84), 188, badge_y),
+            (f"target={target_id or 'n/a'}", (85, 77, 46), 188, badge_y + 38),
+            (f"visible={'yes' if target_visible_now else 'no'}", (33, 106, 62) if target_visible_now else (120, 74, 22), 188, badge_y + 76),
+            (f"goal={'live' if nav_goal_recent else 'none'}", (35, 95, 150) if nav_goal_recent else (120, 74, 22), 360, badge_y + 76),
+            (f"feedback={'live' if feedback_recent else 'waiting'}", (61, 85, 135) if feedback_recent else (120, 74, 22), 532, badge_y + 76),
+        ]
+        if target_transition_active:
+            chip_specs.append(("transition=active", (145, 63, 24), 360, badge_y + 38))
+        for text, color, chip_x, chip_y in chip_specs:
+            cv2.rectangle(frame, (chip_x, chip_y), (chip_x + 156, chip_y + 28), color, -1)
+            cv2.putText(frame, text, (chip_x + 8, chip_y + 18), cv2.FONT_HERSHEY_SIMPLEX, 0.44, (245, 248, 250), 1, cv2.LINE_AA)
+
+        if phase == "multi_target_rehearsal":
+            sequence_text = "sequence: mt_01_center_near -> mt_02_left_offset -> mt_03_right_offset -> mt_04_center_far"
+            cv2.putText(frame, sequence_text, (24, height - 102), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (78, 82, 88), 1, cv2.LINE_AA)
+
         cv2.putText(
             frame,
             f"session={self.run_id} mode={self.args.visual_mode} raw={self.raw_frame_count} debug={self.debug_frame_count} telem={self.telemetry_frame_count}",
-            (24, 28),
+            (24, 24),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
+            0.5,
             (70, 74, 82),
-            2,
+            1,
             cv2.LINE_AA,
         )
+        if status_text:
+            cv2.putText(frame, status_text[:110], (24, 96), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (86, 90, 96), 1, cv2.LINE_AA)
         return frame
 
     def _sample_distance(self) -> Optional[float]:
@@ -471,6 +602,17 @@ class VisualDemoObserver(Node):
 
     def _tick(self) -> None:
         elapsed = time.monotonic() - self.started_monotonic
+        operator_state = self._operator_state()
+        if bool(operator_state.get("target_transition_active", False)) and not self._last_transition_active:
+            self._record_event(
+                "target_transition_observed",
+                f"transition:{round(elapsed, 3)}:{operator_state.get('target_id', '')}",
+                {
+                    "phase": str(operator_state.get("phase", "")),
+                    "target_id": str(operator_state.get("target_id", "")),
+                },
+            )
+        self._last_transition_active = bool(operator_state.get("target_transition_active", False))
         pose = self._pose_from_odom()
         if pose and self.first_pose is None:
             self.first_pose = pose
@@ -557,6 +699,7 @@ class VisualDemoObserver(Node):
         distance = self._sample_distance()
         if distance is not None:
             self.distance_history.append((elapsed, distance))
+        distance_trend, distance_progress = self._distance_trend()
         vision_truth_delta = None
         waypoint_truth_delta = None
         waypoint_vision_delta = None
@@ -579,20 +722,26 @@ class VisualDemoObserver(Node):
 
         record = {
             "t_s": round(elapsed, 3),
-            "phase": self.args.phase or "",
-            "target_id": self.args.target_id or "",
-            "target_transition_active": bool(self.args.target_transition_active),
+            "phase": str(operator_state.get("phase") or self.args.phase or ""),
+            "target_id": str(operator_state.get("target_id") or self.args.target_id or ""),
+            "target_transition_active": bool(operator_state.get("target_transition_active", self.args.target_transition_active)),
             "raw_nonblank": raw_nonblank,
             "debug_nonblank": debug_nonblank,
             "target_visible": target_visible,
             "overlay_mean_abs_diff": round(mean_abs_diff, 6),
             "overlay_changed_pixel_ratio": round(changed_pixel_ratio, 6),
             "cmd_vel_count": self.cmd_vel_count,
+            "feedback_count": self.feedback_count,
             "robot_pose": None,
             "goal_pose": None,
             "detection_world": None,
             "truth_target_world": None,
             "target_distance_m": None if distance is None else round(distance, 6),
+            "distance_trend": distance_trend,
+            "distance_progress_m": None if distance_progress is None else round(distance_progress, 6),
+            "feedback_recent": self._recent(self.last_feedback_monotonic, window_s=5.0),
+            "nav_goal_recent": self._recent(self.last_goal_monotonic, window_s=4.0),
+            "cmd_vel_recent": self._recent(self.last_cmd_vel_monotonic, window_s=3.0),
             "vision_vs_truth_m": None if vision_truth_delta is None else round(vision_truth_delta, 6),
             "waypoint_vs_truth_m": None if waypoint_truth_delta is None else round(waypoint_truth_delta, 6),
             "waypoint_vs_vision_m": None if waypoint_vision_delta is None else round(waypoint_vision_delta, 6),
@@ -616,9 +765,38 @@ class VisualDemoObserver(Node):
             self.finalize()
             raise SystemExit(0)
 
+    def _read_external_events(self) -> list[dict[str, object]]:
+        if not self.timeline_events_path.exists():
+            return []
+        events: list[dict[str, object]] = []
+        for line in self.timeline_events_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+            except Exception:
+                continue
+            if isinstance(payload, dict):
+                events.append(payload)
+        return events
+
+    def _write_timeline_json(self) -> None:
+        payload = {
+            "samples": self.timeline,
+            "events": sorted(
+                [*self.timeline_events, *self._read_external_events()],
+                key=lambda item: (float(item.get("t_s", 0.0) or 0.0), str(item.get("timestamp_utc", ""))),
+            ),
+        }
+        self.timeline_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
     def _write_state_json(self) -> None:
         target_visible_ratio = float(self.target_visible_count / max(self.raw_frame_count, 1))
         truth_target = self._truth_target_world()
+        operator_state = self._operator_state()
+        detection_world = self._transform_detection_world()
+        distance = self.distance_history[-1][1] if self.distance_history else None
+        distance_trend, distance_progress = self._distance_trend()
         latest_vision_truth = self.vision_truth_deltas[-1] if self.vision_truth_deltas else None
         latest_waypoint_truth = self.waypoint_truth_deltas[-1] if self.waypoint_truth_deltas else None
         latest_waypoint_vision = self.waypoint_vision_deltas[-1] if self.waypoint_vision_deltas else None
@@ -630,14 +808,29 @@ class VisualDemoObserver(Node):
         elif self.waypoint_vision_deltas and float(np.median(self.waypoint_vision_deltas)) > 0.50:
             truth_alignment_ok = False
             truth_failure_class = "waypoint_vision_diverged"
+        nav_goal_recent = self._recent(self.last_goal_monotonic, window_s=4.0)
+        feedback_recent = self._recent(self.last_feedback_monotonic, window_s=5.0)
+        cmd_vel_recent = self._recent(self.last_cmd_vel_monotonic, window_s=3.0)
+        target_visible_now = self._recent(self.last_detection_monotonic, window_s=2.5)
+        capability_stage = "WAIT"
+        if bool(operator_state.get("target_transition_active", False)) or operator_state.get("phase") == "multi_target_rehearsal":
+            capability_stage = "MULTI-STEP"
+        elif feedback_recent and ("abort" in self.latest_feedback_text.lower() or "stop" in self.latest_feedback_text.lower()):
+            capability_stage = "INTERRUPT"
+        elif cmd_vel_recent and nav_goal_recent:
+            capability_stage = "ACT"
+        elif nav_goal_recent:
+            capability_stage = "PLAN"
+        elif target_visible_now:
+            capability_stage = "SEE"
         payload = {
             "session_id": self.run_id,
             "visual_mode": self.args.visual_mode,
             "execution_lane": self.args.execution_lane,
             "runtime_target": self.args.runtime_target,
-            "phase": self.args.phase or "",
-            "target_id": self.args.target_id or "",
-            "target_transition_active": bool(self.args.target_transition_active),
+            "phase": str(operator_state.get("phase") or self.args.phase or ""),
+            "target_id": str(operator_state.get("target_id") or self.args.target_id or ""),
+            "target_transition_active": bool(operator_state.get("target_transition_active", self.args.target_transition_active)),
             "raw_frame_count": self.raw_frame_count,
             "debug_frame_count": self.debug_frame_count,
             "telemetry_frame_count": self.telemetry_frame_count,
@@ -650,6 +843,7 @@ class VisualDemoObserver(Node):
             },
             "raw_nonblank": self.raw_nonblank_count > 0,
             "debug_nonblank": self.debug_nonblank_count > 0,
+            "target_visible_now": target_visible_now,
             "target_visible_ratio": round(target_visible_ratio, 6),
             "overlay_difference_ok": bool(
                 self.max_overlay_mean_abs_diff >= self.args.overlay_min_mean_abs_diff
@@ -663,10 +857,39 @@ class VisualDemoObserver(Node):
             "true_target_seen": truth_target is not None,
             "truth_alignment_ok": truth_alignment_ok,
             "truth_failure_class": truth_failure_class,
+            "latest_robot_pose": None,
+            "latest_goal_pose": None,
+            "latest_detection_world": None,
+            "latest_truth_target_world": None,
+            "latest_target_distance_m": None if distance is None else round(distance, 6),
+            "distance_trend": distance_trend,
+            "distance_progress_m": None if distance_progress is None else round(distance_progress, 6),
+            "feedback_recent": feedback_recent,
+            "nav_goal_recent": nav_goal_recent,
+            "cmd_vel_recent": cmd_vel_recent,
+            "boundary_activity_seen": bool(feedback_recent or nav_goal_recent or cmd_vel_recent),
+            "last_feedback_text": self.latest_feedback_text,
+            "capability_stage": capability_stage,
             "vision_vs_truth_m": None if latest_vision_truth is None else round(latest_vision_truth, 6),
             "waypoint_vs_truth_m": None if latest_waypoint_truth is None else round(latest_waypoint_truth, 6),
             "waypoint_vs_vision_m": None if latest_waypoint_vision is None else round(latest_waypoint_vision, 6),
         }
+        if self.latest_pose is not None:
+            payload["latest_robot_pose"] = {
+                "x": round(self.latest_pose.x, 6),
+                "y": round(self.latest_pose.y, 6),
+                "yaw": round(self.latest_pose.yaw, 6),
+            }
+        if self.latest_goal is not None:
+            payload["latest_goal_pose"] = {
+                "x": round(float(self.latest_goal.pose.position.x), 6),
+                "y": round(float(self.latest_goal.pose.position.y), 6),
+                "frame_id": self.latest_goal.header.frame_id or self.latest_goal_source,
+            }
+        if detection_world is not None:
+            payload["latest_detection_world"] = {"x": round(detection_world[0], 6), "y": round(detection_world[1], 6)}
+        if truth_target is not None:
+            payload["latest_truth_target_world"] = {"x": round(truth_target[0], 6), "y": round(truth_target[1], 6)}
         self.state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def finalize(self) -> None:
@@ -678,7 +901,7 @@ class VisualDemoObserver(Node):
             if writer is not None:
                 writer.release()
 
-        self.timeline_path.write_text(json.dumps(self.timeline, indent=2), encoding="utf-8")
+        self._write_timeline_json()
 
         target_visible_ratio = float(self.target_visible_count / max(self.raw_frame_count, 1))
         overlay_difference_ok = bool(
@@ -701,15 +924,16 @@ class VisualDemoObserver(Node):
         if len(self.distance_history) >= 2:
             motion_progress_m = float(self.distance_history[0][1] - self.distance_history[-1][1])
             motion_progress_ok = motion_progress_m >= self.args.motion_progress_min_m
+        operator_state = self._operator_state()
 
         summary = {
             "session_id": self.run_id,
             "execution_lane": self.args.execution_lane,
             "runtime_target": self.args.runtime_target,
             "visual_mode": self.args.visual_mode,
-            "phase": self.args.phase or "",
-            "target_id": self.args.target_id or "",
-            "target_transition_active": bool(self.args.target_transition_active),
+            "phase": str(operator_state.get("phase") or self.args.phase or ""),
+            "target_id": str(operator_state.get("target_id") or self.args.target_id or ""),
+            "target_transition_active": bool(operator_state.get("target_transition_active", self.args.target_transition_active)),
             "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "raw_nonblank": self.raw_nonblank_count > 0,
             "debug_nonblank": self.debug_nonblank_count > 0,

@@ -4,12 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chasecar Operator Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23174f43'/%3E%3Ccircle cx='32' cy='32' r='16' fill='%23f7fbf8'/%3E%3C/svg%3E">
   <style>
     :root {
       --bg: #e7ece7;
       --bg-accent: #d5ddd4;
-      --panel: rgba(248, 250, 247, 0.92);
-      --panel-strong: rgba(252, 253, 251, 0.98);
+      --panel: rgba(248, 250, 247, 0.94);
+      --panel-strong: rgba(252, 253, 251, 0.99);
       --ink: #12201b;
       --muted: #5a6c65;
       --line: rgba(18, 32, 27, 0.12);
@@ -21,6 +22,7 @@
       --accent-soft: #edf5f2;
       --shadow: 0 18px 42px rgba(18, 32, 27, 0.12);
       --radius: 18px;
+      --mono: "Cascadia Code", "Consolas", monospace;
     }
     * { box-sizing: border-box; }
     body {
@@ -33,19 +35,28 @@
         linear-gradient(180deg, var(--bg) 0%, var(--bg-accent) 100%);
     }
     a { color: var(--accent); }
+    button, select, input, textarea { font: inherit; }
+    button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible {
+      outline: 2px solid rgba(23, 79, 67, 0.5);
+      outline-offset: 2px;
+    }
     .shell {
       display: grid;
       gap: 18px;
       padding: 18px;
     }
+    .masthead,
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
     .masthead {
       display: grid;
       gap: 14px;
       padding: 20px;
-      border: 1px solid var(--line);
-      border-radius: calc(var(--radius) + 4px);
       background: linear-gradient(135deg, rgba(248, 250, 247, 0.98), rgba(240, 245, 240, 0.95));
-      box-shadow: var(--shadow);
     }
     .masthead-top {
       display: flex;
@@ -61,30 +72,35 @@
     }
     .subtitle {
       margin: 0;
+      max-width: 860px;
       color: var(--muted);
       font-size: 14px;
-      max-width: 780px;
+      line-height: 1.5;
+    }
+    .mode-pill,
+    .status-badge,
+    .camera-tab {
+      border-radius: 999px;
+      border: 1px solid var(--line-strong);
+      background: var(--panel-strong);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
     .mode-pill {
       padding: 8px 12px;
-      border: 1px solid var(--line-strong);
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      background: var(--panel-strong);
     }
     .status-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 10px;
     }
     .status-card {
       padding: 12px 14px;
       border: 1px solid var(--line);
       border-radius: 14px;
-      background: var(--panel);
+      background: var(--panel-strong);
     }
     .status-card strong {
       display: block;
@@ -95,22 +111,27 @@
       text-transform: uppercase;
     }
     .status-card span {
+      display: block;
       font-size: 14px;
       font-weight: 600;
       word-break: break-word;
     }
     .layout {
       display: grid;
-      grid-template-columns: minmax(0, 1.45fr) minmax(340px, 0.95fr);
+      grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.95fr);
       gap: 18px;
       align-items: start;
     }
-    .panel {
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: var(--panel);
-      box-shadow: var(--shadow);
-      overflow: hidden;
+    .visual-stack,
+    .control-stack,
+    .panel-body,
+    .drawer-body,
+    .control-group,
+    .watch-list,
+    .boundary-grid,
+    .help-list {
+      display: grid;
+      gap: 14px;
     }
     .panel-head {
       display: flex;
@@ -130,57 +151,78 @@
     .panel-body {
       padding: 16px;
     }
-    .visual-stack {
-      display: grid;
-      gap: 18px;
-    }
-    .world-image, .camera-image {
+    .world-image,
+    .telemetry-image,
+    .detail-image {
       width: 100%;
       display: block;
-      background: #ced7cf;
+      border-radius: 14px;
+      background: #d6ded6;
       object-fit: contain;
     }
-    .world-image {
-      min-height: 420px;
-      max-height: 620px;
-    }
-    .camera-grid {
+    .world-image { min-height: 360px; max-height: 560px; }
+    .telemetry-image,
+    .detail-image { min-height: 250px; }
+    .main-visual-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 18px;
     }
-    .camera-image {
-      min-height: 250px;
+    .camera-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
     }
-    .controls {
-      display: grid;
-      gap: 18px;
+    .camera-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
     }
-    .control-group {
-      display: grid;
-      gap: 12px;
+    .camera-tab {
+      padding: 8px 12px;
+      cursor: pointer;
     }
-    .control-group h3 {
+    .camera-tab.is-active {
+      background: linear-gradient(135deg, #174f43, #236857);
+      border-color: #174f43;
+      color: #f7fbf8;
+    }
+    .camera-pane { display: none; }
+    .camera-pane.is-active { display: block; }
+    .count-pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(23, 79, 67, 0.08);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .headline {
       margin: 0;
-      font-size: 13px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+      font-size: 24px;
+      line-height: 1.2;
     }
-    .control-copy {
+    .support-copy,
+    .footnote,
+    .drawer-copy {
       margin: 0;
       color: var(--muted);
       font-size: 13px;
       line-height: 1.5;
     }
-    .button-row, .field-row {
+    .button-row,
+    .field-row {
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
     }
-    button, select, input {
-      font: inherit;
-    }
-    button, select, input[type="text"], input[type="number"] {
+    button,
+    select,
+    input[type="text"],
+    input[type="number"],
+    textarea {
       border-radius: 12px;
       border: 1px solid var(--line-strong);
       background: var(--panel-strong);
@@ -207,18 +249,235 @@
       border-color: #174f43;
       color: #f7fbf8;
     }
-    .secondary {
-      background: var(--accent-soft);
-    }
+    .secondary { background: var(--accent-soft); }
     .danger {
       background: rgba(187, 46, 40, 0.10);
       border-color: rgba(187, 46, 40, 0.34);
       color: #7f1c18;
     }
-    select, input[type="text"], input[type="number"] {
+    .big-action {
       width: 100%;
-      padding: 10px 12px;
+      min-height: 54px;
+      font-size: 16px;
+    }
+    .secondary-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .secondary-actions button[hidden] { display: none; }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      color: var(--muted);
+    }
+    .demo-list {
+      display: grid;
+      gap: 12px;
+    }
+    .demo-card {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel-strong);
+    }
+    .demo-card.is-recommended {
+      border-color: rgba(23, 79, 67, 0.42);
+      background: linear-gradient(135deg, rgba(237, 245, 242, 0.96), rgba(250, 252, 250, 0.98));
+    }
+    .demo-card.is-complete {
+      border-color: rgba(13, 138, 81, 0.26);
+    }
+    .demo-card.is-running {
+      border-color: rgba(154, 101, 0, 0.32);
+    }
+    .demo-card-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .demo-card-title {
+      margin: 0;
+      font-size: 16px;
+    }
+    .demo-card-copy,
+    .watch-item,
+    .boundary-card p,
+    .help-list li,
+    .control-kv dt,
+    .control-kv dd,
+    .log-line {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .demo-card-copy { color: var(--ink); }
+    .demo-meta {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .watch-list {
+      padding-left: 18px;
+      margin: 0;
+    }
+    .boundary-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .boundary-card {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel-strong);
+    }
+    .boundary-card h3 {
+      margin: 0;
+      font-size: 15px;
+    }
+    .boundary-list {
+      display: grid;
+      gap: 8px;
+      padding-left: 18px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .drawer {
+      overflow: hidden;
+    }
+    .drawer > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 16px 18px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.35);
+      border-bottom: 1px solid transparent;
+    }
+    .drawer > summary::-webkit-details-marker { display: none; }
+    .drawer[open] > summary {
+      border-bottom-color: var(--line);
+    }
+    .drawer-body {
+      padding: 16px;
+    }
+    .advanced-grid {
+      display: grid;
+      gap: 14px;
+    }
+    .advanced-section {
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel-strong);
+    }
+    .advanced-section h3 {
+      margin: 0;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .control-kv {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 8px 12px;
+    }
+    .control-kv dt {
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .control-kv dd {
+      font-weight: 600;
+      color: var(--ink);
+      word-break: break-word;
+    }
+    .lane-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .lane-card {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(18, 32, 27, 0.03);
+    }
+    .lane-card strong {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .lane-kv {
+      display: grid;
+      gap: 8px;
+    }
+    .lane-row {
+      display: grid;
+      gap: 4px;
+    }
+    .lane-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .lane-value {
+      font-size: 13px;
+      font-weight: 600;
+      word-break: break-word;
+    }
+    select,
+    input[type="text"],
+    input[type="number"],
+    textarea {
+      width: 100%;
       min-height: 42px;
+      padding: 10px 12px;
+    }
+    textarea {
+      min-height: 160px;
+      resize: vertical;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .preview-shell {
+      display: grid;
+      gap: 12px;
+    }
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .code-box {
+      margin: 0;
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(18, 32, 27, 0.05);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
     .log-line {
       min-height: 44px;
@@ -226,26 +485,32 @@
       border-radius: 14px;
       background: rgba(23, 79, 67, 0.06);
       border: 1px solid rgba(23, 79, 67, 0.12);
-      font-size: 13px;
-      line-height: 1.5;
-      color: var(--muted);
+      color: var(--ink);
     }
     .ok { color: var(--ok); }
     .warn { color: var(--warn); }
     .bad { color: var(--bad); }
-    .footnote {
-      margin: 0;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.5;
+    .muted { color: var(--muted); }
+    @media (max-width: 1320px) {
+      .status-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .boundary-grid { grid-template-columns: 1fr; }
+      .lane-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 1120px) {
-      .layout { grid-template-columns: 1fr; }
+      .layout,
+      .main-visual-grid {
+        grid-template-columns: 1fr;
+      }
     }
-    @media (max-width: 740px) {
-      .camera-grid { grid-template-columns: 1fr; }
+    @media (max-width: 760px) {
       .shell { padding: 12px; }
-      .masthead, .panel-body { padding: 14px; }
+      .masthead, .panel-body, .drawer-body { padding: 14px; }
+      .status-grid,
+      .preview-grid,
+      .control-kv {
+        grid-template-columns: 1fr;
+      }
+      .control-kv dt { font-size: 12px; }
     }
   </style>
 </head>
@@ -255,24 +520,17 @@
       <div class="masthead-top">
         <div>
           <h1>Chasecar Operator Dashboard</h1>
-          <p class="subtitle">Authoritative `container_kilted` control plane for environment lifecycle, preset scenarios, and frozen low-level intents. Docker Desktop can keep the dashboard warm while the session-scoped sim project starts and stops underneath it.</p>
+          <p class="subtitle">Use this page to bring the environment up, rehearse the current capability demos, and understand what the future LLM layer will actually sit on top of. Engineering detail stays available under Advanced Controls.</p>
         </div>
         <div class="mode-pill" id="api-mode" data-testid="api-mode">Control Mode</div>
       </div>
       <div class="status-grid">
-        <div class="status-card"><strong>Session ID</strong><span id="session-id" data-testid="session-id">n/a</span></div>
-        <div class="status-card"><strong>Phase</strong><span id="phase" data-testid="phase">stopped</span></div>
-        <div class="status-card"><strong>Target ID</strong><span id="target-id" data-testid="target-id">n/a</span></div>
-        <div class="status-card"><strong>Target Transition</strong><span id="target-transition" data-testid="target-transition">steady</span></div>
         <div class="status-card"><strong>Environment</strong><span id="environment-state" data-testid="environment-state">stopped</span></div>
         <div class="status-card"><strong>Scenario</strong><span id="scenario-state" data-testid="scenario-state">idle</span></div>
-        <div class="status-card"><strong>Last Intent</strong><span id="last-intent" data-testid="last-intent">none</span></div>
-        <div class="status-card"><strong>Last Feedback/Result</strong><span id="last-result" data-testid="last-result">none</span></div>
-        <div class="status-card"><strong>World Stream</strong><span id="world-stream-ready" data-testid="world-stream-ready">waiting</span></div>
-        <div class="status-card"><strong>Truth Alignment</strong><span id="truth-alignment" data-testid="truth-alignment">waiting</span></div>
-        <div class="status-card"><strong>Motion Evidence</strong><span id="motion-evidence" data-testid="motion-evidence">waiting</span></div>
-        <div class="status-card"><strong>Warm Services</strong><span id="warm-services" data-testid="warm-services">n/a</span></div>
-        <div class="status-card"><strong>Compose Project</strong><span id="compose-project" data-testid="compose-project">n/a</span></div>
+        <div class="status-card"><strong>Phase</strong><span id="phase" data-testid="phase">stopped</span></div>
+        <div class="status-card"><strong>Target</strong><span id="target-id" data-testid="target-id">n/a</span></div>
+        <div class="status-card"><strong>Last Result</strong><span id="last-result" data-testid="last-result">none</span></div>
+        <div class="status-card"><strong>Session ID</strong><span id="session-id" data-testid="session-id">n/a</span></div>
       </div>
     </section>
 
@@ -281,84 +539,223 @@
         <article class="panel">
           <div class="panel-head">
             <h2>World Surface</h2>
-            <a id="world-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open Interactive Stream</a>
+            <a id="world-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open interactive stream</a>
           </div>
           <div class="panel-body">
-            <img class="world-image" id="world-image" data-testid="world-image" src="live/world_stream.jpg" alt="World stream">
-            <p class="footnote">The world pane must stay in the same authoritative session as the dashboard state and the scenario artifacts.</p>
+            <img class="world-image" id="world-image" data-testid="world-image" alt="World stream" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+            <p class="footnote">The world view is the main operator proof that the same authoritative session is alive and moving.</p>
           </div>
         </article>
-        <div class="camera-grid">
+
+        <div class="main-visual-grid">
           <article class="panel">
-            <div class="panel-head"><h2>Raw Camera</h2><span id="raw-count">0 frames</span></div>
+            <div class="panel-head">
+              <h2>Topdown Telemetry</h2>
+              <span class="count-pill" id="topdown-count">0 frames</span>
+            </div>
             <div class="panel-body">
-              <img class="camera-image" id="raw-image" data-testid="raw-image" src="live/raw_camera.jpg" alt="Raw camera feed">
+              <img class="telemetry-image" id="topdown-image" data-testid="topdown-image" alt="Topdown telemetry" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+              <p class="footnote">Use the topdown view to understand robot motion, goal changes, and multi-step handoff behavior.</p>
             </div>
           </article>
+
           <article class="panel">
-            <div class="panel-head"><h2>YOLO Debug</h2><span id="debug-count">0 frames</span></div>
-            <div class="panel-body">
-              <img class="camera-image" id="debug-image" data-testid="debug-image" src="live/yolo_debug.jpg" alt="Debug camera feed">
+            <div class="panel-head">
+              <h2>Camera Detail</h2>
+              <span class="count-pill" id="camera-count">raw 0 - debug 0</span>
+            </div>
+            <div class="panel-body control-group">
+              <div class="camera-toolbar">
+                <div class="camera-tabs">
+                  <button class="camera-tab is-active" id="camera-tab-raw" data-testid="camera-tab-raw" type="button">Raw Camera</button>
+                  <button class="camera-tab" id="camera-tab-debug" data-testid="camera-tab-debug" type="button">YOLO Debug</button>
+                </div>
+                <span class="status-badge" id="camera-status">Raw camera view</span>
+              </div>
+              <div class="camera-pane is-active" id="camera-pane-raw">
+                <img class="detail-image" id="raw-image" data-testid="raw-image" alt="Raw camera feed" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+              </div>
+              <div class="camera-pane" id="camera-pane-debug">
+                <img class="detail-image" id="debug-image" data-testid="debug-image" alt="Debug camera feed" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+              </div>
+              <p class="footnote">Keep this on Raw when you want the operator view. Switch to YOLO Debug when you want to understand what the detector is drawing.</p>
             </div>
           </article>
         </div>
       </div>
 
-      <aside class="controls">
+      <aside class="control-stack">
         <article class="panel">
-          <div class="panel-head"><h2>Environment Controls</h2></div>
-          <div class="panel-body control-group">
-            <p class="control-copy">The dashboard owns one compose project and one active session at a time. `Start`, `Stop`, and `Refresh` always target the authoritative session project instead of the warm launcher services.</p>
-            <div class="button-row">
-              <button class="primary" id="btn-start" data-testid="btn-start">Start</button>
-              <button class="secondary" id="btn-refresh" data-testid="btn-refresh">Refresh</button>
-              <button class="danger" id="btn-stop" data-testid="btn-stop">Stop</button>
-            </div>
+          <div class="panel-head">
+            <h2>Next Step</h2>
+            <span class="status-badge" id="primary-status-chip" data-testid="primary-status-chip">loading</span>
           </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-head"><h2>Scenario Controls</h2></div>
           <div class="panel-body control-group">
-            <p class="control-copy">Only fixed presets are exposed in this pass. `Reset Sim` creates a new session ID while keeping the warm dashboard services alive.</p>
-            <div class="field-row">
-              <select id="scenario-select" data-testid="scenario-select"></select>
+            <h2 class="headline" id="next-step-title">Loading dashboard state</h2>
+            <p class="support-copy" id="next-step-copy">Reading the control plane and current session status.</p>
+            <button class="primary big-action" id="btn-next-step" data-testid="btn-next-step" type="button" disabled>Loading...</button>
+            <div class="secondary-actions">
+              <button class="secondary" id="btn-refresh" data-testid="btn-refresh" type="button">Refresh</button>
+              <button class="secondary" id="btn-reset-sim" data-testid="btn-reset-sim" type="button" disabled>Reset Sim</button>
+              <button class="danger" id="btn-stop-scenario" data-testid="btn-stop-scenario" type="button" hidden disabled>Stop Scenario</button>
+              <button class="danger" id="btn-stop" data-testid="btn-stop" type="button" disabled>Stop Environment</button>
             </div>
-            <div class="button-row">
-              <button class="primary" id="btn-run-scenario" data-testid="btn-run-scenario">Run Scenario</button>
-              <button class="secondary" id="btn-reset-sim" data-testid="btn-reset-sim">Reset Sim</button>
-              <button class="danger" id="btn-stop-scenario" data-testid="btn-stop-scenario">Stop Scenario</button>
-            </div>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-head"><h2>Frozen Intents</h2></div>
-          <div class="panel-body control-group">
-            <p class="control-copy">Frozen low-level intents are accepted only from the published contract. The service launches the in-session publisher inside the active environment and records command history under the current session.</p>
-            <div class="field-row">
-              <input id="target-class" data-testid="target-class" type="text" value="ball" aria-label="Target class">
-              <input id="approach-distance" data-testid="approach-distance" type="number" value="0.25" step="0.05" min="0.05" aria-label="Approach distance">
-            </div>
-            <div class="button-row">
-              <button class="primary" id="btn-acquire-target" data-testid="btn-acquire-target">acquire_target</button>
-              <button class="secondary" id="btn-plan-to-target" data-testid="btn-plan-to-target">plan_to_target</button>
-              <button class="secondary" id="btn-track-target" data-testid="btn-track-target">track_target</button>
-            </div>
-            <div class="button-row">
-              <button class="danger" id="btn-abort" data-testid="btn-abort">abort</button>
-              <button class="danger" id="btn-safe-stop" data-testid="btn-safe-stop">safe_stop</button>
-            </div>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-head"><h2>Operator Log</h2></div>
-          <div class="panel-body control-group">
             <div class="log-line" id="operator-log" data-testid="operator-log">Waiting for dashboard state.</div>
-            <p class="footnote" id="operator-footnote">Legacy visual mode disables controls until the API-backed service is reachable on `127.0.0.1:8860`.</p>
           </div>
         </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Capability Demos</h2>
+            <span class="status-badge" id="capability-stage" data-testid="capability-stage">WAIT</span>
+          </div>
+          <div class="panel-body control-group">
+            <p class="support-copy" id="demo-expectation">Start with M3 single target, then rehearse the left, center, and right variants, then finish with multi-target rehearsal.</p>
+            <div class="demo-list" id="demo-list"></div>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>What To Watch</h2>
+            <span class="status-badge" id="watch-context">operator cues</span>
+          </div>
+          <div class="panel-body control-group">
+            <p class="support-copy" id="watch-copy">Use these cues to decide whether the current step looks healthy without needing to open the engineering detail.</p>
+            <ul class="watch-list" id="watch-list"></ul>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head"><h2>Current Capability Boundary</h2></div>
+          <div class="panel-body">
+            <div class="boundary-grid">
+              <div class="boundary-card">
+                <h3>What the system has now</h3>
+                <p>These are the current capabilities the operator can trust and rehearse.</p>
+                <ul class="boundary-list">
+                  <li>Perception from the current target pipeline</li>
+                  <li>Goal creation and motion execution through the frozen control path</li>
+                  <li>Track, abort, and safe_stop through the fixed intent boundary</li>
+                </ul>
+              </div>
+              <div class="boundary-card">
+                <h3>What the future LLM would sit on top of</h3>
+                <p>This is the real substrate an LLM layer would be allowed to use.</p>
+                <ul class="boundary-list">
+                  <li>The frozen intent boundary</li>
+                  <li>Current perception and state signals</li>
+                  <li>Returned feedback and outcome signals</li>
+                </ul>
+              </div>
+              <div class="boundary-card">
+                <h3>What is not here yet</h3>
+                <p>The dashboard should stay honest about the current limits.</p>
+                <ul class="boundary-list">
+                  <li>Freeform language understanding</li>
+                  <li>Open-ended planning or task decomposition</li>
+                  <li>Unbounded action selection outside the frozen set</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <details class="drawer panel" id="help-drawer" data-testid="help-drawer">
+          <summary id="help-toggle" data-testid="help-toggle">How To Use This</summary>
+          <div class="drawer-body">
+            <p class="drawer-copy">For the full walkthrough, use <code>docs/DASHBOARD_OPERATOR_GUIDE.md</code>. This drawer keeps the common operator path on the page.</p>
+            <ol class="help-list">
+              <li>Open Docker Desktop, click play on the Chasecar app, then open <code>http://127.0.0.1:8860</code>.</li>
+              <li>Use the Next Step card to start the environment and wait for the world and topdown views to update.</li>
+              <li>Run <code>m3_single_target</code> first, then <code>m3_center</code>, <code>m3_left</code>, <code>m3_right</code>, and finally <code>multi_target_rehearsal</code>.</li>
+              <li>Use the What To Watch panel to judge whether the run looks healthy before opening Advanced Controls.</li>
+              <li>Use Reset Sim if you want a fresh session id and Stop Environment when you are done.</li>
+              <li>Open Advanced Controls only when you want the workbench lanes, the frozen-intent console, or deeper control-plane detail.</li>
+            </ol>
+          </div>
+        </details>
+
+        <details class="drawer panel" id="advanced-drawer" data-testid="advanced-drawer">
+          <summary id="advanced-toggle" data-testid="advanced-toggle">Advanced Controls</summary>
+          <div class="drawer-body">
+            <div class="advanced-grid">
+              <section class="advanced-section">
+                <h3>Control Plane Detail</h3>
+                <dl class="control-kv">
+                  <dt>Control Mode</dt><dd id="control-mode-detail">n/a</dd>
+                  <dt>Warm Services</dt><dd id="warm-services" data-testid="warm-services">n/a</dd>
+                  <dt>Compose Project</dt><dd id="compose-project" data-testid="compose-project">n/a</dd>
+                  <dt>World Stream</dt><dd id="world-stream-ready" data-testid="world-stream-ready">waiting</dd>
+                  <dt>Truth Alignment</dt><dd id="truth-alignment" data-testid="truth-alignment">waiting</dd>
+                  <dt>Motion Evidence</dt><dd id="motion-evidence" data-testid="motion-evidence">waiting</dd>
+                </dl>
+                <p class="drawer-copy" id="operator-footnote">Read-only fallback mode disables controls until the API-backed service is reachable.</p>
+              </section>
+
+              <section class="advanced-section">
+                <h3>Manual Scenario Tools</h3>
+                <p class="drawer-copy">The simple view focuses on the rehearsal flow. This selector remains available when you want direct access to any preset scenario, including M2.</p>
+                <div class="field-row">
+                  <select id="scenario-select" data-testid="scenario-select"></select>
+                </div>
+                <div class="button-row">
+                  <button class="secondary" id="btn-run-scenario" data-testid="btn-run-scenario" type="button">Run Selected Scenario</button>
+                </div>
+              </section>
+
+              <section class="advanced-section">
+                <h3>LLM Workbench</h3>
+                <p class="drawer-copy">These lanes show the current real signals behind the frozen control boundary.</p>
+                <div class="lane-grid">
+                  <div class="lane-card"><strong>Perception</strong><div class="lane-kv" id="perception-lane"></div></div>
+                  <div class="lane-card"><strong>Belief</strong><div class="lane-kv" id="belief-lane"></div></div>
+                  <div class="lane-card"><strong>Decision</strong><div class="lane-kv" id="decision-lane"></div></div>
+                  <div class="lane-card"><strong>Outcome</strong><div class="lane-kv" id="outcome-lane"></div></div>
+                </div>
+              </section>
+
+              <section class="advanced-section">
+                <h3>Structured Frozen Intent Console</h3>
+                <p class="drawer-copy">Preview validates the request and shows the exact payload. Execute sends that frozen intent through the same authoritative path as the quick buttons.</p>
+                <div class="field-row">
+                  <select id="intent-template" data-testid="intent-template"></select>
+                </div>
+                <textarea id="intent-json" data-testid="intent-json" spellcheck="false" aria-label="Frozen intent JSON"></textarea>
+                <div class="button-row">
+                  <button class="secondary" id="btn-preview-intent" data-testid="btn-preview-intent" type="button">Preview</button>
+                  <button class="primary" id="btn-dispatch-intent" data-testid="btn-dispatch-intent" type="button">Execute</button>
+                </div>
+                <div class="preview-shell">
+                  <div class="preview-grid">
+                    <div><div class="lane-label">Preview Status</div><div class="lane-value" id="preview-status">Preview required.</div></div>
+                    <div><div class="lane-label">Readiness</div><div class="lane-value" id="preview-readiness">No preview yet.</div></div>
+                  </div>
+                  <div><div class="lane-label">Expected Boundary Activity</div><div class="lane-value" id="preview-activity">No preview yet.</div></div>
+                  <div><div class="lane-label">Resolved Payload</div><pre class="code-box" id="preview-payload">{}</pre></div>
+                </div>
+              </section>
+
+              <section class="advanced-section">
+                <h3>Quick Frozen Intents</h3>
+                <p class="drawer-copy">Use these when you want direct access to the frozen set without editing JSON.</p>
+                <div class="field-row">
+                  <input id="target-class" data-testid="target-class" type="text" value="ball" aria-label="Target class">
+                  <input id="approach-distance" data-testid="approach-distance" type="number" value="0.25" step="0.05" min="0.05" aria-label="Approach distance">
+                </div>
+                <div class="button-row">
+                  <button class="secondary" id="btn-acquire-target" data-testid="btn-acquire-target" type="button">acquire_target</button>
+                  <button class="secondary" id="btn-plan-to-target" data-testid="btn-plan-to-target" type="button">plan_to_target</button>
+                  <button class="secondary" id="btn-track-target" data-testid="btn-track-target" type="button">track_target</button>
+                </div>
+                <div class="button-row">
+                  <button class="danger" id="btn-abort" data-testid="btn-abort" type="button">abort</button>
+                  <button class="danger" id="btn-safe-stop" data-testid="btn-safe-stop" type="button">safe_stop</button>
+                </div>
+              </section>
+            </div>
+          </div>
+        </details>
       </aside>
     </section>
   </div>
@@ -366,277 +763,1020 @@
   <script>
     const stateEls = {
       apiMode: document.getElementById('api-mode'),
-      sessionId: document.getElementById('session-id'),
-      phase: document.getElementById('phase'),
-      targetId: document.getElementById('target-id'),
-      targetTransition: document.getElementById('target-transition'),
       environmentState: document.getElementById('environment-state'),
       scenarioState: document.getElementById('scenario-state'),
-      lastIntent: document.getElementById('last-intent'),
+      phase: document.getElementById('phase'),
+      targetId: document.getElementById('target-id'),
       lastResult: document.getElementById('last-result'),
+      sessionId: document.getElementById('session-id'),
+      topdownCount: document.getElementById('topdown-count'),
+      cameraCount: document.getElementById('camera-count'),
+      cameraStatus: document.getElementById('camera-status'),
+      primaryStatusChip: document.getElementById('primary-status-chip'),
+      nextStepTitle: document.getElementById('next-step-title'),
+      nextStepCopy: document.getElementById('next-step-copy'),
+      capabilityStage: document.getElementById('capability-stage'),
+      demoExpectation: document.getElementById('demo-expectation'),
+      demoList: document.getElementById('demo-list'),
+      watchContext: document.getElementById('watch-context'),
+      watchCopy: document.getElementById('watch-copy'),
+      watchList: document.getElementById('watch-list'),
+      operatorLog: document.getElementById('operator-log'),
+      operatorFootnote: document.getElementById('operator-footnote'),
+      worldLink: document.getElementById('world-link'),
+      worldImage: document.getElementById('world-image'),
+      topdownImage: document.getElementById('topdown-image'),
+      rawImage: document.getElementById('raw-image'),
+      debugImage: document.getElementById('debug-image'),
+      controlModeDetail: document.getElementById('control-mode-detail'),
+      warmServices: document.getElementById('warm-services'),
+      composeProject: document.getElementById('compose-project'),
       worldStreamReady: document.getElementById('world-stream-ready'),
       truthAlignment: document.getElementById('truth-alignment'),
       motionEvidence: document.getElementById('motion-evidence'),
-      warmServices: document.getElementById('warm-services'),
-      composeProject: document.getElementById('compose-project'),
-      rawCount: document.getElementById('raw-count'),
-      debugCount: document.getElementById('debug-count'),
-      worldLink: document.getElementById('world-link'),
-      operatorLog: document.getElementById('operator-log'),
-      operatorFootnote: document.getElementById('operator-footnote'),
-      rawImage: document.getElementById('raw-image'),
-      debugImage: document.getElementById('debug-image'),
-      worldImage: document.getElementById('world-image')
+      perceptionLane: document.getElementById('perception-lane'),
+      beliefLane: document.getElementById('belief-lane'),
+      decisionLane: document.getElementById('decision-lane'),
+      outcomeLane: document.getElementById('outcome-lane'),
+      previewStatus: document.getElementById('preview-status'),
+      previewReadiness: document.getElementById('preview-readiness'),
+      previewActivity: document.getElementById('preview-activity'),
+      previewPayload: document.getElementById('preview-payload')
     };
 
     const controls = {
-      start: document.getElementById('btn-start'),
+      nextStep: document.getElementById('btn-next-step'),
       refresh: document.getElementById('btn-refresh'),
-      stop: document.getElementById('btn-stop'),
-      runScenario: document.getElementById('btn-run-scenario'),
       resetSim: document.getElementById('btn-reset-sim'),
       stopScenario: document.getElementById('btn-stop-scenario'),
+      stop: document.getElementById('btn-stop'),
+      runScenario: document.getElementById('btn-run-scenario'),
+      scenarioSelect: document.getElementById('scenario-select'),
+      targetClass: document.getElementById('target-class'),
+      approachDistance: document.getElementById('approach-distance'),
       acquireTarget: document.getElementById('btn-acquire-target'),
       planToTarget: document.getElementById('btn-plan-to-target'),
       trackTarget: document.getElementById('btn-track-target'),
       abort: document.getElementById('btn-abort'),
       safeStop: document.getElementById('btn-safe-stop'),
-      scenarioSelect: document.getElementById('scenario-select'),
-      targetClass: document.getElementById('target-class'),
-      approachDistance: document.getElementById('approach-distance')
+      intentTemplate: document.getElementById('intent-template'),
+      intentJson: document.getElementById('intent-json'),
+      previewIntent: document.getElementById('btn-preview-intent'),
+      dispatchIntent: document.getElementById('btn-dispatch-intent'),
+      cameraTabRaw: document.getElementById('camera-tab-raw'),
+      cameraTabDebug: document.getElementById('camera-tab-debug'),
+      cameraPaneRaw: document.getElementById('camera-pane-raw'),
+      cameraPaneDebug: document.getElementById('camera-pane-debug')
     };
 
-    const fallbackScenarios = [
-      'm2_single_target',
-      'm3_single_target',
-      'm3_center',
-      'm3_left',
-      'm3_right',
-      'multi_target_rehearsal'
+    const demoFlow = [
+      {
+        id: 'm3_single_target',
+        label: 'M3 Single Target',
+        shortLabel: 'M3 Single Target',
+        copy: 'Start here. This is the first clear proof that the robot can see, plan, and move toward one target.',
+        watchCopy: 'The most important cues are motion and steady approach. You do not need dramatic camera effects to trust this run.',
+        cues: [
+          'The robot starts moving toward the single target instead of sitting still.',
+          'The topdown view shows a clear goal and a shrinking approach path.',
+          'The world view keeps updating and motion ends in a settled state rather than drifting.'
+        ]
+      },
+      {
+        id: 'm3_center',
+        label: 'M3 Center',
+        shortLabel: 'M3 Center',
+        copy: 'Rehearse the centered preset to confirm the forward motion story stays consistent.',
+        watchCopy: 'Treat this as a repeatability check. The main question is whether the robot still makes clean progress.',
+        cues: [
+          'The robot heads to the centered target without hesitation.',
+          'The topdown path stays simple and progress looks continuous.',
+          'The run ends cleanly and the dashboard returns to ready.'
+        ]
+      },
+      {
+        id: 'm3_left',
+        label: 'M3 Left',
+        shortLabel: 'M3 Left',
+        copy: 'Check that the robot can handle an offset target to the left without losing the simple motion story.',
+        watchCopy: 'The important cue is that the path visibly bends left and still resolves cleanly.',
+        cues: [
+          'The world view shows a leftward turn or offset path rather than a straight center drive.',
+          'The topdown view shows that the target and path are offset left of center.',
+          'The robot settles after reaching the left preset instead of oscillating.'
+        ]
+      },
+      {
+        id: 'm3_right',
+        label: 'M3 Right',
+        shortLabel: 'M3 Right',
+        copy: 'Mirror the left offset case and confirm the robot can handle the right-side target equally well.',
+        watchCopy: 'This should feel like the left run mirrored, not like a different capability.',
+        cues: [
+          'The world view shows a rightward path to the target.',
+          'The topdown view clearly places the motion target on the right side.',
+          'The robot reaches the target and returns the dashboard to ready.'
+        ]
+      },
+      {
+        id: 'multi_target_rehearsal',
+        label: 'Multi-Target Rehearsal',
+        shortLabel: 'Multi-Target',
+        copy: 'Finish with the multi-step rehearsal. This is mainly a motion and state-handoff demo, not a flashy camera demo.',
+        watchCopy: 'Do not expect dramatic camera changes. The trustworthy cues are robot motion, target changes, and the transition indicator.',
+        cues: [
+          'The robot moves through multiple legs instead of one single approach.',
+          'The target label changes as the rehearsal advances to the next leg.',
+          'The transition indicator briefly becomes active during handoff before settling back down.'
+        ]
+      }
     ];
+
+    const demoMetaById = Object.fromEntries(demoFlow.map((item) => [item.id, item]));
+    const manualScenarioFallback = ['m2_single_target', ...demoFlow.map((item) => item.id)];
+    const intentTemplates = {
+      acquire_target: { intent: 'acquire_target', args: { target_class: 'ball' } },
+      plan_to_target: { intent: 'plan_to_target', args: { approach_distance_m: 0.25 } },
+      track_target: { intent: 'track_target', args: {} },
+      abort: { intent: 'abort', args: {} },
+      safe_stop: { intent: 'safe_stop', args: {} }
+    };
 
     let apiMode = true;
     let cachedScenarios = [];
+    let localPreview = null;
+    let editorDirty = false;
+    let activeCamera = 'raw';
+    let currentPrimaryAction = null;
+    let pendingScenarioId = '';
+    let lastRenderedState = null;
+
+    function placeholderImage() {
+      return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+    }
 
     function stampImage(el, path) {
       el.src = `${path}?t=${Date.now()}`;
-    }
-
-    function boolText(value, okText, badText) {
-      return `<span class="${value ? 'ok' : 'bad'}">${value ? okText : badText}</span>`;
     }
 
     function selectText(value, fallback = 'n/a') {
       return value === undefined || value === null || value === '' ? fallback : String(value);
     }
 
-    function populateScenarioOptions(items) {
-      if (!Array.isArray(items) || items.length === 0) {
-        items = fallbackScenarios.map((id) => ({ id, label: id }));
+    function boolText(value, okText, badText) {
+      return `<span class="${value ? 'ok' : 'bad'}">${value ? okText : badText}</span>`;
+    }
+
+    function formatMeters(value) {
+      if (value === undefined || value === null || value === '') {
+        return 'n/a';
       }
-      if (cachedScenarios.length === items.length && cachedScenarios.every((item, index) => item.id === items[index].id)) {
+      const num = Number(value);
+      return Number.isFinite(num) ? `${num.toFixed(2)} m` : String(value);
+    }
+
+    function formatPose(value) {
+      if (!value || typeof value !== 'object') {
+        return 'n/a';
+      }
+      const x = Number(value.x);
+      const y = Number(value.y);
+      const yaw = value.yaw === undefined ? null : Number(value.yaw);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return 'n/a';
+      }
+      if (yaw === null || !Number.isFinite(yaw)) {
+        return `x=${x.toFixed(2)}, y=${y.toFixed(2)}`;
+      }
+      return `x=${x.toFixed(2)}, y=${y.toFixed(2)}, yaw=${yaw.toFixed(2)}`;
+    }
+
+    function formatPoint(value) {
+      if (!value || typeof value !== 'object') {
+        return 'n/a';
+      }
+      const x = Number(value.x);
+      const y = Number(value.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return 'n/a';
+      }
+      return `x=${x.toFixed(2)}, y=${y.toFixed(2)}`;
+    }
+
+    function laneRow(label, value) {
+      return `
+        <div class="lane-row">
+          <div class="lane-label">${label}</div>
+          <div class="lane-value">${value}</div>
+        </div>
+      `;
+    }
+
+    function renderLane(element, rows) {
+      element.innerHTML = rows.map((row) => laneRow(row.label, row.value)).join('');
+    }
+
+    function completedStorageKey(sessionId) {
+      return `chasecar.dashboard.completed.${sessionId}`;
+    }
+
+    function loadCompletedScenarios(sessionId) {
+      if (!sessionId) {
+        return new Set();
+      }
+      try {
+        const raw = window.sessionStorage.getItem(completedStorageKey(sessionId));
+        const parsed = raw ? JSON.parse(raw) : [];
+        return new Set(Array.isArray(parsed) ? parsed : []);
+      } catch (_err) {
+        return new Set();
+      }
+    }
+
+    function saveCompletedScenarios(sessionId, completedSet) {
+      if (!sessionId) {
         return;
       }
-      cachedScenarios = items;
+      window.sessionStorage.setItem(completedStorageKey(sessionId), JSON.stringify(Array.from(completedSet)));
+    }
+
+    function trackScenarioProgress(state) {
+      const sessionId = selectText(state.session_id, '');
+      const completed = loadCompletedScenarios(sessionId);
+      const scenarioState = selectText(state.scenario_state, 'idle');
+      const activeScenario = selectText(state.active_scenario, '');
+      const sessionChanged = lastRenderedState && lastRenderedState.session_id !== sessionId;
+      if (sessionChanged) {
+        pendingScenarioId = '';
+      }
+
+      if (scenarioState === 'running' && demoMetaById[activeScenario]) {
+        pendingScenarioId = activeScenario;
+      }
+
+      const scenarioJustFinished =
+        lastRenderedState
+        && lastRenderedState.session_id === sessionId
+        && lastRenderedState.scenario_state === 'running'
+        && scenarioState !== 'running';
+      if (scenarioJustFinished && pendingScenarioId) {
+        const cancelled = String(state.last_result || '').toLowerCase().includes('cancel');
+        if (!cancelled && scenarioState === 'ready') {
+          completed.add(pendingScenarioId);
+          saveCompletedScenarios(sessionId, completed);
+        }
+        pendingScenarioId = '';
+      }
+
+      return completed;
+    }
+
+    function recommendedScenarioId(_state, completed) {
+      const next = demoFlow.find((item) => !completed.has(item.id));
+      return next ? next.id : '';
+    }
+
+    function getPrimaryAction(state, completed) {
+      const controlsState = state.controls || {};
+      const envState = selectText(state.environment_state, 'stopped');
+      const scenarioState = selectText(state.scenario_state, 'idle');
+      const activeScenario = selectText(state.active_scenario, '');
+      const controlReady = Boolean(state.control_plane_ready);
+      const recommendedId = recommendedScenarioId(state, completed);
+      const recommendedMeta = demoMetaById[recommendedId];
+
+      if (!controlReady) {
+        return {
+          kind: 'waiting',
+          chip: 'control plane',
+          label: 'Waiting for Control Plane',
+          title: 'Dashboard is waiting on the control plane',
+          copy: selectText(state.control_plane_error, 'Warm services are still coming up. Open Advanced Controls if you want the exact readiness details.'),
+          disabled: true,
+          scenarioId: '',
+        };
+      }
+
+      if (envState === 'starting') {
+        return {
+          kind: 'starting',
+          chip: 'starting',
+          label: 'Environment Starting',
+          title: 'Environment is starting',
+          copy: selectText(state.environment_message, 'Wait for the world and topdown views to begin updating before running a capability demo.'),
+          disabled: true,
+          scenarioId: '',
+        };
+      }
+
+      if (scenarioState === 'running') {
+        return {
+          kind: 'stopScenario',
+          chip: 'scenario active',
+          label: 'Stop Scenario',
+          title: `Scenario running: ${activeScenario || 'active run'}`,
+          copy: selectText(state.scenario_message, 'Use Stop Scenario if you want to end the current rehearsal without tearing down the environment.'),
+          disabled: !controlsState.can_stop_scenario,
+          scenarioId: activeScenario,
+        };
+      }
+
+      if (envState === 'stopped' || envState === 'error') {
+        return {
+          kind: 'start',
+          chip: 'step 1',
+          label: 'Start Environment',
+          title: 'Bring the environment up',
+          copy: 'Start the authoritative environment first. Once the world and topdown views are live, the dashboard will guide you to the first M3 proof.',
+          disabled: !controlsState.can_start,
+          scenarioId: '',
+        };
+      }
+
+      if (envState === 'environment_ready' && recommendedMeta) {
+        return {
+          kind: 'runScenario',
+          chip: 'recommended next',
+          label: `Run ${recommendedMeta.shortLabel}`,
+          title: `Recommended next demo: ${recommendedMeta.label}`,
+          copy: recommendedMeta.copy,
+          disabled: !controlsState.can_run_scenario,
+          scenarioId: recommendedMeta.id,
+        };
+      }
+
+      if (envState === 'environment_ready') {
+        return {
+          kind: 'stop',
+          chip: 'session complete',
+          label: 'Stop Environment',
+          title: 'Capability rehearsal complete',
+          copy: 'You have worked through the default demo flow for this session. Stop the environment when you are done, or open Advanced Controls for manual tools.',
+          disabled: !controlsState.can_stop,
+          scenarioId: '',
+        };
+      }
+
+      return {
+        kind: 'waiting',
+        chip: 'waiting',
+        label: 'Refresh',
+        title: 'Waiting for dashboard state',
+        copy: 'Use Refresh if the dashboard looks stale.',
+        disabled: false,
+        scenarioId: '',
+      };
+    }
+
+    function populateScenarioOptions() {
       const previous = controls.scenarioSelect.value;
-      controls.scenarioSelect.innerHTML = '';
-      items.forEach((item) => {
-        const option = document.createElement('option');
-        option.value = item.id;
-        option.textContent = item.label || item.id;
-        controls.scenarioSelect.appendChild(option);
+      const options = [];
+      const seen = new Set();
+      const source = cachedScenarios.length ? cachedScenarios : manualScenarioFallback.map((id) => ({
+        id,
+        label: demoMetaById[id] ? demoMetaById[id].label : id.replaceAll('_', ' ')
+      }));
+      source.forEach((item) => {
+        const id = selectText(item.id, '');
+        if (!id || seen.has(id)) {
+          return;
+        }
+        seen.add(id);
+        options.push({ id, label: selectText(item.label, id) });
       });
-      if (previous && items.some((item) => item.id === previous)) {
+      controls.scenarioSelect.innerHTML = options
+        .map((item) => `<option value="${item.id}">${item.label}</option>`)
+        .join('');
+      if (previous && seen.has(previous)) {
         controls.scenarioSelect.value = previous;
+      } else if (options.length > 0) {
+        controls.scenarioSelect.value = options[0].id;
+      }
+    }
+
+    function populateIntentTemplates() {
+      controls.intentTemplate.innerHTML = Object.keys(intentTemplates)
+        .map((intentName) => `<option value="${intentName}">${intentName}</option>`)
+        .join('');
+      setIntentEditor(controls.intentTemplate.value || 'acquire_target', true);
+    }
+
+    function setIntentEditor(intentName, preservePreview) {
+      const template = intentTemplates[intentName] || intentTemplates.acquire_target;
+      controls.intentJson.value = JSON.stringify(template, null, 2);
+      editorDirty = false;
+      if (!preservePreview) {
+        clearPreview();
+      }
+    }
+
+    function clearPreview(message = 'Preview required.') {
+      localPreview = null;
+      stateEls.previewStatus.textContent = message;
+      stateEls.previewReadiness.textContent = 'No preview yet.';
+      stateEls.previewActivity.textContent = 'No preview yet.';
+      stateEls.previewPayload.textContent = '{}';
+      controls.dispatchIntent.disabled = true;
+    }
+
+    function readIntentBodyFromEditor() {
+      const parsed = JSON.parse(controls.intentJson.value || '{}');
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Intent body must be a JSON object.');
+      }
+      const intentName = selectText(parsed.intent, '');
+      if (!intentName) {
+        throw new Error('Intent body must include an intent field.');
+      }
+      const args = parsed.args && typeof parsed.args === 'object' && !Array.isArray(parsed.args) ? parsed.args : {};
+      return { intent: intentName, args };
+    }
+
+    function previewFromState(state) {
+      const decision = state.decision || {};
+      if (decision.last_preview_valid) {
+        return {
+          generated_utc: decision.last_preview_timestamp_utc || '',
+          intent: selectText(decision.last_preview_payload && decision.last_preview_payload.intent, ''),
+          payload: decision.last_preview_payload || {},
+          readiness: decision.last_preview_readiness || {},
+          expected_boundary_activity: Array.isArray(decision.last_preview_expected_activity) ? decision.last_preview_expected_activity : [],
+          ready_to_dispatch: Boolean(decision.last_preview_readiness && decision.last_preview_readiness.ready_to_dispatch),
+          contract_valid: true,
+        };
+      }
+      if (decision.last_preview_error) {
+        return {
+          intent: '',
+          payload: {},
+          readiness: {},
+          expected_boundary_activity: [],
+          ready_to_dispatch: false,
+          contract_valid: false,
+          error: decision.last_preview_error,
+        };
+      }
+      return null;
+    }
+
+    function renderPreview(state) {
+      const preview = localPreview || previewFromState(state);
+      const controlsState = state.controls || {};
+      if (!preview) {
+        clearPreview('Preview required.');
+        return;
+      }
+
+      if (preview.error) {
+        stateEls.previewStatus.textContent = `Preview failed: ${preview.error}`;
+        stateEls.previewReadiness.textContent = 'Preview is invalid.';
+        stateEls.previewActivity.textContent = 'No boundary activity because validation failed.';
+        stateEls.previewPayload.textContent = '{}';
+        controls.dispatchIntent.disabled = true;
+        return;
+      }
+
+      const readiness = preview.readiness || {};
+      const missing = Array.isArray(readiness.missing_keys) ? readiness.missing_keys : [];
+      const readinessText = missing.length
+        ? `Missing: ${missing.join(', ')}`
+        : 'Ready to dispatch from the current session.';
+      const expectedActivity = Array.isArray(preview.expected_boundary_activity) && preview.expected_boundary_activity.length
+        ? preview.expected_boundary_activity.join(', ')
+        : 'No specific activity listed.';
+
+      stateEls.previewStatus.textContent = `${preview.intent || 'intent'} preview ${preview.ready_to_dispatch ? 'ready' : 'blocked'}`;
+      stateEls.previewReadiness.textContent = readinessText;
+      stateEls.previewActivity.textContent = expectedActivity;
+      stateEls.previewPayload.textContent = JSON.stringify(preview.payload || {}, null, 2);
+      controls.dispatchIntent.disabled = !(
+        controlsState.can_dispatch_intent
+        && preview.contract_valid
+        && preview.ready_to_dispatch
+      );
+    }
+
+    function renderAdvancedLanes(state) {
+      const perception = state.perception || {};
+      const belief = state.belief || {};
+      const decision = state.decision || {};
+      const outcome = state.outcome || {};
+
+      renderLane(stateEls.perceptionLane, [
+        { label: 'Detection Topic', value: perception.detection_topic_seen ? 'live' : 'waiting' },
+        { label: 'Target Visible Now', value: perception.target_visible_now ? 'yes' : 'no' },
+        { label: 'Target Visible Ratio', value: `${Number(perception.target_visible_ratio || 0).toFixed(2)}` },
+        { label: 'Latest Detection', value: formatPoint(perception.latest_detection_world) },
+        { label: 'Truth Target', value: formatPoint(perception.latest_truth_target_world) },
+        { label: 'Truth Status', value: selectText(perception.truth_status, 'truth unavailable') }
+      ]);
+
+      renderLane(stateEls.beliefLane, [
+        { label: 'Robot Pose', value: formatPose(belief.latest_robot_pose) },
+        { label: 'Goal Pose', value: formatPose(belief.latest_goal_pose) },
+        { label: 'Distance', value: formatMeters(belief.latest_target_distance_m) },
+        { label: 'Distance Trend', value: selectText(belief.distance_trend, 'unknown') },
+        { label: 'Phase', value: selectText(belief.phase, 'n/a') },
+        { label: 'Target / Transition', value: `${selectText(belief.target_id, 'n/a')} / ${belief.target_transition_active ? 'active' : 'steady'}` }
+      ]);
+
+      renderLane(stateEls.decisionLane, [
+        { label: 'Last Intent', value: selectText(decision.last_intent, 'none') },
+        { label: 'Last Intent At', value: selectText(decision.last_intent_timestamp_utc, 'n/a') },
+        { label: 'Last Preview Valid', value: decision.last_preview_valid ? 'yes' : 'no' },
+        { label: 'Preview Generated', value: selectText(decision.last_preview_timestamp_utc, 'n/a') },
+        { label: 'Preview Error', value: selectText(decision.last_preview_error, 'none') },
+        { label: 'Available Intents', value: Array.isArray(decision.available_intents) ? decision.available_intents.join(', ') : 'n/a' }
+      ]);
+
+      renderLane(stateEls.outcomeLane, [
+        { label: 'Last Feedback', value: selectText(outcome.last_feedback, 'none') },
+        { label: 'Last Result', value: selectText(outcome.last_result, 'none') },
+        { label: 'Feedback Recent', value: outcome.feedback_recent ? 'yes' : 'no' },
+        { label: 'Nav Goal Recent', value: outcome.nav_goal_recent ? 'yes' : 'no' },
+        { label: 'cmd_vel Recent', value: outcome.cmd_vel_recent ? 'yes' : 'no' },
+        { label: 'Motion Evidence', value: outcome.motion_evidence ? 'yes' : 'no' }
+      ]);
+    }
+
+    function renderDemoCards(state, completed, recommendedId) {
+      const controlsState = state.controls || {};
+      const activeScenario = selectText(state.active_scenario, '');
+      const canRunScenario = Boolean(controlsState.can_run_scenario);
+      stateEls.demoList.innerHTML = demoFlow.map((item) => {
+        const complete = completed.has(item.id);
+        const running = activeScenario === item.id && state.scenario_state === 'running';
+        const recommended = recommendedId === item.id && state.environment_state === 'environment_ready' && state.scenario_state !== 'running';
+        const classes = ['demo-card'];
+        if (complete) {
+          classes.push('is-complete');
+        }
+        if (running) {
+          classes.push('is-running');
+        }
+        if (recommended) {
+          classes.push('is-recommended');
+        }
+        const badge = running ? 'running' : (complete ? 'done' : (recommended ? 'recommended next' : 'available'));
+        return `
+          <div class="${classes.join(' ')}">
+            <div class="demo-card-head">
+              <div>
+                <p class="demo-meta">${badge}</p>
+                <h3 class="demo-card-title">${item.label}</h3>
+              </div>
+              <button
+                class="${recommended ? 'primary' : 'secondary'}"
+                type="button"
+                data-demo-run="${item.id}"
+                data-testid="btn-demo-${item.id}"
+                ${canRunScenario ? '' : 'disabled'}
+              >Run</button>
+            </div>
+            <p class="demo-card-copy">${item.copy}</p>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderWatchPanel(state, recommendedId) {
+      const envState = selectText(state.environment_state, 'stopped');
+      const activeScenario = selectText(state.active_scenario, '');
+      const runningMeta = demoMetaById[activeScenario];
+      const recommendedMeta = demoMetaById[recommendedId];
+      let title = 'operator cues';
+      let copy = 'Use these cues to decide whether the current step looks healthy without needing to open the engineering detail.';
+      let cues = [
+        'The world and topdown panes should stay current instead of freezing.',
+        'The status strip should match what the robot appears to be doing.',
+        'If the simple story stops making sense, open Advanced Controls for the exact signal-level view.'
+      ];
+
+      if (!state.control_plane_ready) {
+        title = 'control plane';
+        copy = 'The dashboard can render before the control plane is ready. Wait for the warm services and controls to become available.';
+        cues = [
+          'The Next Step card should explain what the dashboard is waiting on.',
+          'The world and camera panes may stay blank until the environment is started.',
+          'Open Advanced Controls only if you want the exact warm-service status.'
+        ];
+      } else if (envState === 'stopped') {
+        title = 'startup cues';
+        copy = 'Before the environment starts, the visuals should be quiet and the primary action should clearly be Start Environment.';
+        cues = [
+          'The Next Step button should say Start Environment.',
+          'Session id should still be empty or n/a.',
+          'The world, topdown, and camera panes should not look live yet.'
+        ];
+      } else if (envState === 'starting') {
+        title = 'environment startup';
+        copy = 'Wait for visual life signs before trying to run any scenario.';
+        cues = [
+          'World and topdown panes should begin updating.',
+          'Session id should populate once the environment is taking shape.',
+          'The primary action should switch away from Start when the system becomes ready.'
+        ];
+      } else if (runningMeta && state.scenario_state === 'running') {
+        title = runningMeta.label;
+        copy = runningMeta.watchCopy;
+        cues = runningMeta.cues;
+      } else if (envState === 'environment_ready' && recommendedMeta) {
+        title = `${recommendedMeta.label} next`;
+        copy = recommendedMeta.watchCopy;
+        cues = recommendedMeta.cues;
+      } else if (envState === 'environment_ready') {
+        title = 'ready state';
+        copy = 'The environment is ready. Run the next capability demo or stop the environment if this session is complete.';
+        cues = [
+          'The primary action should recommend the next scenario or Stop Environment.',
+          'The world and topdown panes should remain live while idle.',
+          'Reset Sim stays available if you want a fresh session id.'
+        ];
+      }
+
+      stateEls.watchContext.textContent = title;
+      stateEls.watchCopy.textContent = copy;
+      stateEls.watchList.innerHTML = cues.map((cue) => `<li class="watch-item">${cue}</li>`).join('');
+    }
+
+    function renderPrimaryAction(state, recommendedId) {
+      const completed = loadCompletedScenarios(selectText(state.session_id, ''));
+      const action = getPrimaryAction(state, completed);
+      currentPrimaryAction = action;
+      stateEls.primaryStatusChip.textContent = action.chip;
+      stateEls.nextStepTitle.textContent = action.title;
+      stateEls.nextStepCopy.textContent = action.copy;
+      controls.nextStep.textContent = action.label;
+      controls.nextStep.disabled = Boolean(action.disabled);
+
+      const controlsState = state.controls || {};
+      controls.refresh.disabled = !controlsState.can_refresh;
+      controls.resetSim.disabled = !controlsState.can_reset_sim;
+      controls.stop.disabled = !controlsState.can_stop;
+      controls.stopScenario.disabled = !controlsState.can_stop_scenario;
+      controls.stopScenario.hidden = !controlsState.can_stop_scenario;
+      controls.runScenario.disabled = !controlsState.can_run_scenario;
+      controls.acquireTarget.disabled = !controlsState.can_issue_intent;
+      controls.planToTarget.disabled = !controlsState.can_issue_intent;
+      controls.trackTarget.disabled = !controlsState.can_issue_intent;
+      controls.abort.disabled = !controlsState.can_issue_intent;
+      controls.safeStop.disabled = !controlsState.can_issue_intent;
+      controls.previewIntent.disabled = !controlsState.can_preview_intent;
+      controls.scenarioSelect.disabled = !controlsState.can_run_scenario;
+
+      const logMessage = selectText(
+        state.scenario_message || state.environment_message || state.status_text || state.last_feedback || state.last_result,
+        'Waiting for dashboard state.'
+      );
+      stateEls.operatorLog.textContent = logMessage;
+    }
+
+    function renderControlDetail(state) {
+      stateEls.controlModeDetail.textContent = selectText(state.control_mode, 'n/a');
+      stateEls.warmServices.textContent = selectText(state.warm_services_status, 'unknown');
+      stateEls.composeProject.textContent = selectText(state.compose_project, 'n/a');
+      stateEls.worldStreamReady.textContent = state.world_stream_ready ? 'ready' : (selectText(state.world_stream_failure_class, 'waiting'));
+      stateEls.truthAlignment.textContent = state.truth_alignment_ok ? 'aligned' : (selectText(state.truth_failure_class, 'waiting'));
+      stateEls.motionEvidence.textContent = state.motion_evidence ? 'present' : 'waiting';
+      if (state.control_plane_ready) {
+        stateEls.operatorFootnote.textContent = 'Controls are live. Advanced tools here are the same truthful backend state, just with more detail.';
+      } else {
+        stateEls.operatorFootnote.textContent = selectText(state.control_plane_error, 'Read-only fallback mode disables controls until the API-backed service is reachable.');
+      }
+    }
+
+    function renderCameraState(state) {
+      const sessionActive = Boolean(state.session_id) && state.environment_state !== 'stopped';
+      const rawCount = sessionActive ? Number(state.raw_frame_count || 0) : 0;
+      const debugCount = sessionActive ? Number(state.debug_frame_count || 0) : 0;
+      const telemetryCount = sessionActive ? Number(state.telemetry_frame_count || 0) : 0;
+      stateEls.topdownCount.textContent = `${telemetryCount} frames`;
+      stateEls.cameraCount.textContent = `raw ${rawCount} - debug ${debugCount}`;
+      stateEls.cameraStatus.textContent = activeCamera === 'raw' ? 'Raw camera view' : 'YOLO debug view';
+
+      controls.cameraTabRaw.classList.toggle('is-active', activeCamera === 'raw');
+      controls.cameraTabDebug.classList.toggle('is-active', activeCamera === 'debug');
+      controls.cameraPaneRaw.classList.toggle('is-active', activeCamera === 'raw');
+      controls.cameraPaneDebug.classList.toggle('is-active', activeCamera === 'debug');
+
+      if (sessionActive && state.live_paths) {
+        stampImage(stateEls.worldImage, state.live_paths.world_stream || 'live/world_stream.jpg');
+        stampImage(stateEls.topdownImage, state.live_paths.topdown_telemetry || 'live/topdown_telemetry.jpg');
+        stampImage(stateEls.rawImage, state.live_paths.raw_camera || 'live/raw_camera.jpg');
+        stampImage(stateEls.debugImage, state.live_paths.yolo_debug || 'live/yolo_debug.jpg');
+      } else {
+        stateEls.worldImage.src = placeholderImage();
+        stateEls.topdownImage.src = placeholderImage();
+        stateEls.rawImage.src = placeholderImage();
+        stateEls.debugImage.src = placeholderImage();
+      }
+
+      if (state.world_stream_url) {
+        stateEls.worldLink.style.display = 'inline';
+        stateEls.worldLink.href = state.world_stream_url;
+      } else {
+        stateEls.worldLink.style.display = 'none';
+        stateEls.worldLink.removeAttribute('href');
       }
     }
 
     function renderState(state) {
-      const controlMode = selectText(state.control_mode, 'control');
-      const warmStatus = selectText(state.warm_services_status, 'n/a');
-      stateEls.sessionId.textContent = selectText(state.session_id);
-      stateEls.phase.textContent = selectText(state.phase, 'stopped');
-      stateEls.targetId.textContent = selectText(state.target_id);
-      stateEls.targetTransition.innerHTML = boolText(Boolean(state.target_transition_active), 'active', 'steady');
-      stateEls.environmentState.textContent = selectText(state.environment_state, 'stopped');
+      const sessionChanged = lastRenderedState && lastRenderedState.session_id !== state.session_id;
+      if (sessionChanged) {
+        clearPreview('Preview cleared because the session changed.');
+      }
+
+      const envState = selectText(state.environment_state, 'stopped');
+      const completed = envState === 'stopped' ? new Set() : trackScenarioProgress(state);
+      const recommendedId = recommendedScenarioId(state, completed);
+      const demoStory = state.demo_story || {};
+      const sessionDisplay = envState === 'stopped' ? 'n/a' : selectText(state.session_id, 'n/a');
+      const phaseDisplay = envState === 'stopped' ? 'stopped' : selectText(state.phase, 'stopped');
+      const targetDisplay = envState === 'stopped' ? 'n/a' : selectText(state.target_id, 'n/a');
+      const capabilityDisplay = envState === 'stopped' ? 'WAIT' : selectText(demoStory.capability_stage, 'WAIT');
+
+      stateEls.apiMode.textContent = apiMode
+        ? `${selectText(state.control_mode, 'control')} • ${state.warm_services_ready ? 'warm ready' : selectText(state.warm_services_status, 'warm pending')}`
+        : 'Read-Only Fallback';
+      stateEls.environmentState.textContent = envState;
       stateEls.scenarioState.textContent = selectText(state.scenario_state, 'idle');
-      stateEls.lastIntent.textContent = selectText(state.last_intent, 'none');
-      stateEls.lastResult.textContent = selectText(state.last_feedback || state.last_result, 'none');
-      stateEls.composeProject.textContent = selectText(state.compose_project);
-      stateEls.rawCount.textContent = `${Number(state.raw_frame_count || 0)} frames`;
-      stateEls.debugCount.textContent = `${Number(state.debug_frame_count || 0)} frames`;
-      stateEls.worldStreamReady.innerHTML = boolText(Boolean(state.world_stream_ready), 'ready', selectText(state.world_stream_failure_class, 'waiting'));
-      stateEls.truthAlignment.innerHTML = boolText(Boolean(state.truth_alignment_ok), 'aligned', selectText(state.truth_failure_class, 'waiting'));
-      stateEls.motionEvidence.innerHTML = boolText(Boolean(state.motion_evidence), 'true', 'false');
-      if (state.control_mode === 'docker_socket') {
-        stateEls.warmServices.innerHTML = boolText(Boolean(state.warm_services_ready), 'ready', warmStatus);
-      } else {
-        stateEls.warmServices.textContent = warmStatus;
-      }
-      stateEls.operatorLog.textContent = selectText(
-        state.control_plane_error || state.status_text || state.environment_message || state.scenario_message,
-        'Waiting for dashboard state.'
+      stateEls.phase.textContent = phaseDisplay;
+      stateEls.targetId.textContent = targetDisplay;
+      stateEls.lastResult.textContent = selectText(state.last_result, 'none');
+      stateEls.sessionId.textContent = sessionDisplay;
+      stateEls.capabilityStage.textContent = capabilityDisplay;
+      stateEls.demoExpectation.textContent = selectText(
+        demoStory.demo_expectation,
+        'Start with M3 single target, then rehearse the left, center, and right variants, then finish with multi-target rehearsal.'
       );
-      stateEls.operatorFootnote.textContent = apiMode
-        ? (
-            state.control_plane_ready === false
-              ? `Control plane unavailable: ${selectText(state.control_plane_error, 'unknown error')}.`
-              : state.control_mode === 'docker_socket'
-                ? `Launcher mode: ${controlMode}. Warm services: ${warmStatus}.`
-                : 'Host fallback mode is active for engineering use.'
-          )
-        : 'Read-only fallback mode detected. Controls stay disabled until the API-backed service is reachable.';
 
-      if (state.world_stream_url) {
-        stateEls.worldLink.href = state.world_stream_url;
-        stateEls.worldLink.style.display = 'inline';
-      } else {
-        stateEls.worldLink.style.display = 'none';
-      }
-
-      if (apiMode && state.controls) {
-        controls.start.disabled = !state.controls.can_start;
-        controls.refresh.disabled = !state.controls.can_refresh;
-        controls.stop.disabled = !state.controls.can_stop;
-        controls.runScenario.disabled = !state.controls.can_run_scenario;
-        controls.resetSim.disabled = !state.controls.can_reset_sim;
-        controls.stopScenario.disabled = !state.controls.can_stop_scenario;
-        controls.acquireTarget.disabled = !state.controls.can_issue_intent;
-        controls.planToTarget.disabled = !state.controls.can_issue_intent;
-        controls.trackTarget.disabled = !state.controls.can_issue_intent;
-        controls.abort.disabled = !state.controls.can_issue_intent;
-        controls.safeStop.disabled = !state.controls.can_issue_intent;
-        controls.targetClass.disabled = false;
-        controls.approachDistance.disabled = false;
-        controls.scenarioSelect.disabled = false;
-      } else {
-        Object.values(controls).forEach((control) => {
-          if ('disabled' in control) {
-            control.disabled = true;
-          }
-        });
-        controls.targetClass.disabled = true;
-        controls.approachDistance.disabled = true;
-        controls.scenarioSelect.disabled = true;
-      }
-
-      stampImage(stateEls.rawImage, 'live/raw_camera.jpg');
-      stampImage(stateEls.debugImage, 'live/yolo_debug.jpg');
-      stampImage(stateEls.worldImage, 'live/world_stream.jpg');
+      renderDemoCards(state, completed, recommendedId);
+      renderWatchPanel(state, recommendedId);
+      renderPrimaryAction(state, recommendedId);
+      renderControlDetail(state);
+      renderCameraState(state);
+      renderAdvancedLanes(state);
+      renderPreview(state);
+      lastRenderedState = JSON.parse(JSON.stringify(state));
     }
 
-    async function fetchJson(path, options = {}) {
-      const response = await fetch(path, {
-        cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
-        ...options
-      });
+    async function fetchJson(path) {
+      const response = await fetch(path, { cache: 'no-store' });
+      const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(`http_${response.status}`);
+        throw new Error(payload.error || payload.message || `Request failed: ${response.status}`);
       }
-      return await response.json();
+      return payload;
     }
 
-    async function postJson(path, payload = {}) {
-      const body = JSON.stringify(payload);
+    async function postJson(path, body) {
       const response = await fetch(path, {
         method: 'POST',
-        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
-        body
+        body: JSON.stringify(body || {})
       });
-      const json = await response.json().catch(() => ({}));
+      const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(json.error || `http_${response.status}`);
+        const error = new Error(payload.error || payload.message || `Request failed: ${response.status}`);
+        error.status = response.status;
+        error.payload = payload;
+        throw error;
       }
-      return json;
+      return payload;
+    }
+
+    async function runScenarioById(scenarioId) {
+      if (!scenarioId) {
+        throw new Error('Missing scenario id.');
+      }
+      stateEls.operatorLog.textContent = `Queueing ${scenarioId}.`;
+      await postJson('/api/scenario/run', { scenario_id: scenarioId });
+      await refreshState();
+    }
+
+    async function handlePrimaryAction() {
+      if (!currentPrimaryAction || currentPrimaryAction.disabled) {
+        return;
+      }
+      try {
+        if (currentPrimaryAction.kind === 'start') {
+          stateEls.operatorLog.textContent = 'Starting environment.';
+          await postJson('/api/env/start', {});
+        } else if (currentPrimaryAction.kind === 'stop') {
+          stateEls.operatorLog.textContent = 'Stopping environment.';
+          await postJson('/api/env/stop', {});
+        } else if (currentPrimaryAction.kind === 'stopScenario') {
+          stateEls.operatorLog.textContent = 'Stopping scenario.';
+          await postJson('/api/scenario/stop', {});
+        } else if (currentPrimaryAction.kind === 'runScenario') {
+          await runScenarioById(currentPrimaryAction.scenarioId);
+          return;
+        } else {
+          return;
+        }
+        await refreshState();
+      } catch (error) {
+        stateEls.operatorLog.textContent = String(error.message || error);
+        throw error;
+      }
     }
 
     async function refreshApiState() {
-      const [state, scenarios] = await Promise.all([
+      const [state, scenarioCatalog] = await Promise.all([
         fetchJson('/api/state'),
-        fetchJson('/api/scenarios').catch(() => ({ scenarios: fallbackScenarios.map((id) => ({ id, label: id })) }))
+        fetchJson('/api/scenarios').catch(() => ({ scenarios: [] }))
       ]);
       apiMode = true;
-      stateEls.apiMode.textContent = selectText(state.control_mode, 'control');
-      populateScenarioOptions(scenarios.scenarios || []);
-      renderState(state);
+      if (Array.isArray(scenarioCatalog.scenarios) && scenarioCatalog.scenarios.length) {
+        cachedScenarios = scenarioCatalog.scenarios;
+        populateScenarioOptions();
+      }
+      return state;
     }
 
-    async function refreshLegacyState() {
-      const [visualState, operatorState, worldState] = await Promise.all([
-        fetchJson(`state.json?t=${Date.now()}`).catch(() => ({})),
-        fetchJson(`operator_status.json?t=${Date.now()}`).catch(() => ({})),
-        fetchJson(`world_stream_state.json?t=${Date.now()}`).catch(() => ({}))
-      ]);
+    function refreshLegacyState(error) {
       apiMode = false;
-      stateEls.apiMode.textContent = 'read_only';
-      populateScenarioOptions([]);
-      renderState({
-        control_mode: 'read_only',
-        control_plane_ready: false,
-        control_plane_error: '',
-        warm_services_status: 'n/a',
-        session_id: operatorState.session_id || visualState.session_id || '',
-        phase: operatorState.phase || visualState.phase || 'visual_only',
-        target_id: operatorState.target_id || visualState.target_id || '',
-        target_transition_active: operatorState.target_transition_active || visualState.target_transition_active || false,
-        environment_state: 'legacy_visual_only',
-        scenario_state: 'external_control',
-        last_intent: '',
-        last_result: '',
-        compose_project: '',
-        raw_frame_count: visualState.raw_frame_count || 0,
-        debug_frame_count: visualState.debug_frame_count || 0,
-        truth_alignment_ok: visualState.truth_alignment_ok || false,
-        truth_failure_class: visualState.truth_failure_class || '',
-        motion_evidence: false,
-        world_stream_ready: worldState.world_stream_ready || false,
-        world_stream_failure_class: worldState.failure_class || '',
-        world_stream_url: worldState.world_stream_url || '',
-        controls: {
-          can_start: false,
-          can_refresh: false,
-          can_stop: false,
-          can_run_scenario: false,
-          can_reset_sim: false,
-          can_stop_scenario: false,
-          can_issue_intent: false
-        }
-      });
+      const base = lastRenderedState
+        ? JSON.parse(JSON.stringify(lastRenderedState))
+        : {
+            control_mode: 'read_only',
+            control_plane_ready: false,
+            control_plane_error: 'Dashboard API unavailable.',
+            warm_services_ready: false,
+            warm_services_status: 'unknown',
+            environment_state: 'stopped',
+            environment_message: 'Dashboard API unavailable.',
+            scenario_state: 'idle',
+            scenario_message: '',
+            session_id: '',
+            compose_project: '',
+            phase: 'stopped',
+            target_id: '',
+            target_transition_active: false,
+            active_scenario: '',
+            last_feedback: '',
+            last_result: '',
+            motion_evidence: false,
+            world_stream_ready: false,
+            truth_alignment_ok: false,
+            raw_frame_count: 0,
+            debug_frame_count: 0,
+            telemetry_frame_count: 0,
+            live_paths: {},
+            perception: {},
+            belief: {},
+            decision: {},
+            outcome: {},
+            demo_story: {},
+            controls: {
+              can_start: false,
+              can_stop: false,
+              can_refresh: true,
+              can_reset_sim: false,
+              can_run_scenario: false,
+              can_stop_scenario: false,
+              can_issue_intent: false,
+              can_preview_intent: false,
+              can_dispatch_intent: false
+            }
+          };
+      base.control_plane_ready = false;
+      base.control_mode = 'read_only';
+      base.control_plane_error = String(error && error.message ? error.message : error || 'Dashboard API unavailable.');
+      if (!base.controls) {
+        base.controls = {};
+      }
+      base.controls.can_start = false;
+      base.controls.can_stop = false;
+      base.controls.can_refresh = true;
+      base.controls.can_reset_sim = false;
+      base.controls.can_run_scenario = false;
+      base.controls.can_stop_scenario = false;
+      base.controls.can_issue_intent = false;
+      base.controls.can_preview_intent = false;
+      base.controls.can_dispatch_intent = false;
+      return base;
     }
 
     async function refreshState() {
       try {
-        await refreshApiState();
-      } catch (err) {
-        await refreshLegacyState();
+        const state = await refreshApiState();
+        renderState(state);
+      } catch (error) {
+        renderState(refreshLegacyState(error));
       }
     }
 
-    controls.start.addEventListener('click', async () => { await postJson('/api/env/start'); await refreshState(); });
-    controls.refresh.addEventListener('click', async () => { await postJson('/api/env/refresh'); await refreshState(); });
-    controls.stop.addEventListener('click', async () => { await postJson('/api/env/stop'); await refreshState(); });
-    controls.resetSim.addEventListener('click', async () => { await postJson('/api/sim/reset'); await refreshState(); });
-    controls.runScenario.addEventListener('click', async () => {
-      await postJson('/api/scenario/run', { scenario_id: controls.scenarioSelect.value });
-      await refreshState();
+    controls.cameraTabRaw.addEventListener('click', () => {
+      activeCamera = 'raw';
+      renderCameraState(lastRenderedState || refreshLegacyState('Dashboard API unavailable.'));
     });
-    controls.stopScenario.addEventListener('click', async () => { await postJson('/api/scenario/stop'); await refreshState(); });
-    controls.acquireTarget.addEventListener('click', async () => {
-      await postJson('/api/intents/acquire_target', { target_class: controls.targetClass.value || 'ball' });
-      await refreshState();
-    });
-    controls.planToTarget.addEventListener('click', async () => {
-      await postJson('/api/intents/plan_to_target', { approach_distance_m: Number(controls.approachDistance.value || 0.25) });
-      await refreshState();
-    });
-    controls.trackTarget.addEventListener('click', async () => { await postJson('/api/intents/track_target'); await refreshState(); });
-    controls.abort.addEventListener('click', async () => { await postJson('/api/intents/abort'); await refreshState(); });
-    controls.safeStop.addEventListener('click', async () => { await postJson('/api/intents/safe_stop'); await refreshState(); });
 
+    controls.cameraTabDebug.addEventListener('click', () => {
+      activeCamera = 'debug';
+      renderCameraState(lastRenderedState || refreshLegacyState('Dashboard API unavailable.'));
+    });
+
+    controls.nextStep.addEventListener('click', async () => {
+      await handlePrimaryAction();
+    });
+
+    controls.refresh.addEventListener('click', async () => {
+      stateEls.operatorLog.textContent = 'Refreshing environment.';
+      await postJson('/api/env/refresh', {});
+      await refreshState();
+    });
+
+    controls.resetSim.addEventListener('click', async () => {
+      stateEls.operatorLog.textContent = 'Resetting sim.';
+      await postJson('/api/sim/reset', {});
+      await refreshState();
+    });
+
+    controls.stopScenario.addEventListener('click', async () => {
+      stateEls.operatorLog.textContent = 'Stopping scenario.';
+      await postJson('/api/scenario/stop', {});
+      await refreshState();
+    });
+
+    controls.stop.addEventListener('click', async () => {
+      stateEls.operatorLog.textContent = 'Stopping environment.';
+      await postJson('/api/env/stop', {});
+      await refreshState();
+    });
+
+    controls.runScenario.addEventListener('click', async () => {
+      await runScenarioById(controls.scenarioSelect.value);
+    });
+
+    stateEls.demoList.addEventListener('click', async (event) => {
+      const target = event.target instanceof HTMLElement ? event.target.closest('[data-demo-run]') : null;
+      if (!target) {
+        return;
+      }
+      const scenarioId = target.getAttribute('data-demo-run') || '';
+      if (scenarioId) {
+        await runScenarioById(scenarioId);
+      }
+    });
+
+    controls.intentTemplate.addEventListener('change', () => {
+      setIntentEditor(controls.intentTemplate.value, false);
+    });
+
+    controls.intentJson.addEventListener('input', () => {
+      editorDirty = true;
+      clearPreview('Preview required after edits.');
+    });
+
+    controls.previewIntent.addEventListener('click', async () => {
+      try {
+        const body = readIntentBodyFromEditor();
+        const payload = await postJson('/api/intents/preview', body);
+        localPreview = payload.preview || null;
+        renderPreview(lastRenderedState || refreshLegacyState('Dashboard API unavailable.'));
+      } catch (error) {
+        localPreview = { error: String(error.message || error) };
+        renderPreview(lastRenderedState || refreshLegacyState('Dashboard API unavailable.'));
+      }
+    });
+
+    controls.dispatchIntent.addEventListener('click', async () => {
+      const body = readIntentBodyFromEditor();
+      await postJson('/api/intents/dispatch', body);
+      await refreshState();
+    });
+
+    async function fireQuickIntent(intentName, args) {
+      await postJson(`/api/intents/${intentName}`, args);
+      await refreshState();
+    }
+
+    controls.acquireTarget.addEventListener('click', async () => {
+      await fireQuickIntent('acquire_target', { target_class: controls.targetClass.value || 'ball' });
+    });
+
+    controls.planToTarget.addEventListener('click', async () => {
+      await fireQuickIntent('plan_to_target', { approach_distance_m: Number(controls.approachDistance.value || 0.25) });
+    });
+
+    controls.trackTarget.addEventListener('click', async () => {
+      await fireQuickIntent('track_target', {});
+    });
+
+    controls.abort.addEventListener('click', async () => {
+      await fireQuickIntent('abort', {});
+    });
+
+    controls.safeStop.addEventListener('click', async () => {
+      await fireQuickIntent('safe_stop', {});
+    });
+
+    populateScenarioOptions();
+    populateIntentTemplates();
+    clearPreview();
     refreshState();
-    setInterval(refreshState, 1000);
+    window.setInterval(refreshState, 1000);
   </script>
 </body>
 </html>

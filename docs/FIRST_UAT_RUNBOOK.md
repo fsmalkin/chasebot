@@ -4,6 +4,8 @@
 
 Run the first deterministic operator UAT on a rebuilt machine and produce a session package with clear pass/fail gates.
 
+For the browser-dashboard operator flow, use [Dashboard Operator Guide](./DASHBOARD_OPERATOR_GUIDE.md). This runbook stays focused on orchestration, gating, and artifact interpretation.
+
 ## Preconditions
 
 1. Repo branch is `recovery/uat-full-robot-2026-02`.

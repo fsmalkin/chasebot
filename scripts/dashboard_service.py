@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import socket
 import subprocess
@@ -270,6 +271,15 @@ class DashboardController:
                 "last_intent": "",
                 "last_feedback": "",
                 "last_result": "",
+                "last_intent_payload": {},
+                "last_intent_timestamp_utc": "",
+                "last_preview_payload": {},
+                "last_preview_valid": False,
+                "last_preview_error": "",
+                "last_preview_timestamp_utc": "",
+                "last_preview_session_id": "",
+                "last_preview_readiness": {},
+                "last_preview_expected_activity": [],
                 "last_error": "",
                 "status_text": "",
                 "world_stream_url": "",
@@ -293,6 +303,79 @@ class DashboardController:
         if not isinstance(payload, dict):
             raise ValueError("LLM control contract must be a mapping.")
         return payload
+
+    def _intent_required_args(self, intent_name: str) -> list[str]:
+        spec = self.frozen_intents.get(intent_name)
+        if spec is None:
+            raise KeyError(intent_name)
+        return [str(value) for value in list(spec.get("required_args", []))]
+
+    def _intent_transport(self) -> Dict[str, Any]:
+        transport = self.contract.get("transport", {})
+        return dict(transport) if isinstance(transport, dict) else {}
+
+    def _normalize_intent_args(self, intent_name: str, args_payload: Dict[str, Any]) -> Dict[str, Any]:
+        if intent_name not in self.frozen_intents:
+            raise KeyError(intent_name)
+        if not isinstance(args_payload, dict):
+            raise ValueError("intent args must be an object")
+        required_args = self._intent_required_args(intent_name)
+        allowed_args = set(required_args)
+        missing_args = [name for name in required_args if name not in args_payload]
+        extra_args = sorted(name for name in args_payload.keys() if str(name) not in allowed_args)
+        if missing_args:
+            raise ValueError(f"Missing required args for {intent_name}: {', '.join(missing_args)}")
+        if extra_args:
+            raise ValueError(f"Unexpected args for {intent_name}: {', '.join(extra_args)}")
+
+        normalized: Dict[str, Any] = {}
+        for name in required_args:
+            value = args_payload.get(name)
+            if name == "target_class":
+                value = str(value or "").strip()
+                if not value:
+                    raise ValueError("target_class must be a non-empty string")
+            elif name == "approach_distance_m":
+                value = float(value)
+                if value <= 0.0:
+                    raise ValueError("approach_distance_m must be greater than zero")
+            normalized[name] = value
+        return normalized
+
+    def _build_intent_payload(
+        self,
+        intent_name: str,
+        args_payload: Dict[str, Any],
+        *,
+        planner: str = "dashboard_service",
+        seq: Optional[int] = None,
+        timestamp_utc: str = "",
+    ) -> Dict[str, Any]:
+        return {
+            "intent": intent_name,
+            "seq": int(seq or int(time.time() * 1000)),
+            "planner": planner,
+            "timestamp_utc": timestamp_utc or utc_now(),
+            "args": json.loads(json.dumps(args_payload)),
+        }
+
+    def _resolve_intent_request(self, body: Dict[str, Any], route_intent: str = "") -> tuple[str, Dict[str, Any]]:
+        if route_intent:
+            intent_name = route_intent.strip()
+            args_payload = body.get("args")
+            if isinstance(args_payload, dict) and set(body.keys()).issubset({"intent", "args"}):
+                raw_args = dict(args_payload)
+            else:
+                raw_args = {key: value for key, value in body.items() if key != "intent"}
+            return intent_name, raw_args
+
+        intent_name = str(body.get("intent", "")).strip()
+        if not intent_name:
+            raise ValueError("intent is required")
+        args_payload = body.get("args", {})
+        if not isinstance(args_payload, dict):
+            raise ValueError("args must be an object")
+        return intent_name, dict(args_payload)
 
     def _persist_state_locked(self) -> None:
         write_json(STATE_PATH, self.state)
@@ -337,6 +420,12 @@ class DashboardController:
         if validation_dir is None:
             return None
         return validation_dir / "command_history.jsonl"
+
+    def _timeline_events_path(self) -> Optional[Path]:
+        visual_dir = self._current_visual_dir()
+        if visual_dir is None:
+            return None
+        return visual_dir / "timeline_events.jsonl"
 
     def _scenarios_dir(self) -> Optional[Path]:
         validation_dir = self._current_validation_dir()
@@ -633,6 +722,98 @@ class DashboardController:
             "topdown_telemetry": "live/topdown_telemetry.jpg",
             "world_stream": "live/world_stream.jpg",
         }
+
+        perception = {
+            "detection_topic_seen": bool(visual_state.get("detection_topic_seen", False)),
+            "target_visible_now": bool(visual_state.get("target_visible_now", False)),
+            "target_visible_ratio": float(visual_state.get("target_visible_ratio", 0.0) or 0.0),
+            "latest_detection_world": visual_state.get("latest_detection_world"),
+            "latest_truth_target_world": visual_state.get("latest_truth_target_world"),
+            "truth_alignment_ok": bool(visual_state.get("truth_alignment_ok", False)),
+            "truth_status": "aligned" if visual_state.get("truth_alignment_ok", False) else (visual_state.get("truth_failure_class") or "truth unavailable"),
+        }
+        belief = {
+            "latest_robot_pose": visual_state.get("latest_robot_pose"),
+            "robot_pose_available": bool(visual_state.get("latest_robot_pose")),
+            "latest_goal_pose": visual_state.get("latest_goal_pose"),
+            "latest_target_distance_m": visual_state.get("latest_target_distance_m"),
+            "distance_trend": visual_state.get("distance_trend", "unknown"),
+            "distance_progress_m": visual_state.get("distance_progress_m"),
+            "capability_stage": visual_state.get("capability_stage", ""),
+            "phase": snapshot.get("phase", ""),
+            "target_id": snapshot.get("target_id", ""),
+            "target_transition_active": bool(snapshot.get("target_transition_active", False)),
+        }
+        decision = {
+            "available_intents": sorted(self.frozen_intents.keys()),
+            "last_intent": snapshot.get("last_intent", ""),
+            "last_intent_payload": snapshot.get("last_intent_payload", {}),
+            "last_intent_timestamp_utc": snapshot.get("last_intent_timestamp_utc", ""),
+            "last_preview_payload": snapshot.get("last_preview_payload", {}),
+            "last_preview_valid": bool(snapshot.get("last_preview_valid", False)),
+            "last_preview_error": snapshot.get("last_preview_error", ""),
+            "last_preview_timestamp_utc": snapshot.get("last_preview_timestamp_utc", ""),
+            "last_preview_readiness": snapshot.get("last_preview_readiness", {}),
+            "last_preview_expected_activity": snapshot.get("last_preview_expected_activity", []),
+        }
+        outcome = {
+            "last_feedback": snapshot.get("last_feedback", "") or visual_state.get("last_feedback_text", ""),
+            "last_result": snapshot.get("last_result", ""),
+            "feedback_recent": bool(visual_state.get("feedback_recent", False)),
+            "nav_goal_recent": bool(visual_state.get("nav_goal_recent", False)),
+            "cmd_vel_recent": bool(visual_state.get("cmd_vel_recent", False)),
+            "boundary_activity_seen": bool(visual_state.get("boundary_activity_seen", False)),
+            "motion_evidence": bool(snapshot.get("motion_evidence", False)),
+        }
+        active_scenario = snapshot.get("active_scenario", "")
+        capability_stage = "WAIT"
+        demo_label = "Warm Dashboard"
+        demo_expectation = "Use Start to bring the authoritative session up, then run a capability demo."
+        recommended_scenario_id = ""
+        if active_scenario == "multi_target_rehearsal" or snapshot.get("phase") == "multi_target_rehearsal":
+            capability_stage = "MULTI-STEP"
+            demo_label = "Multi-Step"
+            demo_expectation = "Watch the target sequence advance and the transition badge flip active at handoff."
+            recommended_scenario_id = "multi_target_rehearsal"
+        elif snapshot.get("last_intent") in {"abort", "safe_stop"} and snapshot.get("last_intent_timestamp_utc"):
+            capability_stage = "INTERRUPT"
+            demo_label = "Interrupt"
+            demo_expectation = "Use abort or safe_stop during active motion and watch feedback plus motion drop-off."
+            recommended_scenario_id = "m3_single_target"
+        elif active_scenario.startswith("m3_") or active_scenario == "m3_single_target":
+            capability_stage = "ACT" if outcome["cmd_vel_recent"] else "PLAN"
+            demo_label = "Plan + Act"
+            demo_expectation = "Watch the waypoint appear, then confirm the distance trend shrinks as motion continues."
+            recommended_scenario_id = active_scenario or "m3_single_target"
+        elif active_scenario == "m2_single_target":
+            capability_stage = "SEE"
+            demo_label = "See"
+            demo_expectation = "Use the raw, debug, and topdown panes to compare detections against truth."
+            recommended_scenario_id = "m2_single_target"
+        elif snapshot.get("last_intent") == "track_target":
+            capability_stage = "TRACK"
+            demo_label = "Track"
+            demo_expectation = "Watch continued boundary activity while the target remains visible and motion stays live."
+        elif perception["detection_topic_seen"]:
+            capability_stage = "SEE"
+            demo_label = "See"
+            demo_expectation = "Perception is live; the target cues should line up across the panes and the workbench."
+
+        if capability_stage == "WAIT" and belief.get("capability_stage"):
+            capability_stage = belief["capability_stage"]
+        demo_story = {
+            "capability_stage": capability_stage,
+            "demo_label": demo_label,
+            "demo_expectation": demo_expectation,
+            "recommended_scenario_id": recommended_scenario_id,
+        }
+
+        snapshot["perception"] = perception
+        snapshot["belief"] = belief
+        snapshot["decision"] = decision
+        snapshot["outcome"] = outcome
+        snapshot["demo_story"] = demo_story
+
         controls_enabled = bool(snapshot.get("control_plane_ready", False))
         snapshot["controls"] = {
             "can_start": controls_enabled and snapshot["environment_state"] in {"stopped", "error"},
@@ -642,6 +823,8 @@ class DashboardController:
             "can_run_scenario": controls_enabled and snapshot["environment_state"] == "environment_ready" and snapshot["scenario_state"] != "running",
             "can_stop_scenario": controls_enabled and snapshot["scenario_state"] == "running",
             "can_issue_intent": controls_enabled and snapshot["environment_state"] == "environment_ready",
+            "can_preview_intent": True,
+            "can_dispatch_intent": controls_enabled and snapshot["environment_state"] == "environment_ready",
         }
         snapshot["available_intents"] = sorted(self.frozen_intents.keys())
         return snapshot
@@ -774,9 +957,35 @@ class DashboardController:
         self._update_state(scenario_message="scenario stop requested")
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "scenario stop requested"}
 
+    def request_intent_preview(self, body: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
+        try:
+            intent_name, args_payload = self._resolve_intent_request(body)
+            preview = self._prepare_intent_preview(intent_name, args_payload)
+        except KeyError:
+            error = f"unknown frozen intent: {body.get('intent', '')}"
+            self._remember_preview({}, error=error, valid=False)
+            return HTTPStatus.NOT_FOUND, {"accepted": False, "error": error}
+        except Exception as exc:
+            self._remember_preview({}, error=str(exc), valid=False)
+            return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
+
+        self._remember_preview(preview, record_history=True)
+        return HTTPStatus.OK, {"accepted": True, "preview": preview}
+
+    def request_intent_dispatch(self, body: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
+        try:
+            intent_name, args_payload = self._resolve_intent_request(body)
+        except Exception as exc:
+            return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
+        return self.request_intent(intent_name, args_payload)
+
     def request_intent(self, intent_name: str, args_payload: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
         if intent_name not in self.frozen_intents:
             return HTTPStatus.NOT_FOUND, {"accepted": False, "error": f"unknown frozen intent: {intent_name}"}
+        try:
+            preview = self._prepare_intent_preview(intent_name, args_payload)
+        except Exception as exc:
+            return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
         with self.state_lock:
             env_state = self.state["environment_state"]
         if env_state != "environment_ready":
@@ -789,12 +998,12 @@ class DashboardController:
             return HTTPStatus.CONFLICT, {"accepted": False, "error": "intent already in progress"}
         self.intent_thread = threading.Thread(
             target=self._intent_worker,
-            args=(intent_name, args_payload),
+            args=(preview,),
             name=f"dashboard-intent-{intent_name}",
             daemon=True,
         )
         self.intent_thread.start()
-        return HTTPStatus.ACCEPTED, {"accepted": True, "message": f"intent {intent_name} queued"}
+        return HTTPStatus.ACCEPTED, {"accepted": True, "message": f"intent {intent_name} queued", "preview": preview}
 
     def _write_lock_file(self) -> None:
         payload = {
@@ -851,6 +1060,134 @@ class DashboardController:
         with path.open("a", encoding="utf-8") as fp:
             fp.write(json.dumps(entry, sort_keys=True) + "\n")
         self._update_state(command_history_path=str(path))
+
+    def _record_visual_event(self, entry: Dict[str, Any]) -> None:
+        path = self._timeline_events_path()
+        if path is None:
+            return
+        payload = dict(entry)
+        payload.setdefault("timestamp_utc", utc_now())
+        ensure_dir(path.parent)
+        with path.open("a", encoding="utf-8") as fp:
+            fp.write(json.dumps(payload, sort_keys=True) + "\n")
+
+    def _preview_matches_cached(self, intent_name: str, args_payload: Dict[str, Any]) -> bool:
+        with self.state_lock:
+            valid = bool(self.state.get("last_preview_valid", False))
+            payload = self.state.get("last_preview_payload", {})
+            preview_session_id = str(self.state.get("last_preview_session_id", ""))
+            current_session_id = str(self.state.get("session_id", ""))
+        if not valid or not isinstance(payload, dict):
+            return False
+        if not current_session_id or preview_session_id != current_session_id:
+            return False
+        return payload.get("intent") == intent_name and payload.get("args") == args_payload
+
+    def _intent_expected_activity(self, intent_name: str) -> list[str]:
+        if intent_name == "acquire_target":
+            return ["feedback on /chasecar/brain/feedback", "fresh detection/odom boundary activity"]
+        if intent_name == "plan_to_target":
+            return ["nav goal activity on /chasecar/nav_goal_pose", "feedback on /chasecar/brain/feedback"]
+        if intent_name == "track_target":
+            return ["continued cmd_vel activity", "feedback on /chasecar/brain/feedback"]
+        if intent_name == "abort":
+            return ["cancel feedback", "behavior activity should stop"]
+        if intent_name == "safe_stop":
+            return ["stop feedback", "immediate low-level stop semantics"]
+        return []
+
+    def _intent_readiness_snapshot(self, intent_name: str, state: Dict[str, Any]) -> Dict[str, Any]:
+        perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
+        belief = state.get("belief", {}) if isinstance(state.get("belief"), dict) else {}
+        outcome = state.get("outcome", {}) if isinstance(state.get("outcome"), dict) else {}
+
+        readiness = {
+            "control_plane_ready": bool(state.get("control_plane_ready", False)),
+            "environment_ready": state.get("environment_state") == "environment_ready",
+            "session_active": bool(state.get("session_id")),
+            "sim_gate_ready": bool(self.sim_gate_container_id),
+            "detection_seen": bool(perception.get("detection_topic_seen", False)),
+            "target_visible_now": bool(perception.get("target_visible_now", False)),
+            "robot_pose_available": bool(belief.get("robot_pose_available", False)),
+            "nav_goal_recent": bool(outcome.get("nav_goal_recent", False)),
+            "feedback_recent": bool(outcome.get("feedback_recent", False)),
+            "cmd_vel_recent": bool(outcome.get("cmd_vel_recent", False)),
+        }
+
+        required_keys = ["control_plane_ready", "environment_ready", "session_active", "sim_gate_ready"]
+        if intent_name in {"acquire_target", "plan_to_target", "track_target"}:
+            required_keys.extend(["detection_seen", "robot_pose_available"])
+        missing = [name for name in required_keys if not readiness.get(name, False)]
+        readiness["required_keys"] = required_keys
+        readiness["missing_keys"] = missing
+        readiness["ready_to_dispatch"] = not missing
+        return readiness
+
+    def _prepare_intent_preview(self, intent_name: str, args_payload: Dict[str, Any]) -> Dict[str, Any]:
+        if intent_name not in self.frozen_intents:
+            raise KeyError(intent_name)
+        normalized_args = self._normalize_intent_args(intent_name, args_payload)
+        payload = (
+            json.loads(json.dumps(self.state.get("last_preview_payload", {})))
+            if self._preview_matches_cached(intent_name, normalized_args)
+            else self._build_intent_payload(intent_name, normalized_args)
+        )
+        state = self.get_state()
+        readiness = self._intent_readiness_snapshot(intent_name, state)
+        spec = self.frozen_intents[intent_name]
+        transport = self._intent_transport()
+        return {
+            "generated_utc": utc_now(),
+            "intent": intent_name,
+            "description": str(spec.get("description", "")),
+            "required_args": self._intent_required_args(intent_name),
+            "args": normalized_args,
+            "payload": payload,
+            "command_topic": str(transport.get("command_topic", "/chasecar/brain/intent")),
+            "feedback_topic": str(transport.get("feedback_topic", "/chasecar/brain/feedback")),
+            "contract_status": str(self.contract.get("contract_status", "")),
+            "contract_valid": True,
+            "readiness": readiness,
+            "ready_to_dispatch": bool(readiness.get("ready_to_dispatch", False)),
+            "expected_boundary_activity": self._intent_expected_activity(intent_name),
+        }
+
+    def _remember_preview(self, preview: Dict[str, Any], *, error: str = "", valid: bool = True, record_history: bool = False) -> None:
+        preview_payload = json.loads(json.dumps(preview.get("payload", {}))) if valid else {}
+        readiness = json.loads(json.dumps(preview.get("readiness", {}))) if valid else {}
+        expected_activity = list(preview.get("expected_boundary_activity", [])) if valid else []
+        timestamp_utc = str(preview.get("generated_utc", utc_now()))
+        self._update_state(
+            last_preview_payload=preview_payload,
+            last_preview_valid=bool(valid),
+            last_preview_error=error,
+            last_preview_timestamp_utc=timestamp_utc,
+            last_preview_session_id=str(self.state.get("session_id", "")),
+            last_preview_readiness=readiness,
+            last_preview_expected_activity=expected_activity,
+        )
+        if not valid:
+            return
+        if record_history:
+            history_entry = {
+                "event_type": "preview",
+                "timestamp_utc": timestamp_utc,
+                "intent": preview.get("intent", ""),
+                "args": preview.get("args", {}),
+                "payload": preview_payload,
+                "readiness": readiness,
+                "ready_to_dispatch": bool(preview.get("ready_to_dispatch", False)),
+                "expected_boundary_activity": expected_activity,
+            }
+            self._record_command_history(history_entry)
+            self._record_visual_event(
+                {
+                    "event_type": "preview_created",
+                    "intent": preview.get("intent", ""),
+                    "payload": preview_payload,
+                    "ready_to_dispatch": bool(preview.get("ready_to_dispatch", False)),
+                }
+            )
 
     def _powershell_command(self, script_name: str, *args: str) -> list[str]:
         return [POWERSHELL_EXE, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(SCRIPTS_DIR / script_name), *args]
@@ -1224,6 +1561,7 @@ echo "TRUTH_LOG=$LOG_FILE"
                 raise RuntimeError(f"Truth probe did not report robot visibility. {truth_info['output']}".strip())
 
             truth_state_container = to_container_repo_path(visual_dir / "truth_state.json")
+            operator_status_container = to_container_repo_path(visual_dir / "operator_status.json")
             world_script = f"""
 set -euo pipefail
 PID_FILE="/tmp/chasecar_world_stream.pid"
@@ -1246,7 +1584,7 @@ PID_FILE="/tmp/chasecar_visual_observer.pid"
 LOG_FILE="/tmp/chasecar_visual_observer.log"
 pkill -f "visual_demo_observer.py" 2>/dev/null || true
 rm -f "$PID_FILE" "$LOG_FILE"
-nohup bash -lc 'source /opt/ros/{DEFAULT_CORE_ROS_DISTRO}/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/visual_demo_observer.py --session-id "{session_id}" --output-dir "{visual_dir_container}" --execution-lane "container_kilted" --runtime-target "{DEFAULT_RUNTIME_TARGET}" --visual-mode "browser_dashboard" --phase "environment_ready" --target-id "" --duration-s 7200 --target-visible-min-ratio 0.04 --motion-progress-min-m 0.20 --truth-state-path "{truth_state_container}" --use-sim-time' >"$LOG_FILE" 2>&1 &
+nohup bash -lc 'source /opt/ros/{DEFAULT_CORE_ROS_DISTRO}/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/visual_demo_observer.py --session-id "{session_id}" --output-dir "{visual_dir_container}" --execution-lane "container_kilted" --runtime-target "{DEFAULT_RUNTIME_TARGET}" --visual-mode "browser_dashboard" --phase "environment_ready" --target-id "" --duration-s 7200 --target-visible-min-ratio 0.04 --motion-progress-min-m 0.20 --truth-state-path "{truth_state_container}" --operator-status-path "{operator_status_container}" --use-sim-time' >"$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 sleep 1
 echo "VISUAL_PID=$(cat "$PID_FILE")"
@@ -1797,7 +2135,7 @@ fi
             )
         if self.state.get("environment_state") == "environment_ready":
             try:
-                self._run_intent_sync("abort", {})
+                self._run_intent_sync(self._prepare_intent_preview("abort", {}))
             except Exception:
                 pass
         self._write_operator_status(
@@ -1808,27 +2146,43 @@ fi
         )
         self._update_state(scenario_state="ready", scenario_message="ready", active_scenario="")
 
-    def _intent_worker(self, intent_name: str, args_payload: Dict[str, Any]) -> None:
+    def _intent_worker(self, preview: Dict[str, Any]) -> None:
         if not self.intent_lock.acquire(blocking=False):
             return
+        intent_name = str(preview.get("intent", ""))
         try:
-            result = self._run_intent_sync(intent_name, args_payload)
+            result = self._run_intent_sync(preview)
             self._update_state(
                 last_intent=intent_name,
+                last_intent_payload=preview.get("payload", {}),
+                last_intent_timestamp_utc=preview.get("payload", {}).get("timestamp_utc", ""),
                 last_feedback=result.get("feedback_samples", [""])[-1] if result.get("feedback_samples") else "",
                 last_result=f"{intent_name}: {'pass' if result.get('pass') else 'fail'}",
             )
         except Exception as exc:
-            self._update_state(last_intent=intent_name, last_result=f"{intent_name}: fail", last_error=str(exc))
+            self._update_state(
+                last_intent=intent_name,
+                last_intent_payload=preview.get("payload", {}),
+                last_intent_timestamp_utc=preview.get("payload", {}).get("timestamp_utc", ""),
+                last_result=f"{intent_name}: fail",
+                last_error=str(exc),
+            )
         finally:
             self.active_intent_proc = None
             self.intent_lock.release()
 
-    def _run_intent_sync(self, intent_name: str, args_payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _run_intent_sync(self, preview: Dict[str, Any]) -> Dict[str, Any]:
+        intent_name = str(preview.get("intent", ""))
+        args_payload = dict(preview.get("args", {}))
+        payload = dict(preview.get("payload", {}))
+        readiness = dict(preview.get("readiness", {}))
         if intent_name not in self.frozen_intents:
             raise ValueError(f"Unsupported frozen intent: {intent_name}")
         output_path = ensure_dir(self._current_validation_dir()) / f"intent_{intent_name}_{int(time.time())}.json"
         args_json = json.dumps(args_payload, separators=(",", ":"))
+        output_path_container = shlex.quote(to_container_repo_path(output_path))
+        planner = shlex.quote(str(payload.get("planner", "dashboard_service")))
+        timestamp_utc = shlex.quote(str(payload.get("timestamp_utc", "")))
         script = f"""
 set -euo pipefail
 export AMENT_TRACE_SETUP_FILES="${{AMENT_TRACE_SETUP_FILES-}}"
@@ -1839,7 +2193,7 @@ if [ -f /root/ros2_ws/install/setup.bash ]; then
 fi
 set -u
 cd /workspaces/chasecar
-python3 scripts/dashboard_intent_runner.py --intent "{intent_name}" --args-json '{args_json}' --output "{to_container_repo_path(output_path)}" --wait-timeout-s 12 --observe-time-s 3 --use-sim-time
+python3 scripts/dashboard_intent_runner.py --intent {shlex.quote(intent_name)} --args-json {shlex.quote(args_json)} --output {output_path_container} --seq {int(payload.get("seq", 0) or 0)} --planner {planner} --timestamp-utc {timestamp_utc} --wait-timeout-s 12 --observe-time-s 3 --use-sim-time
 """
         log_path = output_path.with_suffix(".log")
         proc = self._docker_exec_popen(self.sim_gate_container_id, script, log_path)
@@ -1850,15 +2204,28 @@ python3 scripts/dashboard_intent_runner.py --intent "{intent_name}" --args-json 
             raise RuntimeError(output.strip() or "intent runner failed")
         result = read_json(output_path)
         history_entry = {
+            "event_type": "execute",
             "timestamp_utc": utc_now(),
             "intent": intent_name,
             "args": args_payload,
+            "payload": payload,
+            "readiness": readiness,
             "summary_path": str(output_path),
             "pass": bool(result.get("pass")),
             "feedback_seen": bool(result.get("feedback_seen")),
             "feedback_samples": result.get("feedback_samples", []),
+            "boundary_activity_seen": bool(result.get("boundary_activity_seen", False)),
         }
         self._record_command_history(history_entry)
+        self._record_visual_event(
+            {
+                "event_type": "intent_executed",
+                "intent": intent_name,
+                "payload": payload,
+                "pass": bool(result.get("pass")),
+                "summary_path": str(output_path),
+            }
+        )
         return result
 
 
@@ -1942,9 +2309,18 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         if path == "/api/scenario/stop":
             status, payload = controller.request_scenario_stop()
             return self._json_response(status, payload)
+        if path == "/api/intents/preview":
+            status, payload = controller.request_intent_preview(body)
+            return self._json_response(status, payload)
+        if path == "/api/intents/dispatch":
+            status, payload = controller.request_intent_dispatch(body)
+            return self._json_response(status, payload)
         if path.startswith("/api/intents/"):
             intent_name = path.rsplit("/", 1)[-1]
-            args_payload = {key: value for key, value in body.items() if key != "intent"}
+            try:
+                _, args_payload = controller._resolve_intent_request(body, route_intent=intent_name)
+            except Exception as exc:
+                return self._json_response(HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)})
             status, payload = controller.request_intent(intent_name, args_payload)
             return self._json_response(status, payload)
         return self._json_response(HTTPStatus.NOT_FOUND, {"error": f"unknown route: {path}"})

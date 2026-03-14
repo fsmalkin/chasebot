@@ -121,7 +121,16 @@ def test_06_frozen_intents_write_command_history_and_contract_results(dashboard_
         ("/api/intents/safe_stop", {}, "safe_stop"),
     ]
     for path, body, intent_name in checks:
-        status, payload = dashboard_client.request("POST", path, body)
+        preview_status, preview_payload = dashboard_client.request(
+            "POST",
+            "/api/intents/preview",
+            {"intent": intent_name, "args": body},
+        )
+        assert preview_status == 200, preview_payload
+        assert preview_payload["preview"]["contract_valid"] is True
+        assert preview_payload["preview"]["payload"]["intent"] == intent_name
+
+        status, payload = dashboard_client.request("POST", "/api/intents/dispatch", {"intent": intent_name, "args": body})
         assert status == 202, payload
         state = dashboard_client.wait_for(
             lambda current, intent=intent_name: current["last_intent"] == intent,
@@ -132,12 +141,17 @@ def test_06_frozen_intents_write_command_history_and_contract_results(dashboard_
 
     status, payload = dashboard_client.request("POST", "/api/intents/not_in_contract", {})
     assert status == 404, payload
+    preview_status, preview_payload = dashboard_client.request("POST", "/api/intents/preview", {"intent": "not_in_contract", "args": {}})
+    assert preview_status == 404, preview_payload
 
     assert history_path.exists()
     history_lines = [json.loads(line) for line in history_path.read_text(encoding="utf-8").splitlines() if line.strip()]
     recorded_intents = {entry["intent"] for entry in history_lines}
     assert {"acquire_target", "plan_to_target", "track_target", "abort", "safe_stop"}.issubset(recorded_intents)
+    assert {"preview", "execute"}.issubset({entry["event_type"] for entry in history_lines})
     for entry in history_lines:
+        if entry["event_type"] != "execute":
+            continue
         summary_path = Path(entry["summary_path"])
         assert summary_path.exists()
 
