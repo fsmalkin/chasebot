@@ -661,6 +661,19 @@
           </div>
         </article>
 
+        <article class="panel">
+          <div class="panel-head">
+            <h2>Shadow Brain</h2>
+            <span class="status-badge" id="shadow-brain-status" data-testid="shadow-brain-status">disabled</span>
+          </div>
+          <div class="panel-body control-group">
+            <p class="support-copy" id="shadow-brain-intent">The shadow supervisor is read-only in this slice.</p>
+            <p class="support-copy" id="shadow-brain-rationale">It watches the same authoritative dashboard state over time and recommends a bounded frozen intent, but it does not dispatch anything yet.</p>
+            <ul class="watch-list" id="shadow-brain-observations"></ul>
+            <p class="footnote" id="shadow-brain-updated">No evaluations yet.</p>
+          </div>
+        </article>
+
         <details class="drawer panel" id="help-drawer" data-testid="help-drawer">
           <summary id="help-toggle" data-testid="help-toggle">How To Use This</summary>
           <div class="drawer-body">
@@ -691,6 +704,20 @@
                   <dt>Motion Evidence</dt><dd id="motion-evidence" data-testid="motion-evidence">waiting</dd>
                 </dl>
                 <p class="drawer-copy" id="operator-footnote">Read-only fallback mode disables controls until the API-backed service is reachable.</p>
+              </section>
+
+              <section class="advanced-section">
+                <h3>Shadow Brain Detail</h3>
+                <dl class="control-kv">
+                  <dt>Status</dt><dd id="shadow-detail-status">disabled</dd>
+                  <dt>Provider</dt><dd id="shadow-detail-provider">n/a</dd>
+                  <dt>Model</dt><dd id="shadow-detail-model">n/a</dd>
+                  <dt>State Hash</dt><dd id="shadow-detail-state-hash">n/a</dd>
+                  <dt>Preview Gate</dt><dd id="shadow-detail-preview">n/a</dd>
+                  <dt>History Path</dt><dd id="shadow-detail-history-path">n/a</dd>
+                </dl>
+                <p class="drawer-copy" id="shadow-detail-suppression">No suppression active.</p>
+                <ul class="watch-list" id="shadow-history-list"></ul>
               </section>
 
               <section class="advanced-section">
@@ -783,6 +810,11 @@
       watchList: document.getElementById('watch-list'),
       operatorLog: document.getElementById('operator-log'),
       operatorFootnote: document.getElementById('operator-footnote'),
+      shadowBrainStatus: document.getElementById('shadow-brain-status'),
+      shadowBrainIntent: document.getElementById('shadow-brain-intent'),
+      shadowBrainRationale: document.getElementById('shadow-brain-rationale'),
+      shadowBrainObservations: document.getElementById('shadow-brain-observations'),
+      shadowBrainUpdated: document.getElementById('shadow-brain-updated'),
       worldLink: document.getElementById('world-link'),
       worldImage: document.getElementById('world-image'),
       topdownImage: document.getElementById('topdown-image'),
@@ -801,7 +833,15 @@
       previewStatus: document.getElementById('preview-status'),
       previewReadiness: document.getElementById('preview-readiness'),
       previewActivity: document.getElementById('preview-activity'),
-      previewPayload: document.getElementById('preview-payload')
+      previewPayload: document.getElementById('preview-payload'),
+      shadowDetailStatus: document.getElementById('shadow-detail-status'),
+      shadowDetailProvider: document.getElementById('shadow-detail-provider'),
+      shadowDetailModel: document.getElementById('shadow-detail-model'),
+      shadowDetailStateHash: document.getElementById('shadow-detail-state-hash'),
+      shadowDetailPreview: document.getElementById('shadow-detail-preview'),
+      shadowDetailHistoryPath: document.getElementById('shadow-detail-history-path'),
+      shadowDetailSuppression: document.getElementById('shadow-detail-suppression'),
+      shadowHistoryList: document.getElementById('shadow-history-list')
     };
 
     const controls = {
@@ -1445,6 +1485,62 @@
       }
     }
 
+    function renderShadowBrain(state) {
+      const supervisor = state.llm_supervisor || {};
+      const latest = supervisor.latest_decision || {};
+      const preview = supervisor.preview || {};
+      const status = selectText(supervisor.status, 'disabled');
+      const intent = selectText(latest.intent, '');
+      const observations = Array.isArray(latest.expected_observations) && latest.expected_observations.length
+        ? latest.expected_observations
+        : ['No shadow observation hints yet.'];
+
+      stateEls.shadowBrainStatus.textContent = status;
+      if (status === 'recommendation' && intent) {
+        stateEls.shadowBrainIntent.textContent = `Latest shadow recommendation: ${intent}`;
+      } else if (status === 'blocked') {
+        stateEls.shadowBrainIntent.textContent = 'Latest shadow decision: blocked';
+      } else if (status === 'waiting') {
+        stateEls.shadowBrainIntent.textContent = 'The shadow supervisor is watching for a meaningful state change.';
+      } else {
+        stateEls.shadowBrainIntent.textContent = 'The shadow supervisor is read-only in this slice.';
+      }
+      stateEls.shadowBrainRationale.textContent = selectText(
+        latest.rationale_short,
+        status === 'disabled'
+          ? 'Set a provider and key to enable the shadow supervisor.'
+          : 'It watches the same authoritative dashboard state over time and recommends a bounded frozen intent, but it does not dispatch anything yet.'
+      );
+      stateEls.shadowBrainObservations.innerHTML = observations.map((item) => `<li class="watch-item">${item}</li>`).join('');
+      stateEls.shadowBrainUpdated.textContent = supervisor.last_evaluated_utc
+        ? `Last evaluated ${supervisor.last_evaluated_utc}`
+        : 'No evaluations yet.';
+
+      stateEls.shadowDetailStatus.textContent = status;
+      stateEls.shadowDetailProvider.textContent = selectText(supervisor.provider, 'n/a');
+      stateEls.shadowDetailModel.textContent = selectText(supervisor.model, 'n/a');
+      stateEls.shadowDetailStateHash.textContent = selectText(supervisor.state_hash, 'n/a');
+      stateEls.shadowDetailPreview.textContent = preview.ready_to_dispatch
+        ? 'ready_to_dispatch'
+        : (preview.missing_keys && preview.missing_keys.length ? `blocked: ${preview.missing_keys.join(', ')}` : selectText(status, 'n/a'));
+      stateEls.shadowDetailHistoryPath.textContent = selectText(supervisor.history_path, 'n/a');
+      stateEls.shadowDetailSuppression.textContent = selectText(
+        supervisor.suppression_reason,
+        'No suppression active.'
+      );
+
+      const history = Array.isArray(supervisor.recent_history) ? supervisor.recent_history : [];
+      stateEls.shadowHistoryList.innerHTML = history.length
+        ? history.slice().reverse().map((entry) => {
+          const when = selectText(entry.generated_utc, 'unknown time');
+          const label = selectText(entry.event_type, 'event');
+          const intentText = selectText(entry.intent, selectText(entry.status, ''));
+          const detail = intentText ? ` - ${intentText}` : '';
+          return `<li class="watch-item">${when} - ${label}${detail}</li>`;
+        }).join('')
+        : '<li class="watch-item">No shadow history yet.</li>';
+    }
+
     function renderCameraState(state) {
       const sessionActive = Boolean(state.session_id) && state.environment_state !== 'stopped';
       const rawCount = sessionActive ? Number(state.raw_frame_count || 0) : 0;
@@ -1514,6 +1610,7 @@
       renderWatchPanel(state, recommendedId);
       renderPrimaryAction(state, recommendedId);
       renderControlDetail(state);
+      renderShadowBrain(state);
       renderCameraState(state);
       renderAdvancedLanes(state);
       renderPreview(state);

@@ -19,9 +19,12 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Optional
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import yaml
+
+from llm_supervisor_core import load_supervisor_runtime_state as load_shadow_runtime_state
+from llm_supervisor_core import read_jsonl as read_jsonl_lines
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -813,6 +816,7 @@ class DashboardController:
         snapshot["decision"] = decision
         snapshot["outcome"] = outcome
         snapshot["demo_story"] = demo_story
+        snapshot["llm_supervisor"] = self._llm_supervisor_state()
 
         controls_enabled = bool(snapshot.get("control_plane_ready", False))
         snapshot["controls"] = {
@@ -828,6 +832,40 @@ class DashboardController:
         }
         snapshot["available_intents"] = sorted(self.frozen_intents.keys())
         return snapshot
+
+    def _llm_supervisor_state(self) -> Dict[str, Any]:
+        runtime = load_shadow_runtime_state()
+        history_path_raw = str(runtime.get("history_path", "") or "").strip()
+        history_path = Path(history_path_raw) if history_path_raw else None
+        recent_history = runtime.get("recent_history", [])
+        if not isinstance(recent_history, list):
+            recent_history = []
+        if history_path and history_path.exists():
+            recent_history = read_jsonl_lines(history_path, limit=5)
+        return {
+            "mode": str(runtime.get("mode", "shadow") or "shadow"),
+            "provider": str(runtime.get("provider", "") or ""),
+            "model": str(runtime.get("model", "") or ""),
+            "running": bool(runtime.get("running", False)),
+            "status": str(runtime.get("status", "disabled") or "disabled"),
+            "latest_decision": runtime.get("latest_decision", {}) if isinstance(runtime.get("latest_decision"), dict) else {},
+            "last_evaluated_utc": str(runtime.get("last_evaluated_utc", "") or ""),
+            "last_polled_utc": str(runtime.get("last_polled_utc", "") or ""),
+            "history_path": history_path_raw,
+            "latest_path": str(runtime.get("latest_path", "") or ""),
+            "state_hash": str(runtime.get("state_hash", "") or ""),
+            "preview": runtime.get("preview", {}) if isinstance(runtime.get("preview"), dict) else {},
+            "suppression_reason": str(runtime.get("suppression_reason", "") or ""),
+            "recent_history": recent_history,
+        }
+
+    def list_llm_supervisor_history(self, limit: int) -> Dict[str, Any]:
+        supervisor = self._llm_supervisor_state()
+        history_path_raw = str(supervisor.get("history_path", "") or "").strip()
+        history_path = Path(history_path_raw) if history_path_raw else None
+        bounded_limit = max(1, min(limit, 100))
+        history = read_jsonl_lines(history_path, limit=bounded_limit) if history_path and history_path.exists() else []
+        return {"history": history, "latest": supervisor}
 
     def list_scenarios(self) -> Dict[str, Any]:
         return {"scenarios": [item.to_api() for item in SCENARIOS]}
@@ -2263,11 +2301,18 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path or "/"
+        query = parse_qs(parsed.query or "")
         controller = self.server.controller
         if path in {"/", "/dashboard.html"}:
             return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "browser_dashboard.html", "text/html; charset=utf-8")
         if path == "/api/state":
             return self._json_response(HTTPStatus.OK, controller.get_state())
+        if path == "/api/llm/supervisor/history":
+            try:
+                limit = int((query.get("limit") or ["20"])[0])
+            except (TypeError, ValueError):
+                return self._json_response(HTTPStatus.BAD_REQUEST, {"error": "limit must be an integer"})
+            return self._json_response(HTTPStatus.OK, controller.list_llm_supervisor_history(limit))
         if path == "/api/scenarios":
             return self._json_response(HTTPStatus.OK, controller.list_scenarios())
         if path.startswith("/live/"):

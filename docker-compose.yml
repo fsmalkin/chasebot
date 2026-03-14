@@ -30,7 +30,7 @@ services:
     environment:
       PYTHONUNBUFFERED: "1"
       CHASECAR_DASHBOARD_CONTROL_MODE: docker_socket
-      CHASECAR_DASHBOARD_WARM_SERVICES: dashboard-control,dashboard-utility
+      CHASECAR_DASHBOARD_WARM_SERVICES: dashboard-control,dashboard-utility,brain-supervisor-shadow
     volumes:
       - *chasecar-repo-volume
       - /var/run/docker.sock:/var/run/docker.sock
@@ -58,6 +58,29 @@ services:
       - chasecar_ws:/root/ros2_ws
     working_dir: /workspaces/chasecar
     command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && sleep infinity"]
+
+  brain-supervisor-shadow:
+    build:
+      context: .
+      dockerfile: containers/dashboard-control/Dockerfile
+    image: chasecar/dashboard-control:latest
+    depends_on:
+      - dashboard-control
+      - dashboard-utility
+    environment:
+      PYTHONUNBUFFERED: "1"
+      CHASECAR_DASHBOARD_URL: http://dashboard-control:8860
+      CHASECAR_LLM_PROVIDER: ${CHASECAR_LLM_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_ORG_ID: ${OPENAI_ORG_ID:-}
+      OPENAI_PROJECT_ID: ${OPENAI_PROJECT_ID:-}
+      OPENAI_SUPERVISOR_MODEL: ${OPENAI_SUPERVISOR_MODEL:-gpt-5-nano}
+      OPENAI_SUPERVISOR_REASONING_EFFORT: ${OPENAI_SUPERVISOR_REASONING_EFFORT:-minimal}
+    volumes:
+      - *chasecar-repo-volume
+    working_dir: /workspaces/chasecar
+    command: ["python3", "scripts/brain_supervisor_loop.py", "--dashboard-url", "http://dashboard-control:8860"]
 
   core-kilted:
     build:

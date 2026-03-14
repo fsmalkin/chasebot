@@ -17,6 +17,7 @@ runtime/tensorrt/calibration/*.cache
 runtime/tensorrt/calibration/*.json
 runtime/dashboard/dashboard_service_state.json
 runtime/dashboard/dashboard_session.lock.json
+runtime/dashboard/llm_supervisor_state.json
 dashboard_validation/node_modules/
 dashboard_validation/test-results/
 dashboard_validation/playwright-report/
