@@ -50,6 +50,22 @@ async function waitForImageLoaded(page, testId) {
   ), { timeout: 30_000 }).toBeTruthy();
 }
 
+async function openControlsDrawer(page) {
+  const drawer = page.getByTestId('controls-drawer');
+  if ((await drawer.getAttribute('data-open')) !== 'true') {
+    await page.getByTestId('btn-toggle-controls').click();
+    await expect(drawer).toHaveAttribute('data-open', 'true');
+  }
+}
+
+async function closeControlsDrawer(page) {
+  const drawer = page.getByTestId('controls-drawer');
+  if ((await drawer.getAttribute('data-open')) === 'true') {
+    await page.getByRole('button', { name: 'Close' }).first().click();
+    await expect(drawer).toHaveAttribute('data-open', 'false');
+  }
+}
+
 test.describe.serial('dashboard operator flow', () => {
   test.setTimeout(15 * 60 * 1000);
 
@@ -57,17 +73,23 @@ test.describe.serial('dashboard operator flow', () => {
     await page.goto(`${DASHBOARD_URL}/`);
     await ensureStopped(page);
 
-    await expect(page.getByTestId('btn-start-env')).toBeVisible();
-    await expect(page.getByTestId('btn-demo-llm_turn_then_go_proof')).toBeVisible();
-    await expect(page.getByTestId('btn-demo-m3_single_target')).toBeVisible();
-    await expect(page.locator('[data-testid="btn-demo-multi_target_rehearsal"]')).toHaveCount(0);
+    await expect(page.getByTestId('environment-state')).toBeVisible();
+    await expect(page.getByTestId('active-scenario')).toBeVisible();
+    await expect(page.getByTestId('proof-state')).toBeVisible();
+    await expect(page.getByTestId('session-id')).toBeVisible();
     await expect(page.getByTestId('world-image')).toBeVisible();
     await expect(page.getByTestId('debug-image')).toBeVisible();
+    await expect(page.getByTestId('btn-toggle-controls')).toBeVisible();
+    await expect(page.getByTestId('btn-toggle-log')).toBeVisible();
+    await expect(page.getByTestId('controls-drawer')).toHaveAttribute('data-open', 'false');
+    await expect(page.getByTestId('log-drawer')).toHaveAttribute('data-open', 'false');
+    await expect(page.getByTestId('btn-start-env')).not.toBeVisible();
   });
 
   test('environment start-stop-start cycle', async ({ page }) => {
     await page.goto(`${DASHBOARD_URL}/`);
     await ensureStopped(page);
+    await openControlsDrawer(page);
 
     await page.getByTestId('btn-start-env').click();
     await observeStateTransition(page, 'environment_state', 'starting', 'environment_ready', 5 * 60 * 1000);
@@ -84,6 +106,7 @@ test.describe.serial('dashboard operator flow', () => {
 
   test('reset sim and run single-target visible-ball demo', async ({ page }) => {
     await page.goto(`${DASHBOARD_URL}/`);
+    await openControlsDrawer(page);
     const before = await getState(page);
     const oldSession = before.session_id;
 
@@ -97,6 +120,7 @@ test.describe.serial('dashboard operator flow', () => {
     expect(resetState.session_id).not.toBe(oldSession);
 
     await page.getByTestId('btn-demo-m3_single_target').click();
+    await expect(page.getByTestId('controls-drawer')).toHaveAttribute('data-open', 'false');
     await waitForCondition(page, (state) => state.scenario_state === 'running', 30_000, 'Scenario did not enter running state.');
     await expect(page.getByTestId('active-scenario')).toHaveText(/M3 Single Target/);
 
@@ -114,6 +138,7 @@ test.describe.serial('dashboard operator flow', () => {
 
   test('advanced drawer keeps manual tools and quick intents', async ({ page }) => {
     await page.goto(`${DASHBOARD_URL}/`);
+    await openControlsDrawer(page);
     await page.getByTestId('advanced-toggle').click();
 
     await expect(page.getByTestId('scenario-select')).toBeVisible();
@@ -140,8 +165,10 @@ test.describe.serial('dashboard operator flow', () => {
 
   test('final stop returns dashboard to stopped state', async ({ page }) => {
     await page.goto(`${DASHBOARD_URL}/`);
+    await openControlsDrawer(page);
     await page.getByTestId('btn-stop').click();
     await observeStateTransition(page, 'environment_state', 'stopping', 'stopped', 3 * 60 * 1000);
     await expect(page.getByTestId('environment-state')).toHaveText('stopped');
+    await closeControlsDrawer(page);
   });
 });
