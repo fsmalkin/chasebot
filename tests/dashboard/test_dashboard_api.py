@@ -9,6 +9,23 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCK_PATH = REPO_ROOT / "runtime" / "dashboard" / "dashboard_session.lock.json"
 
 
+def test_00_scenario_catalog_exposes_browser_demo_and_proof_fields(dashboard_client):
+    status, payload = dashboard_client.request("GET", "/api/scenarios")
+    assert status == 200, payload
+    scenarios = {item["id"]: item for item in payload["scenarios"]}
+    assert "llm_turn_then_go_proof" in scenarios
+    assert scenarios["llm_turn_then_go_proof"]["browser_default"] is True
+    assert scenarios["llm_turn_then_go_proof"]["featured"] is True
+    assert scenarios["m3_single_target"]["browser_default"] is True
+    assert scenarios["multi_target_rehearsal"]["browser_default"] is False
+
+    state = dashboard_client.state()
+    assert "proof_state" in state
+    assert "latest_operator_event" in state
+    assert "recent_operator_events" in state
+    assert "proof_verdict" in state
+
+
 def test_01_environment_start_is_idempotent(dashboard_client):
     dashboard_client.request("POST", "/api/env/stop")
     dashboard_client.wait_for(lambda state: state["environment_state"] == "stopped", 90, "Environment did not reach stopped state.")
@@ -22,6 +39,8 @@ def test_01_environment_start_is_idempotent(dashboard_client):
     )
     assert ready["session_id"]
     assert LOCK_PATH.exists()
+    assert "proof_state" in ready
+    assert "recent_operator_events" in ready
 
     status, payload = dashboard_client.request("POST", "/api/env/start")
     assert status == 200, payload

@@ -11,6 +11,7 @@ import shlex
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import asdict, dataclass
@@ -33,6 +34,7 @@ RUNTIME_DIR = REPO_ROOT / "runtime" / "dashboard"
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 STATE_PATH = RUNTIME_DIR / "dashboard_service_state.json"
 LOCK_PATH = RUNTIME_DIR / "dashboard_session.lock.json"
+LLM_PROOF_RUNTIME_PATH = RUNTIME_DIR / "llm_turn_then_go_runtime.json"
 
 DEFAULT_RUNTIME_TARGET = "robot_fidelity_orin"
 DEFAULT_CORE_ROS_DISTRO = "kilted"
@@ -66,6 +68,8 @@ class ScenarioDefinition:
     label: str
     description: str
     mode: str
+    browser_default: bool = False
+    featured: bool = False
     target_x: float = 1.10
     target_y: float = 0.00
     target_z: float = 0.05
@@ -84,12 +88,23 @@ SCENARIOS = [
         mode="m2",
     ),
     ScenarioDefinition(
+        id="llm_turn_then_go_proof",
+        phase="llm_turn_then_go_proof",
+        target_id="ball",
+        label="LLM Turn + Go",
+        description="LLM proof demo: turn until the ball is seen, then move to it.",
+        mode="llm_proof",
+        browser_default=True,
+        featured=True,
+    ),
+    ScenarioDefinition(
         id="m3_single_target",
         phase="M3",
         target_id="single_target",
         label="M3 Single Target",
         description="Single-target motion proof on the canonical forward target.",
         mode="m3",
+        browser_default=True,
     ),
     ScenarioDefinition(
         id="m3_center",
@@ -98,6 +113,7 @@ SCENARIOS = [
         label="M3 Center",
         description="Single-target motion proof at the center preset.",
         mode="m3",
+        browser_default=True,
     ),
     ScenarioDefinition(
         id="m3_left",
@@ -106,6 +122,7 @@ SCENARIOS = [
         label="M3 Left",
         description="Single-target motion proof at the left preset.",
         mode="m3",
+        browser_default=True,
         target_y=0.12,
     ),
     ScenarioDefinition(
@@ -115,6 +132,7 @@ SCENARIOS = [
         label="M3 Right",
         description="Single-target motion proof at the right preset.",
         mode="m3",
+        browser_default=True,
         target_y=-0.12,
     ),
     ScenarioDefinition(
@@ -286,6 +304,10 @@ class DashboardController:
                 "last_preview_expected_activity": [],
                 "last_error": "",
                 "status_text": "",
+                "proof_state": "waiting",
+                "proof_verdict": {},
+                "latest_operator_event": "",
+                "recent_operator_events": [],
                 "world_stream_url": "",
                 "world_stream_port": 0,
                 "validation_dir": "",
@@ -298,6 +320,7 @@ class DashboardController:
                 "scenarios": [item.to_api() for item in SCENARIOS],
             }
             self._persist_state_locked()
+        self._clear_llm_proof_runtime_state()
         self._refresh_control_plane_state(force=True)
 
     def _load_contract(self) -> Dict[str, Any]:
@@ -424,6 +447,46 @@ class DashboardController:
         if validation_dir is None:
             return None
         return validation_dir / "command_history.jsonl"
+
+    def _llm_proof_runtime_state(self) -> Dict[str, Any]:
+        payload = read_json(LLM_PROOF_RUNTIME_PATH)
+        return payload if isinstance(payload, dict) else {}
+
+    def _write_llm_proof_runtime_state(self, payload: Dict[str, Any]) -> None:
+        write_json(LLM_PROOF_RUNTIME_PATH, payload)
+
+    def _clear_llm_proof_runtime_state(self) -> None:
+        self._write_llm_proof_runtime_state(
+            {
+                "running": False,
+                "scenario_id": "",
+                "session_id": "",
+                "proof_state": "waiting",
+                "latest_operator_event": "",
+                "recent_operator_events": [],
+                "latest_decision": {},
+                "latest_feedback": "",
+                "artifact_dir": "",
+                "proof_verdict": {},
+                "updated_utc": utc_now(),
+            }
+        )
+
+    def _record_operator_event(self, message: str, *, category: str = "info", source: str = "dashboard") -> None:
+        event = {
+            "timestamp_utc": utc_now(),
+            "message": str(message),
+            "category": str(category),
+            "source": str(source),
+        }
+        with self.state_lock:
+            events = list(self.state.get("recent_operator_events", []))
+            if events and str(events[-1].get("message", "")) == event["message"]:
+                return
+            events.append(event)
+            self.state["recent_operator_events"] = events[-20:]
+            self.state["latest_operator_event"] = event["message"]
+            self._persist_state_locked()
 
     def _timeline_events_path(self) -> Optional[Path]:
         visual_dir = self._current_visual_dir()
@@ -833,6 +896,43 @@ class DashboardController:
         snapshot["demo_story"] = demo_story
         snapshot["llm_supervisor"] = self._llm_supervisor_state()
 
+        proof_runtime = self._llm_proof_runtime_state()
+        proof_verdict = proof_runtime.get("proof_verdict", {}) if isinstance(proof_runtime.get("proof_verdict"), dict) else {}
+        proof_state = str(proof_runtime.get("proof_state", "") or "").strip()
+        if not proof_state:
+            if snapshot.get("active_scenario") == "llm_turn_then_go_proof" and snapshot.get("scenario_state") == "running":
+                proof_state = "searching" if brain.get("search_active") else "waiting"
+            elif proof_verdict:
+                proof_state = "completed" if proof_verdict.get("pass") else "failed"
+            else:
+                proof_state = "waiting"
+
+        operator_events = snapshot.get("recent_operator_events", [])
+        if not isinstance(operator_events, list):
+            operator_events = []
+        proof_events = proof_runtime.get("recent_operator_events", [])
+        if not isinstance(proof_events, list):
+            proof_events = []
+        merged_events = []
+        for item in operator_events + proof_events:
+            if isinstance(item, dict) and item.get("message"):
+                merged_events.append(item)
+        if merged_events:
+            merged_events = sorted(merged_events, key=lambda item: str(item.get("timestamp_utc", "")))[-20:]
+        operator_events = merged_events
+        latest_operator_event = str(snapshot.get("latest_operator_event", "") or "")
+        if operator_events:
+            latest_payload = operator_events[-1] if isinstance(operator_events[-1], dict) else {}
+            latest_operator_event = str(latest_payload.get("message", latest_operator_event) or latest_operator_event)
+
+        snapshot["proof_state"] = proof_state
+        snapshot["proof_verdict"] = proof_verdict
+        snapshot["latest_operator_event"] = latest_operator_event
+        snapshot["recent_operator_events"] = operator_events
+        snapshot["latest_proof_decision"] = proof_runtime.get("latest_decision", {}) if isinstance(proof_runtime.get("latest_decision"), dict) else {}
+        snapshot["latest_proof_feedback"] = str(proof_runtime.get("latest_feedback", "") or "")
+        snapshot["proof_artifact_dir"] = str(proof_runtime.get("artifact_dir", "") or "")
+
         controls_enabled = bool(snapshot.get("control_plane_ready", False))
         snapshot["controls"] = {
             "can_start": controls_enabled and snapshot["environment_state"] in {"stopped", "error"},
@@ -923,6 +1023,7 @@ class DashboardController:
             target_id="",
             target_transition_active=False,
         )
+        self._record_operator_event("Environment starting.", category="environment")
         self.lifecycle_thread = threading.Thread(target=self._start_environment_worker, name="dashboard-start", daemon=True)
         self.lifecycle_thread.start()
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "environment start queued"}
@@ -936,6 +1037,7 @@ class DashboardController:
             self.lifecycle_cancel.set()
             self._terminate_process(self.active_env_proc)
             self._update_state(environment_message="stop requested during startup")
+            self._record_operator_event("Environment stop requested during startup.", category="environment")
             return HTTPStatus.ACCEPTED, {"accepted": True, "message": "startup cancellation requested"}
         self._refresh_control_plane_state(force=True)
         with self.state_lock:
@@ -1008,6 +1110,7 @@ class DashboardController:
         self.scenario_cancel.set()
         self._terminate_process(self.active_scenario_proc)
         self._update_state(scenario_message="scenario stop requested")
+        self._record_operator_event("Scenario stop requested.", category="scenario")
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "scenario stop requested"}
 
     def request_intent_preview(self, body: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
@@ -1595,6 +1698,7 @@ class DashboardController:
                     scenario_state="idle",
                     environment_message="startup cancelled",
                 )
+                self._record_operator_event("Environment startup cancelled.", category="environment")
                 self._remove_lock_file()
                 return
             if proc.returncode != 0:
@@ -1664,6 +1768,7 @@ echo "VISUAL_LOG=$LOG_FILE"
                 scenario_message="ready",
                 world_stream_url=f"http://127.0.0.1:{world_stream_port}/vnc.html?autoconnect=1&resize=scale&path=websockify",
             )
+            self._record_operator_event("Environment ready.", category="environment")
             self._write_operator_status(
                 phase="environment_ready",
                 target_id="",
@@ -1687,6 +1792,7 @@ echo "VISUAL_LOG=$LOG_FILE"
                     scenario_message="",
                     last_error="",
                 )
+                self._record_operator_event("Environment startup cancelled.", category="environment")
             else:
                 self._update_state(
                     environment_state="error",
@@ -1694,6 +1800,7 @@ echo "VISUAL_LOG=$LOG_FILE"
                     environment_message="environment start failed",
                     last_error=str(exc),
                 )
+                self._record_operator_event(f"Environment start failed: {exc}", category="error")
             self._remove_lock_file()
         finally:
             self.lifecycle_cancel.clear()
@@ -1709,6 +1816,7 @@ echo "VISUAL_LOG=$LOG_FILE"
                 world_stream_port = int(self.state.get("world_stream_port", 0) or 0)
             env = self._base_env(session_id=session_id or make_session_id(), world_stream_port=world_stream_port or find_free_port(8891, 8921))
             self._update_state(environment_state="stopping", scenario_state="idle", environment_message="stopping environment")
+            self._record_operator_event("Environment stopping.", category="environment")
             self._write_operator_status(
                 phase="stopping",
                 target_id="",
@@ -1732,8 +1840,11 @@ echo "VISUAL_LOG=$LOG_FILE"
                 target_transition_active=False,
                 stale_chasecar_containers=stale,
             )
+            self._clear_llm_proof_runtime_state()
+            self._record_operator_event("Environment stopped.", category="environment")
         except Exception as exc:
             self._update_state(environment_state="error", last_error=str(exc), environment_message="stop failed")
+            self._record_operator_event(f"Environment stop failed: {exc}", category="error")
         finally:
             self.lifecycle_lock.release()
 
@@ -1873,13 +1984,18 @@ pkill -f "gz gui" 2>/dev/null || true
         if not self.scenario_lock.acquire(blocking=False):
             return
         try:
+            if scenario.mode == "llm_proof":
+                self._clear_llm_proof_runtime_state()
             self._update_state(
                 scenario_state="running",
                 active_scenario=scenario.id,
                 scenario_message=f"running {scenario.id}",
                 latest_artifacts={},
                 motion_evidence=False,
+                proof_state="waiting" if scenario.mode == "llm_proof" else self.state.get("proof_state", "waiting"),
+                proof_verdict={},
             )
+            self._record_operator_event(f"{scenario.label} scenario started.", category="scenario")
             self._write_operator_status(
                 phase=scenario.phase,
                 target_id=scenario.target_id,
@@ -1890,6 +2006,8 @@ pkill -f "gz gui" 2>/dev/null || true
                 result = self._run_m2_scenario(scenario)
             elif scenario.mode == "m3":
                 result = self._run_m3_scenario(scenario)
+            elif scenario.mode == "llm_proof":
+                result = self._run_llm_proof_scenario(scenario)
             else:
                 result = self._run_multi_target_scenario(scenario)
             artifacts = result.get("artifacts", {})
@@ -1899,7 +2017,10 @@ pkill -f "gz gui" 2>/dev/null || true
                 latest_artifacts=artifacts,
                 motion_evidence=bool(result.get("motion_evidence", False)),
                 last_result=result.get("message", ""),
+                proof_state=result.get("proof_state", self.state.get("proof_state", "waiting")),
+                proof_verdict=result.get("proof_verdict", {}),
             )
+            self._record_operator_event(result.get("message", f"{scenario.label} complete"), category="scenario")
             self._write_operator_status(
                 phase="environment_ready",
                 target_id="",
@@ -1920,6 +2041,7 @@ pkill -f "gz gui" 2>/dev/null || true
                     motion_evidence=False,
                     last_error="",
                     last_result="scenario cancelled",
+                    proof_state="failed" if scenario.mode == "llm_proof" else self.state.get("proof_state", "waiting"),
                 )
             else:
                 self._update_state(
@@ -1929,9 +2051,12 @@ pkill -f "gz gui" 2>/dev/null || true
                     motion_evidence=False,
                     last_error="",
                     last_result="scenario cancelled",
+                    proof_state="waiting",
                 )
+            self._record_operator_event(f"{scenario.label} scenario cancelled.", category="scenario")
         except Exception as exc:
             self._update_state(scenario_state="error", scenario_message=f"scenario failed: {exc}", last_error=str(exc))
+            self._record_operator_event(f"{scenario.label} scenario failed: {exc}", category="error")
         finally:
             self.active_scenario_proc = None
             self.scenario_cancel.clear()
@@ -2168,6 +2293,64 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         self._write_scenario_result(scenario.id, payload)
         return payload
 
+    def _run_llm_proof_scenario(self, scenario: ScenarioDefinition) -> Dict[str, Any]:
+        scenario_dir = self._scenarios_dir() or ensure_dir(self._current_validation_dir() or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation"))
+        log_path = ensure_dir(scenario_dir) / f"{scenario.id}.log"
+        env = self._scenario_env(scenario)
+        command = [
+            sys.executable,
+            str(SCRIPTS_DIR / "llm_turn_then_go_proof_runner.py"),
+            "--dashboard-url",
+            str(self.state.get("dashboard_url", f"http://127.0.0.1:{self.port}") or f"http://127.0.0.1:{self.port}"),
+            "--contract",
+            str(REPO_ROOT / "runtime" / "contracts" / "llm_control_contract.yaml"),
+            "--keep-environment",
+        ]
+
+        with log_path.open("w", encoding="utf-8") as handle:
+            proc = subprocess.Popen(
+                command,
+                cwd=str(REPO_ROOT),
+                env=env,
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            self.active_scenario_proc = proc
+            while proc.poll() is None:
+                if self.scenario_cancel.is_set():
+                    self._terminate_process(proc)
+                    raise RuntimeError("scenario cancelled")
+                time.sleep(1.0)
+
+        output = log_path.read_text(encoding="utf-8", errors="ignore") if log_path.exists() else ""
+        summary_path_raw = parse_marker(output, "LLM_TURN_THEN_GO_PROOF_SUMMARY=")
+        summary_path = Path(summary_path_raw) if summary_path_raw else None
+        summary = read_json(summary_path.with_name("summary.json")) if summary_path and summary_path.exists() else {}
+        verdict = read_json(summary_path) if summary_path and summary_path.exists() else {}
+        pass_flag = bool(verdict.get("pass")) if verdict else bool(summary.get("pass"))
+        artifacts = {
+            "llm_turn_then_go_proof": str(summary_path.parent) if summary_path and summary_path.exists() else "",
+            "proof_verdict": str(summary_path) if summary_path and summary_path.exists() else "",
+            "log": str(log_path),
+        }
+        if proc.returncode not in {0, 2} and not verdict:
+            raise RuntimeError(output.strip() or "llm proof scenario failed")
+
+        payload = {
+            "scenario_id": scenario.id,
+            "phase": scenario.phase,
+            "pass": pass_flag,
+            "artifacts": artifacts,
+            "summary": summary,
+            "proof_verdict": verdict,
+            "message": "LLM turn-and-go proof passed" if pass_flag else "LLM turn-and-go proof failed",
+            "motion_evidence": bool(verdict.get("linear_displacement_m", 0.0) or pass_flag),
+            "proof_state": "completed" if pass_flag else "failed",
+        }
+        self._write_scenario_result(scenario.id, payload)
+        return payload
+
     def _find_latest_artifact_dir(self, root: Path, file_name: str) -> Optional[Path]:
         if not root.exists():
             return None
@@ -2330,6 +2513,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         controller = self.server.controller
         if path in {"/", "/dashboard.html"}:
             return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "browser_dashboard.html", "text/html; charset=utf-8")
+        if path == "/browser_dashboard.js":
+            return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "browser_dashboard.js", "text/javascript; charset=utf-8")
         if path == "/api/state":
             return self._json_response(HTTPStatus.OK, controller.get_state())
         if path == "/api/llm/supervisor/history":

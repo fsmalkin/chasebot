@@ -89,25 +89,27 @@ def _gate_hints(state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     perception = state.get("perception") if isinstance(state.get("perception"), dict) else {}
     belief = state.get("belief") if isinstance(state.get("belief"), dict) else {}
     outcome = state.get("outcome") if isinstance(state.get("outcome"), dict) else {}
+    brain = state.get("brain") if isinstance(state.get("brain"), dict) else {}
 
     environment_ready = _clean_text(state.get("environment_state")) == "environment_ready"
     target_visible = _clean_bool(perception.get("target_visible_now"))
+    target_locked = _clean_bool(brain.get("target_locked")) or _clean_bool(brain.get("target_visible_recent"))
     nav_goal_recent = _clean_bool(outcome.get("nav_goal_recent")) or bool(belief.get("latest_goal_pose"))
     motion_active = _clean_bool(outcome.get("cmd_vel_recent")) or _clean_bool(state.get("motion_evidence"))
     boundary_seen = _clean_bool(outcome.get("boundary_activity_seen"))
 
     return {
         "search_for_target": {
-            "ready": environment_ready and bool(belief.get("latest_robot_pose")),
+            "ready": environment_ready and bool(belief.get("latest_robot_pose")) and not target_visible and not target_locked,
             "summary": "Use search_for_target(ball) when the environment is ready but the target is not yet visible.",
         },
         "acquire_target": {
-            "ready": environment_ready and target_visible,
+            "ready": environment_ready and target_visible and not target_locked,
             "summary": "Target should be visible before acquire_target(ball).",
         },
         "plan_to_target": {
-            "ready": environment_ready and target_visible,
-            "summary": "Use plan_to_target(0.25) only when the target is visible and the environment is ready.",
+            "ready": environment_ready and target_visible and target_locked,
+            "summary": "Use plan_to_target(0.25) once the target is visible and locked.",
         },
         "track_target": {
             "ready": environment_ready and (nav_goal_recent or boundary_seen or motion_active),

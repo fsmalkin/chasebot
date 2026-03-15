@@ -203,7 +203,7 @@ def run_recommendation(
                 org_id=openai_org_id,
                 project_id=openai_project_id,
             )
-            parsed = extract_tool_decision(raw_response)
+            parsed = extract_tool_decision(raw_response, task_text=task_text)
             decision = normalize_model_decision(parsed)
             decision = validate_decision_against_contract(decision, contract)
             decision = validate_decision_against_canonical_space(decision)

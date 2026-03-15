@@ -187,3 +187,5 @@ This is where you verify the real signal boundary, not just the operator story.
 ## Related Docs
 
 - [First UAT Runbook](./FIRST_UAT_RUNBOOK.md)
+- [LLM Browser UAT Plan](./LLM_BROWSER_UAT_PLAN.md)
+- [LLM Research Notes](./LLM_RESEARCH_NOTES.md)

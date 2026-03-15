@@ -218,6 +218,9 @@
       gap: 10px;
       flex-wrap: wrap;
     }
+    .button-row.tight {
+      gap: 8px;
+    }
     button,
     select,
     input[type="text"],
@@ -260,6 +263,34 @@
       min-height: 54px;
       font-size: 16px;
     }
+    .hero-kicker {
+      display: inline-flex;
+      align-items: center;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(23, 79, 67, 0.08);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .hero-summary {
+      display: grid;
+      gap: 12px;
+    }
+    .hero-summary .headline {
+      font-size: clamp(26px, 3vw, 34px);
+    }
+    .quick-step-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
     .secondary-actions {
       display: flex;
       gap: 10px;
@@ -272,9 +303,22 @@
       padding: 6px 10px;
       color: var(--muted);
     }
+    .scenario-grid {
+      display: grid;
+      gap: 10px;
+    }
     .demo-list {
       display: grid;
       gap: 12px;
+    }
+    .demo-shortcuts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .demo-shortcuts button {
+      min-height: 48px;
+      justify-content: center;
     }
     .demo-card {
       display: grid;
@@ -303,6 +347,60 @@
     .demo-card-title {
       margin: 0;
       font-size: 16px;
+    }
+    .proof-strip {
+      display: grid;
+      gap: 12px;
+    }
+    .proof-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .proof-card {
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel-strong);
+    }
+    .proof-card strong {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .proof-card span {
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1.2;
+      word-break: break-word;
+    }
+    .proof-card small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .proof-guidance {
+      min-height: 56px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(23, 79, 67, 0.14);
+      background: rgba(23, 79, 67, 0.06);
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .proof-warning {
+      min-height: 48px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(187, 46, 40, 0.18);
+      background: rgba(187, 46, 40, 0.06);
+      color: #7f1c18;
+      font-size: 13px;
+      line-height: 1.5;
     }
     .demo-card-copy,
     .watch-item,
@@ -487,6 +585,34 @@
       border: 1px solid rgba(23, 79, 67, 0.12);
       color: var(--ink);
     }
+    .run-log-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      max-height: 360px;
+      overflow: auto;
+    }
+    .run-log-entry {
+      display: grid;
+      gap: 4px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(23, 79, 67, 0.10);
+      background: rgba(255, 255, 255, 0.55);
+    }
+    .run-log-entry strong {
+      font-size: 13px;
+      color: var(--ink);
+      line-height: 1.45;
+    }
+    .run-log-entry span {
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
     .ok { color: var(--ok); }
     .warn { color: var(--warn); }
     .bad { color: var(--bad); }
@@ -495,6 +621,8 @@
       .status-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .boundary-grid { grid-template-columns: 1fr; }
       .lane-grid { grid-template-columns: 1fr; }
+      .proof-grid { grid-template-columns: 1fr; }
+      .demo-shortcuts { grid-template-columns: 1fr; }
     }
     @media (max-width: 1120px) {
       .layout,
@@ -519,17 +647,16 @@
     <section class="masthead">
       <div class="masthead-top">
         <div>
-          <h1>Chasecar Operator Dashboard</h1>
-          <p class="subtitle">Use this page to bring the environment up, rehearse the current capability demos, and understand what the future LLM layer will actually sit on top of. Engineering detail stays available under Advanced Controls.</p>
+          <span class="hero-kicker">Browser UAT Demo</span>
+          <h1>LLM Turn + Go</h1>
+          <p class="subtitle">Start the environment, launch the proof, then watch for three things: turn, ball lock in YOLO, and move toward the ball. Everything deeper stays under Advanced Controls.</p>
         </div>
         <div class="mode-pill" id="api-mode" data-testid="api-mode">Control Mode</div>
       </div>
       <div class="status-grid">
         <div class="status-card"><strong>Environment</strong><span id="environment-state" data-testid="environment-state">stopped</span></div>
-        <div class="status-card"><strong>Scenario</strong><span id="scenario-state" data-testid="scenario-state">idle</span></div>
-        <div class="status-card"><strong>Phase</strong><span id="phase" data-testid="phase">stopped</span></div>
-        <div class="status-card"><strong>Target</strong><span id="target-id" data-testid="target-id">n/a</span></div>
-        <div class="status-card"><strong>Last Result</strong><span id="last-result" data-testid="last-result">none</span></div>
+        <div class="status-card"><strong>Active Scenario</strong><span id="active-scenario" data-testid="active-scenario">idle</span></div>
+        <div class="status-card"><strong>Proof State</strong><span id="proof-state" data-testid="proof-state">waiting</span></div>
         <div class="status-card"><strong>Session ID</strong><span id="session-id" data-testid="session-id">n/a</span></div>
       </div>
     </section>
@@ -547,58 +674,43 @@
           </div>
         </article>
 
-        <div class="main-visual-grid">
-          <article class="panel">
-            <div class="panel-head">
-              <h2>Topdown Telemetry</h2>
-              <span class="count-pill" id="topdown-count">0 frames</span>
-            </div>
-            <div class="panel-body">
-              <img class="telemetry-image" id="topdown-image" data-testid="topdown-image" alt="Topdown telemetry" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
-              <p class="footnote">Use the topdown view to understand robot motion, goal changes, and multi-step handoff behavior.</p>
-            </div>
-          </article>
-
-          <article class="panel">
-            <div class="panel-head">
-              <h2>Camera Detail</h2>
-              <span class="count-pill" id="camera-count">raw 0 - debug 0</span>
-            </div>
-            <div class="panel-body control-group">
-              <div class="camera-toolbar">
-                <div class="camera-tabs">
-                  <button class="camera-tab is-active" id="camera-tab-raw" data-testid="camera-tab-raw" type="button">Raw Camera</button>
-                  <button class="camera-tab" id="camera-tab-debug" data-testid="camera-tab-debug" type="button">YOLO Debug</button>
-                </div>
-                <span class="status-badge" id="camera-status">Raw camera view</span>
-              </div>
-              <div class="camera-pane is-active" id="camera-pane-raw">
-                <img class="detail-image" id="raw-image" data-testid="raw-image" alt="Raw camera feed" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
-              </div>
-              <div class="camera-pane" id="camera-pane-debug">
-                <img class="detail-image" id="debug-image" data-testid="debug-image" alt="Debug camera feed" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
-              </div>
-              <p class="footnote">Keep this on Raw when you want the operator view. Switch to YOLO Debug when you want to understand what the detector is drawing.</p>
-            </div>
-          </article>
-        </div>
+        <article class="panel">
+          <div class="panel-head">
+            <h2>YOLO Debug</h2>
+            <span class="status-badge" id="debug-visual-status" data-testid="debug-visual-status">terminator view</span>
+          </div>
+          <div class="panel-body control-group">
+            <img class="detail-image" id="debug-image" data-testid="debug-image" alt="YOLO debug feed" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+            <p class="footnote">This is the default camera proof surface. Watch for the ball to enter view and for the detector to visibly lock it.</p>
+          </div>
+        </article>
       </div>
 
       <aside class="control-stack">
         <article class="panel">
           <div class="panel-head">
-            <h2>Next Step</h2>
-            <span class="status-badge" id="primary-status-chip" data-testid="primary-status-chip">loading</span>
+            <h2>Run Controls</h2>
+            <span class="status-badge" id="environment-chip" data-testid="environment-chip">loading</span>
           </div>
           <div class="panel-body control-group">
-            <h2 class="headline" id="next-step-title">Loading dashboard state</h2>
-            <p class="support-copy" id="next-step-copy">Reading the control plane and current session status.</p>
-            <button class="primary big-action" id="btn-next-step" data-testid="btn-next-step" type="button" disabled>Loading...</button>
+            <div class="hero-summary">
+              <h2 class="headline" id="environment-headline">LLM Turn + Go Demo</h2>
+              <p class="support-copy" id="environment-copy">Start the environment, run the proof, then watch the robot turn until it sees the ball and move to it.</p>
+              <ol class="quick-step-list">
+                <li>Start the environment.</li>
+                <li>Run <code>LLM Turn + Go</code>.</li>
+                <li>Watch the world and YOLO panes together.</li>
+                <li>Use the live proof status and run log to confirm the same sequence.</li>
+              </ol>
+            </div>
+            <div class="button-row">
+              <button class="primary big-action" id="btn-start-env" data-testid="btn-start-env" type="button" disabled>Start Environment</button>
+              <button class="danger" id="btn-stop" data-testid="btn-stop" type="button" disabled>Stop Environment</button>
+            </div>
             <div class="secondary-actions">
               <button class="secondary" id="btn-refresh" data-testid="btn-refresh" type="button">Refresh</button>
               <button class="secondary" id="btn-reset-sim" data-testid="btn-reset-sim" type="button" disabled>Reset Sim</button>
               <button class="danger" id="btn-stop-scenario" data-testid="btn-stop-scenario" type="button" hidden disabled>Stop Scenario</button>
-              <button class="danger" id="btn-stop" data-testid="btn-stop" type="button" disabled>Stop Environment</button>
             </div>
             <div class="log-line" id="operator-log" data-testid="operator-log">Waiting for dashboard state.</div>
           </div>
@@ -606,71 +718,51 @@
 
         <article class="panel">
           <div class="panel-head">
-            <h2>Capability Demos</h2>
-            <span class="status-badge" id="capability-stage" data-testid="capability-stage">WAIT</span>
+            <h2>Demos</h2>
+            <span class="status-badge" id="demo-emphasis" data-testid="demo-emphasis">featured</span>
           </div>
           <div class="panel-body control-group">
-            <p class="support-copy" id="demo-expectation">Start with M3 single target, then rehearse the left, center, and right variants, then finish with multi-target rehearsal.</p>
+            <p class="support-copy" id="demo-expectation">Run the LLM proof first. The M3 demos stay here because they are visually obvious and easy to verify.</p>
             <div class="demo-list" id="demo-list"></div>
           </div>
         </article>
 
         <article class="panel">
           <div class="panel-head">
-            <h2>What To Watch</h2>
-            <span class="status-badge" id="watch-context">operator cues</span>
+            <h2>Live Proof Status</h2>
+            <span class="status-badge" id="proof-live-chip" data-testid="proof-live-chip">waiting</span>
           </div>
-          <div class="panel-body control-group">
-            <p class="support-copy" id="watch-copy">Use these cues to decide whether the current step looks healthy without needing to open the engineering detail.</p>
-            <ul class="watch-list" id="watch-list"></ul>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-head"><h2>Current Capability Boundary</h2></div>
-          <div class="panel-body">
-            <div class="boundary-grid">
-              <div class="boundary-card">
-                <h3>What the system has now</h3>
-                <p>These are the current capabilities the operator can trust and rehearse.</p>
-                <ul class="boundary-list">
-                  <li>Perception from the current target pipeline</li>
-                  <li>Goal creation and motion execution through the frozen control path</li>
-                  <li>Track, abort, and safe_stop through the fixed intent boundary</li>
-                </ul>
+          <div class="panel-body proof-strip">
+            <div class="proof-grid">
+              <div class="proof-card">
+                <strong>Stage</strong>
+                <span id="proof-stage-value" data-testid="proof-stage-value">waiting</span>
+                <small id="proof-stage-copy">The proof has not started yet.</small>
               </div>
-              <div class="boundary-card">
-                <h3>What the future LLM would sit on top of</h3>
-                <p>This is the real substrate an LLM layer would be allowed to use.</p>
-                <ul class="boundary-list">
-                  <li>The frozen intent boundary</li>
-                  <li>Current perception and state signals</li>
-                  <li>Returned feedback and outcome signals</li>
-                </ul>
+              <div class="proof-card">
+                <strong>Latest LLM Step</strong>
+                <span id="proof-action-value" data-testid="proof-action-value">none yet</span>
+                <small id="proof-action-copy">No LLM action observed yet.</small>
               </div>
-              <div class="boundary-card">
-                <h3>What is not here yet</h3>
-                <p>The dashboard should stay honest about the current limits.</p>
-                <ul class="boundary-list">
-                  <li>Freeform language understanding</li>
-                  <li>Open-ended planning or task decomposition</li>
-                  <li>Unbounded action selection outside the frozen set</li>
-                </ul>
+              <div class="proof-card">
+                <strong>Robot State</strong>
+                <span id="proof-feedback-value" data-testid="proof-feedback-value">waiting</span>
+                <small id="proof-feedback-copy">Waiting for the next meaningful robot update.</small>
               </div>
             </div>
+            <div class="proof-guidance" id="proof-guidance" data-testid="proof-guidance">When this is working, you should see: turn first, then ball lock in YOLO, then move toward the ball.</div>
+            <div class="proof-warning" id="proof-warning" data-testid="proof-warning">No proof warnings right now.</div>
           </div>
         </article>
 
         <article class="panel">
           <div class="panel-head">
-            <h2>Shadow Brain</h2>
-            <span class="status-badge" id="shadow-brain-status" data-testid="shadow-brain-status">disabled</span>
+            <h2>Run Log</h2>
+            <span class="status-badge" id="run-log-chip" data-testid="run-log-chip">waiting</span>
           </div>
           <div class="panel-body control-group">
-            <p class="support-copy" id="shadow-brain-intent">The shadow supervisor is read-only in this slice.</p>
-            <p class="support-copy" id="shadow-brain-rationale">It watches the same authoritative dashboard state over time and recommends a bounded frozen intent, but it does not dispatch anything yet.</p>
-            <ul class="watch-list" id="shadow-brain-observations"></ul>
-            <p class="footnote" id="shadow-brain-updated">No evaluations yet.</p>
+            <p class="support-copy" id="run-log-summary">The log will show the high-level LLM and robot steps here.</p>
+            <ul class="run-log-list" id="run-log-list" data-testid="run-log-list"></ul>
           </div>
         </article>
 
@@ -680,11 +772,11 @@
             <p class="drawer-copy">For the full walkthrough, use <code>docs/DASHBOARD_OPERATOR_GUIDE.md</code>. This drawer keeps the common operator path on the page.</p>
             <ol class="help-list">
               <li>Open Docker Desktop, click play on the Chasecar app, then open <code>http://127.0.0.1:8860</code>.</li>
-              <li>Use the Next Step card to start the environment and wait for the world and topdown views to update.</li>
-              <li>Run <code>m3_single_target</code> first, then <code>m3_center</code>, <code>m3_left</code>, <code>m3_right</code>, and finally <code>multi_target_rehearsal</code>.</li>
-              <li>Use the What To Watch panel to judge whether the run looks healthy before opening Advanced Controls.</li>
+              <li>Start the environment and wait for the world and YOLO debug views to go live.</li>
+              <li>Run <code>LLM Turn + Go</code> first. The robot should turn until it sees the ball, then move toward it.</li>
+              <li>Use the run log to confirm the same high-level LLM and robot steps you see in the visuals.</li>
               <li>Use Reset Sim if you want a fresh session id and Stop Environment when you are done.</li>
-              <li>Open Advanced Controls only when you want the workbench lanes, the frozen-intent console, or deeper control-plane detail.</li>
+              <li>Open Advanced Controls only when you want raw camera, topdown telemetry, workbench detail, or manual tools.</li>
             </ol>
           </div>
         </details>
@@ -707,7 +799,30 @@
               </section>
 
               <section class="advanced-section">
-                <h3>Shadow Brain Detail</h3>
+                <h3>Additional Visuals</h3>
+                <p class="drawer-copy">These stay out of the default UAT view so the browser can stay focused on the world and YOLO proof panes.</p>
+                <div class="main-visual-grid">
+                  <article class="panel">
+                    <div class="panel-head">
+                      <h2>Raw Camera</h2>
+                    </div>
+                    <div class="panel-body">
+                      <img class="detail-image" id="raw-image" data-testid="raw-image" alt="Raw camera feed" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+                    </div>
+                  </article>
+                  <article class="panel">
+                    <div class="panel-head">
+                      <h2>Topdown Telemetry</h2>
+                    </div>
+                    <div class="panel-body">
+                      <img class="telemetry-image" id="topdown-image" data-testid="topdown-image" alt="Topdown telemetry" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
+                    </div>
+                  </article>
+                </div>
+              </section>
+
+              <section class="advanced-section">
+                <h3>LLM Runtime Detail</h3>
                 <dl class="control-kv">
                   <dt>Status</dt><dd id="shadow-detail-status">disabled</dd>
                   <dt>Provider</dt><dd id="shadow-detail-provider">n/a</dd>
@@ -787,1093 +902,6 @@
     </section>
   </div>
 
-  <script>
-    const stateEls = {
-      apiMode: document.getElementById('api-mode'),
-      environmentState: document.getElementById('environment-state'),
-      scenarioState: document.getElementById('scenario-state'),
-      phase: document.getElementById('phase'),
-      targetId: document.getElementById('target-id'),
-      lastResult: document.getElementById('last-result'),
-      sessionId: document.getElementById('session-id'),
-      topdownCount: document.getElementById('topdown-count'),
-      cameraCount: document.getElementById('camera-count'),
-      cameraStatus: document.getElementById('camera-status'),
-      primaryStatusChip: document.getElementById('primary-status-chip'),
-      nextStepTitle: document.getElementById('next-step-title'),
-      nextStepCopy: document.getElementById('next-step-copy'),
-      capabilityStage: document.getElementById('capability-stage'),
-      demoExpectation: document.getElementById('demo-expectation'),
-      demoList: document.getElementById('demo-list'),
-      watchContext: document.getElementById('watch-context'),
-      watchCopy: document.getElementById('watch-copy'),
-      watchList: document.getElementById('watch-list'),
-      operatorLog: document.getElementById('operator-log'),
-      operatorFootnote: document.getElementById('operator-footnote'),
-      shadowBrainStatus: document.getElementById('shadow-brain-status'),
-      shadowBrainIntent: document.getElementById('shadow-brain-intent'),
-      shadowBrainRationale: document.getElementById('shadow-brain-rationale'),
-      shadowBrainObservations: document.getElementById('shadow-brain-observations'),
-      shadowBrainUpdated: document.getElementById('shadow-brain-updated'),
-      worldLink: document.getElementById('world-link'),
-      worldImage: document.getElementById('world-image'),
-      topdownImage: document.getElementById('topdown-image'),
-      rawImage: document.getElementById('raw-image'),
-      debugImage: document.getElementById('debug-image'),
-      controlModeDetail: document.getElementById('control-mode-detail'),
-      warmServices: document.getElementById('warm-services'),
-      composeProject: document.getElementById('compose-project'),
-      worldStreamReady: document.getElementById('world-stream-ready'),
-      truthAlignment: document.getElementById('truth-alignment'),
-      motionEvidence: document.getElementById('motion-evidence'),
-      perceptionLane: document.getElementById('perception-lane'),
-      beliefLane: document.getElementById('belief-lane'),
-      decisionLane: document.getElementById('decision-lane'),
-      outcomeLane: document.getElementById('outcome-lane'),
-      previewStatus: document.getElementById('preview-status'),
-      previewReadiness: document.getElementById('preview-readiness'),
-      previewActivity: document.getElementById('preview-activity'),
-      previewPayload: document.getElementById('preview-payload'),
-      shadowDetailStatus: document.getElementById('shadow-detail-status'),
-      shadowDetailProvider: document.getElementById('shadow-detail-provider'),
-      shadowDetailModel: document.getElementById('shadow-detail-model'),
-      shadowDetailStateHash: document.getElementById('shadow-detail-state-hash'),
-      shadowDetailPreview: document.getElementById('shadow-detail-preview'),
-      shadowDetailHistoryPath: document.getElementById('shadow-detail-history-path'),
-      shadowDetailSuppression: document.getElementById('shadow-detail-suppression'),
-      shadowHistoryList: document.getElementById('shadow-history-list')
-    };
-
-    const controls = {
-      nextStep: document.getElementById('btn-next-step'),
-      refresh: document.getElementById('btn-refresh'),
-      resetSim: document.getElementById('btn-reset-sim'),
-      stopScenario: document.getElementById('btn-stop-scenario'),
-      stop: document.getElementById('btn-stop'),
-      runScenario: document.getElementById('btn-run-scenario'),
-      scenarioSelect: document.getElementById('scenario-select'),
-      targetClass: document.getElementById('target-class'),
-      approachDistance: document.getElementById('approach-distance'),
-      acquireTarget: document.getElementById('btn-acquire-target'),
-      planToTarget: document.getElementById('btn-plan-to-target'),
-      trackTarget: document.getElementById('btn-track-target'),
-      abort: document.getElementById('btn-abort'),
-      safeStop: document.getElementById('btn-safe-stop'),
-      intentTemplate: document.getElementById('intent-template'),
-      intentJson: document.getElementById('intent-json'),
-      previewIntent: document.getElementById('btn-preview-intent'),
-      dispatchIntent: document.getElementById('btn-dispatch-intent'),
-      cameraTabRaw: document.getElementById('camera-tab-raw'),
-      cameraTabDebug: document.getElementById('camera-tab-debug'),
-      cameraPaneRaw: document.getElementById('camera-pane-raw'),
-      cameraPaneDebug: document.getElementById('camera-pane-debug')
-    };
-
-    const demoFlow = [
-      {
-        id: 'm3_single_target',
-        label: 'M3 Single Target',
-        shortLabel: 'M3 Single Target',
-        copy: 'Start here. This is the first clear proof that the robot can see, plan, and move toward one target.',
-        watchCopy: 'The most important cues are motion and steady approach. You do not need dramatic camera effects to trust this run.',
-        cues: [
-          'The robot starts moving toward the single target instead of sitting still.',
-          'The topdown view shows a clear goal and a shrinking approach path.',
-          'The world view keeps updating and motion ends in a settled state rather than drifting.'
-        ]
-      },
-      {
-        id: 'm3_center',
-        label: 'M3 Center',
-        shortLabel: 'M3 Center',
-        copy: 'Rehearse the centered preset to confirm the forward motion story stays consistent.',
-        watchCopy: 'Treat this as a repeatability check. The main question is whether the robot still makes clean progress.',
-        cues: [
-          'The robot heads to the centered target without hesitation.',
-          'The topdown path stays simple and progress looks continuous.',
-          'The run ends cleanly and the dashboard returns to ready.'
-        ]
-      },
-      {
-        id: 'm3_left',
-        label: 'M3 Left',
-        shortLabel: 'M3 Left',
-        copy: 'Check that the robot can handle an offset target to the left without losing the simple motion story.',
-        watchCopy: 'The important cue is that the path visibly bends left and still resolves cleanly.',
-        cues: [
-          'The world view shows a leftward turn or offset path rather than a straight center drive.',
-          'The topdown view shows that the target and path are offset left of center.',
-          'The robot settles after reaching the left preset instead of oscillating.'
-        ]
-      },
-      {
-        id: 'm3_right',
-        label: 'M3 Right',
-        shortLabel: 'M3 Right',
-        copy: 'Mirror the left offset case and confirm the robot can handle the right-side target equally well.',
-        watchCopy: 'This should feel like the left run mirrored, not like a different capability.',
-        cues: [
-          'The world view shows a rightward path to the target.',
-          'The topdown view clearly places the motion target on the right side.',
-          'The robot reaches the target and returns the dashboard to ready.'
-        ]
-      },
-      {
-        id: 'multi_target_rehearsal',
-        label: 'Multi-Target Rehearsal',
-        shortLabel: 'Multi-Target',
-        copy: 'Finish with the multi-step rehearsal. This is mainly a motion and state-handoff demo, not a flashy camera demo.',
-        watchCopy: 'Do not expect dramatic camera changes. The trustworthy cues are robot motion, target changes, and the transition indicator.',
-        cues: [
-          'The robot moves through multiple legs instead of one single approach.',
-          'The target label changes as the rehearsal advances to the next leg.',
-          'The transition indicator briefly becomes active during handoff before settling back down.'
-        ]
-      }
-    ];
-
-    const demoMetaById = Object.fromEntries(demoFlow.map((item) => [item.id, item]));
-    const manualScenarioFallback = ['m2_single_target', ...demoFlow.map((item) => item.id)];
-    const intentTemplates = {
-      acquire_target: { intent: 'acquire_target', args: { target_class: 'ball' } },
-      plan_to_target: { intent: 'plan_to_target', args: { approach_distance_m: 0.25 } },
-      track_target: { intent: 'track_target', args: {} },
-      abort: { intent: 'abort', args: {} },
-      safe_stop: { intent: 'safe_stop', args: {} }
-    };
-
-    let apiMode = true;
-    let cachedScenarios = [];
-    let localPreview = null;
-    let editorDirty = false;
-    let activeCamera = 'raw';
-    let currentPrimaryAction = null;
-    let pendingScenarioId = '';
-    let lastRenderedState = null;
-
-    function placeholderImage() {
-      return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
-    }
-
-    function stampImage(el, path) {
-      el.src = `${path}?t=${Date.now()}`;
-    }
-
-    function selectText(value, fallback = 'n/a') {
-      return value === undefined || value === null || value === '' ? fallback : String(value);
-    }
-
-    function boolText(value, okText, badText) {
-      return `<span class="${value ? 'ok' : 'bad'}">${value ? okText : badText}</span>`;
-    }
-
-    function formatMeters(value) {
-      if (value === undefined || value === null || value === '') {
-        return 'n/a';
-      }
-      const num = Number(value);
-      return Number.isFinite(num) ? `${num.toFixed(2)} m` : String(value);
-    }
-
-    function formatPose(value) {
-      if (!value || typeof value !== 'object') {
-        return 'n/a';
-      }
-      const x = Number(value.x);
-      const y = Number(value.y);
-      const yaw = value.yaw === undefined ? null : Number(value.yaw);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) {
-        return 'n/a';
-      }
-      if (yaw === null || !Number.isFinite(yaw)) {
-        return `x=${x.toFixed(2)}, y=${y.toFixed(2)}`;
-      }
-      return `x=${x.toFixed(2)}, y=${y.toFixed(2)}, yaw=${yaw.toFixed(2)}`;
-    }
-
-    function formatPoint(value) {
-      if (!value || typeof value !== 'object') {
-        return 'n/a';
-      }
-      const x = Number(value.x);
-      const y = Number(value.y);
-      if (!Number.isFinite(x) || !Number.isFinite(y)) {
-        return 'n/a';
-      }
-      return `x=${x.toFixed(2)}, y=${y.toFixed(2)}`;
-    }
-
-    function laneRow(label, value) {
-      return `
-        <div class="lane-row">
-          <div class="lane-label">${label}</div>
-          <div class="lane-value">${value}</div>
-        </div>
-      `;
-    }
-
-    function renderLane(element, rows) {
-      element.innerHTML = rows.map((row) => laneRow(row.label, row.value)).join('');
-    }
-
-    function completedStorageKey(sessionId) {
-      return `chasecar.dashboard.completed.${sessionId}`;
-    }
-
-    function loadCompletedScenarios(sessionId) {
-      if (!sessionId) {
-        return new Set();
-      }
-      try {
-        const raw = window.sessionStorage.getItem(completedStorageKey(sessionId));
-        const parsed = raw ? JSON.parse(raw) : [];
-        return new Set(Array.isArray(parsed) ? parsed : []);
-      } catch (_err) {
-        return new Set();
-      }
-    }
-
-    function saveCompletedScenarios(sessionId, completedSet) {
-      if (!sessionId) {
-        return;
-      }
-      window.sessionStorage.setItem(completedStorageKey(sessionId), JSON.stringify(Array.from(completedSet)));
-    }
-
-    function trackScenarioProgress(state) {
-      const sessionId = selectText(state.session_id, '');
-      const completed = loadCompletedScenarios(sessionId);
-      const scenarioState = selectText(state.scenario_state, 'idle');
-      const activeScenario = selectText(state.active_scenario, '');
-      const sessionChanged = lastRenderedState && lastRenderedState.session_id !== sessionId;
-      if (sessionChanged) {
-        pendingScenarioId = '';
-      }
-
-      if (scenarioState === 'running' && demoMetaById[activeScenario]) {
-        pendingScenarioId = activeScenario;
-      }
-
-      const scenarioJustFinished =
-        lastRenderedState
-        && lastRenderedState.session_id === sessionId
-        && lastRenderedState.scenario_state === 'running'
-        && scenarioState !== 'running';
-      if (scenarioJustFinished && pendingScenarioId) {
-        const cancelled = String(state.last_result || '').toLowerCase().includes('cancel');
-        if (!cancelled && scenarioState === 'ready') {
-          completed.add(pendingScenarioId);
-          saveCompletedScenarios(sessionId, completed);
-        }
-        pendingScenarioId = '';
-      }
-
-      return completed;
-    }
-
-    function recommendedScenarioId(_state, completed) {
-      const next = demoFlow.find((item) => !completed.has(item.id));
-      return next ? next.id : '';
-    }
-
-    function getPrimaryAction(state, completed) {
-      const controlsState = state.controls || {};
-      const envState = selectText(state.environment_state, 'stopped');
-      const scenarioState = selectText(state.scenario_state, 'idle');
-      const activeScenario = selectText(state.active_scenario, '');
-      const controlReady = Boolean(state.control_plane_ready);
-      const recommendedId = recommendedScenarioId(state, completed);
-      const recommendedMeta = demoMetaById[recommendedId];
-
-      if (!controlReady) {
-        return {
-          kind: 'waiting',
-          chip: 'control plane',
-          label: 'Waiting for Control Plane',
-          title: 'Dashboard is waiting on the control plane',
-          copy: selectText(state.control_plane_error, 'Warm services are still coming up. Open Advanced Controls if you want the exact readiness details.'),
-          disabled: true,
-          scenarioId: '',
-        };
-      }
-
-      if (envState === 'starting') {
-        return {
-          kind: 'starting',
-          chip: 'starting',
-          label: 'Environment Starting',
-          title: 'Environment is starting',
-          copy: selectText(state.environment_message, 'Wait for the world and topdown views to begin updating before running a capability demo.'),
-          disabled: true,
-          scenarioId: '',
-        };
-      }
-
-      if (scenarioState === 'running') {
-        return {
-          kind: 'stopScenario',
-          chip: 'scenario active',
-          label: 'Stop Scenario',
-          title: `Scenario running: ${activeScenario || 'active run'}`,
-          copy: selectText(state.scenario_message, 'Use Stop Scenario if you want to end the current rehearsal without tearing down the environment.'),
-          disabled: !controlsState.can_stop_scenario,
-          scenarioId: activeScenario,
-        };
-      }
-
-      if (envState === 'stopped' || envState === 'error') {
-        return {
-          kind: 'start',
-          chip: 'step 1',
-          label: 'Start Environment',
-          title: 'Bring the environment up',
-          copy: 'Start the authoritative environment first. Once the world and topdown views are live, the dashboard will guide you to the first M3 proof.',
-          disabled: !controlsState.can_start,
-          scenarioId: '',
-        };
-      }
-
-      if (envState === 'environment_ready' && recommendedMeta) {
-        return {
-          kind: 'runScenario',
-          chip: 'recommended next',
-          label: `Run ${recommendedMeta.shortLabel}`,
-          title: `Recommended next demo: ${recommendedMeta.label}`,
-          copy: recommendedMeta.copy,
-          disabled: !controlsState.can_run_scenario,
-          scenarioId: recommendedMeta.id,
-        };
-      }
-
-      if (envState === 'environment_ready') {
-        return {
-          kind: 'stop',
-          chip: 'session complete',
-          label: 'Stop Environment',
-          title: 'Capability rehearsal complete',
-          copy: 'You have worked through the default demo flow for this session. Stop the environment when you are done, or open Advanced Controls for manual tools.',
-          disabled: !controlsState.can_stop,
-          scenarioId: '',
-        };
-      }
-
-      return {
-        kind: 'waiting',
-        chip: 'waiting',
-        label: 'Refresh',
-        title: 'Waiting for dashboard state',
-        copy: 'Use Refresh if the dashboard looks stale.',
-        disabled: false,
-        scenarioId: '',
-      };
-    }
-
-    function populateScenarioOptions() {
-      const previous = controls.scenarioSelect.value;
-      const options = [];
-      const seen = new Set();
-      const source = cachedScenarios.length ? cachedScenarios : manualScenarioFallback.map((id) => ({
-        id,
-        label: demoMetaById[id] ? demoMetaById[id].label : id.replaceAll('_', ' ')
-      }));
-      source.forEach((item) => {
-        const id = selectText(item.id, '');
-        if (!id || seen.has(id)) {
-          return;
-        }
-        seen.add(id);
-        options.push({ id, label: selectText(item.label, id) });
-      });
-      controls.scenarioSelect.innerHTML = options
-        .map((item) => `<option value="${item.id}">${item.label}</option>`)
-        .join('');
-      if (previous && seen.has(previous)) {
-        controls.scenarioSelect.value = previous;
-      } else if (options.length > 0) {
-        controls.scenarioSelect.value = options[0].id;
-      }
-    }
-
-    function populateIntentTemplates() {
-      controls.intentTemplate.innerHTML = Object.keys(intentTemplates)
-        .map((intentName) => `<option value="${intentName}">${intentName}</option>`)
-        .join('');
-      setIntentEditor(controls.intentTemplate.value || 'acquire_target', true);
-    }
-
-    function setIntentEditor(intentName, preservePreview) {
-      const template = intentTemplates[intentName] || intentTemplates.acquire_target;
-      controls.intentJson.value = JSON.stringify(template, null, 2);
-      editorDirty = false;
-      if (!preservePreview) {
-        clearPreview();
-      }
-    }
-
-    function clearPreview(message = 'Preview required.') {
-      localPreview = null;
-      stateEls.previewStatus.textContent = message;
-      stateEls.previewReadiness.textContent = 'No preview yet.';
-      stateEls.previewActivity.textContent = 'No preview yet.';
-      stateEls.previewPayload.textContent = '{}';
-      controls.dispatchIntent.disabled = true;
-    }
-
-    function readIntentBodyFromEditor() {
-      const parsed = JSON.parse(controls.intentJson.value || '{}');
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw new Error('Intent body must be a JSON object.');
-      }
-      const intentName = selectText(parsed.intent, '');
-      if (!intentName) {
-        throw new Error('Intent body must include an intent field.');
-      }
-      const args = parsed.args && typeof parsed.args === 'object' && !Array.isArray(parsed.args) ? parsed.args : {};
-      return { intent: intentName, args };
-    }
-
-    function previewFromState(state) {
-      const decision = state.decision || {};
-      if (decision.last_preview_valid) {
-        return {
-          generated_utc: decision.last_preview_timestamp_utc || '',
-          intent: selectText(decision.last_preview_payload && decision.last_preview_payload.intent, ''),
-          payload: decision.last_preview_payload || {},
-          readiness: decision.last_preview_readiness || {},
-          expected_boundary_activity: Array.isArray(decision.last_preview_expected_activity) ? decision.last_preview_expected_activity : [],
-          ready_to_dispatch: Boolean(decision.last_preview_readiness && decision.last_preview_readiness.ready_to_dispatch),
-          contract_valid: true,
-        };
-      }
-      if (decision.last_preview_error) {
-        return {
-          intent: '',
-          payload: {},
-          readiness: {},
-          expected_boundary_activity: [],
-          ready_to_dispatch: false,
-          contract_valid: false,
-          error: decision.last_preview_error,
-        };
-      }
-      return null;
-    }
-
-    function renderPreview(state) {
-      const preview = localPreview || previewFromState(state);
-      const controlsState = state.controls || {};
-      if (!preview) {
-        clearPreview('Preview required.');
-        return;
-      }
-
-      if (preview.error) {
-        stateEls.previewStatus.textContent = `Preview failed: ${preview.error}`;
-        stateEls.previewReadiness.textContent = 'Preview is invalid.';
-        stateEls.previewActivity.textContent = 'No boundary activity because validation failed.';
-        stateEls.previewPayload.textContent = '{}';
-        controls.dispatchIntent.disabled = true;
-        return;
-      }
-
-      const readiness = preview.readiness || {};
-      const missing = Array.isArray(readiness.missing_keys) ? readiness.missing_keys : [];
-      const readinessText = missing.length
-        ? `Missing: ${missing.join(', ')}`
-        : 'Ready to dispatch from the current session.';
-      const expectedActivity = Array.isArray(preview.expected_boundary_activity) && preview.expected_boundary_activity.length
-        ? preview.expected_boundary_activity.join(', ')
-        : 'No specific activity listed.';
-
-      stateEls.previewStatus.textContent = `${preview.intent || 'intent'} preview ${preview.ready_to_dispatch ? 'ready' : 'blocked'}`;
-      stateEls.previewReadiness.textContent = readinessText;
-      stateEls.previewActivity.textContent = expectedActivity;
-      stateEls.previewPayload.textContent = JSON.stringify(preview.payload || {}, null, 2);
-      controls.dispatchIntent.disabled = !(
-        controlsState.can_dispatch_intent
-        && preview.contract_valid
-        && preview.ready_to_dispatch
-      );
-    }
-
-    function renderAdvancedLanes(state) {
-      const perception = state.perception || {};
-      const belief = state.belief || {};
-      const decision = state.decision || {};
-      const outcome = state.outcome || {};
-
-      renderLane(stateEls.perceptionLane, [
-        { label: 'Detection Topic', value: perception.detection_topic_seen ? 'live' : 'waiting' },
-        { label: 'Target Visible Now', value: perception.target_visible_now ? 'yes' : 'no' },
-        { label: 'Target Visible Ratio', value: `${Number(perception.target_visible_ratio || 0).toFixed(2)}` },
-        { label: 'Latest Detection', value: formatPoint(perception.latest_detection_world) },
-        { label: 'Truth Target', value: formatPoint(perception.latest_truth_target_world) },
-        { label: 'Truth Status', value: selectText(perception.truth_status, 'truth unavailable') }
-      ]);
-
-      renderLane(stateEls.beliefLane, [
-        { label: 'Robot Pose', value: formatPose(belief.latest_robot_pose) },
-        { label: 'Goal Pose', value: formatPose(belief.latest_goal_pose) },
-        { label: 'Distance', value: formatMeters(belief.latest_target_distance_m) },
-        { label: 'Distance Trend', value: selectText(belief.distance_trend, 'unknown') },
-        { label: 'Phase', value: selectText(belief.phase, 'n/a') },
-        { label: 'Target / Transition', value: `${selectText(belief.target_id, 'n/a')} / ${belief.target_transition_active ? 'active' : 'steady'}` }
-      ]);
-
-      renderLane(stateEls.decisionLane, [
-        { label: 'Last Intent', value: selectText(decision.last_intent, 'none') },
-        { label: 'Last Intent At', value: selectText(decision.last_intent_timestamp_utc, 'n/a') },
-        { label: 'Last Preview Valid', value: decision.last_preview_valid ? 'yes' : 'no' },
-        { label: 'Preview Generated', value: selectText(decision.last_preview_timestamp_utc, 'n/a') },
-        { label: 'Preview Error', value: selectText(decision.last_preview_error, 'none') },
-        { label: 'Available Intents', value: Array.isArray(decision.available_intents) ? decision.available_intents.join(', ') : 'n/a' }
-      ]);
-
-      renderLane(stateEls.outcomeLane, [
-        { label: 'Last Feedback', value: selectText(outcome.last_feedback, 'none') },
-        { label: 'Last Result', value: selectText(outcome.last_result, 'none') },
-        { label: 'Feedback Recent', value: outcome.feedback_recent ? 'yes' : 'no' },
-        { label: 'Nav Goal Recent', value: outcome.nav_goal_recent ? 'yes' : 'no' },
-        { label: 'cmd_vel Recent', value: outcome.cmd_vel_recent ? 'yes' : 'no' },
-        { label: 'Motion Evidence', value: outcome.motion_evidence ? 'yes' : 'no' }
-      ]);
-    }
-
-    function renderDemoCards(state, completed, recommendedId) {
-      const controlsState = state.controls || {};
-      const activeScenario = selectText(state.active_scenario, '');
-      const canRunScenario = Boolean(controlsState.can_run_scenario);
-      stateEls.demoList.innerHTML = demoFlow.map((item) => {
-        const complete = completed.has(item.id);
-        const running = activeScenario === item.id && state.scenario_state === 'running';
-        const recommended = recommendedId === item.id && state.environment_state === 'environment_ready' && state.scenario_state !== 'running';
-        const classes = ['demo-card'];
-        if (complete) {
-          classes.push('is-complete');
-        }
-        if (running) {
-          classes.push('is-running');
-        }
-        if (recommended) {
-          classes.push('is-recommended');
-        }
-        const badge = running ? 'running' : (complete ? 'done' : (recommended ? 'recommended next' : 'available'));
-        return `
-          <div class="${classes.join(' ')}">
-            <div class="demo-card-head">
-              <div>
-                <p class="demo-meta">${badge}</p>
-                <h3 class="demo-card-title">${item.label}</h3>
-              </div>
-              <button
-                class="${recommended ? 'primary' : 'secondary'}"
-                type="button"
-                data-demo-run="${item.id}"
-                data-testid="btn-demo-${item.id}"
-                ${canRunScenario ? '' : 'disabled'}
-              >Run</button>
-            </div>
-            <p class="demo-card-copy">${item.copy}</p>
-          </div>
-        `;
-      }).join('');
-    }
-
-    function renderWatchPanel(state, recommendedId) {
-      const envState = selectText(state.environment_state, 'stopped');
-      const activeScenario = selectText(state.active_scenario, '');
-      const runningMeta = demoMetaById[activeScenario];
-      const recommendedMeta = demoMetaById[recommendedId];
-      let title = 'operator cues';
-      let copy = 'Use these cues to decide whether the current step looks healthy without needing to open the engineering detail.';
-      let cues = [
-        'The world and topdown panes should stay current instead of freezing.',
-        'The status strip should match what the robot appears to be doing.',
-        'If the simple story stops making sense, open Advanced Controls for the exact signal-level view.'
-      ];
-
-      if (!state.control_plane_ready) {
-        title = 'control plane';
-        copy = 'The dashboard can render before the control plane is ready. Wait for the warm services and controls to become available.';
-        cues = [
-          'The Next Step card should explain what the dashboard is waiting on.',
-          'The world and camera panes may stay blank until the environment is started.',
-          'Open Advanced Controls only if you want the exact warm-service status.'
-        ];
-      } else if (envState === 'stopped') {
-        title = 'startup cues';
-        copy = 'Before the environment starts, the visuals should be quiet and the primary action should clearly be Start Environment.';
-        cues = [
-          'The Next Step button should say Start Environment.',
-          'Session id should still be empty or n/a.',
-          'The world, topdown, and camera panes should not look live yet.'
-        ];
-      } else if (envState === 'starting') {
-        title = 'environment startup';
-        copy = 'Wait for visual life signs before trying to run any scenario.';
-        cues = [
-          'World and topdown panes should begin updating.',
-          'Session id should populate once the environment is taking shape.',
-          'The primary action should switch away from Start when the system becomes ready.'
-        ];
-      } else if (runningMeta && state.scenario_state === 'running') {
-        title = runningMeta.label;
-        copy = runningMeta.watchCopy;
-        cues = runningMeta.cues;
-      } else if (envState === 'environment_ready' && recommendedMeta) {
-        title = `${recommendedMeta.label} next`;
-        copy = recommendedMeta.watchCopy;
-        cues = recommendedMeta.cues;
-      } else if (envState === 'environment_ready') {
-        title = 'ready state';
-        copy = 'The environment is ready. Run the next capability demo or stop the environment if this session is complete.';
-        cues = [
-          'The primary action should recommend the next scenario or Stop Environment.',
-          'The world and topdown panes should remain live while idle.',
-          'Reset Sim stays available if you want a fresh session id.'
-        ];
-      }
-
-      stateEls.watchContext.textContent = title;
-      stateEls.watchCopy.textContent = copy;
-      stateEls.watchList.innerHTML = cues.map((cue) => `<li class="watch-item">${cue}</li>`).join('');
-    }
-
-    function renderPrimaryAction(state, recommendedId) {
-      const completed = loadCompletedScenarios(selectText(state.session_id, ''));
-      const action = getPrimaryAction(state, completed);
-      currentPrimaryAction = action;
-      stateEls.primaryStatusChip.textContent = action.chip;
-      stateEls.nextStepTitle.textContent = action.title;
-      stateEls.nextStepCopy.textContent = action.copy;
-      controls.nextStep.textContent = action.label;
-      controls.nextStep.disabled = Boolean(action.disabled);
-
-      const controlsState = state.controls || {};
-      controls.refresh.disabled = !controlsState.can_refresh;
-      controls.resetSim.disabled = !controlsState.can_reset_sim;
-      controls.stop.disabled = !controlsState.can_stop;
-      controls.stopScenario.disabled = !controlsState.can_stop_scenario;
-      controls.stopScenario.hidden = !controlsState.can_stop_scenario;
-      controls.runScenario.disabled = !controlsState.can_run_scenario;
-      controls.acquireTarget.disabled = !controlsState.can_issue_intent;
-      controls.planToTarget.disabled = !controlsState.can_issue_intent;
-      controls.trackTarget.disabled = !controlsState.can_issue_intent;
-      controls.abort.disabled = !controlsState.can_issue_intent;
-      controls.safeStop.disabled = !controlsState.can_issue_intent;
-      controls.previewIntent.disabled = !controlsState.can_preview_intent;
-      controls.scenarioSelect.disabled = !controlsState.can_run_scenario;
-
-      const logMessage = selectText(
-        state.scenario_message || state.environment_message || state.status_text || state.last_feedback || state.last_result,
-        'Waiting for dashboard state.'
-      );
-      stateEls.operatorLog.textContent = logMessage;
-    }
-
-    function renderControlDetail(state) {
-      stateEls.controlModeDetail.textContent = selectText(state.control_mode, 'n/a');
-      stateEls.warmServices.textContent = selectText(state.warm_services_status, 'unknown');
-      stateEls.composeProject.textContent = selectText(state.compose_project, 'n/a');
-      stateEls.worldStreamReady.textContent = state.world_stream_ready ? 'ready' : (selectText(state.world_stream_failure_class, 'waiting'));
-      stateEls.truthAlignment.textContent = state.truth_alignment_ok ? 'aligned' : (selectText(state.truth_failure_class, 'waiting'));
-      stateEls.motionEvidence.textContent = state.motion_evidence ? 'present' : 'waiting';
-      if (state.control_plane_ready) {
-        stateEls.operatorFootnote.textContent = 'Controls are live. Advanced tools here are the same truthful backend state, just with more detail.';
-      } else {
-        stateEls.operatorFootnote.textContent = selectText(state.control_plane_error, 'Read-only fallback mode disables controls until the API-backed service is reachable.');
-      }
-    }
-
-    function renderShadowBrain(state) {
-      const supervisor = state.llm_supervisor || {};
-      const latest = supervisor.latest_decision || {};
-      const preview = supervisor.preview || {};
-      const status = selectText(supervisor.status, 'disabled');
-      const intent = selectText(latest.intent, '');
-      const observations = Array.isArray(latest.expected_observations) && latest.expected_observations.length
-        ? latest.expected_observations
-        : ['No shadow observation hints yet.'];
-
-      stateEls.shadowBrainStatus.textContent = status;
-      if (status === 'recommendation' && intent) {
-        stateEls.shadowBrainIntent.textContent = `Latest shadow recommendation: ${intent}`;
-      } else if (status === 'blocked') {
-        stateEls.shadowBrainIntent.textContent = 'Latest shadow decision: blocked';
-      } else if (status === 'waiting') {
-        stateEls.shadowBrainIntent.textContent = 'The shadow supervisor is watching for a meaningful state change.';
-      } else {
-        stateEls.shadowBrainIntent.textContent = 'The shadow supervisor is read-only in this slice.';
-      }
-      stateEls.shadowBrainRationale.textContent = selectText(
-        latest.rationale_short,
-        status === 'disabled'
-          ? 'Set a provider and key to enable the shadow supervisor.'
-          : 'It watches the same authoritative dashboard state over time and recommends a bounded frozen intent, but it does not dispatch anything yet.'
-      );
-      stateEls.shadowBrainObservations.innerHTML = observations.map((item) => `<li class="watch-item">${item}</li>`).join('');
-      stateEls.shadowBrainUpdated.textContent = supervisor.last_evaluated_utc
-        ? `Last evaluated ${supervisor.last_evaluated_utc}`
-        : 'No evaluations yet.';
-
-      stateEls.shadowDetailStatus.textContent = status;
-      stateEls.shadowDetailProvider.textContent = selectText(supervisor.provider, 'n/a');
-      stateEls.shadowDetailModel.textContent = selectText(supervisor.model, 'n/a');
-      stateEls.shadowDetailStateHash.textContent = selectText(supervisor.state_hash, 'n/a');
-      stateEls.shadowDetailPreview.textContent = preview.ready_to_dispatch
-        ? 'ready_to_dispatch'
-        : (preview.missing_keys && preview.missing_keys.length ? `blocked: ${preview.missing_keys.join(', ')}` : selectText(status, 'n/a'));
-      stateEls.shadowDetailHistoryPath.textContent = selectText(supervisor.history_path, 'n/a');
-      stateEls.shadowDetailSuppression.textContent = selectText(
-        supervisor.suppression_reason,
-        'No suppression active.'
-      );
-
-      const history = Array.isArray(supervisor.recent_history) ? supervisor.recent_history : [];
-      stateEls.shadowHistoryList.innerHTML = history.length
-        ? history.slice().reverse().map((entry) => {
-          const when = selectText(entry.generated_utc, 'unknown time');
-          const label = selectText(entry.event_type, 'event');
-          const intentText = selectText(entry.intent, selectText(entry.status, ''));
-          const detail = intentText ? ` - ${intentText}` : '';
-          return `<li class="watch-item">${when} - ${label}${detail}</li>`;
-        }).join('')
-        : '<li class="watch-item">No shadow history yet.</li>';
-    }
-
-    function renderCameraState(state) {
-      const sessionActive = Boolean(state.session_id) && state.environment_state !== 'stopped';
-      const rawCount = sessionActive ? Number(state.raw_frame_count || 0) : 0;
-      const debugCount = sessionActive ? Number(state.debug_frame_count || 0) : 0;
-      const telemetryCount = sessionActive ? Number(state.telemetry_frame_count || 0) : 0;
-      stateEls.topdownCount.textContent = `${telemetryCount} frames`;
-      stateEls.cameraCount.textContent = `raw ${rawCount} - debug ${debugCount}`;
-      stateEls.cameraStatus.textContent = activeCamera === 'raw' ? 'Raw camera view' : 'YOLO debug view';
-
-      controls.cameraTabRaw.classList.toggle('is-active', activeCamera === 'raw');
-      controls.cameraTabDebug.classList.toggle('is-active', activeCamera === 'debug');
-      controls.cameraPaneRaw.classList.toggle('is-active', activeCamera === 'raw');
-      controls.cameraPaneDebug.classList.toggle('is-active', activeCamera === 'debug');
-
-      if (sessionActive && state.live_paths) {
-        stampImage(stateEls.worldImage, state.live_paths.world_stream || 'live/world_stream.jpg');
-        stampImage(stateEls.topdownImage, state.live_paths.topdown_telemetry || 'live/topdown_telemetry.jpg');
-        stampImage(stateEls.rawImage, state.live_paths.raw_camera || 'live/raw_camera.jpg');
-        stampImage(stateEls.debugImage, state.live_paths.yolo_debug || 'live/yolo_debug.jpg');
-      } else {
-        stateEls.worldImage.src = placeholderImage();
-        stateEls.topdownImage.src = placeholderImage();
-        stateEls.rawImage.src = placeholderImage();
-        stateEls.debugImage.src = placeholderImage();
-      }
-
-      if (state.world_stream_url) {
-        stateEls.worldLink.style.display = 'inline';
-        stateEls.worldLink.href = state.world_stream_url;
-      } else {
-        stateEls.worldLink.style.display = 'none';
-        stateEls.worldLink.removeAttribute('href');
-      }
-    }
-
-    function renderState(state) {
-      const sessionChanged = lastRenderedState && lastRenderedState.session_id !== state.session_id;
-      if (sessionChanged) {
-        clearPreview('Preview cleared because the session changed.');
-      }
-
-      const envState = selectText(state.environment_state, 'stopped');
-      const completed = envState === 'stopped' ? new Set() : trackScenarioProgress(state);
-      const recommendedId = recommendedScenarioId(state, completed);
-      const demoStory = state.demo_story || {};
-      const sessionDisplay = envState === 'stopped' ? 'n/a' : selectText(state.session_id, 'n/a');
-      const phaseDisplay = envState === 'stopped' ? 'stopped' : selectText(state.phase, 'stopped');
-      const targetDisplay = envState === 'stopped' ? 'n/a' : selectText(state.target_id, 'n/a');
-      const capabilityDisplay = envState === 'stopped' ? 'WAIT' : selectText(demoStory.capability_stage, 'WAIT');
-
-      stateEls.apiMode.textContent = apiMode
-        ? `${selectText(state.control_mode, 'control')} • ${state.warm_services_ready ? 'warm ready' : selectText(state.warm_services_status, 'warm pending')}`
-        : 'Read-Only Fallback';
-      stateEls.environmentState.textContent = envState;
-      stateEls.scenarioState.textContent = selectText(state.scenario_state, 'idle');
-      stateEls.phase.textContent = phaseDisplay;
-      stateEls.targetId.textContent = targetDisplay;
-      stateEls.lastResult.textContent = selectText(state.last_result, 'none');
-      stateEls.sessionId.textContent = sessionDisplay;
-      stateEls.capabilityStage.textContent = capabilityDisplay;
-      stateEls.demoExpectation.textContent = selectText(
-        demoStory.demo_expectation,
-        'Start with M3 single target, then rehearse the left, center, and right variants, then finish with multi-target rehearsal.'
-      );
-
-      renderDemoCards(state, completed, recommendedId);
-      renderWatchPanel(state, recommendedId);
-      renderPrimaryAction(state, recommendedId);
-      renderControlDetail(state);
-      renderShadowBrain(state);
-      renderCameraState(state);
-      renderAdvancedLanes(state);
-      renderPreview(state);
-      lastRenderedState = JSON.parse(JSON.stringify(state));
-    }
-
-    async function fetchJson(path) {
-      const response = await fetch(path, { cache: 'no-store' });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.error || payload.message || `Request failed: ${response.status}`);
-      }
-      return payload;
-    }
-
-    async function postJson(path, body) {
-      const response = await fetch(path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body || {})
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const error = new Error(payload.error || payload.message || `Request failed: ${response.status}`);
-        error.status = response.status;
-        error.payload = payload;
-        throw error;
-      }
-      return payload;
-    }
-
-    async function runScenarioById(scenarioId) {
-      if (!scenarioId) {
-        throw new Error('Missing scenario id.');
-      }
-      stateEls.operatorLog.textContent = `Queueing ${scenarioId}.`;
-      await postJson('/api/scenario/run', { scenario_id: scenarioId });
-      await refreshState();
-    }
-
-    async function handlePrimaryAction() {
-      if (!currentPrimaryAction || currentPrimaryAction.disabled) {
-        return;
-      }
-      try {
-        if (currentPrimaryAction.kind === 'start') {
-          stateEls.operatorLog.textContent = 'Starting environment.';
-          await postJson('/api/env/start', {});
-        } else if (currentPrimaryAction.kind === 'stop') {
-          stateEls.operatorLog.textContent = 'Stopping environment.';
-          await postJson('/api/env/stop', {});
-        } else if (currentPrimaryAction.kind === 'stopScenario') {
-          stateEls.operatorLog.textContent = 'Stopping scenario.';
-          await postJson('/api/scenario/stop', {});
-        } else if (currentPrimaryAction.kind === 'runScenario') {
-          await runScenarioById(currentPrimaryAction.scenarioId);
-          return;
-        } else {
-          return;
-        }
-        await refreshState();
-      } catch (error) {
-        stateEls.operatorLog.textContent = String(error.message || error);
-        throw error;
-      }
-    }
-
-    async function refreshApiState() {
-      const [state, scenarioCatalog] = await Promise.all([
-        fetchJson('/api/state'),
-        fetchJson('/api/scenarios').catch(() => ({ scenarios: [] }))
-      ]);
-      apiMode = true;
-      if (Array.isArray(scenarioCatalog.scenarios) && scenarioCatalog.scenarios.length) {
-        cachedScenarios = scenarioCatalog.scenarios;
-        populateScenarioOptions();
-      }
-      return state;
-    }
-
-    function refreshLegacyState(error) {
-      apiMode = false;
-      const base = lastRenderedState
-        ? JSON.parse(JSON.stringify(lastRenderedState))
-        : {
-            control_mode: 'read_only',
-            control_plane_ready: false,
-            control_plane_error: 'Dashboard API unavailable.',
-            warm_services_ready: false,
-            warm_services_status: 'unknown',
-            environment_state: 'stopped',
-            environment_message: 'Dashboard API unavailable.',
-            scenario_state: 'idle',
-            scenario_message: '',
-            session_id: '',
-            compose_project: '',
-            phase: 'stopped',
-            target_id: '',
-            target_transition_active: false,
-            active_scenario: '',
-            last_feedback: '',
-            last_result: '',
-            motion_evidence: false,
-            world_stream_ready: false,
-            truth_alignment_ok: false,
-            raw_frame_count: 0,
-            debug_frame_count: 0,
-            telemetry_frame_count: 0,
-            live_paths: {},
-            perception: {},
-            belief: {},
-            decision: {},
-            outcome: {},
-            demo_story: {},
-            controls: {
-              can_start: false,
-              can_stop: false,
-              can_refresh: true,
-              can_reset_sim: false,
-              can_run_scenario: false,
-              can_stop_scenario: false,
-              can_issue_intent: false,
-              can_preview_intent: false,
-              can_dispatch_intent: false
-            }
-          };
-      base.control_plane_ready = false;
-      base.control_mode = 'read_only';
-      base.control_plane_error = String(error && error.message ? error.message : error || 'Dashboard API unavailable.');
-      if (!base.controls) {
-        base.controls = {};
-      }
-      base.controls.can_start = false;
-      base.controls.can_stop = false;
-      base.controls.can_refresh = true;
-      base.controls.can_reset_sim = false;
-      base.controls.can_run_scenario = false;
-      base.controls.can_stop_scenario = false;
-      base.controls.can_issue_intent = false;
-      base.controls.can_preview_intent = false;
-      base.controls.can_dispatch_intent = false;
-      return base;
-    }
-
-    async function refreshState() {
-      try {
-        const state = await refreshApiState();
-        renderState(state);
-      } catch (error) {
-        renderState(refreshLegacyState(error));
-      }
-    }
-
-    controls.cameraTabRaw.addEventListener('click', () => {
-      activeCamera = 'raw';
-      renderCameraState(lastRenderedState || refreshLegacyState('Dashboard API unavailable.'));
-    });
-
-    controls.cameraTabDebug.addEventListener('click', () => {
-      activeCamera = 'debug';
-      renderCameraState(lastRenderedState || refreshLegacyState('Dashboard API unavailable.'));
-    });
-
-    controls.nextStep.addEventListener('click', async () => {
-      await handlePrimaryAction();
-    });
-
-    controls.refresh.addEventListener('click', async () => {
-      stateEls.operatorLog.textContent = 'Refreshing environment.';
-      await postJson('/api/env/refresh', {});
-      await refreshState();
-    });
-
-    controls.resetSim.addEventListener('click', async () => {
-      stateEls.operatorLog.textContent = 'Resetting sim.';
-      await postJson('/api/sim/reset', {});
-      await refreshState();
-    });
-
-    controls.stopScenario.addEventListener('click', async () => {
-      stateEls.operatorLog.textContent = 'Stopping scenario.';
-      await postJson('/api/scenario/stop', {});
-      await refreshState();
-    });
-
-    controls.stop.addEventListener('click', async () => {
-      stateEls.operatorLog.textContent = 'Stopping environment.';
-      await postJson('/api/env/stop', {});
-      await refreshState();
-    });
-
-    controls.runScenario.addEventListener('click', async () => {
-      await runScenarioById(controls.scenarioSelect.value);
-    });
-
-    stateEls.demoList.addEventListener('click', async (event) => {
-      const target = event.target instanceof HTMLElement ? event.target.closest('[data-demo-run]') : null;
-      if (!target) {
-        return;
-      }
-      const scenarioId = target.getAttribute('data-demo-run') || '';
-      if (scenarioId) {
-        await runScenarioById(scenarioId);
-      }
-    });
-
-    controls.intentTemplate.addEventListener('change', () => {
-      setIntentEditor(controls.intentTemplate.value, false);
-    });
-
-    controls.intentJson.addEventListener('input', () => {
-      editorDirty = true;
-      clearPreview('Preview required after edits.');
-    });
-
-    controls.previewIntent.addEventListener('click', async () => {
-      try {
-        const body = readIntentBodyFromEditor();
-        const payload = await postJson('/api/intents/preview', body);
-        localPreview = payload.preview || null;
-        renderPreview(lastRenderedState || refreshLegacyState('Dashboard API unavailable.'));
-      } catch (error) {
-        localPreview = { error: String(error.message || error) };
-        renderPreview(lastRenderedState || refreshLegacyState('Dashboard API unavailable.'));
-      }
-    });
-
-    controls.dispatchIntent.addEventListener('click', async () => {
-      const body = readIntentBodyFromEditor();
-      await postJson('/api/intents/dispatch', body);
-      await refreshState();
-    });
-
-    async function fireQuickIntent(intentName, args) {
-      await postJson(`/api/intents/${intentName}`, args);
-      await refreshState();
-    }
-
-    controls.acquireTarget.addEventListener('click', async () => {
-      await fireQuickIntent('acquire_target', { target_class: controls.targetClass.value || 'ball' });
-    });
-
-    controls.planToTarget.addEventListener('click', async () => {
-      await fireQuickIntent('plan_to_target', { approach_distance_m: Number(controls.approachDistance.value || 0.25) });
-    });
-
-    controls.trackTarget.addEventListener('click', async () => {
-      await fireQuickIntent('track_target', {});
-    });
-
-    controls.abort.addEventListener('click', async () => {
-      await fireQuickIntent('abort', {});
-    });
-
-    controls.safeStop.addEventListener('click', async () => {
-      await fireQuickIntent('safe_stop', {});
-    });
-
-    populateScenarioOptions();
-    populateIntentTemplates();
-    clearPreview();
-    refreshState();
-    window.setInterval(refreshState, 1000);
-  </script>
+  <script src="/browser_dashboard.js"></script>
 </body>
 </html>

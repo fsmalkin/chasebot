@@ -41,6 +41,8 @@ from llm_supervisor_core import write_json
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_DIR = REPO_ROOT / "runtime" / "dashboard"
+PROOF_RUNTIME_STATE_PATH = RUNTIME_DIR / "llm_turn_then_go_runtime.json"
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 DEFAULT_WORLD_NAME = "yolo_test_world"
 DEFAULT_TARGET_MODEL_NAME = "uat_nav2_target"
@@ -102,6 +104,77 @@ class ProofRunner:
         self.nav_activity_seen = False
         self.first_visible_distance_m: float | None = None
         self.best_visible_distance_m: float | None = None
+        self.runtime_state: dict[str, Any] = {
+            "running": False,
+            "scenario_id": "llm_turn_then_go_proof",
+            "session_id": "",
+            "proof_state": "waiting",
+            "latest_operator_event": "",
+            "recent_operator_events": [],
+            "latest_decision": {},
+            "latest_feedback": "",
+            "artifact_dir": "",
+            "proof_verdict": {},
+            "updated_utc": utc_now(),
+        }
+        self._event_keys: set[str] = set()
+
+    def _persist_runtime_state(self) -> None:
+        write_json(PROOF_RUNTIME_STATE_PATH, self.runtime_state)
+
+    def _update_runtime_state(self, **updates: Any) -> None:
+        self.runtime_state.update(updates)
+        self.runtime_state["updated_utc"] = utc_now()
+        self._persist_runtime_state()
+
+    def _append_runtime_event(self, message: str, *, category: str = "proof", key: str = "") -> None:
+        event_key = key or message
+        if event_key in self._event_keys:
+            return
+        self._event_keys.add(event_key)
+        event = {
+            "timestamp_utc": utc_now(),
+            "message": str(message),
+            "category": str(category),
+            "source": "llm_proof",
+        }
+        events = list(self.runtime_state.get("recent_operator_events", []))
+        events.append(event)
+        self.runtime_state["recent_operator_events"] = events[-20:]
+        self.runtime_state["latest_operator_event"] = event["message"]
+        self.runtime_state["updated_utc"] = event["timestamp_utc"]
+        self._persist_runtime_state()
+
+    def _format_decision_label(self, decision: dict[str, Any]) -> str:
+        intent = str(decision.get("intent", "") or "")
+        args = dict(decision.get("args", {}))
+        if intent == "search_for_target":
+            return f"{intent}({args.get('target_class', 'ball')})"
+        if intent == "acquire_target":
+            return f"{intent}({args.get('target_class', 'ball')})"
+        if intent == "plan_to_target":
+            return f"{intent}({args.get('approach_distance_m', 0.25)})"
+        if intent:
+            return f"{intent}()"
+        return "blocked"
+
+    def _infer_proof_state(self, state: dict[str, Any]) -> str:
+        brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
+        outcome = state.get("outcome", {}) if isinstance(state.get("outcome"), dict) else {}
+        perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
+        if self._proof_pass():
+            return "completed"
+        if self.plan_or_track_dispatched and (
+            bool(brain.get("goal_in_progress", False))
+            or bool(outcome.get("nav_goal_recent", False))
+            or bool(outcome.get("cmd_vel_recent", False))
+        ):
+            return "moving"
+        if bool(brain.get("target_locked", False)) or bool(brain.get("target_visible_recent", False)) or bool(perception.get("target_visible_now", False)):
+            return "target_locked"
+        if self.search_dispatched or bool(brain.get("search_active", False)):
+            return "searching"
+        return "waiting"
 
     def _build_provider(self, args: argparse.Namespace):
         provider_name = str(args.provider).strip().lower()
@@ -397,9 +470,26 @@ exit "$rc"
         proof_root = ensure_dir(REPO_ROOT / "artifacts" / "session" / session_id / "llm_turn_then_go_proof" / current_utc_stamp())
         decision_history_path = proof_root / "decision_history.jsonl"
         state_history_path = proof_root / "state_history.jsonl"
+        self.runtime_state = {
+            "running": True,
+            "scenario_id": "llm_turn_then_go_proof",
+            "session_id": session_id,
+            "proof_state": "waiting",
+            "latest_operator_event": "",
+            "recent_operator_events": [],
+            "latest_decision": {},
+            "latest_feedback": "",
+            "artifact_dir": str(proof_root),
+            "proof_verdict": {},
+            "updated_utc": utc_now(),
+        }
+        self._event_keys = set()
+        self._persist_runtime_state()
+        self._append_runtime_event("LLM Turn + Go scenario started.", category="scenario", key="scenario_started")
 
         try:
             spawn_info = self._spawn_target_behind_robot(ready_state, proof_root)
+            self._append_runtime_event("Proof target spawned behind the robot.", key="target_spawned")
             try:
                 self._wait_for_robot_yaw(float(spawn_info["robot_pose_after_turnaway"]["yaw"]), timeout_s=20.0)
             except Exception as exc:
@@ -421,11 +511,37 @@ exit "$rc"
                     "dispatch_payload": payload,
                 },
             )
+            self._update_runtime_state(latest_feedback=str(payload.get("message", "") or ""))
 
             deadline = time.monotonic() + max(self.args.max_runtime_s, 5.0)
             while time.monotonic() < deadline:
                 state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
                 self._update_proof_observations(state)
+                self._update_runtime_state(
+                    proof_state=self._infer_proof_state(state),
+                    latest_feedback=str(
+                        (
+                            (state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}).get("last_feedback_text")
+                            or state.get("last_feedback")
+                            or self.runtime_state.get("latest_feedback", "")
+                        )
+                    ),
+                )
+                brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
+                outcome = state.get("outcome", {}) if isinstance(state.get("outcome"), dict) else {}
+                perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
+                if bool(brain.get("search_active", False)):
+                    self._append_runtime_event("Robot began search turn.", key="search_turn")
+                if bool(brain.get("target_locked", False)) or bool(perception.get("target_visible_now", False)):
+                    self._append_runtime_event("Target visible and locked.", key="target_locked")
+                if self.plan_or_track_dispatched and (
+                    bool(brain.get("goal_in_progress", False))
+                    or bool(outcome.get("nav_goal_recent", False))
+                    or bool(outcome.get("cmd_vel_recent", False))
+                ):
+                    self._append_runtime_event("Robot began move-to-target.", key="move_started")
+                if self.best_visible_distance_m is not None and self.first_visible_distance_m is not None and self.best_visible_distance_m < self.first_visible_distance_m:
+                    self._append_runtime_event("Motion progress observed.", key="motion_progress")
                 append_jsonl(
                     state_history_path,
                     {
@@ -503,6 +619,12 @@ exit "$rc"
                             if dispatch_status == 202 and bool(dispatch_payload.get("accepted", False)):
                                 self.last_decision_signature = signature
                                 self.last_dispatch_monotonic = time.monotonic()
+                                self._update_runtime_state(latest_decision=decision)
+                                self._append_runtime_event(
+                                    f"LLM emitted {self._format_decision_label(decision)}.",
+                                    category="decision",
+                                    key=f"decision:{signature}",
+                                )
                                 if decision.get("intent") == "search_for_target":
                                     self.search_dispatched = True
                                 if decision.get("intent") in {"plan_to_target", "track_target"}:
@@ -549,6 +671,16 @@ exit "$rc"
                 "brain_feedback_history_path": str(REPO_ROOT / "artifacts" / "session" / session_id / "visual" / "brain_feedback.jsonl"),
             }
             write_json(proof_root / "proof_verdict.json", proof_verdict)
+            self._update_runtime_state(
+                running=False,
+                proof_state="completed" if proof_verdict["pass"] else "failed",
+                proof_verdict=proof_verdict,
+            )
+            self._append_runtime_event(
+                "Proof completed successfully." if proof_verdict["pass"] else "Proof failed.",
+                category="result",
+                key="proof_verdict",
+            )
             summary = {
                 "generated_utc": utc_now(),
                 "type": "llm_turn_then_go_proof",
@@ -567,6 +699,7 @@ exit "$rc"
                 pass
             return summary
         finally:
+            self._update_runtime_state(running=False)
             if started_here and not self.args.keep_environment:
                 try:
                     self._stop_environment()

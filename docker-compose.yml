@@ -31,6 +31,12 @@ services:
       PYTHONUNBUFFERED: "1"
       CHASECAR_DASHBOARD_CONTROL_MODE: docker_socket
       CHASECAR_DASHBOARD_WARM_SERVICES: dashboard-control,dashboard-utility,brain-supervisor-shadow
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_ORG_ID: ${OPENAI_ORG_ID:-}
+      OPENAI_PROJECT_ID: ${OPENAI_PROJECT_ID:-}
+      OPENAI_SUPERVISOR_MODEL: ${OPENAI_SUPERVISOR_MODEL:-gpt-5-nano}
+      OPENAI_SUPERVISOR_REASONING_EFFORT: ${OPENAI_SUPERVISOR_REASONING_EFFORT:-minimal}
     volumes:
       - *chasecar-repo-volume
       - /var/run/docker.sock:/var/run/docker.sock
