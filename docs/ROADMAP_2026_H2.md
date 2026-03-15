@@ -68,3 +68,29 @@ Status update as of February 28, 2026:
    - milestone evidence bundle(s)
 4. Unresolved failure signatures are tracked in session readiness reports.
 5. Final GUI rehearsal aligns with headless gate outcomes before LLM handoff.
+
+## Post-Freeze Bounded LLM Promotion Path
+
+Once the frozen pre-LLM boundary is in place, the next roadmap step is not open-ended autonomy. It is a bounded promotion ladder:
+
+1. headless LLM proof over the frozen intent contract
+2. repeatability gate on the authoritative `container_kilted` lane
+3. simple browser UAT demo for the same proof path
+4. bounded supervisor reuse across the visible-ball M3 scenario family
+5. provider benchmarking for a future on-machine model path on Orin Nano
+
+### Intended Outcomes
+
+1. prove that the LLM can supervise high-level bounded decisions without owning low-level loops
+2. keep deterministic policy/gating as the safety and contract layer
+3. give operators a browser demo that is simple enough to trust and understand
+4. keep the control architecture compatible with both:
+   - Wi-Fi/cloud inference
+   - smaller local-model inference later
+
+### Explicit Non-Goals For This Roadmap Slice
+
+1. freeform browser prompt control
+2. open-ended task decomposition
+3. end-to-end VLA action generation
+4. autonomous environment lifecycle management by the LLM

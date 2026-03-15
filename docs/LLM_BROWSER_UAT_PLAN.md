@@ -33,6 +33,143 @@ Current limitation:
 
 Promote the current headless proof into a browser UAT demo only after the action-selection path is hardened and the emitted decision sequence is visible in the dashboard.
 
+## Outcome We Are Driving Toward
+
+Near-term success means all of the following are true in one operator-visible flow:
+
+1. the browser starts from Docker Desktop with minimal operator friction
+2. the operator runs `LLM Turn + Go`
+3. the robot visibly turns until the ball is seen
+4. the robot then visibly moves toward the ball
+5. the browser shows the same high-level decision sequence and final verdict
+6. the same behavior remains grounded in the frozen contract and deterministic lower layers
+
+This is intentionally narrower than full autonomy. The goal is to prove that the current bounded LLM layer can supervise a real behavior legibly and repeatably.
+
+## Next Steps
+
+These are the concrete next slices from the current baseline.
+
+### Step 1: Repeatability Gate For The Existing Turn-And-Go Proof
+
+Goal:
+
+- prove that the current turn-and-go path is stable enough to be treated as the baseline LLM demo
+
+Work:
+
+1. run the authoritative headless proof repeatedly on `container_kilted`
+2. record a short run summary for each attempt
+3. fail any run that:
+   - emits an invalid tool output
+   - leaves the frozen contract
+   - fails to produce visible search then movement
+
+Outcome:
+
+- `3/3` consecutive green proof runs on the authoritative path
+- one compact proof scorecard artifact for the run set
+
+Why it matters:
+
+- this turns the current single successful demo into a promotion-worthy baseline
+
+### Step 2: Formalize Escalation Rules Above The Lower-Level Loops
+
+Goal:
+
+- make the supervisor policy more explicit than "pick one next step" by documenting and enforcing when it should escalate between search, acquire, plan, track, and stop
+
+Work:
+
+1. define deterministic escalation rules from digest state
+2. make those rules visible in the policy layer and docs
+3. ensure the LLM remains the high-level chooser while lower loops still own local execution
+
+Outcome:
+
+- a clear, testable escalation table
+- fewer ambiguous transitions in the LLM decision path
+- a cleaner bridge from proof demo to the longer-term bounded-supervisor design
+
+Why it matters:
+
+- this is the missing layer between the current proof harness and the richer architecture we want long term
+
+### Step 3: Generalize From One Proof To The Visible-Ball M3 Scenarios
+
+Goal:
+
+- show that the bounded LLM layer is supervising a reusable policy pattern, not only one custom proof harness
+
+Work:
+
+1. apply the same bounded supervisor policy to:
+   - `m3_single_target`
+   - `m3_center`
+   - `m3_left`
+   - `m3_right`
+2. keep the same digest and frozen action space
+3. treat failures as policy or gating issues, not as reasons to widen the action surface
+
+Outcome:
+
+- one supervisor policy operating across the visible-ball demo set
+- stronger confidence that the browser UAT demo is representative, not staged
+
+Why it matters:
+
+- this is the first step from "proof of possibility" to "bounded capability family"
+
+### Step 4: Finish The Minimal Browser UAT Surface
+
+Goal:
+
+- keep the browser simple enough that an operator can understand the demo without reading engineering detail
+
+Work:
+
+1. keep only:
+   - environment controls
+   - visible-ball scenario controls
+   - `World Surface`
+   - `YOLO Debug`
+   - high-level run log
+2. keep all other detail under `Advanced Controls`
+3. ensure the browser is reflecting the authoritative backend state, not a second LLM path
+
+Outcome:
+
+- a browser surface that clearly answers:
+   - what scenario is running
+   - what the LLM most recently caused
+   - whether the robot responded
+   - whether the run passed
+
+Why it matters:
+
+- this is the operator trust surface for UAT
+
+### Step 5: Prepare The On-Machine Model Lane Without Changing The Control Shape
+
+Goal:
+
+- preserve a path from Wi-Fi/cloud inference to a smaller on-device model later
+
+Work:
+
+1. keep the digest bounded and fixed-shape
+2. keep the action space canonical and small
+3. benchmark cloud vs local providers against the same session artifacts
+
+Outcome:
+
+- a realistic path toward local inference on the Orin Nano GPU without reworking the architecture
+
+Why it matters:
+
+- this keeps the current implementation aligned with the long-term deployment goal rather than optimizing only for cloud demos
+
 ## Phase 1: Harden The Headless Decision Path
 
 ### Objective
@@ -154,6 +291,59 @@ Promote to operator-facing UAT only when all of the following are true:
    - proof verdict
    - visual evidence
 
+## Clear Exit Outcomes
+
+The plan should produce these visible outcomes in order:
+
+### Outcome A: Stable Proof Baseline
+
+- the turn-and-go proof passes repeatedly
+- provider/gating failures are fail-closed rather than ambiguous
+- the same proof can be trusted as a baseline demo
+
+### Outcome B: Clear Layered Supervisor Behavior
+
+- the LLM remains the high-level bounded decision layer
+- deterministic policy and preview logic remain the contract/safety layer
+- executor and lower loops remain the real-time control layer
+
+### Outcome C: Browser UAT Demo That Is Easy To Read
+
+- operator can run the demo from Docker Desktop
+- operator sees turn, detect, and move in the two main panes
+- operator sees the same story reflected in the run log and proof state
+
+### Outcome D: Future Local-Model Compatibility
+
+- digest and action space stay small enough for a local provider benchmark
+- we do not bake cloud-only assumptions into the control model
+
+## Alignment With Long-Term Roadmap
+
+This plan aligns with the longer-term roadmap in [ROADMAP_2026_H2.md](./ROADMAP_2026_H2.md) and the current architecture note in [LLM_CONTROL_ARCHITECTURE.md](./LLM_CONTROL_ARCHITECTURE.md) in these ways:
+
+1. It preserves the Docker-first, authoritative `container_kilted` lane instead of introducing a separate debug-only execution path.
+2. It builds on the frozen pre-LLM contract rather than widening the robot action surface prematurely.
+3. It keeps the LLM at the supervisory layer and leaves lower-level perception, planning, and control loops deterministic.
+4. It treats browser UAT as a promotion gate after headless proof repeatability, which matches the repo's broader headless-first promotion philosophy.
+5. It keeps the digest/provider split compatible with the longer-term goal of evaluating a smaller on-machine model on Orin Nano hardware.
+
+## Long-Term Connection Without Overcommitting
+
+This plan is meant to support, but not prematurely expand into, the broader long-term goals:
+
+- high-level LLM planning over bounded subsystem capabilities
+- explicit escalation between search, acquire, plan, track, and safe-stop behaviors
+- eventual provider flexibility between Wi-Fi/cloud and local inference
+- operator-visible trust and evidence before any broader autonomy claims
+
+It does not commit us yet to:
+
+- open-ended task planning
+- browser freeform prompt control
+- end-to-end learned action generation
+- autonomous environment lifecycle management by the LLM
+
 ## What We Are Not Doing In This Phase
 
 To keep the demo honest and legible, this phase does not include:
@@ -166,8 +356,8 @@ To keep the demo honest and legible, this phase does not include:
 
 ## Recommended Execution Order
 
-1. tighten the per-intent tool schema
-2. revalidate headless proof repeatability
-3. add the browser proof panel and proof state
-4. run the same scenario through the dashboard as a viewer
-5. conduct operator UAT on the browser demo
+1. lock in `3/3` repeatability for the current turn-and-go proof
+2. formalize escalation rules in the policy layer
+3. generalize the bounded supervisor across the visible-ball M3 scenarios
+4. keep simplifying the browser UAT surface around the same authoritative backend
+5. benchmark the same digest/action-space path for a future local-provider lane
