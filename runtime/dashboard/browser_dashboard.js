@@ -70,6 +70,8 @@ const controls = {
 
 const demoFlow = [
   { id: 'llm_turn_then_go_proof', label: 'LLM Turn + Go' },
+  { id: 'visit_single_ball_proof', label: 'Visit Single Ball' },
+  { id: 'visit_three_ball_sequence', label: 'Visit 3 Ball Sequence' },
   { id: 'm3_single_target', label: 'M3 Single Target' },
   { id: 'm3_center', label: 'M3 Center' },
   { id: 'm3_left', label: 'M3 Left' },

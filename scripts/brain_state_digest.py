@@ -7,6 +7,7 @@ import hashlib
 import json
 from typing import Any, Dict
 
+from brain_supervisor_policy import build_policy_snapshot
 
 CANONICAL_ARGS_BY_INTENT: dict[str, dict[str, object]] = {
     "search_for_target": {"target_class": "ball"},
@@ -84,48 +85,6 @@ def _clean_pose(value: Any) -> Dict[str, float] | None:
         return point
     return {"x": point["x"], "y": point["y"], "yaw": round(yaw, 4)}
 
-
-def _gate_hints(state: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    perception = state.get("perception") if isinstance(state.get("perception"), dict) else {}
-    belief = state.get("belief") if isinstance(state.get("belief"), dict) else {}
-    outcome = state.get("outcome") if isinstance(state.get("outcome"), dict) else {}
-    brain = state.get("brain") if isinstance(state.get("brain"), dict) else {}
-
-    environment_ready = _clean_text(state.get("environment_state")) == "environment_ready"
-    target_visible = _clean_bool(perception.get("target_visible_now"))
-    target_locked = _clean_bool(brain.get("target_locked")) or _clean_bool(brain.get("target_visible_recent"))
-    nav_goal_recent = _clean_bool(outcome.get("nav_goal_recent")) or bool(belief.get("latest_goal_pose"))
-    motion_active = _clean_bool(outcome.get("cmd_vel_recent")) or _clean_bool(state.get("motion_evidence"))
-    boundary_seen = _clean_bool(outcome.get("boundary_activity_seen"))
-
-    return {
-        "search_for_target": {
-            "ready": environment_ready and bool(belief.get("latest_robot_pose")) and not target_visible and not target_locked,
-            "summary": "Use search_for_target(ball) when the environment is ready but the target is not yet visible.",
-        },
-        "acquire_target": {
-            "ready": environment_ready and target_visible and not target_locked,
-            "summary": "Target should be visible before acquire_target(ball).",
-        },
-        "plan_to_target": {
-            "ready": environment_ready and target_visible and target_locked,
-            "summary": "Use plan_to_target(0.25) once the target is visible and locked.",
-        },
-        "track_target": {
-            "ready": environment_ready and (nav_goal_recent or boundary_seen or motion_active),
-            "summary": "track_target() fits continued pursuit once the boundary is already active.",
-        },
-        "abort": {
-            "ready": environment_ready and (nav_goal_recent or motion_active or boundary_seen),
-            "summary": "abort() fits canceling active pursuit or navigation.",
-        },
-        "safe_stop": {
-            "ready": environment_ready,
-            "summary": "safe_stop() is always the lowest-risk frozen action when the environment is live.",
-        },
-    }
-
-
 def _canonical_action_space(contract: Dict[str, Any], state: Dict[str, Any]) -> list[Dict[str, Any]]:
     descriptions: dict[str, str] = {}
     for item in list(contract.get("intents", [])):
@@ -134,7 +93,8 @@ def _canonical_action_space(contract: Dict[str, Any], state: Dict[str, Any]) -> 
         name = _clean_text(item.get("name"))
         if name:
             descriptions[name] = _clean_text(item.get("description"))
-    gate_hints = _gate_hints(state)
+    policy = build_policy_snapshot(state, sim_gate_ready=bool(state.get("sim_gate_ready", False)))
+    gate_hints = policy.get("gate_hints", {}) if isinstance(policy.get("gate_hints"), dict) else {}
     actions: list[Dict[str, Any]] = []
     for intent_name, args in CANONICAL_ARGS_BY_INTENT.items():
         actions.append(
@@ -152,6 +112,9 @@ def build_state_digest(state: Dict[str, Any], contract: Dict[str, Any]) -> Dict[
     perception = state.get("perception") if isinstance(state.get("perception"), dict) else {}
     belief = state.get("belief") if isinstance(state.get("belief"), dict) else {}
     outcome = state.get("outcome") if isinstance(state.get("outcome"), dict) else {}
+    visited_targets = state.get("visited_targets") if isinstance(state.get("visited_targets"), list) else []
+    remaining_targets = state.get("remaining_targets") if isinstance(state.get("remaining_targets"), list) else []
+    policy = build_policy_snapshot(state, sim_gate_ready=bool(state.get("sim_gate_ready", False)))
 
     return {
         "schema_version": 1,
@@ -181,6 +144,22 @@ def build_state_digest(state: Dict[str, Any], contract: Dict[str, Any]) -> Dict[
             "target_locked": _clean_bool(state.get("brain", {}).get("target_locked") if isinstance(state.get("brain"), dict) else False),
             "goal_in_progress": _clean_bool(state.get("brain", {}).get("goal_in_progress") if isinstance(state.get("brain"), dict) else False),
             "track_active": _clean_bool(state.get("brain", {}).get("track_active") if isinstance(state.get("brain"), dict) else False),
+        },
+        "mission": {
+            "phase": _clean_text(state.get("mission_phase"), "idle"),
+            "status": _clean_text(state.get("mission_status"), "idle"),
+            "current_target_id": _clean_text(state.get("current_target_id")),
+            "visit_index": int(state.get("visit_index", 0) or 0),
+            "search_bias_active": _clean_bool(state.get("search_bias_active")),
+            "visited_targets": [str(item) for item in visited_targets],
+            "remaining_targets": [str(item) for item in remaining_targets],
+        },
+        "policy": {
+            "stage": _clean_text(policy.get("stage"), "blocked"),
+            "preferred_intent": _clean_text(policy.get("preferred_intent")),
+            "allowed_intents": [str(item) for item in list(policy.get("allowed_intents", []))],
+            "reason": _clean_text(policy.get("reason")),
+            "unsafe_reasons": [str(item) for item in list(policy.get("unsafe_reasons", []))],
         },
         "outcome": {
             "motion_evidence": _clean_bool(state.get("motion_evidence")),

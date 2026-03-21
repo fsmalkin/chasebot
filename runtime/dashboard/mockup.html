@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chasecar · Dashboard Mockup</title>
+<style>
+:root {
+  --bg:       #0c100f;
+  --surf:     #131a18;
+  --card:     #182019;
+  --hover:    #1e2a27;
+  --line:     rgba(255,255,255,0.07);
+  --line2:    rgba(255,255,255,0.12);
+  --ink:      #ddeae4;
+  --dim:      #6b8880;
+  --faint:    #2d3e3b;
+  --accent:   #5ecfa3;
+  --ag:       rgba(94,207,163,0.13);
+  --warn:     #f0b44f;
+  --wg:       rgba(240,180,79,0.13);
+  --bad:      #f4756e;
+  --bdg:      rgba(244,117,110,0.13);
+  --ok:       #5ecfa3;
+  --r:        10px;
+  --r2:       14px;
+  --sans:     "Segoe UI",system-ui,sans-serif;
+  --mono:     "Cascadia Code","Consolas",monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:var(--faint);border-radius:4px}
+
+/* ─── shell ─── */
+.shell{display:grid;grid-template-rows:52px 1fr;height:100vh;overflow:hidden}
+
+/* ─── topbar ─── */
+.topbar{
+  display:flex;align-items:center;gap:12px;padding:0 18px;
+  background:var(--surf);border-bottom:1px solid var(--line);
+}
+.t-logo{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.t-sep{width:1px;height:20px;background:var(--line2);flex-shrink:0}
+.t-status{display:flex;align-items:center;gap:8px;flex:1}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot.ok  {background:var(--ok);  box-shadow:0 0 7px var(--ok)}
+.dot.warn{background:var(--warn);box-shadow:0 0 7px var(--warn)}
+.dot.bad {background:var(--bad); box-shadow:0 0 7px var(--bad)}
+.dot.idle{background:var(--faint)}
+.t-phrase{font-size:14px;font-weight:600}
+.t-sub{font-size:12px;color:var(--dim)}
+.tabs{display:flex;gap:2px;margin-left:auto}
+.tab{
+  padding:6px 16px;border-radius:8px;font-size:13px;font-weight:600;
+  color:var(--dim);transition:background 120ms,color 120ms;
+}
+.tab.on{background:var(--card);color:var(--ink)}
+.tab:hover:not(.on){color:var(--ink)}
+
+/* ─── body ─── */
+.body{overflow:hidden;position:relative}
+.pane{position:absolute;inset:0;overflow:hidden;display:none}
+.pane.on{display:flex;flex-direction:column}
+
+/* ═══════════════════════════════════
+   WATCH
+═══════════════════════════════════ */
+#watch{flex-direction:column}
+.w-feeds{
+  display:grid;grid-template-columns:1.3fr 1fr;gap:1px;
+  flex:1;background:var(--line);min-height:0;
+}
+.feed{display:flex;flex-direction:column;background:var(--card);min-height:0}
+.feed-top{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 14px;border-bottom:1px solid var(--line);flex-shrink:0;
+}
+.feed-name{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px}
+.badge.ok  {background:var(--ag);color:var(--ok)}
+.badge.warn{background:var(--wg);color:var(--warn)}
+.badge.bad {background:var(--bdg);color:var(--bad)}
+.badge.idle{background:var(--faint);color:var(--bg)}
+.feed-img{
+  flex:1;background:#090d0b;display:grid;place-items:center;
+  position:relative;overflow:hidden;
+}
+/* Simulated camera frames */
+.feed-img::before{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 39px,rgba(255,255,255,.015) 40px),
+             repeating-linear-gradient(90deg,transparent,transparent 39px,rgba(255,255,255,.015) 40px);
+}
+.feed-img .placeholder{opacity:.15;pointer-events:none}
+.feed-img .placeholder svg{width:48px;height:48px;fill:none;stroke:var(--ink);stroke-width:1.2}
+.feed-img .placeholder p{font-size:11px;color:var(--dim);text-align:center;margin-top:8px}
+
+/* World surface mock scene */
+.scene-world{
+  position:absolute;inset:0;
+  background:radial-gradient(ellipse at 55% 55%,#1a2e1a 0%,#0a120a 60%,#080c08 100%);
+}
+.scene-world .robot{
+  position:absolute;left:22%;top:52%;transform:translate(-50%,-50%);
+  width:22px;height:30px;
+  background:var(--accent);border-radius:4px 4px 2px 2px;opacity:.85;
+}
+.scene-world .robot::after{
+  content:'';position:absolute;top:-8px;left:50%;transform:translateX(-50%);
+  border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid var(--accent);opacity:.7;
+}
+.scene-world .target-ball{
+  position:absolute;left:74%;top:44%;transform:translate(-50%,-50%);
+  width:14px;height:14px;border-radius:50%;
+  background:var(--warn);box-shadow:0 0 12px var(--warn);
+}
+.scene-world .grid-line{position:absolute;background:rgba(255,255,255,.04)}
+
+/* YOLO debug mock */
+.scene-yolo{
+  position:absolute;inset:0;
+  background:#0a0e0c;
+  display:grid;place-items:center;
+}
+.yolo-frame{
+  position:relative;width:55%;aspect-ratio:4/3;
+  border:1px solid rgba(255,255,255,.1);border-radius:3px;
+  background:rgba(10,20,14,.8);overflow:hidden;
+}
+.yolo-box{
+  position:absolute;left:52%;top:28%;width:30%;height:40%;
+  border:2px solid var(--warn);border-radius:3px;
+}
+.yolo-label{
+  position:absolute;top:-20px;left:0;
+  font-size:10px;font-weight:700;font-family:var(--mono);
+  color:var(--bg);background:var(--warn);padding:1px 5px;border-radius:3px;
+  white-space:nowrap;
+}
+.yolo-conf{
+  position:absolute;bottom:-20px;left:0;
+  font-size:10px;color:var(--warn);font-family:var(--mono);white-space:nowrap;
+}
+.yolo-crosshair{
+  position:absolute;inset:0;display:grid;place-items:center;opacity:.15;
+}
+.yolo-crosshair::before,.yolo-crosshair::after{content:'';position:absolute;background:var(--dim)}
+.yolo-crosshair::before{width:1px;height:100%}
+.yolo-crosshair::after{width:100%;height:1px}
+
+/* ── proof bar ── */
+.proof-bar{
+  flex-shrink:0;background:var(--surf);border-top:1px solid var(--line);
+  padding:13px 18px;display:flex;align-items:center;gap:24px;
+}
+.stages{display:flex;align-items:center;flex:1;gap:0}
+.st{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1}
+.st-connector{flex:1;height:2px;background:var(--faint);margin-top:-17px;align-self:flex-start;margin-left:-1px;margin-right:-1px}
+.st-connector.done{background:rgba(94,207,163,.35)}
+.st-node{
+  width:26px;height:26px;border-radius:50%;
+  display:grid;place-items:center;font-size:11px;font-weight:700;
+  border:2px solid var(--faint);color:var(--faint);background:var(--bg);
+  position:relative;z-index:1;transition:all 160ms;
+}
+.st.done  .st-node{border-color:var(--ok);color:var(--ok);background:var(--ag)}
+.st.now   .st-node{border-color:var(--accent);background:var(--accent);color:var(--bg);box-shadow:0 0 12px rgba(94,207,163,.4)}
+.st.fail  .st-node{border-color:var(--bad);color:var(--bad)}
+.st-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);white-space:nowrap}
+.st.done  .st-label{color:var(--ok)}
+.st.now   .st-label{color:var(--accent)}
+.st.fail  .st-label{color:var(--bad)}
+
+.proof-meta{display:flex;gap:20px;flex-shrink:0}
+.pm{display:flex;flex-direction:column;gap:1px}
+.pm-k{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
+.pm-v{font-size:13px;font-weight:600;font-family:var(--mono)}
+.pm-v.ok  {color:var(--ok)}
+.pm-v.warn{color:var(--warn)}
+.pm-v.dim {color:var(--dim)}
+
+/* ── watch action bar ── */
+.watch-actions{
+  flex-shrink:0;background:var(--surf);border-top:1px solid var(--line);
+  padding:10px 18px;display:flex;align-items:center;gap:8px;
+}
+.btn{
+  display:inline-flex;align-items:center;gap:7px;padding:7px 15px;
+  border-radius:var(--r);font-size:13px;font-weight:600;
+  transition:filter 120ms,opacity 120ms;
+}
+.btn:active{filter:brightness(.88)}
+.btn:disabled{opacity:.38;cursor:not-allowed}
+.btn-ghost{border:1px solid var(--line2);color:var(--dim)}
+.btn-ghost:hover:not(:disabled){background:var(--card);color:var(--ink)}
+.btn-default{background:var(--card);border:1px solid var(--line2);color:var(--ink)}
+.btn-default:hover:not(:disabled){background:var(--hover)}
+.btn-primary{background:var(--accent);color:var(--bg);font-weight:700}
+.btn-primary:hover:not(:disabled){filter:brightness(1.08)}
+.btn-danger{background:var(--bdg);color:var(--bad);border:1px solid rgba(244,117,110,.22)}
+.btn-danger:hover:not(:disabled){background:rgba(244,117,110,.2)}
+.sep-v{width:1px;height:24px;background:var(--line2);flex-shrink:0;margin:0 2px}
+
+/* ═══════════════════════════════════
+   DRIVE
+═══════════════════════════════════ */
+#drive{flex-direction:row;overflow:hidden}
+.drive-left{
+  width:340px;flex-shrink:0;border-right:1px solid var(--line);
+  background:var(--surf);display:flex;flex-direction:column;overflow:hidden;
+}
+.drive-right{flex:1;background:var(--bg);display:flex;flex-direction:column;overflow:hidden}
+
+.panel-head{
+  padding:14px 18px 12px;border-bottom:1px solid var(--line);flex-shrink:0;
+}
+.panel-title{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.panel-sub{font-size:13px;color:var(--dim);margin-top:3px}
+
+/* Perception facts */
+.facts{flex:1;overflow-y:auto;padding:12px}
+.fact{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:11px 14px;border-radius:var(--r);border:1px solid var(--line);
+  background:var(--card);margin-bottom:6px;
+}
+.fact-label{font-size:13px;color:var(--dim)}
+.fact-value{font-size:14px;font-weight:700;font-family:var(--mono)}
+.fact-value.ok  {color:var(--ok)}
+.fact-value.warn{color:var(--warn)}
+.fact-value.bad {color:var(--bad)}
+
+/* LLM verdict box */
+.llm-verdict{
+  margin:0 12px 12px;padding:12px 14px;
+  border-radius:var(--r);background:var(--ag);border:1px solid rgba(94,207,163,.2);
+}
+.lv-label{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:5px}
+.lv-intent{font-size:14px;font-weight:700;font-family:var(--mono);color:var(--accent)}
+.lv-reason{font-size:12px;color:var(--dim);margin-top:3px}
+
+/* Intent buttons */
+.intents{flex:1;padding:16px;display:flex;flex-direction:column;gap:8px;overflow-y:auto}
+.intent{
+  display:flex;align-items:center;gap:14px;padding:14px 16px;
+  border-radius:var(--r2);background:var(--card);border:1px solid var(--line);
+  text-align:left;transition:background 120ms,border-color 120ms;
+  color:var(--ink);
+}
+.intent:hover{background:var(--hover);border-color:var(--line2)}
+.intent.suggested{border-color:rgba(94,207,163,.3);background:rgba(94,207,163,.06)}
+.intent.suggested:hover{background:rgba(94,207,163,.1)}
+.intent.danger-intent{border-color:rgba(244,117,110,.2)}
+.intent.danger-intent:hover{background:var(--bdg)}
+.i-icon{
+  width:36px;height:36px;border-radius:9px;
+  background:var(--surf);display:grid;place-items:center;flex-shrink:0;
+}
+.i-icon svg{width:16px;height:16px;fill:none;stroke:var(--dim);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.intent.suggested .i-icon{background:var(--ag)}
+.intent.suggested .i-icon svg{stroke:var(--accent)}
+.intent.danger-intent .i-icon svg{stroke:var(--bad)}
+.i-body{flex:1}
+.i-name{font-size:14px;font-weight:700}
+.i-desc{font-size:12px;color:var(--dim);margin-top:2px}
+.intent.danger-intent .i-name{color:var(--bad)}
+.i-tag{
+  font-size:10px;font-weight:700;padding:3px 9px;border-radius:9px;flex-shrink:0;
+  background:var(--ag);color:var(--accent);border:1px solid rgba(94,207,163,.2);
+}
+
+/* Drive response strip */
+.drive-response{
+  flex-shrink:0;border-top:1px solid var(--line);background:var(--surf);
+  padding:12px 16px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--dim);
+}
+.dr-dot{width:7px;height:7px;border-radius:50%;background:var(--ok);flex-shrink:0}
+
+/* ═══════════════════════════════════
+   INSPECT
+═══════════════════════════════════ */
+#inspect{overflow-y:auto}
+.inspect-body{padding:16px;display:flex;flex-direction:column;gap:10px;max-width:900px;margin:0 auto;width:100%}
+
+.layer{background:var(--surf);border:1px solid var(--line);border-radius:var(--r2);overflow:hidden}
+.layer-hd{
+  display:flex;align-items:center;gap:10px;padding:13px 16px;
+  cursor:pointer;user-select:none;transition:background 100ms;
+}
+.layer-hd:hover{background:var(--hover)}
+.l-num{
+  width:22px;height:22px;border-radius:50%;flex-shrink:0;
+  background:var(--faint);display:grid;place-items:center;
+  font-size:10px;font-weight:800;color:var(--bg);letter-spacing:.03em;
+}
+.l-name{font-size:14px;font-weight:700;flex:1}
+.l-summary{font-size:12px;color:var(--dim)}
+.l-chevron{color:var(--faint);font-size:12px;transition:transform 140ms;flex-shrink:0}
+.layer.open .l-chevron{transform:rotate(90deg)}
+.layer.open .layer-hd{border-bottom:1px solid var(--line)}
+.layer-body{display:none;padding:14px 16px}
+.layer.open .layer-body{display:block}
+
+.kv-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:1px;
+  background:var(--line);border-radius:var(--r);overflow:hidden;
+}
+.kv-cell{background:var(--card);padding:9px 12px}
+.kv-k{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin-bottom:3px}
+.kv-v{font-size:13px;font-family:var(--mono);color:var(--ink)}
+.kv-v.ok  {color:var(--ok)}
+.kv-v.warn{color:var(--warn)}
+.kv-v.bad {color:var(--bad)}
+.kv-v.dim {color:var(--dim)}
+.full{grid-column:1/-1}
+
+.log-list{margin-top:12px;display:flex;flex-direction:column;gap:2px}
+.log-row{
+  display:flex;gap:10px;padding:5px 8px;border-radius:6px;
+  font-size:11px;font-family:var(--mono);
+}
+.log-row:hover{background:var(--card)}
+.lr-t{color:var(--faint);flex-shrink:0}
+.lr-m{color:var(--dim)}
+.log-row.ev  .lr-m{color:var(--ink)}
+.log-row.ok  .lr-m{color:var(--ok)}
+.log-row.warn.lr-m{color:var(--warn)}
+.log-row.warn .lr-m{color:var(--warn)}
+.log-row.bad .lr-m{color:var(--bad)}
+
+/* pulse anim for active dot */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.pulsing{animation:pulse 1.6s infinite}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ══════ TOPBAR ══════ -->
+  <div class="topbar">
+    <span class="t-logo">Chasecar</span>
+    <div class="t-sep"></div>
+    <div class="t-status">
+      <span class="dot warn pulsing" id="sdot"></span>
+      <span class="t-phrase" id="sphrase">Searching for ball &nbsp;·&nbsp; attempt 2</span>
+      <span class="t-sub" id="ssub">LLM Turn + Go &nbsp;·&nbsp; 20260315T1412Z</span>
+    </div>
+    <div class="tabs">
+      <button class="tab on" onclick="go('watch')">Watch</button>
+      <button class="tab" onclick="go('drive')">Drive</button>
+      <button class="tab" onclick="go('inspect')">Inspect</button>
+    </div>
+  </div>
+
+  <!-- ══════ BODY ══════ -->
+  <div class="body">
+
+    <!-- ─── WATCH ─── -->
+    <div class="pane on" id="watch">
+
+      <div class="w-feeds">
+
+        <!-- World surface -->
+        <div class="feed">
+          <div class="feed-top">
+            <span class="feed-name">World surface</span>
+            <span class="badge ok">sim live</span>
+          </div>
+          <div class="feed-img">
+            <div class="scene-world">
+              <div class="grid-line" style="left:0;top:50%;width:100%;height:1px"></div>
+              <div class="grid-line" style="left:50%;top:0;width:1px;height:100%"></div>
+              <div class="robot"></div>
+              <div class="target-ball"></div>
+            </div>
+            <!-- swap in: <img src="/live/world_stream.jpg?t=..." style="width:100%;height:100%;object-fit:contain"> -->
+          </div>
+        </div>
+
+        <!-- YOLO debug -->
+        <div class="feed">
+          <div class="feed-top">
+            <span class="feed-name">YOLO debug</span>
+            <span class="badge warn">partial detect · 0.41</span>
+          </div>
+          <div class="feed-img">
+            <div class="scene-yolo">
+              <div class="yolo-frame">
+                <div class="yolo-crosshair"></div>
+                <div class="yolo-box">
+                  <span class="yolo-label">ball</span>
+                  <span class="yolo-conf">conf 0.74</span>
+                </div>
+              </div>
+            </div>
+            <!-- swap in: <img src="/live/yolo_debug.jpg?t=..." style="width:100%;height:100%;object-fit:contain"> -->
+          </div>
+        </div>
+
+      </div><!-- /w-feeds -->
+
+      <!-- Proof stage bar -->
+      <div class="proof-bar">
+        <div class="stages">
+          <div class="st done">
+            <div class="st-node">✓</div>
+            <span class="st-label">Init</span>
+          </div>
+          <div class="st-connector done"></div>
+          <div class="st done">
+            <div class="st-node">✓</div>
+            <span class="st-label">Spawn</span>
+          </div>
+          <div class="st-connector done"></div>
+          <div class="st now">
+            <div class="st-node">3</div>
+            <span class="st-label">Search</span>
+          </div>
+          <div class="st-connector"></div>
+          <div class="st">
+            <div class="st-node">4</div>
+            <span class="st-label">Approach</span>
+          </div>
+          <div class="st-connector"></div>
+          <div class="st">
+            <div class="st-node">5</div>
+            <span class="st-label">Done</span>
+          </div>
+        </div>
+
+        <div class="proof-meta">
+          <div class="pm"><span class="pm-k">Distance</span><span class="pm-v warn">1.84 m</span></div>
+          <div class="pm"><span class="pm-k">Trend</span><span class="pm-v ok">↓ closing</span></div>
+          <div class="pm"><span class="pm-k">Motion</span><span class="pm-v ok">active</span></div>
+        </div>
+      </div>
+
+      <!-- Action bar -->
+      <div class="watch-actions">
+        <button class="btn btn-ghost">Start env</button>
+        <button class="btn btn-ghost" disabled>Stop env</button>
+        <div class="sep-v"></div>
+        <button class="btn btn-primary">▶ &nbsp;LLM Turn + Go</button>
+        <button class="btn btn-default">M3 Single</button>
+        <button class="btn btn-default">M3 Center</button>
+        <button class="btn btn-default">M3 Left</button>
+        <button class="btn btn-default">M3 Right</button>
+        <div style="margin-left:auto">
+          <button class="btn btn-danger">■ &nbsp;Stop scenario</button>
+        </div>
+      </div>
+
+    </div><!-- /watch -->
+
+    <!-- ─── DRIVE ─── -->
+    <div class="pane" id="drive">
+
+      <!-- Left: what the LLM sees -->
+      <div class="drive-left">
+        <div class="panel-head">
+          <div class="panel-title">What the LLM sees</div>
+          <div class="panel-sub">3 facts · same as the model</div>
+        </div>
+
+        <div class="facts">
+          <div class="fact">
+            <span class="fact-label">Target visible</span>
+            <span class="fact-value warn">partial</span>
+          </div>
+          <div class="fact">
+            <span class="fact-label">Distance to target</span>
+            <span class="fact-value warn">1.84 m</span>
+          </div>
+          <div class="fact">
+            <span class="fact-label">Nav goal in flight</span>
+            <span class="fact-value ok">yes</span>
+          </div>
+          <div class="fact">
+            <span class="fact-label">Robot moving</span>
+            <span class="fact-value ok">yes</span>
+          </div>
+        </div>
+
+        <div class="llm-verdict">
+          <div class="lv-label">LLM would choose</div>
+          <div class="lv-intent">acquire_target</div>
+          <div class="lv-reason">target partially visible, no lock yet</div>
+        </div>
+      </div>
+
+      <!-- Right: intent actions -->
+      <div class="drive-right">
+        <div class="panel-head">
+          <div class="panel-title">Your action</div>
+          <div class="panel-sub">Choose an intent to dispatch — same options the LLM has</div>
+        </div>
+
+        <div class="intents">
+
+          <button class="intent suggested">
+            <div class="i-icon">
+              <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="3" fill="currentColor" stroke="none"/></svg>
+            </div>
+            <div class="i-body">
+              <div class="i-name">acquire_target</div>
+              <div class="i-desc">Lock onto target and begin visual tracking</div>
+            </div>
+            <span class="i-tag">LLM pick</span>
+          </button>
+
+          <button class="intent">
+            <div class="i-icon">
+              <svg viewBox="0 0 20 20"><path d="M4 16 L10 4 L16 16"/><path d="M7 11 h6"/></svg>
+            </div>
+            <div class="i-body">
+              <div class="i-name">plan_to_target</div>
+              <div class="i-desc">Send a nav2 goal directly to the target position</div>
+            </div>
+          </button>
+
+          <button class="intent">
+            <div class="i-icon">
+              <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6"/><path d="M10 4 v12 M4 10 h12"/></svg>
+            </div>
+            <div class="i-body">
+              <div class="i-name">track_target</div>
+              <div class="i-desc">Continuous reactive follow — holds on target</div>
+            </div>
+          </button>
+
+          <button class="intent danger-intent">
+            <div class="i-icon">
+              <svg viewBox="0 0 20 20"><rect x="5" y="5" width="10" height="10" rx="2"/></svg>
+            </div>
+            <div class="i-body">
+              <div class="i-name">abort</div>
+              <div class="i-desc">Cancel current goal and hold position</div>
+            </div>
+          </button>
+
+          <button class="intent danger-intent">
+            <div class="i-icon">
+              <svg viewBox="0 0 20 20"><path d="M5 5 L15 15 M15 5 L5 15"/></svg>
+            </div>
+            <div class="i-body">
+              <div class="i-name">safe_stop</div>
+              <div class="i-desc">Full stop — cuts all motion commands</div>
+            </div>
+          </button>
+
+        </div>
+
+        <div class="drive-response">
+          <span class="dr-dot"></span>
+          Last dispatch: <strong style="color:var(--ink);margin:0 4px">acquire_target</strong> — nav goal accepted · 14:12:41
+        </div>
+      </div>
+
+    </div><!-- /drive -->
+
+    <!-- ─── INSPECT ─── -->
+    <div class="pane" id="inspect">
+      <div class="inspect-body">
+
+        <!-- L1: Surface -->
+        <div class="layer open">
+          <div class="layer-hd" onclick="tog(this)">
+            <div class="l-num">L1</div>
+            <span class="l-name">What the robot is doing</span>
+            <span class="l-summary" style="color:var(--warn)">searching · attempt 2</span>
+            <span class="l-chevron">▶</span>
+          </div>
+          <div class="layer-body">
+            <div class="kv-grid">
+              <div class="kv-cell"><div class="kv-k">Stage</div><div class="kv-v warn">searching</div></div>
+              <div class="kv-cell"><div class="kv-k">Proof phase</div><div class="kv-v">llm_turn_then_go</div></div>
+              <div class="kv-cell"><div class="kv-k">Target locked</div><div class="kv-v bad">false</div></div>
+              <div class="kv-cell"><div class="kv-k">Goal in progress</div><div class="kv-v ok">true</div></div>
+              <div class="kv-cell"><div class="kv-k">Search state</div><div class="kv-v dim">turning_right</div></div>
+              <div class="kv-cell"><div class="kv-k">Unsafe reasons</div><div class="kv-v dim">none</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- L2: LLM -->
+        <div class="layer open">
+          <div class="layer-hd" onclick="tog(this)">
+            <div class="l-num">L2</div>
+            <span class="l-name">LLM decision layer</span>
+            <span class="l-summary">last: acquire_target · gate: ready</span>
+            <span class="l-chevron">▶</span>
+          </div>
+          <div class="layer-body">
+            <div class="kv-grid">
+              <div class="kv-cell"><div class="kv-k">Last intent</div><div class="kv-v">acquire_target</div></div>
+              <div class="kv-cell"><div class="kv-k">Preview gate</div><div class="kv-v ok">ready</div></div>
+              <div class="kv-cell"><div class="kv-k">Provider / model</div><div class="kv-v dim">openai / gpt-4o</div></div>
+              <div class="kv-cell"><div class="kv-k">Allowed intents</div><div class="kv-v dim">acquire · plan</div></div>
+              <div class="kv-cell full"><div class="kv-k">Suppression reason</div><div class="kv-v dim">none</div></div>
+            </div>
+            <div class="log-list">
+              <div class="log-row ok"><span class="lr-t">14:12:41</span><span class="lr-m">nav goal accepted · distance 1.84 m</span></div>
+              <div class="log-row ev"><span class="lr-t">14:12:38</span><span class="lr-m">intent dispatched: acquire_target</span></div>
+              <div class="log-row ev"><span class="lr-t">14:12:35</span><span class="lr-m">llm preview valid → dispatching</span></div>
+              <div class="log-row warn"><span class="lr-t">14:12:30</span><span class="lr-m">visible ratio low (0.31) — holding, retrying</span></div>
+              <div class="log-row ev"><span class="lr-t">14:12:22</span><span class="lr-m">search turn started</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- L3: Raw signals -->
+        <div class="layer">
+          <div class="layer-hd" onclick="tog(this)">
+            <div class="l-num">L3</div>
+            <span class="l-name">Raw signals</span>
+            <span class="l-summary" style="color:var(--faint)">perception · belief · outcome — collapsed by default</span>
+            <span class="l-chevron">▶</span>
+          </div>
+          <div class="layer-body">
+            <div class="kv-grid">
+              <div class="kv-cell"><div class="kv-k">Detection topic</div><div class="kv-v ok">seen</div></div>
+              <div class="kv-cell"><div class="kv-k">Target visible now</div><div class="kv-v warn">true (partial)</div></div>
+              <div class="kv-cell"><div class="kv-k">Visible ratio</div><div class="kv-v warn">0.41</div></div>
+              <div class="kv-cell"><div class="kv-k">Truth alignment</div><div class="kv-v ok">ok</div></div>
+              <div class="kv-cell"><div class="kv-k">Detection world</div><div class="kv-v dim">1.14, 0.03</div></div>
+              <div class="kv-cell"><div class="kv-k">Truth target</div><div class="kv-v dim">1.10, 0.00</div></div>
+              <div class="kv-cell"><div class="kv-k">Robot pose</div><div class="kv-v dim">0.02, 0.01 · 2°</div></div>
+              <div class="kv-cell"><div class="kv-k">Distance</div><div class="kv-v warn">1.84 m</div></div>
+              <div class="kv-cell"><div class="kv-k">cmd_vel recent</div><div class="kv-v ok">true</div></div>
+              <div class="kv-cell"><div class="kv-k">Motion evidence</div><div class="kv-v ok">true</div></div>
+              <div class="kv-cell"><div class="kv-k">Nav goal recent</div><div class="kv-v ok">true</div></div>
+              <div class="kv-cell"><div class="kv-k">Feedback recent</div><div class="kv-v warn">false</div></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /inspect -->
+
+  </div><!-- /body -->
+</div><!-- /shell -->
+
+<script>
+function go(id) {
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('on', ['watch','drive','inspect'][i]===id));
+  document.getElementById(id).classList.add('on');
+}
+function tog(hd) { hd.parentElement.classList.toggle('open'); }
+</script>
+
+</body>
+</html>

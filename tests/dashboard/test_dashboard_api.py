@@ -14,16 +14,33 @@ def test_00_scenario_catalog_exposes_browser_demo_and_proof_fields(dashboard_cli
     assert status == 200, payload
     scenarios = {item["id"]: item for item in payload["scenarios"]}
     assert "llm_turn_then_go_proof" in scenarios
+    assert "visit_single_ball_proof" in scenarios
+    assert "visit_three_ball_sequence" in scenarios
     assert scenarios["llm_turn_then_go_proof"]["browser_default"] is True
     assert scenarios["llm_turn_then_go_proof"]["featured"] is True
     assert scenarios["m3_single_target"]["browser_default"] is True
     assert scenarios["multi_target_rehearsal"]["browser_default"] is False
+    assert scenarios["visit_single_ball_proof"]["browser_default"] is False
+    assert scenarios["visit_three_ball_sequence"]["browser_default"] is False
 
     state = dashboard_client.state()
     assert "proof_state" in state
     assert "latest_operator_event" in state
     assert "recent_operator_events" in state
     assert "proof_verdict" in state
+    assert "mission_phase" in state
+    assert "mission_status" in state
+    assert "search_bias_active" in state
+    assert "current_target_id" in state
+    assert "visit_index" in state
+    assert "visited_targets" in state
+    assert "remaining_targets" in state
+    assert "mission_verdict" in state
+    assert "world_stream_frame_count" in state
+    assert "world_stream_latest_frame_utc" in state
+    assert "world_stream_frame_age_s" in state
+    assert "world_stream_frames_stale" in state
+    assert "world_stream_viewer_process_healthy" in state
 
 
 def test_01_environment_start_is_idempotent(dashboard_client):

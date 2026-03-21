@@ -146,10 +146,10 @@ Changes:
       </sensor>
     </link>
 
-    <!-- Observer Camera Link for operator-facing world stream -->
+    <!-- Observer Camera Link for operator-facing chase view -->
     <link name="observer_camera_link">
-      <!-- Elevated rear-quarter chase camera that follows the robot -->
-      <pose>-2.25 0 1.55 0 0.38 0</pose>
+      <!-- High trailing chase camera that keeps the robot body and forward play space visible -->
+      <pose>-1.35 0 1.15 0 0.78 0</pose>
 
       <inertial>
         <mass>0.015</mass>
@@ -171,7 +171,7 @@ Changes:
         <topic>observer/image_raw</topic>
 
         <camera>
-          <horizontal_fov>1.70</horizontal_fov>
+          <horizontal_fov>1.60</horizontal_fov>
           <image>
             <width>960</width>
             <height>540</height>

@@ -24,6 +24,8 @@ from urllib.parse import parse_qs, urlparse
 
 import yaml
 
+from brain_supervisor_policy import build_policy_snapshot
+from brain_supervisor_policy import intent_readiness_snapshot
 from llm_supervisor_core import load_supervisor_runtime_state as load_shadow_runtime_state
 from llm_supervisor_core import read_jsonl as read_jsonl_lines
 
@@ -35,6 +37,7 @@ SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 STATE_PATH = RUNTIME_DIR / "dashboard_service_state.json"
 LOCK_PATH = RUNTIME_DIR / "dashboard_session.lock.json"
 LLM_PROOF_RUNTIME_PATH = RUNTIME_DIR / "llm_turn_then_go_runtime.json"
+VISIT_MISSION_RUNTIME_PATH = RUNTIME_DIR / "visit_mission_runtime.json"
 
 DEFAULT_RUNTIME_TARGET = "robot_fidelity_orin"
 DEFAULT_CORE_ROS_DISTRO = "kilted"
@@ -49,12 +52,17 @@ TARGET_MODEL_SDF = "ros2_config/frisbee_target_ball.sdf"
 TARGET_MODEL_NAME_NAV2 = "uat_nav2_target"
 TARGET_MODEL_NAME_SNAPSHOT = "uat_snapshot_target"
 TARGET_MODEL_NAME_PROOF = "llm_turn_then_go_target"
+WORLD_STREAM_RESTART_COOLDOWN_S = 20.0
+WORLD_STREAM_RESTART_MAX_ATTEMPTS = 3
+WORLD_STREAM_STALE_DEBOUNCE_S = 3.0
+WORLD_STREAM_WATCHDOG_POLL_S = 1.0
 DEFAULT_CONTROL_MODE = "host_powershell"
 DEFAULT_SIM_LANE = "jetty_gate"
 DEFAULT_BRIDGE_ROS_DISTRO = "jazzy"
 DEFAULT_WARM_SERVICES = ("dashboard-control", "dashboard-utility")
 DEFAULT_DOCKER_SOCKET_PATH = Path("/var/run/docker.sock")
 SESSION_PROJECT_PREFIX = "chasecar_dashboard_"
+HOST_PORT_BIND_FAILURE_RE = re.compile(r"Bind for (?:127\.0\.0\.1|0\.0\.0\.0):(\d+) failed: port is already allocated")
 
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 POWERSHELL_EXE = shutil.which("powershell.exe") or shutil.which("powershell") or "powershell.exe"
@@ -143,6 +151,22 @@ SCENARIOS = [
         description="Sequential multi-target rehearsal with explicit transition state.",
         mode="multi_target",
     ),
+    ScenarioDefinition(
+        id="visit_single_ball_proof",
+        phase="visit_single_ball_proof",
+        target_id="ball_1",
+        label="Visit Single Ball",
+        description="Deterministic single-ball visit mission with search, lock, and approach.",
+        mode="visit_mission",
+    ),
+    ScenarioDefinition(
+        id="visit_three_ball_sequence",
+        phase="visit_three_ball_sequence",
+        target_id="ball_sequence",
+        label="Visit Three Ball Sequence",
+        description="Deterministic three-ball visit mission with ordered target progression.",
+        mode="visit_mission",
+    ),
 ]
 SCENARIOS_BY_ID = {item.id: item for item in SCENARIOS}
 
@@ -185,12 +209,19 @@ def write_json(path: Path, payload: Dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def can_bind_localhost_port(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
 def find_free_port(start: int, end: int) -> int:
     for port in range(start, end + 1):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            if sock.connect_ex(("127.0.0.1", port)) != 0:
-                return port
+        if can_bind_localhost_port(port):
+            return port
     raise RuntimeError(f"No free localhost port in range {start}-{end}.")
 
 
@@ -248,10 +279,12 @@ class DashboardController:
         self.intent_lock = threading.Lock()
         self.lifecycle_cancel = threading.Event()
         self.scenario_cancel = threading.Event()
+        self.world_stream_watchdog_cancel = threading.Event()
 
         self.lifecycle_thread: Optional[threading.Thread] = None
         self.scenario_thread: Optional[threading.Thread] = None
         self.intent_thread: Optional[threading.Thread] = None
+        self.world_stream_watchdog_thread: Optional[threading.Thread] = None
 
         self.active_env_proc: Optional[subprocess.Popen[str]] = None
         self.active_scenario_proc: Optional[subprocess.Popen[str]] = None
@@ -261,6 +294,9 @@ class DashboardController:
         self.gate_stack_container_id = ""
         self.world_viewer_container_id = ""
         self.build_on_next_start = True
+        self.world_stream_restart_lock = threading.Lock()
+        self._world_stream_stale_since_monotonic = 0.0
+        self._world_stream_last_restart_monotonic = 0.0
 
         ensure_dir(RUNTIME_DIR)
         with self.state_lock:
@@ -306,6 +342,15 @@ class DashboardController:
                 "status_text": "",
                 "proof_state": "waiting",
                 "proof_verdict": {},
+                "mission_phase": "idle",
+                "mission_status": "idle",
+                "search_bias_active": False,
+                "current_target_id": "",
+                "visit_index": 0,
+                "visited_targets": [],
+                "remaining_targets": [],
+                "last_visit_result": {},
+                "mission_verdict": {},
                 "latest_operator_event": "",
                 "recent_operator_events": [],
                 "world_stream_url": "",
@@ -316,12 +361,29 @@ class DashboardController:
                 "motion_evidence": False,
                 "latest_artifacts": {},
                 "operator_status_path": "",
+                "world_stream_restart_attempts": 0,
+                "world_stream_last_restart_utc": "",
+                "world_stream_last_restart_error": "",
+                "world_stream_recovery_state": "idle",
+                "world_stream_restart_in_progress": False,
+                "world_stream_restart_cooldown_s": WORLD_STREAM_RESTART_COOLDOWN_S,
+                "world_stream_restart_max_attempts": WORLD_STREAM_RESTART_MAX_ATTEMPTS,
+                "startup_retry_count": 0,
+                "startup_cleanup_count": 0,
+                "startup_last_cleanup_projects": [],
                 "lock_file": str(LOCK_PATH),
                 "scenarios": [item.to_api() for item in SCENARIOS],
             }
             self._persist_state_locked()
         self._clear_llm_proof_runtime_state()
+        self._clear_visit_mission_runtime_state()
         self._refresh_control_plane_state(force=True)
+        self.world_stream_watchdog_thread = threading.Thread(
+            target=self._world_stream_watchdog_loop,
+            name="dashboard-world-stream-watchdog",
+            daemon=True,
+        )
+        self.world_stream_watchdog_thread.start()
 
     def _load_contract(self) -> Dict[str, Any]:
         contract_path = REPO_ROOT / "runtime" / "contracts" / "llm_control_contract.yaml"
@@ -472,6 +534,38 @@ class DashboardController:
             }
         )
 
+    def _visit_mission_runtime_state(self) -> Dict[str, Any]:
+        payload = read_json(VISIT_MISSION_RUNTIME_PATH)
+        return payload if isinstance(payload, dict) else {}
+
+    def _write_visit_mission_runtime_state(self, payload: Dict[str, Any]) -> None:
+        write_json(VISIT_MISSION_RUNTIME_PATH, payload)
+
+    def _clear_visit_mission_runtime_state(self) -> None:
+        self._write_visit_mission_runtime_state(
+            {
+                "running": False,
+                "scenario_id": "",
+                "session_id": "",
+                "proof_state": "waiting",
+                "mission_phase": "idle",
+                "mission_status": "idle",
+                "search_bias_active": False,
+                "current_target_id": "",
+                "visit_index": 0,
+                "visited_targets": [],
+                "remaining_targets": [],
+                "last_visit_result": {},
+                "mission_verdict": {},
+                "latest_operator_event": "",
+                "recent_operator_events": [],
+                "latest_decision": {},
+                "latest_feedback": "",
+                "artifact_dir": "",
+                "updated_utc": utc_now(),
+            }
+        )
+
     def _record_operator_event(self, message: str, *, category: str = "info", source: str = "dashboard") -> None:
         event = {
             "timestamp_utc": utc_now(),
@@ -613,6 +707,48 @@ class DashboardController:
                 text=True,
                 check=False,
             )
+
+    def _list_dashboard_projects(self, *, include_stopped: bool = True) -> list[str]:
+        if not self._docker_enabled():
+            return []
+        cmd = [self.docker, "ps"]
+        if include_stopped:
+            cmd.append("-a")
+        cmd.extend(["--format", '{{.Label "com.docker.compose.project"}}'])
+        proc = subprocess.run(
+            cmd,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            return []
+        projects: list[str] = []
+        seen: set[str] = set()
+        for raw in proc.stdout.splitlines():
+            project_name = raw.strip()
+            if not project_name or not project_name.startswith(SESSION_PROJECT_PREFIX) or project_name in seen:
+                continue
+            seen.add(project_name)
+            projects.append(project_name)
+        return projects
+
+    def _cleanup_stale_dashboard_projects(self, *, current_project: str = "") -> list[str]:
+        projects = self._list_dashboard_projects(include_stopped=True)
+        stale_projects = [name for name in projects if name != current_project]
+        for project_name in stale_projects:
+            self._force_remove_project_resources(project_name)
+        return stale_projects
+
+    def _extract_host_port_bind_failure_port(self, output: str) -> Optional[int]:
+        match = HOST_PORT_BIND_FAILURE_RE.search(output or "")
+        if not match:
+            return None
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
 
     def _discover_launcher_context(self) -> tuple[str, str]:
         env_host_source = os.environ.get("HOST_REPO_MOUNT_SOURCE", "").strip()
@@ -780,6 +916,14 @@ class DashboardController:
         snapshot["robot_visible_ok"] = bool(world_state.get("robot_visible_ok", False))
         snapshot["target_visible_ok"] = bool(world_state.get("target_visible_ok", False))
         snapshot["same_session_partition"] = bool(world_state.get("same_session_partition", False))
+        snapshot["world_stream_frame_count"] = int(
+            world_state.get("received_frame_count", world_state.get("frame_count", 0)) or 0
+        )
+        snapshot["world_stream_latest_frame_utc"] = str(world_state.get("latest_frame_utc", "") or "")
+        latest_frame_age = world_state.get("latest_frame_age_s")
+        snapshot["world_stream_frame_age_s"] = float(latest_frame_age) if latest_frame_age not in {None, ""} else None
+        snapshot["world_stream_frames_stale"] = bool(world_state.get("frames_stale", False))
+        snapshot["world_stream_viewer_process_healthy"] = bool(world_state.get("viewer_process_healthy", False))
         snapshot["world_stream_failure_class"] = world_state.get("failure_class", "")
         snapshot["world_stream_url"] = world_state.get("world_stream_url", snapshot.get("world_stream_url", ""))
         snapshot["world_stream_interactive"] = bool(world_state.get("world_stream_interactive", False))
@@ -893,12 +1037,19 @@ class DashboardController:
         snapshot["brain"] = brain
         snapshot["decision"] = decision
         snapshot["outcome"] = outcome
+        snapshot["sim_gate_ready"] = bool(self.sim_gate_container_id)
+        snapshot["policy"] = build_policy_snapshot(snapshot, sim_gate_ready=bool(self.sim_gate_container_id))
         snapshot["demo_story"] = demo_story
         snapshot["llm_supervisor"] = self._llm_supervisor_state()
 
         proof_runtime = self._llm_proof_runtime_state()
+        visit_runtime = self._visit_mission_runtime_state()
         proof_verdict = proof_runtime.get("proof_verdict", {}) if isinstance(proof_runtime.get("proof_verdict"), dict) else {}
         proof_state = str(proof_runtime.get("proof_state", "") or "").strip()
+        visit_verdict = visit_runtime.get("mission_verdict", {}) if isinstance(visit_runtime.get("mission_verdict"), dict) else {}
+        active_scenario_id = str(snapshot.get("active_scenario", "") or "")
+        active_scenario = SCENARIOS_BY_ID.get(active_scenario_id)
+        active_mode = active_scenario.mode if active_scenario else ""
         if not proof_state:
             if snapshot.get("active_scenario") == "llm_turn_then_go_proof" and snapshot.get("scenario_state") == "running":
                 proof_state = "searching" if brain.get("search_active") else "waiting"
@@ -906,6 +1057,10 @@ class DashboardController:
                 proof_state = "completed" if proof_verdict.get("pass") else "failed"
             else:
                 proof_state = "waiting"
+        if active_mode == "visit_mission":
+            proof_state = str(visit_runtime.get("proof_state", "") or "").strip() or proof_state
+            if visit_verdict:
+                proof_verdict = visit_verdict
 
         operator_events = snapshot.get("recent_operator_events", [])
         if not isinstance(operator_events, list):
@@ -913,8 +1068,11 @@ class DashboardController:
         proof_events = proof_runtime.get("recent_operator_events", [])
         if not isinstance(proof_events, list):
             proof_events = []
+        visit_events = visit_runtime.get("recent_operator_events", [])
+        if not isinstance(visit_events, list):
+            visit_events = []
         merged_events = []
-        for item in operator_events + proof_events:
+        for item in operator_events + proof_events + visit_events:
             if isinstance(item, dict) and item.get("message"):
                 merged_events.append(item)
         if merged_events:
@@ -929,9 +1087,27 @@ class DashboardController:
         snapshot["proof_verdict"] = proof_verdict
         snapshot["latest_operator_event"] = latest_operator_event
         snapshot["recent_operator_events"] = operator_events
-        snapshot["latest_proof_decision"] = proof_runtime.get("latest_decision", {}) if isinstance(proof_runtime.get("latest_decision"), dict) else {}
-        snapshot["latest_proof_feedback"] = str(proof_runtime.get("latest_feedback", "") or "")
-        snapshot["proof_artifact_dir"] = str(proof_runtime.get("artifact_dir", "") or "")
+        if active_mode == "visit_mission":
+            snapshot["latest_proof_decision"] = visit_runtime.get("latest_decision", {}) if isinstance(visit_runtime.get("latest_decision"), dict) else {}
+            snapshot["latest_proof_feedback"] = str(visit_runtime.get("latest_feedback", "") or "")
+            snapshot["proof_artifact_dir"] = str(visit_runtime.get("artifact_dir", "") or "")
+        else:
+            snapshot["latest_proof_decision"] = proof_runtime.get("latest_decision", {}) if isinstance(proof_runtime.get("latest_decision"), dict) else {}
+            snapshot["latest_proof_feedback"] = str(proof_runtime.get("latest_feedback", "") or "")
+            snapshot["proof_artifact_dir"] = str(proof_runtime.get("artifact_dir", "") or "")
+
+        snapshot["mission_phase"] = str(visit_runtime.get("mission_phase", snapshot.get("mission_phase", "idle")) or "idle")
+        snapshot["mission_status"] = str(visit_runtime.get("mission_status", snapshot.get("mission_status", "idle")) or "idle")
+        snapshot["search_bias_active"] = bool(visit_runtime.get("search_bias_active", snapshot.get("search_bias_active", False)))
+        snapshot["current_target_id"] = str(visit_runtime.get("current_target_id", snapshot.get("current_target_id", "")) or "")
+        snapshot["visit_index"] = int(visit_runtime.get("visit_index", snapshot.get("visit_index", 0)) or 0)
+        snapshot["visited_targets"] = list(visit_runtime.get("visited_targets", snapshot.get("visited_targets", [])) or [])
+        snapshot["remaining_targets"] = list(visit_runtime.get("remaining_targets", snapshot.get("remaining_targets", [])) or [])
+        snapshot["last_visit_result"] = visit_runtime.get("last_visit_result", snapshot.get("last_visit_result", {})) if isinstance(visit_runtime.get("last_visit_result", snapshot.get("last_visit_result", {})), dict) else {}
+        snapshot["mission_verdict"] = visit_verdict
+        if active_mode == "visit_mission" and snapshot["current_target_id"]:
+            snapshot["target_id"] = snapshot["current_target_id"]
+        snapshot["policy"] = build_policy_snapshot(snapshot, sim_gate_ready=bool(self.sim_gate_container_id))
 
         controls_enabled = bool(snapshot.get("control_plane_ready", False))
         snapshot["controls"] = {
@@ -1022,6 +1198,8 @@ class DashboardController:
             phase="starting",
             target_id="",
             target_transition_active=False,
+            world_stream_recovery_state="idle",
+            world_stream_restart_in_progress=False,
         )
         self._record_operator_event("Environment starting.", category="environment")
         self.lifecycle_thread = threading.Thread(target=self._start_environment_worker, name="dashboard-start", daemon=True)
@@ -1255,35 +1433,7 @@ class DashboardController:
         return []
 
     def _intent_readiness_snapshot(self, intent_name: str, state: Dict[str, Any]) -> Dict[str, Any]:
-        perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
-        belief = state.get("belief", {}) if isinstance(state.get("belief"), dict) else {}
-        brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
-        outcome = state.get("outcome", {}) if isinstance(state.get("outcome"), dict) else {}
-
-        readiness = {
-            "control_plane_ready": bool(state.get("control_plane_ready", False)),
-            "environment_ready": state.get("environment_state") == "environment_ready",
-            "session_active": bool(state.get("session_id")),
-            "sim_gate_ready": bool(self.sim_gate_container_id),
-            "detection_seen": bool(perception.get("detection_topic_seen", False)),
-            "target_visible_now": bool(perception.get("target_visible_now", False)),
-            "robot_pose_available": bool(belief.get("robot_pose_available", False)),
-            "target_locked": bool(brain.get("target_locked", False)),
-            "nav_goal_recent": bool(outcome.get("nav_goal_recent", False)),
-            "feedback_recent": bool(outcome.get("feedback_recent", False)),
-            "cmd_vel_recent": bool(outcome.get("cmd_vel_recent", False)),
-        }
-
-        required_keys = ["control_plane_ready", "environment_ready", "session_active", "sim_gate_ready"]
-        if intent_name == "search_for_target":
-            required_keys.append("robot_pose_available")
-        elif intent_name in {"acquire_target", "plan_to_target", "track_target"}:
-            required_keys.extend(["detection_seen", "robot_pose_available"])
-        missing = [name for name in required_keys if not readiness.get(name, False)]
-        readiness["required_keys"] = required_keys
-        readiness["missing_keys"] = missing
-        readiness["ready_to_dispatch"] = not missing
-        return readiness
+        return intent_readiness_snapshot(intent_name, state, sim_gate_ready=bool(self.sim_gate_container_id))
 
     def _prepare_intent_preview(self, intent_name: str, args_payload: Dict[str, Any]) -> Dict[str, Any]:
         if intent_name not in self.frozen_intents:
@@ -1543,12 +1693,153 @@ class DashboardController:
                 and bool(state.get("scene_content_ok", False))
                 and bool(state.get("robot_visible_ok", False))
                 and bool(state.get("same_session_partition", False))
+                and not bool(state.get("frames_stale", False))
             ):
                 return True
             if self.lifecycle_cancel.is_set():
                 return False
             time.sleep(0.5)
         return False
+
+    def _world_stream_launch_script(self, *, session_id: str, visual_dir_container: str, truth_state_container: str) -> str:
+        world_stream_port = int(self.state.get("world_stream_port", 0) or 0)
+        return f"""
+set -euo pipefail
+PID_FILE="/tmp/chasecar_world_stream.pid"
+LOG_FILE="/tmp/chasecar_world_stream.log"
+pkill -f "world_stream_controller.py" 2>/dev/null || true
+rm -f "$PID_FILE" "$LOG_FILE"
+nohup bash -lc 'source /opt/ros/{DEFAULT_CORE_ROS_DISTRO}/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/world_stream_controller.py --session-id "{session_id}" --output-dir "{visual_dir_container}" --public-url "http://127.0.0.1:{world_stream_port}/vnc.html?autoconnect=1&resize=scale&path=websockify" --world-name "{DEFAULT_WORLD_NAME}" --image-topic /observer/image_raw --camera-profile robot_follow --truth-state-path "{truth_state_container}" --duration-s 7200' >"$LOG_FILE" 2>&1 &
+echo $! > "$PID_FILE"
+sleep 1
+echo "WORLD_STREAM_PID=$(cat "$PID_FILE")"
+echo "WORLD_STREAM_LOG=$LOG_FILE"
+"""
+
+    def _world_stream_restart_ready(self) -> bool:
+        with self.state_lock:
+            if self.state.get("environment_state") != "environment_ready":
+                return False
+            if self.state.get("world_stream_restart_in_progress", False):
+                return False
+            if not self.world_viewer_container_id:
+                return False
+            attempts = int(self.state.get("world_stream_restart_attempts", 0) or 0)
+            max_attempts = int(self.state.get("world_stream_restart_max_attempts", WORLD_STREAM_RESTART_MAX_ATTEMPTS) or WORLD_STREAM_RESTART_MAX_ATTEMPTS)
+            if attempts >= max_attempts:
+                return False
+        visual_dir = self._current_visual_dir()
+        if visual_dir is None:
+            return False
+        state_path = visual_dir / "world_stream_state.json"
+        state = read_json(state_path)
+        if not state:
+            return False
+        current_session_id = str(self.state.get("session_id", "") or "")
+        if current_session_id and str(state.get("session_id", "") or "") != current_session_id:
+            return False
+        if not bool(state.get("frames_stale", False)):
+            return False
+        if self._lifecycle_busy():
+            return False
+        return True
+
+    def _restart_world_stream_controller(self, *, reason: str = "world_stream_stale") -> bool:
+        if not self.world_stream_restart_lock.acquire(blocking=False):
+            return False
+        try:
+            if not self._world_stream_restart_ready():
+                with self.state_lock:
+                    if self.state.get("world_stream_restart_in_progress", False):
+                        return False
+                return False
+            now_monotonic = time.monotonic()
+            with self.state_lock:
+                attempts = int(self.state.get("world_stream_restart_attempts", 0) or 0)
+                cooldown_s = float(self.state.get("world_stream_restart_cooldown_s", WORLD_STREAM_RESTART_COOLDOWN_S) or WORLD_STREAM_RESTART_COOLDOWN_S)
+                max_attempts = int(self.state.get("world_stream_restart_max_attempts", WORLD_STREAM_RESTART_MAX_ATTEMPTS) or WORLD_STREAM_RESTART_MAX_ATTEMPTS)
+                since_last = now_monotonic - float(self._world_stream_last_restart_monotonic or 0.0)
+                if attempts >= max_attempts:
+                    self._update_state(world_stream_recovery_state="exhausted")
+                    return False
+                if self._world_stream_last_restart_monotonic and since_last < cooldown_s:
+                    self._update_state(world_stream_recovery_state="cooldown")
+                    return False
+                self._update_state(
+                    world_stream_restart_in_progress=True,
+                    world_stream_recovery_state="restarting",
+                    world_stream_last_restart_error="",
+                )
+                attempts += 1
+                self._update_state(world_stream_restart_attempts=attempts)
+            self._record_operator_event("World surface stale; restarting world stream controller.", category="environment")
+            visual_dir = self._current_visual_dir()
+            if visual_dir is None:
+                raise RuntimeError("missing visual directory for world stream restart")
+            truth_state_container = to_container_repo_path(visual_dir / "truth_state.json")
+            world_script = self._world_stream_launch_script(
+                session_id=str(self.state.get("session_id", "") or ""),
+                visual_dir_container=to_container_repo_path(visual_dir),
+                truth_state_container=truth_state_container,
+            )
+            world_info = self._run_container_helper(self.world_viewer_container_id, world_script, "WORLD_STREAM")
+            ready = self._wait_for_world_stream_ready(40.0)
+            restart_utc = utc_now()
+            self._world_stream_last_restart_monotonic = now_monotonic
+            if ready:
+                self._world_stream_stale_since_monotonic = 0.0
+                self._update_state(
+                    world_stream_restart_in_progress=False,
+                    world_stream_recovery_state="healthy",
+                    world_stream_last_restart_utc=restart_utc,
+                    world_stream_last_restart_error="",
+                )
+                self._record_operator_event("World surface recovered after stale stream.", category="environment")
+                return True
+
+            error_text = (world_info.get("output", "") or "").strip() or "world stream did not become ready after restart"
+            self._update_state(
+                world_stream_restart_in_progress=False,
+                world_stream_recovery_state="stale",
+                world_stream_last_restart_utc=restart_utc,
+                world_stream_last_restart_error=error_text,
+            )
+            self._record_operator_event("World surface restart did not recover fresh frames.", category="warn")
+            return False
+        except Exception as exc:
+            self._world_stream_last_restart_monotonic = time.monotonic()
+            self._update_state(
+                world_stream_restart_in_progress=False,
+                world_stream_recovery_state="error",
+                world_stream_last_restart_utc=utc_now(),
+                world_stream_last_restart_error=str(exc),
+            )
+            self._record_operator_event(f"World surface restart failed: {exc}", category="error")
+            return False
+        finally:
+            self.world_stream_restart_lock.release()
+
+    def _world_stream_watchdog_loop(self) -> None:
+        while not self.world_stream_watchdog_cancel.wait(WORLD_STREAM_WATCHDOG_POLL_S):
+            try:
+                stale = self._world_stream_restart_ready()
+                if stale:
+                    if not self._world_stream_stale_since_monotonic:
+                        self._world_stream_stale_since_monotonic = time.monotonic()
+                    elif time.monotonic() - self._world_stream_stale_since_monotonic >= WORLD_STREAM_STALE_DEBOUNCE_S:
+                        self._restart_world_stream_controller()
+                else:
+                    self._world_stream_stale_since_monotonic = 0.0
+                    with self.state_lock:
+                        if self.state.get("world_stream_recovery_state") in {"stale", "cooldown", "restarting"} and not self.state.get("world_stream_restart_in_progress", False):
+                            self.state["world_stream_recovery_state"] = "idle"
+                            self.state["world_stream_last_restart_error"] = ""
+                            self._persist_state_locked()
+            except Exception as exc:
+                self._update_state(
+                    world_stream_recovery_state="error",
+                    world_stream_last_restart_error=str(exc),
+                )
 
     def _base_env(self, *, session_id: str, world_stream_port: int) -> Dict[str, str]:
         env = self._compose_env()
@@ -1576,16 +1867,98 @@ class DashboardController:
                 local_path = (REPO_ROOT / local_path).resolve()
         return str(local_path)
 
+    def _run_environment_compose_up(self, project_name: str, env: Dict[str, str]) -> tuple[int, str]:
+        if self._is_docker_socket_mode():
+            self._run_docker_compose(project_name, "down", "--remove-orphans", env=env)
+            args = ["up", "-d"]
+            if self.build_on_next_start:
+                args.append("--build")
+            args.extend(["sim-gate", "world-viewer", "gate-stack"])
+            proc = self._popen_docker_compose(project_name, *args, env=env)
+        else:
+            self._run_powershell(
+                "run_compose_gate.ps1",
+                "-Action",
+                "down",
+                "-ProjectName",
+                project_name,
+                "-RuntimeTarget",
+                DEFAULT_RUNTIME_TARGET,
+                "-InferenceBackend",
+                DEFAULT_INFERENCE_BACKEND,
+                "-CoreRosDistro",
+                DEFAULT_CORE_ROS_DISTRO,
+                env=env,
+            )
+            self._run_powershell(
+                "run_compose_uat.ps1",
+                "-Action",
+                "down",
+                "-ProjectName",
+                project_name,
+                "-RuntimeTarget",
+                DEFAULT_RUNTIME_TARGET,
+                "-InferenceBackend",
+                DEFAULT_INFERENCE_BACKEND,
+                "-CoreRosDistro",
+                DEFAULT_CORE_ROS_DISTRO,
+                env=env,
+            )
+
+            args = [
+                "-Action",
+                "up",
+                "-ProjectName",
+                project_name,
+                "-RuntimeTarget",
+                DEFAULT_RUNTIME_TARGET,
+                "-InferenceBackend",
+                DEFAULT_INFERENCE_BACKEND,
+                "-CoreRosDistro",
+                DEFAULT_CORE_ROS_DISTRO,
+                "-GatePerfProfile",
+                DEFAULT_GATE_PROFILE,
+                "-InferenceDevice",
+                DEFAULT_INFERENCE_DEVICE,
+                "-WorldFile",
+                DEFAULT_WORLD_FILE,
+                "-IncludeNav2Bringup",
+                "true",
+                "-IncludeBridge",
+                "false",
+                "-IncludeCmdVelRelay",
+                "true",
+                "-Headless",
+                "true",
+                "-DisplayMode",
+                "none",
+            ]
+            if self.build_on_next_start:
+                args.append("-Build")
+            proc = self._popen_powershell("run_compose_gate.ps1", *args, env=env)
+        self.active_env_proc = proc
+        output, _ = proc.communicate()
+        self.active_env_proc = None
+        return proc.returncode, output
+
     def _start_environment_worker(self) -> None:
         if not self.lifecycle_lock.acquire(blocking=False):
             return
         try:
+            self._clear_llm_proof_runtime_state()
+            self._clear_visit_mission_runtime_state()
             session_id = make_session_id()
             project_name = f"chasecar_dashboard_{slugify_session(session_id)}"
             validation_dir = ensure_dir(SESSION_ROOT / session_id / "dashboard_validation")
             ensure_dir(SESSION_ROOT / session_id / "visual")
-            world_stream_port = find_free_port(8891, 8921)
-            env = self._base_env(session_id=session_id, world_stream_port=world_stream_port)
+            startup_cleanup_projects = self._cleanup_stale_dashboard_projects(current_project=project_name)
+            startup_cleanup_count = len(startup_cleanup_projects)
+            startup_retry_count = 0
+            if startup_cleanup_projects:
+                self._record_operator_event(
+                    f"Cleaned stale dashboard projects before startup: {', '.join(startup_cleanup_projects)}.",
+                    category="environment",
+                )
             self._update_state(
                 environment_state="starting",
                 scenario_state="idle",
@@ -1594,7 +1967,7 @@ class DashboardController:
                 environment_message="starting authoritative environment",
                 scenario_message="",
                 last_error="",
-                world_stream_port=world_stream_port,
+                world_stream_port=0,
                 validation_dir=str(validation_dir),
                 command_history_path=str(validation_dir / "command_history.jsonl"),
                 multi_target_progress_path=str(validation_dir / "multi_target_progress.json"),
@@ -1604,7 +1977,17 @@ class DashboardController:
                 target_transition_active=False,
                 latest_artifacts={},
                 motion_evidence=False,
+                world_stream_restart_attempts=0,
+                world_stream_last_restart_utc="",
+                world_stream_last_restart_error="",
+                world_stream_recovery_state="idle",
+                world_stream_restart_in_progress=False,
+                startup_retry_count=startup_retry_count,
+                startup_cleanup_count=startup_cleanup_count,
+                startup_last_cleanup_projects=startup_cleanup_projects,
             )
+            self._world_stream_stale_since_monotonic = 0.0
+            self._world_stream_last_restart_monotonic = 0.0
             self._write_operator_status(
                 phase="environment_starting",
                 target_id="",
@@ -1616,92 +1999,66 @@ class DashboardController:
                     environment_state="stopped",
                     scenario_state="idle",
                     environment_message="startup cancelled",
+                    world_stream_recovery_state="idle",
+                    world_stream_restart_in_progress=False,
                 )
                 self._remove_lock_file()
                 return
 
-            if self._is_docker_socket_mode():
-                self._run_docker_compose(project_name, "down", "--remove-orphans", env=env)
-                args = ["up", "-d"]
-                if self.build_on_next_start:
-                    args.append("--build")
-                args.extend(["sim-gate", "world-viewer", "gate-stack"])
-                proc = self._popen_docker_compose(project_name, *args, env=env)
-            else:
-                self._run_powershell(
-                    "run_compose_gate.ps1",
-                    "-Action",
-                    "down",
-                    "-ProjectName",
-                    project_name,
-                    "-RuntimeTarget",
-                    DEFAULT_RUNTIME_TARGET,
-                    "-InferenceBackend",
-                    DEFAULT_INFERENCE_BACKEND,
-                    "-CoreRosDistro",
-                    DEFAULT_CORE_ROS_DISTRO,
-                    env=env,
-                )
-                self._run_powershell(
-                    "run_compose_uat.ps1",
-                    "-Action",
-                    "down",
-                    "-ProjectName",
-                    project_name,
-                    "-RuntimeTarget",
-                    DEFAULT_RUNTIME_TARGET,
-                    "-InferenceBackend",
-                    DEFAULT_INFERENCE_BACKEND,
-                    "-CoreRosDistro",
-                    DEFAULT_CORE_ROS_DISTRO,
-                    env=env,
-                )
-
-                args = [
-                    "-Action",
-                    "up",
-                    "-ProjectName",
-                    project_name,
-                    "-RuntimeTarget",
-                    DEFAULT_RUNTIME_TARGET,
-                    "-InferenceBackend",
-                    DEFAULT_INFERENCE_BACKEND,
-                    "-CoreRosDistro",
-                    DEFAULT_CORE_ROS_DISTRO,
-                    "-GatePerfProfile",
-                    DEFAULT_GATE_PROFILE,
-                    "-InferenceDevice",
-                    DEFAULT_INFERENCE_DEVICE,
-                    "-WorldFile",
-                    DEFAULT_WORLD_FILE,
-                    "-IncludeNav2Bringup",
-                    "true",
-                    "-IncludeBridge",
-                    "false",
-                    "-IncludeCmdVelRelay",
-                    "true",
-                    "-Headless",
-                    "true",
-                    "-DisplayMode",
-                    "none",
-                ]
-                if self.build_on_next_start:
-                    args.append("-Build")
-                proc = self._popen_powershell("run_compose_gate.ps1", *args, env=env)
-            self.active_env_proc = proc
-            output, _ = proc.communicate()
-            self.active_env_proc = None
-            if self.lifecycle_cancel.is_set():
-                self._teardown_environment(env=env)
+            output = ""
+            env: Dict[str, str] = {}
+            world_stream_port = 0
+            for attempt in range(2):
+                world_stream_port = find_free_port(8891, 8921)
+                env = self._base_env(session_id=session_id, world_stream_port=world_stream_port)
                 self._update_state(
-                    environment_state="stopped",
-                    scenario_state="idle",
-                    environment_message="startup cancelled",
+                    world_stream_port=world_stream_port,
+                    environment_message="starting authoritative environment",
+                    startup_retry_count=startup_retry_count,
+                    startup_cleanup_count=startup_cleanup_count,
+                    startup_last_cleanup_projects=startup_cleanup_projects,
                 )
-                self._record_operator_event("Environment startup cancelled.", category="environment")
-                self._remove_lock_file()
-                return
-            if proc.returncode != 0:
+                returncode, output = self._run_environment_compose_up(project_name, env)
+                if self.lifecycle_cancel.is_set():
+                    self._teardown_environment(env=env)
+                    self._update_state(
+                        environment_state="stopped",
+                        scenario_state="idle",
+                        environment_message="startup cancelled",
+                        world_stream_recovery_state="idle",
+                        world_stream_restart_in_progress=False,
+                    )
+                    self._record_operator_event("Environment startup cancelled.", category="environment")
+                    self._remove_lock_file()
+                    return
+                if returncode == 0:
+                    break
+                bind_port = self._extract_host_port_bind_failure_port(output)
+                if bind_port is None or attempt >= 1:
+                    raise RuntimeError(output.strip() or "gate bring-up failed")
+                retry_cleanup_projects = self._cleanup_stale_dashboard_projects(current_project=project_name)
+                if retry_cleanup_projects:
+                    for retry_project in retry_cleanup_projects:
+                        if retry_project not in startup_cleanup_projects:
+                            startup_cleanup_projects.append(retry_project)
+                    startup_cleanup_count = len(startup_cleanup_projects)
+                    self._record_operator_event(
+                        f"Cleaned stale dashboard projects after port bind failure: {', '.join(retry_cleanup_projects)}.",
+                        category="environment",
+                    )
+                self._force_remove_project_resources(project_name)
+                startup_retry_count += 1
+                self._update_state(
+                    environment_message=f"retrying startup after world-view port {bind_port} bind failure",
+                    startup_retry_count=startup_retry_count,
+                    startup_cleanup_count=startup_cleanup_count,
+                    startup_last_cleanup_projects=startup_cleanup_projects,
+                )
+                self._record_operator_event(
+                    f"Retrying startup after world-view port {bind_port} bind failure.",
+                    category="environment",
+                )
+            else:
                 raise RuntimeError(output.strip() or "gate bring-up failed")
 
             self._refresh_session_container_ids(project_name)
@@ -1729,18 +2086,11 @@ echo "TRUTH_LOG=$LOG_FILE"
 
             truth_state_container = to_container_repo_path(visual_dir / "truth_state.json")
             operator_status_container = to_container_repo_path(visual_dir / "operator_status.json")
-            world_script = f"""
-set -euo pipefail
-PID_FILE="/tmp/chasecar_world_stream.pid"
-LOG_FILE="/tmp/chasecar_world_stream.log"
-pkill -f "world_stream_controller.py" 2>/dev/null || true
-rm -f "$PID_FILE" "$LOG_FILE"
-nohup bash -lc 'source /opt/ros/{DEFAULT_CORE_ROS_DISTRO}/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/world_stream_controller.py --session-id "{session_id}" --output-dir "{visual_dir_container}" --public-url "http://127.0.0.1:{world_stream_port}/vnc.html?autoconnect=1&resize=scale&path=websockify" --world-name "{DEFAULT_WORLD_NAME}" --image-topic /observer_world/image_raw --camera-profile overview_fixed --truth-state-path "{truth_state_container}" --duration-s 7200' >"$LOG_FILE" 2>&1 &
-echo $! > "$PID_FILE"
-sleep 1
-echo "WORLD_STREAM_PID=$(cat "$PID_FILE")"
-echo "WORLD_STREAM_LOG=$LOG_FILE"
-"""
+            world_script = self._world_stream_launch_script(
+                session_id=session_id,
+                visual_dir_container=visual_dir_container,
+                truth_state_container=truth_state_container,
+            )
             world_info = self._run_container_helper(self.world_viewer_container_id, world_script, "WORLD_STREAM")
             if not self._wait_for_world_stream_ready(40.0):
                 raise RuntimeError(f"World stream did not become ready. {world_info['output']}".strip())
@@ -1767,6 +2117,9 @@ echo "VISUAL_LOG=$LOG_FILE"
                 environment_message="environment ready",
                 scenario_message="ready",
                 world_stream_url=f"http://127.0.0.1:{world_stream_port}/vnc.html?autoconnect=1&resize=scale&path=websockify",
+                world_stream_recovery_state="idle",
+                world_stream_restart_in_progress=False,
+                world_stream_last_restart_error="",
             )
             self._record_operator_event("Environment ready.", category="environment")
             self._write_operator_status(
@@ -1791,6 +2144,8 @@ echo "VISUAL_LOG=$LOG_FILE"
                     environment_message="startup cancelled",
                     scenario_message="",
                     last_error="",
+                    world_stream_recovery_state="idle",
+                    world_stream_restart_in_progress=False,
                 )
                 self._record_operator_event("Environment startup cancelled.", category="environment")
             else:
@@ -1799,6 +2154,9 @@ echo "VISUAL_LOG=$LOG_FILE"
                     scenario_state="idle",
                     environment_message="environment start failed",
                     last_error=str(exc),
+                    world_stream_recovery_state="error",
+                    world_stream_last_restart_error=str(exc),
+                    world_stream_restart_in_progress=False,
                 )
                 self._record_operator_event(f"Environment start failed: {exc}", category="error")
             self._remove_lock_file()
@@ -1815,7 +2173,14 @@ echo "VISUAL_LOG=$LOG_FILE"
                 session_id = self.state.get("session_id", "")
                 world_stream_port = int(self.state.get("world_stream_port", 0) or 0)
             env = self._base_env(session_id=session_id or make_session_id(), world_stream_port=world_stream_port or find_free_port(8891, 8921))
-            self._update_state(environment_state="stopping", scenario_state="idle", environment_message="stopping environment")
+            self._update_state(
+                environment_state="stopping",
+                scenario_state="idle",
+                environment_message="stopping environment",
+                world_stream_recovery_state="idle",
+                world_stream_restart_in_progress=False,
+            )
+            self._world_stream_stale_since_monotonic = 0.0
             self._record_operator_event("Environment stopping.", category="environment")
             self._write_operator_status(
                 phase="stopping",
@@ -1839,11 +2204,20 @@ echo "VISUAL_LOG=$LOG_FILE"
                 target_id="",
                 target_transition_active=False,
                 stale_chasecar_containers=stale,
+                world_stream_recovery_state="idle",
+                world_stream_restart_in_progress=False,
             )
             self._clear_llm_proof_runtime_state()
+            self._clear_visit_mission_runtime_state()
             self._record_operator_event("Environment stopped.", category="environment")
         except Exception as exc:
-            self._update_state(environment_state="error", last_error=str(exc), environment_message="stop failed")
+            self._update_state(
+                environment_state="error",
+                last_error=str(exc),
+                environment_message="stop failed",
+                world_stream_recovery_state="error",
+                world_stream_restart_in_progress=False,
+            )
             self._record_operator_event(f"Environment stop failed: {exc}", category="error")
         finally:
             self.lifecycle_lock.release()
@@ -1856,7 +2230,13 @@ echo "VISUAL_LOG=$LOG_FILE"
                 session_id = self.state.get("session_id", "") or make_session_id()
                 project_name = self.state.get("compose_project", "") or f"chasecar_dashboard_{slugify_session(session_id)}"
                 world_stream_port = int(self.state.get("world_stream_port", 0) or find_free_port(8891, 8921))
-            self._update_state(environment_state="stopping", environment_message="refreshing environment")
+            self._update_state(
+                environment_state="stopping",
+                environment_message="refreshing environment",
+                world_stream_recovery_state="idle",
+                world_stream_restart_in_progress=False,
+            )
+            self._world_stream_stale_since_monotonic = 0.0
             env = self._base_env(session_id=session_id, world_stream_port=world_stream_port)
             self._cleanup_scenario_processes()
             self._teardown_environment(env=env)
@@ -1865,6 +2245,8 @@ echo "VISUAL_LOG=$LOG_FILE"
                 environment_message="refresh restart pending",
                 compose_project=project_name,
                 session_id=session_id,
+                world_stream_recovery_state="idle",
+                world_stream_restart_in_progress=False,
             )
         finally:
             self.lifecycle_lock.release()
@@ -1878,7 +2260,14 @@ echo "VISUAL_LOG=$LOG_FILE"
                 old_session = self.state.get("session_id", "")
                 world_stream_port = int(self.state.get("world_stream_port", 0) or find_free_port(8891, 8921))
             env = self._base_env(session_id=old_session or make_session_id(), world_stream_port=world_stream_port)
-            self._update_state(environment_state="stopping", environment_message="resetting sim", scenario_message="reset pending")
+            self._update_state(
+                environment_state="stopping",
+                environment_message="resetting sim",
+                scenario_message="reset pending",
+                world_stream_recovery_state="idle",
+                world_stream_restart_in_progress=False,
+            )
+            self._world_stream_stale_since_monotonic = 0.0
             self.scenario_cancel.set()
             self._terminate_process(self.active_scenario_proc)
             self._cleanup_scenario_processes()
@@ -1968,6 +2357,7 @@ pkill -f "gz gui" 2>/dev/null || true
         self.sim_gate_container_id = ""
         self.gate_stack_container_id = ""
         self.world_viewer_container_id = ""
+        self._world_stream_stale_since_monotonic = 0.0
 
     def _list_chasecar_containers(self) -> list[str]:
         proc = subprocess.run(
@@ -1986,14 +2376,25 @@ pkill -f "gz gui" 2>/dev/null || true
         try:
             if scenario.mode == "llm_proof":
                 self._clear_llm_proof_runtime_state()
+            if scenario.mode == "visit_mission":
+                self._clear_visit_mission_runtime_state()
             self._update_state(
                 scenario_state="running",
                 active_scenario=scenario.id,
                 scenario_message=f"running {scenario.id}",
                 latest_artifacts={},
                 motion_evidence=False,
-                proof_state="waiting" if scenario.mode == "llm_proof" else self.state.get("proof_state", "waiting"),
+                proof_state="waiting" if scenario.mode in {"llm_proof", "visit_mission"} else self.state.get("proof_state", "waiting"),
                 proof_verdict={},
+                mission_phase="setup" if scenario.mode == "visit_mission" else self.state.get("mission_phase", "idle"),
+                mission_status="running" if scenario.mode == "visit_mission" else self.state.get("mission_status", "idle"),
+                search_bias_active=False,
+                current_target_id="",
+                visit_index=0,
+                visited_targets=[],
+                remaining_targets=[],
+                last_visit_result={},
+                mission_verdict={},
             )
             self._record_operator_event(f"{scenario.label} scenario started.", category="scenario")
             self._write_operator_status(
@@ -2008,6 +2409,8 @@ pkill -f "gz gui" 2>/dev/null || true
                 result = self._run_m3_scenario(scenario)
             elif scenario.mode == "llm_proof":
                 result = self._run_llm_proof_scenario(scenario)
+            elif scenario.mode == "visit_mission":
+                result = self._run_visit_mission_scenario(scenario)
             else:
                 result = self._run_multi_target_scenario(scenario)
             artifacts = result.get("artifacts", {})
@@ -2019,6 +2422,15 @@ pkill -f "gz gui" 2>/dev/null || true
                 last_result=result.get("message", ""),
                 proof_state=result.get("proof_state", self.state.get("proof_state", "waiting")),
                 proof_verdict=result.get("proof_verdict", {}),
+                mission_phase=result.get("mission_phase", self.state.get("mission_phase", "idle")),
+                mission_status=result.get("mission_status", self.state.get("mission_status", "idle")),
+                search_bias_active=bool(result.get("search_bias_active", False)),
+                current_target_id=result.get("current_target_id", ""),
+                visit_index=int(result.get("visit_index", 0) or 0),
+                visited_targets=result.get("visited_targets", []),
+                remaining_targets=result.get("remaining_targets", []),
+                last_visit_result=result.get("last_visit_result", {}),
+                mission_verdict=result.get("mission_verdict", {}),
             )
             self._record_operator_event(result.get("message", f"{scenario.label} complete"), category="scenario")
             self._write_operator_status(
@@ -2031,6 +2443,10 @@ pkill -f "gz gui" 2>/dev/null || true
             if str(exc) != "scenario cancelled":
                 raise
             self._cleanup_scenario_processes()
+            if scenario.mode == "llm_proof":
+                self._clear_llm_proof_runtime_state()
+            if scenario.mode == "visit_mission":
+                self._clear_visit_mission_runtime_state()
             with self.state_lock:
                 environment_state = self.state.get("environment_state", "stopped")
             if environment_state == "environment_ready":
@@ -2041,7 +2457,10 @@ pkill -f "gz gui" 2>/dev/null || true
                     motion_evidence=False,
                     last_error="",
                     last_result="scenario cancelled",
-                    proof_state="failed" if scenario.mode == "llm_proof" else self.state.get("proof_state", "waiting"),
+                    proof_state="failed" if scenario.mode in {"llm_proof", "visit_mission"} else self.state.get("proof_state", "waiting"),
+                    mission_phase="failed" if scenario.mode == "visit_mission" else self.state.get("mission_phase", "idle"),
+                    mission_status="failed" if scenario.mode == "visit_mission" else self.state.get("mission_status", "idle"),
+                    search_bias_active=False,
                 )
             else:
                 self._update_state(
@@ -2052,6 +2471,9 @@ pkill -f "gz gui" 2>/dev/null || true
                     last_error="",
                     last_result="scenario cancelled",
                     proof_state="waiting",
+                    mission_phase="idle",
+                    mission_status="idle",
+                    search_bias_active=False,
                 )
             self._record_operator_event(f"{scenario.label} scenario cancelled.", category="scenario")
         except Exception as exc:
@@ -2351,6 +2773,82 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         self._write_scenario_result(scenario.id, payload)
         return payload
 
+    def _run_visit_mission_scenario(self, scenario: ScenarioDefinition) -> Dict[str, Any]:
+        scenario_dir = self._scenarios_dir() or ensure_dir(self._current_validation_dir() or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation"))
+        log_path = ensure_dir(scenario_dir) / f"{scenario.id}.log"
+        env = self._scenario_env(scenario)
+        command = [
+            sys.executable,
+            str(SCRIPTS_DIR / "visit_mission_runner.py"),
+            "--dashboard-url",
+            str(self.state.get("dashboard_url", f"http://127.0.0.1:{self.port}") or f"http://127.0.0.1:{self.port}"),
+            "--contract",
+            str(REPO_ROOT / "runtime" / "contracts" / "llm_control_contract.yaml"),
+            "--scenario-id",
+            scenario.id,
+            "--scenario-label",
+            scenario.label,
+            "--keep-environment",
+        ]
+
+        with log_path.open("w", encoding="utf-8") as handle:
+            proc = subprocess.Popen(
+                command,
+                cwd=str(REPO_ROOT),
+                env=env,
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            self.active_scenario_proc = proc
+            while proc.poll() is None:
+                if self.scenario_cancel.is_set():
+                    self._terminate_process(proc)
+                    raise RuntimeError("scenario cancelled")
+                time.sleep(1.0)
+
+        output = log_path.read_text(encoding="utf-8", errors="ignore") if log_path.exists() else ""
+        summary_path_raw = parse_marker(output, "VISIT_MISSION_SUMMARY=")
+        summary_path = Path(summary_path_raw) if summary_path_raw else None
+        summary = read_json(summary_path.with_name("summary.json")) if summary_path and summary_path.exists() else {}
+        verdict = read_json(summary_path) if summary_path and summary_path.exists() else {}
+        pass_flag = bool(verdict.get("pass")) if verdict else bool(summary.get("pass"))
+        mission_root = summary_path.parent if summary_path and summary_path.exists() else None
+        target_results = read_json(mission_root / "target_results.json") if mission_root is not None else {}
+        runtime = self._visit_mission_runtime_state()
+        artifacts = {
+            "visit_mission": str(mission_root) if mission_root is not None else "",
+            "mission_verdict": str(summary_path) if summary_path and summary_path.exists() else "",
+            "target_results": str(mission_root / "target_results.json") if mission_root is not None else "",
+            "log": str(log_path),
+        }
+        if proc.returncode not in {0, 2} and not verdict:
+            raise RuntimeError(output.strip() or "visit mission scenario failed")
+
+        payload = {
+            "scenario_id": scenario.id,
+            "phase": scenario.phase,
+            "pass": pass_flag,
+            "artifacts": artifacts,
+            "summary": summary,
+            "mission_verdict": verdict,
+            "proof_verdict": verdict,
+            "target_results": target_results,
+            "message": "Visit mission passed" if pass_flag else "Visit mission failed",
+            "motion_evidence": bool(pass_flag or runtime.get("last_visit_result")),
+            "proof_state": "completed" if pass_flag else "failed",
+            "mission_phase": str(runtime.get("mission_phase", "completed" if pass_flag else "failed") or ("completed" if pass_flag else "failed")),
+            "mission_status": "completed" if pass_flag else "failed",
+            "search_bias_active": bool(runtime.get("search_bias_active", False)),
+            "current_target_id": str(runtime.get("current_target_id", "") or ""),
+            "visit_index": int(runtime.get("visit_index", 0) or 0),
+            "visited_targets": list(runtime.get("visited_targets", [])) if isinstance(runtime.get("visited_targets"), list) else [],
+            "remaining_targets": list(runtime.get("remaining_targets", [])) if isinstance(runtime.get("remaining_targets"), list) else [],
+            "last_visit_result": runtime.get("last_visit_result", {}) if isinstance(runtime.get("last_visit_result"), dict) else {},
+        }
+        self._write_scenario_result(scenario.id, payload)
+        return payload
+
     def _find_latest_artifact_dir(self, root: Path, file_name: str) -> Optional[Path]:
         if not root.exists():
             return None
@@ -2376,6 +2874,7 @@ pkill -f "yolo_3d_to_nav2_bridge.py" 2>/dev/null || true
 if command -v gz >/dev/null 2>&1; then
   gz service -s "/world/{DEFAULT_WORLD_NAME}/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"{TARGET_MODEL_NAME_NAV2}\\" type: 2" >/dev/null 2>&1 || true
   gz service -s "/world/{DEFAULT_WORLD_NAME}/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"{TARGET_MODEL_NAME_SNAPSHOT}\\" type: 2" >/dev/null 2>&1 || true
+  gz service -s "/world/{DEFAULT_WORLD_NAME}/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"visit_mission_target\\" type: 2" >/dev/null 2>&1 || true
 fi
 """,
             )
@@ -2486,11 +2985,15 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _serve_file(self, path: Path, content_type: str) -> None:
+    def _serve_file(self, path: Path, content_type: str, *, no_cache: bool = False) -> None:
         body = path.read_bytes()
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        if no_cache:
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
         self.end_headers()
         self.wfile.write(body)
 
@@ -2513,6 +3016,8 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         controller = self.server.controller
         if path in {"/", "/dashboard.html"}:
             return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "browser_dashboard.html", "text/html; charset=utf-8")
+        if path in {"/beta", "/beta/", "/beta_dashboard.html"}:
+            return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "beta_dashboard.html", "text/html; charset=utf-8")
         if path == "/browser_dashboard.js":
             return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "browser_dashboard.js", "text/javascript; charset=utf-8")
         if path == "/api/state":
@@ -2533,7 +3038,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             content_type = "image/jpeg"
             if live_path.suffix.lower() == ".png":
                 content_type = "image/png"
-            return self._serve_file(live_path, content_type)
+            return self._serve_file(live_path, content_type, no_cache=True)
         return self._json_response(HTTPStatus.NOT_FOUND, {"error": f"unknown route: {path}"})
 
     def do_POST(self) -> None:  # noqa: N802

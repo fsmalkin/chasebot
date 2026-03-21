@@ -99,6 +99,7 @@ class ProofRunner:
         self.last_dispatch_monotonic = 0.0
         self.pose_history: list[dict[str, float]] = []
         self.search_dispatched = False
+        self.acquire_dispatched = False
         self.plan_or_track_dispatched = False
         self.target_locked_seen = False
         self.nav_activity_seen = False
@@ -106,7 +107,7 @@ class ProofRunner:
         self.best_visible_distance_m: float | None = None
         self.runtime_state: dict[str, Any] = {
             "running": False,
-            "scenario_id": "llm_turn_then_go_proof",
+            "scenario_id": str(args.scenario_id),
             "session_id": "",
             "proof_state": "waiting",
             "latest_operator_event": "",
@@ -280,7 +281,7 @@ class ProofRunner:
         output += ("\n" + (proc.stderr or b"").decode("utf-8", errors="replace")) if proc.stderr else ""
         return proc.returncode, output.strip()
 
-    def _spawn_target_behind_robot(self, state: dict[str, Any], proof_root: Path) -> dict[str, Any]:
+    def _spawn_target_relative_to_robot(self, state: dict[str, Any], proof_root: Path) -> dict[str, Any]:
         robot_pose = state.get("belief", {}).get("latest_robot_pose", {}) if isinstance(state.get("belief"), dict) else {}
         if not isinstance(robot_pose, dict) or robot_pose.get("x") is None or robot_pose.get("y") is None or robot_pose.get("yaw") is None:
             raise RuntimeError("Robot pose unavailable for proof target spawn.")
@@ -292,7 +293,7 @@ class ProofRunner:
         target_x = robot_x + (math.cos(robot_yaw) * local_x) - (math.sin(robot_yaw) * local_y)
         target_y = robot_y + (math.sin(robot_yaw) * local_x) + (math.cos(robot_yaw) * local_y)
         target_z = float(self.args.target_z_m)
-        turned_robot_yaw = normalize_angle(robot_yaw + math.pi)
+        turned_robot_yaw = robot_yaw if self.args.start_visible else normalize_angle(robot_yaw + math.pi)
         half_yaw = 0.5 * turned_robot_yaw
         robot_qz = math.sin(half_yaw)
         robot_qw = math.cos(half_yaw)
@@ -362,6 +363,8 @@ exit "$rc"
         log_path.write_text(output + "\n", encoding="utf-8")
         payload = {
             "generated_utc": utc_now(),
+            "scenario_id": str(self.args.scenario_id),
+            "start_visible": bool(self.args.start_visible),
             "robot_pose": {"x": robot_x, "y": robot_y, "yaw": robot_yaw},
             "robot_pose_after_turnaway": {"x": robot_x, "y": robot_y, "yaw": turned_robot_yaw},
             "target_world": {"x": target_x, "y": target_y, "z": target_z},
@@ -447,12 +450,13 @@ exit "$rc"
         distance_ok = False
         if self.first_visible_distance_m is not None and self.best_visible_distance_m is not None:
             distance_ok = self.best_visible_distance_m <= (self.first_visible_distance_m - 0.10)
+        search_ok = self.search_dispatched or bool(self.args.skip_search_requirement)
         return bool(
-            self.search_dispatched
+            search_ok
             and self.plan_or_track_dispatched
             and self.target_locked_seen
             and self.nav_activity_seen
-            and yaw_ok
+            and (yaw_ok or bool(self.args.skip_search_requirement))
             and (distance_ok or displacement_ok)
         )
 
@@ -467,12 +471,12 @@ exit "$rc"
         if not session_id:
             raise RuntimeError("Dashboard did not provide a session id.")
 
-        proof_root = ensure_dir(REPO_ROOT / "artifacts" / "session" / session_id / "llm_turn_then_go_proof" / current_utc_stamp())
+        proof_root = ensure_dir(REPO_ROOT / "artifacts" / "session" / session_id / self.args.artifact_kind / current_utc_stamp())
         decision_history_path = proof_root / "decision_history.jsonl"
         state_history_path = proof_root / "state_history.jsonl"
         self.runtime_state = {
             "running": True,
-            "scenario_id": "llm_turn_then_go_proof",
+            "scenario_id": str(self.args.scenario_id),
             "session_id": session_id,
             "proof_state": "waiting",
             "latest_operator_event": "",
@@ -485,11 +489,12 @@ exit "$rc"
         }
         self._event_keys = set()
         self._persist_runtime_state()
-        self._append_runtime_event("LLM Turn + Go scenario started.", category="scenario", key="scenario_started")
+        self._append_runtime_event(f"{self.args.scenario_label} scenario started.", category="scenario", key="scenario_started")
 
         try:
-            spawn_info = self._spawn_target_behind_robot(ready_state, proof_root)
-            self._append_runtime_event("Proof target spawned behind the robot.", key="target_spawned")
+            spawn_info = self._spawn_target_relative_to_robot(ready_state, proof_root)
+            spawn_message = "Proof target spawned in front of the robot." if self.args.start_visible else "Proof target spawned behind the robot."
+            self._append_runtime_event(spawn_message, key="target_spawned")
             try:
                 self._wait_for_robot_yaw(float(spawn_info["robot_pose_after_turnaway"]["yaw"]), timeout_s=20.0)
             except Exception as exc:
@@ -627,6 +632,8 @@ exit "$rc"
                                 )
                                 if decision.get("intent") == "search_for_target":
                                     self.search_dispatched = True
+                                if decision.get("intent") == "acquire_target":
+                                    self.acquire_dispatched = True
                                 if decision.get("intent") in {"plan_to_target", "track_target"}:
                                     self.plan_or_track_dispatched = True
 
@@ -653,11 +660,13 @@ exit "$rc"
             proof_verdict = {
                 "generated_utc": utc_now(),
                 "session_id": session_id,
+                "scenario_id": str(self.args.scenario_id),
                 "provider": self.provider.provider_name,
                 "model": self.provider.model_name,
                 "task_text": self.args.task,
                 "spawn_target": spawn_info,
                 "search_dispatched": self.search_dispatched,
+                "acquire_dispatched": self.acquire_dispatched,
                 "plan_or_track_dispatched": self.plan_or_track_dispatched,
                 "target_locked_seen": self.target_locked_seen,
                 "nav_activity_seen": self.nav_activity_seen,
@@ -683,7 +692,8 @@ exit "$rc"
             )
             summary = {
                 "generated_utc": utc_now(),
-                "type": "llm_turn_then_go_proof",
+                "type": str(self.args.artifact_kind),
+                "scenario_id": str(self.args.scenario_id),
                 "session_id": session_id,
                 "provider": self.provider.provider_name,
                 "model": self.provider.model_name,
@@ -715,6 +725,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default=os.environ.get("OPENAI_SUPERVISOR_MODEL") or "gpt-5-nano")
     parser.add_argument("--reasoning-effort", default=os.environ.get("OPENAI_SUPERVISOR_REASONING_EFFORT") or os.environ.get("OPENAI_REASONING_EFFORT") or DEFAULT_REASONING_EFFORT)
     parser.add_argument("--task", default=DEFAULT_TASK_TEXT)
+    parser.add_argument("--scenario-id", default="llm_turn_then_go_proof")
+    parser.add_argument("--scenario-label", default="LLM Turn + Go")
+    parser.add_argument("--artifact-kind", default="llm_turn_then_go_proof")
     parser.add_argument("--poll-s", type=float, default=1.0)
     parser.add_argument("--timeout-s", type=float, default=45.0)
     parser.add_argument("--dispatch-cooldown-s", type=float, default=2.0)
@@ -725,6 +738,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-z-m", type=float, default=0.05)
     parser.add_argument("--target-model-name", default=DEFAULT_TARGET_MODEL_NAME)
     parser.add_argument("--target-model-sdf", default=str(DEFAULT_TARGET_MODEL_SDF))
+    parser.add_argument("--start-visible", action="store_true")
+    parser.add_argument("--skip-search-requirement", action="store_true")
     parser.add_argument("--keep-environment", action="store_true")
     return parser.parse_args()
 
@@ -733,6 +748,7 @@ def main() -> int:
     args = parse_args()
     runner = ProofRunner(args)
     summary = runner.run()
+    print(f"LLM_BOUNDED_DEMO_SUMMARY={summary['proof_verdict_path']}")
     print(f"LLM_TURN_THEN_GO_PROOF_SUMMARY={summary['proof_verdict_path']}")
     print(f"LLM_TURN_THEN_GO_PROOF_PASS={summary['pass']}")
     print(json.dumps(summary, indent=2, sort_keys=True))

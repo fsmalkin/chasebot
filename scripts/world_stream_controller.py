@@ -165,7 +165,10 @@ class WorldStreamObserver(Node):
         self.latest_frame: Optional[np.ndarray] = None
         self.last_frame_wall_s = 0.0
         self.image_error = ""
-        self.frame_count = 0
+        self.received_frame_count = 0
+        self.rendered_frame_count = 0
+        self.latest_received_frame_seq = 0
+        self.last_rendered_frame_seq = 0
         self.nonblank_count = 0
         self.scene_content_count = 0
         self.robot_visible_count = 0
@@ -194,8 +197,27 @@ class WorldStreamObserver(Node):
 
     def _on_image(self, msg: Image) -> None:
         try:
-            self.latest_frame = image_msg_to_bgr(msg)
+            frame = image_msg_to_bgr(msg)
+            self.latest_frame = frame
             self.last_frame_wall_s = time.time()
+            self.received_frame_count += 1
+            self.latest_received_frame_seq = self.received_frame_count
+            latest_nonblank = image_is_nonblank(frame)
+            latest_scene = scene_has_content(frame, self.args.scene_std_min, self.args.scene_sat_min)
+            latest_robot_area = robot_blue_area(frame)
+            latest_target_area = target_red_area(frame)
+            latest_robot = latest_robot_area >= self.args.robot_min_area_px
+            latest_target = latest_target_area >= self.args.target_min_area_px
+            if latest_nonblank:
+                self.nonblank_count += 1
+            if latest_scene:
+                self.scene_content_count += 1
+            if latest_robot:
+                self.robot_visible_count += 1
+            if latest_target:
+                self.target_visible_count += 1
+            self.robot_max_area = max(self.robot_max_area, latest_robot_area)
+            self.target_max_area = max(self.target_max_area, latest_target_area)
             self.image_error = ""
         except Exception as exc:  # pragma: no cover - defensive path
             self.image_error = str(exc)
@@ -236,42 +258,45 @@ class WorldStreamObserver(Node):
             latest_robot = latest_robot_area >= self.args.robot_min_area_px
             latest_target = latest_target_area >= self.args.target_min_area_px
 
-            self.frame_count += 1
-            if latest_nonblank:
-                self.nonblank_count += 1
-            if latest_scene:
-                self.scene_content_count += 1
-            if latest_robot:
-                self.robot_visible_count += 1
-            if latest_target:
-                self.target_visible_count += 1
+        new_frame_ready = self.latest_frame is not None and self.latest_received_frame_seq > self.last_rendered_frame_seq
 
-            self.robot_max_area = max(self.robot_max_area, latest_robot_area)
-            self.target_max_area = max(self.target_max_area, latest_target_area)
-
+        if new_frame_ready:
+            self.rendered_frame_count += 1
             self._ensure_writer(frame)
             if self.writer is not None:
                 self.writer.write(frame)
             cv2.imwrite(str(self.screenshot_path), frame)
+            self.last_rendered_frame_seq = self.latest_received_frame_seq
 
         min_frames = 3
         target_required = self.args.require_target_visible and (truth_target_seen or not self.args.truth_state_path)
-        nonblank_ratio = float(self.nonblank_count / max(self.frame_count, 1))
-        scene_ratio = float(self.scene_content_count / max(self.frame_count, 1))
-        robot_ratio = float(self.robot_visible_count / max(self.frame_count, 1))
-        target_ratio = float(self.target_visible_count / max(self.frame_count, 1))
+        observed_frames = max(self.received_frame_count, 1)
+        nonblank_ratio = float(self.nonblank_count / observed_frames)
+        scene_ratio = float(self.scene_content_count / observed_frames)
+        robot_ratio = float(self.robot_visible_count / observed_frames)
+        target_ratio = float(self.target_visible_count / observed_frames)
         elapsed_s = max(time.monotonic() - self.started_monotonic_s, 1e-6)
         expected_frames = max(elapsed_s * max(self.args.fps, 1.0), 1.0)
-        frame_coverage_ratio = float(self.frame_count / expected_frames)
-        viewer_process_healthy = bool(self.frame_count >= min_frames and frame_coverage_ratio >= 0.40 and not self.image_error)
-        world_stream_nonblank = self.frame_count >= min_frames and nonblank_ratio >= 0.60
-        scene_content_ok = self.frame_count >= min_frames and scene_ratio >= 0.60
-        robot_visible_ok = self.frame_count >= min_frames and robot_ratio >= 0.50
-        target_visible_ok = (not target_required) or (self.frame_count >= min_frames and target_ratio >= 0.50)
+        frame_coverage_ratio = float(self.received_frame_count / expected_frames)
+        latest_frame_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.last_frame_wall_s)) if self.last_frame_wall_s > 0 else ""
+        latest_frame_age_s = max(now - self.last_frame_wall_s, 0.0) if self.last_frame_wall_s > 0 else None
+        viewer_client_alive = bool(self.received_frame_count >= min_frames and frame_coverage_ratio >= 0.40 and not self.image_error)
+        frames_stale = bool(
+            self.received_frame_count >= 1
+            and latest_frame_age_s is not None
+            and latest_frame_age_s > max(self.args.healthy_stale_seconds, 0.1)
+        )
+        viewer_process_healthy = bool(viewer_client_alive and not frames_stale)
+        world_stream_nonblank = self.received_frame_count >= min_frames and nonblank_ratio >= 0.60
+        scene_content_ok = self.received_frame_count >= min_frames and scene_ratio >= 0.60
+        robot_visible_ok = self.received_frame_count >= min_frames and robot_ratio >= 0.50
+        target_visible_ok = (not target_required) or (self.received_frame_count >= min_frames and target_ratio >= 0.50)
 
         failure_class = ""
         if not same_session_partition:
             failure_class = "world_stream_partition_mismatch"
+        elif frames_stale:
+            failure_class = "world_stream_stale"
         elif not viewer_process_healthy:
             failure_class = "world_stream_client_crash"
         elif not world_stream_nonblank:
@@ -305,7 +330,14 @@ class WorldStreamObserver(Node):
             "target_visible_ok": target_visible_ok,
             "failure_class": failure_class,
             "image_topic": self.args.image_topic,
-            "frame_count": self.frame_count,
+            "frame_count": self.received_frame_count,
+            "received_frame_count": self.received_frame_count,
+            "rendered_frame_count": self.rendered_frame_count,
+            "latest_frame_wall_s": round(self.last_frame_wall_s, 6) if self.last_frame_wall_s > 0 else None,
+            "latest_frame_utc": latest_frame_utc,
+            "latest_frame_age_s": round(latest_frame_age_s, 3) if latest_frame_age_s is not None else None,
+            "frames_stale": frames_stale,
+            "healthy_stale_seconds": round(max(self.args.healthy_stale_seconds, 0.1), 3),
             "elapsed_s": round(elapsed_s, 3),
             "frame_coverage_ratio": round(frame_coverage_ratio, 6),
             "nonblank_ratio": round(nonblank_ratio, 6),
@@ -374,6 +406,13 @@ def main() -> int:
         "scene_content_ok": False,
         "robot_visible_ok": False,
         "target_visible_ok": False,
+        "received_frame_count": 0,
+        "rendered_frame_count": 0,
+        "latest_frame_wall_s": None,
+        "latest_frame_utc": "",
+        "latest_frame_age_s": None,
+        "frames_stale": False,
+        "healthy_stale_seconds": round(max(args.healthy_stale_seconds, 0.1), 3),
         "screenshot_path": str(node.screenshot_path),
         "video_path": str(node.video_path),
     }

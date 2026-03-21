@@ -84,6 +84,10 @@ def _contract_descriptions(contract: Dict[str, Any]) -> Dict[str, str]:
 
 def _ready_intents_from_digest(digest: Dict[str, Any], contract: Dict[str, Any]) -> List[str]:
     allowed = set(allowed_intent_names(contract))
+    policy = digest.get("policy") if isinstance(digest.get("policy"), dict) else {}
+    policy_allowed = [str(item).strip() for item in list(policy.get("allowed_intents", [])) if str(item).strip() in allowed]
+    if policy_allowed:
+        return policy_allowed
     ready: List[str] = []
     for item in list(digest.get("frozen_action_space", [])):
         if not isinstance(item, dict):
