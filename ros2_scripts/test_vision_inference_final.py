@@ -68,12 +68,12 @@ def main():
     print("  - mono3d: enabled (ball detection)")
     print("  - segmentation: disabled")  
     print("  - depth: disabled")
-    print("  - ONNX model: /home/macro2/ros2_ws/models/mono3d_yolox_576_768.onnx")
+    print("  - ONNX model: ~/ros2_ws/models/mono3d_yolox_576_768.onnx")
     print("  - Camera topic: /d415/color/image_raw")
     print("  - Camera info: /d415/color/camera_info")
     print("  - Output: /vision_inference/detections")
     
-    vi_cmd = f'''powershell -Command "wsl -d Ubuntu-22.04 -- bash -c 'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch ros2_vision_inference detect_seg_depth.launch.xml mono3d_flag:=true mono3d_ckpt_file:=/home/macro2/ros2_ws/models/mono3d_yolox_576_768.onnx seg_flag:=false monodepth_flag:=false camera_topic:=/d415/color/image_raw camera_param:=/d415/color/camera_info output_bbox_topic:=/vision_inference/detections'"'''
+    vi_cmd = f'''powershell -Command "wsl -d Ubuntu-22.04 -- bash -c 'cd ~/ros2_ws && source /opt/ros/humble/setup.bash && source install/setup.bash && ros2 launch ros2_vision_inference detect_seg_depth.launch.xml mono3d_flag:=true mono3d_ckpt_file:=~/ros2_ws/models/mono3d_yolox_576_768.onnx seg_flag:=false monodepth_flag:=false camera_topic:=/d415/color/image_raw camera_param:=/d415/color/camera_info output_bbox_topic:=/vision_inference/detections'"'''
     
     vi_proc = subprocess.Popen(vi_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     

@@ -1,0 +1,1123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chasecar · Beta Dashboard</title>
+<style>
+:root {
+  --bg:    #0c100f;
+  --surf:  #131a18;
+  --card:  #182019;
+  --hover: #1e2a27;
+  --line:  rgba(255,255,255,0.07);
+  --line2: rgba(255,255,255,0.12);
+  --ink:   #ddeae4;
+  --dim:   #6b8880;
+  --faint: #2d3e3b;
+  --accent:#5ecfa3;
+  --ag:    rgba(94,207,163,0.12);
+  --warn:  #f0b44f;
+  --wg:    rgba(240,180,79,0.12);
+  --bad:   #f4756e;
+  --bdg:   rgba(244,117,110,0.12);
+  --r:     10px;
+  --r2:    14px;
+  --sans:  "Segoe UI",system-ui,sans-serif;
+  --mono:  "Cascadia Code","Consolas",monospace;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.5;overflow:hidden}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:var(--faint);border-radius:4px}
+
+/* ── shell ── */
+.shell{display:grid;grid-template-rows:52px 1fr;height:100vh}
+.body{position:relative;overflow:hidden}
+.pane{position:absolute;inset:0;display:none;overflow:hidden}
+.pane.on{display:flex;flex-direction:column}
+
+/* ── topbar ── */
+.topbar{
+  display:flex;align-items:center;gap:12px;padding:0 18px;
+  background:var(--surf);border-bottom:1px solid var(--line);
+}
+.t-logo{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.t-sep{width:1px;height:20px;background:var(--line2);flex-shrink:0}
+.t-status{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:background .3s,box-shadow .3s}
+.dot.ok  {background:var(--accent);box-shadow:0 0 7px var(--accent)}
+.dot.warn{background:var(--warn);  box-shadow:0 0 7px var(--warn)}
+.dot.bad {background:var(--bad);   box-shadow:0 0 7px var(--bad)}
+.dot.idle{background:var(--faint); box-shadow:none}
+.t-phrase{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t-sub{font-size:12px;color:var(--dim);white-space:nowrap;flex-shrink:0;margin-left:4px}
+.tabs{display:flex;gap:2px;margin-left:auto;flex-shrink:0}
+.tab{padding:6px 16px;border-radius:8px;font-size:13px;font-weight:600;color:var(--dim);transition:background 120ms,color 120ms}
+.tab.on{background:var(--card);color:var(--ink)}
+.tab:hover:not(.on){color:var(--ink)}
+
+/* ── feed grid ── */
+.w-feeds{display:grid;grid-template-columns:1.3fr 1fr;gap:1px;flex:1;background:var(--line);min-height:0}
+.feed{display:flex;flex-direction:column;background:var(--card);min-height:0}
+.feed-top{display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--line);flex-shrink:0}
+.feed-name{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;transition:background .3s,color .3s}
+.badge.ok  {background:var(--ag); color:var(--accent)}
+.badge.warn{background:var(--wg); color:var(--warn)}
+.badge.bad {background:var(--bdg);color:var(--bad)}
+.badge.idle{background:var(--faint);color:var(--bg)}
+.feed-img{flex:1;background:#080c0a;position:relative;overflow:hidden;min-height:0}
+.feed-img img{width:100%;height:100%;object-fit:contain;display:block}
+.feed-placeholder{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;color:var(--faint);font-size:11px;pointer-events:none;
+}
+.feed-placeholder svg{width:36px;height:36px;stroke:var(--faint);fill:none;stroke-width:1.2;stroke-linecap:round}
+
+/* ── proof bar ── */
+.proof-bar{
+  flex-shrink:0;background:var(--surf);border-top:1px solid var(--line);
+  padding:13px 18px;display:flex;align-items:center;gap:24px;
+}
+.stages{display:flex;align-items:flex-start;flex:1;gap:0}
+.st{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;min-width:0}
+.st-conn{flex:1;flex-shrink:0;height:2px;background:var(--faint);margin-top:12px;transition:background .4s}
+.st-conn.done{background:rgba(94,207,163,.35)}
+.st-node{
+  width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+  font-size:11px;font-weight:700;border:2px solid var(--faint);color:var(--faint);
+  background:var(--bg);position:relative;z-index:1;transition:all .25s;flex-shrink:0;
+}
+.st.done .st-node{border-color:var(--accent);color:var(--accent);background:var(--ag)}
+.st.now  .st-node{border-color:var(--accent);background:var(--accent);color:var(--bg);box-shadow:0 0 12px rgba(94,207,163,.4)}
+.st.fail .st-node{border-color:var(--bad);color:var(--bad)}
+.st-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);white-space:nowrap;transition:color .25s}
+.st.done .st-label{color:var(--accent)}
+.st.now  .st-label{color:var(--accent)}
+.st.fail .st-label{color:var(--bad)}
+.proof-meta{display:flex;gap:20px;flex-shrink:0}
+.pm{display:flex;flex-direction:column;gap:1px}
+.pm-k{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
+.pm-v{font-size:13px;font-weight:600;font-family:var(--mono);transition:color .25s}
+.pm-v.ok  {color:var(--accent)}
+.pm-v.warn{color:var(--warn)}
+.pm-v.bad {color:var(--bad)}
+.pm-v.dim {color:var(--dim)}
+
+/* ── watch main layout ── */
+.watch-main{display:flex;flex:1;min-height:0}
+.watch-feeds-col{display:flex;flex-direction:column;flex:1;min-width:0}
+
+/* ── log panel ── */
+.watch-log{width:240px;flex-shrink:0;border-left:1px solid var(--line);background:var(--surf);display:flex;flex-direction:column;overflow:hidden}
+.wl-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--line);flex-shrink:0}
+.wl-title{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.wl-count{font-size:10px;color:var(--faint);font-family:var(--mono)}
+.wl-entries{flex:1;overflow-y:auto;padding:4px 0}
+.wl-row{display:flex;align-items:flex-start;gap:7px;padding:5px 12px;font-size:11px;font-family:var(--mono);cursor:default}
+.wl-row:hover{background:var(--card)}
+.wl-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:3px;background:var(--faint)}
+.wl-dot.ok  {background:var(--accent)}
+.wl-dot.warn{background:var(--warn)}
+.wl-dot.bad {background:var(--bad)}
+.wl-t{color:var(--faint);flex-shrink:0;white-space:nowrap}
+.wl-m{color:var(--dim);word-break:break-word;line-height:1.4}
+.wl-empty{padding:20px 14px;text-align:center;font-size:11px;color:var(--faint)}
+
+/* ── scenarios dropdown ── */
+.dropdown-wrap{position:relative}
+.dropdown-menu{
+  position:absolute;bottom:calc(100% + 6px);left:0;min-width:180px;
+  background:var(--surf);border:1px solid var(--line2);border-radius:var(--r);
+  padding:4px;display:none;z-index:50;
+  box-shadow:0 -8px 24px rgba(0,0,0,.45);
+}
+.dropdown-menu.open{display:block}
+.dm-item{display:block;width:100%;text-align:left;padding:7px 11px;border-radius:7px;font-size:13px;color:var(--ink)}
+.dm-item:hover{background:var(--hover)}
+.dm-item:disabled{opacity:.35;cursor:not-allowed}
+.dm-sep{height:1px;background:var(--line);margin:3px 4px}
+
+/* ── action bar ── */
+.watch-actions{flex-shrink:0;background:var(--surf);border-top:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:6px}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:7px 14px;border-radius:var(--r);font-size:12px;font-weight:600;transition:filter .12s,opacity .12s,background .12s}
+.btn:active{filter:brightness(.88)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn-ghost{border:1px solid var(--line2);color:var(--dim)}
+.btn-ghost:hover:not(:disabled){background:var(--card);color:var(--ink)}
+.btn-default{background:var(--card);border:1px solid var(--line2);color:var(--ink)}
+.btn-default:hover:not(:disabled){background:var(--hover)}
+.btn-primary{background:var(--accent);color:var(--bg);font-weight:700}
+.btn-primary:hover:not(:disabled){filter:brightness(1.08)}
+.btn-danger{background:var(--bdg);color:var(--bad);border:1px solid rgba(244,117,110,.22)}
+.btn-danger:hover:not(:disabled){background:rgba(244,117,110,.22)}
+.sep-v{width:1px;height:22px;background:var(--line2);margin:0 3px;flex-shrink:0}
+
+/* ── DRIVE ── */
+#drive{flex-direction:row}
+.drive-left{width:340px;flex-shrink:0;border-right:1px solid var(--line);background:var(--surf);display:flex;flex-direction:column;overflow:hidden}
+.drive-right{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.panel-head{padding:14px 18px 12px;border-bottom:1px solid var(--line);flex-shrink:0}
+.panel-title{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.panel-sub{font-size:12px;color:var(--dim);margin-top:3px}
+.facts{flex:1;overflow-y:auto;padding:10px}
+.fact{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;border-radius:var(--r);border:1px solid var(--line);background:var(--card);margin-bottom:6px}
+.fact-label{font-size:13px;color:var(--dim)}
+.fact-value{font-size:14px;font-weight:700;font-family:var(--mono);transition:color .25s}
+.fact-value.ok  {color:var(--accent)}
+.fact-value.warn{color:var(--warn)}
+.fact-value.bad {color:var(--bad)}
+.fact-value.dim {color:var(--dim)}
+.llm-verdict{margin:0 10px 10px;padding:12px 14px;border-radius:var(--r);background:var(--ag);border:1px solid rgba(94,207,163,.2)}
+.lv-label{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:4px}
+.lv-intent{font-size:14px;font-weight:700;font-family:var(--mono);color:var(--accent)}
+.lv-reason{font-size:12px;color:var(--dim);margin-top:2px;word-break:break-word}
+.intents{flex:1;padding:14px;display:flex;flex-direction:column;gap:7px;overflow-y:auto}
+.intent{
+  display:flex;align-items:center;gap:13px;padding:13px 15px;border-radius:var(--r2);
+  background:var(--card);border:1px solid var(--line);text-align:left;
+  transition:background .1s,border-color .1s;color:var(--ink);
+}
+.intent:hover{background:var(--hover);border-color:var(--line2)}
+.intent.suggested{border-color:rgba(94,207,163,.3);background:rgba(94,207,163,.06)}
+.intent.suggested:hover{background:rgba(94,207,163,.1)}
+.intent.danger-intent:hover{background:var(--bdg)}
+.i-icon{width:34px;height:34px;border-radius:9px;background:var(--surf);display:grid;place-items:center;flex-shrink:0}
+.i-icon svg{width:15px;height:15px;fill:none;stroke:var(--dim);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.intent.suggested .i-icon{background:var(--ag)}
+.intent.suggested .i-icon svg{stroke:var(--accent)}
+.intent.danger-intent .i-icon svg{stroke:var(--bad)}
+.i-body{flex:1;min-width:0}
+.i-name{font-size:13px;font-weight:700}
+.i-desc{font-size:11px;color:var(--dim);margin-top:1px}
+.intent.danger-intent .i-name{color:var(--bad)}
+.i-tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;flex-shrink:0;background:var(--ag);color:var(--accent);border:1px solid rgba(94,207,163,.2)}
+.drive-response{flex-shrink:0;border-top:1px solid var(--line);background:var(--surf);padding:10px 16px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim);min-height:40px}
+.dr-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.dr-dot.warn{background:var(--warn)}
+.dr-dot.bad{background:var(--bad)}
+
+/* ── INSPECT ── */
+#inspect{overflow-y:auto}
+.inspect-body{padding:14px;display:flex;flex-direction:column;gap:9px;max-width:900px;margin:0 auto;width:100%}
+.layer{background:var(--surf);border:1px solid var(--line);border-radius:var(--r2);overflow:hidden}
+.layer-hd{display:flex;align-items:center;gap:10px;padding:12px 15px;cursor:pointer;user-select:none;transition:background .1s}
+.layer-hd:hover{background:var(--hover)}
+.l-num{width:21px;height:21px;border-radius:50%;flex-shrink:0;background:var(--faint);display:grid;place-items:center;font-size:10px;font-weight:800;color:var(--bg)}
+.l-name{font-size:13px;font-weight:700;flex:1}
+.l-summary{font-size:12px;color:var(--dim)}
+.l-chevron{color:var(--faint);font-size:11px;transition:transform .15s;flex-shrink:0}
+.layer.open .l-chevron{transform:rotate(90deg)}
+.layer.open .layer-hd{border-bottom:1px solid var(--line)}
+.layer-body{display:none;padding:13px 15px}
+.layer.open .layer-body{display:block}
+.kv-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:0}
+.kv-cell{background:var(--card);padding:8px 11px}
+.kv-cell.full{grid-column:1/-1}
+.kv-k{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);margin-bottom:2px}
+.kv-v{font-size:12px;font-family:var(--mono);transition:color .2s;word-break:break-all}
+.kv-v.ok  {color:var(--accent)}
+.kv-v.warn{color:var(--warn)}
+.kv-v.bad {color:var(--bad)}
+.kv-v.dim {color:var(--dim)}
+.log-list{margin-top:11px;display:flex;flex-direction:column;gap:1px}
+.log-row{display:flex;gap:9px;padding:4px 7px;border-radius:5px;font-size:11px;font-family:var(--mono)}
+.log-row:hover{background:var(--card)}
+.lr-t{color:var(--faint);flex-shrink:0;min-width:60px}
+.lr-lvl{flex-shrink:0;min-width:42px;font-weight:700;text-transform:uppercase}
+.lr-m{color:var(--dim);word-break:break-word;flex:1}
+.log-row.ok   .lr-lvl{color:var(--accent)}
+.log-row.warn .lr-lvl{color:var(--warn)}
+.log-row.bad  .lr-lvl{color:var(--bad)}
+.log-row.info .lr-lvl{color:var(--dim)}
+.log-row.ok   .lr-m{color:var(--ink)}
+
+/* ── error banner ── */
+.err-banner{position:fixed;bottom:16px;right:16px;background:var(--bdg);color:var(--bad);border:1px solid rgba(244,117,110,.3);padding:8px 14px;border-radius:var(--r);font-size:12px;z-index:100;display:none}
+
+/* ── pulse ── */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.pulsing{animation:pulse 1.6s infinite}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <span class="t-logo">Chasecar</span>
+    <div class="t-sep"></div>
+    <div class="t-status">
+      <span class="dot idle" id="sdot"></span>
+      <span class="t-phrase" id="sphrase">Connecting…</span>
+      <span class="t-sub" id="ssub"></span>
+    </div>
+    <div class="tabs">
+      <button class="tab on" onclick="go('watch')">Watch</button>
+      <button class="tab"    onclick="go('drive')">Drive</button>
+      <button class="tab"    onclick="go('inspect')">Inspect</button>
+    </div>
+  </div>
+
+  <div class="body">
+
+    <!-- ══════════════ WATCH ══════════════ -->
+    <div class="pane on" id="watch">
+
+      <div class="watch-main">
+        <div class="watch-feeds-col">
+
+          <div class="w-feeds">
+            <!-- World surface -->
+            <div class="feed">
+              <div class="feed-top">
+                <span class="feed-name">World surface</span>
+                <span class="badge idle" id="badge-world">—</span>
+              </div>
+              <div class="feed-img">
+                <div class="feed-placeholder" id="ph-world">
+                  <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2"/></svg>
+                  <span>Waiting for stream</span>
+                </div>
+                <img id="img-world" alt="" style="display:none" onload="imgOk('world')" onerror="imgFail('world')">
+              </div>
+            </div>
+            <!-- YOLO debug -->
+            <div class="feed">
+              <div class="feed-top">
+                <span class="feed-name">YOLO debug</span>
+                <span class="badge idle" id="badge-yolo">—</span>
+              </div>
+              <div class="feed-img">
+                <div class="feed-placeholder" id="ph-yolo">
+                  <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg>
+                  <span>Waiting for detections</span>
+                </div>
+                <img id="img-yolo" alt="" style="display:none" onload="imgOk('yolo')" onerror="imgFail('yolo')">
+              </div>
+            </div>
+          </div>
+
+          <!-- Proof stages -->
+          <div class="proof-bar">
+            <div class="stages" id="stages"></div>
+            <div class="proof-meta">
+              <div class="pm"><span class="pm-k">Distance</span><span class="pm-v dim" id="pm-dist">—</span></div>
+              <div class="pm"><span class="pm-k">Trend</span><span class="pm-v dim" id="pm-trend">—</span></div>
+              <div class="pm"><span class="pm-k">Motion</span><span class="pm-v dim" id="pm-motion">—</span></div>
+            </div>
+          </div>
+
+        </div><!-- /watch-feeds-col -->
+
+        <!-- Log panel -->
+        <div class="watch-log">
+          <div class="wl-head">
+            <span class="wl-title">Events</span>
+            <span class="wl-count" id="wl-count"></span>
+          </div>
+          <div class="wl-entries" id="wl-entries">
+            <div class="wl-empty">No events yet</div>
+          </div>
+        </div>
+
+      </div><!-- /watch-main -->
+
+      <!-- Action bar — simplified -->
+      <div class="watch-actions">
+        <button class="btn btn-ghost"   id="btn-start"    onclick="post('/api/env/start',{})">Start env</button>
+        <button class="btn btn-ghost"   id="btn-stop-env" onclick="post('/api/env/stop',{})">Stop env</button>
+        <button class="btn btn-ghost"   id="btn-reset"    onclick="post('/api/sim/reset',{})">↺ Reset</button>
+        <div class="sep-v"></div>
+        <button class="btn btn-primary" id="btn-llm"      onclick="runScenario('llm_turn_then_go_proof')">▶&nbsp;&nbsp;LLM Turn + Go</button>
+        <div class="dropdown-wrap" id="sc-wrap">
+          <button class="btn btn-default" id="btn-scenarios" onclick="toggleScenarios(event)">Scenarios ▾</button>
+          <div class="dropdown-menu" id="sc-menu">
+            <button class="dm-item" onclick="pickScenario('m3_single_target')">M3 Single</button>
+            <button class="dm-item" onclick="pickScenario('m3_center')">M3 Center</button>
+            <button class="dm-item" onclick="pickScenario('m3_left')">M3 Left</button>
+            <button class="dm-item" onclick="pickScenario('m3_right')">M3 Right</button>
+            <div class="dm-sep"></div>
+            <button class="dm-item" onclick="pickScenario('visit_single_ball_proof')">Visit 1-ball</button>
+            <button class="dm-item" onclick="pickScenario('visit_three_ball_sequence')">Visit 3-ball</button>
+            <button class="dm-item" onclick="pickScenario('multi_target_rehearsal')">Multi-target</button>
+          </div>
+        </div>
+        <div style="margin-left:auto">
+          <button class="btn btn-danger" id="btn-stop-sc" onclick="post('/api/scenario/stop',{})">■&nbsp;&nbsp;Stop</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════ DRIVE ══════════════ -->
+    <div class="pane" id="drive">
+      <div class="drive-left">
+        <div class="panel-head">
+          <div class="panel-title">What the LLM sees</div>
+          <div class="panel-sub" id="drive-sub">3 facts · same as the model</div>
+        </div>
+        <div class="facts" id="facts-list">
+          <!-- Populated by JS -->
+        </div>
+        <div class="llm-verdict">
+          <div class="lv-label">LLM would choose</div>
+          <div class="lv-intent" id="lv-intent">—</div>
+          <div class="lv-reason" id="lv-reason">waiting for state…</div>
+        </div>
+      </div>
+
+      <div class="drive-right">
+        <div class="panel-head">
+          <div class="panel-title">Your action</div>
+          <div class="panel-sub">Choose an intent to dispatch — same options the LLM has</div>
+        </div>
+        <div class="intents" id="intents-list">
+          <!-- Populated by JS -->
+        </div>
+        <div class="drive-response" id="drive-resp">
+          <span class="dr-dot dim" id="dr-dot"></span>
+          <span id="dr-msg">No dispatch yet this session.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════ INSPECT ══════════════ -->
+    <div class="pane" id="inspect">
+      <div class="inspect-body">
+
+        <div class="layer open" id="layer-l1">
+          <div class="layer-hd" onclick="tog(this)">
+            <div class="l-num">L1</div>
+            <span class="l-name">What the robot is doing</span>
+            <span class="l-summary" id="l1-summary">—</span>
+            <span class="l-chevron">▶</span>
+          </div>
+          <div class="layer-body">
+            <div class="kv-grid" id="kv-l1"></div>
+          </div>
+        </div>
+
+        <div class="layer open" id="layer-l2">
+          <div class="layer-hd" onclick="tog(this)">
+            <div class="l-num">L2</div>
+            <span class="l-name">LLM decision layer</span>
+            <span class="l-summary" id="l2-summary">—</span>
+            <span class="l-chevron">▶</span>
+          </div>
+          <div class="layer-body">
+            <div class="kv-grid" id="kv-l2"></div>
+            <div class="log-list" id="log-l2"></div>
+          </div>
+        </div>
+
+        <div class="layer" id="layer-l3">
+          <div class="layer-hd" onclick="tog(this)">
+            <div class="l-num">L3</div>
+            <span class="l-name">Raw signals</span>
+            <span class="l-summary" style="color:var(--faint)">perception · belief · outcome — click to expand</span>
+            <span class="l-chevron">▶</span>
+          </div>
+          <div class="layer-body">
+            <div class="kv-grid" id="kv-l3"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+<div class="err-banner" id="err-banner"></div>
+
+<script>
+// ─────────────────────────────────────────────
+//  State
+// ─────────────────────────────────────────────
+let S = null;
+let activeTab = 'watch';
+let prevDistM = null;
+const STREAM_RECOVER_COOLDOWN_MS = 1500;
+const streamUi = {
+  world: createStreamUiState(),
+  yolo: createStreamUiState()
+};
+
+function createStreamUiState() {
+  return {
+    pendingRequestId: 0,
+    lastSuccessfulLoadMs: 0,
+    lastRetryMs: 0,
+    hadError: false
+  };
+}
+
+// ─────────────────────────────────────────────
+//  API helpers
+// ─────────────────────────────────────────────
+async function fetchJson(url) {
+  const r = await fetch(url, { cache:'no-store' });
+  if (!r.ok) throw new Error(`${r.status} ${url}`);
+  return r.json();
+}
+
+async function post(url, body) {
+  try {
+    const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+    const data = await r.json().catch(() => ({}));
+    setDriveResp(r.ok ? 'ok' : 'bad', url.split('/').pop() + (r.ok ? ' → accepted' : ' → ' + (data.error||r.status)));
+    return data;
+  } catch(e) {
+    setDriveResp('bad', 'request failed: ' + e.message);
+  }
+}
+
+async function runScenario(id) { await post('/api/scenario/run', { scenario_id: id }); }
+
+async function dispatchIntent(intent) {
+  setDriveResp('warn', 'dispatching ' + intent + '…');
+  await post('/api/intents/dispatch', { intent });
+}
+
+// ─────────────────────────────────────────────
+//  Poll
+// ─────────────────────────────────────────────
+async function poll() {
+  try {
+    S = await fetchJson('/api/state');
+    hideErr();
+    renderAll();
+  } catch(e) {
+    showErr('API unreachable — ' + e.message);
+    setTopbar('idle', 'Disconnected', '');
+  }
+}
+
+function renderAll() {
+  renderTopbar();
+  if (activeTab === 'watch')   renderWatch();
+  if (activeTab === 'drive')   renderDrive();
+  if (activeTab === 'inspect') renderInspect();
+}
+
+// ─────────────────────────────────────────────
+//  Derived helpers
+// ─────────────────────────────────────────────
+const STAGE_LABELS = ['Init','Spawn','Search','Approach','Done'];
+
+// proof_state → stage index (0=Init 1=Spawn 2=Search 3=Approach 4=Done)
+function stageForState(s) {
+  const scenario = s.scenario_state || 'idle';
+  const ps       = (s.proof_state   || '').toLowerCase();
+  const verdict  = s.proof_verdict  || {};
+
+  if (verdict.pass === true || ps === 'completed') return 5; // past end = all done
+  if (scenario !== 'running') return 0;                      // Init is "now"
+  if (ps === 'searching')                          return 2;
+  if (ps === 'target_locked' || ps === 'moving')   return 3;
+  return 1;                                                  // running + waiting = Spawn
+}
+
+function isFailed(s) {
+  const verdict = s.proof_verdict || {};
+  return s.proof_state === 'failed' || verdict.pass === false;
+}
+
+function deriveTopbar(s) {
+  const scenario = s.scenario_state || 'idle';
+  const ps       = (s.proof_state   || '').toLowerCase();
+  const verdict  = s.proof_verdict  || {};
+  const active   = s.active_scenario || '';
+
+  if (verdict.pass === true  || ps === 'completed') return { dot:'ok',   phrase:'Proof passed ✓',      sub: active };
+  if (verdict.pass === false || ps === 'failed')    return { dot:'bad',  phrase:'Proof failed',         sub: active };
+  if (scenario === 'running') {
+    if (ps === 'searching')                         return { dot:'warn', phrase:'Searching for ball',   sub: active };
+    if (ps === 'target_locked' || ps === 'moving')  return { dot:'warn', phrase:'Approaching target',   sub: active };
+    if (ps === 'waiting')                           return { dot:'warn', phrase:'Waiting for first turn',sub: active };
+    return { dot:'ok', phrase: s.status_text || 'Running', sub: active };
+  }
+  if (!s.control_plane_ready) return { dot:'idle', phrase:'Control plane offline', sub:'' };
+  return { dot:'idle', phrase: s.status_text || 'Ready', sub:'' };
+}
+
+function fmtDist(m) {
+  if (m == null || m === '') return '—';
+  const n = parseFloat(m);
+  return isNaN(n) ? '—' : n.toFixed(2) + ' m';
+}
+
+function distClass(m) {
+  const n = parseFloat(m);
+  if (isNaN(n)) return 'dim';
+  return n < 0.8 ? 'ok' : n < 1.5 ? 'warn' : 'bad';
+}
+
+function visClass(ratio) {
+  const n = parseFloat(ratio);
+  if (isNaN(n)) return 'dim';
+  return n > 0.65 ? 'ok' : n > 0.3 ? 'warn' : 'bad';
+}
+
+function yoloBadgeText(s) {
+  const r = s.target_visible_ratio ?? s.perception?.target_visible_ratio;
+  const n = parseFloat(r);
+  if (isNaN(n) || n === 0) return { cls:'idle', txt:'no detect' };
+  const conf = n.toFixed(2);
+  return n > 0.65
+    ? { cls:'ok',   txt:`strong · ${conf}` }
+    : n > 0.3
+    ? { cls:'warn', txt:`partial · ${conf}` }
+    : { cls:'bad',  txt:`weak · ${conf}` };
+}
+
+// ─────────────────────────────────────────────
+//  Topbar
+// ─────────────────────────────────────────────
+function sessionActive(s) {
+  return Boolean(s?.session_id) && (s?.environment_state || 'stopped') !== 'stopped';
+}
+
+function preloadFeedImage(which, basePath) {
+  if (!basePath) return;
+  const ui = streamUi[which];
+  const requestId = ++ui.pendingRequestId;
+  const url = `${basePath}?t=${Date.now()}`;
+  const probe = new Image();
+  probe.onload = () => {
+    if (requestId !== ui.pendingRequestId) return;
+    const img = document.getElementById('img-' + which);
+    const ph = document.getElementById('ph-' + which);
+    img.src = url;
+    img.style.display = 'block';
+    ph.style.display = 'none';
+    ui.hadError = false;
+    ui.lastSuccessfulLoadMs = Date.now();
+  };
+  probe.onerror = () => {
+    if (requestId !== ui.pendingRequestId) return;
+    ui.hadError = true;
+    if (!ui.lastSuccessfulLoadMs) {
+      const img = document.getElementById('img-' + which);
+      const ph = document.getElementById('ph-' + which);
+      img.style.display = 'none';
+      ph.style.display = '';
+    }
+  };
+  probe.src = url;
+}
+
+function reconnectStream(which, basePath) {
+  const ui = streamUi[which];
+  const now = Date.now();
+  if (!basePath || (now - ui.lastRetryMs) < STREAM_RECOVER_COOLDOWN_MS) return;
+  ui.lastRetryMs = now;
+  preloadFeedImage(which, basePath);
+}
+
+function worldBadgeState(s) {
+  const ui = streamUi.world;
+  const frameAge = Number(s.world_stream_frame_age_s);
+  const apiStale = Boolean(s.world_stream_frames_stale);
+  if (apiStale) {
+    return {
+      cls:'warn',
+      txt:'stale',
+      title: Number.isFinite(frameAge) ? `Last frame ${frameAge.toFixed(1)}s ago` : 'World stream is stale'
+    };
+  }
+  if (ui.hadError || (sessionActive(s) && s.world_stream_ready === false && !s.world_stream_failure_class)) {
+    return {
+      cls:'warn',
+      txt:'reconnecting',
+      title: Number.isFinite(frameAge) ? `Frame age ${frameAge.toFixed(1)}s` : 'Retrying world stream'
+    };
+  }
+  if (s.world_stream_failure_class) {
+    return { cls:'bad', txt:'error', title:s.world_stream_failure_class };
+  }
+  if (s.world_stream_ready !== false) {
+    return {
+      cls:'ok',
+      txt:'sim live',
+      title: Number.isFinite(frameAge) ? `Last frame ${frameAge.toFixed(1)}s ago` : 'World stream live'
+    };
+  }
+  return { cls:'idle', txt:'-', title:'' };
+}
+
+function setTopbar(dot, phrase, sub) {
+  const d = document.getElementById('sdot');
+  d.className = 'dot ' + dot + (dot === 'warn' ? ' pulsing' : '');
+  document.getElementById('sphrase').textContent = phrase;
+  document.getElementById('ssub').textContent    = sub ? '· ' + sub : '';
+}
+
+function renderTopbar() {
+  const { dot, phrase, sub } = deriveTopbar(S);
+  setTopbar(dot, phrase, sub);
+}
+
+// ─────────────────────────────────────────────
+//  Watch
+// ─────────────────────────────────────────────
+function renderWatch() {
+  renderImages();
+  renderStages();
+  renderMetrics();
+  renderButtons();
+  renderWatchLog();
+}
+
+function renderWatchLog() {
+  const events = (S.recent_operator_events || []).slice().reverse();
+  const el  = document.getElementById('wl-entries');
+  const cnt = document.getElementById('wl-count');
+  cnt.textContent = events.length ? events.length + ' events' : '';
+  if (!events.length) {
+    el.innerHTML = '<div class="wl-empty">No events yet</div>';
+    return;
+  }
+  el.innerHTML = events.map(ev => {
+    const t   = (ev.timestamp_utc || '').split('T')[1]?.slice(0, 8) || '—';
+    const lvl = ev.level || 'info';
+    const cls = lvl === 'ok' ? 'ok' : lvl === 'warn' ? 'warn' : (lvl === 'error' || lvl === 'bad') ? 'bad' : '';
+    return `<div class="wl-row">
+      <span class="wl-dot ${cls}"></span>
+      <span class="wl-t">${t}</span>
+      <span class="wl-m">${ev.message || ev.msg || ''}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderImages() {
+  const live = S.live_paths || {};
+
+  // World
+  const imgW = document.getElementById('img-world');
+  const phW  = document.getElementById('ph-world');
+  const bW   = document.getElementById('badge-world');
+  if (live.world_stream) {
+    preloadFeedImage('world', live.world_stream);
+    const badge = worldBadgeState(S);
+    bW.className = 'badge ' + badge.cls;
+    bW.textContent = badge.txt;
+    bW.title = badge.title;
+    if (badge.txt === 'stale' || badge.txt === 'reconnecting') {
+      reconnectStream('world', live.world_stream);
+    }
+    if (!streamUi.world.lastSuccessfulLoadMs && !streamUi.world.hadError) {
+      imgW.style.display = 'none';
+      phW.style.display = '';
+    }
+  } else {
+    imgW.style.display = 'none';
+    phW.style.display  = '';
+    bW.className = 'badge idle';
+    bW.title = '';
+    bW.textContent = '—';
+  }
+
+  // YOLO
+  const imgY = document.getElementById('img-yolo');
+  const phY  = document.getElementById('ph-yolo');
+  const bY   = document.getElementById('badge-yolo');
+  if (live.yolo_debug) {
+    preloadFeedImage('yolo', live.yolo_debug);
+    if (!streamUi.yolo.lastSuccessfulLoadMs && !streamUi.yolo.hadError) {
+      imgY.style.display = 'none';
+      phY.style.display = '';
+    }
+    const { cls, txt } = yoloBadgeText(S);
+    bY.className = 'badge ' + cls;
+    bY.textContent = txt;
+    bY.title = streamUi.yolo.hadError ? 'Retrying YOLO stream' : '';
+    if (streamUi.yolo.hadError) {
+      reconnectStream('yolo', live.yolo_debug);
+    }
+  } else {
+    imgY.style.display = 'none';
+    phY.style.display  = '';
+    bY.className = 'badge idle';
+    bY.title = '';
+    bY.textContent = '—';
+  }
+}
+
+function imgOk(which) {
+  const ui = streamUi[which];
+  ui.hadError = false;
+  ui.lastSuccessfulLoadMs = Date.now();
+  const ph = document.getElementById('ph-' + which);
+  if (ph) ph.style.display = 'none';
+}
+
+function imgFail(which) {
+  const img = document.getElementById('img-' + which);
+  const ph  = document.getElementById('ph-' + which);
+  const ui = streamUi[which];
+  ui.hadError = true;
+  if (!ui.lastSuccessfulLoadMs) {
+    if (img) img.style.display = 'none';
+    if (ph)  ph.style.display  = '';
+  }
+}
+
+function renderStages() {
+  const nowIdx   = stageForState(S);  // 0-5; 5 = all complete
+  const allDone  = nowIdx >= STAGE_LABELS.length;
+  const failed   = isFailed(S);
+  const container = document.getElementById('stages');
+  container.innerHTML = '';
+
+  STAGE_LABELS.forEach((label, i) => {
+    const st = document.createElement('div');
+    st.className = 'st';
+
+    if (allDone || i < nowIdx)        st.className += ' done';
+    else if (i === nowIdx && failed)  st.className += ' fail';
+    else if (i === nowIdx)            st.className += ' now';
+
+    const node = document.createElement('div');
+    node.className = 'st-node';
+    node.textContent = (allDone || i < nowIdx) ? '✓' : (i === nowIdx && failed) ? '✗' : String(i + 1);
+
+    const lbl = document.createElement('span');
+    lbl.className = 'st-label';
+    lbl.textContent = label;
+
+    st.appendChild(node);
+    st.appendChild(lbl);
+    container.appendChild(st);
+
+    if (i < STAGE_LABELS.length - 1) {
+      const conn = document.createElement('div');
+      conn.className = 'st-conn' + ((allDone || i < nowIdx) ? ' done' : '');
+      container.appendChild(conn);
+    }
+  });
+}
+
+function renderMetrics() {
+  const dist = S.belief?.distance_to_target ?? S.perception?.distance_to_target ?? null;
+  const distEl = document.getElementById('pm-dist');
+  distEl.textContent = fmtDist(dist);
+  distEl.className   = 'pm-v ' + distClass(dist);
+
+  // Trend: compare to previous reading
+  const trendEl = document.getElementById('pm-trend');
+  if (dist != null && prevDistM != null) {
+    const delta = parseFloat(dist) - prevDistM;
+    if (Math.abs(delta) < 0.02)  { trendEl.textContent = '→ steady';  trendEl.className = 'pm-v dim'; }
+    else if (delta < 0)           { trendEl.textContent = '↓ closing'; trendEl.className = 'pm-v ok'; }
+    else                          { trendEl.textContent = '↑ moving away'; trendEl.className = 'pm-v warn'; }
+  } else {
+    trendEl.textContent = '—';
+    trendEl.className = 'pm-v dim';
+  }
+  if (dist != null) prevDistM = parseFloat(dist);
+
+  const motion = S.motion_evidence ?? S.brain?.motion_evidence ?? null;
+  const motionEl = document.getElementById('pm-motion');
+  if (motion === true)  { motionEl.textContent = 'active'; motionEl.className = 'pm-v ok'; }
+  else if (motion === false) { motionEl.textContent = 'stopped'; motionEl.className = 'pm-v bad'; }
+  else                       { motionEl.textContent = '—'; motionEl.className = 'pm-v dim'; }
+}
+
+function renderButtons() {
+  const c      = S.controls || {};
+  const running = (S.scenario_state || 'idle') === 'running';
+  const canRun  = !running && (c.can_run_scenario ?? true);
+
+  setDisabled('btn-start',     !(c.can_start_env ?? true));
+  setDisabled('btn-stop-env',  !(c.can_stop_env  ?? true));
+  setDisabled('btn-reset',     !(c.can_reset_sim ?? true));
+  setDisabled('btn-llm',       !canRun);
+  setDisabled('btn-scenarios', !canRun);
+  setDisabled('btn-stop-sc',   !running);
+  document.querySelectorAll('#sc-menu .dm-item').forEach(el => { el.disabled = !canRun; });
+}
+
+// ─────────────────────────────────────────────
+//  Drive
+// ─────────────────────────────────────────────
+
+const INTENT_META = {
+  acquire_target: {
+    desc: 'Lock onto target and begin visual tracking',
+    icon: `<circle cx="10" cy="10" r="7"/><circle cx="10" cy="10" r="2.5" fill="currentColor" stroke="none"/>`,
+    danger: false
+  },
+  plan_to_target: {
+    desc: 'Send a nav2 goal directly to the target position',
+    icon: `<path d="M4 16 L10 4 L16 16"/><path d="M7 11 h6"/>`,
+    danger: false
+  },
+  track_target: {
+    desc: 'Continuous reactive follow — holds on target',
+    icon: `<circle cx="10" cy="10" r="6"/><path d="M10 4 v12 M4 10 h12"/>`,
+    danger: false
+  },
+  search: {
+    desc: 'Begin systematic search sweep',
+    icon: `<circle cx="10" cy="10" r="5"/><path d="M10 1v4 M10 15v4 M1 10h4 M15 10h4"/>`,
+    danger: false
+  },
+  abort: {
+    desc: 'Cancel current goal and hold position',
+    icon: `<rect x="5" y="5" width="10" height="10" rx="2"/>`,
+    danger: true
+  },
+  safe_stop: {
+    desc: 'Full stop — cuts all motion commands',
+    icon: `<path d="M5 5 L15 15 M15 5 L5 15"/>`,
+    danger: true
+  },
+};
+
+const DEFAULT_INTENTS = ['acquire_target','plan_to_target','track_target','abort','safe_stop'];
+
+function renderDrive() {
+  renderFacts();
+  renderLLMVerdict();
+  renderIntents();
+}
+
+function renderFacts() {
+  const p = S.perception || {};
+  const b = S.belief    || {};
+
+  const visRatio  = S.target_visible_ratio ?? p.target_visible_ratio;
+  const visBool   = S.true_target_seen ?? p.target_visible;
+  const dist      = b.distance_to_target ?? p.distance_to_target;
+  const navGoal   = b.nav_goal_in_flight  ?? null;
+  const moving    = S.motion_evidence     ?? null;
+
+  function visText() {
+    if (visBool === true) {
+      const n = parseFloat(visRatio);
+      return isNaN(n) ? 'yes' : (n > 0.65 ? 'yes · strong' : 'partial · ' + n.toFixed(2));
+    }
+    if (visBool === false) return 'not visible';
+    return '—';
+  }
+  function visClass_() {
+    if (visBool === true) {
+      const n = parseFloat(visRatio);
+      return isNaN(n) ? 'ok' : (n > 0.65 ? 'ok' : 'warn');
+    }
+    if (visBool === false) return 'bad';
+    return 'dim';
+  }
+
+  const facts = [
+    { label:'Target visible', value: visText(),       cls: visClass_() },
+    { label:'Distance',       value: fmtDist(dist),   cls: distClass(dist) },
+    { label:'Nav goal active',value: navGoal == null ? '—' : navGoal ? 'yes' : 'no',
+                                                        cls: navGoal ? 'ok' : navGoal === false ? 'dim' : 'dim' },
+    { label:'Robot moving',   value: moving == null ? '—' : moving ? 'yes' : 'stopped',
+                                                        cls: moving ? 'ok' : moving === false ? 'bad' : 'dim' },
+  ];
+
+  const el = document.getElementById('facts-list');
+  el.innerHTML = facts.map(f => `
+    <div class="fact">
+      <span class="fact-label">${f.label}</span>
+      <span class="fact-value ${f.cls}">${f.value}</span>
+    </div>`).join('');
+}
+
+function renderLLMVerdict() {
+  const llm    = S.llm_supervisor || {};
+  const intent = llm.last_intent || S.last_intent || S.decision?.last_intent || '—';
+  const reason = llm.last_reason  || llm.reason   || S.decision?.last_reason || '';
+
+  document.getElementById('lv-intent').textContent = intent;
+  document.getElementById('lv-reason').textContent = reason || 'no reason available';
+}
+
+function renderIntents() {
+  const llmPick     = S.llm_supervisor?.last_intent || S.last_intent || '';
+  const available   = S.decision?.available_intents || DEFAULT_INTENTS;
+  const intentsMap  = available.map(name => name.trim()).filter(Boolean);
+
+  const el = document.getElementById('intents-list');
+  el.innerHTML = intentsMap.map(name => {
+    const meta      = INTENT_META[name] || { desc: '', icon: `<circle cx="10" cy="10" r="6"/>`, danger: false };
+    const suggested = name === llmPick && !meta.danger;
+    const cls       = meta.danger ? 'intent danger-intent' : suggested ? 'intent suggested' : 'intent';
+    const tag       = suggested ? `<span class="i-tag">LLM pick</span>` : '';
+    return `
+      <button class="${cls}" onclick="dispatchIntent('${name}')">
+        <div class="i-icon"><svg viewBox="0 0 20 20">${meta.icon}</svg></div>
+        <div class="i-body">
+          <div class="i-name">${name}</div>
+          <div class="i-desc">${meta.desc}</div>
+        </div>
+        ${tag}
+      </button>`;
+  }).join('');
+}
+
+function setDriveResp(level, msg) {
+  const dot = document.getElementById('dr-dot');
+  const m   = document.getElementById('dr-msg');
+  dot.className = 'dr-dot ' + (level === 'ok' ? '' : level === 'warn' ? 'warn' : 'bad');
+  m.innerHTML   = msg;
+}
+
+// ─────────────────────────────────────────────
+//  Inspect
+// ─────────────────────────────────────────────
+function renderInspect() {
+  renderL1();
+  renderL2();
+  renderL3();
+}
+
+function kv(cells) {
+  return cells.map(([k,v,cls]) => `
+    <div class="kv-cell${cls==='full'?' full':''}">
+      <div class="kv-k">${k}</div>
+      <div class="kv-v ${cls&&cls!=='full'?cls:''}">${v??'—'}</div>
+    </div>`).join('');
+}
+
+function renderL1() {
+  const ps       = S.proof_state || '—';
+  const scenario = S.scenario_state || '—';
+  const brain    = S.brain || {};
+  const verdict  = S.proof_verdict || {};
+
+  document.getElementById('l1-summary').textContent =
+    ps !== '—' ? `${ps} · ${scenario}` : scenario;
+  document.getElementById('kv-l1').innerHTML = kv([
+    ['Proof state',    ps,                       colorProofState(ps)],
+    ['Scenario',       S.active_scenario||scenario, colorScenario(scenario)],
+    ['Target locked',  fmt(brain.target_locked), colorBool(brain.target_locked)],
+    ['Goal in flight', fmt(S.belief?.nav_goal_in_flight), colorBool(S.belief?.nav_goal_in_flight)],
+    ['Search state',   brain.search_state||'—',  'dim'],
+    ['Proof verdict',  verdict.pass==null ? '—' : verdict.pass ? 'pass' : 'fail',
+                                                  verdict.pass ? 'ok' : verdict.pass===false ? 'bad' : 'dim'],
+    ['Unsafe reasons', brain.unsafe_reasons||S.unsafe_reasons||'none', 'dim'],
+    ['Status text',    S.status_text||'—',        'dim'],
+  ]);
+}
+
+function colorProofState(ps) {
+  if (ps === 'completed') return 'ok';
+  if (ps === 'failed')    return 'bad';
+  if (ps === 'searching' || ps === 'target_locked' || ps === 'moving') return 'warn';
+  return 'dim';
+}
+
+function renderL2() {
+  const llm = S.llm_supervisor || {};
+  const dec = S.decision       || {};
+
+  document.getElementById('l2-summary').textContent =
+    `last: ${llm.last_intent || dec.last_intent || '—'} · gate: ${llm.preview_gate || '—'}`;
+
+  document.getElementById('kv-l2').innerHTML = kv([
+    ['Last intent',    llm.last_intent || dec.last_intent || '—', 'ok'],
+    ['Preview gate',   llm.preview_gate || '—',                   colorGate(llm.preview_gate)],
+    ['Provider/model', [llm.provider,llm.model].filter(Boolean).join(' / ')||'—', 'dim'],
+    ['LLM status',     llm.status || '—',                         'dim'],
+    ['Suppression',    llm.suppression_reason || dec.suppression || 'none', 'dim'],
+    ['Available',      (dec.available_intents||[]).join(', ')||'—','dim'],
+  ]);
+
+  const events = S.recent_operator_events || [];
+  document.getElementById('log-l2').innerHTML = events.slice(0,12).map(ev => {
+    const t   = ev.timestamp_utc ? ev.timestamp_utc.split('T')[1]?.slice(0,8) : '—';
+    const cls = ev.level === 'ok' ? 'ok' : ev.level === 'warn' ? 'warn' : ev.level === 'error' ? 'bad' : 'info';
+    return `<div class="log-row ${cls}">
+      <span class="lr-t">${t}</span>
+      <span class="lr-lvl">${ev.level||'info'}</span>
+      <span class="lr-m">${ev.message||ev.msg||''}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderL3() {
+  const p = S.perception || {};
+  const b = S.belief     || {};
+  const o = S.outcome    || {};
+  const pose = b.robot_pose;
+
+  document.getElementById('kv-l3').innerHTML = kv([
+    ['Detection topic',  fmt(S.true_target_seen ?? p.target_visible), colorBool(S.true_target_seen ?? p.target_visible)],
+    ['Visible ratio',    fmt(p.target_visible_ratio ?? S.target_visible_ratio), visClass(p.target_visible_ratio ?? S.target_visible_ratio)],
+    ['Truth alignment',  fmt(S.truth_alignment_ok),                 colorBool(S.truth_alignment_ok)],
+    ['Detection world',  fmtVec(p.detection_world),                 'dim'],
+    ['Truth target',     fmtVec(p.true_target_world),               'dim'],
+    ['Robot pose',       fmtPose(pose),                             'dim'],
+    ['Distance',         fmtDist(b.distance_to_target ?? p.distance_to_target), distClass(b.distance_to_target ?? p.distance_to_target)],
+    ['cmd_vel recent',   fmt(o.cmd_vel_recent ?? S.motion_evidence), colorBool(o.cmd_vel_recent ?? S.motion_evidence)],
+    ['Nav goal recent',  fmt(b.nav_goal_in_flight),                 colorBool(b.nav_goal_in_flight)],
+    ['Last feedback',    S.last_feedback || o.last_feedback || '—', 'dim'],
+    ['Frames (raw)',     fmt(S.raw_frame_count),                    'dim'],
+    ['Frames (debug)',   fmt(S.debug_frame_count),                  'dim'],
+  ]);
+}
+
+function fmt(v)            { if (v == null) return '—'; return String(v); }
+function fmtVec(v)         { if (!v) return '—'; if (Array.isArray(v)) return v.map(n=>n.toFixed(3)).join(', '); return String(v); }
+function fmtPose(p)        { if (!p) return '—'; const {x,y,yaw} = p; return `${x?.toFixed(2)||'?'}, ${y?.toFixed(2)||'?'} · ${yaw?.toFixed(0)||'?'}°`; }
+function colorBool(v)      { if (v == null) return 'dim'; return v ? 'ok' : 'bad'; }
+function colorPhase(p)     { if (!p||p==='—') return 'dim'; if (p.includes('done')||p.includes('success')) return 'ok'; if (p.includes('fail')) return 'bad'; return 'warn'; }
+function colorScenario(s)  { if (s==='running') return 'ok'; if (s==='idle') return 'dim'; return 'warn'; }
+function colorGate(g)      { if (!g||g==='—') return 'dim'; return g==='ready'?'ok':g==='waiting'?'warn':'bad'; }
+
+// ─────────────────────────────────────────────
+//  UI helpers
+// ─────────────────────────────────────────────
+function go(id) {
+  document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('on', ['watch','drive','inspect'][i]===id));
+  document.getElementById(id).classList.add('on');
+  activeTab = id;
+  if (S) renderAll();
+}
+
+function tog(hd) { hd.parentElement.classList.toggle('open'); }
+
+function setDisabled(id, disabled) {
+  const el = document.getElementById(id);
+  if (el) el.disabled = disabled;
+}
+
+function showErr(msg) {
+  const el = document.getElementById('err-banner');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideErr() {
+  document.getElementById('err-banner').style.display = 'none';
+}
+
+// ─────────────────────────────────────────────
+//  Scenarios dropdown
+// ─────────────────────────────────────────────
+function toggleScenarios(e) {
+  e.stopPropagation();
+  document.getElementById('sc-menu').classList.toggle('open');
+}
+function pickScenario(id) {
+  document.getElementById('sc-menu').classList.remove('open');
+  runScenario(id);
+}
+document.addEventListener('click', () => {
+  const m = document.getElementById('sc-menu');
+  if (m) m.classList.remove('open');
+});
+
+// ─────────────────────────────────────────────
+//  Boot
+// ─────────────────────────────────────────────
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>

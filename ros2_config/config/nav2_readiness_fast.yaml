@@ -1,0 +1,37 @@
+metadata:
+  version: 1.0
+  status_topic: /navigate_to_pose/_action/status
+  cmd_vel_topic_primary: /jetbot_base_controller/cmd_vel
+  cmd_vel_topic_secondary: /cmd_vel
+  odom_topic: /odom
+  detection_topic: /yolo/ball_position_3d
+  rosout_topic: /rosout
+  world_name: yolo_test_world
+  model_sdf: ros2_config/frisbee_target_ball.sdf
+  target_model_name: uat_nav2_target
+  spawn_world: {x: 1.2, y: 0.0, z: 0.05}
+  bridge_mode: managed
+
+defaults:
+  warmup_s: 0.0
+  duration_s: 90.0
+  sample_interval_s: 0.1
+  min_cmd_vel_hz: 1.0
+  max_cmd_vel_gap_s: 4.0
+  min_detection_hz: 1.0
+  max_detection_gap_s: 15.0
+
+thresholds:
+  goal_accept_rate_min: 0.80
+  goal_success_rate_min: 0.60
+  cmd_vel_publish_stability_min: 0.60
+  tracking_continuity_score_min: 0.50
+  target_distance_improvement_min_m: 0.12
+  target_distance_retained_progress_min_m: 0.05
+  target_distance_improvement_ratio_min: 0.10
+  target_final_distance_max_m: 0.85
+  target_away_ratio_max: 0.65
+  target_trend_slope_max_mps: -0.001
+  target_min_samples: 18
+  planner_errors_max: 1
+  controller_errors_max: 3

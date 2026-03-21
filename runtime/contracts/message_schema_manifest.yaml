@@ -1,0 +1,33 @@
+version: 1
+interfaces:
+  topics:
+    - name: /yolo/ball_position
+      type: geometry_msgs/msg/Point
+      producer: chasecar_perception
+      consumer: chasecar_nav
+    - name: /yolo/confidence
+      type: std_msgs/msg/Float32
+      producer: chasecar_perception
+      consumer: chasecar_nav
+    - name: /yolo/ball_position_3d
+      type: geometry_msgs/msg/PointStamped
+      producer: chasecar_3d_extractor
+      consumer: chasecar_nav
+    - name: /cmd_vel
+      type: geometry_msgs/msg/Twist
+      producer: chasecar_nav
+      consumer: simulator_or_robot
+    - name: /odom
+      type: nav_msgs/msg/Odometry
+      producer: simulator_or_robot
+      consumer: chasecar_nav
+  actions:
+    - name: /navigate_to_pose
+      type: nav2_msgs/action/NavigateToPose
+      producer: chasecar_nav
+      consumer: nav2_stack
+  services:
+    - name: /lifecycle_manager_navigation/manage_nodes
+      type: nav2_msgs/srv/ManageLifecycleNodes
+      producer: chasecar_orchestrator
+      consumer: nav2_stack

@@ -1,0 +1,67 @@
+metadata:
+  version: 1.0
+  world_name: yolo_test_world
+  model_sdf: ros2_config/frisbee_target_ball.sdf
+  target_model_name: orientation_ball_target
+  cleanup_model_names:
+    - orientation_ball_target
+  truth_frame: d415_camera_link
+  detection_topic: /yolo/ball_position_3d
+  rgb_topic: /d415/color/image_raw
+  debug_topic: /yolo/debug_image
+  odom_topic: /odom
+
+defaults:
+  timeout_s: 20.0
+  cleanup_between_scenarios: true
+  spawn_strategy: set_pose
+  remove_timeout_s: 3.0
+  set_pose_timeout_s: 3.0
+  set_pose_retries: 4
+  set_pose_retry_sleep_s: 0.25
+  respawn_on_set_pose_failure: true
+  post_spawn_settle_s: 0.75
+  stabilization_samples: 8
+  stabilization_window_s: 1.5
+  stale_after_s: 1.0
+  warmup_s: 2.0
+  side_threshold_m: 0.08
+  heading_tolerance_rad: 0.35
+  expected_heading_delta_rad: 0.0
+
+thresholds:
+  side_accuracy_min: 0.90
+  heading_accuracy_min: 0.90
+  frame_accuracy_min: 1.00
+  snapshot_coverage_min: 1.00
+
+scenarios:
+  - id: orient_center_reference
+    spawn_world: {x: 1.50, y: 0.00, z: 0.05}
+    expected_side: center
+    expected_heading_delta_rad: 0.0
+    timeout_s: 20.0
+
+  - id: orient_left_offset
+    spawn_world: {x: 1.50, y: 0.25, z: 0.05}
+    expected_side: left
+    expected_heading_delta_rad: 0.0
+    timeout_s: 20.0
+
+  - id: orient_right_offset
+    spawn_world: {x: 1.50, y: -0.25, z: 0.05}
+    expected_side: right
+    expected_heading_delta_rad: 0.0
+    timeout_s: 20.0
+
+  - id: orient_far_center
+    spawn_world: {x: 2.20, y: 0.00, z: 0.05}
+    expected_side: center
+    expected_heading_delta_rad: 0.0
+    timeout_s: 20.0
+
+  - id: orient_behind_absent
+    spawn_world: {x: -1.20, y: 0.00, z: 0.05}
+    expected_side: none
+    expected_heading_delta_rad: 0.0
+    timeout_s: 12.0

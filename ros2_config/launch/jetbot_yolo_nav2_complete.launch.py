@@ -2,7 +2,7 @@
 
 import os
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription, TimerAction, ExecuteProcess
+from launch.actions import IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
@@ -10,6 +10,26 @@ from launch.substitutions import LaunchConfiguration
 from launch.actions import DeclareLaunchArgument
 
 def generate_launch_description():
+    package_share = get_package_share_directory('chasebot_description')
+    world_file = os.path.join(
+        package_share,
+        'ros2_config',
+        'worlds',
+        'simple_golf_ball_world.world',
+    )
+    urdf_file = os.path.join(
+        package_share,
+        'ros2_config',
+        'urdf',
+        'ros2_jetbot.urdf',
+    )
+    nav2_params = os.path.join(
+        package_share,
+        'ros2_config',
+        'params',
+        'nav2_params_simple.yaml',
+    )
+
     # Declare launch arguments
     use_sim_time = LaunchConfiguration('use_sim_time', default='true')
     
@@ -20,7 +40,7 @@ def generate_launch_description():
             os.path.join(get_package_share_directory('gazebo_ros'), 'launch', 'gazebo.launch.py')
         ]),
         launch_arguments={
-            'world': '/mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_config/worlds/simple_golf_ball_world.world',
+            'world': world_file,
             'verbose': 'true'
         }.items()
     )
@@ -30,7 +50,7 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         name='robot_state_publisher',
-        arguments=['/mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_config/urdf/ros2_jetbot.urdf'],
+        arguments=[urdf_file],
         parameters=[{'use_sim_time': use_sim_time}]
     )
     
@@ -42,7 +62,7 @@ def generate_launch_description():
                 package='gazebo_ros',
                 executable='spawn_entity.py',
                 arguments=[
-                    '-file', '/mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_config/urdf/ros2_jetbot.urdf',
+                    '-file', urdf_file,
                     '-entity', 'jetbot',
                     '-x', '0',
                     '-y', '0',
@@ -109,7 +129,7 @@ def generate_launch_description():
                 ]),
                 launch_arguments={
                     'use_sim_time': 'true',
-                    'params_file': '/mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_config/params/nav2_params_simple.yaml'
+                    'params_file': nav2_params
                 }.items()
             )
         ]
@@ -119,11 +139,9 @@ def generate_launch_description():
     yolo_to_nav_bridge = TimerAction(
         period=12.0,  # Wait for Nav2 to be ready
         actions=[
-            ExecuteProcess(
-                cmd=[
-                    'python3',
-                    '/mnt/c/Users/arsen_j7sbcbk/Desktop/chasebot/ros2_scripts/ros2_yolo_to_nav_goal.py'
-                ],
+            Node(
+                package='chasebot_description',
+                executable='yolo_3d_to_nav2_bridge.py',
                 output='screen'
             )
         ]

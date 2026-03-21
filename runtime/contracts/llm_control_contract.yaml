@@ -1,0 +1,66 @@
+version: 9
+contract_status: frozen_pre_llm
+frozen_on_utc: "2026-03-11T00:00:00Z"
+freeze_basis:
+  campaign_summary: artifacts/session/20260309T063355Z/campaign_run_summary.json
+  campaign_trend_report: artifacts/session/20260309T063355Z/pre_llm_campaign_trend.json
+  soak_summary: artifacts/session/20260309T073224Z/pre_llm_headless_summary.json
+  rc_readiness_report: artifacts/session/20260309T063355Z/rc/readiness_report.json
+  adversarial_summary: artifacts/session/20260303T061055Z/adversarial_headless_summary.json
+  adapter_smoke_summary: artifacts/session/20260312T001204Z/brain_adapter_smoke_summary.json
+  parity_summary: artifacts/session/20260309T071255Z/parity_summary.json
+  message_schema_manifest_version: 1
+  isaac_bridge_allowlist_version: 1
+
+intents:
+  - name: search_for_target
+    description: "Rotate in place until the requested target becomes visible and locked."
+    required_args:
+      - target_class
+    default_timeout_s: 30
+  - name: acquire_target
+    description: "Acquire and lock a target from current perception stream."
+    required_args:
+      - target_class
+    default_timeout_s: 5
+  - name: plan_to_target
+    description: "Plan navigation toward current tracked target."
+    required_args:
+      - approach_distance_m
+    default_timeout_s: 10
+  - name: track_target
+    description: "Maintain continuous pursuit using refreshed 3D updates."
+    required_args: []
+    default_timeout_s: 30
+  - name: abort
+    description: "Cancel active navigation and tracking actions."
+    required_args: []
+    default_timeout_s: 2
+  - name: safe_stop
+    description: "Immediate controlled stop with deadman override."
+    required_args: []
+    default_timeout_s: 1
+
+safety_contract:
+  deadman_timeout_s: 0.5
+  max_linear_velocity_mps: 0.6
+  max_angular_velocity_radps: 2.5
+  command_staleness_limit_s: 0.25
+  require_goal_freshness_s: 1.5
+
+transport:
+  command_topic: /chasecar/brain/intent
+  feedback_topic: /chasecar/brain/feedback
+  emergency_stop_topic: /chasecar/safety/stop
+
+low_level_boundary:
+  topics_consumed:
+    - /yolo/ball_position_3d
+    - /odom
+  topics_published:
+    - /cmd_vel
+    - /chasecar/brain/feedback
+  actions:
+    - /navigate_to_pose
+  services:
+    - /lifecycle_manager_navigation/manage_nodes

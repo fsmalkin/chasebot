@@ -20,6 +20,12 @@ jetbot_base_controller:
     # Wheel separation and radius
     wheel_separation: 0.16    # 16cm between wheels
     wheel_radius: 0.032       # 3.2cm radius
+    wheel_separation_multiplier: 1.0
+    # The JetBot SDF wheel joints rotate with the opposite sign from the controller's
+    # default assumption. Negative radius multipliers bring commanded motion, odom,
+    # and Gazebo world motion back into parity.
+    left_wheel_radius_multiplier: -1.0
+    right_wheel_radius_multiplier: -1.0
     
     # Control parameters
     publish_cmd: true

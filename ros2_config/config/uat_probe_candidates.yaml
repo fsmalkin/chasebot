@@ -1,0 +1,77 @@
+metadata:
+  version: 1.0
+  world_name: yolo_test_world
+  model_sdf: ros2_config/frisbee_target_ball.sdf
+  target_model_name: uat_ball_target
+  cleanup_model_names:
+    - red_ball_forward
+    - blue_ball_left
+    - yellow_ball_right
+    - white_ball_behind
+    - green_ball_behind
+  truth_frame: d415_camera_link
+  detection_topic: /yolo/ball_position_3d
+
+defaults:
+  timeout_s: 12.0
+  cleanup_between_scenarios: true
+  post_spawn_settle_s: 0.75
+  stabilization_samples: 3
+  stabilization_window_s: 2.5
+  stale_after_s: 2.0
+  warmup_s: 2.0
+
+thresholds:
+  detection_success_rate_min: 0.0
+  mean_xy_error_max_m: 999.0
+  p95_xy_error_max_m: 999.0
+  max_timeout_s: 999.0
+
+navigation_thresholds:
+  approach_success_rate_min: 0.0
+  median_final_distance_max_m: 999.0
+  hard_failure_crashes_max: 999
+  nav_observe_timeout_s: 1.0
+
+scenarios:
+  - id: probe_left_x1p5_y0p15
+    spawn_world: {x: 1.50, y: 0.15, z: 0.05}
+    truth_camera: {x_m: -0.15, z_m: 1.50}
+  - id: probe_left_x1p5_y0p20
+    spawn_world: {x: 1.50, y: 0.20, z: 0.05}
+    truth_camera: {x_m: -0.20, z_m: 1.50}
+  - id: probe_left_x1p5_y0p25
+    spawn_world: {x: 1.50, y: 0.25, z: 0.05}
+    truth_camera: {x_m: -0.25, z_m: 1.50}
+  - id: probe_left_x1p5_y0p30
+    spawn_world: {x: 1.50, y: 0.30, z: 0.05}
+    truth_camera: {x_m: -0.30, z_m: 1.50}
+
+  - id: probe_near_x0p50
+    spawn_world: {x: 0.50, y: 0.00, z: 0.05}
+    truth_camera: {x_m: 0.00, z_m: 0.50}
+  - id: probe_near_x0p60
+    spawn_world: {x: 0.60, y: 0.00, z: 0.05}
+    truth_camera: {x_m: 0.00, z_m: 0.60}
+  - id: probe_near_x0p70
+    spawn_world: {x: 0.70, y: 0.00, z: 0.05}
+    truth_camera: {x_m: 0.00, z_m: 0.70}
+  - id: probe_near_x0p80
+    spawn_world: {x: 0.80, y: 0.00, z: 0.05}
+    truth_camera: {x_m: 0.00, z_m: 0.80}
+  - id: probe_near_x0p90
+    spawn_world: {x: 0.90, y: 0.00, z: 0.05}
+    truth_camera: {x_m: 0.00, z_m: 0.90}
+
+  - id: probe_intb_x1p4_yNeg0p12
+    spawn_world: {x: 1.40, y: -0.12, z: 0.05}
+    truth_camera: {x_m: 0.12, z_m: 1.40}
+  - id: probe_intb_x1p4_yNeg0p18
+    spawn_world: {x: 1.40, y: -0.18, z: 0.05}
+    truth_camera: {x_m: 0.18, z_m: 1.40}
+  - id: probe_intb_x1p4_yNeg0p22
+    spawn_world: {x: 1.40, y: -0.22, z: 0.05}
+    truth_camera: {x_m: 0.22, z_m: 1.40}
+  - id: probe_intb_x1p4_yNeg0p26
+    spawn_world: {x: 1.40, y: -0.26, z: 0.05}
+    truth_camera: {x_m: 0.26, z_m: 1.40}

@@ -109,7 +109,7 @@ def main():
             f'export DISPLAY={display_var} && '
             'ros2 run ros2_vision_inference vision_inference_node --ros-args '
             '-p MONO3D_FLAG:=true '
-            '-p MONO3D_CKPT_FILE:=/home/macro2/ros2_ws/models/mono3d_yolox_576_768.onnx '
+            '-p MONO3D_CKPT_FILE:=~/ros2_ws/models/mono3d_yolox_576_768.onnx '
             '-p MONO3D_GPU_INDEX:=0 '
             '-p SEG_FLAG:=false '
             '-p MONODEPTH_FLAG:=false '

@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chasecar Dashboard — Goals & Preview</title>
+  <style>
+    :root {
+      --bg:      #0b0f0e;
+      --surface: #121918;
+      --card:    #171f1d;
+      --line:    rgba(255,255,255,0.08);
+      --ink:     #ddeae4;
+      --dim:     #6b8880;
+      --faint:   #2e3f3c;
+      --accent:  #5ecfa3;
+      --warn:    #f0b44f;
+      --bad:     #f4756e;
+      --ok:      #5ecfa3;
+      --sans:    "Segoe UI", system-ui, sans-serif;
+      --mono:    "Cascadia Code", "Consolas", monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; }
+    html, body { min-height: 100%; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; }
+    button { font: inherit; cursor: pointer; border: none; }
+    ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-thumb { background: var(--faint); border-radius: 3px; }
+
+    /* ─── Page sections ─── */
+    .page { max-width: 860px; margin: 0 auto; padding: 48px 24px 80px; }
+    h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 6px; }
+    .subtitle { color: var(--dim); font-size: 14px; margin-bottom: 40px; }
+
+    /* ─── Goals ─── */
+    .goals { display: flex; flex-direction: column; gap: 28px; margin-bottom: 52px; }
+    .goal { display: grid; grid-template-columns: 28px 1fr; gap: 14px; }
+    .goal-num {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: rgba(94,207,163,0.12); border: 1px solid rgba(94,207,163,0.25);
+      color: var(--accent); font-size: 13px; font-weight: 700;
+      display: grid; place-items: center; flex-shrink: 0; margin-top: 1px;
+    }
+    .goal-body h2 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .goal-body p  { color: var(--dim); font-size: 13px; line-height: 1.6; margin-bottom: 10px; }
+    .stories { display: flex; flex-direction: column; gap: 5px; }
+    .story {
+      display: flex; gap: 10px; align-items: baseline;
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: 8px; padding: 8px 12px; font-size: 13px;
+    }
+    .story-tag {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      padding: 2px 7px; border-radius: 10px; flex-shrink: 0;
+      background: rgba(94,207,163,0.1); color: var(--accent); border: 1px solid rgba(94,207,163,0.2);
+    }
+    .story span { color: var(--dim); }
+
+    /* ─── Design principles ─── */
+    .principles { margin-bottom: 52px; }
+    .principles h2 { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+    .principle-list { display: flex; flex-direction: column; gap: 6px; }
+    .principle {
+      display: flex; gap: 12px; align-items: baseline;
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: 8px; padding: 10px 14px; font-size: 13px; line-height: 1.5;
+    }
+    .pi-rule { font-weight: 600; flex-shrink: 0; }
+    .pi-why  { color: var(--dim); }
+
+    /* ─── Divider ─── */
+    .section-head { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 16px; }
+
+    /* ══════════════════════════════════
+       DASHBOARD PREVIEW
+    ══════════════════════════════════ */
+    .preview-frame {
+      border: 1px solid rgba(94,207,163,0.2);
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    /* ─── Top bar ─── */
+    .topbar {
+      height: 52px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      gap: 12px;
+    }
+    .topbar-logo { font-size: 13px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); flex-shrink: 0; }
+    .topbar-status {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .status-dot.ok   { background: var(--ok);   box-shadow: 0 0 6px var(--ok); }
+    .status-dot.warn { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+    .status-dot.bad  { background: var(--bad);  box-shadow: 0 0 6px var(--bad); }
+    .status-text { font-size: 14px; font-weight: 600; }
+    .status-sub  { font-size: 12px; color: var(--dim); }
+
+    /* Mode tabs */
+    .mode-tabs { display: flex; gap: 2px; flex-shrink: 0; }
+    .mode-tab {
+      padding: 6px 14px; border-radius: 7px;
+      font-size: 12px; font-weight: 600;
+      background: transparent; color: var(--dim);
+      transition: background 120ms, color 120ms;
+    }
+    .mode-tab.active { background: var(--card); color: var(--ink); }
+    .mode-tab:hover:not(.active) { color: var(--ink); }
+
+    /* ─── MODE 1: WATCH ─── */
+    .mode-watch {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr auto;
+      gap: 1px;
+      background: var(--line);
+      height: 460px;
+    }
+    .feed-pane {
+      background: #090d0c;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .feed-label {
+      padding: 8px 12px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .feed-badge {
+      font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 8px;
+    }
+    .feed-badge.ok   { background: rgba(94,207,163,0.12); color: var(--ok); }
+    .feed-badge.warn { background: rgba(240,180,79,0.12); color: var(--warn); }
+    .feed-canvas {
+      flex: 1;
+      display: grid;
+      place-items: center;
+      opacity: 0.18;
+    }
+    .feed-canvas svg { width: 44px; height: 44px; fill: none; stroke: var(--ink); stroke-width: 1.5; }
+
+    /* Proof summary bar (spans full width below feeds) */
+    .proof-bar {
+      grid-column: 1 / -1;
+      background: var(--surface);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .proof-stages {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex: 1;
+    }
+    .ps {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      flex: 1;
+    }
+    .ps-node {
+      width: 24px; height: 24px; border-radius: 50%;
+      display: grid; place-items: center; flex-shrink: 0;
+      font-size: 10px; font-weight: 700;
+    }
+    .ps-node.done   { background: rgba(94,207,163,0.15); color: var(--ok);   border: 1.5px solid rgba(94,207,163,0.4); }
+    .ps-node.active { background: var(--accent); color: var(--bg);           border: none; box-shadow: 0 0 10px rgba(94,207,163,0.4); }
+    .ps-node.idle   { background: var(--faint);  color: var(--bg);           border: none; opacity: 0.5; }
+    .ps-line { flex: 1; height: 2px; background: var(--line); }
+    .ps-line.done { background: rgba(94,207,163,0.3); }
+    .ps-label-row { display: flex; justify-content: space-between; gap: 4px; flex: 1; margin-top: 5px; }
+    .ps-l { font-size: 10px; text-align: center; flex: 1; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: 0.05em; }
+    .ps-l.done   { color: var(--ok); }
+    .ps-l.active { color: var(--accent); }
+    .proof-stages-wrap { flex: 1; }
+    .proof-kv { display: flex; flex-direction: column; gap: 1px; flex-shrink: 0; }
+    .proof-kv .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); font-weight: 700; }
+    .proof-kv .v { font-size: 13px; font-weight: 600; font-family: var(--mono); color: var(--ink); }
+    .proof-kv .v.warn { color: var(--warn); }
+    .proof-kv .v.ok   { color: var(--ok); }
+
+    /* ─── MODE 2: DRIVE ─── */
+    .mode-drive {
+      display: none;
+      padding: 20px;
+      gap: 16px;
+      height: 460px;
+      overflow: hidden;
+    }
+    .drive-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      height: 100%;
+    }
+    .drive-panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .drive-panel h3 { font-size: 12px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+    .perception-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .perception-row:last-child { border-bottom: none; }
+    .pr-key { font-size: 13px; color: var(--dim); }
+    .pr-val { font-size: 13px; font-weight: 600; font-family: var(--mono); }
+    .pr-val.ok   { color: var(--ok); }
+    .pr-val.warn { color: var(--warn); }
+    .pr-val.bad  { color: var(--bad); }
+
+    /* Intent buttons */
+    .intent-list { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .intent-btn {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px;
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: 10px; text-align: left; color: var(--ink);
+      transition: background 120ms, border-color 120ms;
+    }
+    .intent-btn:hover { background: #1e2a27; border-color: rgba(94,207,163,0.25); }
+    .intent-btn.primary-intent {
+      border-color: rgba(94,207,163,0.3);
+      background: rgba(94,207,163,0.06);
+    }
+    .ib-icon {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: var(--surface); display: grid; place-items: center; flex-shrink: 0;
+    }
+    .ib-icon svg { width: 15px; height: 15px; fill: var(--dim); }
+    .intent-btn.primary-intent .ib-icon { background: rgba(94,207,163,0.1); }
+    .intent-btn.primary-intent .ib-icon svg { fill: var(--accent); }
+    .ib-body { flex: 1; }
+    .ib-name { font-size: 13px; font-weight: 600; }
+    .ib-desc { font-size: 11px; color: var(--dim); margin-top: 1px; }
+    .ib-hint {
+      font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 8px;
+      background: rgba(94,207,163,0.1); color: var(--accent);
+    }
+    .intent-btn.danger { border-color: rgba(244,117,110,0.2); }
+    .intent-btn.danger .ib-icon svg { fill: var(--bad); }
+    .intent-btn.danger .ib-name { color: var(--bad); }
+
+    /* ─── MODE 3: INSPECT ─── */
+    .mode-inspect {
+      display: none;
+      padding: 16px;
+      height: 460px;
+      overflow-y: auto;
+      gap: 10px;
+      flex-direction: column;
+    }
+    .layer {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .layer-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 11px 14px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .layer-header:hover { background: var(--card); }
+    .layer-num {
+      font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+      color: var(--faint); flex-shrink: 0;
+    }
+    .layer-name { font-size: 13px; font-weight: 700; flex: 1; }
+    .layer-summary { font-size: 12px; color: var(--dim); }
+    .layer-chevron { color: var(--faint); font-size: 11px; transition: transform 140ms; }
+    .layer.open .layer-chevron { transform: rotate(90deg); }
+    .layer-body {
+      display: none;
+      padding: 0 14px 12px;
+      border-top: 1px solid var(--line);
+    }
+    .layer.open .layer-body { display: block; }
+    .kv-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    .kv-cell {
+      background: var(--card);
+      padding: 8px 10px;
+    }
+    .kv-k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); font-weight: 700; margin-bottom: 3px; }
+    .kv-v { font-size: 12px; font-family: var(--mono); color: var(--ink); }
+    .kv-v.ok   { color: var(--ok); }
+    .kv-v.warn { color: var(--warn); }
+    .kv-v.bad  { color: var(--bad); }
+    .kv-v.dim  { color: var(--dim); }
+
+    .log-strip { margin-top: 10px; display: flex; flex-direction: column; gap: 3px; }
+    .log-row { font-size: 11px; font-family: var(--mono); padding: 4px 8px; border-radius: 5px; display: flex; gap: 10px; }
+    .log-row:hover { background: var(--card); }
+    .log-t { color: var(--faint); flex-shrink: 0; }
+    .log-m { color: var(--dim); }
+    .log-row.ok   .log-m { color: var(--ok); }
+    .log-row.warn .log-m { color: var(--warn); }
+    .log-row.ev   .log-m { color: var(--ink); }
+
+    /* ─── Tab switching JS ─── */
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <h1>Chasecar Dashboard — First Principles</h1>
+  <p class="subtitle">Goals, stories, and design decisions before touching CSS.</p>
+
+  <!-- ════════════════════ GOALS ════════════════════ -->
+  <div class="goals">
+
+    <div class="goal">
+      <div class="goal-num">1</div>
+      <div class="goal-body">
+        <h2>Prove the work</h2>
+        <p>Someone watching — a PM, a demo audience, a teammate — needs to confirm at a glance that the robot behaved correctly. They do not need to know about Docker, ROS, or LLM internals to get value from this view.</p>
+        <div class="stories">
+          <div class="story"><span class="story-tag">watch</span><span>I can see whether the current proof run is <strong>in progress</strong>, <strong>passed</strong>, or <strong>failed</strong> without reading any numbers.</span></div>
+          <div class="story"><span class="story-tag">watch</span><span>I can see the robot's camera feed and the YOLO detection feed live, side by side.</span></div>
+          <div class="story"><span class="story-tag">watch</span><span>I can see which stage of the proof we are in (searching → approaching → done) as a simple progress arc, not a log file.</span></div>
+          <div class="story"><span class="story-tag">watch</span><span>I can start the environment and launch a demo scenario with two clicks and nothing else.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="goal">
+      <div class="goal-num">2</div>
+      <div class="goal-body">
+        <h2>Be the LLM</h2>
+        <p>An operator or engineer wants to understand (and verify) the LLM's decision loop by stepping through it manually. They should see exactly what the LLM sees — no more — and choose from exactly the same constrained set of actions.</p>
+        <div class="stories">
+          <div class="story"><span class="story-tag">drive</span><span>I can see the three facts the LLM uses to decide: <strong>is the target visible</strong>, <strong>how far away</strong>, and <strong>is a nav goal currently in flight</strong>.</span></div>
+          <div class="story"><span class="story-tag">drive</span><span>I can choose from the same small intent list the LLM uses (<em>acquire, plan, track, abort</em>) as large, obvious buttons.</span></div>
+          <div class="story"><span class="story-tag">drive</span><span>The interface shows me which action the LLM would have chosen (highlighted, not forced) so I can agree or override.</span></div>
+          <div class="story"><span class="story-tag">drive</span><span>After I dispatch an action I can see immediately whether the robot responded (nav accepted, cmd_vel seen).</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="goal">
+      <div class="goal-num">3</div>
+      <div class="goal-body">
+        <h2>See behind the scenes — minimally, in layers</h2>
+        <p>A developer debugging a failure needs to drill into the underlying signals without cluttering the view for everyone else. Visibility should be progressive: surface → LLM reasoning → raw telemetry.</p>
+        <div class="stories">
+          <div class="story"><span class="story-tag">inspect</span><span>Layer 1 (surface): I can see what the robot is doing right now in one sentence — e.g. "turning to find ball, 3rd attempt".</span></div>
+          <div class="story"><span class="story-tag">inspect</span><span>Layer 2 (LLM): I can see the last intent the LLM issued, the reason it gave, and whether the preview gate passed or blocked it.</span></div>
+          <div class="story"><span class="story-tag">inspect</span><span>Layer 3 (signals): I can see the raw perception and outcome values (visible ratio, distance, cmd_vel, nav_goal_recent) if I want them.</span></div>
+          <div class="story"><span class="story-tag">inspect</span><span>Layers 2 and 3 are collapsed by default and do not take up space unless I open them.</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ════════════════════ PRINCIPLES ════════════════════ -->
+  <div class="principles">
+    <div class="section-head">Design decisions that follow</div>
+    <div class="principle-list">
+      <div class="principle">
+        <span class="pi-rule">Three modes, not three panels.</span>
+        <span class="pi-why">Watch / Drive / Inspect are different jobs. Showing all three at once makes the busiest job dominate the layout. A tab switches the entire content area.</span>
+      </div>
+      <div class="principle">
+        <span class="pi-rule">Status in one sentence, not four pills.</span>
+        <span class="pi-why">A colored dot + one phrase ("searching for ball · attempt 3") communicates more than four separate status fields the reader has to synthesize.</span>
+      </div>
+      <div class="principle">
+        <span class="pi-rule">Drive mode shows only what the LLM sees.</span>
+        <span class="pi-why">If the LLM only gets target_visible, distance, and goal_in_progress, then the manual control UI should show only those three facts. Everything else is a distraction from the job of mimicking the model.</span>
+      </div>
+      <div class="principle">
+        <span class="pi-rule">Controls live in the sidebar only in Drive mode.</span>
+        <span class="pi-why">In Watch mode, controls are irrelevant. In Inspect mode, the user is reading, not acting. Surfacing environment/scenario buttons everywhere implies they are always relevant — they are not.</span>
+      </div>
+      <div class="principle">
+        <span class="pi-rule">Progressive disclosure via accordion, not drawer.</span>
+        <span class="pi-why">A slide-out drawer is a context switch (the main content disappears). An accordion within the Inspect tab lets the user compare a collapsed summary with expanded detail without losing their place.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════ PREVIEW ════════════════════ -->
+  <div class="section-head">Dashboard preview — click the tabs</div>
+
+  <div class="preview-frame">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <span class="topbar-logo">Chasecar</span>
+      <div class="topbar-status">
+        <span class="status-dot warn" id="status-dot"></span>
+        <span class="status-text" id="status-text">Searching for ball · attempt 2</span>
+        <span class="status-sub" id="status-sub">· LLM Turn + Go</span>
+      </div>
+      <div class="mode-tabs">
+        <button class="mode-tab active" onclick="setMode('watch')">Watch</button>
+        <button class="mode-tab" onclick="setMode('drive')">Drive</button>
+        <button class="mode-tab" onclick="setMode('inspect')">Inspect</button>
+      </div>
+    </div>
+
+    <!-- ── MODE 1: WATCH ── -->
+    <div id="mode-watch">
+      <div class="mode-watch">
+
+        <div class="feed-pane">
+          <div class="feed-label">
+            World Surface
+            <span class="feed-badge ok">sim live</span>
+          </div>
+          <div class="feed-canvas">
+            <svg viewBox="0 0 64 64"><rect x="4" y="10" width="56" height="44" rx="5"/><circle cx="32" cy="32" r="12"/><path d="M22 42 L32 32 L42 38"/></svg>
+          </div>
+        </div>
+
+        <div class="feed-pane">
+          <div class="feed-label">
+            YOLO Debug
+            <span class="feed-badge warn">partial detect</span>
+          </div>
+          <div class="feed-canvas">
+            <svg viewBox="0 0 64 64"><rect x="4" y="10" width="56" height="44" rx="5"/><rect x="20" y="20" width="24" height="24" rx="2" stroke-dasharray="3 2"/><circle cx="32" cy="32" r="4" fill="currentColor" opacity="0.5" stroke="none"/></svg>
+          </div>
+        </div>
+
+        <!-- Proof bar -->
+        <div class="proof-bar">
+          <div class="proof-stages-wrap">
+            <div style="display:flex;align-items:center;gap:0;margin-bottom:6px">
+              <div class="ps-node done" title="Init">✓</div>
+              <div class="ps-line done"></div>
+              <div class="ps-node done" title="Spawn">✓</div>
+              <div class="ps-line done"></div>
+              <div class="ps-node active" title="Search">3</div>
+              <div class="ps-line"></div>
+              <div class="ps-node idle" title="Approach">4</div>
+              <div class="ps-line"></div>
+              <div class="ps-node idle" title="Complete">5</div>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:0 12px">
+              <span class="ps-l done">Init</span>
+              <span class="ps-l done">Spawn</span>
+              <span class="ps-l active">Search</span>
+              <span class="ps-l">Approach</span>
+              <span class="ps-l">Complete</span>
+            </div>
+          </div>
+          <div class="proof-kv">
+            <span class="k">Distance</span>
+            <span class="v warn">1.84 m</span>
+          </div>
+          <div class="proof-kv">
+            <span class="k">Trend</span>
+            <span class="v ok">↓ closing</span>
+          </div>
+          <div class="proof-kv">
+            <span class="k">Session</span>
+            <span class="v" style="color:var(--dim);font-size:11px">20260315T141230Z</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Env / scenario controls (minimal, only in Watch) -->
+      <div style="display:flex;align-items:center;gap:8px;padding:12px 16px;border-top:1px solid var(--line);background:var(--surface)">
+        <button style="padding:7px 16px;border-radius:8px;background:rgba(94,207,163,0.15);color:var(--accent);font-size:13px;font-weight:600;border:1px solid rgba(94,207,163,0.25)">Start env</button>
+        <button style="padding:7px 16px;border-radius:8px;background:var(--card);color:var(--ink);font-size:13px;font-weight:600;border:1px solid var(--line)">Stop env</button>
+        <div style="width:1px;height:22px;background:var(--line);margin:0 4px"></div>
+        <button style="padding:7px 16px;border-radius:8px;background:rgba(94,207,163,0.9);color:#0b0f0e;font-size:13px;font-weight:700;border:none">▶ LLM Turn + Go</button>
+        <button style="padding:7px 14px;border-radius:8px;background:var(--card);color:var(--dim);font-size:13px;font-weight:600;border:1px solid var(--line)">M3 Center</button>
+        <button style="padding:7px 14px;border-radius:8px;background:var(--card);color:var(--dim);font-size:13px;font-weight:600;border:1px solid var(--line)">M3 Left</button>
+        <button style="padding:7px 14px;border-radius:8px;background:var(--card);color:var(--dim);font-size:13px;font-weight:600;border:1px solid var(--line)">M3 Right</button>
+        <div style="margin-left:auto">
+          <button style="padding:7px 14px;border-radius:8px;background:rgba(244,117,110,0.1);color:var(--bad);font-size:13px;font-weight:600;border:1px solid rgba(244,117,110,0.2)">■ Stop scenario</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MODE 2: DRIVE ── -->
+    <div id="mode-drive" style="display:none;padding:20px;background:var(--bg);">
+      <div class="drive-layout">
+
+        <!-- Left: what the LLM sees -->
+        <div class="drive-panel">
+          <h3>What the LLM sees</h3>
+          <div class="perception-row">
+            <span class="pr-key">Target visible</span>
+            <span class="pr-val warn">partial</span>
+          </div>
+          <div class="perception-row">
+            <span class="pr-key">Distance to target</span>
+            <span class="pr-val warn">1.84 m</span>
+          </div>
+          <div class="perception-row">
+            <span class="pr-key">Nav goal in flight</span>
+            <span class="pr-val ok">yes</span>
+          </div>
+          <div class="perception-row">
+            <span class="pr-key">Robot moving</span>
+            <span class="pr-val ok">yes</span>
+          </div>
+          <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--line)">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;color:var(--faint);margin-bottom:6px">LLM last chose</div>
+            <div style="font-size:13px;font-family:var(--mono);color:var(--accent);background:rgba(94,207,163,0.08);padding:8px 10px;border-radius:7px;border:1px solid rgba(94,207,163,0.2)">acquire_target</div>
+          </div>
+        </div>
+
+        <!-- Right: action buttons -->
+        <div class="drive-panel">
+          <h3>Your action</h3>
+          <div class="intent-list">
+            <button class="intent-btn primary-intent">
+              <div class="ib-icon">
+                <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.5" fill="none"/><circle cx="8" cy="8" r="2" fill="currentColor"/></svg>
+              </div>
+              <div class="ib-body">
+                <div class="ib-name">acquire_target</div>
+                <div class="ib-desc">Lock onto target, begin tracking</div>
+              </div>
+              <span class="ib-hint">LLM pick</span>
+            </button>
+            <button class="intent-btn">
+              <div class="ib-icon">
+                <svg viewBox="0 0 16 16"><path d="M3 13 L8 3 L13 13" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/><path d="M5 10 h6" stroke="currentColor" stroke-width="1.5"/></svg>
+              </div>
+              <div class="ib-body">
+                <div class="ib-name">plan_to_target</div>
+                <div class="ib-desc">Send nav goal to target position</div>
+              </div>
+            </button>
+            <button class="intent-btn">
+              <div class="ib-icon">
+                <svg viewBox="0 0 16 16"><path d="M8 2 L8 14 M2 8 L14 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              </div>
+              <div class="ib-body">
+                <div class="ib-name">track_target</div>
+                <div class="ib-desc">Continuous reactive following</div>
+              </div>
+            </button>
+            <button class="intent-btn danger">
+              <div class="ib-icon">
+                <svg viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor"/></svg>
+              </div>
+              <div class="ib-body">
+                <div class="ib-name">abort</div>
+                <div class="ib-desc">Cancel current goal, hold position</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── MODE 3: INSPECT ── -->
+    <div id="mode-inspect" style="display:none;padding:16px;background:var(--bg);overflow-y:auto;max-height:460px;display:none;flex-direction:column;gap:10px">
+
+      <!-- Layer 1: Surface -->
+      <div class="layer open">
+        <div class="layer-header" onclick="toggleLayer(this)">
+          <span class="layer-num">L1</span>
+          <span class="layer-name">What the robot is doing</span>
+          <span class="layer-summary" style="color:var(--warn)">searching · attempt 2</span>
+          <span class="layer-chevron">▶</span>
+        </div>
+        <div class="layer-body">
+          <div class="kv-grid">
+            <div class="kv-cell"><div class="kv-k">Stage</div><div class="kv-v warn">searching</div></div>
+            <div class="kv-cell"><div class="kv-k">Proof phase</div><div class="kv-v">llm_turn_then_go</div></div>
+            <div class="kv-cell"><div class="kv-k">Target locked</div><div class="kv-v bad">false</div></div>
+            <div class="kv-cell"><div class="kv-k">Goal in progress</div><div class="kv-v ok">true</div></div>
+            <div class="kv-cell"><div class="kv-k">Search state</div><div class="kv-v dim">turning_right</div></div>
+            <div class="kv-cell"><div class="kv-k">Unsafe reasons</div><div class="kv-v dim">—</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer 2: LLM -->
+      <div class="layer open">
+        <div class="layer-header" onclick="toggleLayer(this)">
+          <span class="layer-num">L2</span>
+          <span class="layer-name">LLM decision</span>
+          <span class="layer-summary">last: acquire_target · preview ok</span>
+          <span class="layer-chevron">▶</span>
+        </div>
+        <div class="layer-body">
+          <div class="kv-grid">
+            <div class="kv-cell"><div class="kv-k">Last intent</div><div class="kv-v">acquire_target</div></div>
+            <div class="kv-cell"><div class="kv-k">Preview gate</div><div class="kv-v ok">ready</div></div>
+            <div class="kv-cell"><div class="kv-k">Provider</div><div class="kv-v dim">openai / gpt-4o</div></div>
+            <div class="kv-cell"><div class="kv-k">Allowed intents</div><div class="kv-v dim">acquire · plan</div></div>
+            <div class="kv-cell" style="grid-column:1/-1"><div class="kv-k">Suppression reason</div><div class="kv-v dim">—</div></div>
+          </div>
+          <div class="log-strip">
+            <div class="log-row ok"><span class="log-t">14:12:41</span><span class="log-m">nav goal accepted</span></div>
+            <div class="log-row ev"><span class="log-t">14:12:38</span><span class="log-m">intent dispatched: acquire_target</span></div>
+            <div class="log-row ev"><span class="log-t">14:12:35</span><span class="log-m">llm preview valid → dispatching</span></div>
+            <div class="log-row warn"><span class="log-t">14:12:30</span><span class="log-m">visible ratio low (0.31) — retrying</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Layer 3: Signals -->
+      <div class="layer">
+        <div class="layer-header" onclick="toggleLayer(this)">
+          <span class="layer-num">L3</span>
+          <span class="layer-name">Raw signals</span>
+          <span class="layer-summary" style="color:var(--faint)">perception · belief · outcome</span>
+          <span class="layer-chevron">▶</span>
+        </div>
+        <div class="layer-body">
+          <div class="kv-grid">
+            <div class="kv-cell"><div class="kv-k">detection topic</div><div class="kv-v ok">seen</div></div>
+            <div class="kv-cell"><div class="kv-k">visible ratio</div><div class="kv-v warn">0.41</div></div>
+            <div class="kv-cell"><div class="kv-k">detection world</div><div class="kv-v dim">1.14, 0.03</div></div>
+            <div class="kv-cell"><div class="kv-k">truth align</div><div class="kv-v ok">ok</div></div>
+            <div class="kv-cell"><div class="kv-k">robot pose</div><div class="kv-v dim">0.02, 0.01 · 2°</div></div>
+            <div class="kv-cell"><div class="kv-k">goal pose</div><div class="kv-v dim">1.10, 0.00</div></div>
+            <div class="kv-cell"><div class="kv-k">distance</div><div class="kv-v warn">1.84 m</div></div>
+            <div class="kv-cell"><div class="kv-k">cmd_vel recent</div><div class="kv-v ok">true</div></div>
+            <div class="kv-cell"><div class="kv-k">motion evidence</div><div class="kv-v ok">true</div></div>
+            <div class="kv-cell"><div class="kv-k">feedback recent</div><div class="kv-v warn">false</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div><!-- /preview-frame -->
+
+</div><!-- /page -->
+
+<script>
+  function setMode(m) {
+    ['watch','drive','inspect'].forEach(id => {
+      const el = document.getElementById('mode-' + id);
+      if (id === 'inspect') el.style.display = (m === id) ? 'flex' : 'none';
+      else el.style.display = (m === id) ? 'block' : 'none';
+    });
+    document.querySelectorAll('.mode-tab').forEach((tab, i) => {
+      tab.classList.toggle('active', ['watch','drive','inspect'][i] === m);
+    });
+  }
+  function toggleLayer(header) {
+    header.parentElement.classList.toggle('open');
+  }
+</script>
+</body>
+</html>
