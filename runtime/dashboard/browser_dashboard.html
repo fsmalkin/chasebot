@@ -111,6 +111,13 @@
       padding: 12px 14px;
       border-bottom: 1px solid var(--line);
     }
+    .visual-actions {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     .visual-title {
       margin: 0;
       font-size: 12px;
@@ -635,7 +642,10 @@
       <article class="visual-card">
         <div class="visual-head">
           <h1 class="visual-title">World Surface</h1>
-          <a id="world-link" href="#" target="_blank" rel="noopener noreferrer" class="ghost-button hidden">Open Stream</a>
+          <div class="visual-actions">
+            <a id="operator-view-link" href="#" target="_blank" rel="noopener noreferrer" class="ghost-button hidden">Open Xpra</a>
+            <a id="world-link" href="#" target="_blank" rel="noopener noreferrer" class="ghost-button hidden">Open Legacy Stream</a>
+          </div>
         </div>
         <div class="visual-body">
           <img class="world-image" id="world-image" data-testid="world-image" alt="World stream" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
@@ -705,6 +715,8 @@
                 <dt>Control Mode</dt><dd id="control-mode-detail">n/a</dd>
                 <dt>Warm Services</dt><dd id="warm-services" data-testid="warm-services">n/a</dd>
                 <dt>Compose Project</dt><dd id="compose-project" data-testid="compose-project">n/a</dd>
+                <dt>Live View</dt><dd id="operator-view-ready" data-testid="operator-view-ready">waiting</dd>
+                <dt>Live View Backend</dt><dd id="operator-view-backend" data-testid="operator-view-backend">n/a</dd>
                 <dt>World Stream</dt><dd id="world-stream-ready" data-testid="world-stream-ready">waiting</dd>
                 <dt>Truth Alignment</dt><dd id="truth-alignment" data-testid="truth-alignment">waiting</dd>
                 <dt>Motion Evidence</dt><dd id="motion-evidence" data-testid="motion-evidence">waiting</dd>

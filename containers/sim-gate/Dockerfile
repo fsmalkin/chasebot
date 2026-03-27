@@ -15,8 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-dri \
     mesa-utils \
     novnc \
+    xpra \
     websockify \
     ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+    ros-${ROS_DISTRO}-image-view \
+    ros-${ROS_DISTRO}-rqt-image-view \
     python3-pip \
     python3-opencv \
     x11-xserver-utils \
@@ -41,7 +44,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 COPY containers/common/entrypoint.sh /opt/chasecar/entrypoint.sh
-RUN chmod +x /opt/chasecar/entrypoint.sh && mkdir -p /root/ros2_ws/src
+RUN sed -i 's/\r$//' /opt/chasecar/entrypoint.sh && chmod +x /opt/chasecar/entrypoint.sh && mkdir -p /root/ros2_ws/src
 
 WORKDIR /workspaces/chasecar
 ENTRYPOINT ["/opt/chasecar/entrypoint.sh"]

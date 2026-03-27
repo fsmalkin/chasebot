@@ -3,6 +3,7 @@ const stateEls = {
   activeScenario: document.getElementById('active-scenario'),
   proofState: document.getElementById('proof-state'),
   sessionId: document.getElementById('session-id'),
+  operatorViewLink: document.getElementById('operator-view-link'),
   worldLink: document.getElementById('world-link'),
   worldImage: document.getElementById('world-image'),
   debugImage: document.getElementById('debug-image'),
@@ -25,6 +26,8 @@ const stateEls = {
   controlModeDetail: document.getElementById('control-mode-detail'),
   warmServices: document.getElementById('warm-services'),
   composeProject: document.getElementById('compose-project'),
+  operatorViewReady: document.getElementById('operator-view-ready'),
+  operatorViewBackend: document.getElementById('operator-view-backend'),
   worldStreamReady: document.getElementById('world-stream-ready'),
   truthAlignment: document.getElementById('truth-alignment'),
   motionEvidence: document.getElementById('motion-evidence'),
@@ -438,11 +441,17 @@ function renderControlDetail(state) {
   stateEls.controlModeDetail.textContent = selectText(state.control_mode, 'n/a');
   stateEls.warmServices.textContent = selectText(state.warm_services_status, 'unknown');
   stateEls.composeProject.textContent = selectText(state.compose_project, 'n/a');
+  stateEls.operatorViewBackend.textContent = selectText(state.operator_view_backend, 'n/a');
+  stateEls.operatorViewReady.textContent = state.operator_view_ready
+    ? selectText(state.operator_view_status, 'ready')
+    : selectText(state.operator_view_failure_class || state.operator_view_status, 'waiting');
   stateEls.worldStreamReady.textContent = state.world_stream_ready ? 'ready' : selectText(state.world_stream_failure_class, 'waiting');
   stateEls.truthAlignment.textContent = state.truth_alignment_ok ? 'aligned' : selectText(state.truth_failure_class, 'waiting');
   stateEls.motionEvidence.textContent = state.motion_evidence ? 'present' : 'waiting';
   stateEls.operatorFootnote.textContent = state.control_plane_ready
-    ? 'Controls are live.'
+    ? (state.operator_view_ready
+      ? 'Controls are live. Open Xpra for the recommended live view.'
+      : 'Controls are live. Xpra is starting or unavailable; check Live View status.')
     : selectText(state.control_plane_error, 'Read-only fallback mode.');
 }
 
@@ -770,9 +779,19 @@ function renderCameraState(state) {
     stateEls.topdownImage.src = placeholderImage();
   }
 
+  if (state.operator_view_url) {
+    stateEls.operatorViewLink.classList.remove('hidden');
+    stateEls.operatorViewLink.href = state.operator_view_url;
+    stateEls.operatorViewLink.textContent = 'Open Xpra';
+  } else {
+    stateEls.operatorViewLink.classList.add('hidden');
+    stateEls.operatorViewLink.removeAttribute('href');
+  }
+
   if (state.world_stream_url) {
     stateEls.worldLink.classList.remove('hidden');
     stateEls.worldLink.href = state.world_stream_url;
+    stateEls.worldLink.textContent = state.operator_view_url ? 'Open Legacy Stream' : 'Open Stream';
   } else {
     stateEls.worldLink.classList.add('hidden');
     stateEls.worldLink.removeAttribute('href');
@@ -895,6 +914,11 @@ function refreshLegacyState(error) {
     last_feedback: '',
     last_result: '',
     motion_evidence: false,
+    operator_view_backend: 'xpra',
+    operator_view_url: '',
+    operator_view_ready: false,
+    operator_view_status: 'disabled',
+    operator_view_failure_class: '',
     world_stream_ready: false,
     truth_alignment_ok: false,
     live_paths: {},

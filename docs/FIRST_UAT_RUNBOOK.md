@@ -4,7 +4,7 @@
 
 Run the first deterministic operator UAT on a rebuilt machine and produce a session package with clear pass/fail gates.
 
-For the browser-dashboard operator flow, use [Dashboard Operator Guide](./DASHBOARD_OPERATOR_GUIDE.md). This runbook stays focused on orchestration, gating, and artifact interpretation.
+For the browser-dashboard operator flow, use [Dashboard Operator Guide](./DASHBOARD_OPERATOR_GUIDE.md). The dashboard remains the control/status plane, while Xpra is the recommended live operator view. This runbook stays focused on orchestration, gating, and artifact interpretation.
 
 ## Preconditions
 
@@ -111,7 +111,7 @@ powershell -ExecutionPolicy Bypass -File scripts/run_first_uat.ps1 `
     - Do not treat native Gazebo/X11 as authoritative.
     - Prefer recorded-first review:
     - `powershell -ExecutionPolicy Bypass -File scripts/run_recorded_visual_demo.ps1 -Milestone 3 -RuntimeTarget robot_fidelity_orin -SessionId <session_id>`
-    - For live review, use:
+    - For live review, prefer the dashboard's `Open Xpra` link and keep the browser-dashboard rehearsal path as validation tooling:
     - `powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 -Milestone 2 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -Headless true -VisualSurface browser_dashboard -WorldSurface streamed_sim -OpenFeedViewers true -AutoOpenVisualSurface true -RequireParityGreenForOperatorView false`
 
 ## Milestone 3 Motion Triage (Headless-Compatible)
@@ -179,6 +179,7 @@ Operator visual signoff order:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 -Milestone 3 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -Headless true -VisualSurface browser_dashboard -WorldSurface streamed_sim -OpenFeedViewers true -AutoOpenVisualSurface true -RequireParityGreenForOperatorView false -OperatorPhase M3 -TargetId single_target -DemoTargetRelative false -DemoTargetX 1.10 -DemoTargetY 0.00 -DemoTargetZ 0.05 -MaxRunSeconds 150`
 2. Multi-target GUI rehearsal second:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false -VisualSurface browser_dashboard -WorldSurface streamed_sim`
+   - This browser-dashboard wrapper remains unchanged validation tooling in v1.
 3. Dashboard now shows:
    - `phase`
    - `target_id`
@@ -195,7 +196,7 @@ Parity-first GUI readiness (required before operator live view):
    - `artifacts/session/<session_id>/parity_summary.json` with `pass=true`
 4. Only then run operator view:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true -VisualSurface browser_dashboard -WorldSurface streamed_sim -AutoOpenVisualSurface true`
-   - The authoritative browser world pane is the live Gazebo world from `/observer_world/image_raw`, not native X11/noVNC.
+   - The browser world pane remains available for validation, but the recommended live operator view is Xpra from the dashboard's `Open Xpra` link.
 5. Current validated same-session baseline:
    - `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
    - `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`

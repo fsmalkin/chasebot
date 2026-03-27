@@ -9,6 +9,7 @@ import os
 import signal
 import sys
 import time
+from collections import deque
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +19,12 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSPresetProfiles
 from sensor_msgs.msg import Image
+
+
+WORLD_STREAM_RECENT_WINDOW_S = 5.0
+WORLD_STREAM_TRANSPORT_MIN_FRAMES = 3
+WORLD_STREAM_TRANSPORT_MAX_AGE_S = 2.5
+WORLD_STREAM_RENDERABLE_MAX_AGE_S = 10.0
 
 
 def parse_args() -> argparse.Namespace:
@@ -169,6 +176,7 @@ class WorldStreamObserver(Node):
         self.rendered_frame_count = 0
         self.latest_received_frame_seq = 0
         self.last_rendered_frame_seq = 0
+        self.recent_frame_wall_times: deque[float] = deque()
         self.nonblank_count = 0
         self.scene_content_count = 0
         self.robot_visible_count = 0
@@ -202,6 +210,7 @@ class WorldStreamObserver(Node):
             self.last_frame_wall_s = time.time()
             self.received_frame_count += 1
             self.latest_received_frame_seq = self.received_frame_count
+            self.recent_frame_wall_times.append(self.last_frame_wall_s)
             latest_nonblank = image_is_nonblank(frame)
             latest_scene = scene_has_content(frame, self.args.scene_std_min, self.args.scene_sat_min)
             latest_robot_area = robot_blue_area(frame)
@@ -221,6 +230,15 @@ class WorldStreamObserver(Node):
             self.image_error = ""
         except Exception as exc:  # pragma: no cover - defensive path
             self.image_error = str(exc)
+
+    def _prune_recent_frames(self, now: float) -> None:
+        cutoff = now - WORLD_STREAM_RECENT_WINDOW_S
+        while self.recent_frame_wall_times and self.recent_frame_wall_times[0] < cutoff:
+            self.recent_frame_wall_times.popleft()
+
+    def _recent_frame_count(self, now: float) -> int:
+        self._prune_recent_frames(now)
+        return len(self.recent_frame_wall_times)
 
     def _ensure_writer(self, frame: np.ndarray) -> None:
         if self.writer is not None:
@@ -275,18 +293,32 @@ class WorldStreamObserver(Node):
         scene_ratio = float(self.scene_content_count / observed_frames)
         robot_ratio = float(self.robot_visible_count / observed_frames)
         target_ratio = float(self.target_visible_count / observed_frames)
+        recent_frame_count = self._recent_frame_count(now)
         elapsed_s = max(time.monotonic() - self.started_monotonic_s, 1e-6)
-        expected_frames = max(elapsed_s * max(self.args.fps, 1.0), 1.0)
-        frame_coverage_ratio = float(self.received_frame_count / expected_frames)
+        expected_recent_frames = max(WORLD_STREAM_RECENT_WINDOW_S * max(self.args.fps, 1.0), 1.0)
+        frame_coverage_ratio = float(recent_frame_count / expected_recent_frames)
         latest_frame_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(self.last_frame_wall_s)) if self.last_frame_wall_s > 0 else ""
         latest_frame_age_s = max(now - self.last_frame_wall_s, 0.0) if self.last_frame_wall_s > 0 else None
-        viewer_client_alive = bool(self.received_frame_count >= min_frames and frame_coverage_ratio >= 0.40 and not self.image_error)
+        screenshot_exists = self.screenshot_path.exists()
+        world_stream_transport_healthy = bool(
+            same_session_partition
+            and recent_frame_count >= WORLD_STREAM_TRANSPORT_MIN_FRAMES
+            and latest_frame_age_s is not None
+            and latest_frame_age_s <= WORLD_STREAM_TRANSPORT_MAX_AGE_S
+            and not self.image_error
+        )
+        world_stream_renderable = bool(
+            same_session_partition
+            and self.rendered_frame_count >= 1
+            and screenshot_exists
+            and latest_frame_age_s is not None
+            and latest_frame_age_s <= WORLD_STREAM_RENDERABLE_MAX_AGE_S
+        )
         frames_stale = bool(
             self.received_frame_count >= 1
             and latest_frame_age_s is not None
             and latest_frame_age_s > max(self.args.healthy_stale_seconds, 0.1)
         )
-        viewer_process_healthy = bool(viewer_client_alive and not frames_stale)
         world_stream_nonblank = self.received_frame_count >= min_frames and nonblank_ratio >= 0.60
         scene_content_ok = self.received_frame_count >= min_frames and scene_ratio >= 0.60
         robot_visible_ok = self.received_frame_count >= min_frames and robot_ratio >= 0.50
@@ -295,10 +327,12 @@ class WorldStreamObserver(Node):
         failure_class = ""
         if not same_session_partition:
             failure_class = "world_stream_partition_mismatch"
-        elif frames_stale:
-            failure_class = "world_stream_stale"
-        elif not viewer_process_healthy:
-            failure_class = "world_stream_client_crash"
+        elif self.image_error:
+            failure_class = "world_stream_image_decode_error"
+        elif latest_frame_age_s is None or recent_frame_count == 0 or latest_frame_age_s > WORLD_STREAM_RENDERABLE_MAX_AGE_S:
+            failure_class = "world_stream_no_recent_frames"
+        elif not world_stream_transport_healthy:
+            failure_class = "world_stream_receive_rate_low"
         elif not world_stream_nonblank:
             failure_class = "world_stream_blank"
         elif not scene_content_ok:
@@ -309,16 +343,20 @@ class WorldStreamObserver(Node):
             failure_class = "world_stream_target_not_visible"
 
         world_stream_ready = not failure_class
+        world_stream_degraded = bool(world_stream_renderable and (not world_stream_transport_healthy or not world_stream_ready))
         state = {
             "session_id": self.args.session_id,
             "partition": partition,
             "world_surface": "streamed_sim",
             "world_stream_url": "",
             "world_stream_ready": world_stream_ready,
+            "world_stream_renderable": world_stream_renderable,
+            "world_stream_transport_healthy": world_stream_transport_healthy,
+            "world_stream_degraded": world_stream_degraded,
             "world_stream_nonblank": world_stream_nonblank,
             "world_stream_interactive": False,
             "same_session_partition": same_session_partition,
-            "viewer_process_healthy": viewer_process_healthy,
+            "viewer_process_healthy": world_stream_transport_healthy,
             "viewer_client_mode": "gazebo_sensor_camera",
             "camera_profile": self.args.camera_profile,
             "render_backend": "gazebo_sensor_camera:ogre2",
@@ -340,6 +378,8 @@ class WorldStreamObserver(Node):
             "healthy_stale_seconds": round(max(self.args.healthy_stale_seconds, 0.1), 3),
             "elapsed_s": round(elapsed_s, 3),
             "frame_coverage_ratio": round(frame_coverage_ratio, 6),
+            "recent_frame_count_5s": recent_frame_count,
+            "recent_frame_window_s": WORLD_STREAM_RECENT_WINDOW_S,
             "nonblank_ratio": round(nonblank_ratio, 6),
             "scene_content_ratio": round(scene_ratio, 6),
             "robot_visible_ratio": round(robot_ratio, 6),
@@ -392,7 +432,10 @@ def main() -> int:
     last_state: dict[str, object] = {
         "session_id": args.session_id,
         "world_stream_ready": False,
-        "failure_class": "world_stream_client_crash",
+        "world_stream_renderable": False,
+        "world_stream_transport_healthy": False,
+        "world_stream_degraded": False,
+        "failure_class": "world_stream_no_recent_frames",
         "world_stream_nonblank": False,
         "world_stream_interactive": False,
         "same_session_partition": False,
@@ -413,6 +456,8 @@ def main() -> int:
         "latest_frame_age_s": None,
         "frames_stale": False,
         "healthy_stale_seconds": round(max(args.healthy_stale_seconds, 0.1), 3),
+        "recent_frame_count_5s": 0,
+        "recent_frame_window_s": WORLD_STREAM_RECENT_WINDOW_S,
         "screenshot_path": str(node.screenshot_path),
         "video_path": str(node.video_path),
     }

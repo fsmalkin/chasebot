@@ -9,13 +9,14 @@ Use the browser dashboard for the simple operator flow:
 3. Watch the visual cues
 4. Stop the environment
 
-The dashboard is meant to help you trust and understand current real capabilities before a future LLM layer is added on top.
+The dashboard is meant to help you trust and understand current real capabilities before a future LLM layer is added on top. It is the control/status plane; the recommended live operator view opens separately through Xpra.
 
 ## Launch
 
 1. Open Docker Desktop.
 2. Click play on the Chasecar app.
 3. Open `http://127.0.0.1:8860`.
+4. Use the `Open Xpra` link in the dashboard for the live visual session.
 
 If the warm services are still coming up, the dashboard will load first and the controls will enable once the control plane is ready.
 
@@ -32,6 +33,8 @@ The landing view is intentionally simple.
   - last result
   - session id
 - `Main Visuals` keeps the world view and topdown telemetry visible at all times.
+- `Live View` shows whether Xpra is ready and which backend is active.
+- `Open Xpra` launches the recommended live operator surface.
 - `Camera Detail` lets you switch between raw camera and YOLO debug without crowding the page.
 - `What To Watch` explains the current visual cues in plain operator language.
 
@@ -59,6 +62,7 @@ What good looks like:
 - `Session ID` populates
 - world and topdown panes begin updating
 - camera detail panes become live when you switch tabs
+- Xpra is ready and the `Open Xpra` link is available for the live session
 
 ### M3 Single Target
 
@@ -110,6 +114,7 @@ What to watch:
 - `Target` changes as the rehearsal advances
 - transition activity becomes active briefly during handoff
 - the world and topdown views continue updating through the whole sequence
+- the live operator view continues separately in Xpra if you keep it open
 
 What not to expect:
 
@@ -172,6 +177,7 @@ This is where you verify the real signal boundary, not just the operator story.
 - make sure the environment is actually `environment_ready`
 - give the session a few seconds to start publishing live images
 - use `Reset Sim` if the session looks stale
+- if the browser world pane looks stale, open the Xpra live view instead of treating the browser pane as authoritative
 
 ### Scenario looks stuck
 

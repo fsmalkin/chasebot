@@ -143,6 +143,33 @@ services:
     ports:
       - "127.0.0.1:${WORLD_STREAM_PORT:-8891}:6080"
 
+  operator-view:
+    build:
+      context: .
+      dockerfile: containers/sim-gate/Dockerfile
+      args:
+        ROS_DISTRO: ${CORE_ROS_DISTRO:-kilted}
+    image: chasecar/sim-gate:${CORE_ROS_DISTRO:-kilted}
+    profiles: ["gate"]
+    depends_on:
+      - sim-gate
+      - gate-stack
+    gpus: all
+    environment:
+      <<: *chasecar-env
+      CHASECAR_WORLD_FILE: ${WORLD_FILE:-yolo_test_world_v6_clean_uat.world}
+      OPERATOR_VIEW_PORT: ${OPERATOR_VIEW_PORT:-14500}
+      QT_QPA_PLATFORM: ${GATE_QPA_PLATFORM:-xcb}
+      QT_X11_NO_MITSHM: ${GATE_QT_X11_NO_MITSHM:-1}
+      LIBGL_ALWAYS_INDIRECT: ${GATE_LIBGL_ALWAYS_INDIRECT:-1}
+    volumes:
+      - *chasecar-repo-volume
+      - chasecar_ws:/root/ros2_ws
+    working_dir: /workspaces/chasecar
+    command: ["bash", "-lc", "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash && sleep infinity"]
+    ports:
+      - "127.0.0.1:${OPERATOR_VIEW_PORT:-14500}:14500"
+
   gate-stack:
     build:
       context: .

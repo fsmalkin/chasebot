@@ -56,6 +56,11 @@ WORLD_STREAM_RESTART_COOLDOWN_S = 20.0
 WORLD_STREAM_RESTART_MAX_ATTEMPTS = 3
 WORLD_STREAM_STALE_DEBOUNCE_S = 3.0
 WORLD_STREAM_WATCHDOG_POLL_S = 1.0
+WORLD_STREAM_TRANSPORT_WINDOW_S = 5.0
+WORLD_STREAM_TRANSPORT_MIN_FRAMES = 3
+WORLD_STREAM_RENDERABLE_GRACE_S = 10.0
+GATE_SERVICE_READY_TIMEOUT_S = 25.0
+GATE_SERVICE_POLL_S = 0.5
 DEFAULT_CONTROL_MODE = "host_powershell"
 DEFAULT_SIM_LANE = "jetty_gate"
 DEFAULT_BRIDGE_ROS_DISTRO = "jazzy"
@@ -63,6 +68,10 @@ DEFAULT_WARM_SERVICES = ("dashboard-control", "dashboard-utility")
 DEFAULT_DOCKER_SOCKET_PATH = Path("/var/run/docker.sock")
 SESSION_PROJECT_PREFIX = "chasecar_dashboard_"
 HOST_PORT_BIND_FAILURE_RE = re.compile(r"Bind for (?:127\.0\.0\.1|0\.0\.0\.0):(\d+) failed: port is already allocated")
+OPERATOR_VIEW_PORT_START = 14500
+OPERATOR_VIEW_PORT_END = 14520
+OPERATOR_VIEW_HEARTBEAT_STALE_S = 5.0
+REQUIRED_GATE_SERVICES = ("sim-gate", "world-viewer", "gate-stack", "operator-view")
 
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 POWERSHELL_EXE = shutil.which("powershell.exe") or shutil.which("powershell") or "powershell.exe"
@@ -84,6 +93,21 @@ class ScenarioDefinition:
 
     def to_api(self) -> Dict[str, Any]:
         return asdict(self)
+
+
+class EnvironmentStartupError(RuntimeError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        environment_failure_class: str = "",
+        operator_view_failure_class: str = "",
+        gate_service_states: Optional[Dict[str, Dict[str, Any]]] = None,
+    ) -> None:
+        super().__init__(message)
+        self.environment_failure_class = str(environment_failure_class or "")
+        self.operator_view_failure_class = str(operator_view_failure_class or "")
+        self.gate_service_states = json.loads(json.dumps(gate_service_states or {}))
 
 
 SCENARIOS = [
@@ -181,6 +205,17 @@ def make_session_id() -> str:
 
 def slugify_session(session_id: str) -> str:
     return session_id.lower().replace(":", "").replace(" ", "")
+
+
+def parse_utc_timestamp(value: str) -> Optional[datetime]:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    normalized = text.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
 
 
 def choose_docker_cli() -> str:
@@ -293,6 +328,7 @@ class DashboardController:
         self.sim_gate_container_id = ""
         self.gate_stack_container_id = ""
         self.world_viewer_container_id = ""
+        self.operator_view_container_id = ""
         self.build_on_next_start = True
         self.world_stream_restart_lock = threading.Lock()
         self._world_stream_stale_since_monotonic = 0.0
@@ -325,6 +361,8 @@ class DashboardController:
                 "target_transition_active": False,
                 "active_scenario": "",
                 "environment_message": "stopped",
+                "environment_failure_class": "",
+                "gate_service_states": {},
                 "scenario_message": "",
                 "last_intent": "",
                 "last_feedback": "",
@@ -355,6 +393,15 @@ class DashboardController:
                 "recent_operator_events": [],
                 "world_stream_url": "",
                 "world_stream_port": 0,
+                "world_stream_renderable": False,
+                "world_stream_transport_healthy": False,
+                "world_stream_degraded": False,
+                "operator_view_backend": "xpra",
+                "operator_view_url": "",
+                "operator_view_port": 0,
+                "operator_view_ready": False,
+                "operator_view_status": "disabled",
+                "operator_view_failure_class": "",
                 "validation_dir": "",
                 "command_history_path": "",
                 "multi_target_progress_path": "",
@@ -497,6 +544,12 @@ class DashboardController:
         if session_dir is None:
             return None
         return ensure_dir(session_dir / "visual")
+
+    def _current_operator_view_state_path(self) -> Optional[Path]:
+        visual_dir = self._current_visual_dir()
+        if visual_dir is None:
+            return None
+        return visual_dir / "operator_view_state.json"
 
     def _current_validation_dir(self) -> Optional[Path]:
         session_dir = self._current_session_dir()
@@ -647,6 +700,67 @@ class DashboardController:
             return []
         return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
+    def _docker_service_state(self, project_name: str, service_name: str) -> Dict[str, Any]:
+        ids = self._docker_find_container_ids(project_name=project_name, service_name=service_name, include_stopped=True)
+        if not ids:
+            return {"service": service_name, "status": "missing", "container_id": ""}
+        container_id = ids[0]
+        status = "unknown"
+        try:
+            inspect_payload = self._docker_inspect(container_id)
+            state_payload = inspect_payload.get("State", {})
+            if isinstance(state_payload, dict):
+                status = str(state_payload.get("Status", "") or "").strip().lower() or "unknown"
+        except Exception:
+            status = "unknown"
+        return {"service": service_name, "status": status, "container_id": container_id}
+
+    def _required_gate_service_states(self, project_name: str) -> Dict[str, Dict[str, Any]]:
+        return {
+            service_name: self._docker_service_state(project_name, service_name)
+            for service_name in REQUIRED_GATE_SERVICES
+        }
+
+    def _gate_services_ready(self, gate_service_states: Dict[str, Dict[str, Any]]) -> bool:
+        if not gate_service_states:
+            return False
+        return all(
+            str(gate_service_states.get(service_name, {}).get("status", "missing") or "missing") == "running"
+            for service_name in REQUIRED_GATE_SERVICES
+        )
+
+    def _classify_gate_service_states(self, gate_service_states: Dict[str, Dict[str, Any]]) -> tuple[str, str]:
+        missing = [
+            service_name
+            for service_name in REQUIRED_GATE_SERVICES
+            if str(gate_service_states.get(service_name, {}).get("status", "missing") or "missing") == "missing"
+        ]
+        if missing:
+            return "gate_services_missing", f"Required gate services missing: {', '.join(missing)}."
+        not_running = [
+            f"{service_name}={str(gate_service_states.get(service_name, {}).get('status', 'unknown') or 'unknown')}"
+            for service_name in REQUIRED_GATE_SERVICES
+            if str(gate_service_states.get(service_name, {}).get("status", "missing") or "missing") != "running"
+        ]
+        if not_running:
+            return "gate_services_not_running", f"Required gate services not running: {', '.join(not_running)}."
+        return "", ""
+
+    def _wait_for_required_gate_services(self, project_name: str, timeout_s: float) -> Dict[str, Dict[str, Any]]:
+        deadline = time.monotonic() + max(timeout_s, 1.0)
+        latest_states: Dict[str, Dict[str, Any]] = {}
+        while time.monotonic() < deadline:
+            latest_states = self._required_gate_service_states(project_name)
+            self._update_state(gate_service_states=latest_states)
+            if self._gate_services_ready(latest_states):
+                return latest_states
+            if self.lifecycle_cancel.is_set():
+                return latest_states
+            time.sleep(GATE_SERVICE_POLL_S)
+        latest_states = self._required_gate_service_states(project_name)
+        self._update_state(gate_service_states=latest_states)
+        return latest_states
+
     def _docker_project_container_ids(self, project_name: str, *, include_stopped: bool = False) -> list[str]:
         cmd = [self.docker, "ps"]
         if include_stopped:
@@ -664,8 +778,8 @@ class DashboardController:
         return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
     def _docker_service_container_id(self, project_name: str, service_name: str) -> str:
-        ids = self._docker_find_container_ids(project_name=project_name, service_name=service_name)
-        return ids[0] if ids else ""
+        state = self._docker_service_state(project_name, service_name)
+        return str(state.get("container_id", "") or "")
 
     def _docker_version_check(self) -> str:
         proc = subprocess.run(
@@ -877,6 +991,107 @@ class DashboardController:
             "state": state,
         }
 
+    def _operator_view_snapshot(self, visual_dir: Optional[Path], fallback: Dict[str, Any]) -> Dict[str, Any]:
+        operator_view_state = read_json(visual_dir / "operator_view_state.json") if visual_dir else {}
+        snapshot = {
+            "backend": str(operator_view_state.get("backend", fallback.get("operator_view_backend", "xpra")) or "xpra"),
+            "url": str(operator_view_state.get("url", fallback.get("operator_view_url", "")) or ""),
+            "port": int(operator_view_state.get("port", fallback.get("operator_view_port", 0)) or 0),
+            "ready": bool(operator_view_state.get("ready", fallback.get("operator_view_ready", False))),
+            "status": str(operator_view_state.get("status", fallback.get("operator_view_status", "disabled")) or "disabled"),
+            "failure_class": str(
+                operator_view_state.get("failure_class", fallback.get("operator_view_failure_class", "")) or ""
+            ),
+            "latest_heartbeat_utc": str(operator_view_state.get("latest_heartbeat_utc", "") or ""),
+            "apps": operator_view_state.get("apps", {}),
+        }
+        heartbeat = parse_utc_timestamp(snapshot["latest_heartbeat_utc"])
+        if snapshot["ready"] and heartbeat is not None:
+            age_s = (datetime.now(timezone.utc) - heartbeat.astimezone(timezone.utc)).total_seconds()
+            if age_s > OPERATOR_VIEW_HEARTBEAT_STALE_S:
+                snapshot["ready"] = False
+                snapshot["status"] = "stale"
+                if not snapshot["failure_class"]:
+                    snapshot["failure_class"] = "operator_view_stale"
+        if not snapshot["ready"]:
+            snapshot["url"] = ""
+        return snapshot
+
+    def _world_stream_path(self, visual_dir: Optional[Path], world_state: Dict[str, Any]) -> Optional[Path]:
+        if visual_dir is None:
+            return None
+        screenshot_path = str(world_state.get("screenshot_path", "") or "").strip()
+        if screenshot_path:
+            try:
+                return Path(screenshot_path)
+            except Exception:
+                pass
+        return visual_dir / "live" / "world_stream.jpg"
+
+    def _world_stream_snapshot(self, visual_dir: Optional[Path], world_state: Dict[str, Any], session_id: str) -> Dict[str, Any]:
+        latest_frame_age = world_state.get("latest_frame_age_s")
+        latest_frame_age_s = float(latest_frame_age) if latest_frame_age not in {None, ""} else None
+        received_frame_count = int(world_state.get("received_frame_count", world_state.get("frame_count", 0)) or 0)
+        session_matches = str(world_state.get("session_id", "") or "") == str(session_id or "")
+        same_session_partition = bool(world_state.get("same_session_partition", False)) and session_matches
+        latest_frame_error = str(world_state.get("latest_frame_error", "") or "")
+        frames_stale = bool(world_state.get("frames_stale", False))
+
+        world_stream_ready = bool(world_state.get("world_stream_ready", False))
+
+        world_stream_transport_healthy = world_state.get("world_stream_transport_healthy")
+        if world_stream_transport_healthy is None:
+            world_stream_transport_healthy = bool(
+                same_session_partition
+                and received_frame_count >= WORLD_STREAM_TRANSPORT_MIN_FRAMES
+                and latest_frame_age_s is not None
+                and latest_frame_age_s <= max(2.5, 0.1)
+                and not latest_frame_error
+                and not frames_stale
+            )
+        else:
+            world_stream_transport_healthy = bool(world_stream_transport_healthy)
+
+        world_stream_renderable = world_state.get("world_stream_renderable")
+        if world_stream_renderable is None:
+            frame_path = self._world_stream_path(visual_dir, world_state)
+            world_stream_renderable = bool(
+                same_session_partition
+                and received_frame_count >= 1
+                and latest_frame_age_s is not None
+                and latest_frame_age_s <= max(WORLD_STREAM_RENDERABLE_GRACE_S, 0.1)
+                and frame_path is not None
+                and frame_path.exists()
+            )
+        else:
+            world_stream_renderable = bool(world_stream_renderable)
+
+        world_stream_degraded = world_state.get("world_stream_degraded")
+        if world_stream_degraded is None:
+            world_stream_degraded = bool(
+                world_stream_renderable and (not world_stream_transport_healthy or not world_stream_ready)
+            )
+        else:
+            world_stream_degraded = bool(world_stream_degraded)
+
+        return {
+            "world_stream_ready": world_stream_ready,
+            "world_stream_renderable": world_stream_renderable,
+            "world_stream_transport_healthy": world_stream_transport_healthy,
+            "world_stream_degraded": world_stream_degraded,
+            "world_stream_frame_count": received_frame_count,
+            "world_stream_latest_frame_utc": str(world_state.get("latest_frame_utc", "") or ""),
+            "world_stream_frame_age_s": latest_frame_age_s,
+            "world_stream_frames_stale": frames_stale,
+            "world_stream_viewer_process_healthy": bool(world_state.get("viewer_process_healthy", False)),
+            "world_stream_failure_class": str(world_state.get("failure_class", "") or ""),
+            "world_stream_url": str(world_state.get("world_stream_url", "") or ""),
+            "scene_content_ok": bool(world_state.get("scene_content_ok", False)),
+            "robot_visible_ok": bool(world_state.get("robot_visible_ok", False)),
+            "target_visible_ok": bool(world_state.get("target_visible_ok", False)),
+            "same_session_partition": same_session_partition,
+        }
+
     def get_state(self) -> Dict[str, Any]:
         self._refresh_control_plane_state()
         with self.state_lock:
@@ -889,6 +1104,7 @@ class DashboardController:
         world_state = read_json(visual_dir / "world_stream_state.json") if visual_dir else {}
         truth_state = read_json(visual_dir / "truth_state.json") if visual_dir else {}
         progress_state = read_json(Path(snapshot["multi_target_progress_path"])) if snapshot.get("multi_target_progress_path") else {}
+        operator_view = self._operator_view_snapshot(visual_dir, snapshot)
 
         if operator_state:
             snapshot["phase"] = operator_state.get("phase") or snapshot.get("phase")
@@ -911,22 +1127,29 @@ class DashboardController:
         snapshot["true_target_seen"] = bool(visual_state.get("true_target_seen", False))
         snapshot["target_visible_ratio"] = float(visual_state.get("target_visible_ratio", 0.0) or 0.0)
         snapshot["overlay_difference_ok"] = bool(visual_state.get("overlay_difference_ok", False))
-        snapshot["world_stream_ready"] = bool(world_state.get("world_stream_ready", False))
-        snapshot["scene_content_ok"] = bool(world_state.get("scene_content_ok", False))
-        snapshot["robot_visible_ok"] = bool(world_state.get("robot_visible_ok", False))
-        snapshot["target_visible_ok"] = bool(world_state.get("target_visible_ok", False))
-        snapshot["same_session_partition"] = bool(world_state.get("same_session_partition", False))
-        snapshot["world_stream_frame_count"] = int(
-            world_state.get("received_frame_count", world_state.get("frame_count", 0)) or 0
-        )
-        snapshot["world_stream_latest_frame_utc"] = str(world_state.get("latest_frame_utc", "") or "")
-        latest_frame_age = world_state.get("latest_frame_age_s")
-        snapshot["world_stream_frame_age_s"] = float(latest_frame_age) if latest_frame_age not in {None, ""} else None
-        snapshot["world_stream_frames_stale"] = bool(world_state.get("frames_stale", False))
-        snapshot["world_stream_viewer_process_healthy"] = bool(world_state.get("viewer_process_healthy", False))
-        snapshot["world_stream_failure_class"] = world_state.get("failure_class", "")
-        snapshot["world_stream_url"] = world_state.get("world_stream_url", snapshot.get("world_stream_url", ""))
+        world_snapshot = self._world_stream_snapshot(visual_dir, world_state, str(snapshot.get("session_id", "") or ""))
+        snapshot["world_stream_ready"] = world_snapshot["world_stream_ready"]
+        snapshot["world_stream_renderable"] = world_snapshot["world_stream_renderable"]
+        snapshot["world_stream_transport_healthy"] = world_snapshot["world_stream_transport_healthy"]
+        snapshot["world_stream_degraded"] = world_snapshot["world_stream_degraded"]
+        snapshot["scene_content_ok"] = world_snapshot["scene_content_ok"]
+        snapshot["robot_visible_ok"] = world_snapshot["robot_visible_ok"]
+        snapshot["target_visible_ok"] = world_snapshot["target_visible_ok"]
+        snapshot["same_session_partition"] = world_snapshot["same_session_partition"]
+        snapshot["world_stream_frame_count"] = world_snapshot["world_stream_frame_count"]
+        snapshot["world_stream_latest_frame_utc"] = world_snapshot["world_stream_latest_frame_utc"]
+        snapshot["world_stream_frame_age_s"] = world_snapshot["world_stream_frame_age_s"]
+        snapshot["world_stream_frames_stale"] = world_snapshot["world_stream_frames_stale"]
+        snapshot["world_stream_viewer_process_healthy"] = world_snapshot["world_stream_viewer_process_healthy"]
+        snapshot["world_stream_failure_class"] = world_snapshot["world_stream_failure_class"]
+        snapshot["world_stream_url"] = world_snapshot["world_stream_url"] or snapshot.get("world_stream_url", "")
         snapshot["world_stream_interactive"] = bool(world_state.get("world_stream_interactive", False))
+        snapshot["operator_view_backend"] = operator_view["backend"]
+        snapshot["operator_view_url"] = operator_view["url"]
+        snapshot["operator_view_port"] = operator_view["port"]
+        snapshot["operator_view_ready"] = operator_view["ready"]
+        snapshot["operator_view_status"] = operator_view["status"]
+        snapshot["operator_view_failure_class"] = operator_view["failure_class"]
         snapshot["robot_truth_seen"] = bool(truth_state.get("robot_truth_seen", False))
         snapshot["live_paths"] = {
             "raw_camera": "live/raw_camera.jpg",
@@ -1193,6 +1416,8 @@ class DashboardController:
             environment_state="starting",
             scenario_state="idle",
             environment_message="environment start queued",
+            environment_failure_class="",
+            gate_service_states={},
             scenario_message="",
             last_error="",
             phase="starting",
@@ -1701,6 +1926,22 @@ class DashboardController:
             time.sleep(0.5)
         return False
 
+    def _wait_for_operator_view_ready(self, timeout_s: float) -> bool:
+        visual_dir = self._current_visual_dir()
+        if visual_dir is None:
+            return False
+        deadline = time.monotonic() + max(timeout_s, 1.0)
+        while time.monotonic() < deadline:
+            state = self._operator_view_snapshot(visual_dir, self.state)
+            if state["ready"]:
+                return True
+            if state["failure_class"]:
+                return False
+            if self.lifecycle_cancel.is_set():
+                return False
+            time.sleep(0.5)
+        return False
+
     def _world_stream_launch_script(self, *, session_id: str, visual_dir_container: str, truth_state_container: str) -> str:
         world_stream_port = int(self.state.get("world_stream_port", 0) or 0)
         return f"""
@@ -1709,11 +1950,26 @@ PID_FILE="/tmp/chasecar_world_stream.pid"
 LOG_FILE="/tmp/chasecar_world_stream.log"
 pkill -f "world_stream_controller.py" 2>/dev/null || true
 rm -f "$PID_FILE" "$LOG_FILE"
-nohup bash -lc 'source /opt/ros/{DEFAULT_CORE_ROS_DISTRO}/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/world_stream_controller.py --session-id "{session_id}" --output-dir "{visual_dir_container}" --public-url "http://127.0.0.1:{world_stream_port}/vnc.html?autoconnect=1&resize=scale&path=websockify" --world-name "{DEFAULT_WORLD_NAME}" --image-topic /observer/image_raw --camera-profile robot_follow --truth-state-path "{truth_state_container}" --duration-s 7200' >"$LOG_FILE" 2>&1 &
+nohup bash -lc 'source /opt/ros/{DEFAULT_CORE_ROS_DISTRO}/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/world_stream_controller.py --session-id "{session_id}" --output-dir "{visual_dir_container}" --public-url "http://127.0.0.1:{world_stream_port}/vnc.html?autoconnect=1&resize=scale&path=websockify" --world-name "{DEFAULT_WORLD_NAME}" --image-topic /observer_world/image_raw --camera-profile robot_follow --truth-state-path "{truth_state_container}" --duration-s 7200' >"$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 sleep 1
 echo "WORLD_STREAM_PID=$(cat "$PID_FILE")"
 echo "WORLD_STREAM_LOG=$LOG_FILE"
+"""
+
+    def _operator_view_launch_script(self, *, session_id: str, visual_dir_container: str, dashboard_url: str) -> str:
+        operator_view_port = int(self.state.get("operator_view_port", 0) or 0)
+        return f"""
+set -euo pipefail
+PID_FILE="/tmp/chasecar_operator_view.pid"
+LOG_FILE="/tmp/chasecar_operator_view.log"
+pkill -f "operator_view_controller.py start" 2>/dev/null || true
+rm -f "$PID_FILE" "$LOG_FILE"
+nohup bash -lc 'source /opt/ros/{DEFAULT_CORE_ROS_DISTRO}/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/operator_view_controller.py start --session-id "{session_id}" --output-dir "{visual_dir_container}" --port "{operator_view_port}" --dashboard-url "{dashboard_url}"' >"$LOG_FILE" 2>&1 &
+echo $! > "$PID_FILE"
+sleep 1
+echo "OPERATOR_VIEW_PID=$(cat "$PID_FILE")"
+echo "OPERATOR_VIEW_LOG=$LOG_FILE"
 """
 
     def _world_stream_restart_ready(self) -> bool:
@@ -1841,19 +2097,22 @@ echo "WORLD_STREAM_LOG=$LOG_FILE"
                     world_stream_last_restart_error=str(exc),
                 )
 
-    def _base_env(self, *, session_id: str, world_stream_port: int) -> Dict[str, str]:
+    def _base_env(self, *, session_id: str, world_stream_port: int, operator_view_port: int) -> Dict[str, str]:
         env = self._compose_env()
         env["GAZEBO_PARTITION"] = session_id
         env["WORLD_STREAM_PORT"] = str(world_stream_port)
+        env["OPERATOR_VIEW_PORT"] = str(operator_view_port)
         env["CHASECAR_SESSION_ID"] = session_id
         env["CHASECAR_BRAIN_STATE_PATH"] = to_container_repo_path(SESSION_ROOT / session_id / "visual" / "brain_state.json")
         env["CHASECAR_BRAIN_FEEDBACK_PATH"] = to_container_repo_path(SESSION_ROOT / session_id / "visual" / "brain_feedback.jsonl")
         return env
 
     def _refresh_session_container_ids(self, project_name: str) -> None:
-        self.sim_gate_container_id = self._docker_service_container_id(project_name, "sim-gate")
-        self.gate_stack_container_id = self._docker_service_container_id(project_name, "gate-stack")
-        self.world_viewer_container_id = self._docker_service_container_id(project_name, "world-viewer")
+        service_states = self._required_gate_service_states(project_name)
+        self.sim_gate_container_id = str(service_states.get("sim-gate", {}).get("container_id", "") or "")
+        self.gate_stack_container_id = str(service_states.get("gate-stack", {}).get("container_id", "") or "")
+        self.world_viewer_container_id = str(service_states.get("world-viewer", {}).get("container_id", "") or "")
+        self.operator_view_container_id = str(service_states.get("operator-view", {}).get("container_id", "") or "")
 
     def _resolve_artifact_dir(self, artifact_dir: str) -> str:
         if not artifact_dir:
@@ -1873,7 +2132,7 @@ echo "WORLD_STREAM_LOG=$LOG_FILE"
             args = ["up", "-d"]
             if self.build_on_next_start:
                 args.append("--build")
-            args.extend(["sim-gate", "world-viewer", "gate-stack"])
+            args.extend(["sim-gate", "world-viewer", "gate-stack", "operator-view"])
             proc = self._popen_docker_compose(project_name, *args, env=env)
         else:
             self._run_powershell(
@@ -1939,6 +2198,13 @@ echo "WORLD_STREAM_LOG=$LOG_FILE"
         self.active_env_proc = proc
         output, _ = proc.communicate()
         self.active_env_proc = None
+        if returncode := proc.returncode:
+            return returncode, output
+        if not self._is_docker_socket_mode():
+            operator_view_up = self._run_docker_compose(project_name, "up", "-d", "operator-view", env=env)
+            if operator_view_up.returncode != 0:
+                operator_output = (operator_view_up.stdout or "") + ("\n" + operator_view_up.stderr if operator_view_up.stderr else "")
+                return operator_view_up.returncode, operator_output.strip()
         return proc.returncode, output
 
     def _start_environment_worker(self) -> None:
@@ -1965,9 +2231,16 @@ echo "WORLD_STREAM_LOG=$LOG_FILE"
                 session_id=session_id,
                 compose_project=project_name,
                 environment_message="starting authoritative environment",
+                environment_failure_class="",
+                gate_service_states={},
                 scenario_message="",
                 last_error="",
                 world_stream_port=0,
+                operator_view_port=0,
+                operator_view_url="",
+                operator_view_ready=False,
+                operator_view_status="starting",
+                operator_view_failure_class="",
                 validation_dir=str(validation_dir),
                 command_history_path=str(validation_dir / "command_history.jsonl"),
                 multi_target_progress_path=str(validation_dir / "multi_target_progress.json"),
@@ -1999,6 +2272,8 @@ echo "WORLD_STREAM_LOG=$LOG_FILE"
                     environment_state="stopped",
                     scenario_state="idle",
                     environment_message="startup cancelled",
+                    environment_failure_class="",
+                    gate_service_states={},
                     world_stream_recovery_state="idle",
                     world_stream_restart_in_progress=False,
                 )
@@ -2008,12 +2283,26 @@ echo "WORLD_STREAM_LOG=$LOG_FILE"
             output = ""
             env: Dict[str, str] = {}
             world_stream_port = 0
+            operator_view_port = 0
+            gate_service_states: Dict[str, Dict[str, Any]] = {}
             for attempt in range(2):
                 world_stream_port = find_free_port(8891, 8921)
-                env = self._base_env(session_id=session_id, world_stream_port=world_stream_port)
+                operator_view_port = find_free_port(OPERATOR_VIEW_PORT_START, OPERATOR_VIEW_PORT_END)
+                env = self._base_env(
+                    session_id=session_id,
+                    world_stream_port=world_stream_port,
+                    operator_view_port=operator_view_port,
+                )
                 self._update_state(
                     world_stream_port=world_stream_port,
+                    operator_view_port=operator_view_port,
+                    operator_view_url="",
+                    operator_view_ready=False,
+                    operator_view_status="starting",
+                    operator_view_failure_class="",
                     environment_message="starting authoritative environment",
+                    environment_failure_class="",
+                    gate_service_states={},
                     startup_retry_count=startup_retry_count,
                     startup_cleanup_count=startup_cleanup_count,
                     startup_last_cleanup_projects=startup_cleanup_projects,
@@ -2025,6 +2314,8 @@ echo "WORLD_STREAM_LOG=$LOG_FILE"
                         environment_state="stopped",
                         scenario_state="idle",
                         environment_message="startup cancelled",
+                        environment_failure_class="",
+                        gate_service_states={},
                         world_stream_recovery_state="idle",
                         world_stream_restart_in_progress=False,
                     )
@@ -2049,21 +2340,27 @@ echo "WORLD_STREAM_LOG=$LOG_FILE"
                 self._force_remove_project_resources(project_name)
                 startup_retry_count += 1
                 self._update_state(
-                    environment_message=f"retrying startup after world-view port {bind_port} bind failure",
+                    environment_message=f"retrying startup after host port {bind_port} bind failure",
                     startup_retry_count=startup_retry_count,
                     startup_cleanup_count=startup_cleanup_count,
                     startup_last_cleanup_projects=startup_cleanup_projects,
                 )
                 self._record_operator_event(
-                    f"Retrying startup after world-view port {bind_port} bind failure.",
+                    f"Retrying startup after host port {bind_port} bind failure.",
                     category="environment",
                 )
             else:
                 raise RuntimeError(output.strip() or "gate bring-up failed")
 
+            gate_service_states = self._wait_for_required_gate_services(project_name, GATE_SERVICE_READY_TIMEOUT_S)
             self._refresh_session_container_ids(project_name)
-            if not self.sim_gate_container_id or not self.gate_stack_container_id or not self.world_viewer_container_id:
-                raise RuntimeError("Missing required gate containers for dashboard environment.")
+            if not self._gate_services_ready(gate_service_states):
+                failure_class, failure_message = self._classify_gate_service_states(gate_service_states)
+                raise EnvironmentStartupError(
+                    failure_message or "Required gate services failed to reach running state.",
+                    environment_failure_class=failure_class or "gate_services_not_running",
+                    gate_service_states=gate_service_states,
+                )
 
             visual_dir = self._current_visual_dir()
             assert visual_dir is not None
@@ -2081,8 +2378,18 @@ echo "TRUTH_PID=$(cat "$PID_FILE")"
 echo "TRUTH_LOG=$LOG_FILE"
 """
             truth_info = self._run_container_helper(self.sim_gate_container_id, truth_script, "TRUTH")
+            if int(truth_info.get("exit_code", 0) or 0) != 0:
+                raise EnvironmentStartupError(
+                    f"Truth probe helper failed. {truth_info['output']}".strip(),
+                    environment_failure_class="truth_probe_start_failed",
+                    gate_service_states=gate_service_states,
+                )
             if not self._wait_for_truth_ready(20.0):
-                raise RuntimeError(f"Truth probe did not report robot visibility. {truth_info['output']}".strip())
+                raise EnvironmentStartupError(
+                    f"Truth probe did not report robot visibility. {truth_info['output']}".strip(),
+                    environment_failure_class="truth_probe_start_failed",
+                    gate_service_states=gate_service_states,
+                )
 
             truth_state_container = to_container_repo_path(visual_dir / "truth_state.json")
             operator_status_container = to_container_repo_path(visual_dir / "operator_status.json")
@@ -2092,8 +2399,43 @@ echo "TRUTH_LOG=$LOG_FILE"
                 truth_state_container=truth_state_container,
             )
             world_info = self._run_container_helper(self.world_viewer_container_id, world_script, "WORLD_STREAM")
+            if int(world_info.get("exit_code", 0) or 0) != 0:
+                raise EnvironmentStartupError(
+                    f"World stream helper failed. {world_info['output']}".strip(),
+                    environment_failure_class="world_stream_start_failed",
+                    gate_service_states=gate_service_states,
+                )
             if not self._wait_for_world_stream_ready(40.0):
-                raise RuntimeError(f"World stream did not become ready. {world_info['output']}".strip())
+                raise EnvironmentStartupError(
+                    f"World stream did not become ready. {world_info['output']}".strip(),
+                    environment_failure_class="world_stream_start_failed",
+                    gate_service_states=gate_service_states,
+                )
+
+            dashboard_url = f"http://127.0.0.1:{self.port}/dashboard.html"
+            operator_view_script = self._operator_view_launch_script(
+                session_id=session_id,
+                visual_dir_container=visual_dir_container,
+                dashboard_url=dashboard_url,
+            )
+            operator_view_info = self._run_container_helper(self.operator_view_container_id, operator_view_script, "OPERATOR_VIEW")
+            if int(operator_view_info.get("exit_code", 0) or 0) != 0:
+                raise EnvironmentStartupError(
+                    f"Operator view helper failed. {operator_view_info['output']}".strip(),
+                    environment_failure_class="operator_view_start_failed",
+                    operator_view_failure_class="operator_view_start_failed",
+                    gate_service_states=gate_service_states,
+                )
+            if not self._wait_for_operator_view_ready(30.0):
+                operator_view_state = self._operator_view_snapshot(visual_dir, self.state)
+                raise EnvironmentStartupError(
+                    f"Operator view did not become ready. {operator_view_info['output']}".strip(),
+                    environment_failure_class="operator_view_start_failed",
+                    operator_view_failure_class=str(
+                        operator_view_state.get("failure_class", "") or "operator_view_start_failed"
+                    ),
+                    gate_service_states=gate_service_states,
+                )
 
             visual_script = f"""
 set -euo pipefail
@@ -2108,15 +2450,32 @@ echo "VISUAL_PID=$(cat "$PID_FILE")"
 echo "VISUAL_LOG=$LOG_FILE"
 """
             visual_info = self._run_container_helper(self.gate_stack_container_id, visual_script, "VISUAL")
+            if int(visual_info.get("exit_code", 0) or 0) != 0:
+                raise EnvironmentStartupError(
+                    f"Visual observer helper failed. {visual_info['output']}".strip(),
+                    environment_failure_class="visual_observer_start_failed",
+                    gate_service_states=gate_service_states,
+                )
             if not self._wait_for_visual_ready(20.0):
-                raise RuntimeError(f"Visual observer did not emit dashboard frames. {visual_info['output']}".strip())
+                raise EnvironmentStartupError(
+                    f"Visual observer did not emit dashboard frames. {visual_info['output']}".strip(),
+                    environment_failure_class="visual_observer_start_failed",
+                    gate_service_states=gate_service_states,
+                )
 
             self._update_state(
                 environment_state="environment_ready",
                 scenario_state="ready",
                 environment_message="environment ready",
+                environment_failure_class="",
+                gate_service_states=gate_service_states,
                 scenario_message="ready",
                 world_stream_url=f"http://127.0.0.1:{world_stream_port}/vnc.html?autoconnect=1&resize=scale&path=websockify",
+                operator_view_backend="xpra",
+                operator_view_url=f"http://127.0.0.1:{operator_view_port}/",
+                operator_view_ready=True,
+                operator_view_status="ready",
+                operator_view_failure_class="",
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
                 world_stream_last_restart_error="",
@@ -2135,6 +2494,7 @@ echo "VISUAL_LOG=$LOG_FILE"
                 env=self._base_env(
                     session_id=self.state.get("session_id", ""),
                     world_stream_port=int(self.state.get("world_stream_port", 0) or 0),
+                    operator_view_port=int(self.state.get("operator_view_port", 0) or 0),
                 )
             )
             if self.lifecycle_cancel.is_set():
@@ -2142,18 +2502,37 @@ echo "VISUAL_LOG=$LOG_FILE"
                     environment_state="stopped",
                     scenario_state="idle",
                     environment_message="startup cancelled",
+                    environment_failure_class="",
+                    gate_service_states={},
                     scenario_message="",
                     last_error="",
+                    operator_view_url="",
+                    operator_view_ready=False,
+                    operator_view_status="cancelled",
+                    operator_view_failure_class="",
                     world_stream_recovery_state="idle",
                     world_stream_restart_in_progress=False,
                 )
                 self._record_operator_event("Environment startup cancelled.", category="environment")
             else:
+                environment_failure_class = ""
+                operator_view_failure_class = ""
+                failed_gate_service_states: Dict[str, Dict[str, Any]] = gate_service_states
+                if isinstance(exc, EnvironmentStartupError):
+                    environment_failure_class = exc.environment_failure_class
+                    operator_view_failure_class = exc.operator_view_failure_class
+                    failed_gate_service_states = exc.gate_service_states or gate_service_states
                 self._update_state(
                     environment_state="error",
                     scenario_state="idle",
                     environment_message="environment start failed",
+                    environment_failure_class=environment_failure_class,
+                    gate_service_states=failed_gate_service_states,
                     last_error=str(exc),
+                    operator_view_url="",
+                    operator_view_ready=False,
+                    operator_view_status="error",
+                    operator_view_failure_class=operator_view_failure_class,
                     world_stream_recovery_state="error",
                     world_stream_last_restart_error=str(exc),
                     world_stream_restart_in_progress=False,
@@ -2172,11 +2551,22 @@ echo "VISUAL_LOG=$LOG_FILE"
             with self.state_lock:
                 session_id = self.state.get("session_id", "")
                 world_stream_port = int(self.state.get("world_stream_port", 0) or 0)
-            env = self._base_env(session_id=session_id or make_session_id(), world_stream_port=world_stream_port or find_free_port(8891, 8921))
+                operator_view_port = int(self.state.get("operator_view_port", 0) or 0)
+            env = self._base_env(
+                session_id=session_id or make_session_id(),
+                world_stream_port=world_stream_port or find_free_port(8891, 8921),
+                operator_view_port=operator_view_port or find_free_port(OPERATOR_VIEW_PORT_START, OPERATOR_VIEW_PORT_END),
+            )
             self._update_state(
                 environment_state="stopping",
                 scenario_state="idle",
                 environment_message="stopping environment",
+                environment_failure_class="",
+                operator_view_ready=False,
+                operator_view_url="",
+                operator_view_status="stopping",
+                operator_view_failure_class="",
+                gate_service_states={},
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
             )
@@ -2198,12 +2588,19 @@ echo "VISUAL_LOG=$LOG_FILE"
                 environment_state="stopped",
                 scenario_state="idle",
                 environment_message="stopped",
+                environment_failure_class="",
                 scenario_message="",
                 active_scenario="",
                 phase="stopped",
                 target_id="",
                 target_transition_active=False,
                 stale_chasecar_containers=stale,
+                operator_view_url="",
+                operator_view_port=0,
+                operator_view_ready=False,
+                operator_view_status="disabled",
+                operator_view_failure_class="",
+                gate_service_states={},
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
             )
@@ -2215,6 +2612,12 @@ echo "VISUAL_LOG=$LOG_FILE"
                 environment_state="error",
                 last_error=str(exc),
                 environment_message="stop failed",
+                environment_failure_class="environment_stop_failed",
+                operator_view_ready=False,
+                operator_view_url="",
+                operator_view_status="error",
+                operator_view_failure_class="operator_view_stop_failed",
+                gate_service_states={},
                 world_stream_recovery_state="error",
                 world_stream_restart_in_progress=False,
             )
@@ -2230,21 +2633,34 @@ echo "VISUAL_LOG=$LOG_FILE"
                 session_id = self.state.get("session_id", "") or make_session_id()
                 project_name = self.state.get("compose_project", "") or f"chasecar_dashboard_{slugify_session(session_id)}"
                 world_stream_port = int(self.state.get("world_stream_port", 0) or find_free_port(8891, 8921))
+                operator_view_port = int(self.state.get("operator_view_port", 0) or find_free_port(OPERATOR_VIEW_PORT_START, OPERATOR_VIEW_PORT_END))
             self._update_state(
                 environment_state="stopping",
                 environment_message="refreshing environment",
+                environment_failure_class="",
+                operator_view_ready=False,
+                operator_view_url="",
+                operator_view_status="refreshing",
+                operator_view_failure_class="",
+                gate_service_states={},
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
             )
             self._world_stream_stale_since_monotonic = 0.0
-            env = self._base_env(session_id=session_id, world_stream_port=world_stream_port)
+            env = self._base_env(session_id=session_id, world_stream_port=world_stream_port, operator_view_port=operator_view_port)
             self._cleanup_scenario_processes()
             self._teardown_environment(env=env)
             self._update_state(
                 environment_state="stopped",
                 environment_message="refresh restart pending",
+                environment_failure_class="",
                 compose_project=project_name,
                 session_id=session_id,
+                operator_view_url="",
+                operator_view_ready=False,
+                operator_view_status="starting",
+                operator_view_failure_class="",
+                gate_service_states={},
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
             )
@@ -2259,11 +2675,22 @@ echo "VISUAL_LOG=$LOG_FILE"
             with self.state_lock:
                 old_session = self.state.get("session_id", "")
                 world_stream_port = int(self.state.get("world_stream_port", 0) or find_free_port(8891, 8921))
-            env = self._base_env(session_id=old_session or make_session_id(), world_stream_port=world_stream_port)
+                operator_view_port = int(self.state.get("operator_view_port", 0) or find_free_port(OPERATOR_VIEW_PORT_START, OPERATOR_VIEW_PORT_END))
+            env = self._base_env(
+                session_id=old_session or make_session_id(),
+                world_stream_port=world_stream_port,
+                operator_view_port=operator_view_port,
+            )
             self._update_state(
                 environment_state="stopping",
                 environment_message="resetting sim",
+                environment_failure_class="",
                 scenario_message="reset pending",
+                operator_view_ready=False,
+                operator_view_url="",
+                operator_view_status="resetting",
+                operator_view_failure_class="",
+                gate_service_states={},
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
             )
@@ -2319,6 +2746,31 @@ pkill -f "fluxbox" 2>/dev/null || true
 pkill -f "gz gui" 2>/dev/null || true
 """,
             )
+        if self.operator_view_container_id:
+            visual_dir = self._current_visual_dir()
+            output_dir = to_container_repo_path(visual_dir) if visual_dir else ""
+            stop_command = (
+                f'python3 /workspaces/chasecar/scripts/operator_view_controller.py stop --output-dir "{output_dir}"'
+                if output_dir
+                else 'pkill -f "operator_view_controller.py start" 2>/dev/null || true'
+            )
+            self._docker_exec(
+                self.operator_view_container_id,
+                f"""
+set +e
+{stop_command}
+if [ -f /tmp/chasecar_operator_view.pid ]; then
+  PID="$(cat /tmp/chasecar_operator_view.pid 2>/dev/null || true)"
+  [ -n "$PID" ] && kill "$PID" 2>/dev/null || true
+fi
+pkill -f "operator_view_controller.py start" 2>/dev/null || true
+pkill -f "xpra .*14500" 2>/dev/null || true
+pkill -f "rqt_image_view" 2>/dev/null || true
+pkill -f "image_view" 2>/dev/null || true
+pkill -f "gz gui" 2>/dev/null || true
+pkill -f "fluxbox" 2>/dev/null || true
+""",
+            )
 
         project_name = self.state.get("compose_project", "")
         if project_name:
@@ -2354,9 +2806,12 @@ pkill -f "gz gui" 2>/dev/null || true
                     DEFAULT_CORE_ROS_DISTRO,
                     env=env,
                 )
+                if self.docker:
+                    self._run_docker_compose(project_name, "down", "--remove-orphans", env=env)
         self.sim_gate_container_id = ""
         self.gate_stack_container_id = ""
         self.world_viewer_container_id = ""
+        self.operator_view_container_id = ""
         self._world_stream_stale_since_monotonic = 0.0
 
     def _list_chasecar_containers(self) -> list[str]:
@@ -2488,7 +2943,12 @@ pkill -f "gz gui" 2>/dev/null || true
     def _scenario_env(self, scenario: ScenarioDefinition) -> Dict[str, str]:
         session_id = self.state.get("session_id", "")
         world_stream_port = int(self.state.get("world_stream_port", 0) or find_free_port(8891, 8921))
-        env = self._base_env(session_id=session_id, world_stream_port=world_stream_port)
+        operator_view_port = int(self.state.get("operator_view_port", 0) or find_free_port(OPERATOR_VIEW_PORT_START, OPERATOR_VIEW_PORT_END))
+        env = self._base_env(
+            session_id=session_id,
+            world_stream_port=world_stream_port,
+            operator_view_port=operator_view_port,
+        )
         env.update(
             {
                 "CHASECAR_NAV2_TARGET_X": f"{scenario.target_x:.3f}",
@@ -3014,10 +3474,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         path = parsed.path or "/"
         query = parse_qs(parsed.query or "")
         controller = self.server.controller
-        if path in {"/", "/dashboard.html"}:
-            return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "browser_dashboard.html", "text/html; charset=utf-8")
-        if path in {"/beta", "/beta/", "/beta_dashboard.html"}:
+        if path in {"/", "/dashboard.html", "/beta", "/beta/", "/beta_dashboard.html"}:
             return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "beta_dashboard.html", "text/html; charset=utf-8")
+        if path in {"/classic", "/classic/", "/browser_dashboard.html"}:
+            return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "browser_dashboard.html", "text/html; charset=utf-8")
         if path == "/browser_dashboard.js":
             return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "browser_dashboard.js", "text/javascript; charset=utf-8")
         if path == "/api/state":

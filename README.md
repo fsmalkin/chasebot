@@ -183,29 +183,21 @@ powershell -ExecutionPolicy Bypass -File scripts/run_recorded_visual_demo.ps1 `
   -SessionId <session_id>
 ```
 
-2. Browser dashboard on the same authoritative lane:
+2. Dashboard control/status plus separate Xpra live view:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 `
-  -Milestone 2 `
-  -ExecutionLane container_kilted `
-  -CoreRosDistro kilted `
-  -RuntimeTarget robot_fidelity_orin `
-  -Headless true `
-  -VisualSurface browser_dashboard `
-  -WorldSurface streamed_sim `
-  -OpenFeedViewers true `
-  -AutoOpenVisualSurface true `
-  -RequireParityGreenForOperatorView false `
-  -MaxRunSeconds 120
-```
+   - Open the dashboard for control/status.
+   - Use the `Open Xpra` link for the live operator view.
+   - Keep the browser-dashboard wrappers for validation and recorded parity, not as the preferred live surface.
 
 3. Native Gazebo/X11 remains debug-only and does not count toward promotion.
-4. The browser world pane is the live Gazebo world from the world camera sensor (`/observer_world/image_raw`), not the old noVNC/X11 path.
+4. The browser world pane remains available as a legacy/debug fallback from the world camera sensor (`/observer_world/image_raw`), but it is no longer the preferred live operator surface.
 
 Operator visual signoff sequence:
 
-1. Single-target M3 browser run first:
+1. Single-target M3 live view first:
+
+   - Open the dashboard and launch Xpra from the `Open Xpra` link.
+   - Keep the dashboard open for control/status during the live view.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 `

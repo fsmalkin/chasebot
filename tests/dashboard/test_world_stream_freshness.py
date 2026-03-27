@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import re
 import socket
 import sys
 import threading
+import subprocess
+from collections import deque
 from types import ModuleType, SimpleNamespace
 from pathlib import Path
 
@@ -133,8 +136,14 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
     controller.world_stream_restart_lock = threading.Lock()
     controller._world_stream_stale_since_monotonic = 0.0
     controller._world_stream_last_restart_monotonic = 0.0
+    controller.active_env_proc = None
+    controller.active_scenario_proc = None
     controller.sim_gate_container_id = "sim-gate"
+    controller.gate_stack_container_id = "gate-stack"
     controller.world_viewer_container_id = "world-viewer"
+    controller.operator_view_container_id = "operator-view"
+    controller.scenario_lock = threading.Lock()
+    controller.scenario_cancel = threading.Event()
     controller.frozen_intents = {
         "search_for_target": {},
         "plan_to_target": {},
@@ -166,6 +175,8 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
         "target_transition_active": False,
         "active_scenario": "llm_turn_then_go_proof",
         "environment_message": "ready",
+        "environment_failure_class": "",
+        "gate_service_states": {},
         "scenario_message": "",
         "last_intent": "",
         "last_feedback": "",
@@ -196,6 +207,12 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
         "recent_operator_events": [],
         "world_stream_url": "http://127.0.0.1:8891/vnc.html?autoconnect=1&resize=scale&path=websockify",
         "world_stream_port": 8891,
+        "operator_view_backend": "xpra",
+        "operator_view_url": "http://127.0.0.1:14500/",
+        "operator_view_port": 14500,
+        "operator_view_ready": True,
+        "operator_view_status": "ready",
+        "operator_view_failure_class": "",
         "validation_dir": "",
         "command_history_path": "",
         "multi_target_progress_path": "",
@@ -227,7 +244,146 @@ def _write_world_state(tmp_path: Path, payload: dict[str, object]) -> Path:
     visual_dir.mkdir(parents=True, exist_ok=True)
     _write_json(visual_dir / "state.json", {"raw_frame_count": 0, "debug_frame_count": 0, "telemetry_frame_count": 0})
     _write_json(visual_dir / "world_stream_state.json", payload)
+    screenshot_path = str(payload.get("screenshot_path", "") or "")
+    if screenshot_path:
+        screenshot_file = Path(screenshot_path)
+        screenshot_file.parent.mkdir(parents=True, exist_ok=True)
+        screenshot_file.write_bytes(b"frame")
     return visual_dir
+
+
+def _write_operator_view_state(tmp_path: Path, payload: dict[str, object]) -> Path:
+    visual_dir = tmp_path / "visual"
+    visual_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(visual_dir / "state.json", {"raw_frame_count": 0, "debug_frame_count": 0, "telemetry_frame_count": 0})
+    _write_json(visual_dir / "operator_view_state.json", payload)
+    return visual_dir
+
+
+def _serve_dashboard_path(path: str, tmp_path: Path) -> list[tuple[Path, str, bool]]:
+    served: list[tuple[Path, str, bool]] = []
+    handler = dashboard_service.DashboardRequestHandler.__new__(dashboard_service.DashboardRequestHandler)
+    handler.path = path
+    handler.server = SimpleNamespace(controller=_make_controller(tmp_path))
+    handler._serve_file = lambda file_path, content_type, no_cache=False: served.append((Path(file_path), content_type, no_cache))
+    handler._json_response = lambda status, payload: (_ for _ in ()).throw(AssertionError(f"unexpected json response: {status} {payload}"))
+    dashboard_service.DashboardRequestHandler.do_GET(handler)
+    return served
+
+
+def _beta_dashboard_world_snapshots(*states: dict[str, object]) -> list[dict[str, object]]:
+    html_path = REPO_ROOT / "runtime/dashboard/beta_dashboard.html"
+    script = html_path.read_text(encoding="utf-8")
+    script = script.split("<script>", 1)[1].rsplit("</script>", 1)[0]
+    script = re.sub(r"\npoll\(\);\s*setInterval\(poll, 1000\);\s*$", "\n", script)
+    payload = json.dumps(list(states))
+    node_script = f"""
+const states = {payload};
+const elements = new Map();
+function makeElement(id) {{
+  const classes = new Set();
+  const el = {{
+    id,
+    style: {{ display: '' }},
+    disabled: false,
+    title: '',
+    textContent: '',
+    innerHTML: '',
+    _classes: classes,
+    classList: {{
+      add(...names) {{ names.forEach((name) => classes.add(name)); }},
+      remove(...names) {{ names.forEach((name) => classes.delete(name)); }},
+      toggle(name, force) {{
+        const shouldAdd = force === undefined ? !classes.has(name) : !!force;
+        if (shouldAdd) classes.add(name);
+        else classes.delete(name);
+        return shouldAdd;
+      }},
+    }},
+    removeAttribute(name) {{ if (name === 'src') this.src = ''; }},
+  }};
+  let srcValue = '';
+  Object.defineProperty(el, 'src', {{
+    get() {{ return srcValue; }},
+    set(value) {{
+      srcValue = String(value);
+      if (typeof el.onload === 'function') el.onload();
+    }},
+  }});
+  el.onload = null;
+  el.onerror = null;
+  if (id === 'img-world') {{
+    el.onload = () => imgOk('world');
+    el.onerror = () => imgFail('world');
+  }}
+  if (id === 'img-yolo') {{
+    el.onload = () => imgOk('yolo');
+    el.onerror = () => imgFail('yolo');
+  }}
+  el.setAttribute = (name, value) => {{ if (name === 'src') el.src = String(value); }};
+  Object.defineProperty(el, 'className', {{
+    get() {{ return Array.from(classes).join(' '); }},
+    set(value) {{
+      classes.clear();
+      String(value).split(/\\s+/).filter(Boolean).forEach((name) => classes.add(name));
+    }},
+  }});
+  return el;
+}}
+function getElementById(id) {{
+  if (!elements.has(id)) elements.set(id, makeElement(id));
+  return elements.get(id);
+}}
+globalThis.document = {{
+  getElementById,
+  querySelectorAll: () => [],
+  addEventListener: () => {{}},
+}};
+globalThis.window = {{ open: () => {{}} }};
+globalThis.fetch = async () => ({{ ok: true, json: async () => ({{}}) }});
+globalThis.setInterval = () => 0;
+globalThis.clearInterval = () => {{}};
+globalThis.Image = class {{
+  constructor() {{ this.onload = null; this.onerror = null; this._src = ''; }}
+  set src(value) {{
+    this._src = String(value);
+    if (!globalThis.__deferImageLoad && this.onload) this.onload();
+  }}
+  get src() {{ return this._src; }}
+}};
+{script}
+function snapshot() {{
+  const ids = ['label-world','badge-world','ph-world','ph-world-text','note-world','img-world','frame-operator','btn-open-live','btn-embed-live','btn-legacy-world','ph-operator','ph-operator-text'];
+  const pick = (id) => elements.get(id);
+  return {{
+    label: pick('label-world').textContent,
+    badgeText: pick('badge-world').textContent,
+    badgeClass: pick('badge-world').className,
+    badgeTitle: pick('badge-world').title,
+    worldDisplay: pick('img-world').style.display,
+    worldPlaceholderDisplay: pick('ph-world').style.display,
+    worldPlaceholderText: pick('ph-world-text').textContent,
+    noteText: pick('note-world').textContent,
+    noteDisplay: pick('note-world').style.display,
+    operatorFrameDisplay: pick('frame-operator').style.display,
+    operatorPlaceholderDisplay: pick('ph-operator').style.display,
+    operatorPlaceholderText: pick('ph-operator-text').textContent,
+    openHidden: pick('btn-open-live').className.includes('hidden'),
+    embedHidden: pick('btn-embed-live').className.includes('hidden'),
+    legacyHidden: pick('btn-legacy-world').className.includes('hidden'),
+  }};
+}}
+const snapshots = [];
+for (const state of states) {{
+  globalThis.__deferImageLoad = Boolean(state.__defer_image_load);
+  S = state;
+  renderImages();
+  snapshots.push(snapshot());
+}}
+process.stdout.write(JSON.stringify(snapshots));
+"""
+    completed = subprocess.run(["node", "-"], input=node_script, capture_output=True, check=True, text=True)
+    return json.loads(completed.stdout)
 
 
 def test_get_state_exposes_world_stream_freshness_fields(tmp_path):
@@ -254,7 +410,7 @@ def test_get_state_exposes_world_stream_freshness_fields(tmp_path):
             "robot_visible_ok": True,
             "target_visible_ok": True,
             "failure_class": "world_stream_stale",
-            "image_topic": "/observer/image_raw",
+            "image_topic": "/observer_world/image_raw",
             "frame_count": 42,
             "elapsed_s": 9.5,
             "frame_coverage_ratio": 0.81,
@@ -287,6 +443,447 @@ def test_get_state_exposes_world_stream_freshness_fields(tmp_path):
     assert state["world_stream_frame_age_s"] == 3.2
     assert state["world_stream_frames_stale"] is True
     assert state["world_stream_viewer_process_healthy"] is False
+    assert state["world_stream_renderable"] is True
+    assert state["world_stream_transport_healthy"] is False
+    assert state["world_stream_degraded"] is True
+
+
+def test_get_state_derives_healthy_world_renderability_from_current_session_artifact(tmp_path):
+    controller = _make_controller(tmp_path)
+    _write_world_state(
+        tmp_path,
+        {
+            "session_id": controller.state["session_id"],
+            "partition": controller.state["session_id"],
+            "world_surface": "streamed_sim",
+            "world_stream_url": "",
+            "world_stream_ready": True,
+            "world_stream_nonblank": True,
+            "world_stream_interactive": False,
+            "same_session_partition": True,
+            "viewer_process_healthy": True,
+            "camera_profile": "robot_follow",
+            "scene_content_ok": True,
+            "robot_visible_ok": True,
+            "target_visible_ok": True,
+            "failure_class": "",
+            "frame_count": 12,
+            "received_frame_count": 12,
+            "rendered_frame_count": 12,
+            "latest_frame_utc": "2026-03-18T12:00:05Z",
+            "latest_frame_age_s": 0.4,
+            "frames_stale": False,
+            "latest_frame_error": "",
+            "screenshot_path": str(tmp_path / "visual" / "live" / "world_stream.jpg"),
+            "video_path": str(tmp_path / "visual" / "world_stream.mp4"),
+        },
+    )
+
+    state = controller.get_state()
+
+    assert state["world_stream_ready"] is True
+    assert state["world_stream_renderable"] is True
+    assert state["world_stream_transport_healthy"] is True
+    assert state["world_stream_degraded"] is False
+
+
+def test_get_state_world_not_renderable_without_current_session_frame(tmp_path):
+    controller = _make_controller(tmp_path)
+    _write_world_state(
+        tmp_path,
+        {
+            "session_id": controller.state["session_id"],
+            "partition": controller.state["session_id"],
+            "world_surface": "streamed_sim",
+            "world_stream_url": "",
+            "world_stream_ready": False,
+            "world_stream_nonblank": False,
+            "world_stream_interactive": False,
+            "same_session_partition": True,
+            "viewer_process_healthy": False,
+            "camera_profile": "robot_follow",
+            "scene_content_ok": False,
+            "robot_visible_ok": False,
+            "target_visible_ok": False,
+            "failure_class": "world_stream_no_recent_frames",
+            "frame_count": 0,
+            "received_frame_count": 0,
+            "rendered_frame_count": 0,
+            "latest_frame_utc": "",
+            "latest_frame_age_s": None,
+            "frames_stale": False,
+            "latest_frame_error": "",
+            "screenshot_path": str(tmp_path / "visual" / "live" / "world_stream.jpg.missing"),
+            "video_path": str(tmp_path / "visual" / "world_stream.mp4"),
+        },
+    )
+
+    state = controller.get_state()
+
+    assert state["world_stream_ready"] is False
+    assert state["world_stream_renderable"] is False
+    assert state["world_stream_transport_healthy"] is False
+    assert state["world_stream_degraded"] is False
+
+
+def test_get_state_exposes_operator_view_fields(tmp_path):
+    controller = _make_controller(tmp_path)
+    _write_operator_view_state(
+        tmp_path,
+        {
+            "session_id": controller.state["session_id"],
+            "backend": "xpra",
+            "url": "http://127.0.0.1:14512/",
+            "port": 14512,
+            "ready": True,
+            "status": "ready",
+            "failure_class": "",
+            "latest_heartbeat_utc": dashboard_service.utc_now(),
+            "apps": {
+                "gz_gui": {"pid": 1001, "alive": True},
+                "raw_viewer": {"pid": 1002, "alive": True},
+                "debug_viewer": {"pid": 1003, "alive": True},
+            },
+        },
+    )
+
+    state = controller.get_state()
+
+    assert state["operator_view_backend"] == "xpra"
+    assert state["operator_view_url"] == "http://127.0.0.1:14512/"
+    assert state["operator_view_port"] == 14512
+    assert state["operator_view_ready"] is True
+    assert state["operator_view_status"] == "ready"
+    assert state["operator_view_failure_class"] == ""
+
+
+def test_get_state_blanks_operator_view_url_until_ready(tmp_path):
+    controller = _make_controller(tmp_path)
+    _write_operator_view_state(
+        tmp_path,
+        {
+            "session_id": controller.state["session_id"],
+            "backend": "xpra",
+            "url": "http://127.0.0.1:14512/",
+            "port": 14512,
+            "ready": False,
+            "status": "starting",
+            "failure_class": "",
+            "latest_heartbeat_utc": dashboard_service.utc_now(),
+            "apps": {
+                "gz_gui": {"pid": 1001, "alive": True},
+                "raw_viewer": {"pid": 1002, "alive": True},
+                "debug_viewer": {"pid": 1003, "alive": True},
+            },
+        },
+    )
+
+    not_ready = controller.get_state()
+    assert not_ready["operator_view_ready"] is False
+    assert not_ready["operator_view_url"] == ""
+
+    _write_operator_view_state(
+        tmp_path,
+        {
+            "session_id": controller.state["session_id"],
+            "backend": "xpra",
+            "url": "http://127.0.0.1:14512/",
+            "port": 14512,
+            "ready": True,
+            "status": "ready",
+            "failure_class": "",
+            "latest_heartbeat_utc": dashboard_service.utc_now(),
+            "apps": {
+                "gz_gui": {"pid": 1001, "alive": True},
+                "raw_viewer": {"pid": 1002, "alive": True},
+                "debug_viewer": {"pid": 1003, "alive": True},
+            },
+        },
+    )
+
+    ready = controller.get_state()
+    assert ready["operator_view_ready"] is True
+    assert ready["operator_view_url"] == "http://127.0.0.1:14512/"
+
+
+def test_get_state_marks_operator_view_stale_when_heartbeat_old(tmp_path):
+    controller = _make_controller(tmp_path)
+    _write_operator_view_state(
+        tmp_path,
+        {
+            "session_id": controller.state["session_id"],
+            "backend": "xpra",
+            "url": "http://127.0.0.1:14512/",
+            "port": 14512,
+            "ready": True,
+            "status": "ready",
+            "failure_class": "",
+            "latest_heartbeat_utc": "2000-01-01T00:00:00Z",
+            "apps": {
+                "gz_gui": {"pid": 1001, "alive": True},
+                "raw_viewer": {"pid": 1002, "alive": True},
+                "debug_viewer": {"pid": 1003, "alive": True},
+            },
+        },
+    )
+
+    state = controller.get_state()
+
+    assert state["operator_view_ready"] is False
+    assert state["operator_view_status"] == "stale"
+    assert state["operator_view_failure_class"] == "operator_view_stale"
+
+
+def test_required_gate_service_states_cover_running_created_exited_and_missing(tmp_path):
+    controller = _make_controller(tmp_path)
+    service_states = {
+        "sim-gate": {"service": "sim-gate", "status": "running", "container_id": "sim-gate-1"},
+        "world-viewer": {"service": "world-viewer", "status": "created", "container_id": "world-viewer-1"},
+        "gate-stack": {"service": "gate-stack", "status": "exited", "container_id": "gate-stack-1"},
+        "operator-view": {"service": "operator-view", "status": "missing", "container_id": ""},
+    }
+    controller._docker_service_state = lambda _project_name, service_name: dict(service_states[service_name])
+
+    resolved = controller._required_gate_service_states("chasecar_dashboard_test")
+
+    assert resolved == service_states
+    assert controller._gate_services_ready(resolved) is False
+    failure_class, failure_message = controller._classify_gate_service_states(resolved)
+    assert failure_class == "gate_services_missing"
+    assert "operator-view" in failure_message
+
+
+def test_classify_gate_service_states_reports_not_running_when_services_exist(tmp_path):
+    controller = _make_controller(tmp_path)
+    gate_service_states = {
+        "sim-gate": {"service": "sim-gate", "status": "running", "container_id": "sim-gate-1"},
+        "world-viewer": {"service": "world-viewer", "status": "created", "container_id": "world-viewer-1"},
+        "gate-stack": {"service": "gate-stack", "status": "exited", "container_id": "gate-stack-1"},
+        "operator-view": {"service": "operator-view", "status": "running", "container_id": "operator-view-1"},
+    }
+
+    failure_class, failure_message = controller._classify_gate_service_states(gate_service_states)
+
+    assert failure_class == "gate_services_not_running"
+    assert "world-viewer=created" in failure_message
+    assert "gate-stack=exited" in failure_message
+
+
+def test_start_environment_worker_records_gate_service_failure_class_and_states(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    controller._clear_llm_proof_runtime_state = lambda: None
+    controller._clear_visit_mission_runtime_state = lambda: None
+    controller._write_operator_status = lambda **_kwargs: None
+    controller._write_lock_file = lambda: None
+    controller._remove_lock_file = lambda: None
+    controller._record_operator_event = lambda *_args, **_kwargs: None
+    controller._teardown_environment = lambda env=None: None
+    controller._run_environment_compose_up = lambda *_args, **_kwargs: (0, "ok")
+    controller._refresh_session_container_ids = lambda *_args, **_kwargs: None
+    controller._wait_for_required_gate_services = lambda _project_name, _timeout_s: {
+        "sim-gate": {"service": "sim-gate", "status": "running", "container_id": "sim-gate-1"},
+        "world-viewer": {"service": "world-viewer", "status": "created", "container_id": "world-viewer-1"},
+        "gate-stack": {"service": "gate-stack", "status": "exited", "container_id": "gate-stack-1"},
+        "operator-view": {"service": "operator-view", "status": "running", "container_id": "operator-view-1"},
+    }
+    monkeypatch.setattr(dashboard_service, "find_free_port", lambda start, end: start)
+    monkeypatch.setattr(dashboard_service, "make_session_id", lambda: "20260320T200000Z")
+
+    controller._start_environment_worker()
+
+    assert controller.state["environment_state"] == "error"
+    assert controller.state["environment_failure_class"] == "gate_services_not_running"
+    assert controller.state["gate_service_states"]["world-viewer"]["status"] == "created"
+    assert controller.state["gate_service_states"]["gate-stack"]["status"] == "exited"
+    assert controller.state["operator_view_ready"] is False
+    assert controller.state["operator_view_url"] == ""
+    assert controller.state["operator_view_status"] == "error"
+
+
+def test_dashboard_routes_promote_beta_and_keep_classic_alias(tmp_path):
+    root_served = _serve_dashboard_path("/", tmp_path)
+    classic_served = _serve_dashboard_path("/browser_dashboard.html", tmp_path)
+
+    assert root_served[0][0].name == "beta_dashboard.html"
+    assert classic_served[0][0].name == "browser_dashboard.html"
+
+
+def test_beta_dashboard_default_route_stays_inert_before_viewer_ready(tmp_path):
+    root_served = _serve_dashboard_path("/", tmp_path)
+    assert root_served[0][0].name == "beta_dashboard.html"
+
+    controller = _make_controller(tmp_path)
+    _write_operator_view_state(
+        tmp_path,
+        {
+            "session_id": controller.state["session_id"],
+            "backend": "xpra",
+            "url": "http://127.0.0.1:14512/",
+            "port": 14512,
+            "ready": False,
+            "status": "starting",
+            "failure_class": "",
+            "latest_heartbeat_utc": dashboard_service.utc_now(),
+            "apps": {
+                "gz_gui": {"pid": 1001, "alive": True},
+                "raw_viewer": {"pid": 1002, "alive": True},
+                "debug_viewer": {"pid": 1003, "alive": True},
+            },
+        },
+    )
+
+    state = controller.get_state()
+    assert state["operator_view_ready"] is False
+    assert state["operator_view_url"] == ""
+
+
+def test_beta_dashboard_world_surface_prefers_world_feed_when_renderable():
+    snapshots = _beta_dashboard_world_snapshots(
+        {
+            "session_id": "20260327T043932Z",
+            "environment_state": "environment_ready",
+            "world_stream_ready": True,
+            "world_stream_renderable": True,
+            "world_stream_transport_healthy": True,
+            "world_stream_degraded": False,
+            "world_stream_frame_age_s": 0.2,
+            "live_paths": {"world_stream": "live/world_stream.jpg"},
+            "operator_view_ready": True,
+            "operator_view_url": "http://127.0.0.1:14500/",
+            "operator_view_status": "ready",
+            "operator_view_failure_class": "",
+            "world_stream_failure_class": "",
+            "recent_operator_events": [],
+        }
+    )
+
+    snap = snapshots[0]
+
+    assert snap["label"] == "World surface"
+    assert snap["badgeText"] == "sim live"
+    assert snap["worldDisplay"] == "block"
+    assert snap["worldPlaceholderDisplay"] == "none"
+    assert snap["openHidden"] is False
+    assert snap["embedHidden"] is False
+    assert snap["legacyHidden"] is True
+
+
+def test_beta_dashboard_keeps_last_good_world_frame_during_degradation():
+    snapshots = _beta_dashboard_world_snapshots(
+        {
+            "session_id": "20260327T043932Z",
+            "environment_state": "environment_ready",
+            "world_stream_ready": True,
+            "world_stream_renderable": True,
+            "world_stream_transport_healthy": True,
+            "world_stream_degraded": False,
+            "world_stream_frame_age_s": 0.2,
+            "live_paths": {"world_stream": "live/world_stream.jpg"},
+            "operator_view_ready": True,
+            "operator_view_url": "http://127.0.0.1:14500/",
+            "operator_view_status": "ready",
+            "operator_view_failure_class": "",
+            "world_stream_failure_class": "",
+            "recent_operator_events": [],
+        },
+        {
+            "session_id": "20260327T043932Z",
+            "environment_state": "environment_ready",
+            "world_stream_ready": False,
+            "world_stream_renderable": False,
+            "world_stream_transport_healthy": False,
+            "world_stream_degraded": True,
+            "world_stream_frame_age_s": 3.8,
+            "live_paths": {"world_stream": "live/world_stream.jpg"},
+            "operator_view_ready": True,
+            "operator_view_url": "http://127.0.0.1:14500/",
+            "operator_view_status": "ready",
+            "operator_view_failure_class": "",
+            "world_stream_failure_class": "world_stream_no_recent_frames",
+            "recent_operator_events": [],
+        },
+    )
+
+    healthy, degraded = snapshots
+
+    assert healthy["worldDisplay"] == "block"
+    assert degraded["worldDisplay"] == "block"
+    assert degraded["badgeText"] == "stale"
+    assert degraded["noteText"] == "Holding last good world frame while stream recovers..."
+    assert degraded["worldPlaceholderDisplay"] == "none"
+
+
+def test_beta_dashboard_waits_for_first_world_frame():
+    snapshots = _beta_dashboard_world_snapshots(
+        {
+            "session_id": "20260327T043932Z",
+            "environment_state": "environment_ready",
+            "world_stream_ready": False,
+            "world_stream_renderable": True,
+            "world_stream_transport_healthy": False,
+            "world_stream_degraded": True,
+            "world_stream_frame_age_s": 0.0,
+            "live_paths": {"world_stream": "live/world_stream.jpg"},
+            "__defer_image_load": True,
+            "operator_view_ready": True,
+            "operator_view_url": "http://127.0.0.1:14500/",
+            "operator_view_status": "ready",
+            "operator_view_failure_class": "",
+            "world_stream_failure_class": "",
+            "recent_operator_events": [],
+        }
+    )
+
+    snap = snapshots[0]
+
+    assert snap["worldDisplay"] == "none"
+    assert snap["worldPlaceholderDisplay"] == ""
+    assert snap["worldPlaceholderText"] == "Waiting for first world frame..."
+    assert snap["badgeText"] == "degraded"
+
+
+def test_beta_dashboard_session_rollover_clears_stale_world_frame():
+    snapshots = _beta_dashboard_world_snapshots(
+        {
+            "session_id": "20260327T043932Z",
+            "environment_state": "environment_ready",
+            "world_stream_ready": True,
+            "world_stream_renderable": True,
+            "world_stream_transport_healthy": True,
+            "world_stream_degraded": False,
+            "world_stream_frame_age_s": 0.2,
+            "live_paths": {"world_stream": "live/world_stream.jpg"},
+            "operator_view_ready": True,
+            "operator_view_url": "http://127.0.0.1:14500/",
+            "operator_view_status": "ready",
+            "operator_view_failure_class": "",
+            "world_stream_failure_class": "",
+            "recent_operator_events": [],
+        },
+        {
+            "session_id": "20260327T044500Z",
+            "environment_state": "environment_ready",
+            "world_stream_ready": False,
+            "world_stream_renderable": False,
+            "world_stream_transport_healthy": False,
+            "world_stream_degraded": False,
+            "world_stream_frame_age_s": None,
+            "live_paths": {},
+            "operator_view_ready": True,
+            "operator_view_url": "http://127.0.0.1:14500/",
+            "operator_view_status": "ready",
+            "operator_view_failure_class": "",
+            "world_stream_failure_class": "world_stream_no_recent_frames",
+            "recent_operator_events": [],
+        },
+    )
+
+    rollover = snapshots[1]
+
+    assert rollover["worldDisplay"] == "none"
+    assert rollover["worldPlaceholderText"] == "World feed unavailable for this session."
+    assert rollover["badgeText"] == "unavailable"
+    assert rollover["label"] == "World surface"
 
 
 def test_find_free_port_skips_bound_port():
@@ -359,7 +956,7 @@ def test_wait_for_world_stream_ready_accepts_fresh_stream(tmp_path, monkeypatch)
             "robot_visible_ok": True,
             "target_visible_ok": True,
             "failure_class": "",
-            "image_topic": "/observer/image_raw",
+            "image_topic": "/observer_world/image_raw",
             "frame_count": 84,
             "elapsed_s": 17.0,
             "frame_coverage_ratio": 0.91,
@@ -411,7 +1008,7 @@ def test_wait_for_world_stream_ready_rejects_stale_stream(tmp_path, monkeypatch)
             "robot_visible_ok": True,
             "target_visible_ok": True,
             "failure_class": "world_stream_stale",
-            "image_topic": "/observer/image_raw",
+            "image_topic": "/observer_world/image_raw",
             "frame_count": 84,
             "elapsed_s": 17.0,
             "frame_coverage_ratio": 0.91,
@@ -451,11 +1048,19 @@ def test_start_environment_worker_retries_once_after_host_port_bind_failure(tmp_
         setattr(controller, "sim_gate_container_id", "sim-gate"),
         setattr(controller, "gate_stack_container_id", "gate-stack"),
         setattr(controller, "world_viewer_container_id", "world-viewer"),
+        setattr(controller, "operator_view_container_id", "operator-view"),
     )
     controller._run_container_helper = lambda *_args, **_kwargs: {"output": "ok"}
     controller._wait_for_truth_ready = lambda timeout_s: True
     controller._wait_for_world_stream_ready = lambda timeout_s: True
+    controller._wait_for_operator_view_ready = lambda timeout_s: True
     controller._wait_for_visual_ready = lambda timeout_s: True
+    controller._wait_for_required_gate_services = lambda *_args, **_kwargs: {
+        "sim-gate": {"service": "sim-gate", "status": "running", "container_id": "sim-gate-1"},
+        "world-viewer": {"service": "world-viewer", "status": "running", "container_id": "world-viewer-1"},
+        "gate-stack": {"service": "gate-stack", "status": "running", "container_id": "gate-stack-1"},
+        "operator-view": {"service": "operator-view", "status": "running", "container_id": "operator-view-1"},
+    }
 
     cleanup_calls: list[str] = []
     cleanup_batches = iter([["chasecar_dashboard_stale0"], ["chasecar_dashboard_stale1"]])
@@ -464,7 +1069,7 @@ def test_start_environment_worker_retries_once_after_host_port_bind_failure(tmp_
     removed_projects: list[str] = []
     controller._force_remove_project_resources = lambda project_name: removed_projects.append(project_name)
 
-    ports = iter([8891, 8892])
+    ports = iter([8891, 14500, 8892, 14501])
     monkeypatch.setattr(dashboard_service, "find_free_port", lambda start, end: next(ports))
     monkeypatch.setattr(dashboard_service, "make_session_id", lambda: "20260320T200000Z")
 
@@ -487,6 +1092,8 @@ def test_start_environment_worker_retries_once_after_host_port_bind_failure(tmp_
     assert removed_projects == ["chasecar_dashboard_20260320t200000z"]
     assert controller.state["environment_state"] == "environment_ready"
     assert controller.state["world_stream_port"] == 8892
+    assert controller.state["operator_view_port"] == 14501
+    assert controller.state["operator_view_ready"] is True
     assert controller.state["startup_retry_count"] == 1
     assert controller.state["startup_cleanup_count"] == 2
     assert controller.state["startup_last_cleanup_projects"] == [
@@ -496,7 +1103,7 @@ def test_start_environment_worker_retries_once_after_host_port_bind_failure(tmp_
     messages = [message for message, _category in events]
     assert "Cleaned stale dashboard projects before startup: chasecar_dashboard_stale0." in messages
     assert "Cleaned stale dashboard projects after port bind failure: chasecar_dashboard_stale1." in messages
-    assert "Retrying startup after world-view port 8891 bind failure." in messages
+    assert "Retrying startup after host port 8891 bind failure." in messages
 
 
 def test_world_stream_restart_ready_uses_live_world_state_not_snapshot(tmp_path):
@@ -560,7 +1167,7 @@ def _make_world_stream_observer(tmp_path: Path) -> world_stream_controller.World
         session_id="20260318T000000Z",
         output_dir=str(tmp_path / "visual"),
         world_name="yolo_test_world",
-        image_topic="/observer/image_raw",
+        image_topic="/observer_world/image_raw",
         truth_state_path="",
         public_url="",
         camera_profile="robot_follow",
@@ -589,6 +1196,7 @@ def _make_world_stream_observer(tmp_path: Path) -> world_stream_controller.World
     observer.started_monotonic_s = 0.0
     observer.latest_received_frame_seq = 0
     observer.last_rendered_frame_seq = 0
+    observer.recent_frame_wall_times = deque()
     observer.output_dir = tmp_path / "visual"
     observer.output_dir.mkdir(parents=True, exist_ok=True)
     observer.live_dir = observer.output_dir / "live"
@@ -611,6 +1219,16 @@ class _FakeFrame:
         return self
 
 
+def _fake_imwrite_factory(tmp_path: Path):
+    def _fake_imwrite(path: str, *_args, **_kwargs) -> bool:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"frame")
+        return True
+
+    return _fake_imwrite
+
+
 def test_world_stream_observer_counts_only_fresh_callbacks(tmp_path, monkeypatch):
     observer = _make_world_stream_observer(tmp_path)
     frame = _FakeFrame()
@@ -622,7 +1240,7 @@ def test_world_stream_observer_counts_only_fresh_callbacks(tmp_path, monkeypatch
     monkeypatch.setattr(world_stream_controller, "scene_has_content", lambda _frame, *_args: True)
     monkeypatch.setattr(world_stream_controller, "robot_blue_area", lambda _frame: 180.0)
     monkeypatch.setattr(world_stream_controller, "target_red_area", lambda _frame: 100.0)
-    monkeypatch.setattr(world_stream_controller.cv2, "imwrite", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(world_stream_controller.cv2, "imwrite", _fake_imwrite_factory(tmp_path))
     monkeypatch.setattr(world_stream_controller.time, "time", lambda: wall["value"])
     monkeypatch.setattr(world_stream_controller.time, "monotonic", lambda: mono["value"])
     monkeypatch.setenv("GZ_PARTITION", observer.args.session_id)
@@ -634,16 +1252,23 @@ def test_world_stream_observer_counts_only_fresh_callbacks(tmp_path, monkeypatch
         assert state["frame_count"] == i + 1
         assert state["received_frame_count"] == i + 1
         assert state["rendered_frame_count"] == i + 1
+        assert state["world_stream_renderable"] is True
         if i < 2:
             assert state["world_stream_ready"] is False
+            assert state["world_stream_transport_healthy"] is False
+            assert state["world_stream_degraded"] is True
         else:
             assert state["world_stream_ready"] is True
+            assert state["world_stream_transport_healthy"] is True
+            assert state["world_stream_degraded"] is False
 
     state2 = observer.update()
     assert state2["frame_count"] == 3
     assert state2["received_frame_count"] == 3
     assert state2["rendered_frame_count"] == 3
     assert state2["world_stream_ready"] is True
+    assert state2["world_stream_renderable"] is True
+    assert state2["world_stream_transport_healthy"] is True
 
     wall["value"] = 103.1
     state3 = observer.update()
@@ -652,7 +1277,10 @@ def test_world_stream_observer_counts_only_fresh_callbacks(tmp_path, monkeypatch
     assert state3["rendered_frame_count"] == 3
     assert state3["frames_stale"] is True
     assert state3["world_stream_ready"] is False
-    assert state3["failure_class"] == "world_stream_stale"
+    assert state3["world_stream_renderable"] is True
+    assert state3["world_stream_transport_healthy"] is False
+    assert state3["world_stream_degraded"] is True
+    assert state3["failure_class"] == "world_stream_receive_rate_low"
 
 
 def test_world_stream_observer_marks_rendered_and_received_separately(tmp_path, monkeypatch):
@@ -666,7 +1294,7 @@ def test_world_stream_observer_marks_rendered_and_received_separately(tmp_path, 
     monkeypatch.setattr(world_stream_controller, "scene_has_content", lambda _frame, *_args: True)
     monkeypatch.setattr(world_stream_controller, "robot_blue_area", lambda _frame: 180.0)
     monkeypatch.setattr(world_stream_controller, "target_red_area", lambda _frame: 100.0)
-    monkeypatch.setattr(world_stream_controller.cv2, "imwrite", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(world_stream_controller.cv2, "imwrite", _fake_imwrite_factory(tmp_path))
     monkeypatch.setattr(world_stream_controller.time, "time", lambda: wall["value"])
     monkeypatch.setattr(world_stream_controller.time, "monotonic", lambda: mono["value"])
     monkeypatch.setenv("GZ_PARTITION", observer.args.session_id)
@@ -698,7 +1326,7 @@ def test_world_stream_observer_marks_stale_after_any_received_frame(tmp_path, mo
     monkeypatch.setattr(world_stream_controller, "scene_has_content", lambda _frame, *_args: True)
     monkeypatch.setattr(world_stream_controller, "robot_blue_area", lambda _frame: 180.0)
     monkeypatch.setattr(world_stream_controller, "target_red_area", lambda _frame: 0.0)
-    monkeypatch.setattr(world_stream_controller.cv2, "imwrite", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(world_stream_controller.cv2, "imwrite", _fake_imwrite_factory(tmp_path))
     monkeypatch.setattr(world_stream_controller.time, "time", lambda: wall["value"])
     monkeypatch.setattr(world_stream_controller.time, "monotonic", lambda: mono["value"])
     monkeypatch.setenv("GZ_PARTITION", observer.args.session_id)
@@ -706,9 +1334,44 @@ def test_world_stream_observer_marks_stale_after_any_received_frame(tmp_path, mo
     observer._on_image(SimpleNamespace())
     first = observer.update()
     assert first["frames_stale"] is False
-    assert first["failure_class"] == "world_stream_client_crash"
+    assert first["world_stream_renderable"] is True
+    assert first["world_stream_transport_healthy"] is False
+    assert first["failure_class"] == "world_stream_receive_rate_low"
 
     wall["value"] = 103.5
     stale = observer.update()
     assert stale["frames_stale"] is True
-    assert stale["failure_class"] == "world_stream_stale"
+    assert stale["world_stream_renderable"] is True
+    assert stale["world_stream_degraded"] is True
+    assert stale["failure_class"] == "world_stream_receive_rate_low"
+
+
+def test_world_stream_observer_renderability_expires_after_grace_window(tmp_path, monkeypatch):
+    observer = _make_world_stream_observer(tmp_path)
+    frame = _FakeFrame()
+    wall = {"value": 100.0}
+    mono = {"value": 0.6}
+
+    monkeypatch.setattr(world_stream_controller, "image_msg_to_bgr", lambda _msg: frame)
+    monkeypatch.setattr(world_stream_controller, "image_is_nonblank", lambda _frame: True)
+    monkeypatch.setattr(world_stream_controller, "scene_has_content", lambda _frame, *_args: True)
+    monkeypatch.setattr(world_stream_controller, "robot_blue_area", lambda _frame: 180.0)
+    monkeypatch.setattr(world_stream_controller, "target_red_area", lambda _frame: 100.0)
+    monkeypatch.setattr(world_stream_controller.cv2, "imwrite", _fake_imwrite_factory(tmp_path))
+    monkeypatch.setattr(world_stream_controller.time, "time", lambda: wall["value"])
+    monkeypatch.setattr(world_stream_controller.time, "monotonic", lambda: mono["value"])
+    monkeypatch.setenv("GZ_PARTITION", observer.args.session_id)
+
+    for i in range(3):
+        wall["value"] = 100.0 + (i * 0.1)
+        observer._on_image(SimpleNamespace())
+        observer.update()
+
+    wall["value"] = 111.0
+    expired = observer.update()
+
+    assert expired["world_stream_ready"] is False
+    assert expired["world_stream_renderable"] is False
+    assert expired["world_stream_transport_healthy"] is False
+    assert expired["world_stream_degraded"] is False
+    assert expired["failure_class"] == "world_stream_no_recent_frames"

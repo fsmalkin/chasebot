@@ -26,7 +26,7 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     onnxruntime==1.20.1
 
 COPY containers/common/entrypoint.sh /opt/chasecar/entrypoint.sh
-RUN chmod +x /opt/chasecar/entrypoint.sh && mkdir -p /root/ros2_ws/src
+RUN sed -i 's/\r$//' /opt/chasecar/entrypoint.sh && chmod +x /opt/chasecar/entrypoint.sh && mkdir -p /root/ros2_ws/src
 
 WORKDIR /workspaces/chasecar
 ENTRYPOINT ["/opt/chasecar/entrypoint.sh"]

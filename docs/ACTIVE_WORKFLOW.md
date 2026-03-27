@@ -239,20 +239,24 @@ Authoritative visual surfaces:
 
 1. Recorded bundle first:
    - `powershell -ExecutionPolicy Bypass -File scripts/run_recorded_visual_demo.ps1 -Milestone 3 -RuntimeTarget robot_fidelity_orin -SessionId <session_id>`
-2. Browser dashboard second:
-   - `scripts/run_milestone_demo.ps1 ... -VisualSurface browser_dashboard -WorldSurface streamed_sim -OpenFeedViewers true`
+2. Dashboard control/status plus separate Xpra live view:
+   - Open the dashboard for control/status.
+   - Use the `Open Xpra` link for the live operator view.
+   - Keep the browser-dashboard wrapper for validation and recorded parity.
 3. Native Gazebo/X11 is debug-only and non-promoting.
-4. The authoritative world pane is the live Gazebo world from the world camera sensor and is surfaced through the browser dashboard `live/world_stream.jpg`.
+4. The browser world pane remains available as a legacy/debug fallback from the world camera sensor, but Xpra is the recommended live operator surface.
 
 Canonical sequence:
 
-1. Single-target M3 operator signoff:
-   - `scripts/run_milestone_demo.ps1 -Milestone 3 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -Headless true -VisualSurface browser_dashboard -WorldSurface streamed_sim -OpenFeedViewers true -AutoOpenVisualSurface true -RequireParityGreenForOperatorView false -OperatorPhase M3 -TargetId single_target -DemoTargetRelative false -DemoTargetX 1.10 -DemoTargetY 0.00 -DemoTargetZ 0.05 -MaxRunSeconds 150`
+1. Single-target M3 live view first:
+   - Open the dashboard and launch Xpra from the `Open Xpra` link.
+   - Keep the dashboard open for control/status during the live review.
 2. Multi-target GUI rehearsal (same-session parity check is mandatory):
    - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false -VisualSurface browser_dashboard -WorldSurface streamed_sim`
 3. Operator live-view replay of the same multi-target session (only after parity is green):
    - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true -VisualSurface browser_dashboard -WorldSurface streamed_sim -AutoOpenVisualSurface true`
    - Current strict behavior: if browser dashboard or visual bundle readiness is unavailable, this run fails closed.
+   - The browser wrapper remains validation tooling; use Xpra for the live visual session.
 4. Dashboard operator strip now exposes:
    - `phase`
    - `target_id`
