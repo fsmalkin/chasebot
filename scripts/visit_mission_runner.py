@@ -42,11 +42,14 @@ DEFAULT_TARGET_MODEL_NAME = "visit_mission_target"
 DEFAULT_TARGET_MODEL_SDF = REPO_ROOT / "ros2_config" / "frisbee_target_ball.sdf"
 DEFAULT_VISIT_TOLERANCE_M = 0.35
 DEFAULT_MIN_TARGET_DWELL_S = 1.0
+DEFAULT_POST_GOAL_TRUTH_GRACE_S = 2.5
 DEFAULT_TASK_TEXT = (
     "Run the deterministic ball-visit mission through the bounded frozen controls. "
     "Search when the ball is not visible, acquire when visible, plan when locked, track while pursuit is active, "
     "and fail closed with safe_stop if the target cannot be visited."
 )
+INTENT_OWNERSHIP_GRACE_S = 2.0
+OWNED_BOUNDED_INTENTS = {"search_for_target", "acquire_target", "plan_to_target", "track_target"}
 
 
 @dataclass(frozen=True)
@@ -161,10 +164,41 @@ def mission_truth_distance_m(state: dict[str, Any]) -> float | None:
     truth_y = _clean_number(truth_target.get("y"))
     if robot_x is not None and robot_y is not None and truth_x is not None and truth_y is not None:
         return round(math.hypot(truth_x - robot_x, truth_y - robot_y), 6)
-    fallback = _clean_number(belief.get("latest_target_distance_m"))
-    if fallback is not None:
-        return round(fallback, 6)
     return None
+
+
+def mission_belief_distance_m(state: dict[str, Any]) -> float | None:
+    belief = state.get("belief", {}) if isinstance(state.get("belief"), dict) else {}
+    return _clean_number(belief.get("latest_target_distance_m"))
+
+
+def feedback_indicates_goal_success(state: dict[str, Any]) -> bool:
+    brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
+    feedback_text = _clean_text(brain.get("last_feedback_text") or state.get("last_feedback")).lower()
+    return "nav goal reached successfully" in feedback_text
+
+
+def truth_missing_after_goal_failure(
+    state: dict[str, Any],
+    *,
+    target_locked_seen: bool,
+    nav_activity_seen: bool,
+    goal_success_seen_monotonic: float | None,
+    visit_tolerance_m: float,
+    post_goal_truth_grace_s: float,
+    now_monotonic: float | None = None,
+) -> bool:
+    if not target_locked_seen or not nav_activity_seen or goal_success_seen_monotonic is None:
+        return False
+    now_value = time.monotonic() if now_monotonic is None else float(now_monotonic)
+    if (now_value - float(goal_success_seen_monotonic)) < max(post_goal_truth_grace_s, 0.0):
+        return False
+    if mission_truth_distance_m(state) is not None:
+        return False
+    distance_m = mission_belief_distance_m(state)
+    if distance_m is None:
+        return False
+    return distance_m <= max(visit_tolerance_m, 0.05)
 
 
 def visit_success(
@@ -477,7 +511,8 @@ fi
 
         target_x = anchor_x + (math.cos(anchor_yaw) * target.forward_m) - (math.sin(anchor_yaw) * target.lateral_m)
         target_y = anchor_y + (math.sin(anchor_yaw) * target.forward_m) + (math.cos(anchor_yaw) * target.lateral_m)
-        turned_robot_yaw = robot_yaw if target.start_visible else normalize_angle(robot_yaw + math.pi)
+        target_bearing = math.atan2(target_y - robot_y, target_x - robot_x)
+        turned_robot_yaw = target_bearing if target.start_visible else normalize_angle(target_bearing + math.pi)
         half_yaw = 0.5 * turned_robot_yaw
         robot_qz = math.sin(half_yaw)
         robot_qw = math.cos(half_yaw)
@@ -571,6 +606,142 @@ exit "$rc"
             self._request("POST", "/api/intents/dispatch", {"intent": "safe_stop", "args": {}}, timeout_s=10.0)
         except Exception:
             pass
+
+    def _owned_intent_name(self, decision: dict[str, Any]) -> str:
+        intent = _clean_text(decision.get("intent"))
+        return intent if intent in OWNED_BOUNDED_INTENTS else ""
+
+    def _intent_feedback_text(self, state: dict[str, Any]) -> str:
+        brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
+        return _clean_text(brain.get("last_feedback_text") or state.get("last_feedback")).lower()
+
+    def _intent_terminal_feedback_reason(self, state: dict[str, Any], intent_name: str) -> str:
+        feedback = self._intent_feedback_text(state)
+        if not feedback.startswith(f"{intent_name}:"):
+            return ""
+        if "blocked because" in feedback:
+            return "blocked"
+        if intent_name == "search_for_target" and "full scan completed without lock" in feedback:
+            return "search_exhausted"
+        if intent_name == "plan_to_target" and "already within approach distance" in feedback:
+            return "noop"
+        return ""
+
+    def _owned_intent_status(
+        self,
+        *,
+        state: dict[str, Any],
+        intent_name: str,
+        owned_since_monotonic: float,
+    ) -> tuple[bool, bool, str]:
+        if not intent_name:
+            return False, False, ""
+        brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
+        outcome = state.get("outcome", {}) if isinstance(state.get("outcome"), dict) else {}
+        perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
+        elapsed_s = max(time.monotonic() - owned_since_monotonic, 0.0)
+        target_visible_recent = bool(brain.get("target_visible_recent", False)) or bool(perception.get("target_visible_now", False))
+        last_intent = _clean_text(brain.get("last_intent"))
+        terminal_reason = self._intent_terminal_feedback_reason(state, intent_name)
+
+        if intent_name == "search_for_target":
+            if bool(brain.get("target_locked", False)):
+                return False, True, ""
+            if bool(brain.get("search_active", False)):
+                return True, False, ""
+            if last_intent == intent_name and not terminal_reason:
+                return True, False, ""
+            if elapsed_s <= INTENT_OWNERSHIP_GRACE_S:
+                return True, False, ""
+            return False, False, terminal_reason
+
+        if intent_name == "acquire_target":
+            if bool(brain.get("target_locked", False)):
+                return False, True, ""
+            if last_intent == intent_name and target_visible_recent and not terminal_reason:
+                return True, False, ""
+            if elapsed_s <= INTENT_OWNERSHIP_GRACE_S and target_visible_recent:
+                return True, False, ""
+            return False, False, terminal_reason
+
+        if intent_name == "plan_to_target":
+            if bool(brain.get("goal_in_progress", False)) or bool(outcome.get("nav_goal_recent", False)):
+                return False, True, ""
+            if last_intent == intent_name and not terminal_reason:
+                return True, False, ""
+            if elapsed_s <= INTENT_OWNERSHIP_GRACE_S:
+                return True, False, ""
+            return False, False, terminal_reason
+
+        if intent_name == "track_target":
+            if bool(brain.get("track_active", False)):
+                return True, False, ""
+            if last_intent == intent_name and not terminal_reason:
+                return True, False, ""
+            if elapsed_s <= INTENT_OWNERSHIP_GRACE_S:
+                return True, False, ""
+            return False, False, terminal_reason
+
+        return False, False, terminal_reason
+
+    def _search_dispatch_in_flight(self, state: dict[str, Any], decision: dict[str, Any]) -> bool:
+        if _clean_text(decision.get("intent")) != "search_for_target":
+            return False
+        brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
+        return bool(brain.get("search_active", False))
+
+    def _should_dispatch_decision(self, *, decision: dict[str, Any], state_hash: str, state: dict[str, Any]) -> bool:
+        signature = decision_signature(decision)
+        if self._search_dispatch_in_flight(state, decision) and signature == self.last_decision_signature:
+            return False
+        return (
+            signature != self.last_decision_signature
+            or state_hash != self.last_state_hash
+            or (time.monotonic() - self.last_dispatch_monotonic) >= self.args.dispatch_cooldown_s
+        )
+
+    def _owned_in_flight_decision(self, intent_name: str, args_payload: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "status": "owned_in_flight",
+            "intent": intent_name,
+            "args": dict(args_payload),
+            "task_text": self.args.task,
+            "rationale_short": f"{intent_name} is still in flight; waiting for executor progress before choosing the next step.",
+            "missing_prerequisites": [],
+            "expected_observations": [],
+            "confidence": 1.0,
+        }
+
+    def _own_intent(
+        self,
+        *,
+        target: VisitTargetSpec,
+        attempt: int,
+        decision: dict[str, Any],
+        state_hash: str,
+        first_dispatched_intent: str,
+        announce: bool,
+    ) -> tuple[str, str, dict[str, Any], float]:
+        signature = decision_signature(decision)
+        intent_name = self._owned_intent_name(decision)
+        if not first_dispatched_intent and intent_name:
+            first_dispatched_intent = intent_name
+        self.last_decision_signature = signature
+        self.last_state_hash = state_hash
+        owned_since_monotonic = time.monotonic()
+        self.last_dispatch_monotonic = owned_since_monotonic
+        if announce and intent_name:
+            message = {
+                "search_for_target": "Search already in progress; waiting for executor progress.",
+                "acquire_target": "Acquire already in progress; waiting for lock confirmation.",
+                "plan_to_target": "Plan already in progress; waiting for goal activity.",
+                "track_target": "Track already in progress; waiting for pursuit progress.",
+            }.get(intent_name, f"{intent_name} already in progress; waiting for executor progress.")
+            self._append_runtime_event(
+                message,
+                key=f"{intent_name}_inflight:{target.id}:{attempt}:{signature}",
+            )
+        return first_dispatched_intent, intent_name, dict(decision.get("args", {})), owned_since_monotonic
 
     def _format_decision_label(self, decision: dict[str, Any]) -> str:
         intent = _clean_text(decision.get("intent"))
@@ -671,9 +842,13 @@ exit "$rc"
                     nav_activity_seen = False
                     move_started = False
                     first_dispatched_intent = ""
+                    owned_intent = ""
+                    owned_intent_args: dict[str, Any] = {}
+                    owned_intent_started_monotonic = 0.0
                     search_rotation_bias_baseline = 0.0
                     target_visit_started_monotonic = time.monotonic()
                     lock_seen_monotonic: float | None = None
+                    goal_success_seen_monotonic: float | None = None
                     self.last_state_hash = ""
                     self.last_decision_signature = ""
                     self.last_dispatch_monotonic = 0.0
@@ -720,10 +895,12 @@ exit "$rc"
                         brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
                         outcome = state.get("outcome", {}) if isinstance(state.get("outcome"), dict) else {}
                         perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
+                        attempt_phase = "approach_phase" if target_locked_seen else "search_phase"
 
                         if bool(brain.get("target_locked", False)):
                             target_locked_seen = True
                             lock_seen_monotonic = lock_seen_monotonic or time.monotonic()
+                            attempt_phase = "approach_phase"
                             self._append_runtime_event("Target visible and locked.", key=f"target_locked:{target.id}:{attempt}")
                         search_rotation = _clean_number(brain.get("search_rotation_accum_rad")) or 0.0
                         if bool(self.runtime_state.get("search_bias_active", False)) and (
@@ -742,6 +919,12 @@ exit "$rc"
                         ):
                             move_started = True
                             self._append_runtime_event("Robot began move-to-target.", key=f"move_started:{target.id}:{attempt}")
+                        if feedback_indicates_goal_success(state) and goal_success_seen_monotonic is None:
+                            goal_success_seen_monotonic = time.monotonic()
+                            self._append_runtime_event(
+                                "Nav goal succeeded; waiting briefly for active-target truth confirmation.",
+                                key=f"goal_success:{target.id}:{attempt}",
+                            )
 
                         self._update_runtime_state(
                             mission_phase=self._mission_phase_for_decision(self.runtime_state.get("latest_decision", {}), state),
@@ -755,6 +938,8 @@ exit "$rc"
                                 "generated_utc": utc_now(),
                                 "target_id": target.id,
                                 "attempt": attempt,
+                                "attempt_phase": attempt_phase,
+                                "owned_intent": owned_intent,
                                 "mission_phase": self.runtime_state.get("mission_phase"),
                                 "proof_state": self.runtime_state.get("proof_state"),
                                 "perception": state.get("perception", {}),
@@ -819,9 +1004,56 @@ exit "$rc"
                         if not target_locked_seen and search_elapsed >= self.args.search_timeout_s:
                             failure_reason = "search_timeout"
                             break
+                        if truth_missing_after_goal_failure(
+                            state,
+                            target_locked_seen=target_locked_seen,
+                            nav_activity_seen=nav_activity_seen,
+                            goal_success_seen_monotonic=goal_success_seen_monotonic,
+                            visit_tolerance_m=target.visit_tolerance_m,
+                            post_goal_truth_grace_s=self.args.post_goal_truth_grace_s,
+                        ):
+                            failure_reason = "truth_missing_for_active_target"
+                            break
                         if lock_seen_monotonic is not None and (time.monotonic() - lock_seen_monotonic) >= self.args.approach_timeout_s:
                             failure_reason = "approach_timeout"
                             break
+
+                        if owned_intent:
+                            owned_in_flight, owned_transitioned, terminal_reason = self._owned_intent_status(
+                                state=state,
+                                intent_name=owned_intent,
+                                owned_since_monotonic=owned_intent_started_monotonic,
+                            )
+                            if owned_in_flight:
+                                decision = self._owned_in_flight_decision(owned_intent, owned_intent_args)
+                                self._update_runtime_state(
+                                    latest_decision=decision,
+                                    mission_phase=self._mission_phase_for_decision(decision, state),
+                                    proof_state=self._proof_state_for_state(state),
+                                )
+                                append_jsonl(
+                                    visit_sequence_path,
+                                    {
+                                        "generated_utc": utc_now(),
+                                        "event_type": "decision_tick",
+                                        "target_id": target.id,
+                                        "attempt": attempt,
+                                        "attempt_phase": attempt_phase,
+                                        "decision": decision,
+                                        "owned_intent": owned_intent,
+                                        "preview": preview_summary(0, {}),
+                                        "dispatch_status": 0,
+                                        "dispatch_payload": {},
+                                    },
+                                )
+                                time.sleep(self.args.poll_s)
+                                continue
+                            if terminal_reason == "blocked" and owned_intent == "plan_to_target" and target_locked_seen and not nav_activity_seen:
+                                failure_reason = "plan_blocked"
+                                break
+                            owned_intent = ""
+                            owned_intent_args = {}
+                            owned_intent_started_monotonic = 0.0
 
                         policy = build_policy_snapshot(state, sim_gate_ready=bool(state.get("sim_gate_ready", False)))
                         decision = deterministic_visit_decision(state, self.args.task, self.contract)
@@ -852,7 +1084,7 @@ exit "$rc"
                             preview = preview_summary(preview_status, preview_payload)
                             if preview_status == 200 and preview["contract_valid"] and preview["ready_to_dispatch"]:
                                 signature = decision_signature(decision)
-                                if signature != self.last_decision_signature or state_hash != self.last_state_hash or (time.monotonic() - self.last_dispatch_monotonic) >= self.args.dispatch_cooldown_s:
+                                if self._should_dispatch_decision(decision=decision, state_hash=state_hash, state=state):
                                     dispatch_status, dispatch_payload = dispatch_intent(
                                         self.dashboard_url,
                                         _clean_text(decision.get("intent")),
@@ -860,11 +1092,19 @@ exit "$rc"
                                         timeout_s=self.args.timeout_s,
                                     )
                                     if dispatch_status == 202 and bool(dispatch_payload.get("accepted", False)):
-                                        if not first_dispatched_intent:
-                                            first_dispatched_intent = _clean_text(decision.get("intent"))
-                                        self.last_decision_signature = signature
-                                        self.last_state_hash = state_hash
-                                        self.last_dispatch_monotonic = time.monotonic()
+                                        (
+                                            first_dispatched_intent,
+                                            owned_intent,
+                                            owned_intent_args,
+                                            owned_intent_started_monotonic,
+                                        ) = self._own_intent(
+                                            target=target,
+                                            attempt=attempt,
+                                            decision=decision,
+                                            state_hash=state_hash,
+                                            first_dispatched_intent=first_dispatched_intent,
+                                            announce=False,
+                                        )
                                         self._update_runtime_state(
                                             latest_decision=decision,
                                             mission_phase=self._mission_phase_for_decision(decision, state),
@@ -887,15 +1127,22 @@ exit "$rc"
                                         )
                                     elif (
                                         dispatch_status == 409
-                                        and _clean_text(decision.get("intent")) == "search_for_target"
+                                        and self._owned_intent_name(decision)
                                         and "intent already in progress" in _clean_text(dispatch_payload.get("error")).lower()
                                     ):
-                                        self._append_runtime_event(
-                                            "Target lost, stopping pursuit before reacquiring.",
-                                            key=f"reacquire_stop:{target.id}:{attempt}",
+                                        (
+                                            first_dispatched_intent,
+                                            owned_intent,
+                                            owned_intent_args,
+                                            owned_intent_started_monotonic,
+                                        ) = self._own_intent(
+                                            target=target,
+                                            attempt=attempt,
+                                            decision=decision,
+                                            state_hash=state_hash,
+                                            first_dispatched_intent=first_dispatched_intent,
+                                            announce=True,
                                         )
-                                        self._issue_safe_stop()
-                                        self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
                             else:
                                 decision = blocked_decision(
                                     self.args.task,
@@ -912,7 +1159,9 @@ exit "$rc"
                                 "event_type": "decision_tick",
                                 "target_id": target.id,
                                 "attempt": attempt,
+                                "attempt_phase": attempt_phase,
                                 "decision": decision,
+                                "owned_intent": owned_intent,
                                 "preview": preview_summary(preview_status, preview_payload),
                                 "dispatch_status": dispatch_status,
                                 "dispatch_payload": dispatch_payload,
@@ -955,13 +1204,14 @@ exit "$rc"
                         "model_name": self._target_model_name(target),
                         "first_dispatched_intent": first_dispatched_intent,
                         "failure_reason": failure_reason or "visit_timeout",
+                        "failure_phase": "approach_phase" if target_locked_seen else "search_phase",
                         "target_locked_seen": target_locked_seen,
                         "nav_activity_seen": nav_activity_seen,
                         "started_visible": target.start_visible,
                     }
                     target_results.append(result)
                     write_json(target_results_path, {"targets": target_results})
-                    self._update_runtime_state(last_visit_result=result)
+                    self._update_runtime_state(last_visit_result=result, current_target_id="")
                     mission_pass = False
                     mission_error = f"{target.label} failed: {result['failure_reason']}"
                     self._append_runtime_event(mission_error, category="error", key=f"failed:{target.id}")
@@ -1017,6 +1267,7 @@ exit "$rc"
                 visited_targets=[item["target_id"] for item in target_results if item.get("pass")],
                 remaining_targets=[item.id for item in self.targets if item.id not in {entry["target_id"] for entry in target_results if entry.get("pass")}],
                 mission_verdict=mission_verdict,
+                current_target_id="",
             )
             self._append_runtime_event(
                 "Visit mission completed." if mission_verdict["pass"] else "Visit mission failed.",
@@ -1030,7 +1281,7 @@ exit "$rc"
                 self._clear_mission_targets(final_state, mission_root)
             except Exception:
                 pass
-            self._update_runtime_state(running=False, search_bias_active=False)
+            self._update_runtime_state(running=False, search_bias_active=False, current_target_id="")
             if started_here and not self.args.keep_environment:
                 try:
                     self._stop_environment()
@@ -1053,6 +1304,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-target-runtime-s", type=float, default=120.0)
     parser.add_argument("--search-timeout-s", type=float, default=35.0)
     parser.add_argument("--approach-timeout-s", type=float, default=70.0)
+    parser.add_argument("--post-goal-truth-grace-s", type=float, default=DEFAULT_POST_GOAL_TRUTH_GRACE_S)
     parser.add_argument("--hidden-start-settle-s", type=float, default=3.0)
     parser.add_argument("--pursuit-settle-timeout-s", type=float, default=8.0)
     parser.add_argument("--max-retries-per-target", type=int, default=1)

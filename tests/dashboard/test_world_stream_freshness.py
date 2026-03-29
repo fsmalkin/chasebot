@@ -72,6 +72,17 @@ def _install_world_stream_stubs() -> None:
         rclpy_stub.init = lambda *_args, **_kwargs: None
         rclpy_stub.shutdown = lambda *_args, **_kwargs: None
         rclpy_stub.spin_once = lambda *_args, **_kwargs: None
+        parameter_mod = ModuleType("rclpy.parameter")
+
+        class _Parameter:
+            class Type:
+                BOOL = "bool"
+
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+        parameter_mod.Parameter = _Parameter
+        rclpy_stub.parameter = parameter_mod
         node_mod = ModuleType("rclpy.node")
 
         class _Node:
@@ -79,6 +90,12 @@ def _install_world_stream_stubs() -> None:
                 return None
 
             def create_subscription(self, *_args, **_kwargs):
+                return None
+
+            def create_timer(self, *_args, **_kwargs):
+                return None
+
+            def set_parameters(self, *_args, **_kwargs):
                 return None
 
             def destroy_node(self) -> None:
@@ -89,9 +106,24 @@ def _install_world_stream_stubs() -> None:
 
         class _Preset:
             SENSOR_DATA = SimpleNamespace(value=None)
+            SYSTEM_DEFAULT = SimpleNamespace(value=None)
+
+        class _QoSProfile:
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+        class _HistoryPolicy:
+            KEEP_LAST = "keep_last"
+
+        class _ReliabilityPolicy:
+            RELIABLE = "reliable"
 
         qos_mod.QoSPresetProfiles = _Preset
+        qos_mod.QoSProfile = _QoSProfile
+        qos_mod.HistoryPolicy = _HistoryPolicy
+        qos_mod.ReliabilityPolicy = _ReliabilityPolicy
         sys.modules["rclpy"] = rclpy_stub
+        sys.modules["rclpy.parameter"] = parameter_mod
         sys.modules["rclpy.node"] = node_mod
         sys.modules["rclpy.qos"] = qos_mod
 
@@ -107,12 +139,68 @@ def _install_world_stream_stubs() -> None:
         sys.modules["sensor_msgs"] = sensor_msgs_mod
         sys.modules["sensor_msgs.msg"] = msg_mod
 
+    if "geometry_msgs" not in sys.modules:
+        geometry_msgs_mod = ModuleType("geometry_msgs")
+        msg_mod = ModuleType("geometry_msgs.msg")
+
+        class _PointStamped:
+            pass
+
+        class _PoseStamped:
+            pass
+
+        class _Twist:
+            pass
+
+        class _TwistStamped:
+            pass
+
+        msg_mod.PointStamped = _PointStamped
+        msg_mod.PoseStamped = _PoseStamped
+        msg_mod.Twist = _Twist
+        msg_mod.TwistStamped = _TwistStamped
+        geometry_msgs_mod.msg = msg_mod
+        sys.modules["geometry_msgs"] = geometry_msgs_mod
+        sys.modules["geometry_msgs.msg"] = msg_mod
+
+    if "nav_msgs" not in sys.modules:
+        nav_msgs_mod = ModuleType("nav_msgs")
+        msg_mod = ModuleType("nav_msgs.msg")
+
+        class _Odometry:
+            pass
+
+        msg_mod.Odometry = _Odometry
+        nav_msgs_mod.msg = msg_mod
+        sys.modules["nav_msgs"] = nav_msgs_mod
+        sys.modules["nav_msgs.msg"] = msg_mod
+
+    if "std_msgs" not in sys.modules:
+        std_msgs_mod = ModuleType("std_msgs")
+        msg_mod = ModuleType("std_msgs.msg")
+
+        class _String:
+            pass
+
+        msg_mod.String = _String
+        std_msgs_mod.msg = msg_mod
+        sys.modules["std_msgs"] = std_msgs_mod
+        sys.modules["std_msgs.msg"] = msg_mod
+
 
 try:
     import world_stream_controller  # noqa: E402
 except ModuleNotFoundError:
     _install_world_stream_stubs()
     import world_stream_controller  # noqa: E402
+
+try:
+    import visual_demo_observer  # noqa: E402
+except ModuleNotFoundError:
+    _install_world_stream_stubs()
+    import visual_demo_observer  # noqa: E402
+
+import sim_truth_probe  # noqa: E402
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -448,6 +536,48 @@ def test_get_state_exposes_world_stream_freshness_fields(tmp_path):
     assert state["world_stream_degraded"] is True
 
 
+def test_get_state_surfaces_latest_truth_target_model_name(tmp_path):
+    controller = _make_controller(tmp_path)
+    visual_dir = tmp_path / "visual"
+    visual_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        visual_dir / "state.json",
+        {
+            "raw_frame_count": 1,
+            "debug_frame_count": 1,
+            "telemetry_frame_count": 1,
+            "truth_alignment_ok": True,
+            "truth_failure_class": "",
+            "true_target_seen": True,
+            "latest_truth_target_world": {"x": 1.0, "y": 0.1},
+            "latest_truth_target_model_name": "visit_mission_target_ball_2",
+        },
+    )
+    _write_json(
+        visual_dir / "world_stream_state.json",
+        {
+            "session_id": controller.state["session_id"],
+            "partition": controller.state["session_id"],
+            "world_stream_ready": False,
+            "same_session_partition": True,
+            "frames_stale": False,
+        },
+    )
+    _write_json(
+        visual_dir / "truth_state.json",
+        {
+            "session_id": controller.state["session_id"],
+            "robot_truth_seen": True,
+            "target_model_candidates": list(dashboard_service.TRUTH_TARGET_MODEL_NAMES),
+        },
+    )
+
+    state = controller.get_state()
+
+    assert state["latest_truth_target_model_name"] == "visit_mission_target_ball_2"
+    assert state["perception"]["latest_truth_target_model_name"] == "visit_mission_target_ball_2"
+
+
 def test_get_state_derives_healthy_world_renderability_from_current_session_artifact(tmp_path):
     controller = _make_controller(tmp_path)
     _write_world_state(
@@ -485,6 +615,153 @@ def test_get_state_derives_healthy_world_renderability_from_current_session_arti
     assert state["world_stream_renderable"] is True
     assert state["world_stream_transport_healthy"] is True
     assert state["world_stream_degraded"] is False
+
+
+def test_get_state_clears_completed_visit_current_target_id(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["active_scenario"] = "visit_three_ball_sequence"
+    controller._visit_mission_runtime_state = lambda: {
+        "proof_state": "completed",
+        "mission_phase": "completed",
+        "mission_status": "completed",
+        "current_target_id": "ball_3",
+        "visit_index": 3,
+        "visited_targets": ["ball_1", "ball_2", "ball_3"],
+        "remaining_targets": [],
+        "mission_verdict": {"pass": True},
+    }
+
+    state = controller.get_state()
+
+    assert state["mission_status"] == "completed"
+    assert state["current_target_id"] == ""
+
+
+def test_truth_probe_defaults_include_visit_mission_targets(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "sim_truth_probe.py",
+            "--session-id",
+            "20260327T060000Z",
+            "--output-dir",
+            "artifacts/session/20260327T060000Z/visual",
+            "--world-name",
+            "yolo_test_world",
+        ],
+    )
+
+    args = sim_truth_probe.parse_args()
+    targets = set(args.target_model_names.split(","))
+
+    assert "visit_mission_target_ball_1" in targets
+    assert "visit_mission_target_ball_2" in targets
+    assert "visit_mission_target_ball_3" in targets
+
+
+def test_truth_probe_select_target_poses_reports_all_matching_candidates():
+    poses = [
+        {"name": "jetbot", "position": {"x": 0.0, "y": 0.0}},
+        {"name": "visit_mission_target_ball_2", "position": {"x": 1.2, "y": 0.4}},
+        {"name": "visit_mission_target_ball_3", "position": {"x": 1.5, "y": -0.3}},
+    ]
+
+    poses_by_name, names_seen, first_pose, first_name = sim_truth_probe.select_target_poses(
+        poses,
+        ["visit_mission_target_ball_1", "visit_mission_target_ball_2", "visit_mission_target_ball_3"],
+    )
+
+    assert names_seen == ["visit_mission_target_ball_2", "visit_mission_target_ball_3"]
+    assert first_name == "visit_mission_target_ball_2"
+    assert first_pose == poses[1]
+    assert poses_by_name == {
+        "visit_mission_target_ball_2": poses[1],
+        "visit_mission_target_ball_3": poses[2],
+    }
+
+
+def test_select_active_truth_target_prefers_active_visit_target_and_fails_closed_when_missing():
+    truth_state = {
+        "target_poses_by_name": {
+            "visit_mission_target_ball_1": {"position": {"x": 1.0, "y": 0.1}},
+            "visit_mission_target_ball_2": {"position": {"x": 2.0, "y": 0.2}},
+        },
+        "true_target_pose": {"position": {"x": 1.0, "y": 0.1}},
+        "target_model_name": "visit_mission_target_ball_1",
+        "target_model_candidates": [
+            "visit_mission_target_ball_1",
+            "visit_mission_target_ball_2",
+            "visit_mission_target_ball_3",
+        ],
+    }
+
+    truth_target, model_name = visual_demo_observer.select_active_truth_target(truth_state, "ball_2")
+    assert truth_target == (2.0, 0.2)
+    assert model_name == "visit_mission_target_ball_2"
+
+    missing_target, missing_model_name = visual_demo_observer.select_active_truth_target(truth_state, "ball_3")
+    assert missing_target is None
+    assert missing_model_name == ""
+
+
+def test_visual_observer_operator_state_uses_visit_runtime_current_target(tmp_path, monkeypatch):
+    operator_status_path = tmp_path / "visual" / "operator_status.json"
+    operator_status_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        operator_status_path,
+        {
+            "phase": "visit_three_ball_sequence",
+            "target_id": "ball_sequence",
+            "target_transition_active": False,
+            "status_text": "Running Visit Three Ball Sequence",
+        },
+    )
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    _write_json(runtime_path, {"current_target_id": "ball_2"})
+    monkeypatch.setattr(visual_demo_observer, "VISIT_MISSION_RUNTIME_PATH", runtime_path)
+
+    observer = visual_demo_observer.VisualDemoObserver.__new__(visual_demo_observer.VisualDemoObserver)
+    observer.args = SimpleNamespace(phase="", target_id="", target_transition_active=False)
+    observer.operator_status_path = operator_status_path
+
+    state = observer._operator_state()
+
+    assert state["target_id"] == "ball_2"
+
+
+def test_wait_for_truth_ready_requires_full_candidate_set(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    visual_dir = tmp_path / "visual"
+    visual_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        visual_dir / "truth_state.json",
+        {
+            "session_id": controller.state["session_id"],
+            "robot_truth_seen": True,
+            "target_model_candidates": list(dashboard_service.TRUTH_TARGET_MODEL_NAMES),
+        },
+    )
+
+    monkeypatch.setattr(dashboard_service.time, "sleep", lambda *_args, **_kwargs: None)
+    assert controller._wait_for_truth_ready(0.01) is True
+
+
+def test_wait_for_truth_ready_rejects_incomplete_candidate_set(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    visual_dir = tmp_path / "visual"
+    visual_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        visual_dir / "truth_state.json",
+        {
+            "session_id": controller.state["session_id"],
+            "robot_truth_seen": True,
+            "target_model_candidates": ["uat_nav2_target", "uat_snapshot_target"],
+        },
+    )
+
+    monkeypatch.setattr(dashboard_service.time, "sleep", lambda *_args, **_kwargs: None)
+    assert controller._wait_for_truth_ready(0.01) is False
 
 
 def test_get_state_world_not_renderable_without_current_session_frame(tmp_path):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import yaml
 
@@ -11,9 +12,14 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
+import visit_mission_runner as visit_runner  # noqa: E402
 from visit_mission_runner import build_visit_targets  # noqa: E402
+from visit_mission_runner import decision_signature  # noqa: E402
 from visit_mission_runner import deterministic_visit_decision  # noqa: E402
+from visit_mission_runner import feedback_indicates_goal_success  # noqa: E402
+from visit_mission_runner import mission_belief_distance_m  # noqa: E402
 from visit_mission_runner import mission_truth_distance_m  # noqa: E402
+from visit_mission_runner import truth_missing_after_goal_failure  # noqa: E402
 from visit_mission_runner import visit_success  # noqa: E402
 
 
@@ -74,7 +80,7 @@ def test_deterministic_visit_decision_prefers_plan_when_locked():
     assert decision["args"] == {"approach_distance_m": 0.25}
 
 
-def test_deterministic_visit_decision_reacquires_when_visibility_is_lost_mid_pursuit():
+def test_deterministic_visit_decision_prefers_track_when_visibility_flickers_during_active_pursuit():
     contract = _load_contract()
     state = {
         "control_plane_ready": True,
@@ -88,6 +94,26 @@ def test_deterministic_visit_decision_reacquires_when_visibility_is_lost_mid_pur
         },
         "brain": {"target_locked": True, "goal_in_progress": False, "track_active": True, "target_visible_recent": False},
         "outcome": {"nav_goal_recent": True, "cmd_vel_recent": False, "feedback_recent": False, "boundary_activity_seen": False},
+    }
+    decision = deterministic_visit_decision(state, "visit the ball", contract)
+    assert decision["intent"] == "track_target"
+    assert decision["args"] == {}
+
+
+def test_deterministic_visit_decision_reacquires_when_stale_lock_loses_visibility():
+    contract = _load_contract()
+    state = {
+        "control_plane_ready": True,
+        "environment_state": "environment_ready",
+        "session_id": "session-1",
+        "sim_gate_ready": True,
+        "perception": {"detection_topic_seen": True, "target_visible_now": False},
+        "belief": {
+            "latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0},
+            "latest_goal_pose": None,
+        },
+        "brain": {"target_locked": True, "goal_in_progress": False, "track_active": False, "target_visible_recent": False},
+        "outcome": {"nav_goal_recent": False, "cmd_vel_recent": False, "feedback_recent": False, "boundary_activity_seen": False},
     }
     decision = deterministic_visit_decision(state, "visit the ball", contract)
     assert decision["intent"] == "search_for_target"
@@ -118,6 +144,17 @@ def test_mission_truth_distance_uses_truth_target_world():
         "perception": {"latest_truth_target_world": {"x": 1.3, "y": 2.4}},
     }
     assert math.isclose(mission_truth_distance_m(state), 0.5, abs_tol=1e-6)
+
+
+def test_mission_truth_distance_fails_closed_without_truth_target_world():
+    state = {
+        "belief": {
+            "latest_robot_pose": {"x": 1.0, "y": 2.0},
+            "latest_target_distance_m": 0.12,
+        },
+        "perception": {},
+    }
+    assert mission_truth_distance_m(state) is None
 
 
 def test_visit_success_requires_lock_nav_and_distance_tolerance():
@@ -157,3 +194,233 @@ def test_visit_success_requires_lock_nav_and_distance_tolerance():
         elapsed_since_spawn_s=0.2,
         min_dwell_s=1.0,
     ) is False
+
+
+def test_visit_success_fails_closed_when_truth_target_is_missing():
+    state = {
+        "belief": {
+            "latest_robot_pose": {"x": 0.0, "y": 0.0},
+            "latest_target_distance_m": 0.05,
+        },
+        "perception": {},
+    }
+    assert visit_success(
+        state,
+        target_locked_seen=True,
+        nav_activity_seen=True,
+        visit_tolerance_m=0.35,
+        elapsed_since_spawn_s=1.5,
+        min_dwell_s=1.0,
+    ) is False
+
+
+def test_mission_belief_distance_uses_latest_target_distance():
+    state = {"belief": {"latest_target_distance_m": 0.22}}
+    assert math.isclose(mission_belief_distance_m(state), 0.22, abs_tol=1e-6)
+
+
+def test_feedback_indicates_goal_success_matches_executor_feedback():
+    state = {"brain": {"last_feedback_text": "nav goal reached successfully"}}
+    assert feedback_indicates_goal_success(state) is True
+
+
+def test_truth_missing_after_goal_failure_requires_goal_success_and_close_belief_distance():
+    state = {
+        "belief": {"latest_target_distance_m": 0.22},
+        "perception": {"latest_truth_target_world": None},
+        "brain": {"last_feedback_text": "nav goal reached successfully"},
+    }
+    assert truth_missing_after_goal_failure(
+        state,
+        target_locked_seen=True,
+        nav_activity_seen=True,
+        goal_success_seen_monotonic=100.0,
+        visit_tolerance_m=0.35,
+        post_goal_truth_grace_s=2.5,
+        now_monotonic=102.6,
+    ) is True
+    assert truth_missing_after_goal_failure(
+        state,
+        target_locked_seen=True,
+        nav_activity_seen=True,
+        goal_success_seen_monotonic=100.0,
+        visit_tolerance_m=0.35,
+        post_goal_truth_grace_s=2.5,
+        now_monotonic=101.0,
+    ) is False
+    assert truth_missing_after_goal_failure(
+        state,
+        target_locked_seen=True,
+        nav_activity_seen=True,
+        goal_success_seen_monotonic=None,
+        visit_tolerance_m=0.35,
+        post_goal_truth_grace_s=2.5,
+        now_monotonic=105.0,
+    ) is False
+
+
+def _make_runner(monkeypatch, scenario_id: str = "visit_three_ball_sequence") -> visit_runner.VisitMissionRunner:
+    monkeypatch.setattr(visit_runner, "choose_docker_cli", lambda: "docker")
+    args = SimpleNamespace(
+        dashboard_url="http://127.0.0.1:8860",
+        contract=str(CONTRACT_PATH),
+        scenario_id=scenario_id,
+        task="visit the ball",
+        dispatch_cooldown_s=1.0,
+        post_goal_truth_grace_s=2.5,
+        target_model_sdf=str(REPO_ROOT / "ros2_config" / "frisbee_target_ball.sdf"),
+        target_model_name="visit_mission_target",
+    )
+    runner = visit_runner.VisitMissionRunner(args)
+    runner._container_id = lambda project_name, service_name: "sim-gate-1"
+    runner._docker_exec = lambda container_id, script: (0, "ok")
+    return runner
+
+
+def test_visible_start_rotates_robot_toward_spawned_target(monkeypatch, tmp_path):
+    runner = _make_runner(monkeypatch)
+    target = next(item for item in runner.targets if item.id == "ball_3")
+    state = {
+        "compose_project": "chasecar_dashboard_test",
+        "world_name": "yolo_test_world",
+        "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
+    }
+
+    payload = runner._spawn_target_from_mission_anchor(state, target, tmp_path)
+    bearing = math.atan2(
+        float(payload["target_world"]["y"]) - float(payload["robot_pose_after_spawn"]["y"]),
+        float(payload["target_world"]["x"]) - float(payload["robot_pose_after_spawn"]["x"]),
+    )
+    turned_yaw = float(payload["robot_pose_after_spawn"]["yaw"])
+
+    assert math.isclose(visit_runner.normalize_angle(turned_yaw - bearing), 0.0, abs_tol=1e-6)
+
+
+def test_hidden_start_rotates_robot_away_from_spawned_target(monkeypatch, tmp_path):
+    runner = _make_runner(monkeypatch)
+    target = next(item for item in runner.targets if item.id == "ball_1")
+    state = {
+        "compose_project": "chasecar_dashboard_test",
+        "world_name": "yolo_test_world",
+        "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
+    }
+
+    payload = runner._spawn_target_from_mission_anchor(state, target, tmp_path)
+    bearing = math.atan2(
+        float(payload["target_world"]["y"]) - float(payload["robot_pose_after_spawn"]["y"]),
+        float(payload["target_world"]["x"]) - float(payload["robot_pose_after_spawn"]["x"]),
+    )
+    turned_yaw = float(payload["robot_pose_after_spawn"]["yaw"])
+
+    assert math.isclose(abs(visit_runner.normalize_angle(turned_yaw - bearing)), math.pi, abs_tol=1e-6)
+
+
+def test_search_dispatch_in_flight_suppresses_duplicate_dispatch(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    decision = {
+        "status": "recommendation",
+        "intent": "search_for_target",
+        "args": {"target_class": "ball"},
+    }
+    runner.last_decision_signature = decision_signature(decision)
+    runner.last_state_hash = "prior"
+    runner.last_dispatch_monotonic = 100.0
+    state = {"brain": {"search_active": True}}
+
+    monkeypatch.setattr(visit_runner.time, "monotonic", lambda: 101.0)
+
+    assert runner._should_dispatch_decision(decision=decision, state_hash="new", state=state) is False
+
+
+def test_own_intent_preserves_primary_search_intent(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    target = next(item for item in runner.targets if item.id == "ball_1")
+    decision = {
+        "status": "recommendation",
+        "intent": "search_for_target",
+        "args": {"target_class": "ball"},
+    }
+
+    monkeypatch.setattr(visit_runner.time, "monotonic", lambda: 123.0)
+
+    first, owned_intent, owned_args, owned_since = runner._own_intent(
+        target=target,
+        attempt=0,
+        decision=decision,
+        state_hash="search-hash",
+        first_dispatched_intent="",
+        announce=False,
+    )
+
+    assert first == "search_for_target"
+    assert owned_intent == "search_for_target"
+    assert owned_args == {"target_class": "ball"}
+    assert owned_since == 123.0
+
+
+def test_owned_intent_status_holds_acquire_until_lock(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    state = {
+        "brain": {"target_locked": False, "target_visible_recent": True},
+        "perception": {"target_visible_now": True},
+        "outcome": {},
+    }
+
+    monkeypatch.setattr(visit_runner.time, "monotonic", lambda: 101.0)
+
+    in_flight, transitioned, terminal_reason = runner._owned_intent_status(
+        state=state,
+        intent_name="acquire_target",
+        owned_since_monotonic=100.0,
+    )
+
+    assert in_flight is True
+    assert transitioned is False
+    assert terminal_reason == ""
+
+
+def test_owned_intent_status_keeps_search_owned_while_last_intent_is_search(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    state = {
+        "brain": {
+            "target_locked": False,
+            "search_active": False,
+            "last_intent": "search_for_target",
+            "last_feedback_text": "safe_stop: robot stopped",
+        },
+        "perception": {"target_visible_now": False},
+        "outcome": {},
+    }
+
+    monkeypatch.setattr(visit_runner.time, "monotonic", lambda: 110.0)
+
+    in_flight, transitioned, terminal_reason = runner._owned_intent_status(
+        state=state,
+        intent_name="search_for_target",
+        owned_since_monotonic=100.0,
+    )
+
+    assert in_flight is True
+    assert transitioned is False
+    assert terminal_reason == ""
+
+
+def test_owned_intent_status_transitions_plan_after_goal_activity(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    state = {
+        "brain": {"goal_in_progress": True},
+        "perception": {},
+        "outcome": {"nav_goal_recent": True},
+    }
+
+    monkeypatch.setattr(visit_runner.time, "monotonic", lambda: 105.0)
+
+    in_flight, transitioned, terminal_reason = runner._owned_intent_status(
+        state=state,
+        intent_name="plan_to_target",
+        owned_since_monotonic=100.0,
+    )
+
+    assert in_flight is False
+    assert transitioned is True
+    assert terminal_reason == ""

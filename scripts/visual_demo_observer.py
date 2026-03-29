@@ -23,6 +23,15 @@ from rclpy.qos import HistoryPolicy, QoSProfile, QoSPresetProfiles, ReliabilityP
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_DIR = REPO_ROOT / "runtime" / "dashboard"
+VISIT_MISSION_RUNTIME_PATH = RUNTIME_DIR / "visit_mission_runtime.json"
+VISIT_TRUTH_MODEL_BY_TARGET_ID = {
+    "ball_1": "visit_mission_target_ball_1",
+    "ball_2": "visit_mission_target_ball_2",
+    "ball_3": "visit_mission_target_ball_3",
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Observe ROS topics and emit recorded visual artifacts.")
@@ -104,6 +113,62 @@ def placeholder_frame(width: int, height: int, label: str) -> np.ndarray:
     frame = np.full((height, width, 3), 42, dtype=np.uint8)
     cv2.putText(frame, label, (24, height // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (220, 230, 255), 2, cv2.LINE_AA)
     return frame
+
+
+def truth_world_from_pose(target_pose: object) -> Optional[tuple[float, float]]:
+    if not isinstance(target_pose, dict):
+        return None
+    try:
+        position = target_pose["position"]
+        if not isinstance(position, dict):
+            return None
+        return (float(position.get("x", 0.0)), float(position.get("y", 0.0)))
+    except Exception:
+        return None
+
+
+def select_active_truth_target(
+    state: dict[str, object],
+    active_target_id: str,
+) -> tuple[Optional[tuple[float, float]], str]:
+    target_poses_by_name = state.get("target_poses_by_name")
+    if isinstance(target_poses_by_name, dict):
+        active_target_model = VISIT_TRUTH_MODEL_BY_TARGET_ID.get(str(active_target_id or ""))
+        if active_target_model:
+            active_pose = truth_world_from_pose(target_poses_by_name.get(active_target_model))
+            if active_pose is not None:
+                return active_pose, active_target_model
+            if str(state.get("target_model_name", "") or "") == active_target_model:
+                legacy_pose = truth_world_from_pose(state.get("true_target_pose"))
+                if legacy_pose is not None:
+                    return legacy_pose, active_target_model
+            return None, ""
+
+        legacy_name = str(state.get("target_model_name", "") or "")
+        legacy_pose = truth_world_from_pose(state.get("true_target_pose"))
+        if legacy_pose is not None:
+            return legacy_pose, legacy_name
+
+        candidate_names = state.get("target_model_candidates", [])
+        if isinstance(candidate_names, (list, tuple)):
+            for candidate in candidate_names:
+                candidate_name = str(candidate or "").strip()
+                if not candidate_name:
+                    continue
+                candidate_pose = truth_world_from_pose(target_poses_by_name.get(candidate_name))
+                if candidate_pose is not None:
+                    return candidate_pose, candidate_name
+
+        for name, pose in target_poses_by_name.items():
+            candidate_pose = truth_world_from_pose(pose)
+            if candidate_pose is not None:
+                return candidate_pose, str(name)
+
+    legacy_name = str(state.get("target_model_name", "") or "")
+    legacy_pose = truth_world_from_pose(state.get("true_target_pose"))
+    if legacy_pose is not None:
+        return legacy_pose, legacy_name
+    return None, ""
 
 
 def quaternion_to_yaw(x: float, y: float, z: float, w: float) -> float:
@@ -311,11 +376,27 @@ class VisualDemoObserver(Node):
             return {}
         return payload if isinstance(payload, dict) else {}
 
+    def _load_visit_runtime_state(self) -> dict[str, object]:
+        if not VISIT_MISSION_RUNTIME_PATH.exists():
+            return {}
+        try:
+            payload = json.loads(VISIT_MISSION_RUNTIME_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
     def _operator_state(self) -> dict[str, object]:
         state = self._load_operator_status()
+        phase = str(state.get("phase") or self.args.phase or "")
+        target_id = str(state.get("target_id") or self.args.target_id or "")
+        if target_id not in VISIT_TRUTH_MODEL_BY_TARGET_ID and phase.startswith("visit_"):
+            runtime = self._load_visit_runtime_state()
+            runtime_target_id = str(runtime.get("current_target_id", "") or "")
+            if runtime_target_id in VISIT_TRUTH_MODEL_BY_TARGET_ID:
+                target_id = runtime_target_id
         return {
-            "phase": str(state.get("phase") or self.args.phase or ""),
-            "target_id": str(state.get("target_id") or self.args.target_id or ""),
+            "phase": phase,
+            "target_id": target_id,
             "target_transition_active": bool(state.get("target_transition_active", self.args.target_transition_active)),
             "status_text": str(state.get("status_text") or ""),
         }
@@ -364,18 +445,19 @@ class VisualDemoObserver(Node):
         except Exception:
             return None
 
-    def _truth_target_world(self) -> Optional[tuple[float, float]]:
+    def _truth_target_selection(
+        self,
+        operator_state: Optional[dict[str, object]] = None,
+    ) -> tuple[Optional[tuple[float, float]], str]:
         state = self._load_truth_state()
         if not state:
-            return None
-        target_pose = state.get("true_target_pose")
-        if not isinstance(target_pose, dict):
-            return None
-        try:
-            position = target_pose["position"]
-            return (float(position.get("x", 0.0)), float(position.get("y", 0.0)))
-        except Exception:
-            return None
+            return None, ""
+        active_target_id = str((operator_state or self._operator_state()).get("target_id", "") or "")
+        return select_active_truth_target(state, active_target_id)
+
+    def _truth_target_world(self, operator_state: Optional[dict[str, object]] = None) -> Optional[tuple[float, float]]:
+        truth_target, _truth_target_model_name = self._truth_target_selection(operator_state)
+        return truth_target
 
     def _ensure_writer(
         self,
@@ -406,7 +488,7 @@ class VisualDemoObserver(Node):
         pose = self._pose_from_odom()
         detection_world = self._transform_detection_world()
         goal = self.latest_goal
-        truth_target = self._truth_target_world()
+        truth_target, truth_target_model_name = self._truth_target_selection(operator_state)
         distance_trend, distance_progress = self._distance_trend()
         target_visible_now = self._recent(self.last_detection_monotonic, window_s=2.5)
         nav_goal_recent = self._recent(self.last_goal_monotonic, window_s=4.0)
@@ -514,7 +596,10 @@ class VisualDemoObserver(Node):
             pose_text = f"Robot=({pose.x:.2f},{pose.y:.2f}) yaw={pose.yaw:.2f}"
         truth_text = "TrueTarget=none"
         if truth_target:
-            truth_text = f"TrueTarget=({truth_target[0]:.2f},{truth_target[1]:.2f})"
+            if truth_target_model_name:
+                truth_text = f"TrueTarget[{truth_target_model_name}]=({truth_target[0]:.2f},{truth_target[1]:.2f})"
+            else:
+                truth_text = f"TrueTarget=({truth_target[0]:.2f},{truth_target[1]:.2f})"
         goal_text = "NavWaypoint=none"
         if goal:
             goal_text = f"NavWaypoint=({float(goal.pose.position.x):.2f},{float(goal.pose.position.y):.2f})"
@@ -693,7 +778,7 @@ class VisualDemoObserver(Node):
         self._write_image(self.live_dir / "topdown_telemetry.jpg", topdown_frame)
 
         detection_world = self._transform_detection_world()
-        truth_target = self._truth_target_world()
+        truth_target, truth_target_model_name = self._truth_target_selection(operator_state)
         if detection_world is not None:
             self.detection_world_history.append(detection_world)
         distance = self._sample_distance()
@@ -736,6 +821,7 @@ class VisualDemoObserver(Node):
             "goal_pose": None,
             "detection_world": None,
             "truth_target_world": None,
+            "truth_target_model_name": truth_target_model_name,
             "target_distance_m": None if distance is None else round(distance, 6),
             "distance_trend": distance_trend,
             "distance_progress_m": None if distance_progress is None else round(distance_progress, 6),
@@ -792,8 +878,8 @@ class VisualDemoObserver(Node):
 
     def _write_state_json(self) -> None:
         target_visible_ratio = float(self.target_visible_count / max(self.raw_frame_count, 1))
-        truth_target = self._truth_target_world()
         operator_state = self._operator_state()
+        truth_target, truth_target_model_name = self._truth_target_selection(operator_state)
         detection_world = self._transform_detection_world()
         distance = self.distance_history[-1][1] if self.distance_history else None
         distance_trend, distance_progress = self._distance_trend()
@@ -861,6 +947,7 @@ class VisualDemoObserver(Node):
             "latest_goal_pose": None,
             "latest_detection_world": None,
             "latest_truth_target_world": None,
+            "latest_truth_target_model_name": truth_target_model_name,
             "latest_target_distance_m": None if distance is None else round(distance, 6),
             "distance_trend": distance_trend,
             "distance_progress_m": None if distance_progress is None else round(distance_progress, 6),
@@ -909,7 +996,8 @@ class VisualDemoObserver(Node):
             and self.max_overlay_changed_pixel_ratio >= self.args.overlay_min_changed_pixel_ratio
         )
         target_persistence_ok = bool(target_visible_ratio >= self.args.target_visible_min_ratio)
-        truth_target = self._truth_target_world()
+        operator_state = self._operator_state()
+        truth_target, truth_target_model_name = self._truth_target_selection(operator_state)
         truth_alignment_ok = True
         truth_failure_class = ""
         if self.vision_truth_deltas and float(np.median(self.vision_truth_deltas)) > 0.50:
@@ -924,8 +1012,6 @@ class VisualDemoObserver(Node):
         if len(self.distance_history) >= 2:
             motion_progress_m = float(self.distance_history[0][1] - self.distance_history[-1][1])
             motion_progress_ok = motion_progress_m >= self.args.motion_progress_min_m
-        operator_state = self._operator_state()
-
         summary = {
             "session_id": self.run_id,
             "execution_lane": self.args.execution_lane,
@@ -959,6 +1045,7 @@ class VisualDemoObserver(Node):
             "max_overlay_changed_pixel_ratio": round(self.max_overlay_changed_pixel_ratio, 6),
             "motion_progress_m": round(motion_progress_m, 6),
             "true_target_seen": truth_target is not None,
+            "latest_truth_target_model_name": truth_target_model_name,
             "truth_alignment_ok": truth_alignment_ok,
             "truth_failure_class": truth_failure_class,
             "vision_vs_truth_m_median": round(float(np.median(self.vision_truth_deltas)), 6) if self.vision_truth_deltas else None,

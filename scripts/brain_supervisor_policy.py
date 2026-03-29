@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from datetime import timezone
 from typing import Any, Dict
 
 
@@ -21,6 +23,8 @@ COMMON_REQUIRED_KEYS = (
     "session_active",
     "sim_gate_ready",
 )
+LOCK_HANDOFF_GRACE_S = 2.5
+GOAL_DISPATCH_GRACE_S = 2.5
 
 
 def _as_dict(value: Any) -> Dict[str, Any]:
@@ -36,6 +40,20 @@ def _as_text(value: Any, fallback: str = "") -> str:
         return fallback
     text = str(value).strip()
     return text if text else fallback
+
+
+def _utc_age_s(value: Any) -> float | None:
+    text = _as_text(value)
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    return max((now - parsed.astimezone(timezone.utc)).total_seconds(), 0.0)
 
 
 def _intent_summary(intent_name: str, policy_stage: str, preferred_intent: str) -> str:
@@ -71,12 +89,21 @@ def policy_signal_snapshot(state: Dict[str, Any], *, sim_gate_ready: bool | None
         or _as_bool(state.get("motion_evidence", False))
         or _as_bool(brain.get("goal_in_progress", False))
     )
+    track_context_active = _as_bool(brain.get("track_active", False)) or _as_bool(brain.get("goal_in_progress", False))
     boundary_activity_seen = _as_bool(outcome.get("boundary_activity_seen", False)) or motion_active
     search_rotation = brain.get("search_rotation_accum_rad", 0.0)
     try:
         search_rotation = float(search_rotation)
     except (TypeError, ValueError):
         search_rotation = 0.0
+    target_locked_age_s = _utc_age_s(brain.get("target_locked_utc"))
+    last_goal_dispatched_age_s = _utc_age_s(brain.get("last_goal_dispatched_utc"))
+    target_locked_recent = target_locked and (
+        target_locked_age_s is not None and target_locked_age_s <= LOCK_HANDOFF_GRACE_S
+    )
+    goal_recent = nav_goal_recent or (
+        last_goal_dispatched_age_s is not None and last_goal_dispatched_age_s <= GOAL_DISPATCH_GRACE_S
+    )
 
     return {
         "control_plane_ready": _as_bool(state.get("control_plane_ready", False)),
@@ -90,10 +117,13 @@ def policy_signal_snapshot(state: Dict[str, Any], *, sim_gate_ready: bool | None
         "target_visible_now": target_visible_now,
         "target_visible_recent": target_visible_recent,
         "target_locked": target_locked,
+        "target_locked_recent": target_locked_recent,
         "search_active": _as_bool(brain.get("search_active", False)),
         "search_rotation_accum_rad": round(search_rotation, 6),
         "track_active": _as_bool(brain.get("track_active", False)),
+        "track_context_active": track_context_active,
         "goal_in_progress": _as_bool(brain.get("goal_in_progress", False)),
+        "goal_recent": goal_recent,
         "nav_goal_recent": nav_goal_recent,
         "feedback_recent": _as_bool(outcome.get("feedback_recent", False)),
         "cmd_vel_recent": _as_bool(outcome.get("cmd_vel_recent", False)),
@@ -130,6 +160,7 @@ def build_policy_snapshot(state: Dict[str, Any], *, sim_gate_ready: bool | None 
         unsafe_reasons.append("search_exhausted_without_lock")
     if (
         active_pursuit
+        and not signals["search_active"]
         and not signals["target_visible_now"]
         and not signals["target_visible_recent"]
         and not signals["target_locked"]
@@ -166,26 +197,31 @@ def build_policy_snapshot(state: Dict[str, Any], *, sim_gate_ready: bool | None 
         preferred_intent = "acquire_target"
         allowed_intents = ["acquire_target", "safe_stop"] + (["abort"] if active_pursuit else [])
         policy_reason = "The ball is visible but not locked, so acquire_target(ball) is the next bounded step."
+    elif signals["target_locked"] and (signals["track_context_active"] or signals["goal_recent"]):
+        policy_stage = "track"
+        preferred_intent = "track_target"
+        allowed_intents = ["track_target", "safe_stop", "abort"]
+        policy_reason = "Pursuit is already active after lock, so the next bounded step is to stay in track/interrupt space."
     elif (
         signals["target_locked"]
         and not signals["target_visible_now"]
         and not signals["target_visible_recent"]
         and not signals["feedback_recent"]
+        and not signals["target_locked_recent"]
+        and not signals["goal_recent"]
     ):
         policy_stage = "search"
         preferred_intent = "search_for_target"
         allowed_intents = ["search_for_target", "safe_stop"] + (["abort"] if active_pursuit else [])
         policy_reason = "The target lock is stale and visibility has been lost, so the next bounded step is to reacquire with search."
-    elif signals["target_locked"] and not active_pursuit:
+    elif signals["target_locked"]:
         policy_stage = "plan"
         preferred_intent = "plan_to_target"
-        allowed_intents = ["plan_to_target", "safe_stop"]
-        policy_reason = "The target is locked and no goal is active, so planning is the next bounded step."
-    elif active_pursuit:
-        policy_stage = "track"
-        preferred_intent = "track_target"
-        allowed_intents = ["track_target", "safe_stop", "abort"]
-        policy_reason = "Pursuit is already active, so the supervisor should stay in track/interrupt space."
+        allowed_intents = ["plan_to_target", "safe_stop"] + (["abort"] if active_pursuit else [])
+        if signals["target_locked_recent"]:
+            policy_reason = "The target lock is fresh, so planning should continue through the lock handoff window."
+        else:
+            policy_reason = "The target is locked and no active goal owns the handoff, so planning is the next bounded step."
     else:
         policy_stage = "stop"
         preferred_intent = "safe_stop"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -269,6 +270,85 @@ def test_run_recommendation_blocks_when_preview_is_not_ready(tmp_path, monkeypat
     assert "cmd_vel_recent" in summary["decision"]["missing_prerequisites"]
     assert summary["approved"] is False
     assert summary["dispatch_status"] == 0
+
+
+def test_run_recommendation_uses_deterministic_fast_path_without_openai_key(tmp_path, monkeypatch):
+    state = ready_state()
+    state["perception"]["target_visible_now"] = False
+    state["perception"]["latest_detection_world"] = None
+    state["belief"]["latest_goal_pose"] = None
+    state["sim_gate_ready"] = True
+    state["outcome"] = {
+        "feedback_recent": False,
+        "nav_goal_recent": False,
+        "cmd_vel_recent": False,
+        "boundary_activity_seen": False,
+    }
+    state["brain"] = {
+        "target_locked": False,
+        "track_active": False,
+        "goal_in_progress": False,
+        "search_active": False,
+        "target_visible_recent": False,
+    }
+
+    openai_called = {"value": False}
+
+    def _unexpected_openai_call(**_kwargs):
+        openai_called["value"] = True
+        raise AssertionError("OpenAI provider should not be called when the deterministic path is valid.")
+
+    monkeypatch.setattr(recommender, "fetch_dashboard_state", lambda dashboard_url, timeout_s: state)
+    monkeypatch.setattr(recommender, "call_openai_responses", _unexpected_openai_call)
+    monkeypatch.setattr(
+        recommender,
+        "attempt_deterministic_recommendation",
+        lambda **_kwargs: SimpleNamespace(
+            decision={
+                "status": "recommendation",
+                "task_text": "turn until the ball is visible",
+                "intent": "search_for_target",
+                "args": {"target_class": "ball"},
+                "rationale_short": "The target is not visible yet, so bounded search is next.",
+                "missing_prerequisites": [],
+                "expected_observations": [],
+                "confidence": 1.0,
+            },
+            preview_status=200,
+            preview_payload={
+                "preview": {
+                    "contract_valid": True,
+                    "ready_to_dispatch": True,
+                    "payload": {"intent": "search_for_target", "args": {"target_class": "ball"}},
+                    "readiness": {"ready_to_dispatch": True, "missing_keys": []},
+                    "expected_boundary_activity": [],
+                }
+            },
+            evaluation_kind="deterministic_recommendation",
+        ),
+    )
+    monkeypatch.setattr(
+        recommender,
+        "dispatch_intent",
+        lambda dashboard_url, intent, args, timeout_s: (202, {"accepted": True, "message": "intent queued"}),
+    )
+
+    result = recommender.run_recommendation(
+        task_text="turn until the ball is visible",
+        contract_path=CONTRACT_PATH,
+        repo_root=tmp_path,
+        approve=True,
+    )
+
+    summary = result["summary"]
+    assert result["exit_code"] == 0
+    assert openai_called["value"] is False
+    assert summary["decision"]["status"] == "recommendation"
+    assert summary["decision"]["intent"] == "search_for_target"
+    assert summary["decision"]["args"] == {"target_class": "ball"}
+    assert summary["evaluation_kind"] == "deterministic_recommendation"
+    assert summary["approved"] is True
+    assert summary["dispatch_status"] == 202
 
 
 def test_run_recommendation_blocks_on_malformed_model_output(tmp_path, monkeypatch):

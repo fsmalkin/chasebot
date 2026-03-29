@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+from datetime import timezone
 import sys
 from pathlib import Path
 
@@ -56,6 +58,19 @@ def test_policy_prefers_search_when_target_not_visible():
     assert "plan_to_target" not in policy["allowed_intents"]
 
 
+def test_policy_keeps_active_search_out_of_unsafe_stop():
+    state = base_state()
+    state["brain"]["search_active"] = True  # type: ignore[index]
+    state["outcome"]["cmd_vel_recent"] = True  # type: ignore[index]
+    state["outcome"]["boundary_activity_seen"] = True  # type: ignore[index]
+
+    policy = build_policy_snapshot(state, sim_gate_ready=True)
+
+    assert policy["stage"] == "search"
+    assert policy["preferred_intent"] == "search_for_target"
+    assert "active_pursuit_without_target_feedback" not in policy["unsafe_reasons"]
+
+
 def test_policy_prefers_acquire_when_target_visible_but_not_locked():
     state = base_state()
     state["perception"]["target_visible_now"] = True  # type: ignore[index]
@@ -95,12 +110,31 @@ def test_policy_prefers_track_when_pursuit_is_active():
     assert "abort" in policy["allowed_intents"]
 
 
-def test_policy_reacquires_when_locked_target_is_no_longer_visible():
+def test_policy_prefers_track_when_goal_was_recently_dispatched():
+    state = base_state()
+    state["perception"]["target_visible_now"] = True  # type: ignore[index]
+    state["brain"]["target_locked"] = True  # type: ignore[index]
+    state["brain"]["track_active"] = False  # type: ignore[index]
+    state["brain"]["goal_in_progress"] = False  # type: ignore[index]
+    state["outcome"]["nav_goal_recent"] = True  # type: ignore[index]
+    state["outcome"]["cmd_vel_recent"] = True  # type: ignore[index]
+    state["belief"]["latest_goal_pose"] = {"frame_id": "odom", "x": 0.8, "y": 0.0}  # type: ignore[index]
+
+    policy = build_policy_snapshot(state, sim_gate_ready=True)
+
+    assert policy["stage"] == "track"
+    assert policy["preferred_intent"] == "track_target"
+    assert "track_target" in policy["allowed_intents"]
+
+
+def test_policy_reacquires_when_stale_lock_is_no_longer_visible():
     state = base_state()
     state["brain"]["target_locked"] = True  # type: ignore[index]
-    state["brain"]["track_active"] = True  # type: ignore[index]
-    state["outcome"]["nav_goal_recent"] = True  # type: ignore[index]
-    state["belief"]["latest_goal_pose"] = {"frame_id": "odom", "x": 0.8, "y": 0.0}  # type: ignore[index]
+    state["brain"]["track_active"] = False  # type: ignore[index]
+    state["brain"]["goal_in_progress"] = False  # type: ignore[index]
+    state["outcome"]["nav_goal_recent"] = False  # type: ignore[index]
+    state["outcome"]["cmd_vel_recent"] = False  # type: ignore[index]
+    state["belief"]["latest_goal_pose"] = None  # type: ignore[index]
 
     policy = build_policy_snapshot(state, sim_gate_ready=True)
 
@@ -108,6 +142,23 @@ def test_policy_reacquires_when_locked_target_is_no_longer_visible():
     assert policy["preferred_intent"] == "search_for_target"
     assert "search_for_target" in policy["allowed_intents"]
     assert "track_target" not in policy["allowed_intents"]
+
+
+def test_policy_keeps_fresh_lock_in_plan_handoff_even_when_visibility_flickers():
+    state = base_state()
+    state["brain"]["target_locked"] = True  # type: ignore[index]
+    state["brain"]["target_locked_utc"] = datetime.now(timezone.utc).isoformat()  # type: ignore[index]
+    state["perception"]["target_visible_now"] = False  # type: ignore[index]
+    state["brain"]["target_visible_recent"] = False  # type: ignore[index]
+    state["outcome"]["feedback_recent"] = False  # type: ignore[index]
+    state["outcome"]["cmd_vel_recent"] = True  # type: ignore[index]
+    state["outcome"]["boundary_activity_seen"] = True  # type: ignore[index]
+
+    policy = build_policy_snapshot(state, sim_gate_ready=True)
+
+    assert policy["stage"] == "plan"
+    assert policy["preferred_intent"] == "plan_to_target"
+    assert "safe_stop" in policy["allowed_intents"]
 
 
 def test_policy_exposes_safe_stop_on_unsafe_state():

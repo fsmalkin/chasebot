@@ -22,6 +22,7 @@ from llm_supervisor_core import (
     DEFAULT_SHADOW_TASK_TEXT,
     REPO_ROOT,
     RecommendationError,
+    attempt_deterministic_recommendation,
     append_jsonl,
     blocked_decision,
     blocked_from_preview,
@@ -178,30 +179,41 @@ class SupervisorController:
         session_id = str(state.get("session_id", "") or "")
         digest = build_state_digest(state, self.contract)
         state_hash = state_digest_hash(digest)
+        deterministic = None
 
         enabled, disabled_reason = self.provider.is_enabled()
         artifacts = resolve_supervisor_artifacts(self.repo_root, session_id)
         if not enabled:
-            runtime_payload = self._runtime_payload(
-                status="disabled",
-                session_id=artifacts.session_id,
-                provider=self.provider.provider_name,
-                model=self.provider.model_name,
-                latest_decision=blocked_decision(
-                    self.task_text,
-                    disabled_reason or "Provider disabled.",
-                    missing_prerequisites=["provider_disabled"],
-                ),
-                state_hash=state_hash,
-                history_path=str(artifacts.history_path),
-                latest_path=str(artifacts.latest_path),
-                preview={},
-                suppression_reason=disabled_reason or "provider_disabled",
-                recent_history=read_jsonl(artifacts.history_path, limit=5),
-                running=True,
+            deterministic_probe = attempt_deterministic_recommendation(
+                task_text=self.task_text,
+                state=state,
+                contract=self.contract,
+                dashboard_url=self.dashboard_url,
+                timeout_s=self.timeout_s,
+                digest=digest,
             )
-            self._write_runtime(runtime_payload)
-            return runtime_payload
+            if deterministic_probe is None:
+                runtime_payload = self._runtime_payload(
+                    status="disabled",
+                    session_id=artifacts.session_id,
+                    provider=self.provider.provider_name,
+                    model=self.provider.model_name,
+                    latest_decision=blocked_decision(
+                        self.task_text,
+                        disabled_reason or "Provider disabled.",
+                        missing_prerequisites=["provider_disabled"],
+                    ),
+                    state_hash=state_hash,
+                    history_path=str(artifacts.history_path),
+                    latest_path=str(artifacts.latest_path),
+                    preview={},
+                    suppression_reason=disabled_reason or "provider_disabled",
+                    recent_history=read_jsonl(artifacts.history_path, limit=5),
+                    running=True,
+                )
+                self._write_runtime(runtime_payload)
+                return runtime_payload
+            deterministic = deterministic_probe
 
         now_monotonic = time.monotonic()
         is_stale = not self.last_evaluated_monotonic or (now_monotonic - self.last_evaluated_monotonic) >= self.max_staleness_s
@@ -211,6 +223,15 @@ class SupervisorController:
         self.last_suppression_hash = ""
         evaluation_ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         artifacts = resolve_supervisor_artifacts(self.repo_root, session_id, timestamp=evaluation_ts)
+        if deterministic is None:
+            deterministic = attempt_deterministic_recommendation(
+                task_text=self.task_text,
+                state=state,
+                contract=self.contract,
+                dashboard_url=self.dashboard_url,
+                timeout_s=self.timeout_s,
+                digest=digest,
+            )
         provider_request: Dict[str, Any] = {}
         provider_response: Dict[str, Any] = {}
         preview_payload: Dict[str, Any] = {}
@@ -218,7 +239,12 @@ class SupervisorController:
         evaluation_kind = "provider"
         hard_error = ""
 
-        if state_error:
+        if deterministic is not None:
+            decision = dict(deterministic.decision)
+            preview_status = deterministic.preview_status
+            preview_payload = dict(deterministic.preview_payload)
+            evaluation_kind = deterministic.evaluation_kind
+        elif state_error:
             evaluation_kind = "deterministic_blocked"
             decision = blocked_decision(
                 self.task_text,
@@ -261,7 +287,7 @@ class SupervisorController:
                     missing_prerequisites=["provider_output_invalid"],
                 )
 
-        if decision.get("status") == "recommendation":
+        if decision.get("status") == "recommendation" and deterministic is None:
             preview_status, preview_payload = preview_intent(
                 self.dashboard_url,
                 str(decision.get("intent", "")),

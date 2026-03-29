@@ -52,6 +52,17 @@ TARGET_MODEL_SDF = "ros2_config/frisbee_target_ball.sdf"
 TARGET_MODEL_NAME_NAV2 = "uat_nav2_target"
 TARGET_MODEL_NAME_SNAPSHOT = "uat_snapshot_target"
 TARGET_MODEL_NAME_PROOF = "llm_turn_then_go_target"
+VISIT_TARGET_MODEL_NAMES = (
+    "visit_mission_target_ball_1",
+    "visit_mission_target_ball_2",
+    "visit_mission_target_ball_3",
+)
+TRUTH_TARGET_MODEL_NAMES = (
+    *VISIT_TARGET_MODEL_NAMES,
+    TARGET_MODEL_NAME_NAV2,
+    TARGET_MODEL_NAME_SNAPSHOT,
+    TARGET_MODEL_NAME_PROOF,
+)
 WORLD_STREAM_RESTART_COOLDOWN_S = 20.0
 WORLD_STREAM_RESTART_MAX_ATTEMPTS = 3
 WORLD_STREAM_STALE_DEBOUNCE_S = 3.0
@@ -1125,6 +1136,7 @@ class DashboardController:
         snapshot["truth_alignment_ok"] = bool(visual_state.get("truth_alignment_ok", False))
         snapshot["truth_failure_class"] = visual_state.get("truth_failure_class", "")
         snapshot["true_target_seen"] = bool(visual_state.get("true_target_seen", False))
+        snapshot["latest_truth_target_model_name"] = str(visual_state.get("latest_truth_target_model_name", "") or "")
         snapshot["target_visible_ratio"] = float(visual_state.get("target_visible_ratio", 0.0) or 0.0)
         snapshot["overlay_difference_ok"] = bool(visual_state.get("overlay_difference_ok", False))
         world_snapshot = self._world_stream_snapshot(visual_dir, world_state, str(snapshot.get("session_id", "") or ""))
@@ -1164,6 +1176,7 @@ class DashboardController:
             "target_visible_ratio": float(visual_state.get("target_visible_ratio", 0.0) or 0.0),
             "latest_detection_world": visual_state.get("latest_detection_world"),
             "latest_truth_target_world": visual_state.get("latest_truth_target_world"),
+            "latest_truth_target_model_name": str(visual_state.get("latest_truth_target_model_name", "") or ""),
             "truth_alignment_ok": bool(visual_state.get("truth_alignment_ok", False)),
             "truth_status": "aligned" if visual_state.get("truth_alignment_ok", False) else (visual_state.get("truth_failure_class") or "truth unavailable"),
         }
@@ -1322,7 +1335,10 @@ class DashboardController:
         snapshot["mission_phase"] = str(visit_runtime.get("mission_phase", snapshot.get("mission_phase", "idle")) or "idle")
         snapshot["mission_status"] = str(visit_runtime.get("mission_status", snapshot.get("mission_status", "idle")) or "idle")
         snapshot["search_bias_active"] = bool(visit_runtime.get("search_bias_active", snapshot.get("search_bias_active", False)))
-        snapshot["current_target_id"] = str(visit_runtime.get("current_target_id", snapshot.get("current_target_id", "")) or "")
+        current_target_id = str(visit_runtime.get("current_target_id", snapshot.get("current_target_id", "")) or "")
+        if active_mode == "visit_mission" and snapshot["mission_status"] != "running":
+            current_target_id = ""
+        snapshot["current_target_id"] = current_target_id
         snapshot["visit_index"] = int(visit_runtime.get("visit_index", snapshot.get("visit_index", 0)) or 0)
         snapshot["visited_targets"] = list(visit_runtime.get("visited_targets", snapshot.get("visited_targets", [])) or [])
         snapshot["remaining_targets"] = list(visit_runtime.get("remaining_targets", snapshot.get("remaining_targets", [])) or [])
@@ -1891,6 +1907,50 @@ class DashboardController:
             time.sleep(0.5)
         return False
 
+    def _expected_truth_target_candidates(self) -> set[str]:
+        return {str(item).strip() for item in TRUTH_TARGET_MODEL_NAMES if str(item).strip()}
+
+    def _truth_state_target_candidates(self, state: Dict[str, Any]) -> set[str]:
+        raw_candidates = state.get("target_model_candidates", [])
+        if not isinstance(raw_candidates, (list, tuple)):
+            return set()
+        return {str(item).strip() for item in raw_candidates if str(item).strip()}
+
+    def _truth_probe_state_ready(self, state: Dict[str, Any]) -> bool:
+        if not state:
+            return False
+        current_session_id = str(self.state.get("session_id", "") or "")
+        if current_session_id and str(state.get("session_id", "") or "") != current_session_id:
+            return False
+        if not bool(state.get("robot_truth_seen", False)):
+            return False
+        expected_candidates = self._expected_truth_target_candidates()
+        return expected_candidates.issubset(self._truth_state_target_candidates(state))
+
+    def _truth_probe_startup_failure_text(self) -> str:
+        visual_dir = self._current_visual_dir()
+        if visual_dir is None:
+            return "Missing visual directory for truth probe diagnostics."
+        state = read_json(visual_dir / "truth_state.json")
+        if not state:
+            return "truth_state.json missing or unreadable."
+        current_session_id = str(self.state.get("session_id", "") or "")
+        truth_session_id = str(state.get("session_id", "") or "")
+        if current_session_id and truth_session_id != current_session_id:
+            return f"Truth probe session mismatch: expected {current_session_id}, got {truth_session_id or 'none'}."
+        if not bool(state.get("robot_truth_seen", False)):
+            return "Truth probe did not report robot visibility."
+        expected_candidates = self._expected_truth_target_candidates()
+        actual_candidates = self._truth_state_target_candidates(state)
+        missing_candidates = sorted(expected_candidates - actual_candidates)
+        if missing_candidates:
+            reported = sorted(actual_candidates)
+            return (
+                "Truth probe candidate set mismatch: missing "
+                f"{', '.join(missing_candidates)}; reported {', '.join(reported) or 'none'}."
+            )
+        return "Truth probe did not reach a ready state."
+
     def _wait_for_truth_ready(self, timeout_s: float) -> bool:
         visual_dir = self._current_visual_dir()
         if visual_dir is None:
@@ -1898,7 +1958,7 @@ class DashboardController:
         deadline = time.monotonic() + max(timeout_s, 1.0)
         while time.monotonic() < deadline:
             state = read_json(visual_dir / "truth_state.json")
-            if state and bool(state.get("robot_truth_seen", False)):
+            if self._truth_probe_state_ready(state):
                 return True
             if self.lifecycle_cancel.is_set():
                 return False
@@ -2371,7 +2431,7 @@ PID_FILE="/tmp/chasecar_truth_probe.pid"
 LOG_FILE="/tmp/chasecar_truth_probe.log"
 pkill -f "sim_truth_probe.py" 2>/dev/null || true
 rm -f "$PID_FILE" "$LOG_FILE"
-nohup bash -lc 'source /opt/ros/{DEFAULT_CORE_ROS_DISTRO}/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/sim_truth_probe.py --session-id "{session_id}" --output-dir "{visual_dir_container}" --world-name "{DEFAULT_WORLD_NAME}" --target-model-names "{TARGET_MODEL_NAME_NAV2},{TARGET_MODEL_NAME_SNAPSHOT}" --duration-s 7200' >"$LOG_FILE" 2>&1 &
+nohup bash -lc 'source /opt/ros/{DEFAULT_CORE_ROS_DISTRO}/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/sim_truth_probe.py --session-id "{session_id}" --output-dir "{visual_dir_container}" --world-name "{DEFAULT_WORLD_NAME}" --target-model-names "{",".join(TRUTH_TARGET_MODEL_NAMES)}" --duration-s 7200' >"$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 sleep 1
 echo "TRUTH_PID=$(cat "$PID_FILE")"
@@ -2385,8 +2445,9 @@ echo "TRUTH_LOG=$LOG_FILE"
                     gate_service_states=gate_service_states,
                 )
             if not self._wait_for_truth_ready(20.0):
+                truth_failure_text = self._truth_probe_startup_failure_text()
                 raise EnvironmentStartupError(
-                    f"Truth probe did not report robot visibility. {truth_info['output']}".strip(),
+                    f"Truth probe did not report ready state. {truth_failure_text} {truth_info['output']}".strip(),
                     environment_failure_class="truth_probe_start_failed",
                     gate_service_states=gate_service_states,
                 )
@@ -3334,6 +3395,10 @@ pkill -f "yolo_3d_to_nav2_bridge.py" 2>/dev/null || true
 if command -v gz >/dev/null 2>&1; then
   gz service -s "/world/{DEFAULT_WORLD_NAME}/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"{TARGET_MODEL_NAME_NAV2}\\" type: 2" >/dev/null 2>&1 || true
   gz service -s "/world/{DEFAULT_WORLD_NAME}/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"{TARGET_MODEL_NAME_SNAPSHOT}\\" type: 2" >/dev/null 2>&1 || true
+  gz service -s "/world/{DEFAULT_WORLD_NAME}/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"{TARGET_MODEL_NAME_PROOF}\\" type: 2" >/dev/null 2>&1 || true
+  gz service -s "/world/{DEFAULT_WORLD_NAME}/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"visit_mission_target_ball_1\\" type: 2" >/dev/null 2>&1 || true
+  gz service -s "/world/{DEFAULT_WORLD_NAME}/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"visit_mission_target_ball_2\\" type: 2" >/dev/null 2>&1 || true
+  gz service -s "/world/{DEFAULT_WORLD_NAME}/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"visit_mission_target_ball_3\\" type: 2" >/dev/null 2>&1 || true
   gz service -s "/world/{DEFAULT_WORLD_NAME}/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"visit_mission_target\\" type: 2" >/dev/null 2>&1 || true
 fi
 """,

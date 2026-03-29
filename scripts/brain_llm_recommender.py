@@ -17,6 +17,7 @@ from llm_supervisor_core import (
     RECOMMENDATION_TYPE,
     REPO_ROOT,
     RunArtifacts,
+    attempt_deterministic_recommendation,
     allowed_intent_names,
     append_jsonl,
     blocked_decision,
@@ -136,6 +137,8 @@ def run_recommendation(
     dispatch_payload: Dict[str, Any] = {}
     dispatch_status = 0
     hard_error = ""
+    evaluation_kind = "provider"
+    deterministic = None
 
     try:
         state = fetch_dashboard_state(dashboard_url, timeout_s=timeout_s)
@@ -148,6 +151,7 @@ def run_recommendation(
         }
 
     artifacts = resolve_artifacts(repo_root, str(state.get("session_id", "")))
+    digest = build_state_digest(state, contract)
     request_snapshot = {
         "generated_utc": utc_now(),
         "type": RECOMMENDATION_TYPE,
@@ -178,44 +182,58 @@ def run_recommendation(
             "Environment is not ready for frozen intent recommendation.",
             missing_prerequisites=["environment_ready"],
         )
-    elif not openai_api_key:
-        hard_error = "OPENAI_API_KEY is required."
-        decision = blocked_decision(
-            task_text,
-            "OpenAI configuration is missing.",
-            missing_prerequisites=["OPENAI_API_KEY"],
-        )
     else:
-        openai_request = build_openai_request(
-            model=model,
-            reasoning_effort=reasoning_effort,
+        deterministic = attempt_deterministic_recommendation(
             task_text=task_text,
-            digest=build_state_digest(state, contract),
+            state=state,
             contract=contract,
+            dashboard_url=dashboard_url,
+            timeout_s=timeout_s,
+            digest=digest,
         )
-        request_snapshot["openai_request"] = openai_request
-        try:
-            raw_response = call_openai_responses(
-                api_key=openai_api_key,
-                request_payload=openai_request,
-                base_url=normalize_openai_base_url(openai_base_url),
-                timeout_s=timeout_s,
-                org_id=openai_org_id,
-                project_id=openai_project_id,
-            )
-            parsed = extract_tool_decision(raw_response, task_text=task_text)
-            decision = normalize_model_decision(parsed)
-            decision = validate_decision_against_contract(decision, contract)
-            decision = validate_decision_against_canonical_space(decision)
-        except Exception as exc:
-            hard_error = str(exc)
+        if deterministic is not None:
+            decision = dict(deterministic.decision)
+            preview_status = deterministic.preview_status
+            preview_payload = dict(deterministic.preview_payload)
+            evaluation_kind = deterministic.evaluation_kind
+        elif not openai_api_key:
+            hard_error = "OPENAI_API_KEY is required."
             decision = blocked_decision(
                 task_text,
-                "Model output could not be validated.",
-                missing_prerequisites=["model_output_invalid"],
+                "OpenAI configuration is missing.",
+                missing_prerequisites=["OPENAI_API_KEY"],
             )
+        else:
+            openai_request = build_openai_request(
+                model=model,
+                reasoning_effort=reasoning_effort,
+                task_text=task_text,
+                digest=digest,
+                contract=contract,
+            )
+            request_snapshot["openai_request"] = openai_request
+            try:
+                raw_response = call_openai_responses(
+                    api_key=openai_api_key,
+                    request_payload=openai_request,
+                    base_url=normalize_openai_base_url(openai_base_url),
+                    timeout_s=timeout_s,
+                    org_id=openai_org_id,
+                    project_id=openai_project_id,
+                )
+                parsed = extract_tool_decision(raw_response, task_text=task_text)
+                decision = normalize_model_decision(parsed)
+                decision = validate_decision_against_contract(decision, contract)
+                decision = validate_decision_against_canonical_space(decision)
+            except Exception as exc:
+                hard_error = str(exc)
+                decision = blocked_decision(
+                    task_text,
+                    "Model output could not be validated.",
+                    missing_prerequisites=["model_output_invalid"],
+                )
 
-    if decision.get("status") == "recommendation":
+    if decision.get("status") == "recommendation" and deterministic is None:
         preview_status, preview_payload = preview_intent(
             dashboard_url,
             str(decision.get("intent", "")),
@@ -253,7 +271,9 @@ def run_recommendation(
         "preview_payload": preview_payload,
         "dispatch_status": dispatch_status,
         "dispatch_payload": dispatch_payload,
+        "evaluation_kind": evaluation_kind,
     }
+    request_snapshot["evaluation_kind"] = evaluation_kind
     summary = {
         "generated_utc": utc_now(),
         "type": RECOMMENDATION_TYPE,
@@ -269,6 +289,7 @@ def run_recommendation(
         "decision_signature": decision_signature(decision),
         "preview_status": preview_status,
         "preview": preview_summary(preview_status, preview_payload),
+        "evaluation_kind": evaluation_kind,
         "approved": bool(approved),
         "dispatch_status": dispatch_status,
         "dispatch_payload": dispatch_payload,
@@ -289,6 +310,7 @@ def run_recommendation(
             "decision_status": decision.get("status", ""),
             "intent": decision.get("intent", ""),
             "approved": bool(approved),
+            "evaluation_kind": evaluation_kind,
             "summary_path": str(artifacts.summary_path),
         },
     )

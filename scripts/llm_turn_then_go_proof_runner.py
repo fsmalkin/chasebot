@@ -23,6 +23,7 @@ from llm_provider_openai import OpenAIResponsesProvider
 from llm_supervisor_core import DEFAULT_DASHBOARD_URL
 from llm_supervisor_core import DEFAULT_OPENAI_MODEL
 from llm_supervisor_core import DEFAULT_REASONING_EFFORT
+from llm_supervisor_core import attempt_deterministic_recommendation
 from llm_supervisor_core import append_jsonl
 from llm_supervisor_core import blocked_decision
 from llm_supervisor_core import blocked_from_preview
@@ -571,71 +572,90 @@ exit "$rc"
 
                 provider_name = self.provider.provider_name
                 provider_model = self.provider.model_name
-                try:
-                    provider_result = self.provider.recommend(
-                        task_text=self.args.task,
-                        digest=digest,
-                        contract=self.contract,
-                        timeout_s=self.args.timeout_s,
-                    )
-                    provider_name = provider_result.provider
-                    provider_model = provider_result.model
-                    decision = normalize_model_decision(provider_result.decision)
-                    decision = validate_decision_against_contract(decision, self.contract)
-                    decision = validate_decision_against_canonical_space(decision)
-                except Exception as exc:
-                    decision = blocked_decision(
-                        self.args.task,
-                        "Provider output could not be validated.",
-                        missing_prerequisites=["provider_output_invalid"],
-                        expected_observations=[],
-                        confidence=0.0,
-                    )
-                    decision["rationale_short"] = f"{decision['rationale_short']} {exc}"
-
+                evaluation_kind = "provider"
                 preview_status = 0
                 preview_payload: dict[str, Any] = {}
                 dispatch_status = 0
                 dispatch_payload: dict[str, Any] = {}
-                if decision.get("status") == "recommendation":
-                    preview_status, preview_payload = preview_intent(
-                        self.dashboard_url,
-                        str(decision.get("intent", "")),
-                        dict(decision.get("args", {})),
-                        timeout_s=self.args.timeout_s,
-                    )
-                    preview = preview_summary(preview_status, preview_payload)
-                    if preview_status != 200 or not preview["contract_valid"] or not preview["ready_to_dispatch"]:
-                        decision = blocked_from_preview(
+
+                deterministic = attempt_deterministic_recommendation(
+                    task_text=self.args.task,
+                    state=state,
+                    contract=self.contract,
+                    dashboard_url=self.dashboard_url,
+                    timeout_s=self.args.timeout_s,
+                    digest=digest,
+                )
+                if deterministic is not None:
+                    decision = dict(deterministic.decision)
+                    preview_status = deterministic.preview_status
+                    preview_payload = dict(deterministic.preview_payload)
+                    evaluation_kind = deterministic.evaluation_kind
+                    provider_name = "deterministic_recommendation"
+                    provider_model = self.provider.model_name
+                else:
+                    try:
+                        provider_result = self.provider.recommend(
                             task_text=self.args.task,
-                            decision=decision,
-                            preview_status=preview_status,
-                            preview_payload=preview_payload,
+                            digest=digest,
+                            contract=self.contract,
+                            timeout_s=self.args.timeout_s,
                         )
-                    else:
-                        signature = decision_signature(decision)
-                        if signature != self.last_decision_signature or (time.monotonic() - self.last_dispatch_monotonic) >= self.args.dispatch_cooldown_s:
-                            dispatch_status, dispatch_payload = dispatch_intent(
-                                self.dashboard_url,
-                                str(decision.get("intent", "")),
-                                dict(decision.get("args", {})),
-                                timeout_s=self.args.timeout_s,
+                        provider_name = provider_result.provider
+                        provider_model = provider_result.model
+                        decision = normalize_model_decision(provider_result.decision)
+                        decision = validate_decision_against_contract(decision, self.contract)
+                        decision = validate_decision_against_canonical_space(decision)
+                    except Exception as exc:
+                        decision = blocked_decision(
+                            self.args.task,
+                            "Provider output could not be validated.",
+                            missing_prerequisites=["provider_output_invalid"],
+                            expected_observations=[],
+                            confidence=0.0,
+                        )
+                        decision["rationale_short"] = f"{decision['rationale_short']} {exc}"
+
+                    if decision.get("status") == "recommendation":
+                        preview_status, preview_payload = preview_intent(
+                            self.dashboard_url,
+                            str(decision.get("intent", "")),
+                            dict(decision.get("args", {})),
+                            timeout_s=self.args.timeout_s,
+                        )
+                        preview = preview_summary(preview_status, preview_payload)
+                        if preview_status != 200 or not preview["contract_valid"] or not preview["ready_to_dispatch"]:
+                            decision = blocked_from_preview(
+                                task_text=self.args.task,
+                                decision=decision,
+                                preview_status=preview_status,
+                                preview_payload=preview_payload,
                             )
-                            if dispatch_status == 202 and bool(dispatch_payload.get("accepted", False)):
-                                self.last_decision_signature = signature
-                                self.last_dispatch_monotonic = time.monotonic()
-                                self._update_runtime_state(latest_decision=decision)
-                                self._append_runtime_event(
-                                    f"LLM emitted {self._format_decision_label(decision)}.",
-                                    category="decision",
-                                    key=f"decision:{signature}",
-                                )
-                                if decision.get("intent") == "search_for_target":
-                                    self.search_dispatched = True
-                                if decision.get("intent") == "acquire_target":
-                                    self.acquire_dispatched = True
-                                if decision.get("intent") in {"plan_to_target", "track_target"}:
-                                    self.plan_or_track_dispatched = True
+
+                if decision.get("status") == "recommendation":
+                    signature = decision_signature(decision)
+                    if signature != self.last_decision_signature or (time.monotonic() - self.last_dispatch_monotonic) >= self.args.dispatch_cooldown_s:
+                        dispatch_status, dispatch_payload = dispatch_intent(
+                            self.dashboard_url,
+                            str(decision.get("intent", "")),
+                            dict(decision.get("args", {})),
+                            timeout_s=self.args.timeout_s,
+                        )
+                        if dispatch_status == 202 and bool(dispatch_payload.get("accepted", False)):
+                            self.last_decision_signature = signature
+                            self.last_dispatch_monotonic = time.monotonic()
+                            self._update_runtime_state(latest_decision=decision)
+                            self._append_runtime_event(
+                                f"LLM emitted {self._format_decision_label(decision)}.",
+                                category="decision",
+                                key=f"decision:{signature}",
+                            )
+                            if decision.get("intent") == "search_for_target":
+                                self.search_dispatched = True
+                            if decision.get("intent") == "acquire_target":
+                                self.acquire_dispatched = True
+                            if decision.get("intent") in {"plan_to_target", "track_target"}:
+                                self.plan_or_track_dispatched = True
 
                 append_jsonl(
                     decision_history_path,
@@ -646,6 +666,7 @@ exit "$rc"
                         "model": provider_model,
                         "decision": decision,
                         "preview": preview_summary(preview_status, preview_payload),
+                        "evaluation_kind": evaluation_kind,
                         "dispatch_status": dispatch_status,
                         "dispatch_payload": dispatch_payload,
                     },

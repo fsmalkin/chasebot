@@ -78,6 +78,9 @@ Once the frozen pre-LLM boundary is in place, the next roadmap step is not open-
 3. simple browser UAT demo for the same proof path
 4. bounded supervisor reuse across the visible-ball M3 scenario family
 5. provider benchmarking for a future on-machine model path on Orin Nano
+   - benchmark only providers that can map cleanly to the frozen bounded intent contract while preserving deterministic lower layers
+   - optional research lane: evaluate alternate embodied-reasoning providers, including Gemini Robotics-ER-class models, only as supervisory reasoning providers
+   - this benchmarking is not a prerequisite for the current promotion ladder
 
 ### Intended Outcomes
 
@@ -94,3 +97,5 @@ Once the frozen pre-LLM boundary is in place, the next roadmap step is not open-
 2. open-ended task decomposition
 3. end-to-end VLA action generation
 4. autonomous environment lifecycle management by the LLM
+5. pivoting the roadmap slice to end-to-end VLA control
+6. replacing deterministic perception, planning, or execution loops with model-generated low-level action

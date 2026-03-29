@@ -15,6 +15,7 @@ from typing import Any, Dict, Iterable, Tuple
 import yaml
 
 from brain_state_digest import CANONICAL_ARGS_BY_INTENT
+from brain_state_digest import build_state_digest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -59,6 +60,19 @@ class SupervisorArtifacts:
     provider_request_path: Path
     provider_response_path: Path
     evaluation_path: Path
+
+
+@dataclass(frozen=True)
+class DeterministicRecommendation:
+    decision: Dict[str, Any]
+    preview_status: int
+    preview_payload: Dict[str, Any]
+    preview: Dict[str, Any]
+    evaluation_kind: str = "deterministic_recommendation"
+    preferred_intent: str = ""
+    policy_stage: str = ""
+    policy_reason: str = ""
+    policy_snapshot: Dict[str, Any] | None = None
 
 
 def utc_now() -> str:
@@ -336,6 +350,63 @@ def preview_summary(preview_status: int, preview_payload: Dict[str, Any]) -> Dic
         "expected_boundary_activity": [str(item) for item in list(preview.get("expected_boundary_activity", []))],
         "payload": preview.get("payload", {}),
     }
+
+
+def attempt_deterministic_recommendation(
+    *,
+    task_text: str,
+    state: Dict[str, Any],
+    contract: Dict[str, Any],
+    dashboard_url: str,
+    timeout_s: float,
+    digest: Dict[str, Any] | None = None,
+) -> DeterministicRecommendation | None:
+    digest_payload = digest if isinstance(digest, dict) and digest else build_state_digest(state, contract)
+    policy = digest_payload.get("policy") if isinstance(digest_payload.get("policy"), dict) else {}
+    preferred_intent = str(policy.get("preferred_intent", "")).strip()
+    if not preferred_intent:
+        return None
+    canonical_args = CANONICAL_ARGS_BY_INTENT.get(preferred_intent)
+    if canonical_args is None:
+        return None
+
+    decision = {
+        "status": "recommendation",
+        "task_text": task_text,
+        "intent": preferred_intent,
+        "args": dict(canonical_args),
+        "rationale_short": str(policy.get("reason", "")).strip() or f"Policy preferred {preferred_intent}.",
+        "missing_prerequisites": [],
+        "expected_observations": [],
+        "confidence": 1.0,
+        "evaluation_kind": "deterministic_recommendation",
+    }
+    decision = validate_decision_against_contract(decision, contract)
+    decision = validate_decision_against_canonical_space(decision)
+
+    try:
+        preview_status, preview_payload = preview_intent(
+            dashboard_url,
+            preferred_intent,
+            dict(decision.get("args", {})),
+            timeout_s=timeout_s,
+        )
+    except Exception:
+        return None
+    preview = preview_summary(preview_status, preview_payload)
+    if preview_status != 200 or not preview["contract_valid"] or not preview["ready_to_dispatch"]:
+        return None
+
+    return DeterministicRecommendation(
+        decision=decision,
+        preview_status=preview_status,
+        preview_payload=preview_payload,
+        preview=preview,
+        preferred_intent=preferred_intent,
+        policy_stage=str(policy.get("stage", "")),
+        policy_reason=str(policy.get("reason", "")),
+        policy_snapshot=dict(policy),
+    )
 
 
 def blocked_from_preview(

@@ -18,7 +18,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--world-name", required=True)
     parser.add_argument("--robot-model-name", default="jetbot")
-    parser.add_argument("--target-model-names", default="milestone_demo_target,milestone_demo_target_viewer,uat_nav2_target")
+    parser.add_argument(
+        "--target-model-names",
+        default=(
+            "visit_mission_target_ball_1,"
+            "visit_mission_target_ball_2,"
+            "visit_mission_target_ball_3,"
+            "milestone_demo_target,"
+            "milestone_demo_target_viewer,"
+            "uat_nav2_target,"
+            "uat_snapshot_target,"
+            "llm_turn_then_go_target"
+        ),
+    )
     parser.add_argument("--topic", default="")
     parser.add_argument("--duration-s", type=float, default=180.0)
     parser.add_argument("--poll-period-s", type=float, default=0.5)
@@ -91,6 +103,26 @@ def sample_pose_topic(topic: str) -> tuple[bool, str]:
     return True, completed.stdout or ""
 
 
+def select_target_poses(
+    poses: list[dict[str, object]],
+    target_candidates: list[str],
+) -> tuple[dict[str, dict[str, object]], list[str], dict[str, object] | None, str]:
+    target_poses_by_name: dict[str, dict[str, object]] = {}
+    target_names_seen: list[str] = []
+    first_target_pose: dict[str, object] | None = None
+    first_target_name = ""
+    for candidate in target_candidates:
+        target_pose = next((pose for pose in poses if pose.get("name") == candidate), None)
+        if not isinstance(target_pose, dict):
+            continue
+        target_poses_by_name[candidate] = target_pose
+        target_names_seen.append(candidate)
+        if first_target_pose is None:
+            first_target_pose = target_pose
+            first_target_name = candidate
+    return target_poses_by_name, target_names_seen, first_target_pose, first_target_name
+
+
 def main() -> int:
     args = parse_args()
     output_dir = Path(args.output_dir).resolve()
@@ -128,21 +160,19 @@ def main() -> int:
             "robot_truth_pose": None,
             "true_target_pose": None,
             "target_model_name": "",
+            "target_poses_by_name": {},
+            "target_names_seen": [],
         }
         if ok and payload:
             poses = parse_pose_message(payload)
             robot_pose = next((pose for pose in poses if pose.get("name") == args.robot_model_name), None)
-            target_pose = None
-            target_name = ""
-            for candidate in target_candidates:
-                target_pose = next((pose for pose in poses if pose.get("name") == candidate), None)
-                if target_pose is not None:
-                    target_name = candidate
-                    break
+            target_poses_by_name, target_names_seen, target_pose, target_name = select_target_poses(poses, target_candidates)
             if robot_pose is not None:
                 robot_seen += 1
                 latest_robot = robot_pose
                 record["robot_truth_pose"] = robot_pose
+            record["target_poses_by_name"] = target_poses_by_name
+            record["target_names_seen"] = target_names_seen
             if target_pose is not None:
                 target_seen += 1
                 latest_target = target_pose
@@ -161,6 +191,8 @@ def main() -> int:
             "robot_truth_pose": latest_robot,
             "true_target_pose": latest_target,
             "target_model_name": latest_target_name,
+            "target_poses_by_name": dict(record.get("target_poses_by_name", {})),
+            "target_names_seen": list(record.get("target_names_seen", [])),
             "target_model_candidates": target_candidates,
         }
         state_path.write_text(json.dumps(state_payload, indent=2), encoding="utf-8")
@@ -175,6 +207,8 @@ def main() -> int:
         "robot_truth_ratio": round(robot_seen / max(samples, 1), 6),
         "true_target_ratio": round(target_seen / max(samples, 1), 6),
         "target_model_name": latest_target_name,
+        "target_poses_by_name": dict(record.get("target_poses_by_name", {})) if timeline else {},
+        "target_names_seen": list(record.get("target_names_seen", [])) if timeline else [],
         "target_model_candidates": target_candidates,
         "pass": latest_robot is not None and latest_target is not None,
         "state_path": str(state_path),

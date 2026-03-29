@@ -49,6 +49,9 @@ def normalize_angle(value: float) -> float:
     return value
 
 
+SEARCH_FEEDBACK_HEARTBEAT_S = 1.0
+
+
 def parse_args() -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description="Run the bounded frozen brain-intent executor.")
@@ -120,6 +123,7 @@ class BrainIntentExecutor(Node):
         self.search_rotation_accum_rad = 0.0
         self.search_last_yaw: float | None = None
         self.search_target_class = ""
+        self.last_search_feedback_monotonic = 0.0
 
         self.target_locked = False
         self.target_locked_class = ""
@@ -197,16 +201,18 @@ class BrainIntentExecutor(Node):
         self._publish_twist(Twist())
 
     def _cancel_goal(self, reason: str) -> None:
+        self.pending_cancel_reason = reason
         if self.current_goal_handle is None:
             self.goal_in_progress = False
+            self.latest_goal_pose = None
             return
         try:
-            self.pending_cancel_reason = reason
             self.current_goal_handle.cancel_goal_async()
         except Exception as exc:
             self.get_logger().warn(f"Goal cancel failed: {exc}")
         self.current_goal_handle = None
         self.goal_in_progress = False
+        self.latest_goal_pose = None
 
     def _clear_motion_state(self) -> None:
         self.search_active = False
@@ -214,8 +220,21 @@ class BrainIntentExecutor(Node):
         self.search_started_monotonic = 0.0
         self.search_rotation_accum_rad = 0.0
         self.search_last_yaw = None
+        self.search_target_class = ""
+        self.last_search_feedback_monotonic = 0.0
         self.track_active = False
         self.track_needs_replan = False
+
+    def _reset_pursuit_state(self) -> None:
+        self._clear_motion_state()
+        self.target_locked = False
+        self.target_locked_class = ""
+        self.target_locked_utc = ""
+        self.goal_in_progress = False
+        self.current_goal_handle = None
+        self.latest_goal_pose = None
+        self.last_goal_dispatched_monotonic = 0.0
+        self.last_goal_dispatched_utc = ""
 
     def _lock_target(self, target_class: str, source: str) -> None:
         self.target_locked = True
@@ -320,6 +339,7 @@ class BrainIntentExecutor(Node):
     def _on_goal_result(self, future) -> None:
         self.goal_in_progress = False
         self.current_goal_handle = None
+        self.latest_goal_pose = None
         try:
             result = future.result()
             status = int(result.status)
@@ -368,10 +388,7 @@ class BrainIntentExecutor(Node):
     def _handle_search_intent(self, args_payload: dict[str, Any]) -> None:
         target_class = str(args_payload.get("target_class", "")).strip() or "ball"
         self._cancel_goal("search_for_target preempted active goal")
-        self.track_active = False
-        self.track_needs_replan = False
-        self.target_locked = False
-        self.target_locked_class = ""
+        self._reset_pursuit_state()
         if self._target_visible_recent():
             self._lock_target(target_class, "search_for_target")
             return
@@ -384,10 +401,23 @@ class BrainIntentExecutor(Node):
         self.search_rotation_accum_rad = 0.0
         self.search_last_yaw = self.latest_pose.yaw
         self.search_target_class = target_class
+        self.last_search_feedback_monotonic = 0.0
+        self._publish_search_feedback(force=True)
+
+    def _publish_search_feedback(self, *, force: bool = False) -> None:
+        if not self.search_active:
+            return
+        now = time.monotonic()
+        if not force and (now - self.last_search_feedback_monotonic) < SEARCH_FEEDBACK_HEARTBEAT_S:
+            return
+        self.last_search_feedback_monotonic = now
         self._publish_feedback(
-            f"search_for_target: rotating to find {target_class}",
+            f"search_for_target: rotating to find {self.search_target_class or 'ball'}",
             status="search_active",
-            extra={"target_class": target_class},
+            extra={
+                "target_class": self.search_target_class or "ball",
+                "search_rotation_accum_rad": round(self.search_rotation_accum_rad, 6),
+            },
         )
 
     def _handle_acquire_intent(self, args_payload: dict[str, Any]) -> None:
@@ -411,14 +441,14 @@ class BrainIntentExecutor(Node):
         self._publish_feedback("track_target: tracking enabled", status="track_active")
 
     def _handle_abort_intent(self) -> None:
-        self._clear_motion_state()
         self._cancel_goal("abort: canceled active behavior")
+        self._reset_pursuit_state()
         self._publish_stop()
         self._publish_feedback("abort: active behavior canceled", status="aborted")
 
     def _handle_safe_stop_intent(self) -> None:
-        self._clear_motion_state()
         self._cancel_goal("safe_stop: canceled active behavior")
+        self._reset_pursuit_state()
         self._publish_stop()
         self._publish_feedback("safe_stop: robot stopped", status="stopped")
 
@@ -469,6 +499,7 @@ class BrainIntentExecutor(Node):
                 twist = Twist()
                 twist.angular.z = float(self.args.search_turn_speed_radps)
                 self._publish_twist(twist)
+                self._publish_search_feedback()
 
         if (
             self.track_active
