@@ -49,7 +49,13 @@ def normalize_angle(value: float) -> float:
     return value
 
 
+def clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
 SEARCH_FEEDBACK_HEARTBEAT_S = 1.0
+CENTERED_LOCK_TOLERANCE_RAD = 0.18
+CENTERING_TURN_GAIN = 1.5
 
 
 def parse_args() -> argparse.Namespace:
@@ -165,6 +171,25 @@ class BrainIntentExecutor(Node):
     def _target_visible_recent(self) -> bool:
         return self.latest_detection is not None and (time.monotonic() - self.last_detection_monotonic) <= max(self.args.detection_stale_after_s, 0.1)
 
+    def _latest_detection_bearing_rad(self) -> float | None:
+        if not self._target_visible_recent() or self.latest_detection is None:
+            return None
+        try:
+            x_local = float(self.latest_detection.point.x)
+            z_local = float(self.latest_detection.point.z)
+        except (AttributeError, TypeError, ValueError):
+            return None
+        if not math.isfinite(x_local) or not math.isfinite(z_local) or abs(z_local) < 1e-6:
+            return None
+        return math.atan2(-x_local, z_local)
+
+    def _target_centered_now(self) -> bool:
+        bearing = self._latest_detection_bearing_rad()
+        return bearing is not None and abs(bearing) <= CENTERED_LOCK_TOLERANCE_RAD
+
+    def _target_ready_for_lock(self) -> bool:
+        return self._target_visible_recent() and self._target_centered_now() and self.detection_burst_count >= max(self.args.search_detection_burst, 1)
+
     def _publish_feedback(self, text: str, *, status: str, extra: dict[str, Any] | None = None) -> None:
         msg = String()
         msg.data = text
@@ -235,6 +260,15 @@ class BrainIntentExecutor(Node):
         self.latest_goal_pose = None
         self.last_goal_dispatched_monotonic = 0.0
         self.last_goal_dispatched_utc = ""
+
+    def _begin_search_motion(self, *, target_class: str, search_state: str) -> None:
+        self.search_active = True
+        self.search_state = search_state
+        self.search_started_monotonic = time.monotonic()
+        self.search_rotation_accum_rad = 0.0
+        self.search_last_yaw = self.latest_pose.yaw if self.latest_pose is not None else None
+        self.search_target_class = target_class
+        self.last_search_feedback_monotonic = 0.0
 
     def _lock_target(self, target_class: str, source: str) -> None:
         self.target_locked = True
@@ -367,7 +401,7 @@ class BrainIntentExecutor(Node):
             self.detection_burst_count = 1
         self.latest_detection = msg
         self.last_detection_monotonic = now
-        if self.search_active and self.detection_burst_count >= max(self.args.search_detection_burst, 1):
+        if self.search_active and self._target_ready_for_lock():
             self._lock_target(self.search_target_class or "ball", "search_for_target")
             self.track_needs_replan = False
         elif self.track_active and not self.goal_in_progress:
@@ -389,19 +423,14 @@ class BrainIntentExecutor(Node):
         target_class = str(args_payload.get("target_class", "")).strip() or "ball"
         self._cancel_goal("search_for_target preempted active goal")
         self._reset_pursuit_state()
-        if self._target_visible_recent():
+        if self._target_ready_for_lock():
             self._lock_target(target_class, "search_for_target")
             return
         if self.latest_pose is None:
             self._publish_feedback("search_for_target: blocked because odom is unavailable", status="blocked")
             return
-        self.search_active = True
-        self.search_state = "rotating"
-        self.search_started_monotonic = time.monotonic()
-        self.search_rotation_accum_rad = 0.0
-        self.search_last_yaw = self.latest_pose.yaw
-        self.search_target_class = target_class
-        self.last_search_feedback_monotonic = 0.0
+        initial_state = "centering" if self._target_visible_recent() else "rotating"
+        self._begin_search_motion(target_class=target_class, search_state=initial_state)
         self._publish_search_feedback(force=True)
 
     def _publish_search_feedback(self, *, force: bool = False) -> None:
@@ -411,12 +440,21 @@ class BrainIntentExecutor(Node):
         if not force and (now - self.last_search_feedback_monotonic) < SEARCH_FEEDBACK_HEARTBEAT_S:
             return
         self.last_search_feedback_monotonic = now
+        bearing = self._latest_detection_bearing_rad()
+        centered_now = self._target_centered_now()
+        intent_label = self.last_intent if self.last_intent in {"search_for_target", "acquire_target"} else "search_for_target"
+        if self.search_state == "centering":
+            action_text = f"centering on {self.search_target_class or 'ball'}"
+        else:
+            action_text = f"rotating to find {self.search_target_class or 'ball'}"
         self._publish_feedback(
-            f"search_for_target: rotating to find {self.search_target_class or 'ball'}",
+            f"{intent_label}: {action_text}",
             status="search_active",
             extra={
                 "target_class": self.search_target_class or "ball",
                 "search_rotation_accum_rad": round(self.search_rotation_accum_rad, 6),
+                "latest_detection_bearing_rad": None if bearing is None else round(bearing, 6),
+                "target_centered_now": centered_now,
             },
         )
 
@@ -425,7 +463,16 @@ class BrainIntentExecutor(Node):
         if not self._target_visible_recent():
             self._publish_feedback("acquire_target: blocked because target is not visible", status="blocked")
             return
-        self._lock_target(target_class, "acquire_target")
+        if self._target_ready_for_lock():
+            self._lock_target(target_class, "acquire_target")
+            return
+        self._cancel_goal("acquire_target preempted active goal")
+        self._clear_motion_state()
+        self.target_locked = False
+        self.target_locked_class = ""
+        self.target_locked_utc = ""
+        self._begin_search_motion(target_class=target_class, search_state="centering")
+        self._publish_search_feedback(force=True)
 
     def _handle_plan_intent(self, args_payload: dict[str, Any]) -> None:
         approach_distance_m = float(args_payload.get("approach_distance_m", self.args.approach_distance_m))
@@ -485,7 +532,7 @@ class BrainIntentExecutor(Node):
     def _on_timer(self) -> None:
         if self.search_active:
             elapsed = time.monotonic() - self.search_started_monotonic
-            if self._target_visible_recent() and self.detection_burst_count >= max(self.args.search_detection_burst, 1):
+            if self._target_ready_for_lock():
                 self._lock_target(self.search_target_class or "ball", "search_for_target")
             elif (
                 self.search_rotation_accum_rad >= max(self.args.search_max_rotation_rad, 0.1)
@@ -497,7 +544,19 @@ class BrainIntentExecutor(Node):
                 self._publish_feedback("search_for_target: full scan completed without target lock", status="search_failed")
             else:
                 twist = Twist()
-                twist.angular.z = float(self.args.search_turn_speed_radps)
+                bearing = self._latest_detection_bearing_rad()
+                if bearing is not None:
+                    self.search_state = "centering"
+                    twist.angular.z = float(
+                        clamp(
+                            bearing * CENTERING_TURN_GAIN,
+                            -float(self.args.search_turn_speed_radps),
+                            float(self.args.search_turn_speed_radps),
+                        )
+                    )
+                else:
+                    self.search_state = "rotating"
+                    twist.angular.z = float(self.args.search_turn_speed_radps)
                 self._publish_twist(twist)
                 self._publish_search_feedback()
 
@@ -525,6 +584,8 @@ class BrainIntentExecutor(Node):
             "search_state": self.search_state,
             "search_rotation_accum_rad": round(self.search_rotation_accum_rad, 6),
             "target_visible_recent": self._target_visible_recent(),
+            "latest_detection_bearing_rad": None,
+            "target_centered_now": False,
             "target_locked": self.target_locked,
             "target_locked_class": self.target_locked_class,
             "target_locked_utc": self.target_locked_utc,
@@ -549,11 +610,14 @@ class BrainIntentExecutor(Node):
                 "frame_id": self.latest_goal_pose.header.frame_id,
             }
         if self.latest_detection is not None:
+            bearing = self._latest_detection_bearing_rad()
             payload["latest_detection_local"] = {
                 "x": round(float(self.latest_detection.point.x), 6),
                 "y": round(float(self.latest_detection.point.y), 6),
                 "z": round(float(self.latest_detection.point.z), 6),
             }
+            payload["latest_detection_bearing_rad"] = None if bearing is None else round(bearing, 6)
+            payload["target_centered_now"] = self._target_centered_now()
             if self.latest_pose is not None:
                 plan = plan_approach_from_detection(
                     robot_pose=self.latest_pose,

@@ -52,6 +52,7 @@ TARGET_MODEL_SDF = "ros2_config/frisbee_target_ball.sdf"
 TARGET_MODEL_NAME_NAV2 = "uat_nav2_target"
 TARGET_MODEL_NAME_SNAPSHOT = "uat_snapshot_target"
 TARGET_MODEL_NAME_PROOF = "llm_turn_then_go_target"
+DEFAULT_VISIT_MISSION_POLL_S = 0.25
 VISIT_TARGET_MODEL_NAMES = (
     "visit_mission_target_ball_1",
     "visit_mission_target_ball_2",
@@ -1823,6 +1824,25 @@ class DashboardController:
             text=True,
         )
 
+    def _docker_image_exists(self, image_ref: str) -> bool:
+        proc = subprocess.run(
+            [self.docker, "image", "inspect", image_ref],
+            cwd=str(REPO_ROOT),
+            env=self._compose_env(),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return proc.returncode == 0
+
+    def _required_gate_image_refs(self, env: Optional[Dict[str, str]] = None) -> tuple[str, ...]:
+        compose_env = self._compose_env(env)
+        ros_distro = str(compose_env.get("CORE_ROS_DISTRO", DEFAULT_CORE_ROS_DISTRO) or DEFAULT_CORE_ROS_DISTRO)
+        return (
+            f"chasecar/sim-gate:{ros_distro}",
+            f"chasecar/core-kilted:{ros_distro}",
+        )
+
     def _docker_exec(self, container_id: str, script: str) -> subprocess.CompletedProcess[str]:
         normalized_script = script.replace("\r\n", "\n").encode("utf-8")
         proc = subprocess.run(
@@ -1972,13 +1992,23 @@ class DashboardController:
         deadline = time.monotonic() + max(timeout_s, 1.0)
         while time.monotonic() < deadline:
             state = read_json(visual_dir / "world_stream_state.json")
+            world_snapshot = self._world_stream_snapshot(visual_dir, state, str(self.state.get("session_id", "") or "")) if state else {}
             if (
                 state
-                and bool(state.get("world_stream_ready", False))
-                and bool(state.get("scene_content_ok", False))
-                and bool(state.get("robot_visible_ok", False))
-                and bool(state.get("same_session_partition", False))
-                and not bool(state.get("frames_stale", False))
+                and (
+                    (
+                        bool(state.get("world_stream_ready", False))
+                        and bool(state.get("scene_content_ok", False))
+                        and bool(state.get("robot_visible_ok", False))
+                        and bool(state.get("same_session_partition", False))
+                        and not bool(state.get("frames_stale", False))
+                    )
+                    or (
+                        bool(world_snapshot.get("world_stream_renderable", False))
+                        and bool(world_snapshot.get("same_session_partition", False))
+                        and not bool(state.get("frames_stale", False))
+                    )
+                )
             ):
                 return True
             if self.lifecycle_cancel.is_set():
@@ -2191,7 +2221,20 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
             self._run_docker_compose(project_name, "down", "--remove-orphans", env=env)
             args = ["up", "-d"]
             if self.build_on_next_start:
-                args.append("--build")
+                required_images = self._required_gate_image_refs(env)
+                missing_images = [image_ref for image_ref in required_images if not self._docker_image_exists(image_ref)]
+                if missing_images:
+                    args.append("--build")
+                else:
+                    # Reuse the already-built local chasecar images and avoid
+                    # triggering compose/build metadata resolution when the host
+                    # is offline or Docker Hub is unreachable.
+                    args.append("--no-build")
+            else:
+                # Reuse the already-built local chasecar images and avoid
+                # triggering compose/build metadata resolution when the host
+                # is offline or Docker Hub is unreachable.
+                args.append("--no-build")
             args.extend(["sim-gate", "world-viewer", "gate-stack", "operator-view"])
             proc = self._popen_docker_compose(project_name, *args, env=env)
         else:
@@ -3309,6 +3352,8 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             scenario.id,
             "--scenario-label",
             scenario.label,
+            "--poll-s",
+            str(DEFAULT_VISIT_MISSION_POLL_S),
             "--keep-environment",
         ]
 

@@ -1,0 +1,360 @@
+from __future__ import annotations
+
+import math
+import sys
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = REPO_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+
+def _install_executor_stubs() -> None:
+    if "rclpy" not in sys.modules:
+        rclpy_mod = ModuleType("rclpy")
+        rclpy_mod.init = lambda *_args, **_kwargs: None
+        rclpy_mod.shutdown = lambda *_args, **_kwargs: None
+        rclpy_mod.ok = lambda: False
+
+        parameter_mod = ModuleType("rclpy.parameter")
+
+        class _Parameter:
+            class Type:
+                BOOL = "bool"
+
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+        parameter_mod.Parameter = _Parameter
+
+        node_mod = ModuleType("rclpy.node")
+
+        class _Node:
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+        node_mod.Node = _Node
+
+        qos_mod = ModuleType("rclpy.qos")
+
+        class _Preset:
+            SENSOR_DATA = SimpleNamespace(value=None)
+
+        qos_mod.QoSPresetProfiles = _Preset
+
+        action_mod = ModuleType("rclpy.action")
+
+        class _ActionClient:
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+        action_mod.ActionClient = _ActionClient
+
+        sys.modules["rclpy"] = rclpy_mod
+        sys.modules["rclpy.parameter"] = parameter_mod
+        sys.modules["rclpy.node"] = node_mod
+        sys.modules["rclpy.qos"] = qos_mod
+        sys.modules["rclpy.action"] = action_mod
+
+    if "geometry_msgs" not in sys.modules:
+        geometry_mod = ModuleType("geometry_msgs")
+        msg_mod = ModuleType("geometry_msgs.msg")
+
+        class _Pose:
+            def __init__(self) -> None:
+                self.position = SimpleNamespace(x=0.0, y=0.0, z=0.0)
+                self.orientation = SimpleNamespace(x=0.0, y=0.0, z=0.0, w=1.0)
+
+        class _PointStamped:
+            def __init__(self) -> None:
+                self.point = SimpleNamespace(x=0.0, y=0.0, z=0.0)
+
+        class _PoseStamped:
+            def __init__(self) -> None:
+                self.header = SimpleNamespace(frame_id="", stamp=None)
+                self.pose = _Pose()
+
+        class _Twist:
+            def __init__(self) -> None:
+                self.linear = SimpleNamespace(x=0.0, y=0.0, z=0.0)
+                self.angular = SimpleNamespace(x=0.0, y=0.0, z=0.0)
+
+        class _TwistStamped:
+            def __init__(self) -> None:
+                self.header = SimpleNamespace(stamp=None, frame_id="")
+                self.twist = _Twist()
+
+        msg_mod.Pose = _Pose
+        msg_mod.PointStamped = _PointStamped
+        msg_mod.PoseStamped = _PoseStamped
+        msg_mod.Twist = _Twist
+        msg_mod.TwistStamped = _TwistStamped
+        geometry_mod.msg = msg_mod
+        sys.modules["geometry_msgs"] = geometry_mod
+        sys.modules["geometry_msgs.msg"] = msg_mod
+
+    if "nav2_msgs" not in sys.modules:
+        nav2_mod = ModuleType("nav2_msgs")
+        action_mod = ModuleType("nav2_msgs.action")
+
+        class _NavigateToPose:
+            class Goal:
+                def __init__(self) -> None:
+                    self.pose = None
+                    self.behavior_tree = ""
+
+        action_mod.NavigateToPose = _NavigateToPose
+        nav2_mod.action = action_mod
+        sys.modules["nav2_msgs"] = nav2_mod
+        sys.modules["nav2_msgs.action"] = action_mod
+
+    if "nav_msgs" not in sys.modules:
+        nav_mod = ModuleType("nav_msgs")
+        msg_mod = ModuleType("nav_msgs.msg")
+
+        class _Odometry:
+            def __init__(self) -> None:
+                self.pose = SimpleNamespace(pose=None)
+
+        msg_mod.Odometry = _Odometry
+        nav_mod.msg = msg_mod
+        sys.modules["nav_msgs"] = nav_mod
+        sys.modules["nav_msgs.msg"] = msg_mod
+
+    if "std_msgs" not in sys.modules:
+        std_mod = ModuleType("std_msgs")
+        msg_mod = ModuleType("std_msgs.msg")
+
+        class _String:
+            def __init__(self) -> None:
+                self.data = ""
+
+        msg_mod.String = _String
+        std_mod.msg = msg_mod
+        sys.modules["std_msgs"] = std_mod
+        sys.modules["std_msgs.msg"] = msg_mod
+
+
+_install_executor_stubs()
+
+import brain_intent_executor as executor_mod  # noqa: E402
+
+
+def _make_detection(*, x: float, z: float, y: float = 0.0):
+    msg = executor_mod.PointStamped()
+    msg.point.x = x
+    msg.point.y = y
+    msg.point.z = z
+    return msg
+
+
+def _make_executor(monkeypatch):
+    executor = executor_mod.BrainIntentExecutor.__new__(executor_mod.BrainIntentExecutor)
+    executor.args = SimpleNamespace(
+        search_detection_burst=2,
+        search_turn_speed_radps=0.3,
+        detection_stale_after_s=1.5,
+        search_timeout_s=28.0,
+        search_max_rotation_rad=6.6,
+        approach_distance_m=0.25,
+        track_replan_cooldown_s=1.5,
+        goal_frame="odom",
+    )
+    executor.latest_detection = None
+    executor.last_detection_monotonic = 0.0
+    executor.detection_burst_count = 0
+    executor.latest_pose = SimpleNamespace(yaw=0.0)
+    executor.latest_pose_stamp = ""
+    executor.latest_goal_pose = None
+    executor.last_goal_dispatched_monotonic = 0.0
+    executor.last_goal_dispatched_utc = ""
+    executor.feedback_count = 0
+    executor.last_feedback_text = ""
+    executor.last_feedback_utc = ""
+    executor.last_intent = "search_for_target"
+    executor.last_intent_args = {}
+    executor.search_active = False
+    executor.search_state = "idle"
+    executor.search_started_monotonic = 0.0
+    executor.search_rotation_accum_rad = 0.0
+    executor.search_last_yaw = None
+    executor.search_target_class = ""
+    executor.last_search_feedback_monotonic = 0.0
+    executor.target_locked = False
+    executor.target_locked_class = ""
+    executor.target_locked_utc = ""
+    executor.track_active = False
+    executor.track_needs_replan = False
+    executor.goal_in_progress = False
+    executor.current_goal_handle = None
+    executor.pending_cancel_reason = ""
+    executor.last_state_write_monotonic = 0.0
+    executor.state_path = None
+    executor.feedback_history_path = None
+
+    published_feedback = []
+    published_twists = []
+    published_stops = []
+    canceled_goals = []
+    locked_targets = []
+    state_writes = []
+
+    def _publish_feedback(text: str, *, status: str, extra=None) -> None:
+        published_feedback.append({"text": text, "status": status, "extra": extra or {}})
+        executor.last_feedback_text = text
+
+    def _publish_twist(twist) -> None:
+        published_twists.append(twist)
+
+    def _publish_stop() -> None:
+        published_stops.append(True)
+
+    def _cancel_goal(reason: str) -> None:
+        canceled_goals.append(reason)
+
+    def _write_state(*, force: bool) -> None:
+        state_writes.append(force)
+
+    original_clear_motion_state = executor_mod.BrainIntentExecutor._clear_motion_state.__get__(executor, executor_mod.BrainIntentExecutor)
+    original_reset_pursuit_state = executor_mod.BrainIntentExecutor._reset_pursuit_state.__get__(executor, executor_mod.BrainIntentExecutor)
+
+    def _lock_target(target_class: str, source: str) -> None:
+        locked_targets.append((target_class, source))
+        executor.target_locked = True
+        executor.target_locked_class = target_class
+        executor.target_locked_utc = "now"
+        if executor.search_active:
+            executor.search_active = False
+            executor.search_state = "locked"
+
+    executor._publish_feedback = _publish_feedback
+    executor._publish_twist = _publish_twist
+    executor._publish_stop = _publish_stop
+    executor._cancel_goal = _cancel_goal
+    executor._write_state = _write_state
+    executor._lock_target = _lock_target
+    executor._clear_motion_state = original_clear_motion_state
+    executor._reset_pursuit_state = original_reset_pursuit_state
+
+    monkeypatch.setattr(executor_mod.time, "monotonic", lambda: 100.0)
+
+    executor._published_feedback = published_feedback
+    executor._published_twists = published_twists
+    executor._published_stops = published_stops
+    executor._canceled_goals = canceled_goals
+    executor._locked_targets = locked_targets
+    executor._state_writes = state_writes
+    return executor
+
+
+def test_detection_bearing_negative_for_right_of_center_target(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor.latest_detection = _make_detection(x=0.35, z=1.0)
+    executor.last_detection_monotonic = 99.5
+
+    bearing = executor._latest_detection_bearing_rad()
+
+    assert bearing is not None
+    assert bearing < 0.0
+
+
+def test_detection_bearing_positive_for_left_of_center_target(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor.latest_detection = _make_detection(x=-0.35, z=1.0)
+    executor.last_detection_monotonic = 99.5
+
+    bearing = executor._latest_detection_bearing_rad()
+
+    assert bearing is not None
+    assert bearing > 0.0
+
+
+def test_target_ready_for_lock_requires_centering_and_burst(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor.latest_detection = _make_detection(x=0.05, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 1
+
+    assert executor._target_centered_now() is True
+    assert executor._target_ready_for_lock() is False
+
+    executor.detection_burst_count = 2
+    assert executor._target_ready_for_lock() is True
+
+
+def test_search_intent_visible_off_center_enters_centering_not_lock(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor.latest_detection = _make_detection(x=0.4, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 4
+
+    executor._handle_search_intent({"target_class": "ball"})
+
+    assert executor.search_active is True
+    assert executor.search_state == "centering"
+    assert executor.target_locked is False
+    assert executor._locked_targets == []
+
+
+def test_search_intent_visible_centered_locks_after_burst(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor.latest_detection = _make_detection(x=0.05, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 2
+
+    executor._handle_search_intent({"target_class": "ball"})
+
+    assert executor.target_locked is True
+    assert executor._locked_targets == [("ball", "search_for_target")]
+
+
+def test_acquire_intent_visible_off_center_enters_centering(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor.last_intent = "acquire_target"
+    executor.latest_detection = _make_detection(x=-0.35, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 4
+
+    executor._handle_acquire_intent({"target_class": "ball"})
+
+    assert executor.search_active is True
+    assert executor.search_state == "centering"
+    assert executor.target_locked is False
+    assert executor._locked_targets == []
+
+
+def test_timer_centers_visible_target_with_turn_direction(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor.search_active = True
+    executor.search_state = "rotating"
+    executor.search_started_monotonic = 99.0
+    executor.search_target_class = "ball"
+    executor.latest_detection = _make_detection(x=0.35, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 1
+
+    executor._on_timer()
+
+    assert executor.search_state == "centering"
+    assert executor._published_twists
+    assert math.isclose(executor._published_twists[-1].angular.z, -0.3, abs_tol=1e-6)
+    assert executor._locked_targets == []
+
+
+def test_timer_locks_centered_visible_target_after_burst(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor.search_active = True
+    executor.search_state = "centering"
+    executor.search_started_monotonic = 99.0
+    executor.search_target_class = "ball"
+    executor.latest_detection = _make_detection(x=0.05, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 2
+
+    executor._on_timer()
+
+    assert executor._locked_targets == [("ball", "search_for_target")]
+    assert executor.search_state == "locked"

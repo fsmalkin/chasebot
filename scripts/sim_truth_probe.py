@@ -150,6 +150,8 @@ def main() -> int:
     latest_robot = None
     latest_target = None
     latest_target_name = ""
+    latest_target_poses_by_name: dict[str, dict[str, object]] = {}
+    latest_target_names_seen: list[str] = []
 
     while not stop_requested and time.monotonic() < deadline:
         ok, payload = sample_pose_topic(topic)
@@ -179,6 +181,9 @@ def main() -> int:
                 latest_target_name = target_name
                 record["true_target_pose"] = target_pose
                 record["target_model_name"] = target_name
+            if target_poses_by_name:
+                latest_target_poses_by_name = dict(target_poses_by_name)
+                latest_target_names_seen = list(target_names_seen)
 
         timeline.append(record)
         samples += 1
@@ -191,8 +196,8 @@ def main() -> int:
             "robot_truth_pose": latest_robot,
             "true_target_pose": latest_target,
             "target_model_name": latest_target_name,
-            "target_poses_by_name": dict(record.get("target_poses_by_name", {})),
-            "target_names_seen": list(record.get("target_names_seen", [])),
+            "target_poses_by_name": dict(latest_target_poses_by_name),
+            "target_names_seen": list(latest_target_names_seen),
             "target_model_candidates": target_candidates,
         }
         state_path.write_text(json.dumps(state_payload, indent=2), encoding="utf-8")
@@ -207,8 +212,8 @@ def main() -> int:
         "robot_truth_ratio": round(robot_seen / max(samples, 1), 6),
         "true_target_ratio": round(target_seen / max(samples, 1), 6),
         "target_model_name": latest_target_name,
-        "target_poses_by_name": dict(record.get("target_poses_by_name", {})) if timeline else {},
-        "target_names_seen": list(record.get("target_names_seen", [])) if timeline else [],
+        "target_poses_by_name": dict(latest_target_poses_by_name),
+        "target_names_seen": list(latest_target_names_seen),
         "target_model_candidates": target_candidates,
         "pass": latest_robot is not None and latest_target is not None,
         "state_path": str(state_path),

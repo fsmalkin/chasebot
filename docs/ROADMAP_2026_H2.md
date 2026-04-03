@@ -77,7 +77,12 @@ Once the frozen pre-LLM boundary is in place, the next roadmap step is not open-
 2. repeatability gate on the authoritative `container_kilted` lane
 3. simple browser UAT demo for the same proof path
 4. bounded supervisor reuse across the visible-ball M3 scenario family
-5. provider benchmarking for a future on-machine model path on Orin Nano
+5. target prior contract for multi-target scenarios
+   - executor receives expected target position from the mission layer, not from sim ground truth
+   - sim truth probe becomes a validation oracle (test-time only), not an executor runtime dependency
+   - verified by showing that prior-based locking matches ground-truth-based locking across the visit scenario family
+   - this makes the executor's target discrimination portable to hardware, where no sim oracle exists
+6. provider benchmarking for a future on-machine model path on Orin Nano
    - benchmark only providers that can map cleanly to the frozen bounded intent contract while preserving deterministic lower layers
    - optional research lane: evaluate alternate embodied-reasoning providers, including Gemini Robotics-ER-class models, only as supervisory reasoning providers
    - this benchmarking is not a prerequisite for the current promotion ladder
@@ -90,6 +95,9 @@ Once the frozen pre-LLM boundary is in place, the next roadmap step is not open-
 4. keep the control architecture compatible with both:
    - Wi-Fi/cloud inference
    - smaller local-model inference later
+5. ensure multi-target discrimination is solved in sim before hardware POC:
+   - executor target verification uses mission-provided priors, not sim-only ground truth
+   - the same mechanism works on hardware with operator-provided or observation-derived priors
 
 ### Explicit Non-Goals For This Roadmap Slice
 

@@ -121,6 +121,36 @@ Why it matters:
 
 - this is the first step from "proof of possibility" to "bounded capability family"
 
+### Step 3b: Target Prior Contract For Multi-Target Discrimination
+
+Goal:
+
+- make the executor's target lock verification portable to hardware by using mission-provided priors instead of sim ground truth
+
+Problem:
+
+- the executor currently has no way to tell Ball 1 from Ball 2 without an external oracle
+- the proposed sim-truth gate (reading `truth_state.json` from Gazebo's god-view) solves this in sim but creates a dead end for hardware
+- we should solve target discrimination in sim before loading into hardware, using a mechanism that transfers
+
+Work:
+
+1. extend the visit mission's runtime state to include the expected position of the active target (from spawn coordinates in sim, from operator input or prior observation on hardware)
+2. the executor reads target priors from the mission layer's runtime state, not from sim ground truth
+3. the executor's lock gate checks whether the detected blob's world position is within tolerance of the mission-provided prior
+4. sim truth probe runs alongside as a validation oracle — it verifies that the mission's priors are correct, but the executor does not depend on it at runtime
+5. validate by confirming that prior-based locking matches ground-truth-based locking across the visit scenario family
+
+Outcome:
+
+- the executor's target discrimination works identically in sim and on hardware
+- the sim truth probe becomes a test-time confidence check, not a runtime dependency
+- hardware POC does not hit a "we never built the real version" wall
+
+Why it matters:
+
+- this is the difference between "works in sim" and "works on the robot" for any multi-target scenario
+
 ### Step 4: Finish The Minimal Browser UAT Surface
 
 Goal:
@@ -359,5 +389,6 @@ To keep the demo honest and legible, this phase does not include:
 1. lock in `3/3` repeatability for the current turn-and-go proof
 2. formalize escalation rules in the policy layer
 3. generalize the bounded supervisor across the visible-ball M3 scenarios
-4. keep simplifying the browser UAT surface around the same authoritative backend
-5. benchmark the same digest/action-space path for a future local-provider lane
+4. implement target prior contract so multi-target discrimination transfers to hardware
+5. keep simplifying the browser UAT surface around the same authoritative backend
+6. benchmark the same digest/action-space path for a future local-provider lane

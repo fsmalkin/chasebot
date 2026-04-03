@@ -43,12 +43,14 @@ DEFAULT_TARGET_MODEL_SDF = REPO_ROOT / "ros2_config" / "frisbee_target_ball.sdf"
 DEFAULT_VISIT_TOLERANCE_M = 0.35
 DEFAULT_MIN_TARGET_DWELL_S = 1.0
 DEFAULT_POST_GOAL_TRUTH_GRACE_S = 2.5
+DEFAULT_ACTIVE_TARGET_LOCK_TOLERANCE_M = 0.50
 DEFAULT_TASK_TEXT = (
     "Run the deterministic ball-visit mission through the bounded frozen controls. "
     "Search when the ball is not visible, acquire when visible, plan when locked, track while pursuit is active, "
     "and fail closed with safe_stop if the target cannot be visited."
 )
 INTENT_OWNERSHIP_GRACE_S = 2.0
+SEARCH_INTENT_OWNERSHIP_GRACE_S = 5.0
 OWNED_BOUNDED_INTENTS = {"search_for_target", "acquire_target", "plan_to_target", "track_target"}
 
 
@@ -172,6 +174,63 @@ def mission_belief_distance_m(state: dict[str, Any]) -> float | None:
     return _clean_number(belief.get("latest_target_distance_m"))
 
 
+def mission_vision_truth_delta_m(state: dict[str, Any]) -> float | None:
+    perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
+    detection_world = perception.get("latest_detection_world") if isinstance(perception.get("latest_detection_world"), dict) else {}
+    truth_target = perception.get("latest_truth_target_world") if isinstance(perception.get("latest_truth_target_world"), dict) else {}
+    detection_x = _clean_number(detection_world.get("x"))
+    detection_y = _clean_number(detection_world.get("y"))
+    truth_x = _clean_number(truth_target.get("x"))
+    truth_y = _clean_number(truth_target.get("y"))
+    if detection_x is None or detection_y is None or truth_x is None or truth_y is None:
+        return None
+    return round(math.hypot(truth_x - detection_x, truth_y - detection_y), 6)
+
+
+def detection_matches_active_truth(
+    state: dict[str, Any],
+    *,
+    tolerance_m: float = DEFAULT_ACTIVE_TARGET_LOCK_TOLERANCE_M,
+) -> bool:
+    delta_m = mission_vision_truth_delta_m(state)
+    if delta_m is None:
+        return False
+    # Match the observer's alignment contract so a partially-close distractor
+    # cannot slip through with a looser mission-only threshold.
+    alignment_tolerance_m = max(min(tolerance_m, DEFAULT_ACTIVE_TARGET_LOCK_TOLERANCE_M), 0.05)
+    return delta_m <= alignment_tolerance_m
+
+
+def off_truth_centering_during_search(state: dict[str, Any]) -> bool:
+    brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
+    perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
+    if not bool(brain.get("search_active", False)):
+        return False
+    if not bool(perception.get("target_visible_now", False)):
+        return False
+    if bool(brain.get("target_locked", False)):
+        return False
+    return mission_vision_truth_delta_m(state) is not None and not detection_matches_active_truth(state)
+
+
+def search_bias_release_ready(
+    *,
+    target_locked_seen: bool,
+    search_active: bool,
+    search_rotation_accum_rad: float,
+    search_rotation_baseline_rad: float,
+    hold_until_monotonic: float,
+    now_monotonic: float | None = None,
+) -> bool:
+    now_value = time.monotonic() if now_monotonic is None else float(now_monotonic)
+    return bool(
+        target_locked_seen
+        or search_active
+        or (search_rotation_accum_rad - search_rotation_baseline_rad) >= 0.15
+        or now_value >= hold_until_monotonic
+    )
+
+
 def feedback_indicates_goal_success(state: dict[str, Any]) -> bool:
     brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
     feedback_text = _clean_text(brain.get("last_feedback_text") or state.get("last_feedback")).lower()
@@ -223,6 +282,14 @@ def visit_success(
 def deterministic_visit_decision(state: dict[str, Any], task_text: str, contract: dict[str, Any]) -> dict[str, Any]:
     policy = build_policy_snapshot(state, sim_gate_ready=bool(state.get("sim_gate_ready", False)))
     preferred_intent = _clean_text(policy.get("preferred_intent"))
+    active_truth_delta_m = mission_vision_truth_delta_m(state)
+    if preferred_intent == "acquire_target" and active_truth_delta_m is not None and not detection_matches_active_truth(state):
+        preferred_intent = "search_for_target"
+        policy = {
+            **policy,
+            "preferred_intent": preferred_intent,
+            "reason": f"Visible detection diverges from active truth by {active_truth_delta_m:.2f}m, so search remains preferred.",
+        }
     if not preferred_intent:
         return blocked_decision(
             task_text,
@@ -651,7 +718,11 @@ exit "$rc"
                 return True, False, ""
             if last_intent == intent_name and not terminal_reason:
                 return True, False, ""
-            if elapsed_s <= INTENT_OWNERSHIP_GRACE_S:
+            search_grace_s = max(
+                float(getattr(self.args, "search_timeout_s", SEARCH_INTENT_OWNERSHIP_GRACE_S)),
+                SEARCH_INTENT_OWNERSHIP_GRACE_S,
+            )
+            if elapsed_s <= search_grace_s:
                 return True, False, ""
             return False, False, terminal_reason
 
@@ -847,6 +918,7 @@ exit "$rc"
                     owned_intent_started_monotonic = 0.0
                     search_rotation_bias_baseline = 0.0
                     target_visit_started_monotonic = time.monotonic()
+                    search_bias_hold_until_monotonic = target_visit_started_monotonic
                     lock_seen_monotonic: float | None = None
                     goal_success_seen_monotonic: float | None = None
                     self.last_state_hash = ""
@@ -888,6 +960,7 @@ exit "$rc"
                         settled_brain = settled_state.get("brain", {}) if isinstance(settled_state.get("brain"), dict) else {}
                         search_rotation_bias_baseline = _clean_number(settled_brain.get("search_rotation_accum_rad")) or 0.0
                         target_visit_started_monotonic = time.monotonic()
+                        search_bias_hold_until_monotonic = target_visit_started_monotonic + self.args.hidden_start_settle_s
 
                     failure_reason = ""
                     while time.monotonic() < (target_visit_started_monotonic + self.args.max_target_runtime_s):
@@ -896,18 +969,98 @@ exit "$rc"
                         outcome = state.get("outcome", {}) if isinstance(state.get("outcome"), dict) else {}
                         perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
                         attempt_phase = "approach_phase" if target_locked_seen else "search_phase"
+                        target_lock_active = bool(brain.get("target_locked", False))
+                        active_truth_delta_m = mission_vision_truth_delta_m(state)
+                        aligned_target_lock = target_lock_active and detection_matches_active_truth(state)
 
-                        if bool(brain.get("target_locked", False)):
+                        if off_truth_centering_during_search(state):
+                            self._append_runtime_event(
+                                f"Ignoring visible off-target blob ({active_truth_delta_m:.2f}m from active truth); resuming search.",
+                                category="mission",
+                                key=f"off_truth_visible:{target.id}:{attempt}:{round(active_truth_delta_m or 0.0, 2)}",
+                            )
+                            append_jsonl(
+                                visit_sequence_path,
+                                {
+                                    "generated_utc": utc_now(),
+                                    "event_type": "off_truth_visible_rejected",
+                                    "target_id": target.id,
+                                    "attempt": attempt,
+                                    "vision_truth_delta_m": active_truth_delta_m,
+                                    "attempt_phase": attempt_phase,
+                                },
+                            )
+                            self._issue_safe_stop()
+                            self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                            owned_intent = ""
+                            owned_intent_args = {}
+                            owned_intent_started_monotonic = 0.0
+                            search_rotation_bias_baseline = _clean_number(brain.get("search_rotation_accum_rad")) or search_rotation_bias_baseline
+                            search_bias_hold_until_monotonic = time.monotonic() + self.args.hidden_start_settle_s
+                            nav_activity_seen = False
+                            move_started = False
+                            goal_success_seen_monotonic = None
+                            lock_seen_monotonic = None
+                            self._update_runtime_state(
+                                search_bias_active=True,
+                                mission_phase="search",
+                                proof_state=self._proof_state_for_state(state),
+                                latest_feedback=_clean_text(brain.get("last_feedback_text") or state.get("last_feedback")),
+                                current_target_id=target.id,
+                            )
+                            time.sleep(self.args.poll_s)
+                            continue
+
+                        if target_lock_active and active_truth_delta_m is not None and not aligned_target_lock:
+                            self._append_runtime_event(
+                                f"Rejected off-target lock ({active_truth_delta_m:.2f}m from active truth); resuming search.",
+                                category="mission",
+                                key=f"off_target_lock:{target.id}:{attempt}:{round(active_truth_delta_m, 2)}",
+                            )
+                            append_jsonl(
+                                visit_sequence_path,
+                                {
+                                    "generated_utc": utc_now(),
+                                    "event_type": "off_target_lock_rejected",
+                                    "target_id": target.id,
+                                    "attempt": attempt,
+                                    "vision_truth_delta_m": active_truth_delta_m,
+                                    "attempt_phase": attempt_phase,
+                                },
+                            )
+                            self._issue_safe_stop()
+                            self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                            owned_intent = ""
+                            owned_intent_args = {}
+                            owned_intent_started_monotonic = 0.0
+                            search_rotation_bias_baseline = search_rotation
+                            search_bias_hold_until_monotonic = time.monotonic() + self.args.hidden_start_settle_s
+                            nav_activity_seen = False
+                            move_started = False
+                            goal_success_seen_monotonic = None
+                            lock_seen_monotonic = None
+                            self._update_runtime_state(
+                                search_bias_active=True,
+                                mission_phase="search",
+                                proof_state=self._proof_state_for_state(state),
+                                latest_feedback=_clean_text(brain.get("last_feedback_text") or state.get("last_feedback")),
+                                current_target_id=target.id,
+                            )
+                            time.sleep(self.args.poll_s)
+                            continue
+
+                        if aligned_target_lock:
                             target_locked_seen = True
                             lock_seen_monotonic = lock_seen_monotonic or time.monotonic()
                             attempt_phase = "approach_phase"
                             self._append_runtime_event("Target visible and locked.", key=f"target_locked:{target.id}:{attempt}")
                         search_rotation = _clean_number(brain.get("search_rotation_accum_rad")) or 0.0
-                        if bool(self.runtime_state.get("search_bias_active", False)) and (
-                            target_locked_seen
-                            or bool(brain.get("search_active", False))
-                            or (search_rotation - search_rotation_bias_baseline) >= 0.15
-                            or (time.monotonic() - target_visit_started_monotonic) >= self.args.hidden_start_settle_s
+                        if bool(self.runtime_state.get("search_bias_active", False)) and search_bias_release_ready(
+                            target_locked_seen=target_locked_seen,
+                            search_active=bool(brain.get("search_active", False)),
+                            search_rotation_accum_rad=search_rotation,
+                            search_rotation_baseline_rad=search_rotation_bias_baseline,
+                            hold_until_monotonic=search_bias_hold_until_monotonic,
                         ):
                             self._update_runtime_state(search_bias_active=False)
                         if bool(brain.get("goal_in_progress", False)) or bool(outcome.get("nav_goal_recent", False)):

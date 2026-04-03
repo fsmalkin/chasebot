@@ -1261,6 +1261,63 @@ def test_wait_for_world_stream_ready_accepts_fresh_stream(tmp_path, monkeypatch)
     assert controller._wait_for_world_stream_ready(0.01) is True
 
 
+def test_wait_for_world_stream_ready_accepts_fresh_renderable_stream_before_strict_promotion(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    _write_world_state(
+        tmp_path,
+        {
+            "session_id": controller.state["session_id"],
+            "partition": controller.state["session_id"],
+            "world_surface": "streamed_sim",
+            "world_stream_url": "",
+            "world_stream_ready": False,
+            "world_stream_renderable": True,
+            "world_stream_transport_healthy": False,
+            "world_stream_degraded": True,
+            "world_stream_nonblank": True,
+            "world_stream_interactive": False,
+            "same_session_partition": True,
+            "viewer_process_healthy": True,
+            "viewer_client_mode": "gazebo_sensor_camera",
+            "camera_profile": "robot_follow",
+            "render_backend": "gazebo_sensor_camera:ogre2",
+            "software_render_only": False,
+            "display_server": "none",
+            "gpu_available": True,
+            "scene_content_ok": False,
+            "robot_visible_ok": False,
+            "target_visible_ok": True,
+            "failure_class": "world_stream_no_recent_frames",
+            "image_topic": "/observer_world/image_raw",
+            "frame_count": 1,
+            "received_frame_count": 1,
+            "rendered_frame_count": 1,
+            "elapsed_s": 1.0,
+            "frame_coverage_ratio": 0.0,
+            "nonblank_ratio": 1.0,
+            "scene_content_ratio": 1.0,
+            "robot_visible_ratio": 1.0,
+            "target_visible_ratio": 0.0,
+            "robot_max_area_px": 812.0,
+            "target_max_area_px": 0.0,
+            "latest_robot_area_px": 812.0,
+            "latest_target_area_px": 0.0,
+            "latest_frame_error": "",
+            "truth_target_seen": False,
+            "screenshot_path": str(tmp_path / "visual" / "live" / "world_stream.jpg"),
+            "video_path": str(tmp_path / "visual" / "world_stream.mp4"),
+            "latest_frame_wall_s": 123.4,
+            "latest_frame_utc": "2026-04-02T22:28:10Z",
+            "latest_frame_age_s": 0.6,
+            "frames_stale": False,
+            "healthy_stale_seconds": 2.5,
+        },
+    )
+
+    monkeypatch.setattr(dashboard_service.time, "sleep", lambda *_args, **_kwargs: None)
+    assert controller._wait_for_world_stream_ready(0.01) is True
+
+
 def test_wait_for_world_stream_ready_rejects_stale_stream(tmp_path, monkeypatch):
     controller = _make_controller(tmp_path)
     _write_world_state(
@@ -1398,6 +1455,113 @@ def test_world_stream_restart_ready_uses_live_world_state_not_snapshot(tmp_path)
 
     assert "world_stream_frames_stale" not in controller.state
     assert controller._world_stream_restart_ready() is True
+
+
+def test_run_environment_compose_up_uses_no_build_when_reusing_local_images(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.control_mode = "docker_socket"
+    controller.build_on_next_start = False
+
+    down_calls: list[tuple[str, ...]] = []
+    popen_calls: list[tuple[str, ...]] = []
+
+    controller._run_docker_compose = lambda project_name, *args, env=None: down_calls.append((project_name, *args))
+
+    class _Proc:
+        returncode = 0
+
+        def communicate(self):
+            return ("ok", "")
+
+    controller._popen_docker_compose = lambda project_name, *args, env=None: popen_calls.append((project_name, *args)) or _Proc()
+
+    rc, output = controller._run_environment_compose_up("chasecar_dashboard_test", {"WORLD_STREAM_PORT": "8891"})
+
+    assert rc == 0
+    assert output == "ok"
+    assert down_calls == [("chasecar_dashboard_test", "down", "--remove-orphans")]
+    assert popen_calls == [
+        (
+            "chasecar_dashboard_test",
+            "up",
+            "-d",
+            "--no-build",
+            "sim-gate",
+            "world-viewer",
+            "gate-stack",
+            "operator-view",
+        )
+    ]
+
+
+def test_run_environment_compose_up_uses_build_when_requested(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.control_mode = "docker_socket"
+    controller.build_on_next_start = True
+    controller._docker_image_exists = lambda _image_ref: False
+
+    popen_calls: list[tuple[str, ...]] = []
+    controller._run_docker_compose = lambda *_args, **_kwargs: None
+
+    class _Proc:
+        returncode = 0
+
+        def communicate(self):
+            return ("ok", "")
+
+    controller._popen_docker_compose = lambda project_name, *args, env=None: popen_calls.append((project_name, *args)) or _Proc()
+
+    rc, output = controller._run_environment_compose_up("chasecar_dashboard_test", {"WORLD_STREAM_PORT": "8891"})
+
+    assert rc == 0
+    assert output == "ok"
+    assert popen_calls == [
+        (
+            "chasecar_dashboard_test",
+            "up",
+            "-d",
+            "--build",
+            "sim-gate",
+            "world-viewer",
+            "gate-stack",
+            "operator-view",
+        )
+    ]
+
+
+def test_run_environment_compose_up_skips_build_when_local_gate_images_exist(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.control_mode = "docker_socket"
+    controller.build_on_next_start = True
+    controller._docker_image_exists = lambda _image_ref: True
+
+    popen_calls: list[tuple[str, ...]] = []
+    controller._run_docker_compose = lambda *_args, **_kwargs: None
+
+    class _Proc:
+        returncode = 0
+
+        def communicate(self):
+            return ("ok", "")
+
+    controller._popen_docker_compose = lambda project_name, *args, env=None: popen_calls.append((project_name, *args)) or _Proc()
+
+    rc, output = controller._run_environment_compose_up("chasecar_dashboard_test", {"WORLD_STREAM_PORT": "8891"})
+
+    assert rc == 0
+    assert output == "ok"
+    assert popen_calls == [
+        (
+            "chasecar_dashboard_test",
+            "up",
+            "-d",
+            "--no-build",
+            "sim-gate",
+            "world-viewer",
+            "gate-stack",
+            "operator-view",
+        )
+    ]
 
 
 def test_restart_world_stream_controller_recovers_and_records_event(tmp_path, monkeypatch):

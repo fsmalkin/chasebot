@@ -19,6 +19,10 @@ from visit_mission_runner import deterministic_visit_decision  # noqa: E402
 from visit_mission_runner import feedback_indicates_goal_success  # noqa: E402
 from visit_mission_runner import mission_belief_distance_m  # noqa: E402
 from visit_mission_runner import mission_truth_distance_m  # noqa: E402
+from visit_mission_runner import mission_vision_truth_delta_m  # noqa: E402
+from visit_mission_runner import detection_matches_active_truth  # noqa: E402
+from visit_mission_runner import off_truth_centering_during_search  # noqa: E402
+from visit_mission_runner import search_bias_release_ready  # noqa: E402
 from visit_mission_runner import truth_missing_after_goal_failure  # noqa: E402
 from visit_mission_runner import visit_success  # noqa: E402
 
@@ -138,6 +142,28 @@ def test_deterministic_visit_decision_holds_search_during_hidden_start_settle():
     assert decision["args"] == {"target_class": "ball"}
 
 
+def test_deterministic_visit_decision_does_not_acquire_off_truth_visible_target():
+    contract = _load_contract()
+    state = {
+        "control_plane_ready": True,
+        "environment_state": "environment_ready",
+        "session_id": "session-1",
+        "sim_gate_ready": True,
+        "perception": {
+            "detection_topic_seen": True,
+            "target_visible_now": True,
+            "latest_detection_world": {"x": 0.08, "y": 0.73},
+            "latest_truth_target_world": {"x": -0.70, "y": -1.44},
+        },
+        "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
+        "brain": {"target_locked": False, "goal_in_progress": False, "track_active": False},
+        "outcome": {"nav_goal_recent": False, "cmd_vel_recent": False, "feedback_recent": False, "boundary_activity_seen": False},
+    }
+    decision = deterministic_visit_decision(state, "visit the ball", contract)
+    assert decision["intent"] == "search_for_target"
+    assert "diverges from active truth" in decision["rationale_short"]
+
+
 def test_mission_truth_distance_uses_truth_target_world():
     state = {
         "belief": {"latest_robot_pose": {"x": 1.0, "y": 2.0}},
@@ -219,6 +245,109 @@ def test_mission_belief_distance_uses_latest_target_distance():
     assert math.isclose(mission_belief_distance_m(state), 0.22, abs_tol=1e-6)
 
 
+def test_mission_vision_truth_delta_uses_detection_and_truth_world():
+    state = {
+        "perception": {
+            "latest_detection_world": {"x": -1.0, "y": 0.0},
+            "latest_truth_target_world": {"x": 1.1, "y": 0.0},
+        }
+    }
+    assert math.isclose(mission_vision_truth_delta_m(state), 2.1, abs_tol=1e-6)
+
+
+def test_detection_matches_active_truth_requires_close_alignment():
+    aligned = {
+        "perception": {
+            "latest_detection_world": {"x": 1.22, "y": -0.04},
+            "latest_truth_target_world": {"x": 1.1, "y": 0.0},
+        }
+    }
+    divergent = {
+        "perception": {
+            "latest_detection_world": {"x": -1.0, "y": 0.0},
+            "latest_truth_target_world": {"x": 1.1, "y": 0.0},
+        }
+    }
+    assert detection_matches_active_truth(aligned, tolerance_m=0.2) is True
+    assert detection_matches_active_truth(divergent, tolerance_m=0.2) is False
+
+
+def test_detection_matches_active_truth_clamps_to_observer_alignment_threshold():
+    near_but_wrong = {
+        "perception": {
+            "latest_detection_world": {"x": -0.52, "y": -0.85},
+            "latest_truth_target_world": {"x": 0.02, "y": -1.10},
+        }
+    }
+    assert mission_vision_truth_delta_m(near_but_wrong) > 0.5
+    assert detection_matches_active_truth(near_but_wrong) is False
+    assert detection_matches_active_truth(near_but_wrong, tolerance_m=0.75) is False
+
+
+def test_off_truth_centering_during_search_requires_visible_search_and_divergent_truth():
+    state = {
+        "brain": {
+            "search_active": True,
+            "search_state": "rotating",
+            "target_locked": False,
+        },
+        "perception": {
+            "target_visible_now": True,
+            "latest_detection_world": {"x": -0.99, "y": -0.04},
+            "latest_truth_target_world": {"x": 1.10, "y": 0.00},
+        },
+    }
+    assert off_truth_centering_during_search(state) is True
+
+
+def test_off_truth_centering_during_search_ignores_aligned_or_non_visible_states():
+    aligned = {
+        "brain": {
+            "search_active": True,
+            "search_state": "centering",
+            "target_locked": False,
+        },
+        "perception": {
+            "target_visible_now": True,
+            "latest_detection_world": {"x": 1.12, "y": -0.03},
+            "latest_truth_target_world": {"x": 1.10, "y": 0.00},
+        },
+    }
+    hidden = {
+        "brain": {
+            "search_active": True,
+            "search_state": "rotating",
+            "target_locked": False,
+        },
+        "perception": {
+            "target_visible_now": False,
+            "latest_detection_world": {"x": -0.99, "y": -0.04},
+            "latest_truth_target_world": {"x": 1.10, "y": 0.00},
+        },
+    }
+    assert off_truth_centering_during_search(aligned) is False
+    assert off_truth_centering_during_search(hidden) is False
+
+
+def test_search_bias_release_ready_holds_after_off_target_rejection_until_new_rotation():
+    assert search_bias_release_ready(
+        target_locked_seen=False,
+        search_active=False,
+        search_rotation_accum_rad=0.5,
+        search_rotation_baseline_rad=0.5,
+        hold_until_monotonic=12.0,
+        now_monotonic=10.0,
+    ) is False
+    assert search_bias_release_ready(
+        target_locked_seen=False,
+        search_active=False,
+        search_rotation_accum_rad=0.7,
+        search_rotation_baseline_rad=0.5,
+        hold_until_monotonic=12.0,
+        now_monotonic=10.0,
+    ) is True
+
+
 def test_feedback_indicates_goal_success_matches_executor_feedback():
     state = {"brain": {"last_feedback_text": "nav goal reached successfully"}}
     assert feedback_indicates_goal_success(state) is True
@@ -267,6 +396,7 @@ def _make_runner(monkeypatch, scenario_id: str = "visit_three_ball_sequence") ->
         scenario_id=scenario_id,
         task="visit the ball",
         dispatch_cooldown_s=1.0,
+        search_timeout_s=20.0,
         post_goal_truth_grace_s=2.5,
         target_model_sdf=str(REPO_ROOT / "ros2_config" / "frisbee_target_ball.sdf"),
         target_model_name="visit_mission_target",
@@ -393,6 +523,84 @@ def test_owned_intent_status_keeps_search_owned_while_last_intent_is_search(monk
     }
 
     monkeypatch.setattr(visit_runner.time, "monotonic", lambda: 110.0)
+
+    in_flight, transitioned, terminal_reason = runner._owned_intent_status(
+        state=state,
+        intent_name="search_for_target",
+        owned_since_monotonic=100.0,
+    )
+
+    assert in_flight is True
+    assert transitioned is False
+    assert terminal_reason == ""
+
+
+def test_owned_intent_status_keeps_search_owned_while_centering(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    state = {
+        "brain": {
+            "target_locked": False,
+            "search_active": True,
+            "search_state": "centering",
+            "last_intent": "search_for_target",
+        },
+        "perception": {"target_visible_now": True},
+        "outcome": {},
+    }
+
+    monkeypatch.setattr(visit_runner.time, "monotonic", lambda: 110.0)
+
+    in_flight, transitioned, terminal_reason = runner._owned_intent_status(
+        state=state,
+        intent_name="search_for_target",
+        owned_since_monotonic=100.0,
+    )
+
+    assert in_flight is True
+    assert transitioned is False
+    assert terminal_reason == ""
+
+
+def test_owned_intent_status_keeps_search_owned_during_startup_grace(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    state = {
+        "brain": {
+            "target_locked": False,
+            "search_active": False,
+            "last_intent": "safe_stop",
+            "last_feedback_text": "safe_stop: robot stopped",
+        },
+        "perception": {"target_visible_now": False},
+        "outcome": {},
+    }
+
+    monkeypatch.setattr(visit_runner.time, "monotonic", lambda: 103.5)
+
+    in_flight, transitioned, terminal_reason = runner._owned_intent_status(
+        state=state,
+        intent_name="search_for_target",
+        owned_since_monotonic=100.0,
+    )
+
+    assert in_flight is True
+    assert transitioned is False
+    assert terminal_reason == ""
+
+
+def test_owned_intent_status_keeps_search_owned_until_mission_search_timeout(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    state = {
+        "brain": {
+            "target_locked": False,
+            "search_active": False,
+            "last_intent": "safe_stop",
+            "last_feedback_text": "safe_stop: robot stopped",
+        },
+        "perception": {"target_visible_now": False},
+        "outcome": {},
+    }
+
+    monkeypatch.setattr(visit_runner.time, "monotonic", lambda: 118.0)
 
     in_flight, transitioned, terminal_reason = runner._owned_intent_status(
         state=state,
