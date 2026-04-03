@@ -42,6 +42,16 @@ Use `Advanced Controls` only when you want the deeper signal-level truth, frozen
 
 ## Recommended Rehearsal Order
 
+```mermaid
+graph LR
+    Start["Start<br/>Environment"] --> ST["m3<br/>single_target"]
+    ST --> MC["m3<br/>center"]
+    MC --> ML["m3<br/>left"]
+    ML --> MR["m3<br/>right"]
+    MR --> MT["multi_target<br/>rehearsal"]
+    MT --> Stop["Stop<br/>Environment"]
+```
+
 1. `Start Environment`
 2. `m3_single_target`
 3. `m3_center`
@@ -139,6 +149,25 @@ Open `Advanced Controls` when you want:
 This is where you verify the real signal boundary, not just the operator story.
 
 ## Current Capability Boundary
+
+```mermaid
+graph TB
+    subgraph Now["What exists now"]
+        Percep["Target Perception<br/>(YOLO + 3D)"]
+        Frozen["Frozen Intent Set<br/>(search, acquire, plan, track, stop)"]
+        Motion["Goal Creation +<br/>Motion Execution"]
+        Percep --> Frozen --> Motion
+    end
+
+    subgraph Future["Future LLM layer sits on top of"]
+        LLM["LLM Supervisor"] --> Frozen
+        LLM -.-> Percep
+        Motion -.-> LLM
+    end
+
+    style Now fill:#f0f0f0,color:#333
+    style Future fill:#fff3cd,color:#333
+```
 
 ### What the system has now
 

@@ -25,6 +25,48 @@ That means:
 
 ## Layered Architecture
 
+```mermaid
+graph TB
+    subgraph L1["Layer 1: LLM Supervisor"]
+        Digest["State Digest<br/>(compact fixed-shape)"]
+        Recommender["LLM Recommender<br/>(cloud or local provider)"]
+        Loop["Supervisor Loop<br/>(observe → choose one intent)"]
+        Digest --> Loop
+        Loop --> Recommender
+        Recommender --> Loop
+    end
+
+    subgraph L2["Layer 2: Deterministic Policy + Gating"]
+        Contract["Frozen Contract<br/>(allowlisted intents)"]
+        Validate["Arg Validation +<br/>Readiness Check"]
+        Dispatch["Dashboard Dispatch<br/>(control plane)"]
+        Contract --> Validate
+        Validate --> Dispatch
+    end
+
+    subgraph L3["Layer 3: Intent Executor"]
+        Search["search_for_target"]
+        Acquire["acquire_target"]
+        Plan["plan_to_target"]
+        Track["track_target"]
+        Stop["safe_stop / abort"]
+    end
+
+    subgraph L4["Layer 4: Low-Level Subsystems"]
+        YOLO["YOLO + 3D Detection"]
+        Odom["Odometry"]
+        NavCtrl["Nav2 Controller + Planner"]
+        CmdVel["cmd_vel Publication"]
+    end
+
+    Loop -- "chosen intent" --> Contract
+    Validate -- "invalid → blocked" --> Loop
+    Dispatch -- "valid intent" --> L3
+    L3 -- "feedback + state" --> Digest
+    L4 -- "perception signals" --> Digest
+    Search & Acquire & Plan & Track & Stop --> L4
+```
+
 ### Layer 1: LLM Supervisor
 
 Role:
@@ -155,6 +197,34 @@ Important boundary:
 - not between arbitrary freeform model thoughts and low-level robot commands
 
 ## Current Canonical Flow
+
+```mermaid
+sequenceDiagram
+    participant S as Supervisor
+    participant P as Policy Gate
+    participant E as Executor
+    participant N as Nav2 / Perception
+
+    Note over S: Target not visible
+    S->>P: search_for_target(ball)
+    P->>E: validated intent
+    E->>N: bounded search turn
+
+    N-->>S: target visible + locked
+    S->>P: plan_to_target(0.25)
+    P->>E: validated intent
+    E->>N: dispatch nav goal
+
+    N-->>S: motion active, pursuit ok
+    S->>P: track_target()
+    P->>E: validated intent
+    E->>N: continue pursuit
+
+    N-->>S: target reached / uncertainty
+    S->>P: safe_stop()
+    P->>E: validated intent
+    E->>N: stop motion
+```
 
 For the current turn-and-go proof, the intended control story is:
 

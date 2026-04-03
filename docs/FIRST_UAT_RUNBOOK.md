@@ -8,7 +8,7 @@ For the browser-dashboard operator flow, use [Dashboard Operator Guide](./DASHBO
 
 ## Preconditions
 
-1. Repo branch is `recovery/uat-full-robot-2026-02`.
+1. Repo is on `main` (or a branch tracking it).
 2. Docker Desktop is running and Linux engine is reachable.
 3. WSL distro exists and starts:
    - `wsl -d Ubuntu-24.04 -- bash -lc "echo ok"`
@@ -139,98 +139,18 @@ Use `artifacts/demos/milestone_3_<timestamp>/demo_summary.json`:
 
 ## LLM-Ready Handoff Checklist
 
-Run this only after first-UAT promotion is already green:
+Run this only after first-UAT promotion is already green. Full details in [ACTIVE_WORKFLOW.md](ACTIVE_WORKFLOW.md).
 
 1. `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1`
-   - Default includes same-session GUI rehearsal + parity checks (`-IncludeGuiParity true`).
 2. `powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin`
 3. `powershell -ExecutionPolicy Bypass -File scripts/run_brain_intent_shell.ps1 -RuntimeTarget robot_fidelity_orin`
-
-Required handoff artifacts:
-
-1. `artifacts/session/<timestamp>/pre_llm_campaign_trend.json`
-2. `artifacts/session/<timestamp>/campaign_run_summary.json`
-3. `artifacts/session/<timestamp>/rc/manifest.json`
-4. `artifacts/session/<timestamp>/rc/readiness_report.json`
-5. `runtime/contracts/llm_control_contract.yaml`
-6. `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
-7. `artifacts/session/<timestamp>/brain_intent_shell_summary.json`
-
-Current full campaign baseline (post world-stream recovery):
-
-1. `artifacts/session/20260309T063355Z/pre_llm_campaign_trend.json`
-2. `artifacts/session/20260309T063355Z/campaign_run_summary.json`
-3. `artifacts/session/20260309T063355Z/rc/manifest.json`
-4. `artifacts/session/20260309T063355Z/rc/readiness_report.json`
-5. `artifacts/session/20260309T073224Z/pre_llm_headless_summary.json` (soak)
-6. `artifacts/session/20260312T001204Z/brain_adapter_smoke_summary.json` (adapter smoke)
-7. `artifacts/session/20260312T001244Z/brain_intent_shell_summary.json` (deterministic planner shell)
-
-Latest validated same-session visual package:
-
-1. `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
-2. `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
-3. `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
-4. `artifacts/session/20260312T013442Z/parity_summary.json`
-
-Operator visual signoff order:
-
-1. Single-target M3 browser run first:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 -Milestone 3 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -Headless true -VisualSurface browser_dashboard -WorldSurface streamed_sim -OpenFeedViewers true -AutoOpenVisualSurface true -RequireParityGreenForOperatorView false -OperatorPhase M3 -TargetId single_target -DemoTargetRelative false -DemoTargetX 1.10 -DemoTargetY 0.00 -DemoTargetZ 0.05 -MaxRunSeconds 150`
-2. Multi-target GUI rehearsal second:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false -VisualSurface browser_dashboard -WorldSurface streamed_sim`
-   - This browser-dashboard wrapper remains unchanged validation tooling in v1.
-3. Dashboard now shows:
-   - `phase`
-   - `target_id`
-   - `target_transition_active`
-   Use these fields to explain target resets during multi-target rehearsal.
-
-Parity-first GUI readiness (required before operator live view):
-
-1. Run headless session:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane fidelity`
-2. Rehearse GUI on the same session:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers false -VisualSurface browser_dashboard -WorldSurface streamed_sim`
-3. Verify parity:
-   - `artifacts/session/<session_id>/parity_summary.json` with `pass=true`
-4. Only then run operator view:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true -VisualSurface browser_dashboard -WorldSurface streamed_sim -AutoOpenVisualSurface true`
-   - The browser world pane remains available for validation, but the recommended live operator view is Xpra from the dashboard's `Open Xpra` link.
-5. Current validated same-session baseline:
-   - `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
-   - `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
-   - `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
-   - `artifacts/session/20260312T013442Z/parity_summary.json`
 
 Required pass criteria:
 
 1. Campaign report `campaign.all_green=true` for the 3 dual runs.
-2. Fidelity soak is green with Nav2 duration `>= 1200s`.
-3. Fidelity soak multi-target run has `goal_count >= 10`.
-4. RC readiness report has `pass=true`.
-5. `llm_control_contract.yaml` remains in `contract_status: frozen_pre_llm`.
-6. Brain adapter smoke report has `pass=true`.
+2. Fidelity soak green with Nav2 duration `>= 1200s` and `goal_count >= 10`.
+3. RC readiness report `pass=true`.
+4. `llm_control_contract.yaml` remains `contract_status: frozen_pre_llm`.
+5. Brain adapter smoke `pass=true`.
 
-Known limitations before full LLM wiring:
-
-1. High-level behavior planning is not implemented in this phase.
-2. GUI milestone replay is still required before final operator handoff.
-3. Isaac lane remains parity-only and does not replace Jetty gate authority.
-
-Visual parity triage failure classes:
-
-1. `rgb_stream_timeout`
-2. `debug_stream_timeout`
-3. `odom_timeout`
-4. `nav2_action_unavailable`
-5. `target_distance_not_improving`
-6. `lane_mismatch`
-7. `feed_viewer_unavailable`
-8. `visual_bundle_missing`
-9. `world_stream_client_crash`
-10. `world_stream_blank`
-11. `world_stream_scene_missing`
-12. `world_stream_robot_not_visible`
-13. `world_stream_target_not_visible`
-14. `world_stream_partition_mismatch`
+Visual signoff follows the parity-first sequence in [ACTIVE_WORKFLOW.md - Visual UAT Sequence](ACTIVE_WORKFLOW.md#visual-uat-sequence).

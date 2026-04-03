@@ -162,28 +162,35 @@ Lane-specific gate config defaults:
 5. Fidelity soak multi-target config:
    - `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
 
-Latest full pre-LLM campaign package (post world-stream recovery):
-
-1. trend: `artifacts/session/20260309T063355Z/pre_llm_campaign_trend.json`
-2. soak summary: `artifacts/session/20260309T073224Z/pre_llm_headless_summary.json`
-3. rc manifest: `artifacts/session/20260309T063355Z/rc/manifest.json`
-4. rc readiness: `artifacts/session/20260309T063355Z/rc/readiness_report.json` (`pass=true`)
-5. campaign summary: `artifacts/session/20260309T063355Z/campaign_run_summary.json`
-
-Latest same-session visual package:
-
-1. headless: `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
-2. recorded visual: `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
-3. GUI rehearsal: `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
-4. parity: `artifacts/session/20260312T013442Z/parity_summary.json`
-
 Adversarial must-fail suite (required for truth-lock confidence):
 
 1. `powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_adversarial.ps1 -RuntimeTarget robot_fidelity_orin`
-2. Latest summary:
-   - `artifacts/session/20260303T061055Z/adversarial_headless_summary.json`
 
 Pre-LLM stage order (container lane):
+
+```mermaid
+graph LR
+    C[Coordinate] --> S[Snapshot]
+    S --> O[Orientation]
+    O --> N[Nav2 Readiness]
+    N --> M[Multi-Target Nav2]
+    M --> BA[Brain Adapter Smoke]
+    BA --> PS[Planner Shell]
+    PS --> GUI[GUI Rehearsal + Parity]
+    GUI --> VIS[Visual Signoff]
+
+    style C fill:#2d6a4f,color:#fff
+    style S fill:#2d6a4f,color:#fff
+    style O fill:#2d6a4f,color:#fff
+    style N fill:#2d6a4f,color:#fff
+    style M fill:#2d6a4f,color:#fff
+    style BA fill:#2d6a4f,color:#fff
+    style PS fill:#2d6a4f,color:#fff
+    style GUI fill:#40916c,color:#fff
+    style VIS fill:#40916c,color:#fff
+```
+
+Stage list:
 
 1. coordinate gate
 2. snapshot verification gate (raw vs debug image distinctness)
@@ -235,6 +242,19 @@ Deterministic planner shell (first post-freeze integration smoke):
 
 Run only after headless gates are green and on the same session ID.
 
+```mermaid
+graph TB
+    H[Headless Gates Green] --> R[Recorded Visual Bundle]
+    R --> GR[GUI Rehearsal<br/>browser dashboard]
+    GR --> PAR{Parity<br/>pass?}
+    PAR -- yes --> LV[Operator Live View<br/>Xpra]
+    PAR -- no --> FIX[Triage failure class]
+    FIX --> GR
+
+    style H fill:#2d6a4f,color:#fff
+    style PAR fill:#b7791f,color:#fff
+```
+
 Authoritative visual surfaces:
 
 1. Recorded bundle first:
@@ -268,11 +288,6 @@ Parity gate:
 1. `artifacts/session/<session_id>/parity_summary.json` must exist and `pass=true`.
 2. Required checks: lane match, core ROS match, detection pipeline alive in both, `/yolo/ball_position_3d` active in both, nav action readiness in both, motion evidence in both, same-session recorded visual bundle ready, browser dashboard ready, streamed sim world ready, truth alignment OK.
 3. `host_ros` GUI runs are debug-only and cannot promote readiness.
-4. Current validated same-session baseline:
-   - `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
-   - `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
-   - `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
-   - `artifacts/session/20260312T013442Z/parity_summary.json`
 
 ## Headless Milestone Path (Current Preferred)
 

@@ -1,17 +1,73 @@
 # Chasecar
 
-Container-first ROS 2 stack for ball acquire/plan/track validation.
+Container-first ROS 2 stack for autonomous ball acquisition, planning, and tracking validation on a JetBot Nano platform.
+
+## System Overview
+
+```mermaid
+graph TB
+    subgraph Operator["Operator Layer"]
+        Dashboard["Browser Dashboard<br/>(control + status)"]
+        Xpra["Xpra Live View<br/>(operator visual)"]
+    end
+
+    subgraph Brain["Brain Layer"]
+        Supervisor["LLM Supervisor<br/>bounded next-intent"]
+        Policy["Deterministic Policy<br/>frozen contract gating"]
+        Executor["Intent Executor<br/>behavior dispatch"]
+    end
+
+    subgraph Perception["Perception"]
+        YOLO["YOLO v8 Detector<br/>TensorRT INT8"]
+        Extractor["3D Position Extractor<br/>RGB + aligned depth"]
+    end
+
+    subgraph Navigation["Navigation"]
+        Nav2["Nav2 Stack<br/>local planning + control"]
+        CmdVel["cmd_vel relay"]
+    end
+
+    subgraph Simulation["Simulation Lanes"]
+        Gate["Gate Lane<br/>Gazebo Jetty + Kilted"]
+        Isaac["Fidelity Lane<br/>Isaac Sim + Jazzy bridge"]
+    end
+
+    subgraph Validation["Validation Pipeline"]
+        UAT["UAT Orchestrator<br/>coordinate → snapshot → orientation → nav2 → multi-target"]
+        Campaign["Campaign Runner<br/>3x dual + soak + RC"]
+    end
+
+    Dashboard --> Supervisor
+    Supervisor --> Policy
+    Policy --> Executor
+    Executor --> Nav2
+    Nav2 --> CmdVel
+    CmdVel --> Gate
+    CmdVel --> Isaac
+    Gate --> YOLO
+    Isaac --> YOLO
+    YOLO --> Extractor
+    Extractor --> Supervisor
+    Extractor --> Nav2
+    Gate --> Xpra
+    UAT --> Gate
+    Campaign --> UAT
+```
 
 ## Active Architecture (2026)
 
-1. Gate lane (authoritative): ROS 2 `kilted` + Gazebo Jetty.
-2. Fidelity lane (parallel): Isaac + Jazzy bridge sidecar.
-3. Robot-fidelity target: `robot_fidelity_orin`.
-4. Canonical inference backend: `tensorrt_int8`.
+| Lane | Role | Stack |
+|------|------|-------|
+| Gate (authoritative) | Deterministic pass/fail | ROS 2 Kilted + Gazebo Jetty |
+| Fidelity (parallel) | High-fidelity parity | Isaac Sim + Jazzy bridge sidecar |
 
-## First UAT (Operator Entry)
+- Robot-fidelity target: `robot_fidelity_orin` (Jetson Orin Nano 8GB)
+- Canonical inference: `tensorrt_int8`
+- Locked decisions: [docs/STACK_DECISIONS_2026.md](docs/STACK_DECISIONS_2026.md)
 
-Run from Windows PowerShell:
+## Quick Start
+
+### First UAT (Operator Entry)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/run_first_uat.ps1 `
@@ -20,311 +76,53 @@ powershell -ExecutionPolicy Bypass -File scripts/run_first_uat.ps1 `
   -RuntimeTarget robot_fidelity_orin
 ```
 
-Default behavior:
+This cleans stale compose projects, runs coordinate UAT, captures Milestone 1 evidence, and writes session artifacts. See [docs/FIRST_UAT_RUNBOOK.md](docs/FIRST_UAT_RUNBOOK.md) for details.
 
-1. Cleans stale `chasecar_gate_*` compose projects.
-2. Brings up gate lane with Nav2 disabled for coordinate truth stability.
-3. Runs coordinate UAT in container lane (`sim_gate` execution context).
-4. Runs Milestone 1 evidence capture when coordinate gate passes.
-5. Tears down gate/UAT resources and writes session artifacts.
-
-Required outputs:
-
-1. `artifacts/session/<timestamp>/manifest.json`
-2. `artifacts/session/<timestamp>/readiness_report.json`
-3. `artifacts/uat/<timestamp>/summary.json` with `pass=true`
-4. `artifacts/demos/milestone_1_<timestamp>/demo_summary.json` with `pass=true` (when visual enabled)
-
-## Full Headless Replay (Coordinate + Orientation + Nav2)
-
-```powershell
-$proj = "chasecar_gate_replay_<timestamp>"
-powershell -ExecutionPolicy Bypass -File scripts/run_compose_gate.ps1 `
-  -Action up `
-  -ProjectName $proj `
-  -RuntimeTarget robot_fidelity_orin `
-  -IncludeNav2Bringup $true `
-  -IncludeBridge $false
-
-powershell -ExecutionPolicy Bypass -File scripts/run_compose_uat.ps1 `
-  -Action run `
-  -ProjectName $proj `
-  -RuntimeTarget robot_fidelity_orin `
-  -UatMode full_replay `
-  -UatExecutionContext sim_gate
-
-powershell -ExecutionPolicy Bypass -File scripts/run_compose_gate.ps1 `
-  -Action down `
-  -ProjectName $proj `
-  -RuntimeTarget robot_fidelity_orin `
-  -IncludeNav2Bringup $true `
-  -IncludeBridge $false
-
-powershell -ExecutionPolicy Bypass -File scripts/run_compose_uat.ps1 `
-  -Action down `
-  -ProjectName $proj `
-  -RuntimeTarget robot_fidelity_orin
-```
-
-Notes:
-
-1. Coordinate and orientation run with deterministic target snapshots while robot remains stationary.
-2. Nav2 stage uses managed bridge startup and deterministic target spawn before readiness monitoring.
-
-## Pre-LLM Headless Push (Fast + Fidelity)
+### Full Headless Replay
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/run_headless_pre_llm.ps1 -Lane dual
 ```
 
-This runs all low-level gates before high-level LLM wiring:
+Runs all pre-LLM gates: coordinate, snapshot, orientation, nav2 readiness, and multi-target nav2. `dual` runs fast lane then fidelity lane.
 
-1. coordinate UAT
-2. snapshot verification (`/d415/color/image_raw` vs `/yolo/debug_image`)
-3. orientation UAT
-4. nav2 readiness UAT
-5. multi-target nav2 UAT
-
-Verification notes:
-
-1. Snapshot gate passes only when both feeds capture successfully, images are not byte-identical, mean diff meets threshold, and changed-pixel ratio meets threshold.
-2. Nav2 readiness gate includes target-distance truth checks (improvement, retained progress, final distance, away ratio, and trend slope), not just goal status.
-
-Lane modes:
-
-1. `fast`: uses `workstation_max`, short timeouts, and fast-forward world `yolo_test_world_v6_clean_uat_fast.world`.
-2. `fidelity`: uses `robot_fidelity_orin` on canonical world `yolo_test_world_v6_clean_uat.world`.
-3. `dual`: runs `fast` then `fidelity`.
-
-Lane-specific gate configs:
-
-1. Fast Nav2 readiness: `ros2_config/config/nav2_readiness_fast.yaml`
-2. Fidelity Nav2 readiness: `ros2_config/config/nav2_readiness_fidelity.yaml`
-3. Fast multi-target: `ros2_config/config/multi_target_nav2_fast.yaml`
-4. Fidelity multi-target: `ros2_config/config/multi_target_nav2_fidelity.yaml`
-5. Fidelity soak multi-target: `ros2_config/config/multi_target_nav2_fidelity_soak.yaml`
-
-Authoritative campaign command (3x dual + optional soak + RC package):
+### Pre-LLM Campaign (3x dual + soak + RC)
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_campaign.ps1
 ```
 
-Campaign defaults:
-
-1. Runs headless dual lanes (`fast` + `fidelity`).
-2. Runs same-session GUI rehearsal (`M2` then `M3`) in `container_kilted`.
-3. Requires `parity_summary.json pass=true` for each cycle.
-
-Campaign outputs:
-
-1. `artifacts/session/<timestamp>/pre_llm_campaign_trend.json`
-2. `artifacts/session/<timestamp>/campaign_run_summary.json`
-3. `artifacts/session/<timestamp>/rc/manifest.json` (when soak enabled)
-4. `artifacts/session/<timestamp>/rc/readiness_report.json` (when soak enabled)
-
-Latest full pre-LLM campaign package (post world-stream recovery):
-
-1. `artifacts/session/20260309T063355Z/pre_llm_campaign_trend.json`
-2. `artifacts/session/20260309T073224Z/pre_llm_headless_summary.json`
-3. `artifacts/session/20260309T063355Z/rc/manifest.json`
-4. `artifacts/session/20260309T063355Z/rc/readiness_report.json`
-5. `artifacts/session/20260309T063355Z/campaign_run_summary.json`
-
-Latest validated same-session visual package:
-
-1. `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
-2. `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
-3. `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
-4. `artifacts/session/20260312T013442Z/parity_summary.json`
-
-Adversarial must-fail verification:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_adversarial.ps1 -RuntimeTarget robot_fidelity_orin
-```
-
-Latest adversarial summary:
-
-1. `artifacts/session/20260303T061055Z/adversarial_headless_summary.json`
-
-Pre-LLM brain adapter smoke (no LLM planner yet):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_brain_adapter_smoke.ps1 -RuntimeTarget robot_fidelity_orin
-```
-
-Adapter smoke output:
-
-1. `artifacts/session/<timestamp>/brain_adapter_smoke_summary.json`
-2. Latest validated smoke: `artifacts/session/20260312T001204Z/brain_adapter_smoke_summary.json`
-
-Deterministic planner shell (first post-freeze LLM-integration smoke):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_brain_intent_shell.ps1 -RuntimeTarget robot_fidelity_orin
-```
-
-Planner shell output:
-
-1. `artifacts/session/<timestamp>/brain_intent_shell_summary.json`
-2. Latest validated shell: `artifacts/session/20260312T001244Z/brain_intent_shell_summary.json`
+Includes same-session GUI rehearsal and parity checks per cycle.
 
 ## Visual Milestones
 
-Authoritative visual review is no longer the native Gazebo/X11 window path. Use one of these:
+Authoritative visual review uses recorded bundles and the browser dashboard with Xpra live view. Native Gazebo/X11 is debug-only.
 
-1. Recorded-first visual evidence bundle:
+1. Recorded evidence: `scripts/run_recorded_visual_demo.ps1`
+2. Dashboard + Xpra live view: open the dashboard, use `Open Xpra` link
+3. Headless milestone progression: `scripts/run_milestone_demo.ps1`
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_recorded_visual_demo.ps1 `
-  -Milestone 3 `
-  -RuntimeTarget robot_fidelity_orin `
-  -SessionId <session_id>
-```
+Operator visual signoff order: single-target M3 first, then multi-target GUI rehearsal.
 
-2. Dashboard control/status plus separate Xpra live view:
+## Key Directories
 
-   - Open the dashboard for control/status.
-   - Use the `Open Xpra` link for the live operator view.
-   - Keep the browser-dashboard wrappers for validation and recorded parity, not as the preferred live surface.
+| Directory | Purpose |
+|-----------|---------|
+| `scripts/` | Orchestration, UAT runners, brain supervisor (~90 Python files) |
+| `ros2_scripts/` | ROS 2 nodes, detectors, relays (~90 Python files) |
+| `ros2_config/` | Launch files, configs, URDFs, worlds, behavior trees |
+| `containers/` | Docker container definitions (core-kilted, sim-gate, dashboard, etc.) |
+| `runtime/` | Runtime contracts, TensorRT config, dashboard assets |
+| `compose/` | Docker Compose image lock |
+| `launch/` | Top-level launch files |
+| `artifacts/` | Session outputs, UAT results, demo evidence |
 
-3. Native Gazebo/X11 remains debug-only and does not count toward promotion.
-4. The browser world pane remains available as a legacy/debug fallback from the world camera sensor (`/observer_world/image_raw`), but it is no longer the preferred live operator surface.
+## Documentation
 
-Operator visual signoff sequence:
+See [docs/README.md](docs/README.md) for the full documentation index.
 
-1. Single-target M3 live view first:
-
-   - Open the dashboard and launch Xpra from the `Open Xpra` link.
-   - Keep the dashboard open for control/status during the live view.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 `
-  -Milestone 3 `
-  -ExecutionLane container_kilted `
-  -CoreRosDistro kilted `
-  -RuntimeTarget robot_fidelity_orin `
-  -Headless true `
-  -VisualSurface browser_dashboard `
-  -WorldSurface streamed_sim `
-  -OpenFeedViewers true `
-  -AutoOpenVisualSurface true `
-  -RequireParityGreenForOperatorView false `
-  -OperatorPhase M3 `
-  -TargetId single_target `
-  -DemoTargetRelative false `
-  -DemoTargetX 1.10 `
-  -DemoTargetY 0.00 `
-  -DemoTargetZ 0.05 `
-  -MaxRunSeconds 150
-```
-
-2. Multi-target GUI rehearsal second:
-   - `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -SessionId <session_id> -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json -OpenFeedViewers true -VisualSurface browser_dashboard -WorldSurface streamed_sim -AutoOpenVisualSurface true`
-3. Dashboard now surfaces plain-English operator state:
-   - `phase`
-   - `target_id`
-   - `target_transition_active`
-   Use this to distinguish expected target resets during multi-target rehearsal from faults.
-
-Headless milestone progression (current development default):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 -Milestone 2 -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -MaxRunSeconds 90
-powershell -ExecutionPolicy Bypass -File scripts/run_milestone_demo.ps1 -Milestone 3 -RuntimeTarget robot_fidelity_orin -WorldFile yolo_test_world_v6_clean_uat.world -WorldName yolo_test_world -EnsureDemoTarget -MaxRunSeconds 150
-```
-
-Milestone 1 now enforces deterministic target acquisition:
-
-1. removes duplicate legacy ball models in-world
-2. spawns one canonical red target (`frisbee_target_ball.sdf`) with bounded timeout/retries
-3. requires `/yolo/confidence >= 0.50` to pass
-4. requires debug overlay to differ from raw RGB evidence when confidence gate passes
-5. in non-headless mode, verifies both feed viewers are running (`/d415/color/image_raw` and `/yolo/debug_image`)
-
-Milestone 3 now enforces measurable motion:
-
-1. `nav2.action_server_ready=true`
-2. `motion.odom_displacement_m >= MotionMinDistanceMeters` (default `0.40`)
-3. `motion.target_progress_ok=true` (target-distance improvement meets threshold)
-4. cmd_vel/nav progress activity is recorded for diagnostics
-
-Full GUI rehearsal wrapper (assistant-side pre-handoff):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_pre_llm_gui_rehearsal.ps1 `
-  -ExecutionLane container_kilted `
-  -CoreRosDistro kilted `
-  -RuntimeTarget robot_fidelity_orin `
-  -SessionId <session_id> `
-  -HeadlessSummaryPath artifacts/session/<session_id>/pre_llm_headless_summary.json `
-  -OpenFeedViewers false `
-  -VisualSurface browser_dashboard
-```
-
-Default behavior cleans stale viewer/sim processes between attempts and at exit.
-
-Parity-first rule:
-
-1. GUI rehearsal always runs on `container_kilted`.
-2. `host_ros` is debug-only and non-authoritative.
-3. Recorded visual evidence and browser dashboard must use the same session ID as the headless run.
-4. Operator live-view mode (`-OpenFeedViewers true`) is blocked unless latest parity report is green.
-5. Container lane enforces a strict viewer gate: if live viewers are requested but unavailable, runs fail with `failure_class=feed_viewer_unavailable` instead of reporting a false visual pass.
-6. Required parity artifact: `artifacts/session/<session_id>/parity_summary.json` with `pass=true`.
-7. Same-session promotion also requires recorded-mode artifacts to survive the later browser run:
-   - `visual_demo_summary_recorded.json`
-   - `world_stream_summary_recorded.json`
-   - recorded raw/debug/topdown/world stream videos
-8. The current motion sign fix lives in:
-   - `ros2_config/config/jetbot_diff_drive_v1.0.0.yaml`
-   - `ros2_config/config/jetbot_controllers.yaml`
-   If the robot appears to drive backward in the streamed sim world, compare `/jetbot_base_controller/odom` to `/world/<world>/dynamic_pose/info` before trusting headless nav output.
-
-Current same-session visual baseline:
-
-1. `artifacts/session/20260312T013442Z/pre_llm_headless_summary.json`
-2. `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
-3. `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
-4. `artifacts/session/20260312T013442Z/parity_summary.json`
-
-## Artifact Contracts
-
-1. Coordinate: `artifacts/uat/<timestamp>/{detections.csv,summary.json}`
-2. Orientation: `artifacts/orientation/<timestamp>/{orientation_samples.csv,orientation_summary.json,snapshots/*.png}`
-3. Snapshot verification: `artifacts/snapshots/<timestamp>/{d415_color.png,yolo_debug.png,image_diff.json,snapshot_summary.json}`
-4. Nav2: `artifacts/nav2/<timestamp>/nav_summary.json`
-5. Nav2 distance series: `artifacts/nav2/<timestamp>/distance_samples.csv`
-6. Multi-target Nav2: `artifacts/nav2_multi/<timestamp>/{multi_target_samples.csv,multi_target_summary.json}`
-7. Session: `artifacts/session/<timestamp>/{manifest.json,readiness_report.json,pre_llm_headless_summary.json}`
-8. Milestone 1 evidence: `artifacts/demos/milestone_1_<timestamp>/{operator_checklist.json,demo_summary.json,screenshots/*.png}`
-9. GUI parity evidence: `artifacts/session/<timestamp>/{pre_llm_gui_rehearsal_summary.json,parity_summary.json}`
-10. Recorded/browser visual evidence:
-    - `artifacts/session/<timestamp>/visual/raw_camera.mp4`
-    - `artifacts/session/<timestamp>/visual/raw_camera_recorded.mp4`
-    - `artifacts/session/<timestamp>/visual/raw_camera_browser_dashboard.mp4`
-    - `artifacts/session/<timestamp>/visual/yolo_debug.mp4`
-    - `artifacts/session/<timestamp>/visual/yolo_debug_recorded.mp4`
-    - `artifacts/session/<timestamp>/visual/yolo_debug_browser_dashboard.mp4`
-    - `artifacts/session/<timestamp>/visual/topdown_telemetry.mp4`
-    - `artifacts/session/<timestamp>/visual/topdown_telemetry_recorded.mp4`
-    - `artifacts/session/<timestamp>/visual/topdown_telemetry_browser_dashboard.mp4`
-    - `artifacts/session/<timestamp>/visual/world_stream.mp4`
-    - `artifacts/session/<timestamp>/visual/world_stream_recorded.mp4`
-    - `artifacts/session/<timestamp>/visual/world_stream_browser_dashboard.mp4`
-    - `artifacts/session/<timestamp>/visual/world_stream_summary.json`
-    - `artifacts/session/<timestamp>/visual/world_stream_summary_recorded.json`
-    - `artifacts/session/<timestamp>/visual/world_stream_summary_browser_dashboard.json`
-    - `artifacts/session/<timestamp>/visual/timeline.json`
-    - `artifacts/session/<timestamp>/visual/state.json`
-    - `artifacts/session/<timestamp>/visual/visual_demo_summary.json`
-    - `artifacts/session/<timestamp>/visual/visual_demo_summary_recorded.json`
-    - `artifacts/session/<timestamp>/visual/visual_demo_summary_browser_dashboard.json`
-
-## Reference Docs
-
-1. `docs/ACTIVE_WORKFLOW.md`
-2. `docs/FIRST_UAT_RUNBOOK.md`
-3. `docs/LEVEL_SET_2026-02-26.md`
-4. `AGENTS.md`
+Key docs:
+- [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md) — canonical workflow and UAT sequencing
+- [docs/LLM_CONTROL_ARCHITECTURE.md](docs/LLM_CONTROL_ARCHITECTURE.md) — layered control architecture
+- [docs/FIRST_UAT_RUNBOOK.md](docs/FIRST_UAT_RUNBOOK.md) — first operator UAT procedure
+- [AGENTS.md](AGENTS.md) — coding agent execution guidance
