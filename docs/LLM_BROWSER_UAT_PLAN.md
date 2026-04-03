@@ -94,30 +94,24 @@ Outcome:
 - fewer ambiguous transitions in the LLM decision path
 - a cleaner bridge from proof demo to the longer-term bounded-supervisor design
 
-### Step 3: Generalize From One Proof To The Visible-Ball M3 Scenarios
+### Step 3: Generalize From One Proof To The Visible-Ball M3 Scenarios — Complete
 
 Goal:
 
 - show that the bounded LLM layer is supervising a reusable policy pattern, not only one custom proof harness
 
-Work:
+Completed work:
 
-1. apply the same bounded supervisor policy to:
-   - `m3_single_target`
-   - `m3_center`
-   - `m3_left`
-   - `m3_right`
-2. keep the same digest and frozen action space
-3. treat failures as policy or gating issues, not as reasons to widen the action surface
+1. ✓ `visit_m3_positions` scenario added — visits center (0.0m), left (+0.12m), and right (-0.12m) targets using the same bounded supervisor policy
+2. ✓ sim truth probe and dashboard model name lists extended for M3 visit target names
+3. ✓ 3/3 M3 positions visited on attempt 0 (0.34m, 0.32m, 0.27m — all within 0.35m tolerance)
+4. ✓ same digest, frozen action space, and policy layer used across all scenarios
+5. ✓ combined with three-ball sequence: 6/6 unique target positions visited successfully across two scenarios
 
 Outcome:
 
 - one supervisor policy operating across the visible-ball demo set
 - stronger confidence that the browser UAT demo is representative, not staged
-
-Why it matters:
-
-- this is the first step from "proof of possibility" to "bounded capability family"
 
 ### Step 3b: Target Prior Contract For Multi-Target Discrimination — Complete
 

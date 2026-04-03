@@ -49,6 +49,15 @@ def test_build_visit_targets_for_three_ball_sequence():
     assert targets[2].start_visible is True
 
 
+def test_build_visit_targets_for_m3_positions():
+    targets = build_visit_targets("visit_m3_positions")
+    assert [item.id for item in targets] == ["m3_center", "m3_left", "m3_right"]
+    assert all(t.start_visible for t in targets)
+    assert targets[0].lateral_m == 0.00
+    assert targets[1].lateral_m == 0.12
+    assert targets[2].lateral_m == -0.12
+
+
 def test_deterministic_visit_decision_prefers_search_when_target_missing():
     contract = _load_contract()
     state = {

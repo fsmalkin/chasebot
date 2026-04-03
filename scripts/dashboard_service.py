@@ -57,6 +57,9 @@ VISIT_TARGET_MODEL_NAMES = (
     "visit_mission_target_ball_1",
     "visit_mission_target_ball_2",
     "visit_mission_target_ball_3",
+    "visit_mission_target_m3_center",
+    "visit_mission_target_m3_left",
+    "visit_mission_target_m3_right",
 )
 TRUTH_TARGET_MODEL_NAMES = (
     *VISIT_TARGET_MODEL_NAMES,
@@ -201,6 +204,14 @@ SCENARIOS = [
         target_id="ball_sequence",
         label="Visit Three Ball Sequence",
         description="Deterministic three-ball visit mission with ordered target progression.",
+        mode="visit_mission",
+    ),
+    ScenarioDefinition(
+        id="visit_m3_positions",
+        phase="visit_m3_positions",
+        target_id="m3_positions",
+        label="Visit M3 Positions",
+        description="Bounded supervisor visit across M3 target positions (center, left, right).",
         mode="visit_mission",
     ),
 ]

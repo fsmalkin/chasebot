@@ -152,6 +152,30 @@ def build_visit_targets(scenario_id: str) -> list[VisitTargetSpec]:
                 lateral_m=-0.60,
             ),
         ]
+    if scenario_id == "visit_m3_positions":
+        return [
+            VisitTargetSpec(
+                id="m3_center",
+                label="M3 Center",
+                start_visible=True,
+                forward_m=1.10,
+                lateral_m=0.00,
+            ),
+            VisitTargetSpec(
+                id="m3_left",
+                label="M3 Left",
+                start_visible=True,
+                forward_m=1.10,
+                lateral_m=0.12,
+            ),
+            VisitTargetSpec(
+                id="m3_right",
+                label="M3 Right",
+                start_visible=True,
+                forward_m=1.10,
+                lateral_m=-0.12,
+            ),
+        ]
     raise ValueError(f"Unsupported visit mission scenario: {scenario_id}")
 
 
