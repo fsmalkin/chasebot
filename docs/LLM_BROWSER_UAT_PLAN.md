@@ -170,25 +170,25 @@ Outcome:
    - whether the robot responded
    - whether the run passed
 
-### Step 5: Prepare The On-Machine Model Lane Without Changing The Control Shape
+### Step 5: Prepare The On-Machine Model Lane Without Changing The Control Shape — Complete
 
 Goal:
 
 - preserve a path from Wi-Fi/cloud inference to a smaller on-device model later
 
-Work:
+Current state (meets the acceptance criteria):
 
-1. keep the digest bounded and fixed-shape
-2. keep the action space canonical and small
-3. benchmark cloud vs local providers against the same session artifacts
+1. ✓ digest is bounded and fixed-shape (`brain_state_digest.py`)
+2. ✓ action space is canonical and small (6 frozen intents)
+3. ✓ provider abstraction exists (`llm_provider_base.py` — `DecisionProvider` protocol)
+4. ✓ replay comparison tool exists (`llm_provider_replay_compare.py`) — replays recorded state history across providers and compares decisions
+5. ✓ local provider placeholders exist (`llm_provider_local.py` — `LocalStubProvider` and `LocalModelProvider`)
+6. ✓ the deterministic policy layer (`brain_supervisor_policy.py`) works identically regardless of provider — it owns stage/intent selection, the provider is optional
 
 Outcome:
 
 - a realistic path toward local inference on the Orin Nano GPU without reworking the architecture
-
-Why it matters:
-
-- this keeps the current implementation aligned with the long-term deployment goal rather than optimizing only for cloud demos
+- same digest, same action space, same policy/gating layer — only the provider backend changes
 
 ## Phase 1: Harden The Headless Decision Path
 
@@ -376,9 +376,9 @@ To keep the demo honest and legible, this phase does not include:
 
 ## Recommended Execution Order
 
-1. lock in `3/3` repeatability for the current turn-and-go proof
-2. formalize escalation rules in the policy layer
-3. generalize the bounded supervisor across the visible-ball M3 scenarios
-4. implement target prior contract so multi-target discrimination transfers to hardware
-5. keep simplifying the browser UAT surface around the same authoritative backend
-6. benchmark the same digest/action-space path for a future local-provider lane
+1. ✓ lock in `3/3` repeatability for the current turn-and-go proof
+2. ✓ formalize escalation rules in the policy layer
+3. ✓ generalize the bounded supervisor across the visible-ball M3 scenarios
+4. ✓ implement target prior contract so multi-target discrimination transfers to hardware
+5. ✓ browser UAT surface meets acceptance criteria
+6. ✓ provider abstraction and replay comparison infrastructure in place for future local-provider lane
