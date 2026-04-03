@@ -79,6 +79,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--state-json", default=str(repo_root / "runtime" / "dashboard" / "brain_executor_state.json"))
     parser.add_argument("--feedback-jsonl", default="")
     parser.add_argument(
+        "--visit-runtime-json",
+        default=str(repo_root / "runtime" / "dashboard" / "visit_mission_runtime.json"),
+        help="Path to the visit mission runtime state file (source of target priors).",
+    )
+    parser.add_argument(
+        "--prior-lock-tolerance-m",
+        type=float,
+        default=0.50,
+        help="Max distance between detected ball world position and target prior to allow lock.",
+    )
+    parser.add_argument(
         "--use-sim-time",
         action="store_true",
         default=True,
@@ -143,6 +154,11 @@ class BrainIntentExecutor(Node):
         self.pending_cancel_reason = ""
         self.last_state_write_monotonic = 0.0
 
+        self.visit_runtime_path = Path(args.visit_runtime_json).resolve() if args.visit_runtime_json else None
+        self.prior_lock_tolerance_m = max(float(args.prior_lock_tolerance_m), 0.01)
+        self.active_prior: dict[str, float] | None = None
+        self.last_prior_read_monotonic = 0.0
+
         default_qos = QoSPresetProfiles.SENSOR_DATA.value
         self.feedback_pub = self.create_publisher(String, args.feedback_topic, 20)
         self.cmd_vel_pub = self.create_publisher(Twist, args.cmd_vel_topic, 20)
@@ -168,6 +184,67 @@ class BrainIntentExecutor(Node):
                 topics.append(topic)
         return topics
 
+    def _refresh_target_prior(self) -> None:
+        if self.visit_runtime_path is None:
+            return
+        now = time.monotonic()
+        if (now - self.last_prior_read_monotonic) < 0.5:
+            return
+        self.last_prior_read_monotonic = now
+        try:
+            raw = self.visit_runtime_path.read_text(encoding="utf-8")
+            data = json.loads(raw)
+        except (OSError, json.JSONDecodeError, ValueError):
+            return
+        prior = data.get("current_target_prior")
+        if isinstance(prior, dict):
+            px = prior.get("x")
+            py = prior.get("y")
+            if px is not None and py is not None:
+                try:
+                    fx, fy = float(px), float(py)
+                    if math.isfinite(fx) and math.isfinite(fy):
+                        self.active_prior = {"x": fx, "y": fy}
+                        return
+                except (TypeError, ValueError):
+                    pass
+        self.active_prior = None
+
+    def _detection_world_position(self) -> dict[str, float] | None:
+        if self.latest_detection is None or self.latest_pose is None:
+            return None
+        plan = plan_approach_from_detection(
+            robot_pose=self.latest_pose,
+            detection=self.latest_detection,
+            approach_distance_m=float(self.args.approach_distance_m),
+        )
+        if plan is None:
+            return None
+        return {"x": plan.ball_x_world, "y": plan.ball_y_world}
+
+    def _prior_lock_alignment_ok(self) -> bool:
+        if self.active_prior is None:
+            return True
+        world = self._detection_world_position()
+        if world is None:
+            return True
+        delta = math.hypot(
+            world["x"] - self.active_prior["x"],
+            world["y"] - self.active_prior["y"],
+        )
+        return delta <= self.prior_lock_tolerance_m
+
+    def _prior_delta_m(self) -> float | None:
+        if self.active_prior is None:
+            return None
+        world = self._detection_world_position()
+        if world is None:
+            return None
+        return round(math.hypot(
+            world["x"] - self.active_prior["x"],
+            world["y"] - self.active_prior["y"],
+        ), 6)
+
     def _target_visible_recent(self) -> bool:
         return self.latest_detection is not None and (time.monotonic() - self.last_detection_monotonic) <= max(self.args.detection_stale_after_s, 0.1)
 
@@ -188,7 +265,12 @@ class BrainIntentExecutor(Node):
         return bearing is not None and abs(bearing) <= CENTERED_LOCK_TOLERANCE_RAD
 
     def _target_ready_for_lock(self) -> bool:
-        return self._target_visible_recent() and self._target_centered_now() and self.detection_burst_count >= max(self.args.search_detection_burst, 1)
+        return (
+            self._target_visible_recent()
+            and self._target_centered_now()
+            and self.detection_burst_count >= max(self.args.search_detection_burst, 1)
+            and self._prior_lock_alignment_ok()
+        )
 
     def _publish_feedback(self, text: str, *, status: str, extra: dict[str, Any] | None = None) -> None:
         msg = String()
@@ -463,6 +545,14 @@ class BrainIntentExecutor(Node):
         if not self._target_visible_recent():
             self._publish_feedback("acquire_target: blocked because target is not visible", status="blocked")
             return
+        if not self._prior_lock_alignment_ok():
+            delta = self._prior_delta_m()
+            self._publish_feedback(
+                f"acquire_target: blocked because visible detection is off-prior ({delta:.2f}m from expected)",
+                status="blocked",
+                extra={"prior_delta_m": delta, "prior_alignment_ok": False},
+            )
+            return
         if self._target_ready_for_lock():
             self._lock_target(target_class, "acquire_target")
             return
@@ -476,7 +566,7 @@ class BrainIntentExecutor(Node):
 
     def _handle_plan_intent(self, args_payload: dict[str, Any]) -> None:
         approach_distance_m = float(args_payload.get("approach_distance_m", self.args.approach_distance_m))
-        if not self.target_locked and self._target_visible_recent():
+        if not self.target_locked and self._target_visible_recent() and self._prior_lock_alignment_ok():
             self._lock_target("ball", "plan_to_target")
         self.track_active = False
         self.track_needs_replan = False
@@ -530,6 +620,7 @@ class BrainIntentExecutor(Node):
             self._publish_feedback(f"unsupported intent: {intent_name}", status="unsupported")
 
     def _on_timer(self) -> None:
+        self._refresh_target_prior()
         if self.search_active:
             elapsed = time.monotonic() - self.search_started_monotonic
             if self._target_ready_for_lock():
@@ -545,7 +636,8 @@ class BrainIntentExecutor(Node):
             else:
                 twist = Twist()
                 bearing = self._latest_detection_bearing_rad()
-                if bearing is not None:
+                prior_ok = self._prior_lock_alignment_ok()
+                if bearing is not None and prior_ok:
                     self.search_state = "centering"
                     twist.angular.z = float(
                         clamp(
@@ -555,7 +647,16 @@ class BrainIntentExecutor(Node):
                         )
                     )
                 else:
-                    self.search_state = "rotating"
+                    if bearing is not None and not prior_ok:
+                        self.search_state = "rotating"
+                        delta = self._prior_delta_m()
+                        self._publish_feedback(
+                            f"search_for_target: ignoring off-prior detection ({delta:.2f}m from expected)",
+                            status="search_active",
+                            extra={"prior_delta_m": delta, "prior_alignment_ok": False},
+                        )
+                    else:
+                        self.search_state = "rotating"
                     twist.angular.z = float(self.args.search_turn_speed_radps)
                 self._publish_twist(twist)
                 self._publish_search_feedback()
@@ -600,6 +701,9 @@ class BrainIntentExecutor(Node):
             "feedback_count": self.feedback_count,
             "detection_burst_count": self.detection_burst_count,
             "latest_pose_stamp_utc": self.latest_pose_stamp,
+            "active_prior": self.active_prior,
+            "prior_lock_alignment_ok": self._prior_lock_alignment_ok(),
+            "prior_delta_m": self._prior_delta_m(),
         }
         if self.latest_pose is not None:
             payload["latest_robot_pose"] = asdict(self.latest_pose)
@@ -618,6 +722,12 @@ class BrainIntentExecutor(Node):
             }
             payload["latest_detection_bearing_rad"] = None if bearing is None else round(bearing, 6)
             payload["target_centered_now"] = self._target_centered_now()
+            world = self._detection_world_position()
+            if world is not None:
+                payload["latest_detection_world"] = {
+                    "x": round(world["x"], 6),
+                    "y": round(world["y"], 6),
+                }
             if self.latest_pose is not None:
                 plan = plan_approach_from_detection(
                     robot_pose=self.latest_pose,

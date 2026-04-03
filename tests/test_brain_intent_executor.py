@@ -194,6 +194,10 @@ def _make_executor(monkeypatch):
     executor.last_state_write_monotonic = 0.0
     executor.state_path = None
     executor.feedback_history_path = None
+    executor.visit_runtime_path = None
+    executor.prior_lock_tolerance_m = 0.50
+    executor.active_prior = None
+    executor.last_prior_read_monotonic = 0.0
 
     published_feedback = []
     published_twists = []
@@ -358,3 +362,178 @@ def test_timer_locks_centered_visible_target_after_burst(monkeypatch):
 
     assert executor._locked_targets == [("ball", "search_for_target")]
     assert executor.search_state == "locked"
+
+
+# --- Prior-based lock gating tests ---
+
+
+def test_no_prior_allows_lock(monkeypatch):
+    """When no target prior is set, lock proceeds as before."""
+    executor = _make_executor(monkeypatch)
+    executor.active_prior = None
+    executor.latest_detection = _make_detection(x=0.05, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 2
+
+    assert executor._prior_lock_alignment_ok() is True
+    assert executor._target_ready_for_lock() is True
+
+
+def test_aligned_prior_allows_lock(monkeypatch):
+    """When detection world position is within tolerance of prior, lock proceeds."""
+    executor = _make_executor(monkeypatch)
+    # Robot at origin facing +x. Detection at (0.05, 0, 1.0) in local frame
+    # -> ball world position is roughly (1.0, -0.05) in odom.
+    # Set prior near that.
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor.latest_detection = _make_detection(x=0.05, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 2
+
+    world = executor._detection_world_position()
+    assert world is not None
+    executor.active_prior = {"x": world["x"], "y": world["y"]}
+
+    assert executor._prior_lock_alignment_ok() is True
+    assert executor._target_ready_for_lock() is True
+
+
+def test_off_prior_blocks_lock(monkeypatch):
+    """When detection world position is far from prior, lock is refused."""
+    executor = _make_executor(monkeypatch)
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor.latest_detection = _make_detection(x=0.05, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 2
+
+    # Set prior far away from where the detection actually is
+    executor.active_prior = {"x": 5.0, "y": 5.0}
+
+    assert executor._prior_lock_alignment_ok() is False
+    assert executor._target_ready_for_lock() is False
+
+
+def test_search_timer_rotates_past_off_prior_detection(monkeypatch):
+    """During search, if detection is visible but off-prior, executor keeps rotating."""
+    executor = _make_executor(monkeypatch)
+    executor.search_active = True
+    executor.search_state = "centering"
+    executor.search_started_monotonic = 99.0
+    executor.search_target_class = "ball"
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor.latest_detection = _make_detection(x=0.05, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 2
+    executor.active_prior = {"x": 5.0, "y": 5.0}
+
+    executor._on_timer()
+
+    assert executor.search_state == "rotating"
+    assert executor._locked_targets == []
+    assert executor._published_twists
+    assert executor._published_twists[-1].angular.z > 0
+
+
+def test_search_timer_centers_on_prior_aligned_detection(monkeypatch):
+    """During search, if detection is visible and on-prior, executor centers on it."""
+    executor = _make_executor(monkeypatch)
+    executor.search_active = True
+    executor.search_state = "rotating"
+    executor.search_started_monotonic = 99.0
+    executor.search_target_class = "ball"
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    # Off-center detection (bearing != 0) so we're centering, not locking
+    executor.latest_detection = _make_detection(x=0.35, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 1
+
+    world = executor._detection_world_position()
+    executor.active_prior = {"x": world["x"], "y": world["y"]}
+
+    executor._on_timer()
+
+    assert executor.search_state == "centering"
+    assert executor._locked_targets == []
+
+
+def test_acquire_blocks_on_off_prior_detection(monkeypatch):
+    """acquire_target returns blocked when the visible target is off-prior."""
+    executor = _make_executor(monkeypatch)
+    executor.last_intent = "acquire_target"
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor.latest_detection = _make_detection(x=0.05, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.detection_burst_count = 4
+    executor.active_prior = {"x": 5.0, "y": 5.0}
+
+    executor._handle_acquire_intent({"target_class": "ball"})
+
+    assert executor.target_locked is False
+    assert executor._locked_targets == []
+    assert any("off-prior" in fb["text"] for fb in executor._published_feedback)
+
+
+def test_prior_delta_m_computes_distance(monkeypatch):
+    """_prior_delta_m returns the distance between detection world and prior."""
+    executor = _make_executor(monkeypatch)
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor.latest_detection = _make_detection(x=0.0, z=1.0)
+    executor.last_detection_monotonic = 99.5
+
+    world = executor._detection_world_position()
+    assert world is not None
+    executor.active_prior = {"x": world["x"] + 1.0, "y": world["y"]}
+
+    delta = executor._prior_delta_m()
+    assert delta is not None
+    assert math.isclose(delta, 1.0, abs_tol=0.01)
+
+
+def test_prior_delta_m_returns_none_without_prior(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor.latest_detection = _make_detection(x=0.0, z=1.0)
+    executor.last_detection_monotonic = 99.5
+    executor.active_prior = None
+
+    assert executor._prior_delta_m() is None
+
+
+def test_refresh_prior_reads_runtime_file(monkeypatch, tmp_path):
+    """_refresh_target_prior reads current_target_prior from visit runtime JSON."""
+    executor = _make_executor(monkeypatch)
+    runtime_file = tmp_path / "visit_mission_runtime.json"
+    runtime_file.write_text('{"current_target_prior": {"x": 1.5, "y": -0.3}}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_file
+    executor.last_prior_read_monotonic = 0.0
+
+    executor._refresh_target_prior()
+
+    assert executor.active_prior == {"x": 1.5, "y": -0.3}
+
+
+def test_refresh_prior_clears_when_empty(monkeypatch, tmp_path):
+    """_refresh_target_prior clears the prior when runtime file has empty prior."""
+    executor = _make_executor(monkeypatch)
+    runtime_file = tmp_path / "visit_mission_runtime.json"
+    runtime_file.write_text('{"current_target_prior": {}}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_file
+    executor.last_prior_read_monotonic = 0.0
+    executor.active_prior = {"x": 1.0, "y": 2.0}
+
+    executor._refresh_target_prior()
+
+    assert executor.active_prior is None
+
+
+def test_refresh_prior_tolerates_missing_file(monkeypatch, tmp_path):
+    """_refresh_target_prior doesn't crash when the file doesn't exist."""
+    executor = _make_executor(monkeypatch)
+    executor.visit_runtime_path = tmp_path / "nonexistent.json"
+    executor.last_prior_read_monotonic = 0.0
+    executor.active_prior = {"x": 1.0, "y": 2.0}
+
+    executor._refresh_target_prior()
+
+    # Prior unchanged — file missing is not an error, just no update
+    assert executor.active_prior == {"x": 1.0, "y": 2.0}

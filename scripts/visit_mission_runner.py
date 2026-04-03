@@ -341,6 +341,7 @@ class VisitMissionRunner:
             "recent_operator_events": [],
             "latest_decision": {},
             "latest_feedback": "",
+            "current_target_prior": {},
             "artifact_dir": "",
             "updated_utc": utc_now(),
         }
@@ -666,6 +667,9 @@ exit "$rc"
         write_json(mission_root / f"{target.id}_spawn.json", payload)
         if rc != 0:
             raise RuntimeError(f"Failed to spawn visit target {target.id}: {output}")
+        self._update_runtime_state(
+            current_target_prior={"x": round(target_x, 6), "y": round(target_y, 6)},
+        )
         return payload
 
     def _issue_safe_stop(self) -> None:
@@ -889,6 +893,7 @@ exit "$rc"
             "recent_operator_events": [],
             "latest_decision": {},
             "latest_feedback": "",
+            "current_target_prior": {},
             "artifact_dir": str(mission_root),
             "updated_utc": utc_now(),
         }
