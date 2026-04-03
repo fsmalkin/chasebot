@@ -632,3 +632,30 @@ def test_owned_intent_status_transitions_plan_after_goal_activity(monkeypatch):
     assert in_flight is False
     assert transitioned is True
     assert terminal_reason == ""
+
+
+# --- 409 ownership guard tests ---
+
+
+def test_executor_confirms_search_when_search_is_active(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    state = {"brain": {"search_active": True, "last_intent": "search_for_target"}}
+    assert runner._executor_confirms_intent(state, "search_for_target") is True
+
+
+def test_executor_rejects_search_when_different_intent_is_active(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    state = {"brain": {"search_active": False, "last_intent": "acquire_target"}}
+    assert runner._executor_confirms_intent(state, "search_for_target") is False
+
+
+def test_executor_confirms_acquire_when_last_intent_matches(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    state = {"brain": {"last_intent": "acquire_target", "target_locked": False}}
+    assert runner._executor_confirms_intent(state, "acquire_target") is True
+
+
+def test_executor_rejects_acquire_when_already_locked(monkeypatch):
+    runner = _make_runner(monkeypatch)
+    state = {"brain": {"last_intent": "acquire_target", "target_locked": True}}
+    assert runner._executor_confirms_intent(state, "acquire_target") is False

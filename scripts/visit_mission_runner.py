@@ -667,9 +667,8 @@ exit "$rc"
         write_json(mission_root / f"{target.id}_spawn.json", payload)
         if rc != 0:
             raise RuntimeError(f"Failed to spawn visit target {target.id}: {output}")
-        self._update_runtime_state(
-            current_target_prior={"x": round(target_x, 6), "y": round(target_y, 6)},
-        )
+        # Prior is set later in the visit loop (after first lock) so that
+        # odom has time to converge after the spawn teleport.
         return payload
 
     def _issue_safe_stop(self) -> None:
@@ -758,6 +757,24 @@ exit "$rc"
             return False, False, terminal_reason
 
         return False, False, terminal_reason
+
+    def _executor_confirms_intent(self, state: dict[str, Any], intent_name: str) -> bool:
+        """Check whether the executor state shows the named intent is actually active.
+
+        Used to avoid falsely owning an intent on 409 when the dashboard's
+        intent thread is busy with a *different* previous intent.
+        """
+        brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
+        last_intent = _clean_text(brain.get("last_intent"))
+        if intent_name == "search_for_target":
+            return bool(brain.get("search_active", False)) or last_intent == intent_name
+        if intent_name == "acquire_target":
+            return last_intent == intent_name and not bool(brain.get("target_locked", False))
+        if intent_name == "plan_to_target":
+            return last_intent == intent_name or bool(brain.get("goal_in_progress", False))
+        if intent_name == "track_target":
+            return bool(brain.get("track_active", False)) or last_intent == intent_name
+        return last_intent == intent_name
 
     def _search_dispatch_in_flight(self, state: dict[str, Any], decision: dict[str, Any]) -> bool:
         if _clean_text(decision.get("intent")) != "search_for_target":
@@ -931,6 +948,8 @@ exit "$rc"
                     self.last_dispatch_monotonic = 0.0
 
                     current_state = self._wait_for_robot_pose(timeout_s=self.args.environment_timeout_s)
+                    # Clear stale prior before spawn; the spawn sets the correct prior.
+                    self._update_runtime_state(current_target_prior={})
                     spawn_info = self._spawn_target_from_mission_anchor(current_state, target, mission_root)
                     target_spawned_monotonic = time.monotonic()
                     remaining_targets = [item.id for item in self.targets[index:]]
@@ -976,9 +995,13 @@ exit "$rc"
                         attempt_phase = "approach_phase" if target_locked_seen else "search_phase"
                         target_lock_active = bool(brain.get("target_locked", False))
                         active_truth_delta_m = mission_vision_truth_delta_m(state)
-                        aligned_target_lock = target_lock_active and detection_matches_active_truth(state)
+                        # Trust the executor's lock decision in visit missions.
+                        # The executor's prior gate handles target discrimination;
+                        # the depth-based detection_world→truth comparison is too
+                        # unreliable (2m+ error) and causes false search_timeouts.
+                        aligned_target_lock = target_lock_active
 
-                        if off_truth_centering_during_search(state):
+                        if off_truth_centering_during_search(state) and not bool(self.runtime_state.get("search_bias_active", False)) and target_locked_seen:
                             self._append_runtime_event(
                                 f"Ignoring visible off-target blob ({active_truth_delta_m:.2f}m from active truth); resuming search.",
                                 category="mission",
@@ -1016,6 +1039,9 @@ exit "$rc"
                             time.sleep(self.args.poll_s)
                             continue
 
+                        # NOTE: unreachable while aligned_target_lock == target_lock_active
+                        # (visit missions trust the executor's prior gate).  Retained
+                        # as documentation of the fallback for non-prior-gate paths.
                         if target_lock_active and active_truth_delta_m is not None and not aligned_target_lock:
                             self._append_runtime_event(
                                 f"Rejected off-target lock ({active_truth_delta_m:.2f}m from active truth); resuming search.",
@@ -1055,6 +1081,16 @@ exit "$rc"
                             continue
 
                         if aligned_target_lock:
+                            if not target_locked_seen:
+                                # Set the prior on first lock so the executor can
+                                # use it for prior-based approach goals.  Deferring
+                                # the prior until lock gives odom time to converge
+                                # after the spawn teleport.
+                                tw = spawn_info.get("target_world", {})
+                                if tw.get("x") is not None and tw.get("y") is not None:
+                                    self._update_runtime_state(
+                                        current_target_prior={"x": round(float(tw["x"]), 6), "y": round(float(tw["y"]), 6)},
+                                    )
                             target_locked_seen = True
                             lock_seen_monotonic = lock_seen_monotonic or time.monotonic()
                             attempt_phase = "approach_phase"
@@ -1287,6 +1323,7 @@ exit "$rc"
                                         dispatch_status == 409
                                         and self._owned_intent_name(decision)
                                         and "intent already in progress" in _clean_text(dispatch_payload.get("error")).lower()
+                                        and self._executor_confirms_intent(state, _clean_text(decision.get("intent")))
                                     ):
                                         (
                                             first_dispatched_intent,

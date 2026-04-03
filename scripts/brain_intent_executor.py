@@ -245,6 +245,70 @@ class BrainIntentExecutor(Node):
             world["y"] - self.active_prior["y"],
         ), 6)
 
+    def _prior_robot_distance_m(self) -> float | None:
+        """Distance from the robot's current position to the active prior (world frame)."""
+        if self.active_prior is None or self.latest_pose is None:
+            return None
+        return math.hypot(
+            self.active_prior["x"] - self.latest_pose.x,
+            self.active_prior["y"] - self.latest_pose.y,
+        )
+
+    def _dispatch_prior_approach_goal(self, *, reason: str, approach_distance_m: float) -> bool:
+        """Dispatch a nav goal toward the active prior position instead of the detection.
+
+        Used as a fallback when detection-based approach has converged but the
+        robot is still far from the prior (depth estimation error).
+        """
+        if self.active_prior is None or self.latest_pose is None:
+            return False
+        if not self.nav_client.server_is_ready():
+            if not self.nav_client.wait_for_server(timeout_sec=0.5):
+                return False
+        prior_x = self.active_prior["x"]
+        prior_y = self.active_prior["y"]
+        dist = math.hypot(prior_x - self.latest_pose.x, prior_y - self.latest_pose.y)
+        if not math.isfinite(dist) or dist <= max(approach_distance_m, 0.0):
+            return False
+        # Compute goal that stops approach_distance_m short of the prior
+        ratio = (dist - approach_distance_m) / dist
+        goal_x = self.latest_pose.x + (prior_x - self.latest_pose.x) * ratio
+        goal_y = self.latest_pose.y + (prior_y - self.latest_pose.y) * ratio
+
+        if self.goal_in_progress:
+            self._cancel_goal(f"{reason}: replacing active goal")
+
+        goal_pose = build_goal_pose(
+            goal_frame=self.args.goal_frame,
+            goal_x_world=goal_x,
+            goal_y_world=goal_y,
+            face_x_world=prior_x,
+            face_y_world=prior_y,
+            stamp=self.get_clock().now().to_msg(),
+        )
+        goal_msg = NavigateToPose.Goal()
+        goal_msg.pose = goal_pose
+        goal_msg.behavior_tree = ""
+
+        self.latest_goal_pose = goal_pose
+        self.goal_pose_pub.publish(goal_pose)
+        self.goal_in_progress = True
+        self.last_goal_dispatched_monotonic = time.monotonic()
+        self.last_goal_dispatched_utc = utc_now()
+        send_goal_future = self.nav_client.send_goal_async(goal_msg, feedback_callback=self._on_nav_feedback)
+        send_goal_future.add_done_callback(self._on_goal_response)
+        self._publish_feedback(
+            f"{reason}: prior-based goal dispatched to ({goal_x:.2f}, {goal_y:.2f}), prior at ({prior_x:.2f}, {prior_y:.2f})",
+            status="goal_dispatched",
+            extra={
+                "goal_x_world": round(goal_x, 4),
+                "goal_y_world": round(goal_y, 4),
+                "prior_distance_m": round(dist, 4),
+                "prior_fallback": True,
+            },
+        )
+        return True
+
     def _target_visible_recent(self) -> bool:
         return self.latest_detection is not None and (time.monotonic() - self.last_detection_monotonic) <= max(self.args.detection_stale_after_s, 0.1)
 
@@ -668,7 +732,18 @@ class BrainIntentExecutor(Node):
             and not self.goal_in_progress
             and (time.monotonic() - self.last_goal_dispatched_monotonic) >= max(self.args.track_replan_cooldown_s, 0.2)
         ):
-            dispatched = self._dispatch_nav_goal(reason="track_target", approach_distance_m=float(self.args.approach_distance_m))
+            approach_m = float(self.args.approach_distance_m)
+            prior_dist = self._prior_robot_distance_m()
+            # Use a tight approach distance for prior-based goals since
+            # we are driving to a known position, not a detected obstacle.
+            prior_approach_m = min(approach_m, 0.05)
+            if prior_dist is not None and prior_dist > prior_approach_m:
+                dispatched = self._dispatch_prior_approach_goal(
+                    reason="track_target",
+                    approach_distance_m=prior_approach_m,
+                )
+            else:
+                dispatched = self._dispatch_nav_goal(reason="track_target", approach_distance_m=approach_m)
             self.track_needs_replan = not dispatched and self._target_visible_recent()
 
         self._write_state(force=False)
@@ -704,6 +779,7 @@ class BrainIntentExecutor(Node):
             "active_prior": self.active_prior,
             "prior_lock_alignment_ok": self._prior_lock_alignment_ok(),
             "prior_delta_m": self._prior_delta_m(),
+            "prior_robot_distance_m": self._prior_robot_distance_m(),
         }
         if self.latest_pose is not None:
             payload["latest_robot_pose"] = asdict(self.latest_pose)

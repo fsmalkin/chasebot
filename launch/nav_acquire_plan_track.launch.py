@@ -99,6 +99,9 @@ def _build_actions(context):
             brain_cmd.append(f"--state-json {shlex.quote(brain_state_path)}")
         if brain_feedback_path:
             brain_cmd.append(f"--feedback-jsonl {shlex.quote(brain_feedback_path)}")
+        visit_runtime_path = os.environ.get("CHASECAR_VISIT_RUNTIME_PATH", "").strip()
+        if visit_runtime_path:
+            brain_cmd.append(f"--visit-runtime-json {shlex.quote(visit_runtime_path)}")
         brain_cmd.append("--use-sim-time" if _as_bool(use_sim_time) else "--no-use-sim-time")
         actions.append(ExecuteProcess(cmd=["bash", "-lc", " ".join(brain_cmd)], output="screen"))
 

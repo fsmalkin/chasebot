@@ -2195,6 +2195,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
         env["CHASECAR_SESSION_ID"] = session_id
         env["CHASECAR_BRAIN_STATE_PATH"] = to_container_repo_path(SESSION_ROOT / session_id / "visual" / "brain_state.json")
         env["CHASECAR_BRAIN_FEEDBACK_PATH"] = to_container_repo_path(SESSION_ROOT / session_id / "visual" / "brain_feedback.jsonl")
+        env["CHASECAR_VISIT_RUNTIME_PATH"] = to_container_repo_path(RUNTIME_DIR / "visit_mission_runtime.json")
         return env
 
     def _refresh_session_container_ids(self, project_name: str) -> None:
@@ -2217,97 +2218,27 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
         return str(local_path)
 
     def _run_environment_compose_up(self, project_name: str, env: Dict[str, str]) -> tuple[int, str]:
-        if self._is_docker_socket_mode():
-            self._run_docker_compose(project_name, "down", "--remove-orphans", env=env)
-            args = ["up", "-d"]
-            if self.build_on_next_start:
-                required_images = self._required_gate_image_refs(env)
-                missing_images = [image_ref for image_ref in required_images if not self._docker_image_exists(image_ref)]
-                if missing_images:
-                    args.append("--build")
-                else:
-                    # Reuse the already-built local chasecar images and avoid
-                    # triggering compose/build metadata resolution when the host
-                    # is offline or Docker Hub is unreachable.
-                    args.append("--no-build")
+        self._run_docker_compose(project_name, "down", "--remove-orphans", env=env)
+        args: list[str] = ["up", "-d"]
+        if self.build_on_next_start:
+            required_images = self._required_gate_image_refs(env)
+            missing_images = [image_ref for image_ref in required_images if not self._docker_image_exists(image_ref)]
+            if missing_images:
+                args.append("--build")
             else:
-                # Reuse the already-built local chasecar images and avoid
-                # triggering compose/build metadata resolution when the host
-                # is offline or Docker Hub is unreachable.
                 args.append("--no-build")
-            args.extend(["sim-gate", "world-viewer", "gate-stack", "operator-view"])
-            proc = self._popen_docker_compose(project_name, *args, env=env)
         else:
-            self._run_powershell(
-                "run_compose_gate.ps1",
-                "-Action",
-                "down",
-                "-ProjectName",
-                project_name,
-                "-RuntimeTarget",
-                DEFAULT_RUNTIME_TARGET,
-                "-InferenceBackend",
-                DEFAULT_INFERENCE_BACKEND,
-                "-CoreRosDistro",
-                DEFAULT_CORE_ROS_DISTRO,
-                env=env,
-            )
-            self._run_powershell(
-                "run_compose_uat.ps1",
-                "-Action",
-                "down",
-                "-ProjectName",
-                project_name,
-                "-RuntimeTarget",
-                DEFAULT_RUNTIME_TARGET,
-                "-InferenceBackend",
-                DEFAULT_INFERENCE_BACKEND,
-                "-CoreRosDistro",
-                DEFAULT_CORE_ROS_DISTRO,
-                env=env,
-            )
-
-            args = [
-                "-Action",
-                "up",
-                "-ProjectName",
-                project_name,
-                "-RuntimeTarget",
-                DEFAULT_RUNTIME_TARGET,
-                "-InferenceBackend",
-                DEFAULT_INFERENCE_BACKEND,
-                "-CoreRosDistro",
-                DEFAULT_CORE_ROS_DISTRO,
-                "-GatePerfProfile",
-                DEFAULT_GATE_PROFILE,
-                "-InferenceDevice",
-                DEFAULT_INFERENCE_DEVICE,
-                "-WorldFile",
-                DEFAULT_WORLD_FILE,
-                "-IncludeNav2Bringup",
-                "true",
-                "-IncludeBridge",
-                "false",
-                "-IncludeCmdVelRelay",
-                "true",
-                "-Headless",
-                "true",
-                "-DisplayMode",
-                "none",
-            ]
-            if self.build_on_next_start:
-                args.append("-Build")
-            proc = self._popen_powershell("run_compose_gate.ps1", *args, env=env)
+            args.append("--no-build")
+        # Only bring up sim/gate services.  In host_powershell mode the
+        # dashboard-control and brain-supervisor-shadow run on the host, so
+        # starting them inside compose would cause a port conflict on 8860.
+        args.extend(["sim-gate", "world-viewer", "gate-stack", "dashboard-utility", "operator-view"])
+        proc = self._popen_docker_compose(project_name, *args, env=env)
         self.active_env_proc = proc
         output, _ = proc.communicate()
         self.active_env_proc = None
         if returncode := proc.returncode:
             return returncode, output
-        if not self._is_docker_socket_mode():
-            operator_view_up = self._run_docker_compose(project_name, "up", "-d", "operator-view", env=env)
-            if operator_view_up.returncode != 0:
-                operator_output = (operator_view_up.stdout or "") + ("\n" + operator_view_up.stderr if operator_view_up.stderr else "")
-                return operator_view_up.returncode, operator_output.strip()
         return proc.returncode, output
 
     def _start_environment_worker(self) -> None:
@@ -3401,7 +3332,7 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "proof_verdict": verdict,
             "target_results": target_results,
             "message": "Visit mission passed" if pass_flag else "Visit mission failed",
-            "motion_evidence": bool(pass_flag or runtime.get("last_visit_result")),
+            "motion_evidence": bool(pass_flag),
             "proof_state": "completed" if pass_flag else "failed",
             "mission_phase": str(runtime.get("mission_phase", "completed" if pass_flag else "failed") or ("completed" if pass_flag else "failed")),
             "mission_status": "completed" if pass_flag else "failed",

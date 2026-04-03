@@ -537,3 +537,145 @@ def test_refresh_prior_tolerates_missing_file(monkeypatch, tmp_path):
 
     # Prior unchanged — file missing is not an error, just no update
     assert executor.active_prior == {"x": 1.0, "y": 2.0}
+
+
+def test_prior_robot_distance_m(monkeypatch):
+    """_prior_robot_distance_m returns euclidean distance from robot to prior."""
+    executor = _make_executor(monkeypatch)
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor.active_prior = {"x": 3.0, "y": 4.0}
+
+    dist = executor._prior_robot_distance_m()
+    assert dist is not None
+    assert math.isclose(dist, 5.0, abs_tol=0.01)
+
+
+def test_prior_robot_distance_m_none_without_prior(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor.active_prior = None
+
+    assert executor._prior_robot_distance_m() is None
+
+
+def test_dispatch_prior_approach_goal_computes_correct_target(monkeypatch):
+    """_dispatch_prior_approach_goal plans a goal approach_distance_m short of the prior."""
+    executor = _make_executor(monkeypatch)
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor.active_prior = {"x": 1.0, "y": 0.0}
+
+    # Stub out nav client and clock
+    executor.nav_client = SimpleNamespace(
+        server_is_ready=lambda: True,
+        send_goal_async=lambda *a, **kw: SimpleNamespace(add_done_callback=lambda cb: None),
+    )
+    executor.goal_pose_pub = SimpleNamespace(publish=lambda msg: None)
+    executor.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: None))
+
+    dispatched = executor._dispatch_prior_approach_goal(reason="track_target", approach_distance_m=0.25)
+
+    assert dispatched is True
+    assert executor.goal_in_progress is True
+    # Goal should be at 0.75 in x (1.0 - 0.25)
+    assert executor.latest_goal_pose is not None
+    assert math.isclose(executor.latest_goal_pose.pose.position.x, 0.75, abs_tol=0.01)
+    assert math.isclose(executor.latest_goal_pose.pose.position.y, 0.0, abs_tol=0.01)
+
+
+def test_dispatch_prior_approach_goal_returns_false_when_close(monkeypatch):
+    """_dispatch_prior_approach_goal returns False when already within approach distance."""
+    executor = _make_executor(monkeypatch)
+    executor.latest_pose = SimpleNamespace(x=0.9, y=0.0, yaw=0.0)
+    executor.active_prior = {"x": 1.0, "y": 0.0}
+
+    executor.nav_client = SimpleNamespace(
+        server_is_ready=lambda: True,
+    )
+
+    dispatched = executor._dispatch_prior_approach_goal(reason="track_target", approach_distance_m=0.25)
+
+    assert dispatched is False
+
+
+def test_track_replan_uses_prior_when_robot_is_far_from_prior(monkeypatch):
+    """Track replan uses prior-based goal when robot is far from prior, even if detection seems close."""
+    executor = _make_executor(monkeypatch)
+    executor.track_active = True
+    executor.track_needs_replan = True
+    executor.search_active = False
+    executor.goal_in_progress = False
+    executor.last_goal_dispatched_monotonic = 0.0
+    # Robot is at origin, prior is at (1.0, 0.0)
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor.active_prior = {"x": 1.0, "y": 0.0}
+    # Detection says ball is close — detection-based approach would dispatch a short goal
+    executor.latest_detection = _make_detection(x=0.0, z=0.5)
+    executor.last_detection_monotonic = 99.5
+
+    # Stub nav client
+    dispatched_goals = []
+
+    class FakeNavClient:
+        def server_is_ready(self):
+            return True
+
+        def wait_for_server(self, timeout_sec=0.5):
+            return True
+
+        def send_goal_async(self, goal_msg, feedback_callback=None):
+            dispatched_goals.append(goal_msg)
+            return SimpleNamespace(add_done_callback=lambda cb: None)
+
+    executor.nav_client = FakeNavClient()
+    executor.goal_pose_pub = SimpleNamespace(publish=lambda msg: None)
+    executor.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: None))
+
+    executor._on_timer()
+
+    # Should have dispatched a prior-based goal since robot is 1.0m from prior (> 0.05 prior approach)
+    assert len(dispatched_goals) == 1
+    assert executor.goal_in_progress is True
+    # Goal should be toward prior with tight 0.05 approach distance (goal at ~0.95)
+    goal_x = dispatched_goals[0].pose.pose.position.x
+    assert goal_x > 0.9, f"Expected prior-based goal near 0.95, got {goal_x}"
+    assert any("prior-based" in fb["text"] for fb in executor._published_feedback)
+
+
+def test_track_replan_uses_detection_when_close_to_prior(monkeypatch):
+    """Track replan uses detection-based goal when robot is already near the prior."""
+    executor = _make_executor(monkeypatch)
+    executor.track_active = True
+    executor.track_needs_replan = True
+    executor.search_active = False
+    executor.goal_in_progress = False
+    executor.last_goal_dispatched_monotonic = 0.0
+    # Robot is within the tight prior approach distance (0.05m)
+    executor.latest_pose = SimpleNamespace(x=0.96, y=0.0, yaw=0.0)
+    executor.active_prior = {"x": 1.0, "y": 0.0}
+    # Detection says ball is 0.5m ahead — will create a valid plan
+    executor.latest_detection = _make_detection(x=0.0, z=0.5)
+    executor.last_detection_monotonic = 99.5
+
+    dispatched_goals = []
+
+    class FakeNavClient:
+        def server_is_ready(self):
+            return True
+
+        def wait_for_server(self, timeout_sec=0.5):
+            return True
+
+        def send_goal_async(self, goal_msg, feedback_callback=None):
+            dispatched_goals.append(goal_msg)
+            return SimpleNamespace(add_done_callback=lambda cb: None)
+
+    executor.nav_client = FakeNavClient()
+    executor.goal_pose_pub = SimpleNamespace(publish=lambda msg: None)
+    executor.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: None))
+
+    executor._on_timer()
+
+    # Should use detection-based goal since prior distance (0.04m) < prior_approach (0.05m)
+    assert len(dispatched_goals) == 1
+    # Detection-based feedback, not prior-based
+    assert not any("prior-based" in fb["text"] for fb in executor._published_feedback)

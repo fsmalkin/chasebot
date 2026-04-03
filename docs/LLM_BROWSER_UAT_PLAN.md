@@ -121,7 +121,7 @@ Why it matters:
 
 - this is the first step from "proof of possibility" to "bounded capability family"
 
-### Step 3b: Target Prior Contract For Multi-Target Discrimination
+### Step 3b: Target Prior Contract For Multi-Target Discrimination — Complete
 
 Goal:
 
@@ -133,13 +133,18 @@ Problem:
 - the proposed sim-truth gate (reading `truth_state.json` from Gazebo's god-view) solves this in sim but creates a dead end for hardware
 - we should solve target discrimination in sim before loading into hardware, using a mechanism that transfers
 
-Work:
+Completed work:
 
-1. extend the visit mission's runtime state to include the expected position of the active target (from spawn coordinates in sim, from operator input or prior observation on hardware)
-2. the executor reads target priors from the mission layer's runtime state, not from sim ground truth
-3. the executor's lock gate checks whether the detected blob's world position is within tolerance of the mission-provided prior
-4. sim truth probe runs alongside as a validation oracle — it verifies that the mission's priors are correct, but the executor does not depend on it at runtime
-5. validate by confirming that prior-based locking matches ground-truth-based locking across the visit scenario family
+1. ✓ visit mission runtime state extended with `current_target_prior` (set on first target lock, cleared before each spawn)
+2. ✓ executor reads target priors from the mission layer's runtime state via `--visit-runtime-json`
+3. ✓ executor's lock gate checks detection world position against the mission-provided prior (0.50m tolerance)
+4. ✓ prior-based track approach: when depth estimation error causes detection-based goals to fall short, the executor dispatches nav goals toward the prior position with tight 0.05m approach distance
+5. ✓ visit runtime path plumbed end-to-end: `CHASECAR_VISIT_RUNTIME_PATH` env var through compose → launch → executor CLI
+6. ✓ `visit_single_ball_proof` scenario passes (0.33m visit distance, within 0.35m tolerance)
+7. ✓ bugs fixed: port 8860 conflict, 409 intent ownership guard, approach_timeout depth-error gap
+8. ✓ `visit_three_ball_sequence` passes: 3/3 balls visited on attempt 0 (0.34m, 0.33m, 0.34m)
+9. ✓ mission runner's sim-truth lock rejection bypassed in visit missions — executor's prior gate is authoritative
+10. ✓ sim truth probe is a test-time validation oracle, not a runtime dependency
 
 Outcome:
 
