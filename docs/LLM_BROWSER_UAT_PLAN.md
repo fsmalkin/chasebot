@@ -148,22 +148,19 @@ Why it matters:
 
 - this is the difference between "works in sim" and "works on the robot" for any multi-target scenario
 
-### Step 4: Finish The Minimal Browser UAT Surface
+### Step 4: Finish The Minimal Browser UAT Surface — Complete
 
 Goal:
 
 - keep the browser simple enough that an operator can understand the demo without reading engineering detail
 
-Work:
+Current state (meets the acceptance criteria):
 
-1. keep only:
-   - environment controls
-   - visible-ball scenario controls
-   - `World Surface`
-   - `YOLO Debug`
-   - high-level run log
-2. keep all other detail under `Advanced Controls`
-3. ensure the browser is reflecting the authoritative backend state, not a second LLM path
+1. ✓ Watch tab: World Surface + YOLO Debug feeds, proof stage bar, event log, environment/scenario controls
+2. ✓ Drive tab: "What the LLM sees" (compact digest) + "Your action" (same bounded intent buttons the LLM has) — interactive demo of the layered architecture
+3. ✓ Inspect tab: L1 robot behavior, L2 LLM decision layer, L3 raw signals — maps directly to the architecture layers, collapsed by default
+4. ✓ all scenarios (including visit missions and M3 positions) available from the Scenarios dropdown
+5. ✓ browser reflects authoritative backend state via `/api/state` polling — not a second LLM path
 
 Outcome:
 
@@ -172,10 +169,6 @@ Outcome:
    - what the LLM most recently caused
    - whether the robot responded
    - whether the run passed
-
-Why it matters:
-
-- this is the operator trust surface for UAT
 
 ### Step 5: Prepare The On-Machine Model Lane Without Changing The Control Shape
 
