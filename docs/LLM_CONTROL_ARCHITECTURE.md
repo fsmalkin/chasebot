@@ -179,22 +179,66 @@ The intended escalation model is:
 3. supervisor re-evaluates when the state changes meaningfully
 4. supervisor escalates only by choosing another frozen intent
 
-Examples:
-
-- no target visible:
-  - lower-level perception keeps running
-  - supervisor escalates to `search_for_target(ball)`
-- target visible and locked:
-  - supervisor escalates from search to `plan_to_target(0.25)`
-- motion already active and pursuit should continue:
-  - supervisor may choose `track_target()`
-- uncertainty, interruption, or bad state:
-  - supervisor escalates to `safe_stop()` or `abort()`
-
 Important boundary:
 
 - escalation is between bounded intents and subsystem states
 - not between arbitrary freeform model thoughts and low-level robot commands
+
+### Escalation Table
+
+The deterministic policy in `brain_supervisor_policy.py` resolves the current digest state to exactly one policy stage and preferred intent. The table is evaluated top-to-bottom; the first matching row wins.
+
+```mermaid
+graph LR
+    subgraph Escalation["Policy Stage Ladder"]
+        direction TB
+        B["blocked"] --> S["search"]
+        S --> A["acquire"]
+        A --> P["plan"]
+        P --> T["track"]
+    end
+    U["stop (unsafe)"] -.->|"any stage"| B
+```
+
+| # | Condition | Stage | Preferred Intent | Allowed Intents |
+|---|-----------|-------|-----------------|-----------------|
+| 0 | Common readiness missing (control plane, environment, session, sim gate) | `blocked` | _(none)_ | _(none)_ |
+| 1 | Robot pose not available | `blocked` | _(none)_ | _(none)_ |
+| 2 | `search_bias_active` and not locked and no active pursuit (hidden-start settle) | `search` | `search_for_target` | search, stop |
+| 3 | Unsafe reasons present (environment error, scenario error, search exhausted, pursuit without feedback) | `stop` | `safe_stop` | stop, abort (if pursuit active) |
+| 4 | Target not visible and not locked | `search` | `search_for_target` | search, stop, abort (if pursuit active) |
+| 5 | Target visible but not locked | `acquire` | `acquire_target` | acquire, stop, abort (if pursuit active) |
+| 6 | Target locked and pursuit active (goal in progress, track active, or recent goal) | `track` | `track_target` | track, stop, abort |
+| 7 | Target locked but lock stale, visibility lost, no recent feedback or goal | `search` | `search_for_target` | search, stop, abort (if pursuit active) |
+| 8 | Target locked, no active pursuit | `plan` | `plan_to_target` | plan, stop, abort (if pursuit active) |
+| 9 | Fallback: state does not match any clear bucket | `stop` | `safe_stop` | stop |
+
+### Unsafe Conditions
+
+These conditions trigger an immediate escalation to `stop`, overriding normal stage progression:
+
+| Unsafe Reason | Trigger |
+|---------------|---------|
+| `environment_error` | Environment state is `error` (note: also fails common readiness, so `blocked` takes priority) |
+| `scenario_error` | Scenario state is `error` |
+| `search_exhausted_without_lock` | Search active, rotation ≥ 6.0 rad (~1 full turn), target not visible and not locked |
+| `active_pursuit_without_target_feedback` | Pursuit active (not search), target not visible/recent, not locked, no recent feedback |
+
+### Stage Transitions In Practice
+
+Normal forward progression through a visit:
+
+1. **blocked** → environment starts, readiness keys appear
+2. **search** → target not visible, robot turns in place
+3. **acquire** → target visible, executor centers and locks
+4. **plan** → target locked, executor dispatches nav goal
+5. **track** → pursuit active, executor monitors and replans
+
+Backward transitions (re-escalation):
+
+- **track → search**: lock goes stale, visibility lost, no recent feedback
+- **acquire → search**: visible detection diverges from active truth (visit missions)
+- **any → stop**: unsafe condition detected
 
 ## Current Canonical Flow
 

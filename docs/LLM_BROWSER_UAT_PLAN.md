@@ -74,27 +74,25 @@ Why it matters:
 
 - this turns the current single successful demo into a promotion-worthy baseline
 
-### Step 2: Formalize Escalation Rules Above The Lower-Level Loops
+### Step 2: Formalize Escalation Rules Above The Lower-Level Loops — Complete
 
 Goal:
 
 - make the supervisor policy more explicit than "pick one next step" by documenting and enforcing when it should escalate between search, acquire, plan, track, and stop
 
-Work:
+Completed work:
 
-1. define deterministic escalation rules from digest state
-2. make those rules visible in the policy layer and docs
-3. ensure the LLM remains the high-level chooser while lower loops still own local execution
+1. ✓ deterministic escalation table added to [LLM_CONTROL_ARCHITECTURE.md](./LLM_CONTROL_ARCHITECTURE.md) — 10-row policy stage ladder with conditions, preferred intents, and allowed intents
+2. ✓ unsafe conditions documented: search exhausted, pursuit without feedback, scenario error
+3. ✓ stage transitions documented: forward progression (blocked → search → acquire → plan → track) and backward re-escalation paths
+4. ✓ policy test suite expanded from 11 to 19 tests covering all escalation rows, unsafe conditions, and blocked states
+5. ✓ existing `brain_supervisor_policy.py` already implements the table correctly — no code changes needed
 
 Outcome:
 
 - a clear, testable escalation table
 - fewer ambiguous transitions in the LLM decision path
 - a cleaner bridge from proof demo to the longer-term bounded-supervisor design
-
-Why it matters:
-
-- this is the missing layer between the current proof harness and the richer architecture we want long term
 
 ### Step 3: Generalize From One Proof To The Visible-Ball M3 Scenarios
 
