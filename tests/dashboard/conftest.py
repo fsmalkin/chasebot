@@ -95,6 +95,10 @@ def dashboard_client(dashboard_service) -> DashboardClient:
     return DashboardClient(base_url=BASE_URL)
 
 
+def pytest_addoption(parser):  # type: ignore[no-untyped-def]
+    parser.addoption("--run-live", action="store_true", default=False, help="Run live sim integration tests")
+
+
 def pytest_runtest_makereport(item, call):  # type: ignore[no-untyped-def]
     if call.when != "call":
         return

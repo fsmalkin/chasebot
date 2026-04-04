@@ -4,9 +4,17 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOCK_PATH = REPO_ROOT / "runtime" / "dashboard" / "dashboard_session.lock.json"
+
+# These tests require a live simulation environment (Docker, Gazebo, ROS2).
+# Run explicitly with:  pytest tests/dashboard/test_dashboard_api.py --run-live
+pytestmark = pytest.mark.skipif(
+    "not config.getoption('--run-live', default=False)",
+    reason="live sim tests: pass --run-live to execute",
+)
 
 
 def test_00_scenario_catalog_exposes_browser_demo_and_proof_fields(dashboard_client):
