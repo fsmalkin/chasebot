@@ -1149,9 +1149,23 @@ exit "$rc"
                         visited_targets=[r["target_id"] for r in target_results if r.get("pass")],
                         visit_index=visit_index,
                         mission_phase="setup",
-                        search_bias_active=not target.start_visible,
+                        search_bias_active=False,
                     )
                     append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "route_step", "target_id": target.id, "visit_index": visit_index})
+
+                    # Compute target prior from spawn position
+                    spawn_info_for_target = None
+                    anchor = self._mission_anchor_pose or {}
+                    ax = float(anchor.get("x", 0.0))
+                    ay = float(anchor.get("y", 0.0))
+                    ayaw = float(anchor.get("yaw", 0.0))
+                    tx = ax + (math.cos(ayaw) * target.forward_m) - (math.sin(ayaw) * target.lateral_m)
+                    ty = ay + (math.sin(ayaw) * target.forward_m) + (math.cos(ayaw) * target.lateral_m)
+                    spawn_info_for_target = {"target_world": {"x": tx, "y": ty, "z": target.z_m}}
+
+                    # Set prior so multi-ball executor picks the right target
+                    tw = spawn_info_for_target["target_world"]
+                    self._update_runtime_state(current_target_prior={"x": round(float(tw["x"]), 6), "y": round(float(tw["y"]), 6)})
 
                     # Rotate robot to face the selected target so the camera locks the right ball
                     current_state = self._wait_for_robot_pose(timeout_s=self.args.environment_timeout_s)
@@ -1159,7 +1173,7 @@ exit "$rc"
                     self._append_runtime_event(f"Robot rotated toward {target.label}.", key=f"rotate_toward:{target.id}")
                     time.sleep(1.0)  # let sim settle after rotation
 
-                    # Run the visit loop for this target (same as sequential mode)
+                    # Run the visit loop — all balls stay in the world, prior-based selection picks the right one
                     target_pass = False
                     attempt = 0
                     while attempt <= self.args.max_retries_per_target and not target_pass:
@@ -1180,34 +1194,6 @@ exit "$rc"
                         self.last_dispatch_monotonic = 0.0
                         target_spawned_monotonic = time.monotonic()
 
-                        current_state = self._wait_for_robot_pose(timeout_s=self.args.environment_timeout_s)
-                        # Set prior from spawn position
-                        spawn_info_for_target = None
-                        for t in self.targets:
-                            if t.id == target.id:
-                                anchor = self._mission_anchor_pose or {}
-                                ax = float(anchor.get("x", 0.0))
-                                ay = float(anchor.get("y", 0.0))
-                                ayaw = float(anchor.get("yaw", 0.0))
-                                tx = ax + (math.cos(ayaw) * t.forward_m) - (math.sin(ayaw) * t.lateral_m)
-                                ty = ay + (math.sin(ayaw) * t.forward_m) + (math.cos(ayaw) * t.lateral_m)
-                                spawn_info_for_target = {"target_world": {"x": tx, "y": ty, "z": t.z_m}}
-                                break
-                        # Set prior from spawn position so multi-ball executor picks the right target
-                        if spawn_info_for_target and isinstance(spawn_info_for_target.get("target_world"), dict):
-                            tw = spawn_info_for_target["target_world"]
-                            self._update_runtime_state(current_target_prior={"x": round(float(tw["x"]), 6), "y": round(float(tw["y"]), 6)})
-                        else:
-                            self._update_runtime_state(current_target_prior={})
-
-                        if not target.start_visible:
-                            self._append_runtime_event("Waiting for hidden-start view to settle.", key=f"hidden_settle:{target.id}:{attempt}")
-                            settled_state = self._wait_for_hidden_start_settle(self.args.hidden_start_settle_s)
-                            settled_brain = settled_state.get("brain", {}) if isinstance(settled_state.get("brain"), dict) else {}
-                            search_rotation_bias_baseline = _clean_number(settled_brain.get("search_rotation_accum_rad")) or 0.0
-                            target_visit_started_monotonic = time.monotonic()
-                            search_bias_hold_until_monotonic = target_visit_started_monotonic + self.args.hidden_start_settle_s
-
                         failure_reason = ""
                         while time.monotonic() < (target_visit_started_monotonic + self.args.max_target_runtime_s):
                             state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
@@ -1218,12 +1204,6 @@ exit "$rc"
                             aligned_target_lock = target_lock_active
 
                             if aligned_target_lock:
-                                if not target_locked_seen and spawn_info_for_target:
-                                    tw = spawn_info_for_target.get("target_world", {})
-                                    if tw.get("x") is not None and tw.get("y") is not None:
-                                        self._update_runtime_state(
-                                            current_target_prior={"x": round(float(tw["x"]), 6), "y": round(float(tw["y"]), 6)},
-                                        )
                                 target_locked_seen = True
                                 lock_seen_monotonic = lock_seen_monotonic or time.monotonic()
                                 self._append_runtime_event("Target visible and locked.", key=f"target_locked:{target.id}:{attempt}")
@@ -1287,14 +1267,7 @@ exit "$rc"
                                 )
                                 self._append_runtime_event(f"{target.label} visited.", key=f"visited:{target.id}")
                                 append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "target_visited", "target_id": target.id, "result": result})
-                                if self.args.remove_visited_targets:
-                                    self._remove_target_model(
-                                        compose_project=_clean_text(state.get("compose_project")),
-                                        world_name=_clean_text(state.get("world_name"), DEFAULT_WORLD_NAME),
-                                        model_name=self._target_model_name(target),
-                                        mission_root=mission_root,
-                                        log_stem=f"{target.id}_visited",
-                                    )
+                                # Route-planning mode: keep all balls in the world (no despawn)
                                 break
 
                             search_elapsed = time.monotonic() - target_visit_started_monotonic
