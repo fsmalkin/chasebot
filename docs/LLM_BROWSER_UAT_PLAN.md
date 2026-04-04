@@ -190,126 +190,77 @@ Outcome:
 - a realistic path toward local inference on the Orin Nano GPU without reworking the architecture
 - same digest, same action space, same policy/gating layer — only the provider backend changes
 
-## Phase 1: Harden The Headless Decision Path
+## Phase 1: Harden The Headless Decision Path — Complete
 
 ### Objective
 
 Reduce invalid provider outputs and make the LLM action path easier to trust before we expose it in the browser.
 
-### Next changes
+### Completed work
 
-1. Replace the single generic action tool with one strict tool per decision:
-   - `emit_search_for_target`
-   - `emit_acquire_target`
-   - `emit_plan_to_target`
-   - `emit_track_target`
-   - `emit_abort`
-   - `emit_safe_stop`
-   - `emit_blocked`
-2. Expose only the legal subset of tools for the current digest state.
-3. Keep `tool_choice` required and keep deterministic validation fail-closed.
-4. Treat any invalid provider output as `blocked`, never as a near-match.
+1. ✓ one strict tool per decision: `emit_search_for_target`, `emit_acquire_target`, `emit_plan_to_target`, `emit_track_target`, `emit_abort`, `emit_safe_stop`, `emit_blocked` (in `llm_provider_openai.py` `INTENT_TOOL_NAMES`)
+2. ✓ only the legal subset of tools exposed for the current digest state (`_ready_intents_from_digest`)
+3. ✓ `tool_choice: required` enforced on every provider call
+4. ✓ invalid provider output → `blocked_decision`, never a near-match (`validate_decision_against_contract`, `validate_decision_against_canonical_space`)
 
-### Acceptance
+### Acceptance — met
 
-1. No extra-arg failures in the proof path for repeated runs.
-2. Headless proof stays inside the frozen contract and canonical args every time.
-3. The proof harness passes at least 3 consecutive times on the authoritative path.
+1. ✓ no extra-arg failures in the proof path for repeated runs
+2. ✓ headless proof stays inside the frozen contract and canonical args every time
+3. ✓ proof harness passes 3+ consecutive times on the authoritative path
 
-## Phase 2: Add Proof-Focused Dashboard State
+## Phase 2: Add Proof-Focused Dashboard State — Complete
 
 ### Objective
 
 Make the browser surface show the LLM proof in a way that is easy to understand without opening engineering-heavy detail.
 
-### Dashboard additions
+### Completed work
 
-Default view should gain a small `LLM Proof` panel with:
+1. ✓ `GET /api/state` includes: `proof_state` (waiting/searching/target_locked/moving/completed/failed), `latest_proof_decision`, `latest_proof_feedback`, `proof_verdict`, `proof_artifact_dir`
+2. ✓ `llm_supervisor` section in state: `latest_decision`, `mode`, `model`, `status`, `recent_history`
+3. ✓ Watch tab default view shows proof stage bar and event log — operator can tell searching vs moving without opening Advanced
+4. ✓ Inspect tab provides decision timeline, provider/model, artifact links
 
-- current proof status:
-  - `waiting`
-  - `searching`
-  - `target locked`
-  - `moving to target`
-  - `completed`
-  - `failed`
-- latest emitted LLM decision
-- latest executor feedback
-- last evaluation time
-- session proof verdict when the run ends
+### Acceptance — met
 
-Advanced view can include:
+1. ✓ first-time operator can tell whether the system is searching or moving
+2. ✓ dashboard shows the same decision sequence that appears in artifacts
+3. ✓ default page remains simple
 
-- recent decision timeline
-- preview gate result per decision
-- provider/model name
-- artifact links
-
-### API/state additions
-
-Extend `GET /api/state` with a compact proof section:
-
-- `llm_proof.status`
-- `llm_proof.latest_decision`
-- `llm_proof.latest_feedback`
-- `llm_proof.verdict`
-- `llm_proof.artifact_dir`
-
-### Acceptance
-
-1. A first-time operator can tell whether the system is still searching or has moved on to go-to-target behavior.
-2. The dashboard shows the same decision sequence that appears in artifacts.
-3. The default page remains simple and does not require opening Advanced.
-
-## Phase 3: Create A Dedicated Browser UAT Demo Flow
+## Phase 3: Create A Dedicated Browser UAT Demo Flow — Complete
 
 ### Objective
 
 Use the dashboard as the operator-facing proof surface, not as a second execution path.
 
-### Demo flow
+### Completed demo flow
 
-1. Open Docker Desktop.
-2. Start the Chasecar app.
-3. Open the dashboard.
-4. Start the environment.
-5. Run the dedicated turn-then-go proof scenario.
-6. Watch the robot:
-   - turn until the ball becomes visible
-   - then move toward it
-7. Observe the proof panel update through the same sequence.
+1. ✓ Open Docker Desktop → Start the Chasecar app → Open dashboard at `http://localhost:8860/`
+2. ✓ Start the environment (Start button or `POST /api/env/start`)
+3. ✓ Run LLM Turn + Go scenario from Scenarios dropdown
+4. ✓ Watch the robot turn until the ball is visible, then move toward it
+5. ✓ Proof panel updates through waiting → searching → target_locked → moving → completed
 
-### Browser UAT surface requirements
+### Acceptance — met
 
-The operator should be able to answer these questions without opening Advanced:
+1. ✓ browser shows `search_for_target(ball)` → `acquire_target(ball)` → `plan_to_target(0.25)` → `track_target()` progression
+2. ✓ robot visibly turns before moving
+3. ✓ world and topdown panes show the same sequence as the proof panel
+4. ✓ final browser state and session artifacts agree on pass/fail
 
-1. Is the LLM path idle, searching, or moving?
-2. What decision was emitted most recently?
-3. Did the robot actually respond to that decision?
-4. Did the demo finish successfully?
+## Phase 4: Browser UAT Readiness Gate — Complete
 
-### Acceptance
+All gate criteria met:
 
-1. During the run, the browser clearly shows:
-   - `search_for_target(ball)`
-   - then `plan_to_target(0.25)` or equivalent bounded move progression
-   - then motion completion or steady tracking state
-2. The robot visibly turns before it moves.
-3. The world and topdown panes show the same sequence as the proof panel.
-4. The final browser state and session artifacts agree on pass/fail.
-
-## Phase 4: Browser UAT Readiness Gate
-
-Promote to operator-facing UAT only when all of the following are true:
-
-1. Headless proof is green for at least 3 consecutive runs.
-2. No invalid provider-output path escapes fail-closed handling.
-3. The dashboard default view shows the proof sequence clearly.
-4. The same-session artifact bundle contains:
-   - decision history
-   - executor feedback
-   - proof verdict
-   - visual evidence
+1. ✓ headless proof green for 3+ consecutive runs (multiple sessions)
+2. ✓ no invalid provider-output path escapes fail-closed handling
+3. ✓ dashboard default view shows proof sequence clearly
+4. ✓ same-session artifact bundle contains:
+   - `command_history.jsonl` (decision history)
+   - `brain_feedback.jsonl` + `brain_state.json` (executor feedback)
+   - `scenarios/llm_turn_then_go_proof.json` (proof verdict)
+   - `raw_camera.mp4`, `world_stream.mp4`, `topdown_telemetry.mp4`, `yolo_debug.mp4` (visual evidence)
 
 ## Clear Exit Outcomes
 
