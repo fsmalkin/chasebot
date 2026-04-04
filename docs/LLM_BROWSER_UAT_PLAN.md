@@ -307,6 +307,12 @@ This plan is meant to support, but not prematurely expand into, the broader long
 - explicit escalation between search, acquire, plan, track, and safe-stop behaviors
 - eventual provider flexibility between Wi-Fi/cloud and local inference
 - operator-visible trust and evidence before any broader autonomy claims
+- outdoor field deployment for sports ball retrieval (grass/turf, real perception, weather variability)
+
+The route planning phase is the bridge: it proves multi-target planning logic
+in sim using the same decision shape that transfers to outdoor hardware. If a
+lightweight model can handle route planning in sim, the same model runs on the
+robot's Orin Nano GPU on the field — no cloud dependency, no latency penalty.
 
 It does not commit us yet to:
 
@@ -320,10 +326,28 @@ It does not commit us yet to:
 To keep the demo honest and legible, this phase does not include:
 
 - freeform language control from the browser
-- multi-step mission planning
 - autonomous environment lifecycle control by the LLM
 - end-to-end VLA control
-- broader long-term roadmap commitments
+
+## Next Phase: LLM Route Planning and Model Evaluation
+
+The single-target UAT phase is complete. The next phase promotes the LLM from
+reactive supervisor to route planner, then evaluates lightweight models for
+on-robot inference. This is the sim proving ground for the end-state use case:
+a robot on a grass or turf field retrieving scattered sports balls after practice.
+
+See [ROADMAP_2026_H2.md](./ROADMAP_2026_H2.md) for the full 3-step plan:
+
+1. **LLM-planned multi-target route** — LLM decides visit order for 3+ balls based on visibility and proximity; same frozen contract and deterministic lower layers
+2. **Stabilize on current GPT provider** — 5+ consecutive green runs, baseline quality scorecard (path length, visit order optimality, time)
+3. **Model evaluation for on-robot inference** — replay GPT decision traces through lightweight candidates (Phi-3-mini, Llama-3.2-3B, Qwen-2.5-3B) on Orin Nano GPU; live end-to-end proof with top candidate
+
+### New capabilities needed
+
+- `visit_target(target_id)` intent — high-level planning intent for target selection
+- multi-target digest — remaining targets, visited targets, per-target visibility and estimated distance
+- route planning policy stage above the existing search/acquire/plan/track stages
+- `visit_route_planning` dashboard scenario
 
 ## Recommended Execution Order
 

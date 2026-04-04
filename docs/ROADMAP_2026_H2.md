@@ -124,3 +124,79 @@ Status update as of April 4, 2026:
 4. autonomous environment lifecycle management by the LLM
 5. pivoting the roadmap slice to end-to-end VLA control
 6. replacing deterministic perception, planning, or execution loops with model-generated low-level action
+
+## Next Roadmap Slice: LLM Route Planning and Model Evaluation
+
+The bounded single-target supervisor is complete and UAT-ready. The next slice
+promotes the LLM from reactive supervisor to route planner — giving it real
+planning authority over multi-target sequencing — then evaluates whether a
+lightweight model can replace the cloud provider.
+
+### Step 1: LLM-Planned Multi-Target Route
+
+Goal: the LLM decides which target to visit next based on visibility, proximity,
+and progress — not a predetermined sequence.
+
+This is the sim analogue of the end-state use case: a robot on a grass or turf
+field retrieving scattered sports balls (e.g., soccer balls after practice). The
+LLM plans which ball to collect next based on what it can see and where it is.
+Sim proves the planning logic; the same decision shape transfers to outdoor
+hardware with real perception.
+
+Scenario:
+
+- 3 balls spawned at known positions (same positions as `visit_three_ball_sequence`)
+- the LLM sees the multi-target digest: which targets remain, which are visible, robot pose
+- the LLM emits `visit_target(id)` to select the next target, then the existing search/acquire/plan/track policy handles execution
+- success = all 3 targets visited; quality = total distance traveled, time to complete
+
+What changes:
+
+1. extend the frozen intent contract with `visit_target(target_id)` — a high-level planning intent that selects the next target
+2. extend the state digest with multi-target awareness: remaining targets, visited targets, per-target visibility and estimated distance
+3. add a route planning policy stage above the existing search/acquire/plan/track stages
+4. add a `visit_route_planning` scenario to the dashboard
+5. prove the LLM picks a reasonable visit order (e.g., nearest-visible-first) and completes all targets
+
+Acceptance:
+
+1. LLM-planned route completes all 3 targets
+2. visit order is demonstrably non-random (nearest-visible or similar heuristic)
+3. same frozen contract, same deterministic lower layers, same safety guarantees
+4. proof passes 3+ consecutive times
+
+### Step 2: Stabilize on Current Provider (GPT)
+
+Goal: soak the route planning scenario on the current GPT model until it is
+repeatable and the decision quality is measurable.
+
+Work:
+
+1. run 5+ consecutive route planning proofs on `container_kilted`
+2. record decision traces for replay: state digest → LLM decision at each step
+3. define quality metrics: total path length, visit order optimality, time to complete, number of wasted intents
+4. establish a baseline scorecard for the GPT provider
+
+Acceptance:
+
+1. 5/5 consecutive green route planning runs
+2. baseline scorecard with quality metrics for GPT
+
+### Step 3: Model Evaluation for On-Robot Inference
+
+Goal: determine whether a lightweight model can make comparable route planning
+decisions on the Orin Nano GPU.
+
+Work:
+
+1. replay the recorded GPT decision traces through candidate providers using the existing `llm_provider_replay_compare.py` tool
+2. candidate models: small open-weight models that fit Orin Nano 8GB (e.g., Phi-3-mini, Llama-3.2-3B, Qwen-2.5-3B)
+3. compare: decision agreement rate, intent validity rate, visit order quality, inference latency
+4. for the top candidate: run the live route planning scenario end-to-end with `LocalModelProvider`
+5. if no candidate meets quality threshold, document the gap and keep cloud inference as the primary path
+
+Acceptance:
+
+1. replay comparison report for at least 3 candidate models
+2. live end-to-end proof with the top candidate (or documented gap analysis)
+3. decision on whether to proceed with local inference or stay on cloud for the hardware POC
