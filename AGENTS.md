@@ -40,6 +40,13 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | GUI rehearsal | `scripts/run_pre_llm_gui_rehearsal.ps1 -ExecutionLane container_kilted -CoreRosDistro kilted -RuntimeTarget robot_fidelity_orin -OpenFeedViewers false -VisualSurface browser_dashboard` |
 | Visual parity check | `scripts/run_visual_parity_check.ps1 -SessionId <id> -HeadlessSummaryPath <path> -GuiSummaryPath <path>` |
 | Recorded visual demo | `scripts/run_recorded_visual_demo.ps1 -Milestone 3 -RuntimeTarget robot_fidelity_orin -SessionId <id>` |
+| LLM recommend | `scripts/run_brain_llm_recommend.ps1 -RuntimeTarget robot_fidelity_orin` |
+| Turn-then-go proof | `scripts/run_llm_turn_then_go_proof.ps1` |
+| Turn-then-go repeat | `scripts/run_llm_turn_then_go_repeatability.ps1` |
+| Visible ball campaign | `scripts/run_llm_visible_ball_campaign.ps1` |
+| Visit mission repeat | `scripts/run_visit_mission_repeatability.ps1` |
+| Dashboard service | `scripts/run_dashboard_service.ps1` |
+| Dashboard validation | `scripts/run_dashboard_validation.ps1` |
 
 ## Compose Profiles
 
@@ -93,3 +100,87 @@ Same-session visual baseline:
 - `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
 - `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
 - `artifacts/session/20260312T013442Z/parity_summary.json`
+
+## Testing
+
+Run the test suite before committing changes:
+
+```
+pytest tests/
+```
+
+Key test modules and what they cover:
+
+| Module | Covers |
+|--------|--------|
+| `tests/test_brain_supervisor.py` | Supervisor loop observe-choose-dispatch cycle |
+| `tests/test_brain_supervisor_policy.py` | Deterministic policy and escalation rules |
+| `tests/test_brain_intent_executor.py` | Intent executor dispatch and readiness gating |
+| `tests/test_brain_llm_recommender.py` | LLM recommender provider integration |
+| `tests/test_llm_demo_campaign_helpers.py` | Campaign aggregation and trend helpers |
+| `tests/test_llm_turn_then_go_proof_runner.py` | Turn-then-go proof runner logic |
+| `tests/test_visit_mission_runner.py` | Visit mission sequencing |
+| `tests/test_visit_mission_campaign_helpers.py` | Visit mission campaign helpers |
+| `tests/dashboard/test_dashboard_api.py` | Dashboard HTTP API |
+| `tests/dashboard/test_world_stream_freshness.py` | World stream liveness checks |
+
+Dashboard end-to-end validation uses Playwright:
+
+```
+cd dashboard_validation && npx playwright test
+```
+
+## Frozen Contracts
+
+Files under `runtime/contracts/` are versioned and may carry a freeze status:
+
+| Contract | File |
+|----------|------|
+| LLM control contract | `runtime/contracts/llm_control_contract.yaml` |
+| Message schema manifest | `runtime/contracts/message_schema_manifest.yaml` |
+| Isaac bridge allowlist | `runtime/contracts/isaac_bridge_allowlist.yaml` |
+
+Rules:
+
+1. If `contract_status` is `frozen_pre_llm` or any `frozen_*` value, do **not** modify the contract without bumping the `version` field and documenting the rationale.
+2. Adding new intents or removing existing ones from the LLM control contract changes the safety boundary between the LLM layer and low-level execution — treat this as a breaking change.
+3. The `freeze_basis` block in `llm_control_contract.yaml` records which validated artifacts justified the freeze. Do not alter it retroactively.
+
+## LLM Brain Layer
+
+The LLM supervisor stack sits above the frozen contract boundary:
+
+- **State digest**: `scripts/brain_state_digest.py` — compact fixed-shape state for LLM consumption.
+- **Recommender**: `scripts/brain_llm_recommender.py` — calls a provider to choose the next intent.
+- **Providers**: `scripts/llm_provider_base.py`, `llm_provider_local.py`, `llm_provider_openai.py`, `llm_provider_replay_compare.py`.
+- **Supervisor loop**: `scripts/brain_supervisor_loop.py` — observe → recommend → validate → dispatch.
+- **Policy gate**: `scripts/brain_supervisor_policy.py` — deterministic validation between LLM output and executor.
+- **Executor**: `scripts/brain_intent_executor.py` — dispatches validated intents to ROS subsystems.
+
+Architecture details: [docs/LLM_CONTROL_ARCHITECTURE.md](docs/LLM_CONTROL_ARCHITECTURE.md).
+
+Key constraint: the LLM never bypasses deterministic gating. All recommended intents pass through the policy gate before reaching the executor.
+
+## Dashboard
+
+The browser dashboard is part of the operator control plane:
+
+- **Service**: `scripts/dashboard_service.py` (start via `scripts/run_dashboard_service.ps1`).
+- **Frontend**: `runtime/dashboard/browser_dashboard.html` + `browser_dashboard.js`.
+- **Runtime state**: `runtime/dashboard/dashboard_service_state.json`, `llm_supervisor_state.json`.
+- **Validation**: `dashboard_validation/` (Playwright tests via `scripts/run_dashboard_validation.ps1`).
+
+The dashboard surfaces `phase`, `target_id`, and `target_transition_active` status chips during multi-target operation. Parity checks require the dashboard to be ready.
+
+## Documentation Update Policy
+
+When making changes that affect the items below, update the relevant docs **in the same commit**:
+
+1. **Adding or removing a script** in `scripts/` → update the Key Commands table in this file and the relevant section in `docs/ACTIVE_WORKFLOW.md`.
+2. **Adding or removing a UAT mode** → update the UAT Orchestrator Modes list in `docs/ACTIVE_WORKFLOW.md` and the mode list in this file.
+3. **Changing artifact output paths or adding new artifact types** → update Artifact Contracts in `docs/ACTIVE_WORKFLOW.md`.
+4. **Adding or removing an intent** in the LLM control contract → update the LLM Brain Layer section in this file and `docs/LLM_CONTROL_ARCHITECTURE.md`.
+5. **Adding or removing a launch file** → update Canonical Launch Surfaces in `docs/ACTIVE_WORKFLOW.md`.
+6. **Changing contract schema or version** → update the Frozen Contracts section in this file.
+
+If you are unsure whether a doc needs updating, check this file and `docs/ACTIVE_WORKFLOW.md` for references to the changed path or name.
