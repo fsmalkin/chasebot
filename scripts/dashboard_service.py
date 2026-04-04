@@ -32,6 +32,21 @@ from llm_supervisor_core import read_jsonl as read_jsonl_lines
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
+
+# Load .env from repo root so API keys are available regardless of how
+# the dashboard is launched (CLI, IDE, background process, etc.).
+_dotenv_path = REPO_ROOT / ".env"
+if _dotenv_path.is_file():
+    with _dotenv_path.open(encoding="utf-8", errors="ignore") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith("#") or "=" not in _line:
+                continue
+            _key, _, _val = _line.partition("=")
+            _key = _key.strip()
+            _val = _val.strip().strip("'\"")
+            if _key and _key not in os.environ:
+                os.environ[_key] = _val
 RUNTIME_DIR = REPO_ROOT / "runtime" / "dashboard"
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 STATE_PATH = RUNTIME_DIR / "dashboard_service_state.json"
