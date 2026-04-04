@@ -132,6 +132,7 @@ class BrainIntentExecutor(Node):
 
         self.feedback_count = 0
         self.last_feedback_text = ""
+        self.last_feedback_status = ""
         self.last_feedback_utc = ""
 
         self.last_intent = ""
@@ -161,6 +162,13 @@ class BrainIntentExecutor(Node):
         self.prior_lock_tolerance_m = max(float(args.prior_lock_tolerance_m), 0.01)
         self.active_prior: dict[str, float] | None = None
         self.last_prior_read_monotonic = 0.0
+
+        # Visit lifecycle state — executor owns the full search→lock→approach→report cycle
+        self.visit_active = False
+        self.visit_target_id = ""
+        self.visit_started_monotonic = 0.0
+        self.visit_locked = False
+        self.visit_approach_dispatched = False
 
         self.last_inbox_mtime = 0.0
 
@@ -351,6 +359,7 @@ class BrainIntentExecutor(Node):
         self.feedback_pub.publish(msg)
         self.feedback_count += 1
         self.last_feedback_text = text
+        self.last_feedback_status = status
         self.last_feedback_utc = utc_now()
         if self.feedback_history_path is not None:
             payload = {
@@ -438,6 +447,16 @@ class BrainIntentExecutor(Node):
             status="locked",
             extra={"target_class": target_class},
         )
+        # Visit lifecycle: auto-dispatch approach goal on lock
+        if self.visit_active and not self.visit_locked:
+            self.visit_locked = True
+            self._dispatch_nav_goal(
+                reason=f"visit_target({self.visit_target_id})",
+                approach_distance_m=float(self.args.approach_distance_m),
+            )
+            self.visit_approach_dispatched = True
+            self.track_active = True
+            self.track_needs_replan = True
 
     def _dispatch_nav_goal(self, *, reason: str, approach_distance_m: float) -> bool:
         if self.latest_detection is None or not self._target_visible_recent():
@@ -537,6 +556,17 @@ class BrainIntentExecutor(Node):
             return
         if status == 4:
             self._publish_feedback("nav goal reached successfully", status="goal_succeeded")
+            # Visit lifecycle: goal succeeded — check if close enough to prior
+            if self.visit_active and self.visit_locked:
+                prior_dist = self._prior_robot_distance_m()
+                if prior_dist is not None and prior_dist <= self.prior_lock_tolerance_m:
+                    self._end_visit(
+                        status="visit_target_reached",
+                        reason=f"{self.visit_target_id} reached",
+                        extra={"distance_m": round(prior_dist, 4)},
+                    )
+                    return
+                # Not close enough yet — keep tracking for replan
         elif status == 5:
             reason = self.pending_cancel_reason or "nav goal canceled"
             self._publish_feedback(reason, status="goal_canceled")
@@ -710,6 +740,8 @@ class BrainIntentExecutor(Node):
         self._cancel_goal("abort: canceled active behavior")
         self._reset_pursuit_state()
         self._publish_stop()
+        if self.visit_active:
+            self._end_visit(status="visit_target_failed", reason=f"{self.visit_target_id} aborted", extra={"failure_reason": "abort"})
         self._publish_feedback("abort: active behavior canceled", status="aborted")
 
     def _handle_visit_target_intent(self, args_payload: dict[str, Any]) -> None:
@@ -720,6 +752,8 @@ class BrainIntentExecutor(Node):
         if self.visit_runtime_path is None:
             self._publish_feedback("visit_target: blocked because visit runtime path is not configured", status="blocked")
             return
+
+        # Write selection to runtime file (backward compat)
         try:
             runtime: dict[str, Any] = {}
             if self.visit_runtime_path.exists():
@@ -733,16 +767,61 @@ class BrainIntentExecutor(Node):
         except Exception as exc:
             self._publish_feedback(f"visit_target: failed to write selection: {exc}", status="error")
             return
+
+        # Reset all pursuit state and begin autonomous visit lifecycle
+        self._cancel_goal("visit_target: resetting for new target")
+        self._reset_pursuit_state()
+        self._publish_stop()
+
+        # Force-read prior (bypass cooldown)
+        self.last_prior_read_monotonic = 0.0
+        self._refresh_target_prior()
+
+        # Set visit lifecycle state
+        self.visit_active = True
+        self.visit_target_id = target_id
+        self.visit_started_monotonic = time.monotonic()
+        self.visit_locked = False
+        self.visit_approach_dispatched = False
+
+        # Begin search immediately
+        if self.latest_pose is None:
+            self._publish_feedback(
+                f"visit_target: searching for {target_id} (waiting for odom)",
+                status="visit_target_searching",
+                extra={"target_id": target_id},
+            )
+        else:
+            initial_state = "centering" if (self._target_visible_recent() and self._prior_lock_alignment_ok()) else "rotating"
+            self._begin_search_motion(target_class="ball", search_state=initial_state)
+            self._publish_feedback(
+                f"visit_target: searching for {target_id}",
+                status="visit_target_searching",
+                extra={"target_id": target_id},
+            )
+
+    def _end_visit(self, *, status: str, reason: str, extra: dict[str, Any] | None = None) -> None:
+        """End the active visit lifecycle and publish result feedback."""
+        target_id = self.visit_target_id
+        self.visit_active = False
+        self.visit_target_id = ""
+        self.visit_locked = False
+        self.visit_approach_dispatched = False
+        payload: dict[str, Any] = {"target_id": target_id}
+        if extra:
+            payload.update(extra)
         self._publish_feedback(
-            f"visit_target: selected {target_id}",
-            status="visit_target_selected",
-            extra={"target_id": target_id},
+            f"visit_target: {reason}",
+            status=status,
+            extra=payload,
         )
 
     def _handle_safe_stop_intent(self) -> None:
         self._cancel_goal("safe_stop: canceled active behavior")
         self._reset_pursuit_state()
         self._publish_stop()
+        if self.visit_active:
+            self._end_visit(status="visit_target_failed", reason=f"{self.visit_target_id} interrupted by safe_stop", extra={"failure_reason": "safe_stop"})
         self._publish_feedback("safe_stop: robot stopped", status="stopped")
 
     def _on_intent(self, msg: String) -> None:
@@ -816,6 +895,27 @@ class BrainIntentExecutor(Node):
     def _on_timer(self) -> None:
         self._check_intent_inbox()
         self._refresh_target_prior()
+
+        # Visit lifecycle: start search once odom arrives (deferred from _handle_visit_target_intent)
+        if self.visit_active and not self.search_active and not self.visit_locked and self.latest_pose is not None:
+            if not self.visit_approach_dispatched:
+                initial_state = "centering" if (self._target_visible_recent() and self._prior_lock_alignment_ok()) else "rotating"
+                self._begin_search_motion(target_class="ball", search_state=initial_state)
+
+        # Visit lifecycle: check overall timeout
+        if self.visit_active:
+            visit_elapsed = time.monotonic() - self.visit_started_monotonic
+            if visit_elapsed >= max(self.args.search_timeout_s + 45.0, 60.0):
+                reason = "approach_timeout" if self.visit_locked else "search_timeout"
+                self._cancel_goal("visit_target: timed out")
+                self._reset_pursuit_state()
+                self._publish_stop()
+                self._end_visit(
+                    status="visit_target_failed",
+                    reason=f"{self.visit_target_id} failed: {reason}",
+                    extra={"failure_reason": reason, "elapsed_s": round(visit_elapsed, 1)},
+                )
+
         if self.search_active:
             elapsed = time.monotonic() - self.search_started_monotonic
             if self._target_ready_for_lock():
@@ -828,6 +928,9 @@ class BrainIntentExecutor(Node):
                 self.search_state = "failed"
                 self._publish_stop()
                 self._publish_feedback("search_for_target: full scan completed without target lock", status="search_failed")
+                # Visit lifecycle: restart search automatically (overall visit timeout handles failure)
+                if self.visit_active and not self.visit_locked:
+                    self._begin_search_motion(target_class="ball", search_state="rotating")
             else:
                 twist = Twist()
                 bearing = self._latest_detection_bearing_rad()
@@ -865,17 +968,25 @@ class BrainIntentExecutor(Node):
         ):
             approach_m = float(self.args.approach_distance_m)
             prior_dist = self._prior_robot_distance_m()
-            # Use a tight approach distance for prior-based goals since
-            # we are driving to a known position, not a detected obstacle.
-            prior_approach_m = min(approach_m, 0.05)
-            if prior_dist is not None and prior_dist > prior_approach_m:
-                dispatched = self._dispatch_prior_approach_goal(
-                    reason="track_target",
-                    approach_distance_m=prior_approach_m,
+            # Visit lifecycle: check proximity during tracking
+            if self.visit_active and self.visit_locked and prior_dist is not None and prior_dist <= approach_m:
+                self._end_visit(
+                    status="visit_target_reached",
+                    reason=f"{self.visit_target_id} reached",
+                    extra={"distance_m": round(prior_dist, 4)},
                 )
             else:
-                dispatched = self._dispatch_nav_goal(reason="track_target", approach_distance_m=approach_m)
-            self.track_needs_replan = not dispatched and self._target_visible_recent()
+                # Use a tight approach distance for prior-based goals since
+                # we are driving to a known position, not a detected obstacle.
+                prior_approach_m = min(approach_m, 0.05)
+                if prior_dist is not None and prior_dist > prior_approach_m:
+                    dispatched = self._dispatch_prior_approach_goal(
+                        reason="track_target",
+                        approach_distance_m=prior_approach_m,
+                    )
+                else:
+                    dispatched = self._dispatch_nav_goal(reason="track_target", approach_distance_m=approach_m)
+                self.track_needs_replan = not dispatched and self._target_visible_recent()
 
         self._write_state(force=False)
 
@@ -903,6 +1014,7 @@ class BrainIntentExecutor(Node):
             "last_intent": self.last_intent,
             "last_intent_args": self.last_intent_args,
             "last_feedback_text": self.last_feedback_text,
+            "last_feedback_status": self.last_feedback_status,
             "last_feedback_utc": self.last_feedback_utc,
             "feedback_count": self.feedback_count,
             "detection_burst_count": self.detection_burst_count,
@@ -911,6 +1023,8 @@ class BrainIntentExecutor(Node):
             "prior_lock_alignment_ok": self._prior_lock_alignment_ok(),
             "prior_delta_m": self._prior_delta_m(),
             "prior_robot_distance_m": self._prior_robot_distance_m(),
+            "visit_active": self.visit_active,
+            "visit_target_id": self.visit_target_id,
         }
         if self.latest_pose is not None:
             payload["latest_robot_pose"] = asdict(self.latest_pose)

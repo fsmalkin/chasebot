@@ -1042,6 +1042,18 @@ exit "$rc"
         )
         return route
 
+    def _visit_phase_from_brain(self, brain: dict[str, Any]) -> str:
+        """Derive mission phase from executor brain state during autonomous visit."""
+        if bool(brain.get("visit_active", False)):
+            if bool(brain.get("track_active", False)):
+                return "track"
+            if bool(brain.get("target_locked", False)):
+                return "plan"
+            if bool(brain.get("search_active", False)):
+                return "search"
+            return "search"
+        return "idle"
+
     def _mission_phase_for_decision(self, decision: dict[str, Any], state: dict[str, Any]) -> str:
         if self.runtime_state.get("mission_status") in {"completed", "failed"}:
             return str(self.runtime_state.get("mission_status"))
@@ -1142,9 +1154,6 @@ exit "$rc"
                     target = targets_by_id[selected_id]
                     remaining_ids = [tid for tid in remaining_ids if tid != selected_id]
                     self._append_runtime_event(f"Route step {visit_index}: {target.label}.", category="decision", key=f"route_step:{target.id}")
-                    # Reset executor state between targets so stale lock/goal doesn't carry over
-                    self._issue_safe_stop()
-                    self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
 
                     self._update_runtime_state(
                         route_planning_active=False,
@@ -1157,196 +1166,89 @@ exit "$rc"
                     )
                     append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "route_step", "target_id": target.id, "visit_index": visit_index})
 
-                    # Compute target prior from spawn position
-                    spawn_info_for_target = None
+                    # Compute and write target prior from spawn position
                     anchor = self._mission_anchor_pose or {}
                     ax = float(anchor.get("x", 0.0))
                     ay = float(anchor.get("y", 0.0))
                     ayaw = float(anchor.get("yaw", 0.0))
                     tx = ax + (math.cos(ayaw) * target.forward_m) - (math.sin(ayaw) * target.lateral_m)
                     ty = ay + (math.sin(ayaw) * target.forward_m) + (math.cos(ayaw) * target.lateral_m)
-                    spawn_info_for_target = {"target_world": {"x": tx, "y": ty, "z": target.z_m}}
+                    self._update_runtime_state(current_target_prior={"x": round(tx, 6), "y": round(ty, 6)})
 
-                    # Set prior so multi-ball executor picks the right target
-                    tw = spawn_info_for_target["target_world"]
-                    self._update_runtime_state(current_target_prior={"x": round(float(tw["x"]), 6), "y": round(float(tw["y"]), 6)})
-
-                    # Rotate robot to face the selected target so the camera locks the right ball
+                    # Rotate robot to face target
                     current_state = self._wait_for_robot_pose(timeout_s=self.args.environment_timeout_s)
                     self._rotate_robot_toward_target(current_state, target)
                     self._append_runtime_event(f"Robot rotated toward {target.label}.", key=f"rotate_toward:{target.id}")
-                    time.sleep(1.0)  # let sim settle after rotation
+                    time.sleep(1.0)
 
-                    # Run the visit loop — all balls stay in the world, prior-based selection picks the right one
+                    # Dispatch visit_target — executor owns the full search→lock→approach→report lifecycle
+                    dispatch_status, dispatch_payload = dispatch_intent(
+                        self.dashboard_url, "visit_target", {"target_id": target.id}, timeout_s=self.args.timeout_s,
+                    )
+                    if dispatch_status != 202 or not bool(dispatch_payload.get("accepted", False)):
+                        self._append_runtime_event(f"visit_target dispatch rejected for {target.id}.", category="error", key=f"dispatch_rejected:{target.id}")
+
+                    # Poll for executor visit result
                     target_pass = False
-                    attempt = 0
-                    while attempt <= self.args.max_retries_per_target and not target_pass:
-                        target_locked_seen = False
-                        nav_activity_seen = False
-                        move_started = False
-                        first_dispatched_intent = ""
-                        owned_intent = ""
-                        owned_intent_args: dict[str, Any] = {}
-                        owned_intent_started_monotonic = 0.0
-                        search_rotation_bias_baseline = 0.0
-                        target_visit_started_monotonic = time.monotonic()
-                        search_bias_hold_until_monotonic = target_visit_started_monotonic
-                        lock_seen_monotonic: float | None = None
-                        goal_success_seen_monotonic: float | None = None
-                        self.last_state_hash = ""
-                        self.last_decision_signature = ""
-                        self.last_dispatch_monotonic = 0.0
-                        target_spawned_monotonic = time.monotonic()
+                    visit_deadline = time.monotonic() + self.args.max_target_runtime_s
+                    while time.monotonic() < visit_deadline:
+                        state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
+                        brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
+                        self._update_runtime_state(
+                            mission_phase=self._visit_phase_from_brain(brain),
+                            proof_state=self._proof_state_for_state(state),
+                            latest_feedback=_clean_text(brain.get("last_feedback_text") or state.get("last_feedback")),
+                            current_target_id=target.id,
+                        )
 
-                        failure_reason = ""
-                        while time.monotonic() < (target_visit_started_monotonic + self.args.max_target_runtime_s):
-                            state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
-                            brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
-                            outcome = state.get("outcome", {}) if isinstance(state.get("outcome"), dict) else {}
-                            perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
-                            target_lock_active = bool(brain.get("target_locked", False))
-                            aligned_target_lock = target_lock_active
-
-                            if aligned_target_lock:
-                                target_locked_seen = True
-                                lock_seen_monotonic = lock_seen_monotonic or time.monotonic()
-                                self._append_runtime_event("Target visible and locked.", key=f"target_locked:{target.id}:{attempt}")
-                            search_rotation = _clean_number(brain.get("search_rotation_accum_rad")) or 0.0
-                            if bool(self.runtime_state.get("search_bias_active", False)) and search_bias_release_ready(
-                                target_locked_seen=target_locked_seen,
-                                search_active=bool(brain.get("search_active", False)),
-                                search_rotation_accum_rad=search_rotation,
-                                search_rotation_baseline_rad=search_rotation_bias_baseline,
-                                hold_until_monotonic=search_bias_hold_until_monotonic,
-                            ):
-                                self._update_runtime_state(search_bias_active=False)
-                            if bool(brain.get("goal_in_progress", False)) or bool(outcome.get("nav_goal_recent", False)):
-                                nav_activity_seen = True
-                            if nav_activity_seen and not move_started and (
-                                bool(outcome.get("cmd_vel_recent", False))
-                                or bool(brain.get("goal_in_progress", False))
-                                or bool(outcome.get("nav_goal_recent", False))
-                            ):
-                                move_started = True
-                                self._append_runtime_event("Robot began move-to-target.", key=f"move_started:{target.id}:{attempt}")
-                            if feedback_indicates_goal_success(state) and goal_success_seen_monotonic is None:
-                                goal_success_seen_monotonic = time.monotonic()
-
-                            self._update_runtime_state(
-                                mission_phase=self._mission_phase_for_decision(self.runtime_state.get("latest_decision", {}), state),
-                                proof_state=self._proof_state_for_state(state),
-                                latest_feedback=_clean_text(brain.get("last_feedback_text") or state.get("last_feedback")),
-                                current_target_id=target.id,
-                            )
-
-                            if visit_success(
-                                state,
-                                target_locked_seen=target_locked_seen,
-                                nav_activity_seen=nav_activity_seen,
-                                visit_tolerance_m=target.visit_tolerance_m,
-                                elapsed_since_spawn_s=(time.monotonic() - target_spawned_monotonic),
-                                min_dwell_s=target.min_dwell_s,
-                            ):
-                                target_pass = True
-                                distance_m = mission_truth_distance_m(state)
-                                result = {
-                                    "target_id": target.id,
-                                    "label": target.label,
-                                    "attempt": attempt,
-                                    "pass": True,
-                                    "visit_distance_m": distance_m,
-                                    "target_locked_seen": target_locked_seen,
-                                    "nav_activity_seen": nav_activity_seen,
-                                    "started_visible": target.start_visible,
-                                    "llm_selected": True,
-                                }
-                                target_results.append(result)
-                                write_json(target_results_path, {"targets": target_results})
-                                remaining_ids = [tid for tid in remaining_ids if tid != target.id]
-                                self._update_runtime_state(
-                                    mission_phase="advance",
-                                    visited_targets=[item["target_id"] for item in target_results if item.get("pass")],
-                                    remaining_targets=remaining_ids,
-                                    last_visit_result=result,
-                                )
-                                self._append_runtime_event(f"{target.label} visited.", key=f"visited:{target.id}")
-                                append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "target_visited", "target_id": target.id, "result": result})
-                                # Route-planning mode: keep all balls in the world (no despawn)
-                                break
-
-                            search_elapsed = time.monotonic() - target_visit_started_monotonic
-                            if not target_locked_seen and search_elapsed >= self.args.search_timeout_s:
-                                failure_reason = "search_timeout"
-                                break
-                            if lock_seen_monotonic is not None and (time.monotonic() - lock_seen_monotonic) >= self.args.approach_timeout_s:
-                                failure_reason = "approach_timeout"
-                                break
-
-                            # Deterministic decision loop for approach
-                            if owned_intent:
-                                owned_in_flight, owned_transitioned, terminal_reason = self._owned_intent_status(
-                                    state=state, intent_name=owned_intent, owned_since_monotonic=owned_intent_started_monotonic,
-                                )
-                                if owned_in_flight:
-                                    decision = self._owned_in_flight_decision(owned_intent, owned_intent_args)
-                                    self._update_runtime_state(latest_decision=decision, mission_phase=self._mission_phase_for_decision(decision, state))
-                                    time.sleep(self.args.poll_s)
-                                    continue
-                                owned_intent = ""
-                                owned_intent_args = {}
-                                owned_intent_started_monotonic = 0.0
-
-                            policy = build_policy_snapshot(state, sim_gate_ready=bool(state.get("sim_gate_ready", False)))
-                            decision = deterministic_visit_decision(state, self.args.task, self.contract)
-
-                            if decision.get("status") == "recommendation":
-                                state_hash = json.dumps({"policy_stage": policy.get("stage"), "preferred_intent": policy.get("preferred_intent")}, sort_keys=True)
-                                preview_status, preview_payload = preview_intent(
-                                    self.dashboard_url, _clean_text(decision.get("intent")), dict(decision.get("args", {})), timeout_s=self.args.timeout_s,
-                                )
-                                preview = preview_summary(preview_status, preview_payload)
-                                if preview_status == 200 and preview["contract_valid"] and preview["ready_to_dispatch"]:
-                                    if self._should_dispatch_decision(decision=decision, state_hash=state_hash, state=state):
-                                        dispatch_status, dispatch_payload = dispatch_intent(
-                                            self.dashboard_url, _clean_text(decision.get("intent")), dict(decision.get("args", {})), timeout_s=self.args.timeout_s,
-                                        )
-                                        if dispatch_status == 202 and bool(dispatch_payload.get("accepted", False)):
-                                            first_dispatched_intent, owned_intent, owned_intent_args, owned_intent_started_monotonic = self._own_intent(
-                                                target=target, attempt=attempt, decision=decision, state_hash=state_hash,
-                                                first_dispatched_intent=first_dispatched_intent, announce=False,
-                                            )
-                                            self._update_runtime_state(latest_decision=decision, mission_phase=self._mission_phase_for_decision(decision, state))
-                                            self._append_runtime_event(
-                                                f"Mission issued {self._format_decision_label(decision)}.",
-                                                category="decision", key=f"decision:{target.id}:{decision_signature(decision)}",
-                                            )
-                            time.sleep(self.args.poll_s)
-
-                        if target_pass:
-                            self._issue_safe_stop()
-                            self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                        # Check executor feedback for visit completion
+                        feedback_text = _clean_text(brain.get("last_feedback_text", ""))
+                        if f"visit_target_reached" in _clean_text(brain.get("last_feedback_status", "")):
+                            target_pass = True
                             break
+                        if f"visit_target_failed" in _clean_text(brain.get("last_feedback_status", "")):
+                            break
+                        # Also check truth-based visit success as a fallback
+                        if visit_success(
+                            state,
+                            target_locked_seen=bool(brain.get("target_locked", False)),
+                            nav_activity_seen=bool(brain.get("goal_in_progress", False)) or bool((state.get("outcome", {}) if isinstance(state.get("outcome"), dict) else {}).get("nav_goal_recent", False)),
+                            visit_tolerance_m=target.visit_tolerance_m,
+                            elapsed_since_spawn_s=(time.monotonic() - (visit_deadline - self.args.max_target_runtime_s)),
+                            min_dwell_s=target.min_dwell_s,
+                        ):
+                            target_pass = True
+                            break
+                        time.sleep(self.args.poll_s)
 
-                        self._issue_safe_stop()
-                        self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
-                        if attempt < self.args.max_retries_per_target:
-                            attempt += 1
-                            self._append_runtime_event(f"{target.label} retrying after {failure_reason or 'visit timeout'}.", key=f"retry:{target.id}:{attempt}")
-                            continue
-
-                        result = {
-                            "target_id": target.id, "label": target.label, "attempt": attempt, "pass": False,
-                            "failure_reason": failure_reason or "visit_timeout", "llm_selected": True,
-                        }
-                        target_results.append(result)
-                        write_json(target_results_path, {"targets": target_results})
+                    distance_m = mission_truth_distance_m(state) if target_pass else None
+                    result = {
+                        "target_id": target.id,
+                        "label": target.label,
+                        "pass": target_pass,
+                        "visit_distance_m": distance_m,
+                        "llm_selected": True,
+                    }
+                    if not target_pass:
+                        result["failure_reason"] = "visit_timeout"
+                    target_results.append(result)
+                    write_json(target_results_path, {"targets": target_results})
+                    remaining_ids = [tid for tid in remaining_ids if tid != target.id]
+                    self._update_runtime_state(
+                        mission_phase="advance" if target_pass else "failed",
+                        visited_targets=[item["target_id"] for item in target_results if item.get("pass")],
+                        remaining_targets=remaining_ids,
+                        last_visit_result=result,
+                    )
+                    if target_pass:
+                        self._append_runtime_event(f"{target.label} visited.", key=f"visited:{target.id}")
+                    else:
                         mission_pass = False
-                        mission_error = f"{target.label} failed: {result['failure_reason']}"
+                        mission_error = f"{target.label} failed: visit_timeout"
                         self._append_runtime_event(mission_error, category="error", key=f"failed:{target.id}")
-                        break
+                    append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "target_visited", "target_id": target.id, "result": result})
 
-                    if not target_pass and not mission_error:
-                        # Target failed entirely — stop the mission
+                    if not target_pass:
                         break
 
                 self._update_runtime_state(route_planning_active=False, route_target_specs=[])

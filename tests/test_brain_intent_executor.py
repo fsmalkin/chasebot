@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import sys
+import time
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -173,6 +174,7 @@ def _make_executor(monkeypatch):
     executor.last_goal_dispatched_utc = ""
     executor.feedback_count = 0
     executor.last_feedback_text = ""
+    executor.last_feedback_status = ""
     executor.last_feedback_utc = ""
     executor.last_intent = "search_for_target"
     executor.last_intent_args = {}
@@ -198,6 +200,13 @@ def _make_executor(monkeypatch):
     executor.prior_lock_tolerance_m = 0.50
     executor.active_prior = None
     executor.last_prior_read_monotonic = 0.0
+    executor.visit_active = False
+    executor.visit_target_id = ""
+    executor.visit_started_monotonic = 0.0
+    executor.visit_locked = False
+    executor.visit_approach_dispatched = False
+    executor.latest_detections_3d = []
+    executor.latest_detections_3d_mono = 0.0
 
     published_feedback = []
     published_twists = []
@@ -209,6 +218,7 @@ def _make_executor(monkeypatch):
     def _publish_feedback(text: str, *, status: str, extra=None) -> None:
         published_feedback.append({"text": text, "status": status, "extra": extra or {}})
         executor.last_feedback_text = text
+        executor.last_feedback_status = status
 
     def _publish_twist(twist) -> None:
         published_twists.append(twist)
@@ -684,7 +694,7 @@ def test_track_replan_uses_detection_when_close_to_prior(monkeypatch):
 # --- visit_target handler tests ---
 
 
-def test_visit_target_writes_selection_to_runtime_file(monkeypatch, tmp_path):
+def test_visit_target_writes_selection_and_starts_search(monkeypatch, tmp_path):
     executor = _make_executor(monkeypatch)
     runtime_path = tmp_path / "visit_mission_runtime.json"
     runtime_path.write_text('{"running": true}', encoding="utf-8")
@@ -696,7 +706,11 @@ def test_visit_target_writes_selection_to_runtime_file(monkeypatch, tmp_path):
     data = json.loads(runtime_path.read_text(encoding="utf-8"))
     assert data["llm_selected_target_id"] == "ball_b"
     assert "llm_selected_utc" in data
-    assert executor._published_feedback[-1]["status"] == "visit_target_selected"
+    # Visit lifecycle: should start searching and be active
+    assert executor.visit_active is True
+    assert executor.visit_target_id == "ball_b"
+    assert executor.search_active is True
+    assert executor._published_feedback[-1]["status"] == "visit_target_searching"
 
 
 def test_visit_target_blocks_on_empty_target_id(monkeypatch):
@@ -727,3 +741,135 @@ def test_on_intent_dispatches_visit_target(monkeypatch, tmp_path):
     data = json.loads(runtime_path.read_text(encoding="utf-8"))
     assert data["llm_selected_target_id"] == "ball_c"
     assert executor.last_intent == "visit_target"
+
+
+# --- Visit lifecycle tests ---
+
+
+def test_visit_lock_auto_dispatches_approach_goal(monkeypatch, tmp_path):
+    """When target locks during an active visit, approach goal is dispatched automatically."""
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    dispatched_goals = []
+
+    class FakeNavClient:
+        def server_is_ready(self):
+            return True
+
+        def wait_for_server(self, timeout_sec=0.5):
+            return True
+
+        def send_goal_async(self, goal_msg, feedback_callback=None):
+            dispatched_goals.append(goal_msg)
+            return SimpleNamespace(add_done_callback=lambda cb: None)
+
+    executor.nav_client = FakeNavClient()
+    executor.goal_pose_pub = SimpleNamespace(publish=lambda msg: None)
+    executor.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: None))
+
+    # Restore real _lock_target so visit lifecycle hooks fire
+    executor._lock_target = executor_mod.BrainIntentExecutor._lock_target.__get__(executor, executor_mod.BrainIntentExecutor)
+
+    # Start visit lifecycle
+    executor._handle_visit_target_intent({"target_id": "ball_a"})
+    assert executor.visit_active is True
+    assert executor.search_active is True
+
+    # Simulate detection that triggers lock
+    executor.detection_burst_count = 5
+    executor.latest_detection = _make_detection(x=0.0, z=1.5)
+    executor.last_detection_monotonic = time.monotonic()
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor._lock_target("ball", "search_for_target")
+
+    # Visit lifecycle should have auto-dispatched approach
+    assert executor.visit_locked is True
+    assert executor.visit_approach_dispatched is True
+    assert executor.track_active is True
+    assert len(dispatched_goals) == 1
+
+
+def test_visit_search_timeout_restarts_search(monkeypatch, tmp_path):
+    """When search fails during a visit, it restarts automatically."""
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    executor._handle_visit_target_intent({"target_id": "ball_b"})
+    assert executor.visit_active is True
+    assert executor.search_active is True
+
+    # Simulate search failure (rotation limit exceeded)
+    executor.search_rotation_accum_rad = 999.0
+    executor._on_timer()
+
+    # Visit should still be active, search restarted
+    assert executor.visit_active is True
+    assert executor.search_active is True
+    assert executor.search_state == "rotating"
+
+
+def test_visit_overall_timeout_ends_visit(monkeypatch, tmp_path):
+    """Visit lifecycle ends with failure when overall timeout is exceeded."""
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    executor._handle_visit_target_intent({"target_id": "ball_c"})
+    # Force visit to have started long ago
+    executor.visit_started_monotonic = time.monotonic() - 200.0
+    executor._on_timer()
+
+    assert executor.visit_active is False
+    assert executor._published_feedback[-1]["status"] == "visit_target_failed"
+    assert "ball_c" in executor._published_feedback[-1]["text"]
+
+
+def test_visit_proximity_check_declares_reached(monkeypatch, tmp_path):
+    """When robot is close to prior during tracking, visit declares reached."""
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{"current_target_prior": {"x": 1.0, "y": 0.0}}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    executor._handle_visit_target_intent({"target_id": "ball_a"})
+    # Manually set visit state as if search→lock→approach completed
+    executor.visit_locked = True
+    executor.visit_approach_dispatched = True
+    executor.track_active = True
+    executor.track_needs_replan = True
+    executor.search_active = False
+    executor.goal_in_progress = False
+    executor.last_goal_dispatched_monotonic = 0.0
+
+    # Set prior and robot position close together
+    executor.active_prior = {"x": 1.0, "y": 0.0}
+    executor.latest_pose = SimpleNamespace(x=1.05, y=0.0, yaw=0.0)
+
+    executor._on_timer()
+
+    assert executor.visit_active is False
+    reached = [fb for fb in executor._published_feedback if fb["status"] == "visit_target_reached"]
+    assert len(reached) == 1
+    assert reached[0]["extra"]["target_id"] == "ball_a"
+
+
+def test_safe_stop_ends_active_visit(monkeypatch, tmp_path):
+    """safe_stop during an active visit ends the visit with failure."""
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    executor._handle_visit_target_intent({"target_id": "ball_b"})
+    assert executor.visit_active is True
+
+    executor._handle_safe_stop_intent()
+    assert executor.visit_active is False
+    failed = [fb for fb in executor._published_feedback if fb["status"] == "visit_target_failed"]
+    assert len(failed) == 1
