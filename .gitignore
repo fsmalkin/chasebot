@@ -17,6 +17,8 @@ runtime/tensorrt/calibration/*.cache
 runtime/tensorrt/calibration/*.json
 runtime/dashboard/dashboard_service_state.json
 runtime/dashboard/dashboard_session.lock.json
+runtime/dashboard/intent_ack.json
+runtime/dashboard/intent_inbox.json
 runtime/dashboard/llm_supervisor_state.json
 runtime/dashboard/llm_turn_then_go_runtime.json
 runtime/dashboard/visit_mission_runtime.json
