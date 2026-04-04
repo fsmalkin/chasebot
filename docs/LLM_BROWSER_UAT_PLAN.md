@@ -382,3 +382,32 @@ To keep the demo honest and legible, this phase does not include:
 4. ✓ implement target prior contract so multi-target discrimination transfers to hardware
 5. ✓ browser UAT surface meets acceptance criteria
 6. ✓ provider abstraction and replay comparison infrastructure in place for future local-provider lane
+7. **direct intent dispatch — eliminate docker-exec-per-intent bottleneck** (in progress)
+
+### Step 7: Direct Intent Dispatch — Eliminate Docker-Exec-Per-Intent Bottleneck
+
+Goal:
+
+- reduce intent dispatch latency from ~13s to under 1s so the UAT demo feels responsive and the architecture matches the real-time ambition
+
+Problem:
+
+- every intent dispatch currently spawns: `docker exec` → bash sourcing → Python startup → rclpy init → readiness wait (12s) → publish → observe (3s) → exit
+- this adds ~13s between the LLM deciding and the robot moving
+- the executor (`brain_intent_executor.py`) is already a long-running ROS2 node that could process intents instantly, but intents still route through the heavyweight subprocess path
+
+Approach:
+
+1. add a file-based intent inbox to the executor: it watches `runtime/dashboard/intent_inbox.json` via a 10Hz timer
+2. when a new intent appears, the executor processes it immediately (same `_on_intent` path as the ROS2 topic)
+3. executor writes acknowledgment to `runtime/dashboard/intent_ack.json`
+4. dashboard writes intents to the inbox file instead of spawning `docker exec`
+5. dashboard polls the ack file (up to 2s) for confirmation, then collects feedback from executor state as usual
+6. the ROS2 topic path remains as a fallback — nothing is removed
+
+Acceptance:
+
+1. intent dispatch latency < 1s (measured from dashboard dispatch to executor processing)
+2. LLM Turn+Go proof passes end-to-end with the new path
+3. existing tests pass without regression
+4. dashboard UI scenario trigger works for operator UAT

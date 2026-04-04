@@ -3700,10 +3700,13 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     _kill_stale_dashboard_on_port(args.port)
+    # Use 127.0.0.1 for client-facing URL when binding to all interfaces;
+    # 0.0.0.0 is not a valid connect target on Windows.
+    client_host = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
     controller = DashboardController(host=args.host, port=args.port)
-    controller._update_state(dashboard_url=f"http://{args.host}:{args.port}/")
+    controller._update_state(dashboard_url=f"http://{client_host}:{args.port}/")
     server = DashboardHttpServer((args.host, args.port), controller)
-    print(f"DASHBOARD_URL=http://{args.host}:{args.port}/")
+    print(f"DASHBOARD_URL=http://{client_host}:{args.port}/")
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
