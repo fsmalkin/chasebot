@@ -1142,6 +1142,10 @@ exit "$rc"
                     target = targets_by_id[selected_id]
                     remaining_ids = [tid for tid in remaining_ids if tid != selected_id]
                     self._append_runtime_event(f"Route step {visit_index}: {target.label}.", category="decision", key=f"route_step:{target.id}")
+                    # Reset executor state between targets so stale lock/goal doesn't carry over
+                    self._issue_safe_stop()
+                    self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+
                     self._update_runtime_state(
                         route_planning_active=False,
                         current_target_id=target.id,
