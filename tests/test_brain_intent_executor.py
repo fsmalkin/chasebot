@@ -167,7 +167,7 @@ def _make_executor(monkeypatch):
     executor.latest_detection = None
     executor.last_detection_monotonic = 0.0
     executor.detection_burst_count = 0
-    executor.latest_pose = SimpleNamespace(yaw=0.0)
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
     executor.latest_pose_stamp = ""
     executor.latest_goal_pose = None
     executor.last_goal_dispatched_monotonic = 0.0
@@ -184,6 +184,7 @@ def _make_executor(monkeypatch):
     executor.search_rotation_accum_rad = 0.0
     executor.search_last_yaw = None
     executor.search_target_class = ""
+    executor.search_rotation_sign = 1.0
     executor.last_search_feedback_monotonic = 0.0
     executor.target_locked = False
     executor.target_locked_class = ""
@@ -857,6 +858,25 @@ def test_visit_proximity_check_declares_reached(monkeypatch, tmp_path):
     reached = [fb for fb in executor._published_feedback if fb["status"] == "visit_target_reached"]
     assert len(reached) == 1
     assert reached[0]["extra"]["target_id"] == "ball_a"
+
+
+def test_search_rotation_direction_follows_prior(monkeypatch, tmp_path):
+    """Search rotation direction is chosen toward the active prior."""
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    # Prior is to the right of the robot (negative bearing → CW)
+    runtime_path.write_text('{"current_target_prior": {"x": 1.0, "y": -2.0}}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    # Robot at origin facing +X (yaw=0)
+    executor.latest_pose = type("P", (), {"x": 0.0, "y": 0.0, "yaw": 0.0})()
+    executor._handle_visit_target_intent({"target_id": "ball_right"})
+    assert executor.search_rotation_sign == -1.0, "Should rotate CW toward prior on the right"
+
+    # Prior is to the left of the robot (positive bearing → CCW)
+    runtime_path.write_text('{"current_target_prior": {"x": 1.0, "y": 2.0}}', encoding="utf-8")
+    executor._handle_visit_target_intent({"target_id": "ball_left"})
+    assert executor.search_rotation_sign == 1.0, "Should rotate CCW toward prior on the left"
 
 
 def test_safe_stop_ends_active_visit(monkeypatch, tmp_path):

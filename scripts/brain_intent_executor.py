@@ -144,6 +144,7 @@ class BrainIntentExecutor(Node):
         self.search_rotation_accum_rad = 0.0
         self.search_last_yaw: float | None = None
         self.search_target_class = ""
+        self.search_rotation_sign: float = 1.0  # +1 CCW, -1 CW — chosen toward prior
         self.last_search_feedback_monotonic = 0.0
 
         self.target_locked = False
@@ -410,6 +411,7 @@ class BrainIntentExecutor(Node):
         self.search_rotation_accum_rad = 0.0
         self.search_last_yaw = None
         self.search_target_class = ""
+        self.search_rotation_sign = 1.0
         self.last_search_feedback_monotonic = 0.0
         self.track_active = False
         self.track_needs_replan = False
@@ -425,6 +427,17 @@ class BrainIntentExecutor(Node):
         self.last_goal_dispatched_monotonic = 0.0
         self.last_goal_dispatched_utc = ""
 
+    def _bearing_to_prior_rad(self) -> float | None:
+        """Return the robot-local bearing (radians) toward the active prior, or None."""
+        if self.active_prior is None or self.latest_pose is None:
+            return None
+        dx = self.active_prior["x"] - self.latest_pose.x
+        dy = self.active_prior["y"] - self.latest_pose.y
+        if abs(dx) < 0.01 and abs(dy) < 0.01:
+            return None
+        world_bearing = math.atan2(dy, dx)
+        return normalize_angle(world_bearing - self.latest_pose.yaw)
+
     def _begin_search_motion(self, *, target_class: str, search_state: str) -> None:
         self.search_active = True
         self.search_state = search_state
@@ -433,6 +446,9 @@ class BrainIntentExecutor(Node):
         self.search_last_yaw = self.latest_pose.yaw if self.latest_pose is not None else None
         self.search_target_class = target_class
         self.last_search_feedback_monotonic = 0.0
+        # Choose rotation direction toward the prior (shorter arc)
+        prior_bearing = self._bearing_to_prior_rad()
+        self.search_rotation_sign = -1.0 if (prior_bearing is not None and prior_bearing < 0) else 1.0
 
     def _lock_target(self, target_class: str, source: str) -> None:
         self.target_locked = True
@@ -955,7 +971,7 @@ class BrainIntentExecutor(Node):
                         )
                     else:
                         self.search_state = "rotating"
-                    twist.angular.z = float(self.args.search_turn_speed_radps)
+                    twist.angular.z = float(self.args.search_turn_speed_radps) * self.search_rotation_sign
                 self._publish_twist(twist)
                 self._publish_search_feedback()
 
