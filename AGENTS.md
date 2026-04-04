@@ -103,7 +103,40 @@ Same-session visual baseline:
 
 ## Testing
 
-Run the test suite before committing changes:
+### Verification levels
+
+Changes must pass **both** tiers before being considered verified:
+
+| Tier | What | When | Command |
+|------|------|------|---------|
+| **Unit** | Offline pytest (mocks, no sim) | Every commit | `pytest tests/test_brain_intent_executor.py tests/test_visit_mission_runner.py tests/dashboard/` |
+| **Live sim** | Dashboard UAT in running sim | Every behavior change | Click scenario in dashboard, observe robot behavior, check event log |
+
+**Unit tests alone are NOT sufficient verification for behavior changes.** They mock ROS, Nav2, and perception — they prove wiring, not that the robot actually moves correctly. Any commit that changes executor behavior, visit lifecycle, navigation, or perception must be verified with a live sim run before being declared working.
+
+### Live sim verification checklist
+
+For route-planning / visit lifecycle changes, run the "LLM Route Plan" scenario from the dashboard and confirm:
+
+1. All balls spawn and persist throughout the mission
+2. Robot navigates (drives) toward each target — not spinning in place
+3. Robot acquires target visually when near, approaches, and reports visited
+4. Event log shows: `route_planned` -> `visit_dispatched` -> `visit_reached` x N -> `mission_passed`
+5. Top-down telemetry shows robot path to each ball
+
+If any step fails, the change is not verified regardless of unit test results.
+
+### Live sim integration tests
+
+```
+pytest tests/dashboard/test_dashboard_api.py --run-live
+```
+
+These require a running simulation environment (Docker + Gazebo + ROS2) and are skipped by default.
+
+### Unit test modules
+
+Run the unit test suite before committing changes:
 
 ```
 pytest tests/
@@ -115,13 +148,13 @@ Key test modules and what they cover:
 |--------|--------|
 | `tests/test_brain_supervisor.py` | Supervisor loop observe-choose-dispatch cycle |
 | `tests/test_brain_supervisor_policy.py` | Deterministic policy and escalation rules |
-| `tests/test_brain_intent_executor.py` | Intent executor dispatch and readiness gating |
+| `tests/test_brain_intent_executor.py` | Intent executor dispatch, visit lifecycle, scenario tests |
 | `tests/test_brain_llm_recommender.py` | LLM recommender provider integration |
 | `tests/test_llm_demo_campaign_helpers.py` | Campaign aggregation and trend helpers |
 | `tests/test_llm_turn_then_go_proof_runner.py` | Turn-then-go proof runner logic |
-| `tests/test_visit_mission_runner.py` | Visit mission sequencing |
+| `tests/test_visit_mission_runner.py` | Visit mission sequencing and route planning |
 | `tests/test_visit_mission_campaign_helpers.py` | Visit mission campaign helpers |
-| `tests/dashboard/test_dashboard_api.py` | Dashboard HTTP API |
+| `tests/dashboard/test_dashboard_api.py` | Dashboard HTTP API (requires `--run-live`) |
 | `tests/dashboard/test_world_stream_freshness.py` | World stream liveness checks |
 
 Dashboard end-to-end validation uses Playwright:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import math
 import sys
 import time
@@ -733,7 +734,6 @@ def test_visit_target_writes_selection_and_starts_acquire(monkeypatch, tmp_path)
 
     executor._handle_visit_target_intent({"target_id": "ball_b"})
 
-    import json
     data = json.loads(runtime_path.read_text(encoding="utf-8"))
     assert data["llm_selected_target_id"] == "ball_b"
     assert "llm_selected_utc" in data
@@ -766,7 +766,6 @@ def test_on_intent_dispatches_visit_target(monkeypatch, tmp_path):
     runtime_path.write_text('{}', encoding="utf-8")
     executor.visit_runtime_path = runtime_path
 
-    import json
     msg = SimpleNamespace(data=json.dumps({"intent": "visit_target", "args": {"target_id": "ball_c"}}))
     executor._on_intent(msg)
 
@@ -981,3 +980,138 @@ def test_visit_navigating_transitions_to_acquiring_on_proximity(monkeypatch, tmp
 
     assert executor.visit_phase == "acquiring"
     assert executor.search_active is True
+
+
+# --- Scenario-level tests (real code paths, no core method mocks) ---
+
+
+def _make_scenario_executor(monkeypatch, tmp_path, *, prior: dict | None = None, nav2_ready: bool = True):
+    """Build an executor for scenario tests with real core methods and a fake Nav2 client.
+
+    Unlike _make_executor, this restores the real _dispatch_prior_approach_goal,
+    _dispatch_nav_goal, _lock_target, etc. Only I/O (ROS publishers, file writes)
+    is stubbed.
+    """
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_data = {}
+    if prior:
+        runtime_data["current_target_prior"] = prior
+    runtime_path.write_text(json.dumps(runtime_data), encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    dispatched_goals = []
+
+    class FakeNavClient:
+        def server_is_ready(self):
+            return nav2_ready
+
+        def wait_for_server(self, timeout_sec=0.5):
+            return nav2_ready
+
+        def send_goal_async(self, goal_msg, feedback_callback=None):
+            dispatched_goals.append(goal_msg)
+            return SimpleNamespace(add_done_callback=lambda cb: None)
+
+    executor.nav_client = FakeNavClient()
+    executor.goal_pose_pub = SimpleNamespace(publish=lambda msg: None)
+    executor.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: None))
+
+    # Restore real core methods (overridden by _make_executor with mocks)
+    for method_name in (
+        "_dispatch_prior_approach_goal",
+        "_dispatch_nav_goal",
+        "_lock_target",
+    ):
+        real = getattr(executor_mod.BrainIntentExecutor, method_name)
+        setattr(executor, method_name, real.__get__(executor, executor_mod.BrainIntentExecutor))
+
+    executor._dispatched_goals = dispatched_goals
+    return executor
+
+
+def test_scenario_distant_prior_navigates_then_acquires(monkeypatch, tmp_path):
+    """Full scenario: distant prior -> Nav2 goal dispatched -> arrive near prior -> search starts."""
+    executor = _make_scenario_executor(monkeypatch, tmp_path, prior={"x": 5.0, "y": 0.0})
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+
+    executor._handle_visit_target_intent({"target_id": "ball_a"})
+
+    # Should navigate, not spin
+    assert executor.visit_phase == "navigating"
+    assert executor.search_active is False
+    assert executor.goal_in_progress is True
+    assert len(executor._dispatched_goals) == 1
+    goal_x = executor._dispatched_goals[0].pose.pose.position.x
+    assert goal_x > 1.0, f"Nav goal should be toward prior, got x={goal_x}"
+
+    # Simulate arriving near prior (timer fires, robot is close)
+    executor.latest_pose = SimpleNamespace(x=4.2, y=0.0, yaw=0.0)
+    executor.goal_in_progress = False  # Nav2 goal finished
+    executor._on_timer()
+
+    assert executor.visit_phase == "acquiring"
+    assert executor.search_active is True
+
+
+def test_scenario_nav2_not_ready_retries_on_timer(monkeypatch, tmp_path):
+    """When Nav2 isn't ready, visit stays pending and retries on next timer tick."""
+    executor = _make_scenario_executor(monkeypatch, tmp_path, prior={"x": 5.0, "y": 0.0}, nav2_ready=False)
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+
+    executor._handle_visit_target_intent({"target_id": "ball_a"})
+
+    # Should NOT fall through to acquiring/spinning
+    assert executor.visit_active is True
+    assert executor.visit_phase == ""  # Waiting for Nav2
+    assert executor.search_active is False
+    assert len(executor._dispatched_goals) == 0
+
+    # Simulate Nav2 becoming ready
+    executor.nav_client = SimpleNamespace(
+        server_is_ready=lambda: True,
+        wait_for_server=lambda timeout_sec=0.5: True,
+        send_goal_async=lambda goal_msg, feedback_callback=None: (
+            executor._dispatched_goals.append(goal_msg) or SimpleNamespace(add_done_callback=lambda cb: None)
+        ),
+    )
+    executor._on_timer()
+
+    # Now should navigate
+    assert executor.visit_phase == "navigating"
+    assert executor.goal_in_progress is True
+    assert len(executor._dispatched_goals) == 1
+
+
+def test_scenario_lock_during_acquire_dispatches_approach(monkeypatch, tmp_path):
+    """Full scenario: acquiring -> detection -> lock -> approach goal dispatched."""
+    executor = _make_scenario_executor(monkeypatch, tmp_path, prior={"x": 1.0, "y": 0.0})
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+
+    executor._handle_visit_target_intent({"target_id": "ball_a"})
+    assert executor.visit_phase == "acquiring"
+    assert executor.search_active is True
+
+    # Simulate centered detection with burst
+    executor.detection_burst_count = 5
+    executor.latest_detection = _make_detection(x=0.0, z=1.0)
+    executor.last_detection_monotonic = time.monotonic()
+    executor._lock_target("ball", "search_for_target")
+
+    assert executor.visit_phase == "approaching"
+    assert executor.visit_locked is True
+    assert executor.track_active is True
+    # Approach goal dispatched (via detection-based _dispatch_nav_goal)
+    assert len(executor._dispatched_goals) >= 1
+
+
+def test_scenario_no_prior_acquires_immediately(monkeypatch, tmp_path):
+    """Without a prior, visit goes straight to acquiring (search rotation)."""
+    executor = _make_scenario_executor(monkeypatch, tmp_path, prior=None)
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+
+    executor._handle_visit_target_intent({"target_id": "ball_a"})
+
+    assert executor.visit_phase == "acquiring"
+    assert executor.search_active is True
+    assert len(executor._dispatched_goals) == 0

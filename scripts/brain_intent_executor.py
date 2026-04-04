@@ -822,11 +822,29 @@ class BrainIntentExecutor(Node):
         self.visit_locked = False
         self.visit_approach_dispatched = False
 
-        # If prior and odom are available, navigate directly to the prior
-        if self.active_prior is not None and self.latest_pose is not None:
+        # Decide initial visit phase based on prior distance
+        self._begin_visit_phase(target_id)
+
+    def _begin_visit_phase(self, target_id: str) -> None:
+        """Decide and start the right visit phase based on current state.
+
+        Called from _handle_visit_target_intent on initial dispatch and from
+        _on_timer when retrying after Nav2 wasn't ready.
+        """
+        if self.latest_pose is None:
+            # No odom yet — timer will retry
+            if not self.visit_phase:
+                self._publish_feedback(
+                    f"visit_target: waiting for odom to navigate to {target_id}",
+                    status="visit_target_searching",
+                    extra={"target_id": target_id},
+                )
+            return
+
+        if self.active_prior is not None:
             prior_dist = self._prior_robot_distance_m()
             if prior_dist is not None and prior_dist > self.args.acquire_radius_m:
-                # Far from target — navigate toward the prior position
+                # Far from target — try to navigate
                 dispatched = self._dispatch_prior_approach_goal(
                     reason=f"visit_target({target_id}): navigating to prior",
                     approach_distance_m=self.args.acquire_radius_m * 0.5,
@@ -839,18 +857,11 @@ class BrainIntentExecutor(Node):
                         extra={"target_id": target_id, "prior_distance_m": round(prior_dist, 4)},
                     )
                     return
-            # Already near the prior — go straight to acquiring
-            self._begin_visit_acquire(target_id)
-        elif self.latest_pose is None:
-            # No odom yet — wait for it (timer will start navigate or acquire)
-            self._publish_feedback(
-                f"visit_target: waiting for odom to navigate to {target_id}",
-                status="visit_target_searching",
-                extra={"target_id": target_id},
-            )
-        else:
-            # No prior — fall back to search rotation
-            self._begin_visit_acquire(target_id)
+                # Nav2 not ready — stay in empty phase, timer will retry
+                return
+
+        # Near or no prior — go straight to visual search
+        self._begin_visit_acquire(target_id)
 
     def _begin_visit_acquire(self, target_id: str) -> None:
         """Transition the visit lifecycle to the acquiring phase (visual search near prior)."""
@@ -960,29 +971,9 @@ class BrainIntentExecutor(Node):
         self._check_intent_inbox()
         self._refresh_target_prior()
 
-        # Visit lifecycle: deferred start — odom just arrived
-        if self.visit_active and not self.visit_phase and self.latest_pose is not None:
-            # Odom wasn't ready when visit_target was received — start now
-            if self.active_prior is not None:
-                prior_dist = self._prior_robot_distance_m()
-                if prior_dist is not None and prior_dist > self.args.acquire_radius_m:
-                    dispatched = self._dispatch_prior_approach_goal(
-                        reason=f"visit_target({self.visit_target_id}): navigating to prior",
-                        approach_distance_m=self.args.acquire_radius_m * 0.5,
-                    )
-                    if dispatched:
-                        self.visit_phase = "navigating"
-                        self._publish_feedback(
-                            f"visit_target: navigating to {self.visit_target_id}",
-                            status="visit_target_navigating",
-                            extra={"target_id": self.visit_target_id},
-                        )
-                    else:
-                        self._begin_visit_acquire(self.visit_target_id)
-                else:
-                    self._begin_visit_acquire(self.visit_target_id)
-            else:
-                self._begin_visit_acquire(self.visit_target_id)
+        # Visit lifecycle: retry phase start (waiting for odom or Nav2)
+        if self.visit_active and not self.visit_phase:
+            self._begin_visit_phase(self.visit_target_id)
 
         # Visit lifecycle: navigating — check if close enough to transition to acquiring
         if self.visit_active and self.visit_phase == "navigating" and self.latest_pose is not None:
