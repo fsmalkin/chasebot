@@ -658,13 +658,16 @@ fi
             model_name = self._target_model_name(target)
             if model_name in keep_names:
                 continue
-            self._remove_target_model(
-                compose_project=compose_project,
-                world_name=world_name,
-                model_name=model_name,
-                mission_root=mission_root,
-                log_stem=f"{target.id}_cleanup",
-            )
+            try:
+                self._remove_target_model(
+                    compose_project=compose_project,
+                    world_name=world_name,
+                    model_name=model_name,
+                    mission_root=mission_root,
+                    log_stem=f"{target.id}_cleanup",
+                )
+            except RuntimeError:
+                pass  # Container not available — nothing to clean up
 
     def _robot_pose_components(self, state: dict[str, Any]) -> tuple[float, float, float]:
         belief = state.get("belief", {}) if isinstance(state.get("belief"), dict) else {}
