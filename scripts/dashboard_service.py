@@ -70,20 +70,12 @@ TARGET_MODEL_NAME_NAV2 = "uat_nav2_target"
 TARGET_MODEL_NAME_SNAPSHOT = "uat_snapshot_target"
 TARGET_MODEL_NAME_PROOF = "llm_turn_then_go_target"
 DEFAULT_VISIT_MISSION_POLL_S = 0.25
-VISIT_TARGET_MODEL_NAMES = (
-    "visit_mission_target_ball_1",
-    "visit_mission_target_ball_2",
-    "visit_mission_target_ball_3",
-    "visit_mission_target_m3_center",
-    "visit_mission_target_m3_left",
-    "visit_mission_target_m3_right",
-)
 TRUTH_TARGET_MODEL_NAMES = (
-    *VISIT_TARGET_MODEL_NAMES,
     TARGET_MODEL_NAME_NAV2,
     TARGET_MODEL_NAME_SNAPSHOT,
     TARGET_MODEL_NAME_PROOF,
 )
+TRUTH_TARGET_MODEL_PREFIX = "visit_mission_target_"
 WORLD_STREAM_RESTART_COOLDOWN_S = 20.0
 WORLD_STREAM_RESTART_MAX_ATTEMPTS = 3
 WORLD_STREAM_STALE_DEBOUNCE_S = 3.0
@@ -2444,7 +2436,7 @@ PID_FILE="/tmp/chasecar_truth_probe.pid"
 LOG_FILE="/tmp/chasecar_truth_probe.log"
 pkill -f "sim_truth_probe.py" 2>/dev/null || true
 rm -f "$PID_FILE" "$LOG_FILE"
-nohup bash -lc 'source /opt/ros/{DEFAULT_CORE_ROS_DISTRO}/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/sim_truth_probe.py --session-id "{session_id}" --output-dir "{visual_dir_container}" --world-name "{DEFAULT_WORLD_NAME}" --target-model-names "{",".join(TRUTH_TARGET_MODEL_NAMES)}" --duration-s 7200' >"$LOG_FILE" 2>&1 &
+nohup bash -lc 'source /opt/ros/{DEFAULT_CORE_ROS_DISTRO}/setup.bash && if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi && python3 /workspaces/chasecar/scripts/sim_truth_probe.py --session-id "{session_id}" --output-dir "{visual_dir_container}" --world-name "{DEFAULT_WORLD_NAME}" --target-model-names "{",".join(TRUTH_TARGET_MODEL_NAMES)}" --target-model-prefix "{TRUTH_TARGET_MODEL_PREFIX}" --duration-s 7200' >"$LOG_FILE" 2>&1 &
 echo $! > "$PID_FILE"
 sleep 1
 echo "TRUTH_PID=$(cat "$PID_FILE")"

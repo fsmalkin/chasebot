@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -409,9 +410,13 @@ def _make_runner(monkeypatch, scenario_id: str = "visit_three_ball_sequence") ->
         dispatch_cooldown_s=1.0,
         search_timeout_s=20.0,
         post_goal_truth_grace_s=2.5,
+        timeout_s=10.0,
         target_model_sdf=str(REPO_ROOT / "ros2_config" / "frisbee_target_ball.sdf"),
         target_model_name="visit_mission_target",
+        model="gpt-5-nano",
+        reasoning_effort="medium",
     )
+    monkeypatch.setattr(visit_runner.VisitMissionRunner, "_build_provider", staticmethod(lambda _args: None))
     runner = visit_runner.VisitMissionRunner(args)
     runner._container_id = lambda project_name, service_name: "sim-gate-1"
     runner._docker_exec = lambda container_id, script: (0, "ok")
@@ -774,3 +779,101 @@ def test_validate_contract_accepts_visit_target():
     }
     result = validate_decision_against_contract(decision, contract)
     assert result["args"]["target_id"] == "ball_a"
+
+
+def test_rotate_robot_toward_target_computes_correct_bearing(monkeypatch):
+    runner = _make_runner(monkeypatch, scenario_id="visit_route_planning")
+    runner._mission_anchor_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    calls = []
+    runner._docker_exec = lambda cid, script: (calls.append(script), (0, "ok"))[1]
+    runner._container_id = lambda project_name, service_name: "sim-gate-1"
+    target = next(t for t in runner.targets if t.id == "ball_b")
+    state = {
+        "compose_project": "test-project",
+        "world_name": "test_world",
+        "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
+    }
+    runner._rotate_robot_toward_target(state, target)
+    assert len(calls) == 1
+    script = calls[0]
+    assert "set_pose" in script
+    assert "jetbot" in script
+
+
+def test_plan_visit_route_raises_without_provider(monkeypatch):
+    runner = _make_runner(monkeypatch, scenario_id="visit_route_planning")
+    runner.provider = None
+    with pytest.raises(RuntimeError, match="requires an LLM provider"):
+        runner._plan_visit_route(["ball_a", "ball_b", "ball_c"])
+
+
+def test_plan_visit_route_falls_back_to_nearest_on_error(monkeypatch):
+    runner = _make_runner(monkeypatch, scenario_id="visit_route_planning")
+    runner._mission_anchor_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+
+    class FailingProvider:
+        def plan_route(self, **kwargs):
+            raise RuntimeError("API unavailable")
+
+    runner.provider = FailingProvider()
+    monkeypatch.setattr(
+        visit_runner,
+        "fetch_dashboard_state",
+        lambda *a, **kw: {"belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}}},
+    )
+    route = runner._plan_visit_route(["ball_a", "ball_b", "ball_c"])
+    # Should return all 3 targets sorted by distance (nearest first)
+    assert set(route) == {"ball_a", "ball_b", "ball_c"}
+    assert len(route) == 3
+
+
+def test_plan_route_provider_method_validates_response(monkeypatch):
+    """Test that plan_route validates the returned IDs match the input set."""
+    import sys
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from llm_provider_openai import OpenAIResponsesProvider, _parse_function_payload
+    from llm_provider_base import ProviderError
+
+    provider = OpenAIResponsesProvider(api_key="test-key", model="test-model")
+
+    # Mock call_openai_responses to return a valid route
+    def mock_call(**kwargs):
+        return {
+            "output": [
+                {
+                    "type": "function_call",
+                    "name": "plan_visit_route",
+                    "arguments": '{"target_order": ["ball_c", "ball_a", "ball_b"], "rationale_short": "nearest first"}',
+                }
+            ]
+        }
+
+    monkeypatch.setattr("llm_provider_openai.call_openai_responses", mock_call)
+
+    result = provider.plan_route(
+        remaining_target_ids=["ball_a", "ball_b", "ball_c"],
+        target_details=[],
+        timeout_s=10.0,
+    )
+    assert result == ["ball_c", "ball_a", "ball_b"]
+
+    # Test with mismatched IDs
+    def mock_call_bad(**kwargs):
+        return {
+            "output": [
+                {
+                    "type": "function_call",
+                    "name": "plan_visit_route",
+                    "arguments": '{"target_order": ["ball_c", "ball_a"], "rationale_short": "oops"}',
+                }
+            ]
+        }
+
+    monkeypatch.setattr("llm_provider_openai.call_openai_responses", mock_call_bad)
+
+    with pytest.raises(ProviderError, match="expected exactly"):
+        provider.plan_route(
+            remaining_target_ids=["ball_a", "ball_b", "ball_c"],
+            target_details=[],
+            timeout_s=10.0,
+        )

@@ -637,7 +637,7 @@ def test_get_state_clears_completed_visit_current_target_id(tmp_path):
     assert state["current_target_id"] == ""
 
 
-def test_truth_probe_defaults_include_visit_mission_targets(monkeypatch):
+def test_truth_probe_defaults_include_visit_prefix(monkeypatch):
     monkeypatch.setattr(
         sys,
         "argv",
@@ -653,11 +653,7 @@ def test_truth_probe_defaults_include_visit_mission_targets(monkeypatch):
     )
 
     args = sim_truth_probe.parse_args()
-    targets = set(args.target_model_names.split(","))
-
-    assert "visit_mission_target_ball_1" in targets
-    assert "visit_mission_target_ball_2" in targets
-    assert "visit_mission_target_ball_3" in targets
+    assert args.target_model_prefix == "visit_mission_target_"
 
 
 def test_truth_probe_select_target_poses_reports_all_matching_candidates():
@@ -679,6 +675,27 @@ def test_truth_probe_select_target_poses_reports_all_matching_candidates():
         "visit_mission_target_ball_2": poses[1],
         "visit_mission_target_ball_3": poses[2],
     }
+
+
+def test_truth_probe_prefix_discovers_visit_models():
+    poses = [
+        {"name": "jetbot", "position": {"x": 0.0, "y": 0.0}},
+        {"name": "visit_mission_target_ball_a", "position": {"x": 1.0, "y": 0.5}},
+        {"name": "visit_mission_target_ball_c", "position": {"x": 2.0, "y": -0.5}},
+        {"name": "uat_nav2_target", "position": {"x": 3.0, "y": 0.0}},
+    ]
+
+    poses_by_name, names_seen, first_pose, first_name = sim_truth_probe.select_target_poses(
+        poses,
+        ["uat_nav2_target"],
+        ["visit_mission_target_"],
+    )
+
+    assert "uat_nav2_target" in poses_by_name
+    assert "visit_mission_target_ball_a" in poses_by_name
+    assert "visit_mission_target_ball_c" in poses_by_name
+    assert "jetbot" not in poses_by_name
+    assert first_name == "uat_nav2_target"
 
 
 def test_select_active_truth_target_prefers_active_visit_target_and_fails_closed_when_missing():

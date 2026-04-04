@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import shutil
 import subprocess
 import sys
@@ -17,7 +18,10 @@ from typing import Any
 
 from brain_state_digest import CANONICAL_ARGS_BY_INTENT
 from brain_supervisor_policy import build_policy_snapshot
+from llm_provider_openai import OpenAIResponsesProvider
 from llm_supervisor_core import DEFAULT_DASHBOARD_URL
+from llm_supervisor_core import DEFAULT_OPENAI_MODEL
+from llm_supervisor_core import DEFAULT_REASONING_EFFORT
 from llm_supervisor_core import append_jsonl
 from llm_supervisor_core import blocked_decision
 from llm_supervisor_core import decision_signature
@@ -376,6 +380,7 @@ class VisitMissionRunner:
         self.contract = load_contract(Path(args.contract).resolve())
         self.targets = build_visit_targets(str(args.scenario_id))
         self.docker = choose_docker_cli()
+        self.provider = self._build_provider(args) if self._is_route_planning_id(args.scenario_id) else None
         self.last_state_hash = ""
         self.last_decision_signature = ""
         self.last_dispatch_monotonic = 0.0
@@ -429,6 +434,21 @@ class VisitMissionRunner:
         self.runtime_state["latest_operator_event"] = event["message"]
         self.runtime_state["updated_utc"] = event["timestamp_utc"]
         self._persist_runtime_state()
+
+    @staticmethod
+    def _is_route_planning_id(scenario_id: str) -> bool:
+        return str(scenario_id) == "visit_route_planning"
+
+    @staticmethod
+    def _build_provider(args: argparse.Namespace) -> OpenAIResponsesProvider:
+        return OpenAIResponsesProvider(
+            api_key=os.environ.get("OPENAI_API_KEY", ""),
+            model=args.model,
+            reasoning_effort=args.reasoning_effort,
+            base_url=os.environ.get("OPENAI_BASE_URL", ""),
+            org_id=os.environ.get("OPENAI_ORG_ID", ""),
+            project_id=os.environ.get("OPENAI_PROJECT_ID", ""),
+        )
 
     def _request(self, method: str, path: str, payload: dict[str, Any] | None = None, timeout_s: float | None = None) -> tuple[int, dict[str, Any]]:
         return http_json(
@@ -545,6 +565,46 @@ class VisitMissionRunner:
         output = (proc.stdout or b"").decode("utf-8", errors="replace")
         output += ("\n" + (proc.stderr or b"").decode("utf-8", errors="replace")) if proc.stderr else ""
         return proc.returncode, output.strip()
+
+    def _rotate_robot_toward_target(self, state: dict[str, Any], target: VisitTargetSpec) -> None:
+        """Rotate the robot in-place to face the selected target's spawn position."""
+        robot_x, robot_y, _robot_yaw = self._robot_pose_components(state)
+        anchor = self._mission_anchor_pose or {}
+        ax = float(anchor.get("x", robot_x))
+        ay = float(anchor.get("y", robot_y))
+        ayaw = float(anchor.get("yaw", 0.0))
+        target_x = ax + (math.cos(ayaw) * target.forward_m) - (math.sin(ayaw) * target.lateral_m)
+        target_y = ay + (math.sin(ayaw) * target.forward_m) + (math.cos(ayaw) * target.lateral_m)
+        bearing = math.atan2(target_y - robot_y, target_x - robot_x)
+        half_yaw = 0.5 * bearing
+        robot_qz = math.sin(half_yaw)
+        robot_qw = math.cos(half_yaw)
+        compose_project = _clean_text(state.get("compose_project"))
+        if not compose_project:
+            return
+        world_name = _clean_text(state.get("world_name"), DEFAULT_WORLD_NAME)
+        sim_gate_container = self._container_id(compose_project, "sim-gate")
+        script = f"""
+set -eo pipefail
+set +u
+source /opt/ros/${{CORE_ROS_DISTRO:-kilted}}/setup.bash
+set -u
+WORLD_NAME={json.dumps(world_name)}
+ROBOT_X={json.dumps(f"{robot_x:.6f}")}
+ROBOT_Y={json.dumps(f"{robot_y:.6f}")}
+ROBOT_QZ={json.dumps(f"{robot_qz:.6f}")}
+ROBOT_QW={json.dumps(f"{robot_qw:.6f}")}
+if command -v gz >/dev/null 2>&1; then
+  gz service -s "/world/$WORLD_NAME/set_pose/blocking" --reqtype gz.msgs.Pose --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"jetbot\\" position {{ x: $ROBOT_X y: $ROBOT_Y z: 0.0 }} orientation {{ x: 0 y: 0 z: $ROBOT_QZ w: $ROBOT_QW }}"
+fi
+"""
+        rc, output = self._docker_exec(sim_gate_container, script)
+        if rc != 0:
+            self._append_runtime_event(
+                f"Failed to rotate robot toward {target.label}: {output[:200]}",
+                category="warning",
+                key=f"rotate_failed:{target.id}",
+            )
 
     def _target_model_name(self, target: VisitTargetSpec) -> str:
         safe_id = "".join(ch if ch.isalnum() else "_" for ch in target.id.lower())
@@ -922,7 +982,7 @@ exit "$rc"
         return "waiting"
 
     def _is_route_planning(self) -> bool:
-        return str(self.args.scenario_id) == "visit_route_planning"
+        return self._is_route_planning_id(self.args.scenario_id)
 
     def _target_specs_for_state(self, remaining_ids: list[str]) -> list[dict[str, Any]]:
         """Build route_target_specs list for the dashboard state."""
@@ -939,26 +999,48 @@ exit "$rc"
             specs.append({"id": target.id, "label": target.label, "position": {"x": round(tx, 4), "y": round(ty, 4)}})
         return specs
 
-    def _wait_for_llm_target_selection(self, timeout_s: float) -> str | None:
-        """Poll the runtime state file for an LLM-selected target_id."""
-        deadline = time.monotonic() + max(timeout_s, 0.1)
-        while time.monotonic() < deadline:
-            try:
-                raw = MISSION_RUNTIME_STATE_PATH.read_text(encoding="utf-8")
-                runtime = json.loads(raw)
-                selected = str(runtime.get("llm_selected_target_id", "")).strip()
-                if selected:
-                    # Clear the selection so we don't re-read it
-                    runtime["llm_selected_target_id"] = ""
-                    runtime["llm_selected_utc"] = ""
-                    MISSION_RUNTIME_STATE_PATH.write_text(
-                        json.dumps(runtime, indent=2, sort_keys=True) + "\n", encoding="utf-8",
-                    )
-                    return selected
-            except (OSError, json.JSONDecodeError, ValueError):
-                pass
-            time.sleep(self.args.poll_s)
-        return None
+    def _plan_visit_route(self, remaining_ids: list[str]) -> list[str]:
+        """Call the LLM once to produce the full visit order for all remaining targets."""
+        if self.provider is None:
+            raise RuntimeError("Route planning requires an LLM provider.")
+        # Build target details with positions and distances
+        state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
+        specs = self._target_specs_for_state(remaining_ids)
+        robot_pose = (state.get("belief", {}) if isinstance(state.get("belief"), dict) else {}).get("latest_robot_pose", {})
+        rx = float(robot_pose.get("x", 0.0)) if isinstance(robot_pose, dict) else 0.0
+        ry = float(robot_pose.get("y", 0.0)) if isinstance(robot_pose, dict) else 0.0
+        target_details: list[dict[str, Any]] = []
+        for spec in specs:
+            pos = spec.get("position", {})
+            tx, ty = float(pos.get("x", 0.0)), float(pos.get("y", 0.0))
+            dist = round(math.hypot(tx - rx, ty - ry), 3)
+            target_details.append({
+                "target_id": spec["id"],
+                "label": spec.get("label", spec["id"]),
+                "position": pos,
+                "estimated_distance_m": dist,
+            })
+        try:
+            route = self.provider.plan_route(
+                remaining_target_ids=remaining_ids,
+                target_details=target_details,
+                timeout_s=self.args.timeout_s,
+            )
+        except Exception as exc:
+            self._append_runtime_event(
+                f"LLM route plan failed ({exc}), falling back to nearest-first.",
+                category="warning",
+                key="route_plan_fallback",
+            )
+            route = sorted(remaining_ids, key=lambda tid: next(
+                (d["estimated_distance_m"] for d in target_details if d["target_id"] == tid), 999.0
+            ))
+        self._append_runtime_event(
+            f"LLM planned route: {route}",
+            category="decision",
+            key="route_planned",
+        )
+        return route
 
     def _mission_phase_for_decision(self, decision: dict[str, Any], state: dict[str, Any]) -> str:
         if self.runtime_state.get("mission_status") in {"completed", "failed"}:
@@ -977,6 +1059,12 @@ exit "$rc"
         return _clean_text(build_policy_snapshot(state, sim_gate_ready=bool(state.get("sim_gate_ready", False))).get("stage"), "setup")
 
     def run(self) -> dict[str, Any]:
+        if self._is_route_planning():
+            if self.provider is None:
+                raise RuntimeError("Route planning requires an LLM provider but none was configured.")
+            enabled, disabled_reason = self.provider.is_enabled()
+            if not enabled:
+                raise RuntimeError(disabled_reason or "LLM provider is disabled for route planning.")
         ready_state, started_here = self._ensure_environment_ready()
         ready_state = self._wait_for_robot_pose(timeout_s=self.args.environment_timeout_s)
         session_id = _clean_text(ready_state.get("session_id"))
@@ -1038,43 +1126,38 @@ exit "$rc"
                     route_target_specs=self._target_specs_for_state(remaining_ids),
                     remaining_targets=remaining_ids,
                 )
-                self._append_runtime_event("All targets spawned. LLM route planning active.", category="scenario", key="route_planning_started")
+                self._append_runtime_event("All targets spawned. Planning route.", category="scenario", key="route_planning_started")
 
-                visit_index = 0
-                while remaining_ids:
-                    visit_index += 1
-                    self._update_runtime_state(
-                        route_planning_active=True,
-                        route_target_specs=self._target_specs_for_state(remaining_ids),
-                        remaining_targets=remaining_ids,
-                        visited_targets=[item["target_id"] for item in target_results if item.get("pass")],
-                        visit_index=visit_index,
-                        mission_phase="route_planning",
-                        current_target_id="",
-                        current_target_prior={},
-                        llm_selected_target_id="",
-                    )
-                    self._append_runtime_event(
-                        f"Waiting for LLM to select next target from: {remaining_ids}",
-                        category="mission",
-                        key=f"route_wait:{visit_index}",
-                    )
-                    selected_id = self._wait_for_llm_target_selection(timeout_s=self.args.max_target_runtime_s)
-                    if not selected_id or selected_id not in remaining_ids:
+                # One-shot LLM route plan
+                planned_route = self._plan_visit_route(remaining_ids)
+                append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "route_planned", "route": planned_route})
+
+                for visit_index, selected_id in enumerate(planned_route, start=1):
+                    if selected_id not in targets_by_id:
                         mission_pass = False
-                        mission_error = f"LLM target selection failed or invalid: {selected_id!r}"
-                        self._append_runtime_event(mission_error, category="error", key="route_selection_failed")
+                        mission_error = f"Planned target {selected_id!r} not found."
+                        self._append_runtime_event(mission_error, category="error", key="route_invalid_target")
                         break
 
                     target = targets_by_id[selected_id]
-                    self._append_runtime_event(f"LLM selected {target.label}.", category="decision", key=f"route_selected:{target.id}")
+                    remaining_ids = [tid for tid in remaining_ids if tid != selected_id]
+                    self._append_runtime_event(f"Route step {visit_index}: {target.label}.", category="decision", key=f"route_step:{target.id}")
                     self._update_runtime_state(
                         route_planning_active=False,
                         current_target_id=target.id,
+                        remaining_targets=remaining_ids,
+                        visited_targets=[r["target_id"] for r in target_results if r.get("pass")],
+                        visit_index=visit_index,
                         mission_phase="setup",
                         search_bias_active=not target.start_visible,
                     )
-                    append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "llm_target_selected", "target_id": target.id, "visit_index": visit_index})
+                    append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "route_step", "target_id": target.id, "visit_index": visit_index})
+
+                    # Rotate robot to face the selected target so the camera locks the right ball
+                    current_state = self._wait_for_robot_pose(timeout_s=self.args.environment_timeout_s)
+                    self._rotate_robot_toward_target(current_state, target)
+                    self._append_runtime_event(f"Robot rotated toward {target.label}.", key=f"rotate_toward:{target.id}")
+                    time.sleep(1.0)  # let sim settle after rotation
 
                     # Run the visit loop for this target (same as sequential mode)
                     target_pass = False
@@ -1110,7 +1193,12 @@ exit "$rc"
                                 ty = ay + (math.sin(ayaw) * t.forward_m) + (math.cos(ayaw) * t.lateral_m)
                                 spawn_info_for_target = {"target_world": {"x": tx, "y": ty, "z": t.z_m}}
                                 break
-                        self._update_runtime_state(current_target_prior={})
+                        # Set prior from spawn position so multi-ball executor picks the right target
+                        if spawn_info_for_target and isinstance(spawn_info_for_target.get("target_world"), dict):
+                            tw = spawn_info_for_target["target_world"]
+                            self._update_runtime_state(current_target_prior={"x": round(float(tw["x"]), 6), "y": round(float(tw["y"]), 6)})
+                        else:
+                            self._update_runtime_state(current_target_prior={})
 
                         if not target.start_visible:
                             self._append_runtime_event("Waiting for hidden-start view to settle.", key=f"hidden_settle:{target.id}:{attempt}")
@@ -1847,6 +1935,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a deterministic visible-ball visit mission.")
     parser.add_argument("--dashboard-url", default=DEFAULT_DASHBOARD_URL)
     parser.add_argument("--contract", default=str(REPO_ROOT / "runtime" / "contracts" / "llm_control_contract.yaml"))
+    parser.add_argument("--provider", default=os.environ.get("CHASECAR_LLM_PROVIDER", "openai"))
+    parser.add_argument("--model", default=os.environ.get("OPENAI_SUPERVISOR_MODEL") or DEFAULT_OPENAI_MODEL)
+    parser.add_argument("--reasoning-effort", default=os.environ.get("OPENAI_SUPERVISOR_REASONING_EFFORT") or os.environ.get("OPENAI_REASONING_EFFORT") or DEFAULT_REASONING_EFFORT)
     parser.add_argument("--task", default=DEFAULT_TASK_TEXT)
     parser.add_argument("--scenario-id", default="visit_single_ball_proof")
     parser.add_argument("--scenario-label", default="Visit Single Ball Proof")

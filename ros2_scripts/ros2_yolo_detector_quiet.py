@@ -14,7 +14,8 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 import os
-from std_msgs.msg import Header, Float32
+from std_msgs.msg import Header, Float32, String
+import json
 import time
 
 class YOLODetectorNode(Node):
@@ -42,6 +43,7 @@ class YOLODetectorNode(Node):
         self.debug_image_pub = self.create_publisher(Image, '/yolo/debug_image', 10)
         self.detection_pub = self.create_publisher(Point, '/yolo/ball_position', 10)
         self.confidence_pub = self.create_publisher(Float32, '/yolo/confidence', 10)
+        self.detections_pub = self.create_publisher(String, '/yolo/ball_detections', 10)
         
         # Subscriber
         self.image_sub = self.create_subscription(
@@ -140,6 +142,17 @@ class YOLODetectorNode(Node):
                 confidence_msg.data = closest_ball['confidence']
                 self.confidence_pub.publish(confidence_msg)
                 
+                # Publish all detections as JSON array
+                height, width = cv_image.shape[:2]
+                detections_msg = String()
+                detections_msg.data = json.dumps([{
+                    "center_x_px": round(ball['center'][0], 1),
+                    "center_y_px": round(ball['center'][1], 1),
+                    "confidence": round(ball['confidence'], 4),
+                    "bbox": list(ball['bbox']),
+                } for ball in detected_balls])
+                self.detections_pub.publish(detections_msg)
+
                 # Log significant confidence changes
                 current_confidence = closest_ball['confidence']
                 if abs(current_confidence - self.last_confidence) > self.confidence_change_threshold:

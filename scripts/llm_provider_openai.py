@@ -20,6 +20,7 @@ from llm_supervisor_core import (
 
 LEGACY_TOOL_NAME = "emit_frozen_decision"
 BLOCKED_TOOL_NAME = "emit_blocked"
+ROUTE_PLAN_TOOL_NAME = "plan_visit_route"
 INTENT_TOOL_NAMES = {
     "search_for_target": "emit_search_for_target",
     "acquire_target": "emit_acquire_target",
@@ -317,3 +318,67 @@ class OpenAIResponsesProvider:
             provider=self.provider_name,
             model=self.model_name,
         )
+
+    def plan_route(
+        self,
+        *,
+        remaining_target_ids: list[str],
+        target_details: list[Dict[str, Any]],
+        timeout_s: float,
+    ) -> list[str]:
+        """Call the LLM once to produce a full visit order for all remaining targets."""
+        details_text = json.dumps(target_details, indent=2, sort_keys=True)
+        request_payload = {
+            "model": self.model_name,
+            "store": False,
+            "parallel_tool_calls": False,
+            "reasoning": {"effort": self.reasoning_effort},
+            "instructions": (
+                "You are a route planner for a ball-collection robot. "
+                "Given a set of target balls with their positions and distances, "
+                "choose the visit order that minimizes total travel. "
+                "You must use the plan_visit_route tool with ALL target IDs in your chosen order."
+            ),
+            "input": (
+                f"Plan the visit order for these targets:\n{details_text}\n\n"
+                "Return ALL target IDs in your chosen visit order."
+            ),
+            "tool_choice": "required",
+            "tools": [
+                {
+                    "type": "function",
+                    "name": ROUTE_PLAN_TOOL_NAME,
+                    "description": "Submit the planned visit order for all targets.",
+                    "strict": True,
+                    "parameters": _strict_schema({
+                        "target_order": {
+                            "type": "array",
+                            "items": {"type": "string", "enum": remaining_target_ids},
+                        },
+                        "rationale_short": {"type": "string"},
+                    }),
+                }
+            ],
+        }
+        response_payload = call_openai_responses(
+            api_key=self.api_key,
+            request_payload=request_payload,
+            base_url=self.base_url,
+            timeout_s=timeout_s,
+            org_id=self.org_id,
+            project_id=self.project_id,
+        )
+        for item in list(response_payload.get("output", [])):
+            if not isinstance(item, dict) or item.get("type") != "function_call":
+                continue
+            if str(item.get("name", "")) != ROUTE_PLAN_TOOL_NAME:
+                continue
+            payload = _parse_function_payload(item.get("arguments", ""))
+            target_order = list(payload.get("target_order", []))
+            order_ids = [str(tid).strip() for tid in target_order]
+            if set(order_ids) != set(remaining_target_ids):
+                raise ProviderError(
+                    f"Route plan returned {order_ids} but expected exactly {remaining_target_ids}"
+                )
+            return order_ids
+        raise ProviderError("Route plan response did not contain a plan_visit_route call.")

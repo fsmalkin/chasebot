@@ -164,6 +164,9 @@ class BrainIntentExecutor(Node):
 
         self.last_inbox_mtime = 0.0
 
+        self.latest_detections_3d: list[dict[str, Any]] = []
+        self.latest_detections_3d_mono = 0.0
+
         default_qos = QoSPresetProfiles.SENSOR_DATA.value
         self.feedback_pub = self.create_publisher(String, args.feedback_topic, 20)
         self.cmd_vel_pub = self.create_publisher(Twist, args.cmd_vel_topic, 20)
@@ -173,6 +176,7 @@ class BrainIntentExecutor(Node):
 
         self.create_subscription(String, args.intent_topic, self._on_intent, 20)
         self.create_subscription(PointStamped, args.detection_topic, self._on_detection, default_qos)
+        self.create_subscription(String, "/yolo/ball_detections_3d", self._on_detections_3d, 10)
         for topic in self._odom_topic_candidates():
             self.create_subscription(Odometry, topic, self._on_odom, default_qos)
         self.timer = self.create_timer(0.1, self._on_timer)
@@ -546,6 +550,16 @@ class BrainIntentExecutor(Node):
 
     def _on_detection(self, msg: PointStamped) -> None:
         now = time.monotonic()
+        # When multi-ball detections are fresh and a prior is active, override
+        # the single-detection topic with the detection closest to the prior.
+        if (
+            self.active_prior is not None
+            and self.latest_detections_3d
+            and (now - self.latest_detections_3d_mono) <= max(self.args.detection_stale_after_s, 0.5)
+        ):
+            best = self._select_detection_by_prior()
+            if best is not None:
+                msg = best
         if now - self.last_detection_monotonic <= 0.75:
             self.detection_burst_count += 1
         else:
@@ -558,6 +572,52 @@ class BrainIntentExecutor(Node):
         elif self.track_active and not self.goal_in_progress:
             self.track_needs_replan = True
         self._write_state(force=False)
+
+    def _on_detections_3d(self, msg: String) -> None:
+        """Store latest multi-ball 3D detections from the extractor."""
+        try:
+            self.latest_detections_3d = json.loads(msg.data)
+            self.latest_detections_3d_mono = time.monotonic()
+        except (json.JSONDecodeError, TypeError):
+            self.latest_detections_3d = []
+
+    def _select_detection_by_prior(self) -> PointStamped | None:
+        """Pick the 3D detection closest to the active prior in world frame.
+
+        Converts each camera-frame detection to world coordinates using
+        the robot pose, then returns the closest one as a PointStamped
+        matching the format of the single-detection topic.
+        """
+        if self.active_prior is None or self.latest_pose is None or not self.latest_detections_3d:
+            return None
+        px, py = self.active_prior["x"], self.active_prior["y"]
+        best_dist = float("inf")
+        best_det = None
+        for det in self.latest_detections_3d:
+            try:
+                # Camera frame: z=forward, x=right — same transform as nav_goal_planner
+                cam_z = float(det["z"])
+                cam_x = float(det["x"])
+                fwd = cam_z
+                lat = -cam_x
+                cos_yaw = math.cos(self.latest_pose.yaw)
+                sin_yaw = math.sin(self.latest_pose.yaw)
+                wx = self.latest_pose.x + cos_yaw * fwd - sin_yaw * lat
+                wy = self.latest_pose.y + sin_yaw * fwd + cos_yaw * lat
+                dist = math.hypot(wx - px, wy - py)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_det = det
+            except (KeyError, TypeError, ValueError):
+                continue
+        if best_det is None or best_dist > self.prior_lock_tolerance_m:
+            return None
+        pt = PointStamped()
+        pt.header.frame_id = "d415_camera_link"
+        pt.point.x = float(best_det["x"])
+        pt.point.y = float(best_det["y"])
+        pt.point.z = float(best_det["z"])
+        return pt
 
     def _on_odom(self, msg: Odometry) -> None:
         pose = pose_to_robot_pose(msg.pose.pose)

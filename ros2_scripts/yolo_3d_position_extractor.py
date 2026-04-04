@@ -14,9 +14,10 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Point, PointStamped
 from sensor_msgs.msg import Image, CameraInfo
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, String
 from cv_bridge import CvBridge
 import numpy as np
+import json
 import message_filters
 import time
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
@@ -96,13 +97,28 @@ class YOLO3DPositionExtractor(Node):
             sensor_qos
         )
         
+        # Multi-ball detections subscriber
+        self.detections_sub = self.create_subscription(
+            String,
+            '/yolo/ball_detections',
+            self.detections_callback,
+            10
+        )
+        self.latest_detections_2d: list[dict] = []
+        self.latest_detections_mono = 0.0
+
         # Publishers
         self.position_3d_pub = self.create_publisher(
             PointStamped,
             '/yolo/ball_position_3d',
             10
         )
-        
+        self.detections_3d_pub = self.create_publisher(
+            String,
+            '/yolo/ball_detections_3d',
+            10
+        )
+
         self.get_logger().info('3D Position Extractor initialized')
         self.get_logger().info(f'Confidence threshold: {self.confidence_threshold}')
         self.get_logger().info(f'Detection stale timeout: {self.detection_stale_timeout_s:.2f}s')
@@ -146,10 +162,44 @@ class YOLO3DPositionExtractor(Node):
         if self.confidence_received_count % 10 == 1:  # Log every 10th
             self.get_logger().info(f'Confidence received #{self.confidence_received_count}: {msg.data:.3f}')
     
+    def detections_callback(self, msg):
+        """Store latest multi-ball 2D detections from the YOLO detector."""
+        try:
+            self.latest_detections_2d = json.loads(msg.data)
+            self.latest_detections_mono = time.monotonic()
+        except (json.JSONDecodeError, TypeError):
+            self.latest_detections_2d = []
+
+    def _pixel_to_3d(self, pixel_x: int, pixel_y: int, depth_image, depth_scale: float):
+        """Project a single pixel coordinate to a 3D point using depth. Returns (x, y, z) or None."""
+        height, width = depth_image.shape
+        pixel_x = max(0, min(pixel_x, width - 1))
+        pixel_y = max(0, min(pixel_y, height - 1))
+
+        radius = max(0, self.depth_sample_radius_px)
+        y0 = max(0, pixel_y - radius)
+        y1 = min(height - 1, pixel_y + radius)
+        x0 = max(0, pixel_x - radius)
+        x1 = min(width - 1, pixel_x + radius)
+        depth_window = depth_image[y0:y1 + 1, x0:x1 + 1]
+        valid_window = depth_window[np.isfinite(depth_window) & (depth_window > 0)]
+        if valid_window.size > 0:
+            depth_value = float(np.median(valid_window) * depth_scale)
+        else:
+            depth_value = float(depth_image[pixel_y, pixel_x] * depth_scale)
+
+        if depth_value <= 0.01 or depth_value > 10.0:
+            return None
+
+        z = depth_value
+        x = (pixel_x - self.cx) * z / self.fx
+        y = (pixel_y - self.cy) * z / self.fy
+        return (x, y, z)
+
     def depth_callback(self, msg):
         """Process depth image and extract 3D position if detection is available"""
         self.depth_received_count += 1
-        
+
         # Check if we have all required data
         if self.fx is None:
             if self.depth_received_count % 30 == 1:
@@ -268,7 +318,32 @@ class YOLO3DPositionExtractor(Node):
                     f'(from pixel [{pixel_x}, {pixel_y}], '
                     f'confidence: {self.latest_confidence:.3f})'
                 )
-            
+
+            # Multi-ball: project all 2D detections to 3D and publish as JSON array
+            now_mono = time.monotonic()
+            if (
+                self.latest_detections_2d
+                and (now_mono - self.latest_detections_mono) <= self.detection_stale_timeout_s
+            ):
+                results_3d: list[dict] = []
+                for det in self.latest_detections_2d:
+                    cx_px = int(round(float(det.get("center_x_px", 0))))
+                    cy_px = int(round(float(det.get("center_y_px", 0))))
+                    pt = self._pixel_to_3d(cx_px, cy_px, depth_image, depth_scale)
+                    if pt is not None:
+                        results_3d.append({
+                            "x": round(pt[0], 4),
+                            "y": round(pt[1], 4),
+                            "z": round(pt[2], 4),
+                            "confidence": round(float(det.get("confidence", 0)), 4),
+                            "center_x_px": det.get("center_x_px"),
+                            "center_y_px": det.get("center_y_px"),
+                        })
+                if results_3d:
+                    det3d_msg = String()
+                    det3d_msg.data = json.dumps(results_3d)
+                    self.detections_3d_pub.publish(det3d_msg)
+
         except Exception as e:
             self.get_logger().error(f'Error processing depth: {str(e)}')
 

@@ -26,11 +26,13 @@ from std_msgs.msg import String
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_DIR = REPO_ROOT / "runtime" / "dashboard"
 VISIT_MISSION_RUNTIME_PATH = RUNTIME_DIR / "visit_mission_runtime.json"
-VISIT_TRUTH_MODEL_BY_TARGET_ID = {
-    "ball_1": "visit_mission_target_ball_1",
-    "ball_2": "visit_mission_target_ball_2",
-    "ball_3": "visit_mission_target_ball_3",
-}
+VISIT_TARGET_MODEL_PREFIX = "visit_mission_target_"
+
+
+def visit_truth_model_name(target_id: str) -> str:
+    """Derive the Gazebo model name from a visit target ID using the naming convention."""
+    safe_id = "".join(ch if ch.isalnum() else "_" for ch in target_id.lower())
+    return f"{VISIT_TARGET_MODEL_PREFIX}{safe_id}"
 
 
 def parse_args() -> argparse.Namespace:
@@ -133,7 +135,7 @@ def select_active_truth_target(
 ) -> tuple[Optional[tuple[float, float]], str]:
     target_poses_by_name = state.get("target_poses_by_name")
     if isinstance(target_poses_by_name, dict):
-        active_target_model = VISIT_TRUTH_MODEL_BY_TARGET_ID.get(str(active_target_id or ""))
+        active_target_model = visit_truth_model_name(active_target_id) if active_target_id else ""
         if active_target_model:
             active_pose = truth_world_from_pose(target_poses_by_name.get(active_target_model))
             if active_pose is not None:
@@ -234,6 +236,7 @@ class VisualDemoObserver(Node):
         # The detector publishes the debug image with RELIABLE QoS; mirror that here.
         self.create_subscription(Image, args.debug_topic, self._on_debug, reliable_image_qos)
         self.create_subscription(PointStamped, args.detection_topic, self._on_detection, default_qos)
+        self.create_subscription(String, "/yolo/ball_detections_3d", self._on_detections_3d, default_qos)
         self.create_subscription(PoseStamped, args.goal_topic, self._on_goal, default_qos)
         if args.goal_fallback_topic and args.goal_fallback_topic != args.goal_topic:
             self.create_subscription(PoseStamped, args.goal_fallback_topic, self._on_goal, default_qos)
@@ -249,6 +252,8 @@ class VisualDemoObserver(Node):
         self.latest_debug_msg: Optional[Image] = None
         self.latest_odom: Optional[Odometry] = None
         self.latest_detection_local: Optional[PointStamped] = None
+        self.latest_detections_3d: list[dict] = []
+        self.latest_detections_3d_mono = 0.0
         self.latest_goal: Optional[PoseStamped] = None
         self.latest_goal_source: str = ""
         self.latest_feedback_text = ""
@@ -314,6 +319,13 @@ class VisualDemoObserver(Node):
     def _on_detection(self, msg: PointStamped) -> None:
         self.latest_detection_local = msg
         self.last_detection_monotonic = time.monotonic()
+
+    def _on_detections_3d(self, msg: String) -> None:
+        try:
+            self.latest_detections_3d = json.loads(msg.data)
+            self.latest_detections_3d_mono = time.monotonic()
+        except (json.JSONDecodeError, TypeError):
+            self.latest_detections_3d = []
 
     def _on_goal(self, msg: PoseStamped) -> None:
         self.latest_goal = msg
@@ -389,10 +401,10 @@ class VisualDemoObserver(Node):
         state = self._load_operator_status()
         phase = str(state.get("phase") or self.args.phase or "")
         target_id = str(state.get("target_id") or self.args.target_id or "")
-        if target_id not in VISIT_TRUTH_MODEL_BY_TARGET_ID and phase.startswith("visit_"):
+        if phase.startswith("visit_"):
             runtime = self._load_visit_runtime_state()
             runtime_target_id = str(runtime.get("current_target_id", "") or "")
-            if runtime_target_id in VISIT_TRUTH_MODEL_BY_TARGET_ID:
+            if runtime_target_id:
                 target_id = runtime_target_id
         return {
             "phase": phase,
@@ -436,6 +448,30 @@ class VisualDemoObserver(Node):
         world_x = pose.x + (math.cos(pose.yaw) * ball_x) - (math.sin(pose.yaw) * ball_y)
         world_y = pose.y + (math.sin(pose.yaw) * ball_x) + (math.cos(pose.yaw) * ball_y)
         return (world_x, world_y)
+
+    def _all_detections_world(self) -> list[tuple[float, float]]:
+        """Transform all multi-ball 3D detections to world coordinates."""
+        pose = self._pose_from_odom()
+        if pose is None or not self.latest_detections_3d:
+            return []
+        now = time.monotonic()
+        if (now - self.latest_detections_3d_mono) > 2.5:
+            return []
+        results: list[tuple[float, float]] = []
+        cos_yaw = math.cos(pose.yaw)
+        sin_yaw = math.sin(pose.yaw)
+        for det in self.latest_detections_3d:
+            try:
+                cam_z = float(det["z"])
+                cam_x = float(det["x"])
+                fwd = cam_z
+                lat = -cam_x
+                wx = pose.x + cos_yaw * fwd - sin_yaw * lat
+                wy = pose.y + sin_yaw * fwd + cos_yaw * lat
+                results.append((wx, wy))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return results
 
     def _load_truth_state(self) -> Optional[dict[str, object]]:
         if self.truth_state_path is None or not self.truth_state_path.exists():
@@ -487,6 +523,7 @@ class VisualDemoObserver(Node):
         status_text = str(operator_state.get("status_text", ""))
         pose = self._pose_from_odom()
         detection_world = self._transform_detection_world()
+        all_detections_world = self._all_detections_world()
         goal = self.latest_goal
         truth_target, truth_target_model_name = self._truth_target_selection(operator_state)
         distance_trend, distance_progress = self._distance_trend()
@@ -511,6 +548,7 @@ class VisualDemoObserver(Node):
             world_points.append((pose.x, pose.y))
         if detection_world:
             world_points.append(detection_world)
+        world_points.extend(all_detections_world)
         if goal:
             world_points.append((float(goal.pose.position.x), float(goal.pose.position.y)))
         if truth_target:
@@ -562,6 +600,13 @@ class VisualDemoObserver(Node):
             cv2.circle(frame, (tx_px, ty_px), 6, (45, 150, 225), -1)
             cv2.putText(frame, "true target", (tx_px + 10, ty_px - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (35, 95, 150), 2, cv2.LINE_AA)
 
+        # Render all detected balls as smaller dots (non-active targets)
+        for aw_x, aw_y in all_detections_world:
+            aw_px, aw_py = world_to_px(aw_x, aw_y)
+            cv2.circle(frame, (aw_px, aw_py), 5, (100, 100, 200), -1)
+            cv2.circle(frame, (aw_px, aw_py), 5, (60, 60, 160), 1)
+
+        # Active detection (primary vision target) rendered larger on top
         if detection_world:
             dx_px, dy_px = world_to_px(*detection_world)
             cv2.circle(frame, (dx_px, dy_px), 8, (30, 30, 210), -1)

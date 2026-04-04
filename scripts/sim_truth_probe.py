@@ -21,18 +21,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--target-model-names",
         default=(
-            "visit_mission_target_ball_1,"
-            "visit_mission_target_ball_2,"
-            "visit_mission_target_ball_3,"
-            "visit_mission_target_m3_center,"
-            "visit_mission_target_m3_left,"
-            "visit_mission_target_m3_right,"
             "milestone_demo_target,"
             "milestone_demo_target_viewer,"
             "uat_nav2_target,"
             "uat_snapshot_target,"
             "llm_turn_then_go_target"
         ),
+    )
+    parser.add_argument(
+        "--target-model-prefix",
+        default="visit_mission_target_",
+        help="Auto-discover any Gazebo model whose name starts with this prefix.",
     )
     parser.add_argument("--topic", default="")
     parser.add_argument("--duration-s", type=float, default=180.0)
@@ -109,6 +108,7 @@ def sample_pose_topic(topic: str) -> tuple[bool, str]:
 def select_target_poses(
     poses: list[dict[str, object]],
     target_candidates: list[str],
+    target_prefixes: list[str] | None = None,
 ) -> tuple[dict[str, dict[str, object]], list[str], dict[str, object] | None, str]:
     target_poses_by_name: dict[str, dict[str, object]] = {}
     target_names_seen: list[str] = []
@@ -123,6 +123,16 @@ def select_target_poses(
         if first_target_pose is None:
             first_target_pose = target_pose
             first_target_name = candidate
+    # Auto-discover models matching any prefix (e.g. "visit_mission_target_")
+    for prefix in (target_prefixes or []):
+        for pose in poses:
+            name = str(pose.get("name", ""))
+            if name and name.startswith(prefix) and name not in target_poses_by_name and isinstance(pose, dict):
+                target_poses_by_name[name] = pose
+                target_names_seen.append(name)
+                if first_target_pose is None:
+                    first_target_pose = pose
+                    first_target_name = name
     return target_poses_by_name, target_names_seen, first_target_pose, first_target_name
 
 
@@ -134,6 +144,7 @@ def main() -> int:
     timeline_path = output_dir / "truth_timeline.json"
     summary_path = output_dir / "truth_summary.json"
     target_candidates = [item.strip() for item in args.target_model_names.split(",") if item.strip()]
+    target_prefixes = [p.strip() for p in (args.target_model_prefix or "").split(",") if p.strip()]
     topic = args.topic or f"/world/{args.world_name}/dynamic_pose/info"
     started = time.monotonic()
     deadline = started + max(args.duration_s, 1.0)
@@ -171,7 +182,7 @@ def main() -> int:
         if ok and payload:
             poses = parse_pose_message(payload)
             robot_pose = next((pose for pose in poses if pose.get("name") == args.robot_model_name), None)
-            target_poses_by_name, target_names_seen, target_pose, target_name = select_target_poses(poses, target_candidates)
+            target_poses_by_name, target_names_seen, target_pose, target_name = select_target_poses(poses, target_candidates, target_prefixes)
             if robot_pose is not None:
                 robot_seen += 1
                 latest_robot = robot_pose
