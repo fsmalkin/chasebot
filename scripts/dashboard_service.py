@@ -3617,9 +3617,77 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
 
 class DashboardHttpServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+
     def __init__(self, server_address: tuple[str, int], controller: DashboardController) -> None:
         super().__init__(server_address, DashboardRequestHandler)
         self.controller = controller
+
+
+def _kill_stale_dashboard_on_port(port: int) -> None:
+    """Find and kill any existing processes listening on *port*.
+
+    This prevents zombie dashboard instances from accumulating when the
+    service is restarted (e.g. after a code fix) without first killing
+    the old process.  Works on both Windows and Linux.
+    """
+    my_pid = os.getpid()
+    pids_to_kill: list[int] = []
+
+    if sys.platform == "win32":
+        try:
+            out = subprocess.check_output(
+                ["netstat", "-ano"], text=True, stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            return
+        for line in out.splitlines():
+            if "LISTENING" not in line:
+                continue
+            parts = line.split()
+            # Format: proto  local_addr  foreign_addr  state  pid
+            if len(parts) < 5:
+                continue
+            local_addr = parts[1]
+            if local_addr.endswith(f":{port}"):
+                try:
+                    pid = int(parts[-1])
+                except ValueError:
+                    continue
+                if pid != my_pid and pid > 0:
+                    pids_to_kill.append(pid)
+        for pid in pids_to_kill:
+            print(f"[dashboard] killing stale process {pid} on port {port}")
+            subprocess.call(
+                ["taskkill", "/PID", str(pid), "/F"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+    else:
+        # Linux / macOS
+        try:
+            out = subprocess.check_output(
+                ["ss", "-tlnp", f"sport = :{port}"],
+                text=True, stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            return
+        for line in out.splitlines():
+            # Extract pid from pid=<N> token
+            m = re.search(r"pid=(\d+)", line)
+            if m:
+                pid = int(m.group(1))
+                if pid != my_pid and pid > 0:
+                    pids_to_kill.append(pid)
+        for pid in pids_to_kill:
+            print(f"[dashboard] killing stale process {pid} on port {port}")
+            try:
+                os.kill(pid, 9)
+            except OSError:
+                pass
+
+    if pids_to_kill:
+        # Brief pause for the OS to release the socket.
+        time.sleep(0.5)
 
 
 def parse_args() -> argparse.Namespace:
@@ -3631,6 +3699,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    _kill_stale_dashboard_on_port(args.port)
     controller = DashboardController(host=args.host, port=args.port)
     controller._update_state(dashboard_url=f"http://{args.host}:{args.port}/")
     server = DashboardHttpServer((args.host, args.port), controller)
