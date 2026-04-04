@@ -93,6 +93,12 @@ def parse_args() -> argparse.Namespace:
         help="Max distance between detected ball world position and target prior to allow lock.",
     )
     parser.add_argument(
+        "--acquire-radius-m",
+        type=float,
+        default=1.5,
+        help="Distance from prior at which visit transitions from navigating to acquiring (visual search).",
+    )
+    parser.add_argument(
         "--use-sim-time",
         action="store_true",
         default=True,
@@ -164,10 +170,11 @@ class BrainIntentExecutor(Node):
         self.active_prior: dict[str, float] | None = None
         self.last_prior_read_monotonic = 0.0
 
-        # Visit lifecycle state — executor owns the full search→lock→approach→report cycle
+        # Visit lifecycle state — executor owns the full navigate→acquire→approach→report cycle
         self.visit_active = False
         self.visit_target_id = ""
         self.visit_started_monotonic = 0.0
+        self.visit_phase = ""  # "navigating" | "acquiring" | "approaching"
         self.visit_locked = False
         self.visit_approach_dispatched = False
 
@@ -465,6 +472,7 @@ class BrainIntentExecutor(Node):
         )
         # Visit lifecycle: auto-dispatch approach goal on lock
         if self.visit_active and not self.visit_locked:
+            self.visit_phase = "approaching"
             self.visit_locked = True
             self._dispatch_nav_goal(
                 reason=f"visit_target({self.visit_target_id})",
@@ -572,7 +580,11 @@ class BrainIntentExecutor(Node):
             return
         if status == 4:
             self._publish_feedback("nav goal reached successfully", status="goal_succeeded")
-            # Visit lifecycle: goal succeeded — check if close enough to prior
+            # Visit lifecycle: navigating goal arrived — transition to acquiring
+            if self.visit_active and self.visit_phase == "navigating":
+                self._begin_visit_acquire(self.visit_target_id)
+                return
+            # Visit lifecycle: approach goal succeeded — check if close enough to prior
             if self.visit_active and self.visit_locked:
                 prior_dist = self._prior_robot_distance_m()
                 if prior_dist is not None and prior_dist <= self.prior_lock_tolerance_m:
@@ -588,6 +600,10 @@ class BrainIntentExecutor(Node):
             self._publish_feedback(reason, status="goal_canceled")
         elif status == 6:
             self._publish_feedback("nav goal aborted by Nav2", status="goal_aborted")
+            # Visit lifecycle: navigating goal aborted — fall back to acquiring from here
+            if self.visit_active and self.visit_phase == "navigating":
+                self._begin_visit_acquire(self.visit_target_id)
+                return
         else:
             self._publish_feedback(f"nav goal finished with status {status}", status="goal_finished")
         self.pending_cancel_reason = ""
@@ -614,6 +630,11 @@ class BrainIntentExecutor(Node):
         self.last_detection_monotonic = now
         if self.search_active and self._target_ready_for_lock():
             self._lock_target(self.search_target_class or "ball", "search_for_target")
+            self.track_needs_replan = False
+        elif self.visit_active and self.visit_phase == "navigating" and self._target_ready_for_lock():
+            # Opportunistic: spotted the ball while navigating — skip to lock
+            self._cancel_goal("visit_target: target detected during navigation")
+            self._lock_target("ball", "visit_target_navigate")
             self.track_needs_replan = False
         elif self.track_active and not self.goal_in_progress:
             self.track_needs_replan = True
@@ -797,30 +818,57 @@ class BrainIntentExecutor(Node):
         self.visit_active = True
         self.visit_target_id = target_id
         self.visit_started_monotonic = time.monotonic()
+        self.visit_phase = ""
         self.visit_locked = False
         self.visit_approach_dispatched = False
 
-        # Begin search immediately
-        if self.latest_pose is None:
+        # If prior and odom are available, navigate directly to the prior
+        if self.active_prior is not None and self.latest_pose is not None:
+            prior_dist = self._prior_robot_distance_m()
+            if prior_dist is not None and prior_dist > self.args.acquire_radius_m:
+                # Far from target — navigate toward the prior position
+                dispatched = self._dispatch_prior_approach_goal(
+                    reason=f"visit_target({target_id}): navigating to prior",
+                    approach_distance_m=self.args.acquire_radius_m * 0.5,
+                )
+                if dispatched:
+                    self.visit_phase = "navigating"
+                    self._publish_feedback(
+                        f"visit_target: navigating to {target_id}",
+                        status="visit_target_navigating",
+                        extra={"target_id": target_id, "prior_distance_m": round(prior_dist, 4)},
+                    )
+                    return
+            # Already near the prior — go straight to acquiring
+            self._begin_visit_acquire(target_id)
+        elif self.latest_pose is None:
+            # No odom yet — wait for it (timer will start navigate or acquire)
             self._publish_feedback(
-                f"visit_target: searching for {target_id} (waiting for odom)",
+                f"visit_target: waiting for odom to navigate to {target_id}",
                 status="visit_target_searching",
                 extra={"target_id": target_id},
             )
         else:
-            initial_state = "centering" if (self._target_visible_recent() and self._prior_lock_alignment_ok()) else "rotating"
-            self._begin_search_motion(target_class="ball", search_state=initial_state)
-            self._publish_feedback(
-                f"visit_target: searching for {target_id}",
-                status="visit_target_searching",
-                extra={"target_id": target_id},
-            )
+            # No prior — fall back to search rotation
+            self._begin_visit_acquire(target_id)
+
+    def _begin_visit_acquire(self, target_id: str) -> None:
+        """Transition the visit lifecycle to the acquiring phase (visual search near prior)."""
+        self.visit_phase = "acquiring"
+        initial_state = "centering" if (self._target_visible_recent() and self._prior_lock_alignment_ok()) else "rotating"
+        self._begin_search_motion(target_class="ball", search_state=initial_state)
+        self._publish_feedback(
+            f"visit_target: acquiring {target_id}",
+            status="visit_target_acquiring",
+            extra={"target_id": target_id},
+        )
 
     def _end_visit(self, *, status: str, reason: str, extra: dict[str, Any] | None = None) -> None:
         """End the active visit lifecycle and publish result feedback."""
         target_id = self.visit_target_id
         self.visit_active = False
         self.visit_target_id = ""
+        self.visit_phase = ""
         self.visit_locked = False
         self.visit_approach_dispatched = False
         payload: dict[str, Any] = {"target_id": target_id}
@@ -912,8 +960,39 @@ class BrainIntentExecutor(Node):
         self._check_intent_inbox()
         self._refresh_target_prior()
 
-        # Visit lifecycle: start search once odom arrives (deferred from _handle_visit_target_intent)
-        if self.visit_active and not self.search_active and not self.visit_locked and self.latest_pose is not None:
+        # Visit lifecycle: deferred start — odom just arrived
+        if self.visit_active and not self.visit_phase and self.latest_pose is not None:
+            # Odom wasn't ready when visit_target was received — start now
+            if self.active_prior is not None:
+                prior_dist = self._prior_robot_distance_m()
+                if prior_dist is not None and prior_dist > self.args.acquire_radius_m:
+                    dispatched = self._dispatch_prior_approach_goal(
+                        reason=f"visit_target({self.visit_target_id}): navigating to prior",
+                        approach_distance_m=self.args.acquire_radius_m * 0.5,
+                    )
+                    if dispatched:
+                        self.visit_phase = "navigating"
+                        self._publish_feedback(
+                            f"visit_target: navigating to {self.visit_target_id}",
+                            status="visit_target_navigating",
+                            extra={"target_id": self.visit_target_id},
+                        )
+                    else:
+                        self._begin_visit_acquire(self.visit_target_id)
+                else:
+                    self._begin_visit_acquire(self.visit_target_id)
+            else:
+                self._begin_visit_acquire(self.visit_target_id)
+
+        # Visit lifecycle: navigating — check if close enough to transition to acquiring
+        if self.visit_active and self.visit_phase == "navigating" and self.latest_pose is not None:
+            prior_dist = self._prior_robot_distance_m()
+            if prior_dist is not None and prior_dist <= self.args.acquire_radius_m:
+                self._cancel_goal("visit_target: within acquire radius")
+                self._begin_visit_acquire(self.visit_target_id)
+
+        # Visit lifecycle: acquiring — if search is not active and not locked, restart search
+        if self.visit_active and self.visit_phase == "acquiring" and not self.search_active and not self.visit_locked:
             if not self.visit_approach_dispatched:
                 initial_state = "centering" if (self._target_visible_recent() and self._prior_lock_alignment_ok()) else "rotating"
                 self._begin_search_motion(target_class="ball", search_state=initial_state)
@@ -1041,6 +1120,7 @@ class BrainIntentExecutor(Node):
             "prior_robot_distance_m": self._prior_robot_distance_m(),
             "visit_active": self.visit_active,
             "visit_target_id": self.visit_target_id,
+            "visit_phase": self.visit_phase,
         }
         if self.latest_pose is not None:
             payload["latest_robot_pose"] = asdict(self.latest_pose)

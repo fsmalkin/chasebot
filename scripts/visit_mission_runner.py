@@ -1045,6 +1045,9 @@ exit "$rc"
     def _visit_phase_from_brain(self, brain: dict[str, Any]) -> str:
         """Derive mission phase from executor brain state during autonomous visit."""
         if bool(brain.get("visit_active", False)):
+            phase = str(brain.get("visit_phase", ""))
+            if phase == "navigating":
+                return "navigate"
             if bool(brain.get("track_active", False)):
                 return "track"
             if bool(brain.get("target_locked", False)):
@@ -1175,13 +1178,7 @@ exit "$rc"
                     ty = ay + (math.sin(ayaw) * target.forward_m) + (math.cos(ayaw) * target.lateral_m)
                     self._update_runtime_state(current_target_prior={"x": round(tx, 6), "y": round(ty, 6)})
 
-                    # Rotate robot to face target
-                    current_state = self._wait_for_robot_pose(timeout_s=self.args.environment_timeout_s)
-                    self._rotate_robot_toward_target(current_state, target)
-                    self._append_runtime_event(f"Robot rotated toward {target.label}.", key=f"rotate_toward:{target.id}")
-                    time.sleep(1.0)
-
-                    # Dispatch visit_target — executor owns the full search→lock→approach→report lifecycle
+                    # Dispatch visit_target — executor navigates to prior, acquires, approaches, and reports
                     dispatch_status, dispatch_payload = dispatch_intent(
                         self.dashboard_url, "visit_target", {"target_id": target.id}, timeout_s=self.args.timeout_s,
                     )

@@ -163,6 +163,7 @@ def _make_executor(monkeypatch):
         approach_distance_m=0.25,
         track_replan_cooldown_s=1.5,
         goal_frame="odom",
+        acquire_radius_m=1.5,
     )
     executor.latest_detection = None
     executor.last_detection_monotonic = 0.0
@@ -204,6 +205,7 @@ def _make_executor(monkeypatch):
     executor.visit_active = False
     executor.visit_target_id = ""
     executor.visit_started_monotonic = 0.0
+    executor.visit_phase = ""
     executor.visit_locked = False
     executor.visit_approach_dispatched = False
     executor.latest_detections_3d = []
@@ -245,12 +247,25 @@ def _make_executor(monkeypatch):
             executor.search_active = False
             executor.search_state = "locked"
 
+    dispatched_nav_goals = []
+    dispatched_prior_goals = []
+
+    def _dispatch_nav_goal(*, reason: str, approach_distance_m: float) -> bool:
+        dispatched_nav_goals.append({"reason": reason, "approach_distance_m": approach_distance_m})
+        return True
+
+    def _dispatch_prior_approach_goal(*, reason: str, approach_distance_m: float) -> bool:
+        dispatched_prior_goals.append({"reason": reason, "approach_distance_m": approach_distance_m})
+        return True
+
     executor._publish_feedback = _publish_feedback
     executor._publish_twist = _publish_twist
     executor._publish_stop = _publish_stop
     executor._cancel_goal = _cancel_goal
     executor._write_state = _write_state
     executor._lock_target = _lock_target
+    executor._dispatch_nav_goal = _dispatch_nav_goal
+    executor._dispatch_prior_approach_goal = _dispatch_prior_approach_goal
     executor._clear_motion_state = original_clear_motion_state
     executor._reset_pursuit_state = original_reset_pursuit_state
 
@@ -258,6 +273,8 @@ def _make_executor(monkeypatch):
 
     executor._published_feedback = published_feedback
     executor._published_twists = published_twists
+    executor._dispatched_nav_goals = dispatched_nav_goals
+    executor._dispatched_prior_goals = dispatched_prior_goals
     executor._published_stops = published_stops
     executor._canceled_goals = canceled_goals
     executor._locked_targets = locked_targets
@@ -575,6 +592,9 @@ def test_dispatch_prior_approach_goal_computes_correct_target(monkeypatch):
     executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
     executor.active_prior = {"x": 1.0, "y": 0.0}
 
+    # Restore real _dispatch_prior_approach_goal (mocked in _make_executor)
+    executor._dispatch_prior_approach_goal = executor_mod.BrainIntentExecutor._dispatch_prior_approach_goal.__get__(executor, executor_mod.BrainIntentExecutor)
+
     # Stub out nav client and clock
     executor.nav_client = SimpleNamespace(
         server_is_ready=lambda: True,
@@ -598,6 +618,9 @@ def test_dispatch_prior_approach_goal_returns_false_when_close(monkeypatch):
     executor = _make_executor(monkeypatch)
     executor.latest_pose = SimpleNamespace(x=0.9, y=0.0, yaw=0.0)
     executor.active_prior = {"x": 1.0, "y": 0.0}
+
+    # Restore real _dispatch_prior_approach_goal (mocked in _make_executor)
+    executor._dispatch_prior_approach_goal = executor_mod.BrainIntentExecutor._dispatch_prior_approach_goal.__get__(executor, executor_mod.BrainIntentExecutor)
 
     executor.nav_client = SimpleNamespace(
         server_is_ready=lambda: True,
@@ -640,6 +663,9 @@ def test_track_replan_uses_prior_when_robot_is_far_from_prior(monkeypatch):
     executor.nav_client = FakeNavClient()
     executor.goal_pose_pub = SimpleNamespace(publish=lambda msg: None)
     executor.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: None))
+
+    # Restore real _dispatch_prior_approach_goal (mocked in _make_executor)
+    executor._dispatch_prior_approach_goal = executor_mod.BrainIntentExecutor._dispatch_prior_approach_goal.__get__(executor, executor_mod.BrainIntentExecutor)
 
     executor._on_timer()
 
@@ -684,6 +710,9 @@ def test_track_replan_uses_detection_when_close_to_prior(monkeypatch):
     executor.goal_pose_pub = SimpleNamespace(publish=lambda msg: None)
     executor.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: None))
 
+    # Restore real _dispatch_nav_goal (mocked in _make_executor)
+    executor._dispatch_nav_goal = executor_mod.BrainIntentExecutor._dispatch_nav_goal.__get__(executor, executor_mod.BrainIntentExecutor)
+
     executor._on_timer()
 
     # Should use detection-based goal since prior distance (0.04m) < prior_approach (0.05m)
@@ -695,7 +724,8 @@ def test_track_replan_uses_detection_when_close_to_prior(monkeypatch):
 # --- visit_target handler tests ---
 
 
-def test_visit_target_writes_selection_and_starts_search(monkeypatch, tmp_path):
+def test_visit_target_writes_selection_and_starts_acquire(monkeypatch, tmp_path):
+    """Without a distant prior, visit_target goes straight to acquiring phase."""
     executor = _make_executor(monkeypatch)
     runtime_path = tmp_path / "visit_mission_runtime.json"
     runtime_path.write_text('{"running": true}', encoding="utf-8")
@@ -707,11 +737,12 @@ def test_visit_target_writes_selection_and_starts_search(monkeypatch, tmp_path):
     data = json.loads(runtime_path.read_text(encoding="utf-8"))
     assert data["llm_selected_target_id"] == "ball_b"
     assert "llm_selected_utc" in data
-    # Visit lifecycle: should start searching and be active
+    # Visit lifecycle: should go to acquiring (no distant prior to navigate to)
     assert executor.visit_active is True
     assert executor.visit_target_id == "ball_b"
+    assert executor.visit_phase == "acquiring"
     assert executor.search_active is True
-    assert executor._published_feedback[-1]["status"] == "visit_target_searching"
+    assert executor._published_feedback[-1]["status"] == "visit_target_acquiring"
 
 
 def test_visit_target_blocks_on_empty_target_id(monkeypatch):
@@ -771,12 +802,14 @@ def test_visit_lock_auto_dispatches_approach_goal(monkeypatch, tmp_path):
     executor.goal_pose_pub = SimpleNamespace(publish=lambda msg: None)
     executor.get_clock = lambda: SimpleNamespace(now=lambda: SimpleNamespace(to_msg=lambda: None))
 
-    # Restore real _lock_target so visit lifecycle hooks fire
+    # Restore real _lock_target and _dispatch_nav_goal so visit lifecycle hooks fire
     executor._lock_target = executor_mod.BrainIntentExecutor._lock_target.__get__(executor, executor_mod.BrainIntentExecutor)
+    executor._dispatch_nav_goal = executor_mod.BrainIntentExecutor._dispatch_nav_goal.__get__(executor, executor_mod.BrainIntentExecutor)
 
     # Start visit lifecycle
     executor._handle_visit_target_intent({"target_id": "ball_a"})
     assert executor.visit_active is True
+    assert executor.visit_phase == "acquiring"
     assert executor.search_active is True
 
     # Simulate detection that triggers lock
@@ -861,21 +894,23 @@ def test_visit_proximity_check_declares_reached(monkeypatch, tmp_path):
 
 
 def test_search_rotation_direction_follows_prior(monkeypatch, tmp_path):
-    """Search rotation direction is chosen toward the active prior."""
+    """Search rotation direction is chosen toward the active prior in acquiring phase."""
     executor = _make_executor(monkeypatch)
     runtime_path = tmp_path / "visit_mission_runtime.json"
-    # Prior is to the right of the robot (negative bearing → CW)
-    runtime_path.write_text('{"current_target_prior": {"x": 1.0, "y": -2.0}}', encoding="utf-8")
+    # Prior within acquire radius (1.5m) but to the right (negative bearing → CW)
+    runtime_path.write_text('{"current_target_prior": {"x": 0.5, "y": -1.0}}', encoding="utf-8")
     executor.visit_runtime_path = runtime_path
 
     # Robot at origin facing +X (yaw=0)
     executor.latest_pose = type("P", (), {"x": 0.0, "y": 0.0, "yaw": 0.0})()
     executor._handle_visit_target_intent({"target_id": "ball_right"})
+    assert executor.visit_phase == "acquiring"
     assert executor.search_rotation_sign == -1.0, "Should rotate CW toward prior on the right"
 
-    # Prior is to the left of the robot (positive bearing → CCW)
-    runtime_path.write_text('{"current_target_prior": {"x": 1.0, "y": 2.0}}', encoding="utf-8")
+    # Prior within acquire radius but to the left (positive bearing → CCW)
+    runtime_path.write_text('{"current_target_prior": {"x": 0.5, "y": 1.0}}', encoding="utf-8")
     executor._handle_visit_target_intent({"target_id": "ball_left"})
+    assert executor.visit_phase == "acquiring"
     assert executor.search_rotation_sign == 1.0, "Should rotate CCW toward prior on the left"
 
 
@@ -893,3 +928,56 @@ def test_safe_stop_ends_active_visit(monkeypatch, tmp_path):
     assert executor.visit_active is False
     failed = [fb for fb in executor._published_feedback if fb["status"] == "visit_target_failed"]
     assert len(failed) == 1
+
+
+def test_visit_navigates_to_distant_prior(monkeypatch, tmp_path):
+    """When prior is farther than acquire_radius, visit dispatches nav goal to prior."""
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{"current_target_prior": {"x": 5.0, "y": 0.0}}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor._handle_visit_target_intent({"target_id": "ball_far"})
+
+    assert executor.visit_active is True
+    assert executor.visit_phase == "navigating"
+    assert executor.search_active is False  # Not searching — navigating
+    assert len(executor._dispatched_prior_goals) == 1
+    nav_fb = [fb for fb in executor._published_feedback if fb["status"] == "visit_target_navigating"]
+    assert len(nav_fb) >= 1
+
+
+def test_visit_near_prior_goes_straight_to_acquiring(monkeypatch, tmp_path):
+    """When prior is within acquire_radius, visit skips navigating and goes to acquiring."""
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{"current_target_prior": {"x": 1.0, "y": 0.0}}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor._handle_visit_target_intent({"target_id": "ball_near"})
+
+    assert executor.visit_active is True
+    assert executor.visit_phase == "acquiring"
+    assert executor.search_active is True
+    assert len(executor._dispatched_prior_goals) == 0
+
+
+def test_visit_navigating_transitions_to_acquiring_on_proximity(monkeypatch, tmp_path):
+    """During navigating phase, timer transitions to acquiring when robot nears prior."""
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{"current_target_prior": {"x": 5.0, "y": 0.0}}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor._handle_visit_target_intent({"target_id": "ball_x"})
+    assert executor.visit_phase == "navigating"
+
+    # Simulate robot has moved close to prior
+    executor.latest_pose = SimpleNamespace(x=4.5, y=0.0, yaw=0.0)
+    executor._on_timer()
+
+    assert executor.visit_phase == "acquiring"
+    assert executor.search_active is True
