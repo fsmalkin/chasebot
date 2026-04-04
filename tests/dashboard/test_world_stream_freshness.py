@@ -1489,6 +1489,7 @@ def test_run_environment_compose_up_uses_no_build_when_reusing_local_images(tmp_
             "sim-gate",
             "world-viewer",
             "gate-stack",
+            "dashboard-utility",
             "operator-view",
         )
     ]
@@ -1524,6 +1525,7 @@ def test_run_environment_compose_up_uses_build_when_requested(tmp_path):
             "sim-gate",
             "world-viewer",
             "gate-stack",
+            "dashboard-utility",
             "operator-view",
         )
     ]
@@ -1559,6 +1561,7 @@ def test_run_environment_compose_up_skips_build_when_local_gate_images_exist(tmp
             "sim-gate",
             "world-viewer",
             "gate-stack",
+            "dashboard-utility",
             "operator-view",
         )
     ]
