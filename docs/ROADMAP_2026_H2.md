@@ -97,6 +97,13 @@ Status update as of April 3, 2026:
 4. Browser UAT surface meets acceptance criteria (Watch/Drive/Inspect tabs).
 5. Provider benchmarking infrastructure in place (replay comparison tool, local provider placeholder).
 
+Status update as of April 4, 2026:
+
+1. Direct intent dispatch implemented: file-based inbox replaces docker-exec-per-intent.
+2. Intent dispatch latency reduced from ~13s to <1s.
+3. Zombie dashboard prevention: startup kills stale processes, `allow_reuse_address` enabled.
+4. Dashboard URL fix: client-facing URL uses `127.0.0.1` when binding `0.0.0.0` (Windows).
+
 ### Intended Outcomes
 
 1. prove that the LLM can supervise high-level bounded decisions without owning low-level loops
