@@ -3528,7 +3528,7 @@ python3 scripts/dashboard_intent_runner.py --intent {shlex.quote(intent_name)} -
         if intent_name not in self.frozen_intents:
             raise ValueError(f"Unsupported frozen intent: {intent_name}")
         # Use direct file inbox when the executor is running (gate-stack up).
-        use_direct = bool(self.state.get("sim_gate_ready", False))
+        use_direct = bool(self.sim_gate_container_id)
         if use_direct:
             result = self._dispatch_intent_via_inbox(preview)
         else:
