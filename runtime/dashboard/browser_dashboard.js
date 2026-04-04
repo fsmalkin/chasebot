@@ -72,6 +72,7 @@ const controls = {
 };
 
 const demoFlow = [
+  { id: 'visit_route_planning', label: 'LLM Route Planning' },
   { id: 'llm_turn_then_go_proof', label: 'LLM Turn + Go' },
   { id: 'visit_single_ball_proof', label: 'Visit Single Ball' },
   { id: 'visit_three_ball_sequence', label: 'Visit 3 Ball Sequence' },
