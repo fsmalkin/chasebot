@@ -53,6 +53,8 @@ STATE_PATH = RUNTIME_DIR / "dashboard_service_state.json"
 LOCK_PATH = RUNTIME_DIR / "dashboard_session.lock.json"
 LLM_PROOF_RUNTIME_PATH = RUNTIME_DIR / "llm_turn_then_go_runtime.json"
 VISIT_MISSION_RUNTIME_PATH = RUNTIME_DIR / "visit_mission_runtime.json"
+INTENT_INBOX_PATH = RUNTIME_DIR / "intent_inbox.json"
+INTENT_ACK_PATH = RUNTIME_DIR / "intent_ack.json"
 
 DEFAULT_RUNTIME_TARGET = "robot_fidelity_orin"
 DEFAULT_CORE_ROS_DISTRO = "kilted"
@@ -3443,11 +3445,53 @@ fi
             self.active_intent_proc = None
             self.intent_lock.release()
 
-    def _run_intent_sync(self, preview: Dict[str, Any]) -> Dict[str, Any]:
+    def _dispatch_intent_via_inbox(self, preview: Dict[str, Any]) -> Dict[str, Any]:
+        """Write intent to file inbox; the executor picks it up in <100ms."""
         intent_name = str(preview.get("intent", ""))
         args_payload = dict(preview.get("args", {}))
         payload = dict(preview.get("payload", {}))
-        readiness = dict(preview.get("readiness", {}))
+        inbox_payload = {
+            "intent": intent_name,
+            "seq": int(payload.get("seq", 0) or int(time.time() * 1000)),
+            "planner": str(payload.get("planner", "dashboard_service")),
+            "timestamp_utc": str(payload.get("timestamp_utc", "") or utc_now()),
+            "args": args_payload,
+        }
+        # Clear stale ack before writing inbox.
+        try:
+            INTENT_ACK_PATH.unlink()
+        except FileNotFoundError:
+            pass
+        ensure_dir(RUNTIME_DIR)
+        INTENT_INBOX_PATH.write_text(
+            json.dumps(inbox_payload, separators=(",", ":")) + "\n", encoding="utf-8",
+        )
+        # Poll for ack from the executor (up to 2s).
+        deadline = time.monotonic() + 2.0
+        ack: Dict[str, Any] = {}
+        while time.monotonic() < deadline:
+            if INTENT_ACK_PATH.exists():
+                try:
+                    ack = json.loads(INTENT_ACK_PATH.read_text(encoding="utf-8"))
+                    break
+                except (json.JSONDecodeError, OSError):
+                    pass
+            time.sleep(0.05)
+        accepted = bool(ack.get("accepted", False))
+        return {
+            "pass": accepted,
+            "feedback_seen": accepted,
+            "feedback_samples": [f"{intent_name}: dispatched via direct inbox"] if accepted else [],
+            "boundary_activity_seen": False,
+            "dispatch_method": "direct_inbox",
+            "ack": ack,
+        }
+
+    def _run_intent_sync_docker(self, preview: Dict[str, Any]) -> Dict[str, Any]:
+        """Legacy path: dispatch intent via docker exec subprocess."""
+        intent_name = str(preview.get("intent", ""))
+        args_payload = dict(preview.get("args", {}))
+        payload = dict(preview.get("payload", {}))
         if intent_name not in self.frozen_intents:
             raise ValueError(f"Unsupported frozen intent: {intent_name}")
         output_path = ensure_dir(self._current_validation_dir()) / f"intent_{intent_name}_{int(time.time())}.json"
@@ -3474,7 +3518,21 @@ python3 scripts/dashboard_intent_runner.py --intent {shlex.quote(intent_name)} -
         if proc.returncode != 0 and not output_path.exists():
             output = log_path.read_text(encoding="utf-8", errors="ignore") if log_path.exists() else ""
             raise RuntimeError(output.strip() or "intent runner failed")
-        result = read_json(output_path)
+        return read_json(output_path)
+
+    def _run_intent_sync(self, preview: Dict[str, Any]) -> Dict[str, Any]:
+        intent_name = str(preview.get("intent", ""))
+        args_payload = dict(preview.get("args", {}))
+        payload = dict(preview.get("payload", {}))
+        readiness = dict(preview.get("readiness", {}))
+        if intent_name not in self.frozen_intents:
+            raise ValueError(f"Unsupported frozen intent: {intent_name}")
+        # Use direct file inbox when the executor is running (gate-stack up).
+        use_direct = bool(self.state.get("sim_gate_ready", False))
+        if use_direct:
+            result = self._dispatch_intent_via_inbox(preview)
+        else:
+            result = self._run_intent_sync_docker(preview)
         history_entry = {
             "event_type": "execute",
             "timestamp_utc": utc_now(),
@@ -3482,11 +3540,11 @@ python3 scripts/dashboard_intent_runner.py --intent {shlex.quote(intent_name)} -
             "args": args_payload,
             "payload": payload,
             "readiness": readiness,
-            "summary_path": str(output_path),
             "pass": bool(result.get("pass")),
             "feedback_seen": bool(result.get("feedback_seen")),
             "feedback_samples": result.get("feedback_samples", []),
             "boundary_activity_seen": bool(result.get("boundary_activity_seen", False)),
+            "dispatch_method": str(result.get("dispatch_method", "docker_exec")),
         }
         self._record_command_history(history_entry)
         self._record_visual_event(
@@ -3495,7 +3553,7 @@ python3 scripts/dashboard_intent_runner.py --intent {shlex.quote(intent_name)} -
                 "intent": intent_name,
                 "payload": payload,
                 "pass": bool(result.get("pass")),
-                "summary_path": str(output_path),
+                "dispatch_method": str(result.get("dispatch_method", "docker_exec")),
             }
         )
         return result

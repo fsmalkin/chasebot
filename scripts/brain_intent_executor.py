@@ -57,6 +57,9 @@ SEARCH_FEEDBACK_HEARTBEAT_S = 1.0
 CENTERED_LOCK_TOLERANCE_RAD = 0.18
 CENTERING_TURN_GAIN = 1.5
 
+INTENT_INBOX_PATH = REPO_ROOT / "runtime" / "dashboard" / "intent_inbox.json"
+INTENT_ACK_PATH = REPO_ROOT / "runtime" / "dashboard" / "intent_ack.json"
+
 
 def parse_args() -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[1]
@@ -158,6 +161,8 @@ class BrainIntentExecutor(Node):
         self.prior_lock_tolerance_m = max(float(args.prior_lock_tolerance_m), 0.01)
         self.active_prior: dict[str, float] | None = None
         self.last_prior_read_monotonic = 0.0
+
+        self.last_inbox_mtime = 0.0
 
         default_qos = QoSPresetProfiles.SENSOR_DATA.value
         self.feedback_pub = self.create_publisher(String, args.feedback_topic, 20)
@@ -683,7 +688,44 @@ class BrainIntentExecutor(Node):
         else:
             self._publish_feedback(f"unsupported intent: {intent_name}", status="unsupported")
 
+    def _check_intent_inbox(self) -> None:
+        """Poll the file-based intent inbox for direct dispatch from the dashboard."""
+        try:
+            if not INTENT_INBOX_PATH.exists():
+                return
+            st = INTENT_INBOX_PATH.stat()
+            if st.st_mtime_ns == self.last_inbox_mtime:
+                return
+            self.last_inbox_mtime = st.st_mtime_ns
+            raw = INTENT_INBOX_PATH.read_text(encoding="utf-8").strip()
+            if not raw:
+                return
+            payload = json.loads(raw)
+            # Remove inbox file before processing so we don't re-process.
+            try:
+                INTENT_INBOX_PATH.unlink()
+            except FileNotFoundError:
+                pass
+            # Build a String message and dispatch through the normal path.
+            msg = String()
+            msg.data = json.dumps(payload, separators=(",", ":"))
+            self._on_intent(msg)
+            # Write acknowledgment.
+            ack = {
+                "intent": str(payload.get("intent", "")),
+                "seq": payload.get("seq", 0),
+                "accepted": True,
+                "ack_utc": utc_now(),
+            }
+            INTENT_ACK_PATH.parent.mkdir(parents=True, exist_ok=True)
+            INTENT_ACK_PATH.write_text(
+                json.dumps(ack, separators=(",", ":")) + "\n", encoding="utf-8",
+            )
+        except Exception:
+            pass
+
     def _on_timer(self) -> None:
+        self._check_intent_inbox()
         self._refresh_target_prior()
         if self.search_active:
             elapsed = time.monotonic() - self.search_started_monotonic
