@@ -289,3 +289,48 @@ def test_intent_readiness_marks_plan_not_allowed_while_searching():
     assert readiness["ready_to_dispatch"] is False
     assert readiness["policy_allowed"] is False
     assert "policy_not_allowed" in readiness["missing_keys"]
+
+
+def test_policy_route_planning_stage_when_route_active():
+    state = base_state()
+    state["route_planning_active"] = True
+
+    policy = build_policy_snapshot(state, sim_gate_ready=True)
+
+    assert policy["stage"] == "route_planning"
+    assert policy["preferred_intent"] == "visit_target"
+    assert "visit_target" in policy["allowed_intents"]
+    assert "safe_stop" in policy["allowed_intents"]
+
+
+def test_policy_route_planning_skipped_during_active_pursuit():
+    state = base_state()
+    state["route_planning_active"] = True
+    state["brain"]["goal_in_progress"] = True  # type: ignore[index]
+
+    policy = build_policy_snapshot(state, sim_gate_ready=True)
+
+    # Active pursuit overrides route planning
+    assert policy["stage"] != "route_planning"
+
+
+def test_visit_target_gate_hint_requires_route_planning():
+    state = base_state()
+    state["route_planning_active"] = False
+
+    policy = build_policy_snapshot(state, sim_gate_ready=True)
+    gate = policy["gate_hints"]["visit_target"]
+
+    assert gate["ready"] is False
+    assert "policy_not_allowed" in gate["missing_keys"]
+
+
+def test_visit_target_gate_hint_ready_when_route_planning():
+    state = base_state()
+    state["route_planning_active"] = True
+
+    policy = build_policy_snapshot(state, sim_gate_ready=True)
+    gate = policy["gate_hints"]["visit_target"]
+
+    assert gate["ready"] is True
+    assert gate["policy_allowed"] is True

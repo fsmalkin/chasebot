@@ -16,6 +16,7 @@ CANONICAL_ARGS_BY_INTENT: dict[str, dict[str, object]] = {
     "track_target": {},
     "abort": {},
     "safe_stop": {},
+    "visit_target": {"target_id": ""},  # target_id is dynamic, validated at dispatch
 }
 
 
@@ -85,6 +86,28 @@ def _clean_pose(value: Any) -> Dict[str, float] | None:
         return point
     return {"x": point["x"], "y": point["y"], "yaw": round(yaw, 4)}
 
+def _build_remaining_target_details(state: Dict[str, Any], remaining_targets: list) -> list[Dict[str, Any]]:
+    """Build per-target info for route planning decisions."""
+    target_specs = state.get("route_target_specs") if isinstance(state.get("route_target_specs"), list) else []
+    specs_by_id = {str(s.get("id", "")): s for s in target_specs if isinstance(s, dict)}
+    robot_pose = state.get("belief", {}).get("latest_robot_pose") if isinstance(state.get("belief"), dict) else None
+    robot_pose = _clean_pose(robot_pose)
+    details: list[Dict[str, Any]] = []
+    for tid in remaining_targets:
+        tid = str(tid)
+        spec = specs_by_id.get(tid, {})
+        entry: Dict[str, Any] = {"target_id": tid}
+        pos = _clean_point(spec.get("position"))
+        if pos is not None:
+            entry["position"] = pos
+            if robot_pose is not None:
+                dx = pos["x"] - robot_pose["x"]
+                dy = pos["y"] - robot_pose["y"]
+                entry["estimated_distance_m"] = round((dx * dx + dy * dy) ** 0.5, 3)
+        details.append(entry)
+    return details
+
+
 def _canonical_action_space(contract: Dict[str, Any], state: Dict[str, Any]) -> list[Dict[str, Any]]:
     descriptions: dict[str, str] = {}
     for item in list(contract.get("intents", [])):
@@ -153,6 +176,8 @@ def build_state_digest(state: Dict[str, Any], contract: Dict[str, Any]) -> Dict[
             "search_bias_active": _clean_bool(state.get("search_bias_active")),
             "visited_targets": [str(item) for item in visited_targets],
             "remaining_targets": [str(item) for item in remaining_targets],
+            "remaining_target_details": _build_remaining_target_details(state, remaining_targets),
+            "route_planning_active": _clean_bool(state.get("route_planning_active")),
         },
         "policy": {
             "stage": _clean_text(policy.get("stage"), "blocked"),

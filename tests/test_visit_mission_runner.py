@@ -13,6 +13,8 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import visit_mission_runner as visit_runner  # noqa: E402
+from llm_supervisor_core import validate_decision_against_canonical_space  # noqa: E402
+from llm_supervisor_core import validate_decision_against_contract  # noqa: E402
 from visit_mission_runner import build_visit_targets  # noqa: E402
 from visit_mission_runner import decision_signature  # noqa: E402
 from visit_mission_runner import deterministic_visit_decision  # noqa: E402
@@ -668,3 +670,107 @@ def test_executor_rejects_acquire_when_already_locked(monkeypatch):
     runner = _make_runner(monkeypatch)
     state = {"brain": {"last_intent": "acquire_target", "target_locked": True}}
     assert runner._executor_confirms_intent(state, "acquire_target") is False
+
+
+# --- Route planning tests ---
+
+
+def test_build_visit_targets_for_route_planning():
+    targets = build_visit_targets("visit_route_planning")
+    assert len(targets) == 3
+    assert [item.id for item in targets] == ["ball_a", "ball_b", "ball_c"]
+    assert targets[0].start_visible is False
+    assert targets[1].start_visible is True
+    assert targets[2].start_visible is False
+
+
+def test_route_planning_runner_is_route_planning(monkeypatch):
+    runner = _make_runner(monkeypatch, scenario_id="visit_route_planning")
+    assert runner._is_route_planning() is True
+    seq_runner = _make_runner(monkeypatch, scenario_id="visit_three_ball_sequence")
+    assert seq_runner._is_route_planning() is False
+
+
+def test_target_specs_for_state_returns_positions(monkeypatch):
+    runner = _make_runner(monkeypatch, scenario_id="visit_route_planning")
+    runner._mission_anchor_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    specs = runner._target_specs_for_state(["ball_a", "ball_b", "ball_c"])
+    assert len(specs) == 3
+    assert specs[0]["id"] == "ball_a"
+    assert "position" in specs[0]
+    assert "x" in specs[0]["position"]
+    assert "y" in specs[0]["position"]
+
+
+def test_target_specs_for_state_filters_remaining(monkeypatch):
+    runner = _make_runner(monkeypatch, scenario_id="visit_route_planning")
+    runner._mission_anchor_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    specs = runner._target_specs_for_state(["ball_b"])
+    assert len(specs) == 1
+    assert specs[0]["id"] == "ball_b"
+
+
+def test_deterministic_visit_decision_prefers_visit_target_when_route_planning():
+    contract = _load_contract()
+    state = {
+        "control_plane_ready": True,
+        "environment_state": "environment_ready",
+        "session_id": "session-1",
+        "sim_gate_ready": True,
+        "route_planning_active": True,
+        "perception": {"detection_topic_seen": True, "target_visible_now": False},
+        "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
+        "brain": {"target_locked": False, "goal_in_progress": False, "track_active": False},
+        "outcome": {"nav_goal_recent": False, "cmd_vel_recent": False, "feedback_recent": False, "boundary_activity_seen": False},
+    }
+    decision = deterministic_visit_decision(state, "visit the ball", contract)
+    # visit_target requires LLM judgment — the deterministic path returns blocked
+    assert decision["status"] == "blocked"
+    assert "llm_target_selection" in decision["missing_prerequisites"]
+
+
+def test_validate_canonical_space_accepts_visit_target_with_id():
+    decision = {
+        "status": "recommendation",
+        "task_text": "test",
+        "intent": "visit_target",
+        "args": {"target_id": "ball_b"},
+        "rationale_short": "nearest target",
+        "missing_prerequisites": [],
+        "expected_observations": [],
+        "confidence": 0.9,
+    }
+    result = validate_decision_against_canonical_space(decision)
+    assert result["args"]["target_id"] == "ball_b"
+
+
+def test_validate_canonical_space_rejects_visit_target_empty_id():
+    import pytest
+    decision = {
+        "status": "recommendation",
+        "task_text": "test",
+        "intent": "visit_target",
+        "args": {"target_id": ""},
+        "rationale_short": "test",
+        "missing_prerequisites": [],
+        "expected_observations": [],
+        "confidence": 0.5,
+    }
+    with pytest.raises(ValueError, match="non-empty target_id"):
+        validate_decision_against_canonical_space(decision)
+
+
+def test_validate_contract_accepts_visit_target():
+    contract = _load_contract()
+    decision = {
+        "status": "recommendation",
+        "task_text": "test",
+        "intent": "visit_target",
+        "args": {"target_id": "ball_a"},
+        "rationale_short": "test",
+        "missing_prerequisites": [],
+        "expected_observations": [],
+        "confidence": 0.8,
+    }
+    result = validate_decision_against_contract(decision, contract)
+    assert result["args"]["target_id"] == "ball_a"

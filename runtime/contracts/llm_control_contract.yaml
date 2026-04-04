@@ -40,6 +40,11 @@ intents:
     description: "Immediate controlled stop with deadman override."
     required_args: []
     default_timeout_s: 1
+  - name: visit_target
+    description: "Select the next target to visit from the remaining set during route planning."
+    required_args:
+      - target_id
+    default_timeout_s: 5
 
 safety_contract:
   deadman_timeout_s: 0.5

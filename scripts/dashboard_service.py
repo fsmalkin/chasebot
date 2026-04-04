@@ -231,6 +231,15 @@ SCENARIOS = [
         description="Bounded supervisor visit across M3 target positions (center, left, right).",
         mode="visit_mission",
     ),
+    ScenarioDefinition(
+        id="visit_route_planning",
+        phase="visit_route_planning",
+        target_id="route_plan",
+        label="LLM Route Planning",
+        description="LLM-planned multi-target visit: the LLM chooses which target to visit next.",
+        mode="visit_mission",
+        featured=True,
+    ),
 ]
 SCENARIOS_BY_ID = {item.id: item for item in SCENARIOS}
 
@@ -1373,6 +1382,8 @@ class DashboardController:
         snapshot["remaining_targets"] = list(visit_runtime.get("remaining_targets", snapshot.get("remaining_targets", [])) or [])
         snapshot["last_visit_result"] = visit_runtime.get("last_visit_result", snapshot.get("last_visit_result", {})) if isinstance(visit_runtime.get("last_visit_result", snapshot.get("last_visit_result", {})), dict) else {}
         snapshot["mission_verdict"] = visit_verdict
+        snapshot["route_planning_active"] = bool(visit_runtime.get("route_planning_active", False))
+        snapshot["route_target_specs"] = list(visit_runtime.get("route_target_specs", [])) if isinstance(visit_runtime.get("route_target_specs"), list) else []
         if active_mode == "visit_mission" and snapshot["current_target_id"]:
             snapshot["target_id"] = snapshot["current_target_id"]
         snapshot["policy"] = build_policy_snapshot(snapshot, sim_gate_ready=bool(self.sim_gate_container_id))

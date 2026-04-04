@@ -284,6 +284,10 @@ def validate_decision_against_contract(decision: Dict[str, Any], contract: Dict[
             if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
                 raise ValueError("approach_distance_m must be numeric.")
             normalized_args[key] = float(value)
+        elif key == "target_id":
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("target_id must be a non-empty string.")
+            normalized_args[key] = value.strip()
         else:
             normalized_args[key] = value
     normalized["args"] = normalized_args
@@ -305,7 +309,18 @@ def validate_decision_against_canonical_space(decision: Dict[str, Any]) -> Dict[
     candidate_args = dict(normalized.get("args", {}))
     if intent_name == "plan_to_target" and "approach_distance_m" in candidate_args:
         candidate_args["approach_distance_m"] = float(candidate_args["approach_distance_m"])
-    if candidate_args != expected_args:
+    # visit_target has a dynamic target_id — validate keys match but allow any non-empty value
+    if intent_name == "visit_target":
+        if set(candidate_args.keys()) != set(expected_args.keys()):
+            raise ValueError(
+                f"Non-canonical arg keys for {intent_name}: expected {sorted(expected_args.keys())}, "
+                f"got {sorted(candidate_args.keys())}"
+            )
+        target_id = str(candidate_args.get("target_id", "")).strip()
+        if not target_id:
+            raise ValueError("visit_target requires a non-empty target_id.")
+        candidate_args["target_id"] = target_id
+    elif candidate_args != expected_args:
         raise ValueError(
             f"Non-canonical args for {intent_name}: expected {json.dumps(expected_args, sort_keys=True)}, "
             f"got {json.dumps(candidate_args, sort_keys=True)}"
@@ -368,6 +383,9 @@ def attempt_deterministic_recommendation(
         return None
     canonical_args = CANONICAL_ARGS_BY_INTENT.get(preferred_intent)
     if canonical_args is None:
+        return None
+    # visit_target requires LLM judgment to choose a target_id — skip deterministic path
+    if preferred_intent == "visit_target":
         return None
 
     decision = {

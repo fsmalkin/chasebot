@@ -15,6 +15,7 @@ INTENT_NAMES = (
     "track_target",
     "abort",
     "safe_stop",
+    "visit_target",
 )
 
 COMMON_REQUIRED_KEYS = (
@@ -130,6 +131,7 @@ def policy_signal_snapshot(state: Dict[str, Any], *, sim_gate_ready: bool | None
         "motion_evidence": _as_bool(state.get("motion_evidence", False)),
         "boundary_activity_seen": boundary_activity_seen,
         "search_bias_active": _as_bool(state.get("search_bias_active", mission.get("search_bias_active", False))),
+        "route_planning_active": _as_bool(state.get("route_planning_active", mission.get("route_planning_active", False))),
         "last_result": _as_text(state.get("last_result"), ""),
         "last_feedback": _as_text(state.get("last_feedback"), ""),
     }
@@ -177,6 +179,11 @@ def build_policy_snapshot(state: Dict[str, Any], *, sim_gate_ready: bool | None 
         policy_reason = f"Missing common readiness: {', '.join(common_missing)}."
     elif not signals["robot_pose_available"]:
         policy_reason = "Robot pose is required before the bounded supervisor can choose a next step."
+    elif signals["route_planning_active"] and not active_pursuit:
+        policy_stage = "route_planning"
+        preferred_intent = "visit_target"
+        allowed_intents = ["visit_target", "safe_stop"]
+        policy_reason = "Multiple targets remain; the supervisor should select the next target to visit."
     elif signals["search_bias_active"] and not signals["target_locked"] and not active_pursuit:
         policy_stage = "search"
         preferred_intent = "search_for_target"
@@ -232,7 +239,9 @@ def build_policy_snapshot(state: Dict[str, Any], *, sim_gate_ready: bool | None 
     gate_hints: Dict[str, Dict[str, Any]] = {}
     for intent_name in INTENT_NAMES:
         required_keys = list(COMMON_REQUIRED_KEYS)
-        if intent_name == "search_for_target":
+        if intent_name == "visit_target":
+            required_keys.extend(["robot_pose_available", "route_planning_active"])
+        elif intent_name == "search_for_target":
             required_keys.append("robot_pose_available")
         elif intent_name in {"acquire_target", "plan_to_target", "track_target"}:
             required_keys.extend(["robot_pose_available", "detection_seen"])

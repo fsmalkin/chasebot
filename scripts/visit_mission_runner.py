@@ -176,6 +176,30 @@ def build_visit_targets(scenario_id: str) -> list[VisitTargetSpec]:
                 lateral_m=-0.12,
             ),
         ]
+    if scenario_id == "visit_route_planning":
+        return [
+            VisitTargetSpec(
+                id="ball_a",
+                label="Ball A (far left)",
+                start_visible=False,
+                forward_m=1.75,
+                lateral_m=0.60,
+            ),
+            VisitTargetSpec(
+                id="ball_b",
+                label="Ball B (near center)",
+                start_visible=True,
+                forward_m=1.10,
+                lateral_m=0.00,
+            ),
+            VisitTargetSpec(
+                id="ball_c",
+                label="Ball C (far right)",
+                start_visible=False,
+                forward_m=1.75,
+                lateral_m=-0.60,
+            ),
+        ]
     raise ValueError(f"Unsupported visit mission scenario: {scenario_id}")
 
 
@@ -319,6 +343,15 @@ def deterministic_visit_decision(state: dict[str, Any], task_text: str, contract
             task_text,
             _clean_text(policy.get("reason"), "The deterministic visit mission is waiting for an actionable state."),
             missing_prerequisites=list(policy.get("common_missing_keys", [])),
+            expected_observations=[],
+            confidence=0.0,
+        )
+    # visit_target requires LLM judgment — the deterministic path cannot choose a target_id
+    if preferred_intent == "visit_target":
+        return blocked_decision(
+            task_text,
+            "Route planning requires LLM target selection; the deterministic path cannot choose.",
+            missing_prerequisites=["llm_target_selection"],
             expected_observations=[],
             confidence=0.0,
         )
@@ -888,6 +921,45 @@ exit "$rc"
             return "searching"
         return "waiting"
 
+    def _is_route_planning(self) -> bool:
+        return str(self.args.scenario_id) == "visit_route_planning"
+
+    def _target_specs_for_state(self, remaining_ids: list[str]) -> list[dict[str, Any]]:
+        """Build route_target_specs list for the dashboard state."""
+        specs: list[dict[str, Any]] = []
+        for target in self.targets:
+            if target.id not in remaining_ids:
+                continue
+            anchor = self._mission_anchor_pose or {}
+            ax = float(anchor.get("x", 0.0))
+            ay = float(anchor.get("y", 0.0))
+            ayaw = float(anchor.get("yaw", 0.0))
+            tx = ax + (math.cos(ayaw) * target.forward_m) - (math.sin(ayaw) * target.lateral_m)
+            ty = ay + (math.sin(ayaw) * target.forward_m) + (math.cos(ayaw) * target.lateral_m)
+            specs.append({"id": target.id, "label": target.label, "position": {"x": round(tx, 4), "y": round(ty, 4)}})
+        return specs
+
+    def _wait_for_llm_target_selection(self, timeout_s: float) -> str | None:
+        """Poll the runtime state file for an LLM-selected target_id."""
+        deadline = time.monotonic() + max(timeout_s, 0.1)
+        while time.monotonic() < deadline:
+            try:
+                raw = MISSION_RUNTIME_STATE_PATH.read_text(encoding="utf-8")
+                runtime = json.loads(raw)
+                selected = str(runtime.get("llm_selected_target_id", "")).strip()
+                if selected:
+                    # Clear the selection so we don't re-read it
+                    runtime["llm_selected_target_id"] = ""
+                    runtime["llm_selected_utc"] = ""
+                    MISSION_RUNTIME_STATE_PATH.write_text(
+                        json.dumps(runtime, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+                    )
+                    return selected
+            except (OSError, json.JSONDecodeError, ValueError):
+                pass
+            time.sleep(self.args.poll_s)
+        return None
+
     def _mission_phase_for_decision(self, decision: dict[str, Any], state: dict[str, Any]) -> str:
         if self.runtime_state.get("mission_status") in {"completed", "failed"}:
             return str(self.runtime_state.get("mission_status"))
@@ -951,7 +1023,270 @@ exit "$rc"
             ready_state = self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
             self._clear_mission_targets(ready_state, mission_root)
             self._capture_mission_anchor_pose(ready_state)
-            for index, target in enumerate(self.targets, start=1):
+
+            if self._is_route_planning():
+                # Route planning mode: spawn all targets, let LLM pick order
+                remaining_ids = [item.id for item in self.targets]
+                targets_by_id = {item.id: item for item in self.targets}
+                for target in self.targets:
+                    current_state = self._wait_for_robot_pose(timeout_s=self.args.environment_timeout_s)
+                    spawn_info = self._spawn_target_from_mission_anchor(current_state, target, mission_root)
+                    append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "target_spawned", "target_id": target.id, "spawn_info": spawn_info})
+                    self._append_runtime_event(f"{target.label} spawned.", key=f"target_spawned:{target.id}")
+                self._update_runtime_state(
+                    route_planning_active=True,
+                    route_target_specs=self._target_specs_for_state(remaining_ids),
+                    remaining_targets=remaining_ids,
+                )
+                self._append_runtime_event("All targets spawned. LLM route planning active.", category="scenario", key="route_planning_started")
+
+                visit_index = 0
+                while remaining_ids:
+                    visit_index += 1
+                    self._update_runtime_state(
+                        route_planning_active=True,
+                        route_target_specs=self._target_specs_for_state(remaining_ids),
+                        remaining_targets=remaining_ids,
+                        visited_targets=[item["target_id"] for item in target_results if item.get("pass")],
+                        visit_index=visit_index,
+                        mission_phase="route_planning",
+                        current_target_id="",
+                        current_target_prior={},
+                        llm_selected_target_id="",
+                    )
+                    self._append_runtime_event(
+                        f"Waiting for LLM to select next target from: {remaining_ids}",
+                        category="mission",
+                        key=f"route_wait:{visit_index}",
+                    )
+                    selected_id = self._wait_for_llm_target_selection(timeout_s=self.args.max_target_runtime_s)
+                    if not selected_id or selected_id not in remaining_ids:
+                        mission_pass = False
+                        mission_error = f"LLM target selection failed or invalid: {selected_id!r}"
+                        self._append_runtime_event(mission_error, category="error", key="route_selection_failed")
+                        break
+
+                    target = targets_by_id[selected_id]
+                    self._append_runtime_event(f"LLM selected {target.label}.", category="decision", key=f"route_selected:{target.id}")
+                    self._update_runtime_state(
+                        route_planning_active=False,
+                        current_target_id=target.id,
+                        mission_phase="setup",
+                        search_bias_active=not target.start_visible,
+                    )
+                    append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "llm_target_selected", "target_id": target.id, "visit_index": visit_index})
+
+                    # Run the visit loop for this target (same as sequential mode)
+                    target_pass = False
+                    attempt = 0
+                    while attempt <= self.args.max_retries_per_target and not target_pass:
+                        target_locked_seen = False
+                        nav_activity_seen = False
+                        move_started = False
+                        first_dispatched_intent = ""
+                        owned_intent = ""
+                        owned_intent_args: dict[str, Any] = {}
+                        owned_intent_started_monotonic = 0.0
+                        search_rotation_bias_baseline = 0.0
+                        target_visit_started_monotonic = time.monotonic()
+                        search_bias_hold_until_monotonic = target_visit_started_monotonic
+                        lock_seen_monotonic: float | None = None
+                        goal_success_seen_monotonic: float | None = None
+                        self.last_state_hash = ""
+                        self.last_decision_signature = ""
+                        self.last_dispatch_monotonic = 0.0
+                        target_spawned_monotonic = time.monotonic()
+
+                        current_state = self._wait_for_robot_pose(timeout_s=self.args.environment_timeout_s)
+                        # Set prior from spawn position
+                        spawn_info_for_target = None
+                        for t in self.targets:
+                            if t.id == target.id:
+                                anchor = self._mission_anchor_pose or {}
+                                ax = float(anchor.get("x", 0.0))
+                                ay = float(anchor.get("y", 0.0))
+                                ayaw = float(anchor.get("yaw", 0.0))
+                                tx = ax + (math.cos(ayaw) * t.forward_m) - (math.sin(ayaw) * t.lateral_m)
+                                ty = ay + (math.sin(ayaw) * t.forward_m) + (math.cos(ayaw) * t.lateral_m)
+                                spawn_info_for_target = {"target_world": {"x": tx, "y": ty, "z": t.z_m}}
+                                break
+                        self._update_runtime_state(current_target_prior={})
+
+                        if not target.start_visible:
+                            self._append_runtime_event("Waiting for hidden-start view to settle.", key=f"hidden_settle:{target.id}:{attempt}")
+                            settled_state = self._wait_for_hidden_start_settle(self.args.hidden_start_settle_s)
+                            settled_brain = settled_state.get("brain", {}) if isinstance(settled_state.get("brain"), dict) else {}
+                            search_rotation_bias_baseline = _clean_number(settled_brain.get("search_rotation_accum_rad")) or 0.0
+                            target_visit_started_monotonic = time.monotonic()
+                            search_bias_hold_until_monotonic = target_visit_started_monotonic + self.args.hidden_start_settle_s
+
+                        failure_reason = ""
+                        while time.monotonic() < (target_visit_started_monotonic + self.args.max_target_runtime_s):
+                            state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
+                            brain = state.get("brain", {}) if isinstance(state.get("brain"), dict) else {}
+                            outcome = state.get("outcome", {}) if isinstance(state.get("outcome"), dict) else {}
+                            perception = state.get("perception", {}) if isinstance(state.get("perception"), dict) else {}
+                            target_lock_active = bool(brain.get("target_locked", False))
+                            aligned_target_lock = target_lock_active
+
+                            if aligned_target_lock:
+                                if not target_locked_seen and spawn_info_for_target:
+                                    tw = spawn_info_for_target.get("target_world", {})
+                                    if tw.get("x") is not None and tw.get("y") is not None:
+                                        self._update_runtime_state(
+                                            current_target_prior={"x": round(float(tw["x"]), 6), "y": round(float(tw["y"]), 6)},
+                                        )
+                                target_locked_seen = True
+                                lock_seen_monotonic = lock_seen_monotonic or time.monotonic()
+                                self._append_runtime_event("Target visible and locked.", key=f"target_locked:{target.id}:{attempt}")
+                            search_rotation = _clean_number(brain.get("search_rotation_accum_rad")) or 0.0
+                            if bool(self.runtime_state.get("search_bias_active", False)) and search_bias_release_ready(
+                                target_locked_seen=target_locked_seen,
+                                search_active=bool(brain.get("search_active", False)),
+                                search_rotation_accum_rad=search_rotation,
+                                search_rotation_baseline_rad=search_rotation_bias_baseline,
+                                hold_until_monotonic=search_bias_hold_until_monotonic,
+                            ):
+                                self._update_runtime_state(search_bias_active=False)
+                            if bool(brain.get("goal_in_progress", False)) or bool(outcome.get("nav_goal_recent", False)):
+                                nav_activity_seen = True
+                            if nav_activity_seen and not move_started and (
+                                bool(outcome.get("cmd_vel_recent", False))
+                                or bool(brain.get("goal_in_progress", False))
+                                or bool(outcome.get("nav_goal_recent", False))
+                            ):
+                                move_started = True
+                                self._append_runtime_event("Robot began move-to-target.", key=f"move_started:{target.id}:{attempt}")
+                            if feedback_indicates_goal_success(state) and goal_success_seen_monotonic is None:
+                                goal_success_seen_monotonic = time.monotonic()
+
+                            self._update_runtime_state(
+                                mission_phase=self._mission_phase_for_decision(self.runtime_state.get("latest_decision", {}), state),
+                                proof_state=self._proof_state_for_state(state),
+                                latest_feedback=_clean_text(brain.get("last_feedback_text") or state.get("last_feedback")),
+                                current_target_id=target.id,
+                            )
+
+                            if visit_success(
+                                state,
+                                target_locked_seen=target_locked_seen,
+                                nav_activity_seen=nav_activity_seen,
+                                visit_tolerance_m=target.visit_tolerance_m,
+                                elapsed_since_spawn_s=(time.monotonic() - target_spawned_monotonic),
+                                min_dwell_s=target.min_dwell_s,
+                            ):
+                                target_pass = True
+                                distance_m = mission_truth_distance_m(state)
+                                result = {
+                                    "target_id": target.id,
+                                    "label": target.label,
+                                    "attempt": attempt,
+                                    "pass": True,
+                                    "visit_distance_m": distance_m,
+                                    "target_locked_seen": target_locked_seen,
+                                    "nav_activity_seen": nav_activity_seen,
+                                    "started_visible": target.start_visible,
+                                    "llm_selected": True,
+                                }
+                                target_results.append(result)
+                                write_json(target_results_path, {"targets": target_results})
+                                remaining_ids = [tid for tid in remaining_ids if tid != target.id]
+                                self._update_runtime_state(
+                                    mission_phase="advance",
+                                    visited_targets=[item["target_id"] for item in target_results if item.get("pass")],
+                                    remaining_targets=remaining_ids,
+                                    last_visit_result=result,
+                                )
+                                self._append_runtime_event(f"{target.label} visited.", key=f"visited:{target.id}")
+                                append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "target_visited", "target_id": target.id, "result": result})
+                                if self.args.remove_visited_targets:
+                                    self._remove_target_model(
+                                        compose_project=_clean_text(state.get("compose_project")),
+                                        world_name=_clean_text(state.get("world_name"), DEFAULT_WORLD_NAME),
+                                        model_name=self._target_model_name(target),
+                                        mission_root=mission_root,
+                                        log_stem=f"{target.id}_visited",
+                                    )
+                                break
+
+                            search_elapsed = time.monotonic() - target_visit_started_monotonic
+                            if not target_locked_seen and search_elapsed >= self.args.search_timeout_s:
+                                failure_reason = "search_timeout"
+                                break
+                            if lock_seen_monotonic is not None and (time.monotonic() - lock_seen_monotonic) >= self.args.approach_timeout_s:
+                                failure_reason = "approach_timeout"
+                                break
+
+                            # Deterministic decision loop for approach
+                            if owned_intent:
+                                owned_in_flight, owned_transitioned, terminal_reason = self._owned_intent_status(
+                                    state=state, intent_name=owned_intent, owned_since_monotonic=owned_intent_started_monotonic,
+                                )
+                                if owned_in_flight:
+                                    decision = self._owned_in_flight_decision(owned_intent, owned_intent_args)
+                                    self._update_runtime_state(latest_decision=decision, mission_phase=self._mission_phase_for_decision(decision, state))
+                                    time.sleep(self.args.poll_s)
+                                    continue
+                                owned_intent = ""
+                                owned_intent_args = {}
+                                owned_intent_started_monotonic = 0.0
+
+                            policy = build_policy_snapshot(state, sim_gate_ready=bool(state.get("sim_gate_ready", False)))
+                            decision = deterministic_visit_decision(state, self.args.task, self.contract)
+
+                            if decision.get("status") == "recommendation":
+                                state_hash = json.dumps({"policy_stage": policy.get("stage"), "preferred_intent": policy.get("preferred_intent")}, sort_keys=True)
+                                preview_status, preview_payload = preview_intent(
+                                    self.dashboard_url, _clean_text(decision.get("intent")), dict(decision.get("args", {})), timeout_s=self.args.timeout_s,
+                                )
+                                preview = preview_summary(preview_status, preview_payload)
+                                if preview_status == 200 and preview["contract_valid"] and preview["ready_to_dispatch"]:
+                                    if self._should_dispatch_decision(decision=decision, state_hash=state_hash, state=state):
+                                        dispatch_status, dispatch_payload = dispatch_intent(
+                                            self.dashboard_url, _clean_text(decision.get("intent")), dict(decision.get("args", {})), timeout_s=self.args.timeout_s,
+                                        )
+                                        if dispatch_status == 202 and bool(dispatch_payload.get("accepted", False)):
+                                            first_dispatched_intent, owned_intent, owned_intent_args, owned_intent_started_monotonic = self._own_intent(
+                                                target=target, attempt=attempt, decision=decision, state_hash=state_hash,
+                                                first_dispatched_intent=first_dispatched_intent, announce=False,
+                                            )
+                                            self._update_runtime_state(latest_decision=decision, mission_phase=self._mission_phase_for_decision(decision, state))
+                                            self._append_runtime_event(
+                                                f"Mission issued {self._format_decision_label(decision)}.",
+                                                category="decision", key=f"decision:{target.id}:{decision_signature(decision)}",
+                                            )
+                            time.sleep(self.args.poll_s)
+
+                        if target_pass:
+                            self._issue_safe_stop()
+                            self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                            break
+
+                        self._issue_safe_stop()
+                        self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                        if attempt < self.args.max_retries_per_target:
+                            attempt += 1
+                            self._append_runtime_event(f"{target.label} retrying after {failure_reason or 'visit timeout'}.", key=f"retry:{target.id}:{attempt}")
+                            continue
+
+                        result = {
+                            "target_id": target.id, "label": target.label, "attempt": attempt, "pass": False,
+                            "failure_reason": failure_reason or "visit_timeout", "llm_selected": True,
+                        }
+                        target_results.append(result)
+                        write_json(target_results_path, {"targets": target_results})
+                        mission_pass = False
+                        mission_error = f"{target.label} failed: {result['failure_reason']}"
+                        self._append_runtime_event(mission_error, category="error", key=f"failed:{target.id}")
+                        break
+
+                    if not target_pass and not mission_error:
+                        # Target failed entirely — stop the mission
+                        break
+
+                self._update_runtime_state(route_planning_active=False, route_target_specs=[])
+
+            for index, target in (enumerate(self.targets, start=1) if not self._is_route_planning() else []):
                 attempt = 0
                 target_pass = False
                 while attempt <= self.args.max_retries_per_target and not target_pass:

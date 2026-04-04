@@ -679,3 +679,51 @@ def test_track_replan_uses_detection_when_close_to_prior(monkeypatch):
     assert len(dispatched_goals) == 1
     # Detection-based feedback, not prior-based
     assert not any("prior-based" in fb["text"] for fb in executor._published_feedback)
+
+
+# --- visit_target handler tests ---
+
+
+def test_visit_target_writes_selection_to_runtime_file(monkeypatch, tmp_path):
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{"running": true}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    executor._handle_visit_target_intent({"target_id": "ball_b"})
+
+    import json
+    data = json.loads(runtime_path.read_text(encoding="utf-8"))
+    assert data["llm_selected_target_id"] == "ball_b"
+    assert "llm_selected_utc" in data
+    assert executor._published_feedback[-1]["status"] == "visit_target_selected"
+
+
+def test_visit_target_blocks_on_empty_target_id(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor._handle_visit_target_intent({"target_id": ""})
+    assert executor._published_feedback[-1]["status"] == "blocked"
+    assert "empty" in executor._published_feedback[-1]["text"]
+
+
+def test_visit_target_blocks_without_runtime_path(monkeypatch):
+    executor = _make_executor(monkeypatch)
+    executor.visit_runtime_path = None
+    executor._handle_visit_target_intent({"target_id": "ball_a"})
+    assert executor._published_feedback[-1]["status"] == "blocked"
+    assert "not configured" in executor._published_feedback[-1]["text"]
+
+
+def test_on_intent_dispatches_visit_target(monkeypatch, tmp_path):
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    import json
+    msg = SimpleNamespace(data=json.dumps({"intent": "visit_target", "args": {"target_id": "ball_c"}}))
+    executor._on_intent(msg)
+
+    data = json.loads(runtime_path.read_text(encoding="utf-8"))
+    assert data["llm_selected_target_id"] == "ball_c"
+    assert executor.last_intent == "visit_target"

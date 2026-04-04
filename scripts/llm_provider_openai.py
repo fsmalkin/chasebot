@@ -27,6 +27,7 @@ INTENT_TOOL_NAMES = {
     "track_target": "emit_track_target",
     "abort": "emit_abort",
     "safe_stop": "emit_safe_stop",
+    "visit_target": "emit_visit_target",
 }
 TOOL_NAME_TO_INTENT = {tool_name: intent_name for intent_name, tool_name in INTENT_TOOL_NAMES.items()}
 
@@ -53,12 +54,17 @@ def blocked_tool_schema() -> Dict[str, Any]:
     return _strict_schema(_decision_metadata_properties())
 
 
-def intent_tool_schema(intent_name: str) -> Dict[str, Any]:
+def intent_tool_schema(intent_name: str, *, remaining_target_ids: list[str] | None = None) -> Dict[str, Any]:
     properties = dict(_decision_metadata_properties())
     if intent_name in {"search_for_target", "acquire_target"}:
         properties["target_class"] = {"type": "string", "enum": ["ball"]}
     elif intent_name == "plan_to_target":
         properties["approach_distance_m"] = {"type": "number", "enum": [0.25]}
+    elif intent_name == "visit_target":
+        if remaining_target_ids:
+            properties["target_id"] = {"type": "string", "enum": remaining_target_ids}
+        else:
+            properties["target_id"] = {"type": "string"}
     return _strict_schema(properties)
 
 
@@ -133,6 +139,8 @@ def build_openai_request(
             "parameters": blocked_tool_schema(),
         }
     ]
+    mission = digest.get("mission") if isinstance(digest.get("mission"), dict) else {}
+    remaining_ids = [str(t.get("target_id", "")) for t in list(mission.get("remaining_target_details", [])) if isinstance(t, dict) and t.get("target_id")]
     for intent_name in ready_intents:
         tool_name = INTENT_TOOL_NAMES.get(intent_name)
         if not tool_name:
@@ -144,7 +152,7 @@ def build_openai_request(
                 "name": tool_name,
                 "description": _tool_description(intent_name, description),
                 "strict": True,
-                "parameters": intent_tool_schema(intent_name),
+                "parameters": intent_tool_schema(intent_name, remaining_target_ids=remaining_ids if intent_name == "visit_target" else None),
             }
         )
     return {
@@ -232,6 +240,8 @@ def _decision_from_tool_call(tool_name: str, payload: Dict[str, Any], task_text:
         decision["args"] = {"target_class": str(payload.get("target_class", "")).strip()}
     elif intent_name == "plan_to_target":
         decision["args"] = {"approach_distance_m": float(payload.get("approach_distance_m", 0.25))}
+    elif intent_name == "visit_target":
+        decision["args"] = {"target_id": str(payload.get("target_id", "")).strip()}
     else:
         decision["args"] = {}
     return decision

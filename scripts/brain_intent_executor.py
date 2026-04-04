@@ -652,6 +652,33 @@ class BrainIntentExecutor(Node):
         self._publish_stop()
         self._publish_feedback("abort: active behavior canceled", status="aborted")
 
+    def _handle_visit_target_intent(self, args_payload: dict[str, Any]) -> None:
+        target_id = str(args_payload.get("target_id", "")).strip()
+        if not target_id:
+            self._publish_feedback("visit_target: blocked because target_id is empty", status="blocked")
+            return
+        if self.visit_runtime_path is None:
+            self._publish_feedback("visit_target: blocked because visit runtime path is not configured", status="blocked")
+            return
+        try:
+            runtime: dict[str, Any] = {}
+            if self.visit_runtime_path.exists():
+                runtime = json.loads(self.visit_runtime_path.read_text(encoding="utf-8"))
+            runtime["llm_selected_target_id"] = target_id
+            runtime["llm_selected_utc"] = utc_now()
+            self.visit_runtime_path.parent.mkdir(parents=True, exist_ok=True)
+            self.visit_runtime_path.write_text(
+                json.dumps(runtime, indent=2, sort_keys=True) + "\n", encoding="utf-8",
+            )
+        except Exception as exc:
+            self._publish_feedback(f"visit_target: failed to write selection: {exc}", status="error")
+            return
+        self._publish_feedback(
+            f"visit_target: selected {target_id}",
+            status="visit_target_selected",
+            extra={"target_id": target_id},
+        )
+
     def _handle_safe_stop_intent(self) -> None:
         self._cancel_goal("safe_stop: canceled active behavior")
         self._reset_pursuit_state()
@@ -685,6 +712,8 @@ class BrainIntentExecutor(Node):
             self._handle_abort_intent()
         elif intent_name == "safe_stop":
             self._handle_safe_stop_intent()
+        elif intent_name == "visit_target":
+            self._handle_visit_target_intent(dict(args_payload))
         else:
             self._publish_feedback(f"unsupported intent: {intent_name}", status="unsupported")
 
