@@ -1039,12 +1039,10 @@ class BrainIntentExecutor(Node):
         if self.visit_active and not self.visit_phase:
             self._begin_visit_phase(self.visit_target_id)
 
-        # Visit lifecycle: navigating — check if close enough to transition to acquiring
-        if self.visit_active and self.visit_phase == "navigating" and self.latest_pose is not None:
-            prior_dist = self._prior_robot_distance_m()
-            if prior_dist is not None and prior_dist <= self.args.acquire_radius_m:
-                self._cancel_goal("visit_target: within acquire radius")
-                self._begin_visit_acquire(self.visit_target_id)
+        # Visit lifecycle: navigating — goal result callback (_on_goal_result)
+        # handles transition to acquiring when Nav2 finishes or aborts.
+        # No acquire-radius watchdog here: it prematurely canceled Nav2 goals
+        # when the robot was still far from the approach point.
 
         # Visit lifecycle: acquiring — if search is not active and not locked, restart search
         if self.visit_active and self.visit_phase == "acquiring" and not self.search_active and not self.visit_locked:

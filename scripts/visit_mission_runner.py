@@ -42,6 +42,18 @@ RUNTIME_DIR = REPO_ROOT / "runtime" / "dashboard"
 MISSION_RUNTIME_STATE_PATH = RUNTIME_DIR / "visit_mission_runtime.json"
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 DEFAULT_WORLD_NAME = "yolo_test_world"
+
+# Shell script block to reposition the robot after spawning a target.
+# Included conditionally — route-planning mode skips this to avoid
+# rotating the robot away from visible targets between spawns.
+_ROBOT_REPOSE_SCRIPT = """\
+if [[ "$rc" -eq 0 ]] && command -v gz >/dev/null 2>&1; then
+  gz service -s "/world/$WORLD_NAME/set_pose/blocking" --reqtype gz.msgs.Pose --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"jetbot\\" position { x: $ROBOT_X y: $ROBOT_Y z: $ROBOT_Z } orientation { x: 0 y: 0 z: $ROBOT_QZ w: $ROBOT_QW }" >> /tmp/chasecar_visit_mission_spawn.log 2>&1
+  setpose_rc=$?
+  if [[ "$setpose_rc" -ne 0 ]]; then
+    rc="$setpose_rc"
+  fi
+fi"""
 DEFAULT_TARGET_MODEL_NAME = "visit_mission_target"
 DEFAULT_TARGET_MODEL_SDF = REPO_ROOT / "ros2_config" / "frisbee_target_ball.sdf"
 DEFAULT_VISIT_TOLERANCE_M = 0.35
@@ -713,7 +725,7 @@ fi
             "yaw": robot_yaw,
         }
 
-    def _spawn_target_from_mission_anchor(self, state: dict[str, Any], target: VisitTargetSpec, mission_root: Path) -> dict[str, Any]:
+    def _spawn_target_from_mission_anchor(self, state: dict[str, Any], target: VisitTargetSpec, mission_root: Path, *, repose_robot: bool = True) -> dict[str, Any]:
         robot_x, robot_y, robot_yaw = self._robot_pose_components(state)
         self._capture_mission_anchor_pose(state)
         anchor_pose = dict(self._mission_anchor_pose or {})
@@ -780,13 +792,7 @@ if [[ "$rc" -eq 0 ]] && command -v gz >/dev/null 2>&1; then
     rc="$target_setpose_rc"
   fi
 fi
-if [[ "$rc" -eq 0 ]] && command -v gz >/dev/null 2>&1; then
-  gz service -s "/world/$WORLD_NAME/set_pose/blocking" --reqtype gz.msgs.Pose --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"jetbot\\" position {{ x: $ROBOT_X y: $ROBOT_Y z: $ROBOT_Z }} orientation {{ x: 0 y: 0 z: $ROBOT_QZ w: $ROBOT_QW }}" >> /tmp/chasecar_visit_mission_spawn.log 2>&1
-  setpose_rc=$?
-  if [[ "$setpose_rc" -ne 0 ]]; then
-    rc="$setpose_rc"
-  fi
-fi
+{_ROBOT_REPOSE_SCRIPT if repose_robot else ""}
 cat /tmp/chasecar_visit_mission_spawn.log
 exit "$rc"
 """
@@ -802,7 +808,7 @@ exit "$rc"
             "model_sdf": str(model_sdf_host),
             "target_world": {"x": target_x, "y": target_y, "z": target.z_m},
             "anchor_pose": {"x": anchor_x, "y": anchor_y, "yaw": anchor_yaw},
-            "robot_pose_after_spawn": {"x": robot_x, "y": robot_y, "yaw": turned_robot_yaw},
+            "robot_pose_after_spawn": {"x": robot_x, "y": robot_y, "yaw": turned_robot_yaw if repose_robot else robot_yaw},
             "spawn_rc": rc,
             "log_path": str(log_path),
             "output": output,
@@ -1160,7 +1166,7 @@ exit "$rc"
                 targets_by_id = {item.id: item for item in self.targets}
                 for target in self.targets:
                     current_state = self._wait_for_robot_pose(timeout_s=self.args.environment_timeout_s)
-                    spawn_info = self._spawn_target_from_mission_anchor(current_state, target, mission_root)
+                    spawn_info = self._spawn_target_from_mission_anchor(current_state, target, mission_root, repose_robot=False)
                     append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "target_spawned", "target_id": target.id, "spawn_info": spawn_info})
                     self._append_runtime_event(f"{target.label} spawned.", key=f"target_spawned:{target.id}")
                 self._update_runtime_state(

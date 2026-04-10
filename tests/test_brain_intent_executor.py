@@ -259,6 +259,7 @@ def _make_executor(monkeypatch):
 
     def _dispatch_prior_approach_goal(*, reason: str, approach_distance_m: float) -> bool:
         dispatched_prior_goals.append({"reason": reason, "approach_distance_m": approach_distance_m})
+        executor.goal_in_progress = True
         return True
 
     executor._publish_feedback = _publish_feedback
@@ -1007,8 +1008,8 @@ def test_visit_not_visible_navigates_regardless_of_distance(monkeypatch, tmp_pat
     assert len(executor._dispatched_prior_goals) == 1
 
 
-def test_visit_navigating_transitions_to_acquiring_on_proximity(monkeypatch, tmp_path):
-    """During navigating phase, timer transitions to acquiring when robot nears prior."""
+def test_visit_navigating_transitions_to_acquiring_on_goal_result(monkeypatch, tmp_path):
+    """Nav2 goal result (success) transitions navigating → acquiring."""
     executor = _make_executor(monkeypatch)
     runtime_path = tmp_path / "visit_mission_runtime.json"
     runtime_path.write_text('{"current_target_prior": {"x": 5.0, "y": 0.0}}', encoding="utf-8")
@@ -1018,12 +1019,33 @@ def test_visit_navigating_transitions_to_acquiring_on_proximity(monkeypatch, tmp
     executor._handle_visit_target_intent({"target_id": "ball_x"})
     assert executor.visit_phase == "navigating"
 
-    # Simulate robot has moved close to prior
+    # Simulate Nav2 goal succeeded (status 4)
     executor.latest_pose = SimpleNamespace(x=4.5, y=0.0, yaw=0.0)
-    executor._on_timer()
+    fake_future = SimpleNamespace(result=lambda: SimpleNamespace(status=4))
+    executor._on_goal_result(fake_future)
 
     assert executor.visit_phase == "acquiring"
     assert executor.search_active is True
+
+
+def test_visit_navigating_not_cancelled_prematurely_by_timer(monkeypatch, tmp_path):
+    """Timer must NOT cancel an active Nav2 goal during navigating phase based on proximity."""
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{"current_target_prior": {"x": 1.1, "y": 0.0}}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor._handle_visit_target_intent({"target_id": "ball_b"})
+    assert executor.visit_phase == "navigating"
+
+    # Robot moves 0.2m forward — within acquire_radius (1.0m) of prior at 1.1m
+    executor.latest_pose = SimpleNamespace(x=0.2, y=0.0, yaw=0.0)
+    executor._on_timer()
+
+    # Should still be navigating, not prematurely switched to acquiring
+    assert executor.visit_phase == "navigating"
+    assert executor.goal_in_progress is True
 
 
 # --- Scenario-level tests (real code paths, no core method mocks) ---
@@ -1075,7 +1097,7 @@ def _make_scenario_executor(monkeypatch, tmp_path, *, prior: dict | None = None,
 
 
 def test_scenario_distant_prior_navigates_then_acquires(monkeypatch, tmp_path):
-    """Full scenario: distant prior -> Nav2 goal dispatched -> arrive near prior -> search starts."""
+    """Full scenario: distant prior -> Nav2 goal dispatched -> goal succeeds -> search starts."""
     executor = _make_scenario_executor(monkeypatch, tmp_path, prior={"x": 5.0, "y": 0.0})
     executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
 
@@ -1089,10 +1111,10 @@ def test_scenario_distant_prior_navigates_then_acquires(monkeypatch, tmp_path):
     goal_x = executor._dispatched_goals[0].pose.pose.position.x
     assert goal_x > 1.0, f"Nav goal should be toward prior, got x={goal_x}"
 
-    # Simulate arriving near prior (timer fires, robot is close)
-    executor.latest_pose = SimpleNamespace(x=4.2, y=0.0, yaw=0.0)
-    executor.goal_in_progress = False  # Nav2 goal finished
-    executor._on_timer()
+    # Simulate Nav2 goal succeeded (status 4) — robot arrived near prior
+    executor.latest_pose = SimpleNamespace(x=4.6, y=0.0, yaw=0.0)
+    fake_future = SimpleNamespace(result=lambda: SimpleNamespace(status=4))
+    executor._on_goal_result(fake_future)
 
     assert executor.visit_phase == "acquiring"
     assert executor.search_active is True
@@ -1162,3 +1184,47 @@ def test_scenario_no_prior_acquires_immediately(monkeypatch, tmp_path):
     assert executor.visit_phase == "acquiring"
     assert executor.search_active is True
     assert len(executor._dispatched_goals) == 0
+
+
+def test_scenario_close_prior_nav2_goal_not_cancelled_by_timer(monkeypatch, tmp_path):
+    """Exact live failure repro: ball_b at 1.1m, robot at origin.
+
+    Previously the acquire-radius watchdog (1.0m) fired after the robot
+    moved just 0.1m, cancelling the Nav2 goal and dropping into search spin.
+    The fix: no acquire-radius watchdog — Nav2 goal result drives the transition.
+    """
+    executor = _make_scenario_executor(monkeypatch, tmp_path, prior={"x": 1.1, "y": 0.0})
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+
+    # No detection — robot is facing backward (yaw ~2.81), can't see ball_b
+    executor.detection_burst_count = 0
+    executor.latest_detection = None
+    executor.last_detection_monotonic = 0.0
+
+    executor._handle_visit_target_intent({"target_id": "ball_b"})
+
+    # Should navigate to prior, not spin
+    assert executor.visit_phase == "navigating", f"Expected navigating, got {executor.visit_phase}"
+    assert executor.goal_in_progress is True
+    assert len(executor._dispatched_goals) == 1
+
+    # Nav2 goal should be approach_distance_m (0.4m) short of prior → ~0.7m
+    goal_x = executor._dispatched_goals[0].pose.pose.position.x
+    assert 0.5 < goal_x < 1.1, f"Nav goal should be ~0.7m toward prior, got x={goal_x}"
+
+    # Simulate robot moving 0.2m forward — within old acquire_radius (1.0m) of prior
+    executor.latest_pose = SimpleNamespace(x=0.2, y=0.0, yaw=0.0)
+    executor._on_timer()
+
+    # Must still be navigating — timer must NOT cancel the goal
+    assert executor.visit_phase == "navigating", "Timer cancelled Nav2 goal prematurely!"
+    assert executor.goal_in_progress is True
+    assert executor.search_active is False
+
+    # Now simulate Nav2 goal completing successfully
+    fake_future = SimpleNamespace(result=lambda: SimpleNamespace(status=4))
+    executor._on_goal_result(fake_future)
+
+    # NOW it should transition to acquiring
+    assert executor.visit_phase == "acquiring"
+    assert executor.search_active is True
