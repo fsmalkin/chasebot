@@ -164,7 +164,8 @@ def _make_executor(monkeypatch):
         approach_distance_m=0.25,
         track_replan_cooldown_s=1.5,
         goal_frame="odom",
-        acquire_radius_m=1.5,
+        acquire_radius_m=1.0,
+        visit_approach_distance_m=0.4,
     )
     executor.latest_detection = None
     executor.last_detection_monotonic = 0.0
@@ -885,6 +886,7 @@ def test_visit_proximity_check_declares_reached(monkeypatch, tmp_path):
 
     executor._handle_visit_target_intent({"target_id": "ball_a"})
     # Manually set visit state as if search→lock→approach completed
+    executor.visit_phase = "approaching"
     executor.visit_locked = True
     executor.visit_approach_dispatched = True
     executor.track_active = True
@@ -906,21 +908,28 @@ def test_visit_proximity_check_declares_reached(monkeypatch, tmp_path):
 
 
 def test_search_rotation_direction_follows_prior(monkeypatch, tmp_path):
-    """Search rotation direction is chosen toward the active prior in acquiring phase."""
+    """Search rotation direction is chosen toward the active prior in acquiring phase.
+
+    Vision-first: with no detection, the executor would navigate.  To test
+    rotation direction we need the executor to enter the acquire phase.
+    We force this by making the nav dispatch fail (prior already at approach distance).
+    """
     executor = _make_executor(monkeypatch)
     runtime_path = tmp_path / "visit_mission_runtime.json"
-    # Prior within acquire radius (1.5m) but to the right (negative bearing → CW)
-    runtime_path.write_text('{"current_target_prior": {"x": 0.5, "y": -1.0}}', encoding="utf-8")
     executor.visit_runtime_path = runtime_path
 
-    # Robot at origin facing +X (yaw=0)
+    # Prior to the right but very close (within approach distance, so nav dispatch
+    # returns True but the mock just records it). We override _dispatch_prior_approach_goal
+    # to return False to force the fall-through to acquire.
+    runtime_path.write_text('{"current_target_prior": {"x": 0.1, "y": -0.3}}', encoding="utf-8")
     executor.latest_pose = type("P", (), {"x": 0.0, "y": 0.0, "yaw": 0.0})()
+    executor._dispatch_prior_approach_goal = lambda **kw: False
     executor._handle_visit_target_intent({"target_id": "ball_right"})
     assert executor.visit_phase == "acquiring"
     assert executor.search_rotation_sign == -1.0, "Should rotate CW toward prior on the right"
 
-    # Prior within acquire radius but to the left (positive bearing → CCW)
-    runtime_path.write_text('{"current_target_prior": {"x": 0.5, "y": 1.0}}', encoding="utf-8")
+    # Prior to the left
+    runtime_path.write_text('{"current_target_prior": {"x": 0.1, "y": 0.3}}', encoding="utf-8")
     executor._handle_visit_target_intent({"target_id": "ball_left"})
     assert executor.visit_phase == "acquiring"
     assert executor.search_rotation_sign == 1.0, "Should rotate CCW toward prior on the left"
@@ -960,20 +969,42 @@ def test_visit_navigates_to_distant_prior(monkeypatch, tmp_path):
     assert len(nav_fb) >= 1
 
 
-def test_visit_near_prior_goes_straight_to_acquiring(monkeypatch, tmp_path):
-    """When prior is within acquire_radius, visit skips navigating and goes to acquiring."""
+def test_visit_visible_aligned_target_acquires_immediately(monkeypatch, tmp_path):
+    """Vision-first: when target is visible and prior-aligned, skip navigation."""
     executor = _make_executor(monkeypatch)
     runtime_path = tmp_path / "visit_mission_runtime.json"
     runtime_path.write_text('{"current_target_prior": {"x": 1.0, "y": 0.0}}', encoding="utf-8")
     executor.visit_runtime_path = runtime_path
 
+    # Simulate a visible detection aligned with prior (within prior_lock_tolerance)
     executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
-    executor._handle_visit_target_intent({"target_id": "ball_near"})
+    executor.latest_detection = _make_detection(x=0.0, z=1.0)
+    executor.last_detection_monotonic = time.monotonic()
+    executor.detection_burst_count = 1  # not enough for lock
+
+    executor._handle_visit_target_intent({"target_id": "ball_vis"})
 
     assert executor.visit_active is True
     assert executor.visit_phase == "acquiring"
     assert executor.search_active is True
     assert len(executor._dispatched_prior_goals) == 0
+
+
+def test_visit_not_visible_navigates_regardless_of_distance(monkeypatch, tmp_path):
+    """Vision-first: when target is NOT visible, navigate to prior even if close."""
+    executor = _make_executor(monkeypatch)
+    runtime_path = tmp_path / "visit_mission_runtime.json"
+    runtime_path.write_text('{"current_target_prior": {"x": 1.0, "y": 0.0}}', encoding="utf-8")
+    executor.visit_runtime_path = runtime_path
+
+    # No detection — robot can't see the ball
+    executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
+    executor._handle_visit_target_intent({"target_id": "ball_near"})
+
+    assert executor.visit_active is True
+    assert executor.visit_phase == "navigating"
+    assert executor.search_active is False
+    assert len(executor._dispatched_prior_goals) == 1
 
 
 def test_visit_navigating_transitions_to_acquiring_on_proximity(monkeypatch, tmp_path):
@@ -1102,25 +1133,22 @@ def test_scenario_nav2_not_ready_retries_on_timer(monkeypatch, tmp_path):
     assert executor.visit_nav2_retry_count == 0
 
 
-def test_scenario_lock_during_acquire_dispatches_approach(monkeypatch, tmp_path):
-    """Full scenario: acquiring -> detection -> lock -> approach goal dispatched."""
+def test_scenario_visible_target_locks_and_approaches(monkeypatch, tmp_path):
+    """Vision-first: visible+aligned target → immediate lock → approach goal dispatched."""
     executor = _make_scenario_executor(monkeypatch, tmp_path, prior={"x": 1.0, "y": 0.0})
     executor.latest_pose = SimpleNamespace(x=0.0, y=0.0, yaw=0.0)
 
-    executor._handle_visit_target_intent({"target_id": "ball_a"})
-    assert executor.visit_phase == "acquiring"
-    assert executor.search_active is True
-
-    # Simulate centered detection with burst
+    # Simulate visible, centered, burst-ready detection aligned with prior
     executor.detection_burst_count = 5
     executor.latest_detection = _make_detection(x=0.0, z=1.0)
     executor.last_detection_monotonic = time.monotonic()
-    executor._lock_target("ball", "search_for_target")
 
+    executor._handle_visit_target_intent({"target_id": "ball_a"})
+
+    # Vision-first: should lock immediately and dispatch approach goal
     assert executor.visit_phase == "approaching"
     assert executor.visit_locked is True
     assert executor.track_active is True
-    # Approach goal dispatched (via detection-based _dispatch_nav_goal)
     assert len(executor._dispatched_goals) >= 1
 
 

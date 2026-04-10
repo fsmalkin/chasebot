@@ -95,12 +95,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--acquire-radius-m",
         type=float,
-        default=0.5,
+        default=1.0,
         help=(
-            "Distance from prior at which visit transitions from navigating to "
-            "acquiring (visual search). Must be larger than --visit-approach-distance-m. "
-            "When the robot is closer than this to the prior, we skip navigation and "
-            "go straight to visual search."
+            "Watchdog radius: if the robot is navigating and gets within this "
+            "distance of the prior, cancel the Nav2 goal and start visual search. "
+            "Only used by the timer loop as a safety net for stuck Nav2 goals."
         ),
     )
     parser.add_argument(
@@ -850,18 +849,20 @@ class BrainIntentExecutor(Node):
     def _begin_visit_phase(self, target_id: str) -> None:
         """Decide and start the right visit phase based on current state.
 
+        Vision-first design — detection drives state, not distance thresholds:
+
+        1. Target visible and prior-aligned → lock and approach immediately
+        2. Target visible but not lock-ready → acquire (center on detection)
+        3. Not visible + have prior → navigate to prior via Nav2
+        4. Not visible + no prior → visual search (rotate)
+
         Called from _handle_visit_target_intent on initial dispatch and from
         _on_timer when retrying after Nav2 wasn't ready.
 
         IMPORTANT: This method must NOT block.  It is called from a timer
-        callback inside the single-threaded rclpy executor.  A blocking
-        ``wait_for_server()`` call would prevent DDS from processing discovery
-        messages, so Nav2 would never be discovered.  Instead we check
-        ``server_is_ready()`` (non-blocking) and return immediately if Nav2 has
-        not been discovered yet — the timer will retry on the next tick.
+        callback inside the single-threaded rclpy executor.
         """
         if self.latest_pose is None:
-            # No odom yet — timer will retry
             if not self.visit_phase:
                 self._publish_feedback(
                     f"visit_target: waiting for odom to navigate to {target_id}",
@@ -870,77 +871,60 @@ class BrainIntentExecutor(Node):
                 )
             return
 
-        if self.active_prior is not None:
-            prior_dist = self._prior_robot_distance_m()
-            if prior_dist is None:
-                # Have prior but no pose distance — wait for next tick
+        # ── Vision-first: if we can already see a valid target, use it ──
+        if self._target_visible_recent() and self._prior_lock_alignment_ok():
+            if self._target_ready_for_lock():
+                self._lock_target("ball", f"visit_target({target_id})")
                 return
-            if prior_dist > self.args.acquire_radius_m:
-                # Far from target — need Nav2 to navigate there.
-                # Non-blocking readiness check.  Do NOT call wait_for_server()
-                # here — it blocks the executor and prevents DDS discovery.
-                if not self.nav_client.server_is_ready():
-                    self.visit_nav2_retry_count += 1
-                    # Publish feedback periodically (every ~1s at 10Hz timer) so
-                    # dashboard/mission runner can see what's happening.
-                    if self.visit_nav2_retry_count % 10 == 1:
-                        self.get_logger().warn(
-                            f"visit_target({target_id}): Nav2 not ready "
-                            f"(attempt {self.visit_nav2_retry_count}), retrying..."
-                        )
-                        self._publish_feedback(
-                            f"visit_target: Nav2 not ready (attempt {self.visit_nav2_retry_count}), retrying",
-                            status="visit_target_nav2_wait",
-                            extra={
-                                "target_id": target_id,
-                                "nav2_retry_count": self.visit_nav2_retry_count,
-                                "prior_distance_m": round(prior_dist, 4),
-                            },
-                        )
-                    return
+            # Visible and aligned but not centered enough yet — acquire
+            self._begin_visit_acquire(target_id)
+            return
 
-                # Nav2 is ready — dispatch navigation goal.
-                # Use a fixed approach distance (> Nav2 xy_goal_tolerance of
-                # 0.25m) so the goal is always reachable as a destination.
-                dispatched = self._dispatch_prior_approach_goal(
-                    reason=f"visit_target({target_id}): navigating to prior",
-                    approach_distance_m=float(self.args.visit_approach_distance_m),
-                )
-                if dispatched:
-                    self.visit_phase = "navigating"
-                    if self.visit_nav2_retry_count > 0:
-                        self.get_logger().info(
-                            f"visit_target({target_id}): Nav2 ready after "
-                            f"{self.visit_nav2_retry_count} retries"
-                        )
-                    self.visit_nav2_retry_count = 0
-                    self._publish_feedback(
-                        f"visit_target: navigating to {target_id}",
-                        status="visit_target_navigating",
-                        extra={"target_id": target_id, "prior_distance_m": round(prior_dist, 4)},
+        # ── Not visible: navigate toward the prior if we have one ──
+        if self.active_prior is not None:
+            if not self.nav_client.server_is_ready():
+                self.visit_nav2_retry_count += 1
+                if self.visit_nav2_retry_count % 10 == 1:
+                    self.get_logger().warn(
+                        f"visit_target({target_id}): Nav2 not ready "
+                        f"(attempt {self.visit_nav2_retry_count}), retrying..."
                     )
-                    return
-                # Dispatch failed despite Nav2 being ready — log and fall
-                # through to acquire so the robot doesn't sit idle.  This
-                # should be rare (e.g., dist somehow shrank below
-                # approach_distance between checks).
-                self.get_logger().warn(
-                    f"visit_target({target_id}): _dispatch_prior_approach_goal "
-                    f"returned False unexpectedly (dist={prior_dist:.2f}m, "
-                    f"approach={self.args.visit_approach_distance_m:.2f}m); "
-                    f"falling through to acquire"
-                )
+                    self._publish_feedback(
+                        f"visit_target: Nav2 not ready (attempt {self.visit_nav2_retry_count}), retrying",
+                        status="visit_target_nav2_wait",
+                        extra={
+                            "target_id": target_id,
+                            "nav2_retry_count": self.visit_nav2_retry_count,
+                        },
+                    )
+                return
+
+            dispatched = self._dispatch_prior_approach_goal(
+                reason=f"visit_target({target_id}): navigating to prior",
+                approach_distance_m=float(self.args.visit_approach_distance_m),
+            )
+            if dispatched:
+                self.visit_phase = "navigating"
+                if self.visit_nav2_retry_count > 0:
+                    self.get_logger().info(
+                        f"visit_target({target_id}): Nav2 ready after "
+                        f"{self.visit_nav2_retry_count} retries"
+                    )
+                self.visit_nav2_retry_count = 0
+                prior_dist = self._prior_robot_distance_m()
                 self._publish_feedback(
-                    f"visit_target: nav dispatch failed unexpectedly, falling through to acquire",
-                    status="visit_target_nav_dispatch_failed",
+                    f"visit_target: navigating to {target_id}",
+                    status="visit_target_navigating",
                     extra={
                         "target_id": target_id,
-                        "prior_distance_m": round(prior_dist, 4),
+                        "prior_distance_m": round(prior_dist, 4) if prior_dist is not None else None,
                     },
                 )
-                # fall through
+                return
+            # Nav dispatch failed (already at prior, or dist < approach_distance).
+            # Fall through to visual search.
 
-        # Near or no prior — go straight to visual search
+        # ── Fallback: rotate and search visually ──
         self._begin_visit_acquire(target_id)
 
     def _begin_visit_acquire(self, target_id: str) -> None:
