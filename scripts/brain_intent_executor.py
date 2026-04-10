@@ -95,8 +95,23 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--acquire-radius-m",
         type=float,
-        default=1.5,
-        help="Distance from prior at which visit transitions from navigating to acquiring (visual search).",
+        default=0.5,
+        help=(
+            "Distance from prior at which visit transitions from navigating to "
+            "acquiring (visual search). Must be larger than --visit-approach-distance-m. "
+            "When the robot is closer than this to the prior, we skip navigation and "
+            "go straight to visual search."
+        ),
+    )
+    parser.add_argument(
+        "--visit-approach-distance-m",
+        type=float,
+        default=0.4,
+        help=(
+            "Distance from prior at which Nav2 goals are placed during the visit "
+            "navigation phase. Must be greater than Nav2's xy_goal_tolerance (0.25m) "
+            "or Nav2 will consider the goal already reached and not move."
+        ),
     )
     parser.add_argument(
         "--use-sim-time",
@@ -177,6 +192,7 @@ class BrainIntentExecutor(Node):
         self.visit_phase = ""  # "navigating" | "acquiring" | "approaching"
         self.visit_locked = False
         self.visit_approach_dispatched = False
+        self.visit_nav2_retry_count = 0
 
         self.last_inbox_mtime = 0.0
 
@@ -284,12 +300,17 @@ class BrainIntentExecutor(Node):
 
         Used as a fallback when detection-based approach has converged but the
         robot is still far from the prior (depth estimation error).
+
+        IMPORTANT: This method must NOT call ``wait_for_server`` — it is invoked
+        from timer/callback context inside the single-threaded rclpy executor,
+        and blocking would prevent DDS from processing discovery messages.  We
+        only do a non-blocking ``server_is_ready`` check; callers must handle
+        a False return (e.g., retry later).
         """
         if self.active_prior is None or self.latest_pose is None:
             return False
         if not self.nav_client.server_is_ready():
-            if not self.nav_client.wait_for_server(timeout_sec=0.5):
-                return False
+            return False
         prior_x = self.active_prior["x"]
         prior_y = self.active_prior["y"]
         dist = math.hypot(prior_x - self.latest_pose.x, prior_y - self.latest_pose.y)
@@ -496,12 +517,12 @@ class BrainIntentExecutor(Node):
             )
             return False
         if not self.nav_client.server_is_ready():
-            if not self.nav_client.wait_for_server(timeout_sec=0.5):
-                self._publish_feedback(
-                    f"{reason}: blocked because Nav2 is unavailable",
-                    status="blocked",
-                )
-                return False
+            # Non-blocking only — see _dispatch_prior_approach_goal docstring
+            self._publish_feedback(
+                f"{reason}: blocked because Nav2 is unavailable",
+                status="blocked",
+            )
+            return False
 
         plan = plan_approach_from_detection(
             robot_pose=self.latest_pose,
@@ -821,6 +842,7 @@ class BrainIntentExecutor(Node):
         self.visit_phase = ""
         self.visit_locked = False
         self.visit_approach_dispatched = False
+        self.visit_nav2_retry_count = 0
 
         # Decide initial visit phase based on prior distance
         self._begin_visit_phase(target_id)
@@ -830,6 +852,13 @@ class BrainIntentExecutor(Node):
 
         Called from _handle_visit_target_intent on initial dispatch and from
         _on_timer when retrying after Nav2 wasn't ready.
+
+        IMPORTANT: This method must NOT block.  It is called from a timer
+        callback inside the single-threaded rclpy executor.  A blocking
+        ``wait_for_server()`` call would prevent DDS from processing discovery
+        messages, so Nav2 would never be discovered.  Instead we check
+        ``server_is_ready()`` (non-blocking) and return immediately if Nav2 has
+        not been discovered yet — the timer will retry on the next tick.
         """
         if self.latest_pose is None:
             # No odom yet — timer will retry
@@ -843,22 +872,73 @@ class BrainIntentExecutor(Node):
 
         if self.active_prior is not None:
             prior_dist = self._prior_robot_distance_m()
-            if prior_dist is not None and prior_dist > self.args.acquire_radius_m:
-                # Far from target — try to navigate
+            if prior_dist is None:
+                # Have prior but no pose distance — wait for next tick
+                return
+            if prior_dist > self.args.acquire_radius_m:
+                # Far from target — need Nav2 to navigate there.
+                # Non-blocking readiness check.  Do NOT call wait_for_server()
+                # here — it blocks the executor and prevents DDS discovery.
+                if not self.nav_client.server_is_ready():
+                    self.visit_nav2_retry_count += 1
+                    # Publish feedback periodically (every ~1s at 10Hz timer) so
+                    # dashboard/mission runner can see what's happening.
+                    if self.visit_nav2_retry_count % 10 == 1:
+                        self.get_logger().warn(
+                            f"visit_target({target_id}): Nav2 not ready "
+                            f"(attempt {self.visit_nav2_retry_count}), retrying..."
+                        )
+                        self._publish_feedback(
+                            f"visit_target: Nav2 not ready (attempt {self.visit_nav2_retry_count}), retrying",
+                            status="visit_target_nav2_wait",
+                            extra={
+                                "target_id": target_id,
+                                "nav2_retry_count": self.visit_nav2_retry_count,
+                                "prior_distance_m": round(prior_dist, 4),
+                            },
+                        )
+                    return
+
+                # Nav2 is ready — dispatch navigation goal.
+                # Use a fixed approach distance (> Nav2 xy_goal_tolerance of
+                # 0.25m) so the goal is always reachable as a destination.
                 dispatched = self._dispatch_prior_approach_goal(
                     reason=f"visit_target({target_id}): navigating to prior",
-                    approach_distance_m=self.args.acquire_radius_m * 0.5,
+                    approach_distance_m=float(self.args.visit_approach_distance_m),
                 )
                 if dispatched:
                     self.visit_phase = "navigating"
+                    if self.visit_nav2_retry_count > 0:
+                        self.get_logger().info(
+                            f"visit_target({target_id}): Nav2 ready after "
+                            f"{self.visit_nav2_retry_count} retries"
+                        )
+                    self.visit_nav2_retry_count = 0
                     self._publish_feedback(
                         f"visit_target: navigating to {target_id}",
                         status="visit_target_navigating",
                         extra={"target_id": target_id, "prior_distance_m": round(prior_dist, 4)},
                     )
                     return
-                # Nav2 not ready — stay in empty phase, timer will retry
-                return
+                # Dispatch failed despite Nav2 being ready — log and fall
+                # through to acquire so the robot doesn't sit idle.  This
+                # should be rare (e.g., dist somehow shrank below
+                # approach_distance between checks).
+                self.get_logger().warn(
+                    f"visit_target({target_id}): _dispatch_prior_approach_goal "
+                    f"returned False unexpectedly (dist={prior_dist:.2f}m, "
+                    f"approach={self.args.visit_approach_distance_m:.2f}m); "
+                    f"falling through to acquire"
+                )
+                self._publish_feedback(
+                    f"visit_target: nav dispatch failed unexpectedly, falling through to acquire",
+                    status="visit_target_nav_dispatch_failed",
+                    extra={
+                        "target_id": target_id,
+                        "prior_distance_m": round(prior_dist, 4),
+                    },
+                )
+                # fall through
 
         # Near or no prior — go straight to visual search
         self._begin_visit_acquire(target_id)
@@ -1112,6 +1192,7 @@ class BrainIntentExecutor(Node):
             "visit_active": self.visit_active,
             "visit_target_id": self.visit_target_id,
             "visit_phase": self.visit_phase,
+            "nav2_server_ready": self.nav_client.server_is_ready(),
         }
         if self.latest_pose is not None:
             payload["latest_robot_pose"] = asdict(self.latest_pose)

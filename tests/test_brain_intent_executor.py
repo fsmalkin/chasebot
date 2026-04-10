@@ -209,6 +209,7 @@ def _make_executor(monkeypatch):
     executor.visit_phase = ""
     executor.visit_locked = False
     executor.visit_approach_dispatched = False
+    executor.visit_nav2_retry_count = 0
     executor.latest_detections_3d = []
     executor.latest_detections_3d_mono = 0.0
 
@@ -269,6 +270,18 @@ def _make_executor(monkeypatch):
     executor._dispatch_prior_approach_goal = _dispatch_prior_approach_goal
     executor._clear_motion_state = original_clear_motion_state
     executor._reset_pursuit_state = original_reset_pursuit_state
+
+    # Mock nav_client and logger — needed by _begin_visit_phase (non-blocking
+    # server_is_ready check) and feedback logging.
+    executor.nav_client = SimpleNamespace(
+        server_is_ready=lambda: True,
+        wait_for_server=lambda timeout_sec=0.5: True,
+    )
+    executor.get_logger = lambda: SimpleNamespace(
+        info=lambda *a, **kw: None,
+        warn=lambda *a, **kw: None,
+        error=lambda *a, **kw: None,
+    )
 
     monkeypatch.setattr(executor_mod.time, "monotonic", lambda: 100.0)
 
@@ -1066,6 +1079,11 @@ def test_scenario_nav2_not_ready_retries_on_timer(monkeypatch, tmp_path):
     assert executor.visit_phase == ""  # Waiting for Nav2
     assert executor.search_active is False
     assert len(executor._dispatched_goals) == 0
+    assert executor.visit_nav2_retry_count == 1  # First attempt counted
+
+    # Feedback published on first retry
+    nav2_fb = [f for f in executor._published_feedback if f["status"] == "visit_target_nav2_wait"]
+    assert len(nav2_fb) >= 1
 
     # Simulate Nav2 becoming ready
     executor.nav_client = SimpleNamespace(
@@ -1077,10 +1095,11 @@ def test_scenario_nav2_not_ready_retries_on_timer(monkeypatch, tmp_path):
     )
     executor._on_timer()
 
-    # Now should navigate
+    # Now should navigate and reset retry count
     assert executor.visit_phase == "navigating"
     assert executor.goal_in_progress is True
     assert len(executor._dispatched_goals) == 1
+    assert executor.visit_nav2_retry_count == 0
 
 
 def test_scenario_lock_during_acquire_dispatches_approach(monkeypatch, tmp_path):

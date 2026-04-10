@@ -514,6 +514,30 @@ class VisitMissionRunner:
             error_text="Environment did not stop cleanly.",
         )
 
+    def _wait_for_nav2_ready(self, timeout_s: float = 30.0) -> dict[str, Any]:
+        """Wait for the executor to report Nav2 action server as ready.
+
+        The executor exposes ``nav2_server_ready`` in its brain state.  We poll
+        until it becomes True or the timeout expires.  This prevents dispatching
+        ``visit_target`` before Nav2 is discoverable, which would cause the
+        executor to spin in a retry loop.
+        """
+        deadline = time.monotonic() + max(timeout_s, 0.1)
+        last_state: dict[str, Any] = {}
+        while time.monotonic() < deadline:
+            last_state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
+            brain = last_state.get("brain", {}) if isinstance(last_state.get("brain"), dict) else {}
+            if bool(brain.get("nav2_server_ready", False)):
+                self._append_runtime_event("Nav2 action server ready.", category="system", key="nav2_ready")
+                return last_state
+            time.sleep(0.5)
+        self._append_runtime_event(
+            f"Nav2 action server not ready after {timeout_s:.0f}s — proceeding anyway.",
+            category="warning",
+            key="nav2_not_ready",
+        )
+        return last_state
+
     def _wait_for_pursuit_quiet(self, timeout_s: float) -> dict[str, Any]:
         deadline = time.monotonic() + max(timeout_s, 0.1)
         last_state: dict[str, Any] = {}
@@ -1149,6 +1173,9 @@ exit "$rc"
                 # One-shot LLM route plan
                 planned_route = self._plan_visit_route(remaining_ids)
                 append_jsonl(visit_sequence_path, {"generated_utc": utc_now(), "event_type": "route_planned", "route": planned_route})
+
+                # Pre-flight: wait for Nav2 readiness before dispatching visits
+                self._wait_for_nav2_ready(timeout_s=30.0)
 
                 for visit_index, selected_id in enumerate(planned_route, start=1):
                     if selected_id not in targets_by_id:
