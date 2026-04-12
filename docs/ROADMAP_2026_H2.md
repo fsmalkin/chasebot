@@ -73,18 +73,18 @@ Status update as of February 28, 2026:
 
 Once the frozen pre-LLM boundary is in place, the next roadmap step is not open-ended autonomy. It is a bounded promotion ladder:
 
-1. headless LLM proof over the frozen intent contract ✓
-2. repeatability gate on the authoritative `container_kilted` lane ✓
-3. simple browser UAT demo for the same proof path ✓
-4. bounded supervisor reuse across the visible-ball M3 scenario family ✓
+1. headless LLM proof over the frozen intent contract (complete)
+2. repeatability gate on the authoritative `container_kilted` lane (complete)
+3. simple browser UAT demo for the same proof path (complete)
+4. bounded supervisor reuse across the visible-ball M3 scenario family (complete)
    - `visit_m3_positions` scenario validates center, left, right targets using the same policy
-5. target prior contract for multi-target scenarios ✓
+5. target prior contract for multi-target scenarios (complete)
    - executor receives expected target position from the mission layer, not from sim ground truth
    - prior-based lock gating and prior-based track approach implemented and tested
    - `visit_single_ball_proof` and `visit_three_ball_sequence` passing
    - sim truth probe is a validation oracle (test-time only), not an executor runtime dependency
    - this makes the executor's target discrimination portable to hardware
-6. provider benchmarking infrastructure for a future on-machine model path on Orin Nano ✓
+6. provider benchmarking infrastructure for a future on-machine model path on Orin Nano (complete)
    - provider abstraction (`DecisionProvider` protocol) and replay comparison tool exist
    - `LocalModelProvider` placeholder ready for Orin Nano integration
    - benchmarking is not a prerequisite for the current promotion ladder
@@ -125,118 +125,98 @@ Status update as of April 4, 2026:
 5. pivoting the roadmap slice to end-to-end VLA control
 6. replacing deterministic perception, planning, or execution loops with model-generated low-level action
 
-## Next Roadmap Slice: LLM Route Planning and Model Evaluation
+## Next Roadmap Slice: Ball Corral / Place and Onboard Planning
 
-The bounded single-target supervisor is complete and UAT-ready. The next slice
-promotes the LLM from reactive supervisor to route planner — giving it real
-planning authority over multi-target sequencing — then evaluates whether a
-lightweight model can replace the cloud provider.
+The route-planning baseline is now the proved foundation, not the next open
+question. The next slice upgrades the mission from "visit balls in a smart
+order" to "gather balls into a designated area," then uses that fuller task to
+evaluate whether an onboard planner can replace the cloud-backed planner.
 
-### Step 1: LLM-Planned Multi-Target Route
+For the first gather proof we assume smooth-surface operation such as soccer
+fields or similar turf-like practice surfaces. That keeps the milestone focused
+on controlled placement with a front catcher instead of trying to generalize a
+harder bump-and-roll behavior too early.
 
-Goal: the LLM decides which target to visit next based on visibility, proximity,
-and progress — not a predetermined sequence.
+```mermaid
+flowchart LR
+    A[Route-planning baseline complete] --> B[Simulated catcher geometry]
+    B --> C[Single-ball corral or place proof]
+    C --> D[Multi-ball gather to zone]
+    D --> E[Onboard model shadow lane]
+    E --> F[Promote onboard planner]
+```
 
-This is the sim analogue of the end-state use case: a robot on a grass or turf
-field retrieving scattered sports balls (e.g., soccer balls after practice). The
-LLM plans which ball to collect next based on what it can see and where it is.
-Sim proves the planning logic; the same decision shape transfers to outdoor
-hardware with real perception.
+### Step 1: Route-Planning Baseline - Complete
 
-Scenario:
+Goal: keep the current visit-and-avoid stack as the regression floor while new
+gather behavior lands above it.
 
-- 3 balls spawned at known positions (same positions as `visit_three_ball_sequence`)
-- the LLM sees the multi-target digest: which targets remain, which are visible, robot pose
-- the LLM emits `visit_target(id)` to select the next target, then the existing search/acquire/plan/track policy handles execution
-- success = all 3 targets visited; quality = total distance traveled, time to complete
+Validated evidence:
 
-What changes:
+1. authoritative serial dashboard gate: `artifacts/session/20260412T170306Z/route_planning_serial_gate/campaign_summary.json`
+2. serial operator scorecard: `artifacts/session/20260412T170306Z/route_planning_serial_gate/scorecard.md`
+3. isolated parallel soak baseline: `artifacts/session/20260412T054630Z/route_planning_parallel_soak/campaign_summary.json`
 
-1. extend the frozen intent contract with `visit_target(target_id)` — a high-level planning intent that selects the next target
-2. extend the state digest with multi-target awareness: remaining targets, visited targets, per-target visibility and estimated distance
-3. add a route planning policy stage above the existing search/acquire/plan/track stages
-4. add a `visit_route_planning` scenario to the dashboard
-5. prove the LLM picks a reasonable visit order (e.g., nearest-visible-first) and completes all targets
+What this means:
 
-Acceptance:
+1. `visit_route_planning` is now a one-click self-contained dashboard proof
+2. already-visited balls are avoided on later legs instead of being driven through
+3. serial dashboard UAT remains the trust surface
+4. parallel soak remains the throughput surface
 
-1. LLM-planned route completes all 3 targets
-2. visit order is demonstrably non-random (nearest-visible or similar heuristic)
-3. same frozen contract, same deterministic lower layers, same safety guarantees
-4. proof passes 3+ consecutive times
+Exit criterion for this step:
 
-Current status as of April 12, 2026:
+1. keep the route-planning serial gate green while corral/place work is added
 
-1. fresh-session route planning is now green with object avoidance working against already-visited balls
-2. validated fresh-session proofs:
-   - `artifacts/session/20260412T021011Z/visit_mission/20260412T021044Z/mission_verdict.json`
-   - `artifacts/session/20260412T022002Z/visit_mission/20260412T022019Z/mission_verdict.json`
-3. the previous "drive through the visited center ball" failure mode improved from roughly `0.05 m` center clearance to roughly `0.26-0.27 m` on the `ball_b -> ball_a` transition
-4. dashboard route-planning clicks are now self-contained: each click queues a sim reset before launch and starts a fresh session automatically
-5. validated one-click rerun proofs:
-   - `artifacts/session/20260412T033747Z/visit_mission/20260412T033759Z/mission_verdict.json`
-   - `artifacts/session/20260412T033934Z/visit_mission/20260412T033947Z/mission_verdict.json`
+### Step 2: Ball Corral / Place Proof
 
-### Step 2: Stabilize on Current Provider (GPT)
+Goal: the robot gathers a ball by keeping it controlled at the front of the
+robot and placing it into a designated area, rather than relying on random
+post-contact rolling.
 
-Goal: soak the route planning scenario on the current GPT model until it is
-repeatable and the decision quality is measurable.
+Assumptions for the first proof:
 
-Top priority decision:
-
-1. keep the browser dashboard / operator UAT flow serial and authoritative
-2. build a separate non-interactive parallel soak runner for repeatability campaigns
-3. treat the soak runner as campaign infrastructure, not as the operator proof surface
-
-Why:
-
-1. the dashboard now intentionally auto-resets into a fresh session per click; keeping that flow single-threaded preserves operator trust and makes session-to-session evidence easy to reason about
-2. campaign throughput is still important, so parallelism should come from isolated background workers with their own ports, compose projects, and sessions
-3. this lets us speed up repeatability measurement without weakening the meaning of the dashboard UAT proof
+1. operating surface is smooth, like a soccer field or similar practice surface
+2. the robot gets a simulated front-mounted catcher shaped like a spur with a U opening outward
+3. the catcher sits below the ball midline so the ball can roll into a stable push envelope while the robot advances
+4. success is measured by zone entry and control, not just contact
 
 Work:
 
-1. build a parallel non-interactive soak runner that launches isolated route-planning workers on unique dashboard ports / compose projects
-2. keep each worker self-contained: start dashboard service, bring up environment, run `visit_route_planning`, collect artifacts, tear down cleanly
-3. record decision traces for replay: state digest → LLM decision at each step
-4. define quality metrics: total path length, visit order optimality, time to complete, number of wasted intents
-5. establish a baseline scorecard for the GPT provider
-6. keep the browser dashboard flow as the serial operator proof path; do not use multi-worker parallelism as UAT evidence
+1. add and tune the simulated catcher geometry on the robot in Gazebo
+2. add a designated corral zone with explicit scoring and event logging
+3. create a single-ball browser-dashboard UAT scenario for corral/place
+4. instrument control metrics: capture acquired, capture lost, place complete, time-to-place, and zone occupancy
+5. extend from single-ball place to multi-ball gather-to-zone using the existing route planner as the upper layer
 
 Acceptance:
 
-1. 5/5 consecutive green route planning runs
-2. soak runner can execute multiple isolated workers in parallel without cross-session contamination
-3. baseline scorecard with quality metrics for GPT
+1. single-ball corral/place passes `3/3` consecutive dashboard runs
+2. the robot keeps the ball controlled long enough to place it into the zone without depending on random ricochet behavior
+3. multi-ball gather-to-zone completes end-to-end with route planning still respecting obstacle avoidance and self-contained dashboard resets
+4. artifacts include route order, place times, zone score, and capture-loss events
 
-Status update as of April 12, 2026:
+### Step 3: Onboard Model for Visit + Gather Planning
 
-1. top-priority infrastructure split is now implemented and verified:
-   - browser dashboard UAT stays serial and authoritative
-   - parallel throughput lives in `scripts/run_route_planning_parallel_soak.ps1`
-2. isolated 2-worker live soak is green:
-   - `artifacts/session/20260412T054630Z/route_planning_parallel_soak/campaign_summary.json`
-3. the soak runner now isolates dashboard port, `ROS_DOMAIN_ID`, compose project, session, and runtime state per worker
-4. the worker path is headless by design and uses worker-local `visit_mission_runtime.json` plus direct intent inbox/ack wiring
-5. next promotion work inside Step 2 is campaign depth and scorecards:
-   - extend from the verified `2/2` worker proof to the full `5/5` repeatability gate
-   - add quality metrics for route order, mission time, and visited-ball clearance
+Goal: determine whether a local model on the Orin can take over high-level visit
+and gather planning after the task is stable enough to benchmark fairly.
 
-### Step 3: Model Evaluation for On-Robot Inference
+Why this comes after corral/place:
 
-Goal: determine whether a lightweight model can make comparable route planning
-decisions on the Orin Nano GPU.
+1. route planning alone is now too small a target; the more useful benchmark is the full visit-and-gather loop
+2. gather introduces richer tradeoffs: which ball next, when to place, when to recover a lost ball, and how to sequence the corral zone efficiently
+3. evaluating local models after that task surface stabilizes gives a more meaningful promotion decision
 
 Work:
 
-1. replay the recorded GPT decision traces through candidate providers using the existing `llm_provider_replay_compare.py` tool
-2. candidate models: small open-weight models that fit Orin Nano 8GB (e.g., Phi-3-mini, Llama-3.2-3B, Qwen-2.5-3B)
-3. compare: decision agreement rate, intent validity rate, visit order quality, inference latency
-4. for the top candidate: run the live route planning scenario end-to-end with `LocalModelProvider`
-5. if no candidate meets quality threshold, document the gap and keep cloud inference as the primary path
+1. record decision traces from the visit-and-gather scenarios using the current GPT planner as the baseline
+2. replay those traces through candidate onboard providers with `llm_provider_replay_compare.py`
+3. compare validity, agreement, latency, and gather-quality metrics
+4. run the best local candidate in shadow mode first, then in live sim if it holds up
+5. promote the onboard planner only if it matches the safety and task-completion bar; otherwise document the gap and keep cloud planning as the baseline
 
 Acceptance:
 
-1. replay comparison report for at least 3 candidate models
-2. live end-to-end proof with the top candidate (or documented gap analysis)
-3. decision on whether to proceed with local inference or stay on cloud for the hardware POC
+1. replay comparison report for candidate onboard models against visit-and-gather traces
+2. shadow-lane evidence that the top local model makes comparable high-level decisions
+3. live end-to-end gather proof with the promoted local planner, or a documented decision to stay cloud-backed for this milestone

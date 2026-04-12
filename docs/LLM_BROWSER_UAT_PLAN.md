@@ -336,67 +336,74 @@ To keep the demo honest and legible, this phase does not include:
 - autonomous environment lifecycle control by the LLM
 - end-to-end VLA control
 
-## Next Phase: LLM Route Planning and Model Evaluation
+## Next Phase: Ball Corral / Place, Then Onboard Planning
 
-The single-target UAT phase is complete. The next phase promotes the LLM from
-reactive supervisor to route planner, then evaluates lightweight models for
-on-robot inference. This is the sim proving ground for the end-state use case:
-a robot on a grass or turf field retrieving scattered sports balls after practice.
+The single-target and multi-target visit UAT phase is complete enough to serve
+as the baseline. Route planning is now the floor, not the next open milestone.
+The next browser-facing phase is ball corral/place into a designated area, with
+onboard planning promotion following after the gather task is stable enough to
+benchmark fairly.
 
-### Route Planning Status Snapshot
+For this first gather milestone, we assume smooth-surface operation such as
+soccer fields or similar turf-like practice surfaces.
 
-Fresh-session route planning now clears the main object-avoidance bar: the robot
-visits all 3 balls and avoids driving through already-visited balls on the next leg.
+### Route-Planning Baseline Snapshot
+
+Route planning now provides the regression floor for the next phase: the robot
+visits all 3 balls, avoids already-visited balls on later legs, and reruns as a
+self-contained one-click dashboard scenario.
 
 ```mermaid
 flowchart LR
     A[Spawn 3 balls] --> B[LLM chooses route]
     B --> C[visit_target target_id]
-    C --> D[Vision + depth-backed scan]
-    D --> E[Visited-target obstacle cloud]
-    E --> F[Nav2 local/global costmaps]
-    F --> G[Avoid visited balls on next leg]
+    C --> D[Depth-backed obstacle perception]
+    D --> E[Visited-target obstacle persistence]
+    E --> F[Nav2 costmaps plus controller]
+    F --> G[5 of 5 serial dashboard gate]
+    G --> H[Regression floor for gather work]
 ```
 
-Validated fresh-session evidence:
+Validated baseline evidence:
 
-1. `artifacts/session/20260412T021011Z/visit_mission/20260412T021044Z/mission_verdict.json` — pass
-2. `artifacts/session/20260412T022002Z/visit_mission/20260412T022019Z/mission_verdict.json` — pass
-3. `artifacts/session/20260412T021011Z/route_clearance_monitor_persistent_obstacles.jsonl` — minimum center clearance to visited `ball_b` during the `ball_a` leg: `0.269 m`
-4. `artifacts/session/20260412T022002Z/route_clearance_monitor_fresh2.jsonl` — minimum center clearance to visited `ball_b` during the `ball_a` leg: `0.262 m`
+1. fresh-session route-planning passes:
+   - `artifacts/session/20260412T021011Z/visit_mission/20260412T021044Z/mission_verdict.json`
+   - `artifacts/session/20260412T022002Z/visit_mission/20260412T022019Z/mission_verdict.json`
+2. one-click rerun passes:
+   - `artifacts/session/20260412T033747Z/visit_mission/20260412T033759Z/mission_verdict.json`
+   - `artifacts/session/20260412T033934Z/visit_mission/20260412T033947Z/mission_verdict.json`
+3. authoritative serial gate:
+   - `artifacts/session/20260412T170306Z/route_planning_serial_gate/campaign_summary.json`
+   - `artifacts/session/20260412T170306Z/route_planning_serial_gate/scorecard.md`
+4. isolated parallel soak infrastructure:
+   - `artifacts/session/20260412T054630Z/route_planning_parallel_soak/campaign_summary.json`
 
 What changed to make that possible:
 
-1. the HSV obstacle scan now uses D415 depth-backed ranges instead of pixel-only heuristics
-2. Nav2's `BaseObstacle` critic is weighted strongly enough to matter in route choice
+1. the HSV obstacle scan now uses depth-backed ranges instead of pixel-only heuristics
+2. Nav2's `BaseObstacle` critic is weighted strongly enough to affect route choice
 3. visited targets are republished as persistent world-frame obstacle points so the next leg still sees them as obstacles
-
-Repeatability status:
-
-1. `visit_route_planning` now behaves as a one-click self-contained dashboard scenario: the dashboard queues a sim reset before launch so each click starts from a fresh session
-2. consecutive operator clicks validated without a manual env restart:
-   - `artifacts/session/20260412T033747Z/visit_mission/20260412T033759Z/mission_verdict.json` â€” pass
-   - `artifacts/session/20260412T033934Z/visit_mission/20260412T033947Z/mission_verdict.json` â€” pass
-3. the mission runner still uses the canonical origin anchor for route-planning target spawn, so the target field remains deterministic even if the robot pose from the previous run was near a ball
+4. dashboard clicks queue a reset before launch so each run starts from a fresh session
 
 Top-priority next step:
 
-1. keep browser/dashboard UAT serial for operator trust
-2. build a separate parallel soak runner for non-interactive repeatability campaigns
-3. use isolated workers (unique dashboard ports, compose projects, and sessions) so campaign throughput improves without turning the dashboard proof surface into a concurrent system
+1. keep browser/dashboard UAT serial for operator trust and use it as the proof surface
+2. treat the parallel soak runner as regression infrastructure, not as the operator proof surface
+3. build the simulated catcher and corral/place proof above the current route-planning baseline
 
 See [ROADMAP_2026_H2.md](./ROADMAP_2026_H2.md) for the full 3-step plan:
 
-1. **LLM-planned multi-target route** — LLM decides visit order for 3+ balls based on visibility and proximity; same frozen contract and deterministic lower layers
-2. **Stabilize on current GPT provider** — 5+ consecutive green runs, baseline quality scorecard (path length, visit order optimality, time)
-3. **Model evaluation for on-robot inference** — replay GPT decision traces through lightweight candidates (Phi-3-mini, Llama-3.2-3B, Qwen-2.5-3B) on Orin Nano GPU; live end-to-end proof with top candidate
+1. **Route-planning baseline complete** - keep the `5/5` serial gate and isolated soak green while gather work lands
+2. **Ball corral / place proof** - simulate the front-mounted catcher, capture a ball in a controlled push envelope, and place it into a designated zone
+3. **Onboard planning for visit + gather** - replay-compare candidate local models, shadow them in live sim, then promote only if they meet the full gather bar
 
 ### New capabilities needed
 
-- `visit_target(target_id)` intent — high-level planning intent for target selection
-- multi-target digest — remaining targets, visited targets, per-target visibility and estimated distance
-- route planning policy stage above the existing search/acquire/plan/track stages
-- `visit_route_planning` dashboard scenario
+- simulated front catcher geometry that supports controlled ball capture and push
+- designated corral zone with explicit scoring and event logging
+- a gather/place phase above the current visit flow, reusing the existing route planner underneath
+- browser-dashboard UAT scenarios for single-ball place and multi-ball gather
+- visit-and-gather scorecards that report route order, place time, zone score, and capture-loss events
 
 ## Recommended Execution Order
 
