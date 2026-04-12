@@ -3485,6 +3485,8 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             scenario.id,
             "--scenario-label",
             scenario.label,
+            "--visit-runtime-json",
+            str(self.visit_mission_runtime_path),
             "--poll-s",
             str(DEFAULT_VISIT_MISSION_POLL_S),
             "--keep-environment",

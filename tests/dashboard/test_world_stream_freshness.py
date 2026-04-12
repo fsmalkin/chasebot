@@ -1406,6 +1406,49 @@ def test_base_env_uses_instance_runtime_files(tmp_path):
     assert env["CHASECAR_INTENT_ACK_PATH"].endswith("/runtime/intent_ack.json")
 
 
+def test_run_visit_mission_scenario_uses_host_visit_runtime_path(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    controller.state["dashboard_url"] = "http://127.0.0.1:8860/"
+    controller._scenarios_dir = lambda: tmp_path / "scenarios"
+    controller._current_validation_dir = lambda: tmp_path / "validation"
+    controller._visit_mission_runtime_state = lambda: {}
+    controller._scenario_env = lambda _scenario: {
+        "CHASECAR_VISIT_RUNTIME_PATH": "/workspaces/chasecar/runtime/dashboard/visit_mission_runtime.json"
+    }
+
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    mission_verdict_path = mission_root / "mission_verdict.json"
+    _write_json(mission_verdict_path, {"pass": True})
+    _write_json(mission_root / "summary.json", {"pass": True})
+    _write_json(mission_root / "target_results.json", {"targets": []})
+
+    captured: dict[str, object] = {}
+
+    class _FakeProc:
+        def __init__(self, cmd, stdout_handle) -> None:
+            captured["cmd"] = list(cmd)
+            stdout_handle.write(f"VISIT_MISSION_SUMMARY={mission_verdict_path}\n")
+            stdout_handle.flush()
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+    def _fake_popen(command, **kwargs):
+        return _FakeProc(command, kwargs["stdout"])
+
+    monkeypatch.setattr(dashboard_service.subprocess, "Popen", _fake_popen)
+
+    result = controller._run_visit_mission_scenario(dashboard_service.SCENARIOS_BY_ID["visit_route_planning"])
+
+    command = captured["cmd"]
+    assert "--visit-runtime-json" in command
+    path_index = command.index("--visit-runtime-json") + 1
+    assert command[path_index] == str(controller.visit_mission_runtime_path)
+    assert result["pass"] is True
+
+
 def test_wait_for_world_stream_ready_accepts_fresh_stream(tmp_path, monkeypatch):
     controller = _make_controller(tmp_path)
     _write_world_state(
