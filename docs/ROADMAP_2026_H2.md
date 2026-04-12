@@ -172,7 +172,10 @@ Current status as of April 12, 2026:
    - `artifacts/session/20260412T021011Z/visit_mission/20260412T021044Z/mission_verdict.json`
    - `artifacts/session/20260412T022002Z/visit_mission/20260412T022019Z/mission_verdict.json`
 3. the previous "drive through the visited center ball" failure mode improved from roughly `0.05 m` center clearance to roughly `0.26-0.27 m` on the `ball_b -> ball_a` transition
-4. the remaining blocker before Step 1 can be treated as fully repeatable is same-session rerun stability: reusing the scenario without a fresh environment restart can reuse the previous mission anchor and respawn the route-planning targets around the wrong origin
+4. dashboard route-planning clicks are now self-contained: each click queues a sim reset before launch and starts a fresh session automatically
+5. validated one-click rerun proofs:
+   - `artifacts/session/20260412T033747Z/visit_mission/20260412T033759Z/mission_verdict.json`
+   - `artifacts/session/20260412T033934Z/visit_mission/20260412T033947Z/mission_verdict.json`
 
 ### Step 2: Stabilize on Current Provider (GPT)
 
@@ -185,7 +188,7 @@ Work:
 2. record decision traces for replay: state digest → LLM decision at each step
 3. define quality metrics: total path length, visit order optimality, time to complete, number of wasted intents
 4. establish a baseline scorecard for the GPT provider
-5. eliminate the same-session mission-anchor reset bug so the 5-run soak is measuring route-planning quality, not scenario reset drift
+5. use the self-contained dashboard flow (scenario click â†’ auto-reset â†’ mission launch) for the soak so repeatability is measured without manual environment intervention
 
 Acceptance:
 

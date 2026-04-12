@@ -84,7 +84,7 @@ Lane-specific configs:
 12. Diff-drive sign parity is in `ros2_config/config/jetbot_diff_drive_v1.0.0.yaml` and `jetbot_controllers.yaml`. If robot drives backward, compare odom to world pose before trusting nav results.
 13. Operator visual signoff: single-target M3 first, multi-target rehearsal second.
 14. Dashboard status chips surface `phase`, `target_id`, `target_transition_active`.
-15. Route-planning same-session reruns currently need a fresh environment restart before reuse; otherwise the mission anchor can drift from the previous end pose and respawn the balls around the wrong origin.
+15. `visit_route_planning` dashboard runs are intentionally self-contained: each click queues a sim reset and starts a fresh session before the mission launches. For repeatability triage, compare the pre-click and post-click session IDs.
 
 ## Latest Validated Artifacts
 
@@ -108,6 +108,10 @@ Route-planning obstacle-avoidance validation:
 - Clearance trace: `artifacts/session/20260412T021011Z/route_clearance_monitor_persistent_obstacles.jsonl`
 - Clearance trace: `artifacts/session/20260412T022002Z/route_clearance_monitor_fresh2.jsonl`
 
+Route-planning self-contained rerun validation:
+- One-click rerun pass: `artifacts/session/20260412T033747Z/visit_mission/20260412T033759Z/mission_verdict.json`
+- One-click rerun pass: `artifacts/session/20260412T033934Z/visit_mission/20260412T033947Z/mission_verdict.json`
+
 ## Testing
 
 ### Verification levels
@@ -130,6 +134,7 @@ For route-planning / visit lifecycle changes, run the "LLM Route Plan" scenario 
 3. Robot acquires target visually when near, approaches, and reports visited
 4. Event log shows: `route_planned` -> `route_step` -> `target_visited` x N -> `mission_passed`
 5. Top-down telemetry shows robot path to each ball
+6. For repeatability changes, click the scenario twice without a manual env restart and confirm each click creates a fresh session ID and still ends in `mission_passed`
 
 If any step fails, the change is not verified regardless of unit test results.
 

@@ -364,9 +364,13 @@ What changed to make that possible:
 2. Nav2's `BaseObstacle` critic is weighted strongly enough to matter in route choice
 3. visited targets are republished as persistent world-frame obstacle points so the next leg still sees them as obstacles
 
-Remaining blocker before calling the scenario one-click repeatable:
+Repeatability status:
 
-1. same-session reruns can reuse the previous run's mission anchor pose, which respawns the next mission's balls around the wrong origin unless the environment is restarted first
+1. `visit_route_planning` now behaves as a one-click self-contained dashboard scenario: the dashboard queues a sim reset before launch so each click starts from a fresh session
+2. consecutive operator clicks validated without a manual env restart:
+   - `artifacts/session/20260412T033747Z/visit_mission/20260412T033759Z/mission_verdict.json` â€” pass
+   - `artifacts/session/20260412T033934Z/visit_mission/20260412T033947Z/mission_verdict.json` â€” pass
+3. the mission runner still uses the canonical origin anchor for route-planning target spawn, so the target field remains deterministic even if the robot pose from the previous run was near a ball
 
 See [ROADMAP_2026_H2.md](./ROADMAP_2026_H2.md) for the full 3-step plan:
 

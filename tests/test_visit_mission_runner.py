@@ -461,6 +461,28 @@ def test_hidden_start_rotates_robot_away_from_spawned_target(monkeypatch, tmp_pa
     assert math.isclose(abs(visit_runner.normalize_angle(turned_yaw - bearing)), math.pi, abs_tol=1e-6)
 
 
+def test_initialize_mission_anchor_pose_uses_canonical_origin_for_route_planning(monkeypatch):
+    runner = _make_runner(monkeypatch, scenario_id="visit_route_planning")
+    state = {
+        "belief": {"latest_robot_pose": {"x": 1.7, "y": -0.3, "yaw": -1.4}},
+    }
+
+    runner._initialize_mission_anchor_pose(state)
+
+    assert runner._mission_anchor_pose == visit_runner.DEFAULT_MISSION_START_POSE
+
+
+def test_initialize_mission_anchor_pose_uses_live_robot_pose_for_non_route_planning(monkeypatch):
+    runner = _make_runner(monkeypatch, scenario_id="visit_three_ball_sequence")
+    state = {
+        "belief": {"latest_robot_pose": {"x": 1.7, "y": -0.3, "yaw": -1.4}},
+    }
+
+    runner._initialize_mission_anchor_pose(state)
+
+    assert runner._mission_anchor_pose == {"x": 1.7, "y": -0.3, "yaw": -1.4}
+
+
 def test_search_dispatch_in_flight_suppresses_duplicate_dispatch(monkeypatch):
     runner = _make_runner(monkeypatch)
     decision = {

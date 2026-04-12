@@ -96,6 +96,7 @@ OPERATOR_VIEW_PORT_START = 14500
 OPERATOR_VIEW_PORT_END = 14520
 OPERATOR_VIEW_HEARTBEAT_STALE_S = 5.0
 REQUIRED_GATE_SERVICES = ("sim-gate", "world-viewer", "gate-stack", "operator-view")
+SELF_CONTAINED_SCENARIO_IDS = {"visit_route_planning"}
 
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 POWERSHELL_EXE = shutil.which("powershell.exe") or shutil.which("powershell") or "powershell.exe"
@@ -370,6 +371,7 @@ class DashboardController:
         self.gate_stack_container_id = ""
         self.world_viewer_container_id = ""
         self.operator_view_container_id = ""
+        self.pending_scenario_id = ""
         self.build_on_next_start = True
         self.world_stream_restart_lock = threading.Lock()
         self._world_stream_stale_since_monotonic = 0.0
@@ -567,6 +569,30 @@ class DashboardController:
         if thread is not None and not thread.is_alive():
             self.lifecycle_thread = None
         return self.lifecycle_lock.locked()
+
+    def _scenario_requires_clean_reset(self, scenario: ScenarioDefinition) -> bool:
+        return scenario.id in SELF_CONTAINED_SCENARIO_IDS
+
+    def _launch_scenario_thread(self, scenario: ScenarioDefinition) -> None:
+        self.scenario_cancel.clear()
+        self.scenario_thread = threading.Thread(
+            target=self._scenario_worker,
+            args=(scenario,),
+            name=f"dashboard-scenario-{scenario.id}",
+            daemon=True,
+        )
+        self.scenario_thread.start()
+
+    def _start_pending_scenario_if_any(self) -> None:
+        pending_scenario_id = str(self.pending_scenario_id or "").strip()
+        if not pending_scenario_id:
+            return
+        self.pending_scenario_id = ""
+        scenario = SCENARIOS_BY_ID.get(pending_scenario_id)
+        if scenario is None:
+            return
+        self._record_operator_event(f"{scenario.label} auto-starting after sim reset.", category="scenario")
+        self._launch_scenario_thread(scenario)
 
     def _wait_for_lifecycle_idle(self, timeout_s: float) -> bool:
         deadline = time.monotonic() + max(timeout_s, 0.0)
@@ -1231,6 +1257,7 @@ class DashboardController:
             "target_locked_class": str(brain_state.get("target_locked_class", "") or ""),
             "track_active": bool(brain_state.get("track_active", False)),
             "goal_in_progress": bool(brain_state.get("goal_in_progress", False)),
+            "nav2_server_ready": bool(brain_state.get("nav2_server_ready", False)),
             "last_feedback_text": str(brain_state.get("last_feedback_text", "") or ""),
             "last_goal_dispatched_utc": str(brain_state.get("last_goal_dispatched_utc", "") or ""),
         }
@@ -1485,6 +1512,7 @@ class DashboardController:
         if env_state == "stopped":
             return HTTPStatus.OK, {"accepted": False, "message": "environment already stopped", "state": self.get_state()}
         if env_state == "starting":
+            self.pending_scenario_id = ""
             self.lifecycle_cancel.set()
             self._terminate_process(self.active_env_proc)
             self._update_state(environment_message="stop requested during startup")
@@ -1496,6 +1524,7 @@ class DashboardController:
                 return self._control_plane_unavailable_response()
         if self._lifecycle_busy():
             return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
+        self.pending_scenario_id = ""
         self.lifecycle_thread = threading.Thread(target=self._stop_environment_worker, name="dashboard-stop", daemon=True)
         self.lifecycle_thread.start()
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "environment stop queued"}
@@ -1522,6 +1551,7 @@ class DashboardController:
                 return self._control_plane_unavailable_response()
         if self._lifecycle_busy():
             return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
+        self.pending_scenario_id = ""
         self.lifecycle_thread = threading.Thread(target=self._reset_environment_worker, name="dashboard-reset", daemon=True)
         self.lifecycle_thread.start()
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "sim reset queued"}
@@ -1541,14 +1571,16 @@ class DashboardController:
                 return self._control_plane_unavailable_response()
         if scenario_state == "running" or (self.scenario_thread and self.scenario_thread.is_alive()):
             return HTTPStatus.CONFLICT, {"accepted": False, "error": "scenario already running"}
-        self.scenario_cancel.clear()
-        self.scenario_thread = threading.Thread(
-            target=self._scenario_worker,
-            args=(scenario,),
-            name=f"dashboard-scenario-{scenario_id}",
-            daemon=True,
-        )
-        self.scenario_thread.start()
+        if self._scenario_requires_clean_reset(scenario):
+            if self._lifecycle_busy():
+                return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
+            self.pending_scenario_id = scenario_id
+            self._record_operator_event(f"{scenario.label} queued after sim reset.", category="scenario")
+            self._update_state(scenario_message=f"{scenario.label} queued after sim reset")
+            self.lifecycle_thread = threading.Thread(target=self._reset_environment_worker, name="dashboard-reset", daemon=True)
+            self.lifecycle_thread.start()
+            return HTTPStatus.ACCEPTED, {"accepted": True, "message": f"scenario {scenario_id} queued after sim reset"}
+        self._launch_scenario_thread(scenario)
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": f"scenario {scenario_id} queued"}
 
     def request_scenario_stop(self) -> tuple[int, Dict[str, Any]]:
@@ -2273,6 +2305,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
         return proc.returncode, output
 
     def _start_environment_worker(self) -> None:
+        pending_scenario_ready_to_launch = False
         if not self.lifecycle_lock.acquire(blocking=False):
             return
         try:
@@ -2555,7 +2588,9 @@ echo "VISUAL_LOG=$LOG_FILE"
             )
             self._write_lock_file()
             self.build_on_next_start = False
+            pending_scenario_ready_to_launch = bool(str(self.pending_scenario_id or "").strip())
         except Exception as exc:
+            self.pending_scenario_id = ""
             self._teardown_environment(
                 env=self._base_env(
                     session_id=self.state.get("session_id", ""),
@@ -2609,11 +2644,14 @@ echo "VISUAL_LOG=$LOG_FILE"
             self.lifecycle_cancel.clear()
             self.active_env_proc = None
             self.lifecycle_lock.release()
+        if pending_scenario_ready_to_launch:
+            self._start_pending_scenario_if_any()
 
     def _stop_environment_worker(self) -> None:
         if not self.lifecycle_lock.acquire(blocking=False):
             return
         try:
+            self.pending_scenario_id = ""
             with self.state_lock:
                 session_id = self.state.get("session_id", "")
                 world_stream_port = int(self.state.get("world_stream_port", 0) or 0)

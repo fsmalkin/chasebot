@@ -60,6 +60,7 @@ DEFAULT_VISIT_TOLERANCE_M = 0.35
 DEFAULT_MIN_TARGET_DWELL_S = 1.0
 DEFAULT_POST_GOAL_TRUTH_GRACE_S = 2.5
 DEFAULT_ACTIVE_TARGET_LOCK_TOLERANCE_M = 0.50
+DEFAULT_MISSION_START_POSE = {"x": 0.0, "y": 0.0, "yaw": 0.0}
 DEFAULT_TASK_TEXT = (
     "Run the deterministic ball-visit mission through the bounded frozen controls. "
     "Search when the ball is not visible, acquire when visible, plan when locked, track while pursuit is active, "
@@ -735,6 +736,14 @@ fi
             "yaw": robot_yaw,
         }
 
+    def _initialize_mission_anchor_pose(self, state: dict[str, Any]) -> None:
+        if self._mission_anchor_pose is not None:
+            return
+        if self._is_route_planning():
+            self._mission_anchor_pose = dict(DEFAULT_MISSION_START_POSE)
+            return
+        self._capture_mission_anchor_pose(state)
+
     def _spawn_target_from_mission_anchor(self, state: dict[str, Any], target: VisitTargetSpec, mission_root: Path, *, repose_robot: bool = True) -> dict[str, Any]:
         robot_x, robot_y, robot_yaw = self._robot_pose_components(state)
         self._capture_mission_anchor_pose(state)
@@ -1169,7 +1178,14 @@ exit "$rc"
             self._issue_safe_stop()
             ready_state = self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
             self._clear_mission_targets(ready_state, mission_root)
-            self._capture_mission_anchor_pose(ready_state)
+            self._mission_anchor_pose = None
+            self._initialize_mission_anchor_pose(ready_state)
+            if self._is_route_planning():
+                self._append_runtime_event(
+                    "Route planning using canonical mission anchor pose.",
+                    category="scenario",
+                    key="canonical_mission_anchor",
+                )
 
             if self._is_route_planning():
                 # Route planning mode: spawn all targets, let LLM pick order

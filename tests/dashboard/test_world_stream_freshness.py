@@ -226,10 +226,13 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
     controller._world_stream_last_restart_monotonic = 0.0
     controller.active_env_proc = None
     controller.active_scenario_proc = None
+    controller.scenario_thread = None
+    controller.intent_thread = None
     controller.sim_gate_container_id = "sim-gate"
     controller.gate_stack_container_id = "gate-stack"
     controller.world_viewer_container_id = "world-viewer"
     controller.operator_view_container_id = "operator-view"
+    controller.pending_scenario_id = ""
     controller.scenario_lock = threading.Lock()
     controller.scenario_cancel = threading.Event()
     controller.frozen_intents = {
@@ -578,6 +581,43 @@ def test_get_state_surfaces_latest_truth_target_model_name(tmp_path):
     assert state["perception"]["latest_truth_target_model_name"] == "visit_mission_target_ball_2"
 
 
+def test_get_state_surfaces_nav2_server_ready_from_brain_state(tmp_path):
+    controller = _make_controller(tmp_path)
+    visual_dir = tmp_path / "visual"
+    visual_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        visual_dir / "state.json",
+        {
+            "raw_frame_count": 1,
+            "debug_frame_count": 1,
+            "telemetry_frame_count": 1,
+            "latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        },
+    )
+    _write_json(
+        visual_dir / "brain_state.json",
+        {
+            "nav2_server_ready": True,
+            "goal_in_progress": False,
+            "search_active": False,
+        },
+    )
+    _write_json(
+        visual_dir / "world_stream_state.json",
+        {
+            "session_id": controller.state["session_id"],
+            "partition": controller.state["session_id"],
+            "world_stream_ready": True,
+            "same_session_partition": True,
+            "frames_stale": False,
+        },
+    )
+
+    state = controller.get_state()
+
+    assert state["brain"]["nav2_server_ready"] is True
+
+
 def test_get_state_derives_healthy_world_renderability_from_current_session_artifact(tmp_path):
     controller = _make_controller(tmp_path)
     _write_world_state(
@@ -615,6 +655,49 @@ def test_get_state_derives_healthy_world_renderability_from_current_session_arti
     assert state["world_stream_renderable"] is True
     assert state["world_stream_transport_healthy"] is True
     assert state["world_stream_degraded"] is False
+
+
+def test_request_scenario_run_route_planning_queues_after_sim_reset(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    started: list[threading.Thread] = []
+
+    class _FakeThread:
+        def __init__(self, *, target=None, name=None, daemon=None, args=()):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            self.args = args
+            self._alive = False
+            started.append(self)
+
+        def start(self) -> None:
+            self._alive = True
+
+        def is_alive(self) -> bool:
+            return self._alive
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_scenario_run("visit_route_planning")
+
+    assert status == 202
+    assert payload["accepted"] is True
+    assert "queued after sim reset" in payload["message"]
+    assert controller.pending_scenario_id == "visit_route_planning"
+    assert started
+    assert started[0].target == controller._reset_environment_worker
+
+
+def test_start_pending_scenario_if_any_launches_queued_scenario(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    launched: list[str] = []
+    controller.pending_scenario_id = "visit_route_planning"
+    controller._launch_scenario_thread = lambda scenario: launched.append(scenario.id)
+
+    controller._start_pending_scenario_if_any()
+
+    assert launched == ["visit_route_planning"]
+    assert controller.pending_scenario_id == ""
 
 
 def test_get_state_clears_completed_visit_current_target_id(tmp_path):
