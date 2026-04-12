@@ -182,18 +182,32 @@ Current status as of April 12, 2026:
 Goal: soak the route planning scenario on the current GPT model until it is
 repeatable and the decision quality is measurable.
 
+Top priority decision:
+
+1. keep the browser dashboard / operator UAT flow serial and authoritative
+2. build a separate non-interactive parallel soak runner for repeatability campaigns
+3. treat the soak runner as campaign infrastructure, not as the operator proof surface
+
+Why:
+
+1. the dashboard now intentionally auto-resets into a fresh session per click; keeping that flow single-threaded preserves operator trust and makes session-to-session evidence easy to reason about
+2. campaign throughput is still important, so parallelism should come from isolated background workers with their own ports, compose projects, and sessions
+3. this lets us speed up repeatability measurement without weakening the meaning of the dashboard UAT proof
+
 Work:
 
-1. run 5+ consecutive route planning proofs on `container_kilted`
-2. record decision traces for replay: state digest → LLM decision at each step
-3. define quality metrics: total path length, visit order optimality, time to complete, number of wasted intents
-4. establish a baseline scorecard for the GPT provider
-5. use the self-contained dashboard flow (scenario click â†’ auto-reset â†’ mission launch) for the soak so repeatability is measured without manual environment intervention
+1. build a parallel non-interactive soak runner that launches isolated route-planning workers on unique dashboard ports / compose projects
+2. keep each worker self-contained: start dashboard service, bring up environment, run `visit_route_planning`, collect artifacts, tear down cleanly
+3. record decision traces for replay: state digest → LLM decision at each step
+4. define quality metrics: total path length, visit order optimality, time to complete, number of wasted intents
+5. establish a baseline scorecard for the GPT provider
+6. keep the browser dashboard flow as the serial operator proof path; do not use multi-worker parallelism as UAT evidence
 
 Acceptance:
 
 1. 5/5 consecutive green route planning runs
-2. baseline scorecard with quality metrics for GPT
+2. soak runner can execute multiple isolated workers in parallel without cross-session contamination
+3. baseline scorecard with quality metrics for GPT
 
 ### Step 3: Model Evaluation for On-Robot Inference
 

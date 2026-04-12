@@ -372,6 +372,12 @@ Repeatability status:
    - `artifacts/session/20260412T033934Z/visit_mission/20260412T033947Z/mission_verdict.json` â€” pass
 3. the mission runner still uses the canonical origin anchor for route-planning target spawn, so the target field remains deterministic even if the robot pose from the previous run was near a ball
 
+Top-priority next step:
+
+1. keep browser/dashboard UAT serial for operator trust
+2. build a separate parallel soak runner for non-interactive repeatability campaigns
+3. use isolated workers (unique dashboard ports, compose projects, and sessions) so campaign throughput improves without turning the dashboard proof surface into a concurrent system
+
 See [ROADMAP_2026_H2.md](./ROADMAP_2026_H2.md) for the full 3-step plan:
 
 1. **LLM-planned multi-target route** — LLM decides visit order for 3+ balls based on visibility and proximity; same frozen contract and deterministic lower layers

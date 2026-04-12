@@ -85,6 +85,7 @@ Lane-specific configs:
 13. Operator visual signoff: single-target M3 first, multi-target rehearsal second.
 14. Dashboard status chips surface `phase`, `target_id`, `target_transition_active`.
 15. `visit_route_planning` dashboard runs are intentionally self-contained: each click queues a sim reset and starts a fresh session before the mission launches. For repeatability triage, compare the pre-click and post-click session IDs.
+16. Route-planning campaign parallelism belongs in isolated non-interactive soak runners, not in the operator dashboard. Keep browser UAT serial; use unique dashboard ports / compose projects / sessions for parallel background workers.
 
 ## Latest Validated Artifacts
 
