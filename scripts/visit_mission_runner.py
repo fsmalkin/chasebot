@@ -1867,8 +1867,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-retries-per-target", type=int, default=1)
     parser.add_argument("--target-model-name", default=DEFAULT_TARGET_MODEL_NAME)
     parser.add_argument("--target-model-sdf", default=str(DEFAULT_TARGET_MODEL_SDF))
-    parser.add_argument("--keep-visited-targets", dest="remove_visited_targets", action="store_false")
-    parser.set_defaults(remove_visited_targets=True)
+    parser.add_argument("--remove-visited-targets", dest="remove_visited_targets", action="store_true")
+    parser.set_defaults(remove_visited_targets=False)
     parser.add_argument("--keep-environment", action="store_true")
     return parser.parse_args()
 
