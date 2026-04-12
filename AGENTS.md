@@ -84,6 +84,7 @@ Lane-specific configs:
 12. Diff-drive sign parity is in `ros2_config/config/jetbot_diff_drive_v1.0.0.yaml` and `jetbot_controllers.yaml`. If robot drives backward, compare odom to world pose before trusting nav results.
 13. Operator visual signoff: single-target M3 first, multi-target rehearsal second.
 14. Dashboard status chips surface `phase`, `target_id`, `target_transition_active`.
+15. Route-planning same-session reruns currently need a fresh environment restart before reuse; otherwise the mission anchor can drift from the previous end pose and respawn the balls around the wrong origin.
 
 ## Latest Validated Artifacts
 
@@ -100,6 +101,12 @@ Same-session visual baseline:
 - `artifacts/session/20260312T013442Z/visual/visual_demo_summary_recorded.json`
 - `artifacts/session/20260312T013442Z/pre_llm_gui_rehearsal_summary.json`
 - `artifacts/session/20260312T013442Z/parity_summary.json`
+
+Route-planning obstacle-avoidance validation:
+- Fresh-session pass: `artifacts/session/20260412T021011Z/visit_mission/20260412T021044Z/mission_verdict.json`
+- Fresh-session pass: `artifacts/session/20260412T022002Z/visit_mission/20260412T022019Z/mission_verdict.json`
+- Clearance trace: `artifacts/session/20260412T021011Z/route_clearance_monitor_persistent_obstacles.jsonl`
+- Clearance trace: `artifacts/session/20260412T022002Z/route_clearance_monitor_fresh2.jsonl`
 
 ## Testing
 
@@ -121,7 +128,7 @@ For route-planning / visit lifecycle changes, run the "LLM Route Plan" scenario 
 1. All balls spawn and persist throughout the mission
 2. Robot navigates (drives) toward each target — not spinning in place
 3. Robot acquires target visually when near, approaches, and reports visited
-4. Event log shows: `route_planned` -> `visit_dispatched` -> `visit_reached` x N -> `mission_passed`
+4. Event log shows: `route_planned` -> `route_step` -> `target_visited` x N -> `mission_passed`
 5. Top-down telemetry shows robot path to each ball
 
 If any step fails, the change is not verified regardless of unit test results.

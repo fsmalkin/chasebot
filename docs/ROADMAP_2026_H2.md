@@ -165,6 +165,15 @@ Acceptance:
 3. same frozen contract, same deterministic lower layers, same safety guarantees
 4. proof passes 3+ consecutive times
 
+Current status as of April 12, 2026:
+
+1. fresh-session route planning is now green with object avoidance working against already-visited balls
+2. validated fresh-session proofs:
+   - `artifacts/session/20260412T021011Z/visit_mission/20260412T021044Z/mission_verdict.json`
+   - `artifacts/session/20260412T022002Z/visit_mission/20260412T022019Z/mission_verdict.json`
+3. the previous "drive through the visited center ball" failure mode improved from roughly `0.05 m` center clearance to roughly `0.26-0.27 m` on the `ball_b -> ball_a` transition
+4. the remaining blocker before Step 1 can be treated as fully repeatable is same-session rerun stability: reusing the scenario without a fresh environment restart can reuse the previous mission anchor and respawn the route-planning targets around the wrong origin
+
 ### Step 2: Stabilize on Current Provider (GPT)
 
 Goal: soak the route planning scenario on the current GPT model until it is
@@ -176,6 +185,7 @@ Work:
 2. record decision traces for replay: state digest → LLM decision at each step
 3. define quality metrics: total path length, visit order optimality, time to complete, number of wasted intents
 4. establish a baseline scorecard for the GPT provider
+5. eliminate the same-session mission-anchor reset bug so the 5-run soak is measuring route-planning quality, not scenario reset drift
 
 Acceptance:
 

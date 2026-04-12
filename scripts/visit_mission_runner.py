@@ -416,6 +416,7 @@ class VisitMissionRunner:
             "latest_decision": {},
             "latest_feedback": "",
             "current_target_prior": {},
+            "target_positions": {},
             "artifact_dir": "",
             "updated_utc": utc_now(),
         }
@@ -428,6 +429,15 @@ class VisitMissionRunner:
         self.runtime_state.update(updates)
         self.runtime_state["updated_utc"] = utc_now()
         self._persist_runtime_state()
+
+    def _record_target_position(self, target_id: str, *, x: float, y: float, z: float = 0.05) -> None:
+        target_positions = dict(self.runtime_state.get("target_positions", {}) or {})
+        target_positions[str(target_id)] = {
+            "x": round(float(x), 6),
+            "y": round(float(y), 6),
+            "z": round(float(z), 6),
+        }
+        self._update_runtime_state(target_positions=target_positions)
 
     def _append_runtime_event(self, message: str, *, category: str = "mission", key: str = "") -> None:
         event_key = key or message
@@ -1143,6 +1153,7 @@ exit "$rc"
             "latest_decision": {},
             "latest_feedback": "",
             "current_target_prior": {},
+            "target_positions": {},
             "artifact_dir": str(mission_root),
             "updated_utc": utc_now(),
         }
@@ -1213,6 +1224,7 @@ exit "$rc"
                     tx = ax + (math.cos(ayaw) * target.forward_m) - (math.sin(ayaw) * target.lateral_m)
                     ty = ay + (math.sin(ayaw) * target.forward_m) + (math.cos(ayaw) * target.lateral_m)
                     self._update_runtime_state(current_target_prior={"x": round(tx, 6), "y": round(ty, 6)})
+                    self._record_target_position(target.id, x=tx, y=ty, z=target.z_m)
 
                     # Dispatch visit_target — executor navigates to prior, acquires, approaches, and reports
                     dispatch_status, dispatch_payload = dispatch_intent(
@@ -1310,6 +1322,14 @@ exit "$rc"
                     # Clear stale prior before spawn; the spawn sets the correct prior.
                     self._update_runtime_state(current_target_prior={})
                     spawn_info = self._spawn_target_from_mission_anchor(current_state, target, mission_root)
+                    target_world = spawn_info.get("target_world", {})
+                    if target_world.get("x") is not None and target_world.get("y") is not None:
+                        self._record_target_position(
+                            target.id,
+                            x=float(target_world["x"]),
+                            y=float(target_world["y"]),
+                            z=float(target_world.get("z", target.z_m)),
+                        )
                     target_spawned_monotonic = time.monotonic()
                     remaining_targets = [item.id for item in self.targets[index:]]
                     self._update_runtime_state(

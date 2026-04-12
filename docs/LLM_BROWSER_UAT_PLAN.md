@@ -336,6 +336,38 @@ reactive supervisor to route planner, then evaluates lightweight models for
 on-robot inference. This is the sim proving ground for the end-state use case:
 a robot on a grass or turf field retrieving scattered sports balls after practice.
 
+### Route Planning Status Snapshot
+
+Fresh-session route planning now clears the main object-avoidance bar: the robot
+visits all 3 balls and avoids driving through already-visited balls on the next leg.
+
+```mermaid
+flowchart LR
+    A[Spawn 3 balls] --> B[LLM chooses route]
+    B --> C[visit_target target_id]
+    C --> D[Vision + depth-backed scan]
+    D --> E[Visited-target obstacle cloud]
+    E --> F[Nav2 local/global costmaps]
+    F --> G[Avoid visited balls on next leg]
+```
+
+Validated fresh-session evidence:
+
+1. `artifacts/session/20260412T021011Z/visit_mission/20260412T021044Z/mission_verdict.json` — pass
+2. `artifacts/session/20260412T022002Z/visit_mission/20260412T022019Z/mission_verdict.json` — pass
+3. `artifacts/session/20260412T021011Z/route_clearance_monitor_persistent_obstacles.jsonl` — minimum center clearance to visited `ball_b` during the `ball_a` leg: `0.269 m`
+4. `artifacts/session/20260412T022002Z/route_clearance_monitor_fresh2.jsonl` — minimum center clearance to visited `ball_b` during the `ball_a` leg: `0.262 m`
+
+What changed to make that possible:
+
+1. the HSV obstacle scan now uses D415 depth-backed ranges instead of pixel-only heuristics
+2. Nav2's `BaseObstacle` critic is weighted strongly enough to matter in route choice
+3. visited targets are republished as persistent world-frame obstacle points so the next leg still sees them as obstacles
+
+Remaining blocker before calling the scenario one-click repeatable:
+
+1. same-session reruns can reuse the previous run's mission anchor pose, which respawns the next mission's balls around the wrong origin unless the environment is restarted first
+
 See [ROADMAP_2026_H2.md](./ROADMAP_2026_H2.md) for the full 3-step plan:
 
 1. **LLM-planned multi-target route** — LLM decides visit order for 3+ balls based on visibility and proximity; same frozen contract and deterministic lower layers

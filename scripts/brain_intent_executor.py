@@ -941,6 +941,12 @@ class BrainIntentExecutor(Node):
     def _end_visit(self, *, status: str, reason: str, extra: dict[str, Any] | None = None) -> None:
         """End the active visit lifecycle and publish result feedback."""
         target_id = self.visit_target_id
+        # A completed visit must leave the robot motionless before the next
+        # target can be selected, otherwise the previous pursuit can carry
+        # the robot through the just-visited obstacle.
+        self._cancel_goal(f"visit_target: ending visit for {target_id}")
+        self._reset_pursuit_state()
+        self._publish_stop()
         self.visit_active = False
         self.visit_target_id = ""
         self.visit_phase = ""
