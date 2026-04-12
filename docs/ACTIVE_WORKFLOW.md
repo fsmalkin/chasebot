@@ -289,6 +289,35 @@ Parity gate:
 2. Required checks: lane match, core ROS match, detection pipeline alive in both, `/yolo/ball_position_3d` active in both, nav action readiness in both, motion evidence in both, same-session recorded visual bundle ready, browser dashboard ready, streamed sim world ready, truth alignment OK.
 3. `host_ros` GUI runs are debug-only and cannot promote readiness.
 
+## Route-Planning Parallel Soak
+
+Use this only for non-interactive repeatability throughput. The browser dashboard remains the serial operator proof path.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_route_planning_parallel_soak.ps1 -Workers 2 -RunsPerWorker 1`
+
+Isolation contract:
+
+```mermaid
+graph LR
+    UAT[Serial Dashboard UAT] --> TRUST[Operator Trust]
+    SOAK[Parallel Soak Wrapper] --> W1[Worker 01]
+    SOAK --> W2[Worker 02]
+    W1 --> P1[Port + ROS domain + runtime dir]
+    W2 --> P2[Port + ROS domain + runtime dir]
+    P1 --> A1[Independent artifacts]
+    P2 --> A2[Independent artifacts]
+```
+
+Worker rules:
+
+1. each worker runs its own `dashboard_service.py` instance on a unique localhost port
+2. each worker uses a unique `ROS_DOMAIN_ID`
+3. each worker gets its own `runtime/dashboard_parallel/<campaign_id>/worker_##/` state files
+4. each worker launches a separate compose project/session and tears it down at the end
+5. promotion evidence comes from `route_planning_parallel_soak/campaign_summary.json`, not from dashboard clicks
+
 ## Headless Milestone Path (Current Preferred)
 
 Use this while iterating before operator-facing GUI rehearsal:
@@ -380,6 +409,10 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<timestamp>/visual/timeline.json`
    - `artifacts/session/<timestamp>/visual/state.json`
    - `artifacts/session/<timestamp>/visual/visual_demo_summary.json`
+13. Route-planning parallel soak:
+   - `artifacts/session/<campaign_id>/route_planning_parallel_soak/campaign_summary.json`
+   - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/dashboard_service.log`
+   - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/repeatability.log`
 
 ## Failure Triage Path
 

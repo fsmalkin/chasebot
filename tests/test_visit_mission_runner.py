@@ -44,6 +44,25 @@ def test_build_visit_targets_for_single_ball_proof():
     assert targets[0].start_visible is False
 
 
+def test_resolve_visit_runtime_state_path_prefers_explicit_arg(tmp_path, monkeypatch):
+    env_path = tmp_path / "env_runtime.json"
+    monkeypatch.setenv("CHASECAR_VISIT_RUNTIME_PATH", str(env_path))
+    explicit_path = tmp_path / "explicit_runtime.json"
+
+    resolved = visit_runner.resolve_visit_runtime_state_path(str(explicit_path))
+
+    assert resolved == explicit_path.resolve()
+
+
+def test_resolve_visit_runtime_state_path_falls_back_to_env(tmp_path, monkeypatch):
+    env_path = tmp_path / "env_runtime.json"
+    monkeypatch.setenv("CHASECAR_VISIT_RUNTIME_PATH", str(env_path))
+
+    resolved = visit_runner.resolve_visit_runtime_state_path("")
+
+    assert resolved == env_path.resolve()
+
+
 def test_build_visit_targets_for_three_ball_sequence():
     targets = build_visit_targets("visit_three_ball_sequence")
     assert [item.id for item in targets] == ["ball_1", "ball_2", "ball_3"]

@@ -209,6 +209,19 @@ Acceptance:
 2. soak runner can execute multiple isolated workers in parallel without cross-session contamination
 3. baseline scorecard with quality metrics for GPT
 
+Status update as of April 12, 2026:
+
+1. top-priority infrastructure split is now implemented and verified:
+   - browser dashboard UAT stays serial and authoritative
+   - parallel throughput lives in `scripts/run_route_planning_parallel_soak.ps1`
+2. isolated 2-worker live soak is green:
+   - `artifacts/session/20260412T054630Z/route_planning_parallel_soak/campaign_summary.json`
+3. the soak runner now isolates dashboard port, `ROS_DOMAIN_ID`, compose project, session, and runtime state per worker
+4. the worker path is headless by design and uses worker-local `visit_mission_runtime.json` plus direct intent inbox/ack wiring
+5. next promotion work inside Step 2 is campaign depth and scorecards:
+   - extend from the verified `2/2` worker proof to the full `5/5` repeatability gate
+   - add quality metrics for route order, mission time, and visited-ball clearance
+
 ### Step 3: Model Evaluation for On-Robot Inference
 
 Goal: determine whether a lightweight model can make comparable route planning

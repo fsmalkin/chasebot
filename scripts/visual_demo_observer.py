@@ -6,26 +6,64 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import signal
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 import cv2
+import importlib
 import numpy as np
 import rclpy
 from geometry_msgs.msg import PointStamped, PoseStamped, Twist, TwistStamped
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
-from rclpy.qos import HistoryPolicy, QoSProfile, QoSPresetProfiles, ReliabilityPolicy
 from sensor_msgs.msg import Image
 from std_msgs.msg import String
 
+
+def _load_rclpy_qos_module():
+    try:
+        return importlib.import_module("rclpy.qos")
+    except Exception:
+        return None
+
+
+_rclpy_qos = _load_rclpy_qos_module()
+
+
+class _FallbackQoSProfile:
+    def __init__(self, *_args, **_kwargs) -> None:
+        return None
+
+
+class _FallbackHistoryPolicy:
+    KEEP_LAST = "keep_last"
+
+
+class _FallbackReliabilityPolicy:
+    RELIABLE = "reliable"
+
+
+class _FallbackQoSPresetProfiles:
+    SENSOR_DATA = SimpleNamespace(value=None)
+    SYSTEM_DEFAULT = SimpleNamespace(value=None)
+
+
+QoSPresetProfiles = getattr(_rclpy_qos, "QoSPresetProfiles", _FallbackQoSPresetProfiles)
+QoSProfile = getattr(_rclpy_qos, "QoSProfile", _FallbackQoSProfile)
+HistoryPolicy = getattr(_rclpy_qos, "HistoryPolicy", _FallbackHistoryPolicy)
+ReliabilityPolicy = getattr(_rclpy_qos, "ReliabilityPolicy", _FallbackReliabilityPolicy)
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_DIR = REPO_ROOT / "runtime" / "dashboard"
-VISIT_MISSION_RUNTIME_PATH = RUNTIME_DIR / "visit_mission_runtime.json"
+VISIT_MISSION_RUNTIME_PATH = Path(
+    os.environ.get("CHASECAR_VISIT_RUNTIME_PATH", str(RUNTIME_DIR / "visit_mission_runtime.json"))
+).resolve()
 VISIT_TARGET_MODEL_PREFIX = "visit_mission_target_"
 
 

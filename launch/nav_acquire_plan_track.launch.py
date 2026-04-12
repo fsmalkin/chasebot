@@ -68,6 +68,8 @@ def _build_actions(context):
     brain_executor_path = os.path.join(source_root, "scripts", "brain_intent_executor.py")
     brain_state_path = os.environ.get("CHASECAR_BRAIN_STATE_PATH", "").strip()
     brain_feedback_path = os.environ.get("CHASECAR_BRAIN_FEEDBACK_PATH", "").strip()
+    intent_inbox_path = os.environ.get("CHASECAR_INTENT_INBOX_PATH", "").strip()
+    intent_ack_path = os.environ.get("CHASECAR_INTENT_ACK_PATH", "").strip()
 
     use_sim_time = LaunchConfiguration("use_sim_time").perform(context)
     include_bridge = _as_bool(LaunchConfiguration("include_bridge").perform(context))
@@ -102,6 +104,10 @@ def _build_actions(context):
         visit_runtime_path = os.environ.get("CHASECAR_VISIT_RUNTIME_PATH", "").strip()
         if visit_runtime_path:
             brain_cmd.append(f"--visit-runtime-json {shlex.quote(visit_runtime_path)}")
+        if intent_inbox_path:
+            brain_cmd.append(f"--intent-inbox-json {shlex.quote(intent_inbox_path)}")
+        if intent_ack_path:
+            brain_cmd.append(f"--intent-ack-json {shlex.quote(intent_ack_path)}")
         brain_cmd.append("--use-sim-time" if _as_bool(use_sim_time) else "--no-use-sim-time")
         actions.append(ExecuteProcess(cmd=["bash", "-lc", " ".join(brain_cmd)], output="screen"))
 

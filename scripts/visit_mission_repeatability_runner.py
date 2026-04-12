@@ -35,6 +35,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-s", type=float, default=30.0)
     parser.add_argument("--hidden-start-settle-s", type=float, default=3.0)
     parser.add_argument("--keep-visited-targets", action="store_true")
+    parser.add_argument("--max-target-runtime-s", type=float, default=0.0)
+    parser.add_argument("--search-timeout-s", type=float, default=0.0)
+    parser.add_argument("--approach-timeout-s", type=float, default=0.0)
+    parser.add_argument("--visit-runtime-json", default=os.environ.get("CHASECAR_VISIT_RUNTIME_PATH", ""))
+    parser.add_argument("--promotion-gate-mode", choices=("strict", "pass_only"), default="strict")
     return parser.parse_args()
 
 
@@ -49,6 +54,14 @@ def wait_for_dashboard(dashboard_url: str, timeout_s: float) -> None:
             pass
         time.sleep(1.0)
     raise RuntimeError("Dashboard API did not become ready before visit repeatability run.")
+
+
+def promotion_gate_pass_for_runs(runs: list[dict[str, object]], *, mode: str) -> bool:
+    if not runs:
+        return False
+    if mode == "pass_only":
+        return all(bool(item.get("pass")) for item in runs)
+    return campaign_pass(runs)
 
 
 def main() -> int:
@@ -73,8 +86,17 @@ def main() -> int:
             "--hidden-start-settle-s",
             str(args.hidden_start_settle_s),
         ]
-        if args.keep_visited_targets:
-            command.append("--keep-visited-targets")
+        if args.visit_runtime_json.strip():
+            command.extend(["--visit-runtime-json", args.visit_runtime_json.strip()])
+        # Keeping visited targets is already the visit_mission_runner default.
+        # The repeatability wrapper keeps the flag for compatibility but does
+        # not need to forward anything unless despawn is explicitly requested.
+        if args.max_target_runtime_s > 0.0:
+            command.extend(["--max-target-runtime-s", str(args.max_target_runtime_s)])
+        if args.search_timeout_s > 0.0:
+            command.extend(["--search-timeout-s", str(args.search_timeout_s)])
+        if args.approach_timeout_s > 0.0:
+            command.extend(["--approach-timeout-s", str(args.approach_timeout_s)])
         proc = subprocess.run(
             command,
             cwd=str(REPO_ROOT),
@@ -91,6 +113,7 @@ def main() -> int:
         append_jsonl(history_path, run_summary)
         runs.append(run_summary)
 
+    promotion_gate_pass = promotion_gate_pass_for_runs(runs, mode=args.promotion_gate_mode)
     summary = {
         "generated_utc": utc_now(),
         "type": "visit_mission_repeatability",
@@ -98,10 +121,11 @@ def main() -> int:
         "scenario_id": args.scenario_id,
         "scenario_label": args.scenario_label,
         "required_green_runs": max(args.runs, 1),
+        "promotion_gate_mode": args.promotion_gate_mode,
         "pass_count": sum(1 for item in runs if bool(item.get("pass"))),
         "hidden_start_search_first_count": sum(1 for item in runs if bool(item.get("hidden_start_search_first"))),
         "retry_count_total": sum(int(item.get("retry_count", 0)) for item in runs),
-        "promotion_gate_pass": campaign_pass(runs),
+        "promotion_gate_pass": promotion_gate_pass,
         "history_path": str(history_path),
         "runs": runs,
     }

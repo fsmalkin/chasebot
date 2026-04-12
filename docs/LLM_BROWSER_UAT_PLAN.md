@@ -29,6 +29,13 @@ Current limitation:
 - the browser dashboard does not yet present the emitted LLM decision sequence and proof verdict in a simple UAT-ready way
 - the provider path can still produce avoidable invalid outputs when the schema is too permissive for `gpt-5-nano`
 
+Status update as of April 12, 2026:
+
+- the browser dashboard UAT flow is intentionally serial and self-contained for operator trust
+- the non-interactive repeatability lane now has an isolated parallel soak runner: `scripts/run_route_planning_parallel_soak.ps1`
+- latest verified parallel soak artifact: `artifacts/session/20260412T054630Z/route_planning_parallel_soak/campaign_summary.json`
+- next repeatability target is campaign depth (`5/5`), not dashboard parallelism
+
 ## Immediate Goal
 
 Promote the current headless proof into a browser UAT demo only after the action-selection path is hardened and the emitted decision sequence is visible in the dashboard.

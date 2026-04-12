@@ -45,6 +45,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Turn-then-go repeat | `scripts/run_llm_turn_then_go_repeatability.ps1` |
 | Visible ball campaign | `scripts/run_llm_visible_ball_campaign.ps1` |
 | Visit mission repeat | `scripts/run_visit_mission_repeatability.ps1` |
+| Route-planning parallel soak | `scripts/run_route_planning_parallel_soak.ps1 -Workers 2 -RunsPerWorker 1` |
 | Dashboard service | `scripts/run_dashboard_service.ps1` |
 | Dashboard validation | `scripts/run_dashboard_validation.ps1` |
 
@@ -112,6 +113,9 @@ Route-planning obstacle-avoidance validation:
 Route-planning self-contained rerun validation:
 - One-click rerun pass: `artifacts/session/20260412T033747Z/visit_mission/20260412T033759Z/mission_verdict.json`
 - One-click rerun pass: `artifacts/session/20260412T033934Z/visit_mission/20260412T033947Z/mission_verdict.json`
+
+Route-planning parallel soak validation:
+- Isolated 2-worker soak pass: `artifacts/session/20260412T054630Z/route_planning_parallel_soak/campaign_summary.json`
 
 ## Testing
 

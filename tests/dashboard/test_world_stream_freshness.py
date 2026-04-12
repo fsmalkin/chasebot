@@ -122,10 +122,18 @@ def _install_world_stream_stubs() -> None:
         qos_mod.QoSProfile = _QoSProfile
         qos_mod.HistoryPolicy = _HistoryPolicy
         qos_mod.ReliabilityPolicy = _ReliabilityPolicy
+        action_mod = ModuleType("rclpy.action")
+
+        class _ActionClient:
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+        action_mod.ActionClient = _ActionClient
         sys.modules["rclpy"] = rclpy_stub
         sys.modules["rclpy.parameter"] = parameter_mod
         sys.modules["rclpy.node"] = node_mod
         sys.modules["rclpy.qos"] = qos_mod
+        sys.modules["rclpy.action"] = action_mod
 
     if "sensor_msgs" not in sys.modules:
         sensor_msgs_mod = ModuleType("sensor_msgs")
@@ -143,18 +151,31 @@ def _install_world_stream_stubs() -> None:
         geometry_msgs_mod = ModuleType("geometry_msgs")
         msg_mod = ModuleType("geometry_msgs.msg")
 
+        class _Pose:
+            def __init__(self) -> None:
+                self.position = SimpleNamespace(x=0.0, y=0.0, z=0.0)
+                self.orientation = SimpleNamespace(x=0.0, y=0.0, z=0.0, w=1.0)
+
         class _PointStamped:
-            pass
+            def __init__(self) -> None:
+                self.point = SimpleNamespace(x=0.0, y=0.0, z=0.0)
 
         class _PoseStamped:
-            pass
+            def __init__(self) -> None:
+                self.header = SimpleNamespace(frame_id="", stamp=None)
+                self.pose = _Pose()
 
         class _Twist:
-            pass
+            def __init__(self) -> None:
+                self.linear = SimpleNamespace(x=0.0, y=0.0, z=0.0)
+                self.angular = SimpleNamespace(x=0.0, y=0.0, z=0.0)
 
         class _TwistStamped:
-            pass
+            def __init__(self) -> None:
+                self.header = SimpleNamespace(stamp=None, frame_id="")
+                self.twist = _Twist()
 
+        msg_mod.Pose = _Pose
         msg_mod.PointStamped = _PointStamped
         msg_mod.PoseStamped = _PoseStamped
         msg_mod.Twist = _Twist
@@ -168,7 +189,8 @@ def _install_world_stream_stubs() -> None:
         msg_mod = ModuleType("nav_msgs.msg")
 
         class _Odometry:
-            pass
+            def __init__(self) -> None:
+                self.pose = SimpleNamespace(pose=None)
 
         msg_mod.Odometry = _Odometry
         nav_msgs_mod.msg = msg_mod
@@ -212,6 +234,15 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
     controller = dashboard_service.DashboardController.__new__(dashboard_service.DashboardController)
     controller.host = "127.0.0.1"
     controller.port = 8860
+    controller.runtime_dir = tmp_path / "runtime"
+    controller.state_path = controller.runtime_dir / "dashboard_service_state.json"
+    controller.lock_path = controller.runtime_dir / "dashboard_session.lock.json"
+    controller.llm_proof_runtime_path = controller.runtime_dir / "llm_turn_then_go_runtime.json"
+    controller.visit_mission_runtime_path = controller.runtime_dir / "visit_mission_runtime.json"
+    controller.intent_inbox_path = controller.runtime_dir / "intent_inbox.json"
+    controller.intent_ack_path = controller.runtime_dir / "intent_ack.json"
+    controller.peer_project_cleanup = "exclusive"
+    controller.headless_worker_mode = False
     controller.docker = "docker"
     controller.compose_file = REPO_ROOT / "docker-compose.yml"
     controller.host_repo_mount_source = ""
@@ -360,6 +391,11 @@ def _serve_dashboard_path(path: str, tmp_path: Path) -> list[tuple[Path, str, bo
     handler._json_response = lambda status, payload: (_ for _ in ()).throw(AssertionError(f"unexpected json response: {status} {payload}"))
     dashboard_service.DashboardRequestHandler.do_GET(handler)
     return served
+
+
+def test_make_session_id_uses_subsecond_precision():
+    session_id = dashboard_service.make_session_id()
+    assert re.fullmatch(r"\d{8}T\d{12}Z", session_id)
 
 
 def _beta_dashboard_world_snapshots(*states: dict[str, object]) -> list[dict[str, object]]:
@@ -616,6 +652,42 @@ def test_get_state_surfaces_nav2_server_ready_from_brain_state(tmp_path):
     state = controller.get_state()
 
     assert state["brain"]["nav2_server_ready"] is True
+
+
+def test_get_state_surfaces_last_feedback_status_from_brain_state(tmp_path):
+    controller = _make_controller(tmp_path)
+    visual_dir = tmp_path / "visual"
+    visual_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        visual_dir / "state.json",
+        {
+            "raw_frame_count": 1,
+            "debug_frame_count": 1,
+            "telemetry_frame_count": 1,
+            "latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        },
+    )
+    _write_json(
+        visual_dir / "brain_state.json",
+        {
+            "last_feedback_status": "visit_target_reached",
+            "last_feedback_text": "visit_target: ball_b reached",
+        },
+    )
+    _write_json(
+        visual_dir / "world_stream_state.json",
+        {
+            "session_id": controller.state["session_id"],
+            "partition": controller.state["session_id"],
+            "world_stream_ready": True,
+            "same_session_partition": True,
+            "frames_stale": False,
+        },
+    )
+
+    state = controller.get_state()
+
+    assert state["brain"]["last_feedback_status"] == "visit_target_reached"
 
 
 def test_get_state_derives_healthy_world_renderability_from_current_session_artifact(tmp_path):
@@ -1309,6 +1381,31 @@ def test_cleanup_stale_dashboard_projects_excludes_current(tmp_path):
     assert removed == cleaned
 
 
+def test_cleanup_stale_dashboard_projects_can_leave_peer_projects_running(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.peer_project_cleanup = "none"
+    removed: list[str] = []
+    controller._list_dashboard_projects = lambda include_stopped=True: [
+        "chasecar_dashboard_keepme",
+        "chasecar_dashboard_peer",
+    ]
+    controller._force_remove_project_resources = lambda project_name: removed.append(project_name)
+
+    cleaned = controller._cleanup_stale_dashboard_projects(current_project="chasecar_dashboard_keepme")
+
+    assert cleaned == []
+    assert removed == []
+
+
+def test_base_env_uses_instance_runtime_files(tmp_path):
+    controller = _make_controller(tmp_path)
+    env = controller._base_env(session_id="20260412T120000Z", world_stream_port=8891, operator_view_port=14500)
+
+    assert env["CHASECAR_VISIT_RUNTIME_PATH"].endswith("/runtime/visit_mission_runtime.json")
+    assert env["CHASECAR_INTENT_INBOX_PATH"].endswith("/runtime/intent_inbox.json")
+    assert env["CHASECAR_INTENT_ACK_PATH"].endswith("/runtime/intent_ack.json")
+
+
 def test_wait_for_world_stream_ready_accepts_fresh_stream(tmp_path, monkeypatch):
     controller = _make_controller(tmp_path)
     _write_world_state(
@@ -1591,6 +1688,39 @@ def test_run_environment_compose_up_uses_no_build_when_reusing_local_images(tmp_
             "gate-stack",
             "dashboard-utility",
             "operator-view",
+        )
+    ]
+
+
+def test_run_environment_compose_up_headless_worker_skips_visual_services(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.control_mode = "docker_socket"
+    controller.build_on_next_start = False
+    controller.headless_worker_mode = True
+
+    popen_calls: list[tuple[str, ...]] = []
+    controller._run_docker_compose = lambda *_args, **_kwargs: None
+
+    class _Proc:
+        returncode = 0
+
+        def communicate(self):
+            return ("ok", "")
+
+    controller._popen_docker_compose = lambda project_name, *args, env=None: popen_calls.append((project_name, *args)) or _Proc()
+
+    rc, output = controller._run_environment_compose_up("chasecar_dashboard_test", {"WORLD_STREAM_PORT": "8891"})
+
+    assert rc == 0
+    assert output == "ok"
+    assert popen_calls == [
+        (
+            "chasecar_dashboard_test",
+            "up",
+            "-d",
+            "--no-build",
+            "sim-gate",
+            "gate-stack",
         )
     ]
 

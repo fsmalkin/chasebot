@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import shlex
@@ -47,14 +48,9 @@ if _dotenv_path.is_file():
             _val = _val.strip().strip("'\"")
             if _key and _key not in os.environ:
                 os.environ[_key] = _val
-RUNTIME_DIR = REPO_ROOT / "runtime" / "dashboard"
+STATIC_DASHBOARD_DIR = REPO_ROOT / "runtime" / "dashboard"
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
-STATE_PATH = RUNTIME_DIR / "dashboard_service_state.json"
-LOCK_PATH = RUNTIME_DIR / "dashboard_session.lock.json"
-LLM_PROOF_RUNTIME_PATH = RUNTIME_DIR / "llm_turn_then_go_runtime.json"
-VISIT_MISSION_RUNTIME_PATH = RUNTIME_DIR / "visit_mission_runtime.json"
-INTENT_INBOX_PATH = RUNTIME_DIR / "intent_inbox.json"
-INTENT_ACK_PATH = RUNTIME_DIR / "intent_ack.json"
+DEFAULT_RUNTIME_DIR = STATIC_DASHBOARD_DIR
 
 DEFAULT_RUNTIME_TARGET = "robot_fidelity_orin"
 DEFAULT_CORE_ROS_DISTRO = "kilted"
@@ -96,6 +92,7 @@ OPERATOR_VIEW_PORT_START = 14500
 OPERATOR_VIEW_PORT_END = 14520
 OPERATOR_VIEW_HEARTBEAT_STALE_S = 5.0
 REQUIRED_GATE_SERVICES = ("sim-gate", "world-viewer", "gate-stack", "operator-view")
+HEADLESS_SOAK_GATE_SERVICES = ("sim-gate", "gate-stack")
 SELF_CONTAINED_SCENARIO_IDS = {"visit_route_planning"}
 
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
@@ -242,7 +239,7 @@ def utc_now() -> str:
 
 
 def make_session_id() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
 
 
 def slugify_session(session_id: str) -> str:
@@ -258,6 +255,41 @@ def parse_utc_timestamp(value: str) -> Optional[datetime]:
         return datetime.fromisoformat(normalized)
     except ValueError:
         return None
+
+
+def _truth_world_xy(pose: Dict[str, Any]) -> Optional[Dict[str, float]]:
+    if not isinstance(pose, dict):
+        return None
+    position = pose.get("position")
+    if not isinstance(position, dict):
+        return None
+    try:
+        return {
+            "x": float(position.get("x", 0.0)),
+            "y": float(position.get("y", 0.0)),
+        }
+    except Exception:
+        return None
+
+
+def _truth_robot_pose(pose: Dict[str, Any]) -> Optional[Dict[str, float]]:
+    if not isinstance(pose, dict):
+        return None
+    position = pose.get("position")
+    orientation = pose.get("orientation")
+    if not isinstance(position, dict) or not isinstance(orientation, dict):
+        return None
+    try:
+        x = float(position.get("x", 0.0))
+        y = float(position.get("y", 0.0))
+        ox = float(orientation.get("x", 0.0))
+        oy = float(orientation.get("y", 0.0))
+        oz = float(orientation.get("z", 0.0))
+        ow = float(orientation.get("w", 1.0))
+    except Exception:
+        return None
+    yaw = math.atan2(2.0 * (ow * oz + ox * oy), 1.0 - 2.0 * (oy * oy + oz * oz))
+    return {"x": x, "y": y, "yaw": yaw}
 
 
 def choose_docker_cli() -> str:
@@ -333,10 +365,37 @@ def parse_step_marker(text: str, step_name: str) -> Dict[str, str]:
     return {"status": match.group(1).strip(), "artifact_dir": match.group(2).strip()}
 
 
+def resolve_runtime_dir(path_hint: str) -> Path:
+    cleaned = str(path_hint or "").strip()
+    if not cleaned:
+        return DEFAULT_RUNTIME_DIR
+    candidate = Path(cleaned)
+    if not candidate.is_absolute():
+        candidate = (REPO_ROOT / candidate).resolve()
+    return candidate
+
+
 class DashboardController:
-    def __init__(self, host: str, port: int) -> None:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        *,
+        runtime_dir: Path | None = None,
+        peer_project_cleanup: str = "exclusive",
+        headless_worker_mode: bool = False,
+    ) -> None:
         self.host = host
         self.port = port
+        self.runtime_dir = (runtime_dir or DEFAULT_RUNTIME_DIR).resolve()
+        self.state_path = self.runtime_dir / "dashboard_service_state.json"
+        self.lock_path = self.runtime_dir / "dashboard_session.lock.json"
+        self.llm_proof_runtime_path = self.runtime_dir / "llm_turn_then_go_runtime.json"
+        self.visit_mission_runtime_path = self.runtime_dir / "visit_mission_runtime.json"
+        self.intent_inbox_path = self.runtime_dir / "intent_inbox.json"
+        self.intent_ack_path = self.runtime_dir / "intent_ack.json"
+        self.peer_project_cleanup = peer_project_cleanup if peer_project_cleanup in {"exclusive", "none"} else "exclusive"
+        self.headless_worker_mode = bool(headless_worker_mode)
         self.control_mode = (os.environ.get("CHASECAR_DASHBOARD_CONTROL_MODE", DEFAULT_CONTROL_MODE).strip() or DEFAULT_CONTROL_MODE)
         try:
             self.docker = choose_docker_cli()
@@ -377,7 +436,7 @@ class DashboardController:
         self._world_stream_stale_since_monotonic = 0.0
         self._world_stream_last_restart_monotonic = 0.0
 
-        ensure_dir(RUNTIME_DIR)
+        ensure_dir(self.runtime_dir)
         with self.state_lock:
             self.state: Dict[str, Any] = {
                 "service_started_utc": utc_now(),
@@ -461,7 +520,9 @@ class DashboardController:
                 "startup_retry_count": 0,
                 "startup_cleanup_count": 0,
                 "startup_last_cleanup_projects": [],
-                "lock_file": str(LOCK_PATH),
+                "lock_file": str(self.lock_path),
+                "runtime_dir": str(self.runtime_dir),
+                "headless_worker_mode": self.headless_worker_mode,
                 "scenarios": [item.to_api() for item in SCENARIOS],
             }
             self._persist_state_locked()
@@ -557,7 +618,7 @@ class DashboardController:
         return intent_name, dict(args_payload)
 
     def _persist_state_locked(self) -> None:
-        write_json(STATE_PATH, self.state)
+        write_json(self.state_path, self.state)
 
     def _update_state(self, **updates: Any) -> None:
         with self.state_lock:
@@ -631,11 +692,11 @@ class DashboardController:
         return validation_dir / "command_history.jsonl"
 
     def _llm_proof_runtime_state(self) -> Dict[str, Any]:
-        payload = read_json(LLM_PROOF_RUNTIME_PATH)
+        payload = read_json(self.llm_proof_runtime_path)
         return payload if isinstance(payload, dict) else {}
 
     def _write_llm_proof_runtime_state(self, payload: Dict[str, Any]) -> None:
-        write_json(LLM_PROOF_RUNTIME_PATH, payload)
+        write_json(self.llm_proof_runtime_path, payload)
 
     def _clear_llm_proof_runtime_state(self) -> None:
         self._write_llm_proof_runtime_state(
@@ -655,11 +716,11 @@ class DashboardController:
         )
 
     def _visit_mission_runtime_state(self) -> Dict[str, Any]:
-        payload = read_json(VISIT_MISSION_RUNTIME_PATH)
+        payload = read_json(self.visit_mission_runtime_path)
         return payload if isinstance(payload, dict) else {}
 
     def _write_visit_mission_runtime_state(self, payload: Dict[str, Any]) -> None:
-        write_json(VISIT_MISSION_RUNTIME_PATH, payload)
+        write_json(self.visit_mission_runtime_path, payload)
 
     def _clear_visit_mission_runtime_state(self) -> None:
         self._write_visit_mission_runtime_state(
@@ -783,30 +844,33 @@ class DashboardController:
         return {"service": service_name, "status": status, "container_id": container_id}
 
     def _required_gate_service_states(self, project_name: str) -> Dict[str, Dict[str, Any]]:
+        required_services = self._required_gate_services()
         return {
             service_name: self._docker_service_state(project_name, service_name)
-            for service_name in REQUIRED_GATE_SERVICES
+            for service_name in required_services
         }
 
     def _gate_services_ready(self, gate_service_states: Dict[str, Dict[str, Any]]) -> bool:
         if not gate_service_states:
             return False
+        required_services = self._required_gate_services()
         return all(
             str(gate_service_states.get(service_name, {}).get("status", "missing") or "missing") == "running"
-            for service_name in REQUIRED_GATE_SERVICES
+            for service_name in required_services
         )
 
     def _classify_gate_service_states(self, gate_service_states: Dict[str, Dict[str, Any]]) -> tuple[str, str]:
+        required_services = self._required_gate_services()
         missing = [
             service_name
-            for service_name in REQUIRED_GATE_SERVICES
+            for service_name in required_services
             if str(gate_service_states.get(service_name, {}).get("status", "missing") or "missing") == "missing"
         ]
         if missing:
             return "gate_services_missing", f"Required gate services missing: {', '.join(missing)}."
         not_running = [
             f"{service_name}={str(gate_service_states.get(service_name, {}).get('status', 'unknown') or 'unknown')}"
-            for service_name in REQUIRED_GATE_SERVICES
+            for service_name in required_services
             if str(gate_service_states.get(service_name, {}).get("status", "missing") or "missing") != "running"
         ]
         if not_running:
@@ -916,11 +980,16 @@ class DashboardController:
         return projects
 
     def _cleanup_stale_dashboard_projects(self, *, current_project: str = "") -> list[str]:
+        if self.peer_project_cleanup == "none":
+            return []
         projects = self._list_dashboard_projects(include_stopped=True)
         stale_projects = [name for name in projects if name != current_project]
         for project_name in stale_projects:
             self._force_remove_project_resources(project_name)
         return stale_projects
+
+    def _required_gate_services(self) -> tuple[str, ...]:
+        return HEADLESS_SOAK_GATE_SERVICES if self.headless_worker_mode else REQUIRED_GATE_SERVICES
 
     def _extract_host_port_bind_failure_port(self, output: str) -> Optional[int]:
         match = HOST_PORT_BIND_FAILURE_RE.search(output or "")
@@ -1226,21 +1295,46 @@ class DashboardController:
             "world_stream": "live/world_stream.jpg",
         }
 
+        latest_detection_world = (
+            visual_state.get("latest_detection_world")
+            if isinstance(visual_state.get("latest_detection_world"), dict)
+            else brain_state.get("latest_detection_world")
+        )
+        latest_truth_target_world = (
+            visual_state.get("latest_truth_target_world")
+            if isinstance(visual_state.get("latest_truth_target_world"), dict)
+            else _truth_world_xy(truth_state.get("true_target_pose") if isinstance(truth_state.get("true_target_pose"), dict) else {})
+        )
+        latest_truth_target_model_name = str(
+            visual_state.get("latest_truth_target_model_name", "")
+            or truth_state.get("target_model_name", "")
+            or ""
+        )
+        latest_robot_pose = (
+            visual_state.get("latest_robot_pose")
+            if isinstance(visual_state.get("latest_robot_pose"), dict)
+            else brain_state.get("latest_robot_pose")
+        )
+        if not isinstance(latest_robot_pose, dict):
+            latest_robot_pose = _truth_robot_pose(
+                truth_state.get("robot_truth_pose") if isinstance(truth_state.get("robot_truth_pose"), dict) else {}
+            )
+
         perception = {
             "detection_topic_seen": bool(visual_state.get("detection_topic_seen", False)),
             "target_visible_now": bool(visual_state.get("target_visible_now", False)),
             "target_visible_ratio": float(visual_state.get("target_visible_ratio", 0.0) or 0.0),
-            "latest_detection_world": visual_state.get("latest_detection_world"),
-            "latest_truth_target_world": visual_state.get("latest_truth_target_world"),
-            "latest_truth_target_model_name": str(visual_state.get("latest_truth_target_model_name", "") or ""),
+            "latest_detection_world": latest_detection_world,
+            "latest_truth_target_world": latest_truth_target_world,
+            "latest_truth_target_model_name": latest_truth_target_model_name,
             "truth_alignment_ok": bool(visual_state.get("truth_alignment_ok", False)),
             "truth_status": "aligned" if visual_state.get("truth_alignment_ok", False) else (visual_state.get("truth_failure_class") or "truth unavailable"),
         }
         belief = {
-            "latest_robot_pose": visual_state.get("latest_robot_pose"),
-            "robot_pose_available": bool(visual_state.get("latest_robot_pose")),
+            "latest_robot_pose": latest_robot_pose,
+            "robot_pose_available": isinstance(latest_robot_pose, dict) and bool(latest_robot_pose),
             "latest_goal_pose": visual_state.get("latest_goal_pose"),
-            "latest_target_distance_m": visual_state.get("latest_target_distance_m"),
+            "latest_target_distance_m": visual_state.get("latest_target_distance_m", brain_state.get("latest_target_distance_m")),
             "distance_trend": visual_state.get("distance_trend", "unknown"),
             "distance_progress_m": visual_state.get("distance_progress_m"),
             "capability_stage": visual_state.get("capability_stage", ""),
@@ -1258,6 +1352,7 @@ class DashboardController:
             "track_active": bool(brain_state.get("track_active", False)),
             "goal_in_progress": bool(brain_state.get("goal_in_progress", False)),
             "nav2_server_ready": bool(brain_state.get("nav2_server_ready", False)),
+            "last_feedback_status": str(brain_state.get("last_feedback_status", "") or ""),
             "last_feedback_text": str(brain_state.get("last_feedback_text", "") or ""),
             "last_goal_dispatched_utc": str(brain_state.get("last_goal_dispatched_utc", "") or ""),
         }
@@ -1651,11 +1746,11 @@ class DashboardController:
             "owner_pid": os.getpid(),
             "updated_utc": utc_now(),
         }
-        write_json(LOCK_PATH, payload)
+        write_json(self.lock_path, payload)
 
     def _remove_lock_file(self) -> None:
         try:
-            LOCK_PATH.unlink()
+            self.lock_path.unlink()
         except FileNotFoundError:
             pass
 
@@ -2126,6 +2221,8 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
 """
 
     def _world_stream_restart_ready(self) -> bool:
+        if self.headless_worker_mode:
+            return False
         with self.state_lock:
             if self.state.get("environment_state") != "environment_ready":
                 return False
@@ -2258,7 +2355,9 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
         env["CHASECAR_SESSION_ID"] = session_id
         env["CHASECAR_BRAIN_STATE_PATH"] = to_container_repo_path(SESSION_ROOT / session_id / "visual" / "brain_state.json")
         env["CHASECAR_BRAIN_FEEDBACK_PATH"] = to_container_repo_path(SESSION_ROOT / session_id / "visual" / "brain_feedback.jsonl")
-        env["CHASECAR_VISIT_RUNTIME_PATH"] = to_container_repo_path(RUNTIME_DIR / "visit_mission_runtime.json")
+        env["CHASECAR_VISIT_RUNTIME_PATH"] = to_container_repo_path(self.visit_mission_runtime_path)
+        env["CHASECAR_INTENT_INBOX_PATH"] = to_container_repo_path(self.intent_inbox_path)
+        env["CHASECAR_INTENT_ACK_PATH"] = to_container_repo_path(self.intent_ack_path)
         return env
 
     def _refresh_session_container_ids(self, project_name: str) -> None:
@@ -2292,10 +2391,13 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                 args.append("--no-build")
         else:
             args.append("--no-build")
-        # Only bring up sim/gate services.  In host_powershell mode the
+        # Only bring up sim/gate services. In host_powershell mode the
         # dashboard-control and brain-supervisor-shadow run on the host, so
         # starting them inside compose would cause a port conflict on 8860.
-        args.extend(["sim-gate", "world-viewer", "gate-stack", "dashboard-utility", "operator-view"])
+        compose_services = ["sim-gate", "world-viewer", "gate-stack", "dashboard-utility", "operator-view"]
+        if self.headless_worker_mode:
+            compose_services = ["sim-gate", "gate-stack"]
+        args.extend(compose_services)
         proc = self._popen_docker_compose(project_name, *args, env=env)
         self.active_env_proc = proc
         output, _ = proc.communicate()
@@ -2323,6 +2425,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     f"Cleaned stale dashboard projects before startup: {', '.join(startup_cleanup_projects)}.",
                     category="environment",
                 )
+            operator_view_status = "disabled" if self.headless_worker_mode else "starting"
             self._update_state(
                 environment_state="starting",
                 scenario_state="idle",
@@ -2337,7 +2440,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                 operator_view_port=0,
                 operator_view_url="",
                 operator_view_ready=False,
-                operator_view_status="starting",
+                operator_view_status=operator_view_status,
                 operator_view_failure_class="",
                 validation_dir=str(validation_dir),
                 command_history_path=str(validation_dir / "command_history.jsonl"),
@@ -2384,8 +2487,8 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
             operator_view_port = 0
             gate_service_states: Dict[str, Dict[str, Any]] = {}
             for attempt in range(2):
-                world_stream_port = find_free_port(8891, 8921)
-                operator_view_port = find_free_port(OPERATOR_VIEW_PORT_START, OPERATOR_VIEW_PORT_END)
+                world_stream_port = 0 if self.headless_worker_mode else find_free_port(8891, 8921)
+                operator_view_port = 0 if self.headless_worker_mode else find_free_port(OPERATOR_VIEW_PORT_START, OPERATOR_VIEW_PORT_END)
                 env = self._base_env(
                     session_id=session_id,
                     world_stream_port=world_stream_port,
@@ -2396,7 +2499,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     operator_view_port=operator_view_port,
                     operator_view_url="",
                     operator_view_ready=False,
-                    operator_view_status="starting",
+                    operator_view_status=operator_view_status,
                     operator_view_failure_class="",
                     environment_message="starting authoritative environment",
                     environment_failure_class="",
@@ -2489,6 +2592,36 @@ echo "TRUTH_LOG=$LOG_FILE"
                     environment_failure_class="truth_probe_start_failed",
                     gate_service_states=gate_service_states,
                 )
+
+            if self.headless_worker_mode:
+                self._update_state(
+                    environment_state="environment_ready",
+                    scenario_state="ready",
+                    environment_message="environment ready",
+                    environment_failure_class="",
+                    gate_service_states=gate_service_states,
+                    scenario_message="ready",
+                    world_stream_url="",
+                    operator_view_backend="disabled",
+                    operator_view_url="",
+                    operator_view_ready=False,
+                    operator_view_status="disabled",
+                    operator_view_failure_class="",
+                    world_stream_recovery_state="idle",
+                    world_stream_restart_in_progress=False,
+                    world_stream_last_restart_error="",
+                )
+                self._record_operator_event("Environment ready (headless soak mode).", category="environment")
+                self._write_operator_status(
+                    phase="environment_ready",
+                    target_id="",
+                    target_transition_active=False,
+                    status_text="Environment ready",
+                )
+                self._write_lock_file()
+                self.build_on_next_start = False
+                pending_scenario_ready_to_launch = True
+                return
 
             truth_state_container = to_container_repo_path(visual_dir / "truth_state.json")
             operator_status_container = to_container_repo_path(visual_dir / "operator_status.json")
@@ -3500,20 +3633,20 @@ fi
         }
         # Clear stale ack before writing inbox.
         try:
-            INTENT_ACK_PATH.unlink()
+            self.intent_ack_path.unlink()
         except FileNotFoundError:
             pass
-        ensure_dir(RUNTIME_DIR)
-        INTENT_INBOX_PATH.write_text(
+        ensure_dir(self.runtime_dir)
+        self.intent_inbox_path.write_text(
             json.dumps(inbox_payload, separators=(",", ":")) + "\n", encoding="utf-8",
         )
         # Poll for ack from the executor (up to 2s).
         deadline = time.monotonic() + 2.0
         ack: Dict[str, Any] = {}
         while time.monotonic() < deadline:
-            if INTENT_ACK_PATH.exists():
+            if self.intent_ack_path.exists():
                 try:
-                    ack = json.loads(INTENT_ACK_PATH.read_text(encoding="utf-8"))
+                    ack = json.loads(self.intent_ack_path.read_text(encoding="utf-8"))
                     break
                 except (json.JSONDecodeError, OSError):
                     pass
@@ -3641,11 +3774,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         query = parse_qs(parsed.query or "")
         controller = self.server.controller
         if path in {"/", "/dashboard.html", "/beta", "/beta/", "/beta_dashboard.html"}:
-            return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "beta_dashboard.html", "text/html; charset=utf-8")
+            return self._serve_file(STATIC_DASHBOARD_DIR / "beta_dashboard.html", "text/html; charset=utf-8")
         if path in {"/classic", "/classic/", "/browser_dashboard.html"}:
-            return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "browser_dashboard.html", "text/html; charset=utf-8")
+            return self._serve_file(STATIC_DASHBOARD_DIR / "browser_dashboard.html", "text/html; charset=utf-8")
         if path == "/browser_dashboard.js":
-            return self._serve_file(REPO_ROOT / "runtime" / "dashboard" / "browser_dashboard.js", "text/javascript; charset=utf-8")
+            return self._serve_file(STATIC_DASHBOARD_DIR / "browser_dashboard.js", "text/javascript; charset=utf-8")
         if path == "/api/state":
             return self._json_response(HTTPStatus.OK, controller.get_state())
         if path == "/api/llm/supervisor/history":
@@ -3793,6 +3926,22 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Serve the Chasecar operator dashboard control plane.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8860)
+    parser.add_argument(
+        "--runtime-dir",
+        default="",
+        help="Optional repo-local runtime state directory for this dashboard instance.",
+    )
+    parser.add_argument(
+        "--peer-project-cleanup",
+        choices=("exclusive", "none"),
+        default="exclusive",
+        help="Whether startup should remove peer dashboard compose projects.",
+    )
+    parser.add_argument(
+        "--headless-worker",
+        action="store_true",
+        help="Start only the sim and gate stack needed for non-interactive soak workers.",
+    )
     return parser.parse_args()
 
 
@@ -3802,7 +3951,13 @@ def main() -> int:
     # Use 127.0.0.1 for client-facing URL when binding to all interfaces;
     # 0.0.0.0 is not a valid connect target on Windows.
     client_host = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
-    controller = DashboardController(host=args.host, port=args.port)
+    controller = DashboardController(
+        host=args.host,
+        port=args.port,
+        runtime_dir=resolve_runtime_dir(args.runtime_dir),
+        peer_project_cleanup=args.peer_project_cleanup,
+        headless_worker_mode=args.headless_worker,
+    )
     controller._update_state(dashboard_url=f"http://{client_host}:{args.port}/")
     server = DashboardHttpServer((args.host, args.port), controller)
     print(f"DASHBOARD_URL=http://{client_host}:{args.port}/")

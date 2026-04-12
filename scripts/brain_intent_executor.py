@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import sys
 import time
 from dataclasses import asdict
@@ -57,8 +58,8 @@ SEARCH_FEEDBACK_HEARTBEAT_S = 1.0
 CENTERED_LOCK_TOLERANCE_RAD = 0.18
 CENTERING_TURN_GAIN = 1.5
 
-INTENT_INBOX_PATH = REPO_ROOT / "runtime" / "dashboard" / "intent_inbox.json"
-INTENT_ACK_PATH = REPO_ROOT / "runtime" / "dashboard" / "intent_ack.json"
+DEFAULT_INTENT_INBOX_PATH = REPO_ROOT / "runtime" / "dashboard" / "intent_inbox.json"
+DEFAULT_INTENT_ACK_PATH = REPO_ROOT / "runtime" / "dashboard" / "intent_ack.json"
 
 
 def parse_args() -> argparse.Namespace:
@@ -82,8 +83,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--state-json", default=str(repo_root / "runtime" / "dashboard" / "brain_executor_state.json"))
     parser.add_argument("--feedback-jsonl", default="")
     parser.add_argument(
+        "--intent-inbox-json",
+        default=os.environ.get("CHASECAR_INTENT_INBOX_PATH", str(DEFAULT_INTENT_INBOX_PATH)),
+        help="Path to the direct-dispatch intent inbox JSON file.",
+    )
+    parser.add_argument(
+        "--intent-ack-json",
+        default=os.environ.get("CHASECAR_INTENT_ACK_PATH", str(DEFAULT_INTENT_ACK_PATH)),
+        help="Path to the direct-dispatch intent ack JSON file.",
+    )
+    parser.add_argument(
         "--visit-runtime-json",
-        default=str(repo_root / "runtime" / "dashboard" / "visit_mission_runtime.json"),
+        default=os.environ.get("CHASECAR_VISIT_RUNTIME_PATH", str(repo_root / "runtime" / "dashboard" / "visit_mission_runtime.json")),
         help="Path to the visit mission runtime state file (source of target priors).",
     )
     parser.add_argument(
@@ -136,10 +147,14 @@ class BrainIntentExecutor(Node):
 
         self.state_path = Path(args.state_json).resolve() if args.state_json else None
         self.feedback_history_path = Path(args.feedback_jsonl).resolve() if args.feedback_jsonl else None
+        self.intent_inbox_path = Path(args.intent_inbox_json).resolve() if args.intent_inbox_json else DEFAULT_INTENT_INBOX_PATH.resolve()
+        self.intent_ack_path = Path(args.intent_ack_json).resolve() if args.intent_ack_json else DEFAULT_INTENT_ACK_PATH.resolve()
         if self.state_path is not None:
             self.state_path.parent.mkdir(parents=True, exist_ok=True)
         if self.feedback_history_path is not None:
             self.feedback_history_path.parent.mkdir(parents=True, exist_ok=True)
+        self.intent_inbox_path.parent.mkdir(parents=True, exist_ok=True)
+        self.intent_ack_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.latest_detection: PointStamped | None = None
         self.last_detection_monotonic = 0.0
@@ -1004,19 +1019,19 @@ class BrainIntentExecutor(Node):
     def _check_intent_inbox(self) -> None:
         """Poll the file-based intent inbox for direct dispatch from the dashboard."""
         try:
-            if not INTENT_INBOX_PATH.exists():
+            if not self.intent_inbox_path.exists():
                 return
-            st = INTENT_INBOX_PATH.stat()
+            st = self.intent_inbox_path.stat()
             if st.st_mtime_ns == self.last_inbox_mtime:
                 return
             self.last_inbox_mtime = st.st_mtime_ns
-            raw = INTENT_INBOX_PATH.read_text(encoding="utf-8").strip()
+            raw = self.intent_inbox_path.read_text(encoding="utf-8").strip()
             if not raw:
                 return
             payload = json.loads(raw)
             # Remove inbox file before processing so we don't re-process.
             try:
-                INTENT_INBOX_PATH.unlink()
+                self.intent_inbox_path.unlink()
             except FileNotFoundError:
                 pass
             # Build a String message and dispatch through the normal path.
@@ -1030,8 +1045,8 @@ class BrainIntentExecutor(Node):
                 "accepted": True,
                 "ack_utc": utc_now(),
             }
-            INTENT_ACK_PATH.parent.mkdir(parents=True, exist_ok=True)
-            INTENT_ACK_PATH.write_text(
+            self.intent_ack_path.parent.mkdir(parents=True, exist_ok=True)
+            self.intent_ack_path.write_text(
                 json.dumps(ack, separators=(",", ":")) + "\n", encoding="utf-8",
             )
         except Exception:

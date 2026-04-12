@@ -39,9 +39,22 @@ from llm_supervisor_core import write_json
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_DIR = REPO_ROOT / "runtime" / "dashboard"
-MISSION_RUNTIME_STATE_PATH = RUNTIME_DIR / "visit_mission_runtime.json"
+DEFAULT_MISSION_RUNTIME_STATE_PATH = RUNTIME_DIR / "visit_mission_runtime.json"
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 DEFAULT_WORLD_NAME = "yolo_test_world"
+
+_dotenv_path = REPO_ROOT / ".env"
+if _dotenv_path.is_file():
+    with _dotenv_path.open(encoding="utf-8", errors="ignore") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if not _line or _line.startswith("#") or "=" not in _line:
+                continue
+            _key, _, _val = _line.partition("=")
+            _key = _key.strip()
+            _val = _val.strip().strip("'\"")
+            if _key and _key not in os.environ:
+                os.environ[_key] = _val
 
 # Shell script block to reposition the robot after spawning a target.
 # Included conditionally — route-planning mode skips this to avoid
@@ -107,6 +120,13 @@ def current_utc_stamp() -> str:
 def ensure_dir(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def resolve_visit_runtime_state_path(raw_path: str = "") -> Path:
+    candidate = str(raw_path or os.environ.get("CHASECAR_VISIT_RUNTIME_PATH") or "").strip()
+    if candidate:
+        return Path(candidate).resolve()
+    return DEFAULT_MISSION_RUNTIME_STATE_PATH.resolve()
 
 
 def to_container_repo_path(path: Path) -> str:
@@ -391,6 +411,8 @@ class VisitMissionRunner:
         self.args = args
         self.dashboard_url = args.dashboard_url.rstrip("/")
         self.contract = load_contract(Path(args.contract).resolve())
+        self.runtime_state_path = resolve_visit_runtime_state_path(getattr(args, "visit_runtime_json", ""))
+        self.runtime_state_path.parent.mkdir(parents=True, exist_ok=True)
         self.targets = build_visit_targets(str(args.scenario_id))
         self.docker = choose_docker_cli()
         self.provider = self._build_provider(args) if self._is_route_planning_id(args.scenario_id) else None
@@ -424,7 +446,7 @@ class VisitMissionRunner:
         self._event_keys: set[str] = set()
 
     def _persist_runtime_state(self) -> None:
-        write_json(MISSION_RUNTIME_STATE_PATH, self.runtime_state)
+        write_json(self.runtime_state_path, self.runtime_state)
 
     def _update_runtime_state(self, **updates: Any) -> None:
         self.runtime_state.update(updates)
@@ -1903,6 +1925,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-retries-per-target", type=int, default=1)
     parser.add_argument("--target-model-name", default=DEFAULT_TARGET_MODEL_NAME)
     parser.add_argument("--target-model-sdf", default=str(DEFAULT_TARGET_MODEL_SDF))
+    parser.add_argument(
+        "--visit-runtime-json",
+        default=os.environ.get("CHASECAR_VISIT_RUNTIME_PATH", str(DEFAULT_MISSION_RUNTIME_STATE_PATH)),
+        help="Path to the shared visit mission runtime state file.",
+    )
     parser.add_argument("--remove-visited-targets", dest="remove_visited_targets", action="store_true")
     parser.set_defaults(remove_visited_targets=False)
     parser.add_argument("--keep-environment", action="store_true")
