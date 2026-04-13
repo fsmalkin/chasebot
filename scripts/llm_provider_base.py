@@ -36,3 +36,15 @@ class DecisionProvider(Protocol):
         timeout_s: float,
     ) -> ProviderDecisionResult:
         """Return one bounded decision plus request/response artifacts."""
+
+    def plan_collection_route(
+        self,
+        *,
+        remaining_target_ids: list[str],
+        target_details: list[Dict[str, Any]],
+        zone_details: Dict[str, Any],
+        placed_targets: list[str],
+        mission_state: Dict[str, Any],
+        timeout_s: float,
+    ) -> list[str]:
+        """Return a complete ordered route for a gather/collection scenario."""

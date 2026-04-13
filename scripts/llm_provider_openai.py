@@ -21,6 +21,7 @@ from llm_supervisor_core import (
 LEGACY_TOOL_NAME = "emit_frozen_decision"
 BLOCKED_TOOL_NAME = "emit_blocked"
 ROUTE_PLAN_TOOL_NAME = "plan_visit_route"
+COLLECTION_PLAN_TOOL_NAME = "plan_collection_route"
 INTENT_TOOL_NAMES = {
     "search_for_target": "emit_search_for_target",
     "acquire_target": "emit_acquire_target",
@@ -382,3 +383,78 @@ class OpenAIResponsesProvider:
                 )
             return order_ids
         raise ProviderError("Route plan response did not contain a plan_visit_route call.")
+
+    def plan_collection_route(
+        self,
+        *,
+        remaining_target_ids: list[str],
+        target_details: list[Dict[str, Any]],
+        zone_details: Dict[str, Any],
+        placed_targets: list[str],
+        mission_state: Dict[str, Any],
+        timeout_s: float,
+    ) -> list[str]:
+        details_text = json.dumps(
+            {
+                "remaining_targets": target_details,
+                "zone": zone_details,
+                "placed_targets": placed_targets,
+                "mission_state": mission_state,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        request_payload = {
+            "model": self.model_name,
+            "store": False,
+            "parallel_tool_calls": False,
+            "reasoning": {"effort": self.reasoning_effort},
+            "instructions": (
+                "You are a route planner for a ball gathering robot with a fixed corral zone. "
+                "Given the remaining balls, current mission state, and already placed balls, "
+                "choose the full visit order that best supports collecting and placing all remaining balls. "
+                "Use the plan_collection_route tool with ALL remaining target IDs in your chosen order."
+            ),
+            "input": (
+                f"Plan the gather order for these remaining targets:\n{details_text}\n\n"
+                "Return ALL remaining target IDs in gather order."
+            ),
+            "tool_choice": "required",
+            "tools": [
+                {
+                    "type": "function",
+                    "name": COLLECTION_PLAN_TOOL_NAME,
+                    "description": "Submit the planned gather order for all remaining targets.",
+                    "strict": True,
+                    "parameters": _strict_schema({
+                        "target_order": {
+                            "type": "array",
+                            "items": {"type": "string", "enum": remaining_target_ids},
+                        },
+                        "rationale_short": {"type": "string"},
+                    }),
+                }
+            ],
+        }
+        response_payload = call_openai_responses(
+            api_key=self.api_key,
+            request_payload=request_payload,
+            base_url=self.base_url,
+            timeout_s=timeout_s,
+            org_id=self.org_id,
+            project_id=self.project_id,
+        )
+        for item in list(response_payload.get("output", [])):
+            if not isinstance(item, dict) or item.get("type") != "function_call":
+                continue
+            if str(item.get("name", "")) != COLLECTION_PLAN_TOOL_NAME:
+                continue
+            payload = _parse_function_payload(item.get("arguments", ""))
+            target_order = list(payload.get("target_order", []))
+            order_ids = [str(tid).strip() for tid in target_order]
+            if set(order_ids) != set(remaining_target_ids):
+                raise ProviderError(
+                    f"Collection route returned {order_ids} but expected exactly {remaining_target_ids}"
+                )
+            return order_ids
+        raise ProviderError("Collection route response did not contain a plan_collection_route call.")

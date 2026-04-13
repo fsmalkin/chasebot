@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = REPO_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+import gather_mission_runner as gather_runner  # noqa: E402
+from llm_supervisor_core import read_json  # noqa: E402
+
+
+def _make_args(tmp_path: Path) -> SimpleNamespace:
+    return SimpleNamespace(
+        dashboard_url="http://127.0.0.1:8860",
+        provider="local_stub",
+        model="local-stub",
+        reasoning_effort="low",
+        scenario_id="corral_single_ball_place",
+        scenario_label="Corral Single Ball Place",
+        artifact_kind="gather_mission",
+        poll_s=0.01,
+        timeout_s=1.0,
+        environment_timeout_s=1.0,
+        visit_timeout_s=1.0,
+        capture_timeout_s=1.0,
+        place_timeout_s=1.0,
+        pursuit_settle_timeout_s=0.01,
+        max_retries_per_target=0,
+        target_model_name="visit_mission_target",
+        target_model_sdf=str(tmp_path / "ball.sdf"),
+        zone_model_name="corral_zone_marker",
+        zone_model_sdf=str(tmp_path / "zone.sdf"),
+        visit_runtime_json=str(tmp_path / "visit_mission_runtime.json"),
+        gather_runtime_json=str(tmp_path / "gather_mission_runtime.json"),
+        motion_loop_hz=10.0,
+        keep_environment=True,
+    )
+
+
+def _make_runner(tmp_path: Path, monkeypatch) -> gather_runner.GatherMissionRunner:
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+    return gather_runner.GatherMissionRunner(_make_args(tmp_path))
+
+
+def test_resolve_gather_runtime_state_path_prefers_explicit_arg(tmp_path, monkeypatch):
+    env_path = tmp_path / "env_runtime.json"
+    monkeypatch.setenv("CHASECAR_GATHER_RUNTIME_PATH", str(env_path))
+    explicit_path = tmp_path / "explicit_runtime.json"
+
+    resolved = gather_runner.resolve_gather_runtime_state_path(str(explicit_path))
+
+    assert resolved == explicit_path.resolve()
+
+
+def test_resolve_gather_runtime_state_path_falls_back_to_env(tmp_path, monkeypatch):
+    env_path = tmp_path / "env_runtime.json"
+    monkeypatch.setenv("CHASECAR_GATHER_RUNTIME_PATH", str(env_path))
+
+    resolved = gather_runner.resolve_gather_runtime_state_path("")
+
+    assert resolved == env_path.resolve()
+
+
+def test_init_runtime_state_seeds_dashboard_friendly_fields(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    assert runner.visit_runtime_state["proof_state"] == "waiting"
+    assert runner.visit_runtime_state["artifact_dir"] == str(mission_root)
+    assert runner.gather_runtime_state["gather_phase"] == "setup"
+    assert runner.gather_runtime_state["zone_pose"]["radius_m"] > 0.0
+    assert runner.gather_runtime_state["artifact_dir"] == str(mission_root)
+
+
+def test_run_normalizes_success_summary_and_marks_proof_completed(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    monkeypatch.setattr(gather_runner, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gather_runner, "current_utc_stamp", lambda: "20260412T000000Z")
+
+    ready_state = {"session_id": "session-1", "compose_project": "proj", "world_name": "yolo_test_world"}
+    monkeypatch.setattr(runner, "_ensure_environment_ready", lambda: (ready_state, False))
+    monkeypatch.setattr(runner, "_wait_for_robot_pose", lambda timeout_s: ready_state)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_spawn_mission_models", lambda ready_state, mission_root: None)
+    monkeypatch.setattr(runner, "_wait_for_truth_models", lambda session_id, expected_truth_models, timeout_s: None)
+    monkeypatch.setattr(runner, "_start_motion_bridge", lambda compose_project, mission_root: None)
+    monkeypatch.setattr(runner, "_stop_motion_bridge", lambda compose_project: None)
+    monkeypatch.setattr(runner, "_clear_mission_models", lambda state: None)
+    monkeypatch.setattr(runner, "_plan_collection_route", lambda remaining_ids, state: list(remaining_ids))
+    def _run_target_success(**kwargs):
+        runner.gather_runtime_state["placed_targets"] = ["ball_1"]
+        runner.gather_runtime_state["remaining_targets"] = []
+        runner.visit_runtime_state["visited_targets"] = ["ball_1"]
+        return {
+            "target_id": "ball_1",
+            "label": "Ball 1",
+            "pass": True,
+            "attempts": 1,
+            "capture_loss_count": 0,
+            "route_index": 1,
+            "placed": True,
+            "final_ball_pose": {"x": 2.4, "y": 0.0, "z": 0.05},
+            "place_time_s": 7.5,
+        }
+
+    monkeypatch.setattr(runner, "_run_target", _run_target_success)
+    monkeypatch.setattr(
+        gather_runner,
+        "fetch_dashboard_state",
+        lambda dashboard_url, timeout_s=0: {"belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}}},
+    )
+
+    summary = runner.run()
+
+    assert summary["pass"] is True
+    assert summary["placed_count"] == 1
+    verdict = read_json(Path(summary["mission_verdict_path"]))
+    assert verdict["type"] == "gather_mission"
+    assert verdict["route_order"] == ["ball_1"]
+    assert Path(summary["scorecard_path"]).exists()
+    assert runner.visit_runtime_state["proof_state"] == "completed"
+    assert runner.gather_runtime_state["gather_phase"] == "completed"
+
+
+def test_run_normalizes_failure_summary_and_marks_proof_failed(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    monkeypatch.setattr(gather_runner, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gather_runner, "current_utc_stamp", lambda: "20260412T000001Z")
+
+    ready_state = {"session_id": "session-2", "compose_project": "proj", "world_name": "yolo_test_world"}
+    monkeypatch.setattr(runner, "_ensure_environment_ready", lambda: (ready_state, False))
+    monkeypatch.setattr(runner, "_wait_for_robot_pose", lambda timeout_s: ready_state)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_spawn_mission_models", lambda ready_state, mission_root: None)
+    monkeypatch.setattr(runner, "_wait_for_truth_models", lambda session_id, expected_truth_models, timeout_s: None)
+    monkeypatch.setattr(runner, "_start_motion_bridge", lambda compose_project, mission_root: None)
+    monkeypatch.setattr(runner, "_stop_motion_bridge", lambda compose_project: None)
+    monkeypatch.setattr(runner, "_clear_mission_models", lambda state: None)
+    monkeypatch.setattr(runner, "_plan_collection_route", lambda remaining_ids, state: list(remaining_ids))
+    monkeypatch.setattr(
+        runner,
+        "_run_target",
+        lambda **kwargs: {
+            "target_id": "ball_1",
+            "label": "Ball 1",
+            "pass": False,
+            "failure_reason": "capture_lost",
+            "attempts": 1,
+            "capture_loss_count": 1,
+            "route_index": 1,
+        },
+    )
+    monkeypatch.setattr(
+        gather_runner,
+        "fetch_dashboard_state",
+        lambda dashboard_url, timeout_s=0: {"belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}}},
+    )
+
+    summary = runner.run()
+
+    assert summary["pass"] is False
+    verdict = read_json(Path(summary["mission_verdict_path"]))
+    assert verdict["mission_error"] == "capture_lost"
+    assert runner.visit_runtime_state["proof_state"] == "failed"
+    assert runner.gather_runtime_state["gather_phase"] == "failed"

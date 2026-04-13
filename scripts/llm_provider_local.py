@@ -48,6 +48,36 @@ class LocalStubProvider:
             model=self.model_name,
         )
 
+    def plan_collection_route(
+        self,
+        *,
+        remaining_target_ids: list[str],
+        target_details: Dict[str, Any] | list[Dict[str, Any]],
+        zone_details: Dict[str, Any],
+        placed_targets: list[str],
+        mission_state: Dict[str, Any],
+        timeout_s: float,
+    ) -> list[str]:
+        raw = os.environ.get("CHASECAR_LOCAL_STUB_COLLECTION_ROUTE_JSON", "").strip()
+        if not raw:
+            return list(remaining_target_ids)
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ProviderError(f"CHASECAR_LOCAL_STUB_COLLECTION_ROUTE_JSON is not valid JSON: {exc}") from exc
+        if isinstance(payload, dict):
+            target_order = list(payload.get("target_order", []))
+        elif isinstance(payload, list):
+            target_order = list(payload)
+        else:
+            raise ProviderError("CHASECAR_LOCAL_STUB_COLLECTION_ROUTE_JSON must decode to an object or array.")
+        order_ids = [str(item).strip() for item in target_order if str(item).strip()]
+        if set(order_ids) != set(remaining_target_ids):
+            raise ProviderError(
+                f"Local stub collection route returned {order_ids} but expected exactly {remaining_target_ids}"
+            )
+        return order_ids
+
 
 class LocalModelProvider:
     provider_name = "local_model"
@@ -66,4 +96,16 @@ class LocalModelProvider:
         contract: Dict[str, Any],
         timeout_s: float,
     ) -> ProviderDecisionResult:
+        raise ProviderError("Local model backend is not implemented in this slice.")
+
+    def plan_collection_route(
+        self,
+        *,
+        remaining_target_ids: list[str],
+        target_details: list[Dict[str, Any]],
+        zone_details: Dict[str, Any],
+        placed_targets: list[str],
+        mission_state: Dict[str, Any],
+        timeout_s: float,
+    ) -> list[str]:
         raise ProviderError("Local model backend is not implemented in this slice.")

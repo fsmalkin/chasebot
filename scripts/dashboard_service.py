@@ -93,7 +93,7 @@ OPERATOR_VIEW_PORT_END = 14520
 OPERATOR_VIEW_HEARTBEAT_STALE_S = 5.0
 REQUIRED_GATE_SERVICES = ("sim-gate", "world-viewer", "gate-stack", "operator-view")
 HEADLESS_SOAK_GATE_SERVICES = ("sim-gate", "gate-stack")
-SELF_CONTAINED_SCENARIO_IDS = {"visit_route_planning"}
+SELF_CONTAINED_SCENARIO_IDS = {"visit_route_planning", "corral_single_ball_place"}
 
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 POWERSHELL_EXE = shutil.which("powershell.exe") or shutil.which("powershell") or "powershell.exe"
@@ -229,6 +229,14 @@ SCENARIOS = [
         description="LLM-planned multi-target visit: the LLM chooses which target to visit next.",
         mode="visit_mission",
         featured=True,
+    ),
+    ScenarioDefinition(
+        id="corral_single_ball_place",
+        phase="corral_single_ball_place",
+        target_id="ball_1",
+        label="Corral Single Ball Place",
+        description="Single-ball corral mission: visit, capture, and place the ball into the zone.",
+        mode="gather_mission",
     ),
 ]
 SCENARIOS_BY_ID = {item.id: item for item in SCENARIOS}
@@ -392,6 +400,7 @@ class DashboardController:
         self.lock_path = self.runtime_dir / "dashboard_session.lock.json"
         self.llm_proof_runtime_path = self.runtime_dir / "llm_turn_then_go_runtime.json"
         self.visit_mission_runtime_path = self.runtime_dir / "visit_mission_runtime.json"
+        self.gather_mission_runtime_path = self.runtime_dir / "gather_mission_runtime.json"
         self.intent_inbox_path = self.runtime_dir / "intent_inbox.json"
         self.intent_ack_path = self.runtime_dir / "intent_ack.json"
         self.peer_project_cleanup = peer_project_cleanup if peer_project_cleanup in {"exclusive", "none"} else "exclusive"
@@ -491,6 +500,13 @@ class DashboardController:
                 "remaining_targets": [],
                 "last_visit_result": {},
                 "mission_verdict": {},
+                "gather_phase": "idle",
+                "capture_state": {},
+                "zone_pose": {},
+                "zone_score": {},
+                "placed_targets": [],
+                "capture_loss_count": 0,
+                "route_order": [],
                 "latest_operator_event": "",
                 "recent_operator_events": [],
                 "world_stream_url": "",
@@ -525,9 +541,10 @@ class DashboardController:
                 "headless_worker_mode": self.headless_worker_mode,
                 "scenarios": [item.to_api() for item in SCENARIOS],
             }
-            self._persist_state_locked()
+        self._persist_state_locked()
         self._clear_llm_proof_runtime_state()
         self._clear_visit_mission_runtime_state()
+        self._clear_gather_mission_runtime_state()
         self._refresh_control_plane_state(force=True)
         self.world_stream_watchdog_thread = threading.Thread(
             target=self._world_stream_watchdog_loop,
@@ -742,6 +759,41 @@ class DashboardController:
                 "recent_operator_events": [],
                 "latest_decision": {},
                 "latest_feedback": "",
+                "artifact_dir": "",
+                "updated_utc": utc_now(),
+            }
+        )
+
+    def _gather_mission_runtime_state(self) -> Dict[str, Any]:
+        payload = read_json(self.gather_mission_runtime_path)
+        return payload if isinstance(payload, dict) else {}
+
+    def _write_gather_mission_runtime_state(self, payload: Dict[str, Any]) -> None:
+        write_json(self.gather_mission_runtime_path, payload)
+
+    def _clear_gather_mission_runtime_state(self) -> None:
+        self._write_gather_mission_runtime_state(
+            {
+                "running": False,
+                "scenario_id": "",
+                "session_id": "",
+                "mission_phase": "idle",
+                "mission_status": "idle",
+                "gather_phase": "idle",
+                "current_target_id": "",
+                "visit_index": 0,
+                "placed_targets": [],
+                "remaining_targets": [],
+                "route_order": [],
+                "capture_state": {},
+                "capture_loss_count": 0,
+                "zone_pose": {},
+                "zone_score": {},
+                "latest_control_command": {},
+                "latest_feedback": "",
+                "mission_verdict": {},
+                "latest_operator_event": "",
+                "recent_operator_events": [],
                 "artifact_dir": "",
                 "updated_utc": utc_now(),
             }
@@ -1432,12 +1484,22 @@ class DashboardController:
 
         proof_runtime = self._llm_proof_runtime_state()
         visit_runtime = self._visit_mission_runtime_state()
+        gather_runtime = self._gather_mission_runtime_state()
         proof_verdict = proof_runtime.get("proof_verdict", {}) if isinstance(proof_runtime.get("proof_verdict"), dict) else {}
         proof_state = str(proof_runtime.get("proof_state", "") or "").strip()
         visit_verdict = visit_runtime.get("mission_verdict", {}) if isinstance(visit_runtime.get("mission_verdict"), dict) else {}
+        gather_verdict = gather_runtime.get("mission_verdict", {}) if isinstance(gather_runtime.get("mission_verdict"), dict) else {}
         active_scenario_id = str(snapshot.get("active_scenario", "") or "")
         active_scenario = SCENARIOS_BY_ID.get(active_scenario_id)
         active_mode = active_scenario.mode if active_scenario else ""
+        if not active_mode:
+            mission_verdict_type = ""
+            if isinstance(snapshot.get("mission_verdict"), dict):
+                mission_verdict_type = str(snapshot.get("mission_verdict", {}).get("type", "") or "")
+            if mission_verdict_type == "gather_mission":
+                active_mode = "gather_mission"
+            elif mission_verdict_type == "visit_mission":
+                active_mode = "visit_mission"
         if not proof_state:
             if snapshot.get("active_scenario") == "llm_turn_then_go_proof" and snapshot.get("scenario_state") == "running":
                 proof_state = "searching" if brain.get("search_active") else "waiting"
@@ -1449,6 +1511,10 @@ class DashboardController:
             proof_state = str(visit_runtime.get("proof_state", "") or "").strip() or proof_state
             if visit_verdict:
                 proof_verdict = visit_verdict
+        elif active_mode == "gather_mission":
+            proof_state = str(visit_runtime.get("proof_state", "") or gather_runtime.get("proof_state", "") or "").strip() or proof_state
+            if gather_verdict:
+                proof_verdict = gather_verdict
 
         operator_events = snapshot.get("recent_operator_events", [])
         if not isinstance(operator_events, list):
@@ -1459,8 +1525,11 @@ class DashboardController:
         visit_events = visit_runtime.get("recent_operator_events", [])
         if not isinstance(visit_events, list):
             visit_events = []
+        gather_events = gather_runtime.get("recent_operator_events", [])
+        if not isinstance(gather_events, list):
+            gather_events = []
         merged_events = []
-        for item in operator_events + proof_events + visit_events:
+        for item in operator_events + proof_events + visit_events + gather_events:
             if isinstance(item, dict) and item.get("message"):
                 merged_events.append(item)
         if merged_events:
@@ -1479,26 +1548,38 @@ class DashboardController:
             snapshot["latest_proof_decision"] = visit_runtime.get("latest_decision", {}) if isinstance(visit_runtime.get("latest_decision"), dict) else {}
             snapshot["latest_proof_feedback"] = str(visit_runtime.get("latest_feedback", "") or "")
             snapshot["proof_artifact_dir"] = str(visit_runtime.get("artifact_dir", "") or "")
+        elif active_mode == "gather_mission":
+            snapshot["latest_proof_decision"] = visit_runtime.get("latest_decision", {}) if isinstance(visit_runtime.get("latest_decision"), dict) else {}
+            snapshot["latest_proof_feedback"] = str(gather_runtime.get("latest_feedback", "") or visit_runtime.get("latest_feedback", "") or "")
+            snapshot["proof_artifact_dir"] = str(gather_runtime.get("artifact_dir", "") or visit_runtime.get("artifact_dir", "") or "")
         else:
             snapshot["latest_proof_decision"] = proof_runtime.get("latest_decision", {}) if isinstance(proof_runtime.get("latest_decision"), dict) else {}
             snapshot["latest_proof_feedback"] = str(proof_runtime.get("latest_feedback", "") or "")
             snapshot["proof_artifact_dir"] = str(proof_runtime.get("artifact_dir", "") or "")
 
-        snapshot["mission_phase"] = str(visit_runtime.get("mission_phase", snapshot.get("mission_phase", "idle")) or "idle")
-        snapshot["mission_status"] = str(visit_runtime.get("mission_status", snapshot.get("mission_status", "idle")) or "idle")
+        mission_runtime = gather_runtime if active_mode == "gather_mission" else visit_runtime
+        snapshot["mission_phase"] = str(mission_runtime.get("mission_phase", snapshot.get("mission_phase", "idle")) or "idle")
+        snapshot["mission_status"] = str(mission_runtime.get("mission_status", snapshot.get("mission_status", "idle")) or "idle")
         snapshot["search_bias_active"] = bool(visit_runtime.get("search_bias_active", snapshot.get("search_bias_active", False)))
-        current_target_id = str(visit_runtime.get("current_target_id", snapshot.get("current_target_id", "")) or "")
-        if active_mode == "visit_mission" and snapshot["mission_status"] != "running":
+        current_target_id = str(mission_runtime.get("current_target_id", visit_runtime.get("current_target_id", snapshot.get("current_target_id", ""))) or "")
+        if active_mode in {"visit_mission", "gather_mission"} and snapshot["mission_status"] != "running":
             current_target_id = ""
         snapshot["current_target_id"] = current_target_id
-        snapshot["visit_index"] = int(visit_runtime.get("visit_index", snapshot.get("visit_index", 0)) or 0)
+        snapshot["visit_index"] = int(mission_runtime.get("visit_index", visit_runtime.get("visit_index", snapshot.get("visit_index", 0))) or 0)
         snapshot["visited_targets"] = list(visit_runtime.get("visited_targets", snapshot.get("visited_targets", [])) or [])
-        snapshot["remaining_targets"] = list(visit_runtime.get("remaining_targets", snapshot.get("remaining_targets", [])) or [])
+        snapshot["remaining_targets"] = list(mission_runtime.get("remaining_targets", visit_runtime.get("remaining_targets", snapshot.get("remaining_targets", []))) or [])
         snapshot["last_visit_result"] = visit_runtime.get("last_visit_result", snapshot.get("last_visit_result", {})) if isinstance(visit_runtime.get("last_visit_result", snapshot.get("last_visit_result", {})), dict) else {}
-        snapshot["mission_verdict"] = visit_verdict
+        snapshot["mission_verdict"] = gather_verdict if active_mode == "gather_mission" and gather_verdict else visit_verdict
         snapshot["route_planning_active"] = bool(visit_runtime.get("route_planning_active", False))
         snapshot["route_target_specs"] = list(visit_runtime.get("route_target_specs", [])) if isinstance(visit_runtime.get("route_target_specs"), list) else []
-        if active_mode == "visit_mission" and snapshot["current_target_id"]:
+        snapshot["gather_phase"] = str(gather_runtime.get("gather_phase", snapshot.get("gather_phase", "idle")) or "idle")
+        snapshot["capture_state"] = gather_runtime.get("capture_state", snapshot.get("capture_state", {})) if isinstance(gather_runtime.get("capture_state", snapshot.get("capture_state", {})), dict) else {}
+        snapshot["zone_pose"] = gather_runtime.get("zone_pose", snapshot.get("zone_pose", {})) if isinstance(gather_runtime.get("zone_pose", snapshot.get("zone_pose", {})), dict) else {}
+        snapshot["zone_score"] = gather_runtime.get("zone_score", snapshot.get("zone_score", {})) if isinstance(gather_runtime.get("zone_score", snapshot.get("zone_score", {})), dict) else {}
+        snapshot["placed_targets"] = list(gather_runtime.get("placed_targets", snapshot.get("placed_targets", [])) or [])
+        snapshot["capture_loss_count"] = int(gather_runtime.get("capture_loss_count", snapshot.get("capture_loss_count", 0)) or 0)
+        snapshot["route_order"] = list(gather_runtime.get("route_order", snapshot.get("route_order", [])) or [])
+        if active_mode in {"visit_mission", "gather_mission"} and snapshot["current_target_id"]:
             snapshot["target_id"] = snapshot["current_target_id"]
         snapshot["policy"] = build_policy_snapshot(snapshot, sim_gate_ready=bool(self.sim_gate_container_id))
 
@@ -2356,6 +2437,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
         env["CHASECAR_BRAIN_STATE_PATH"] = to_container_repo_path(SESSION_ROOT / session_id / "visual" / "brain_state.json")
         env["CHASECAR_BRAIN_FEEDBACK_PATH"] = to_container_repo_path(SESSION_ROOT / session_id / "visual" / "brain_feedback.jsonl")
         env["CHASECAR_VISIT_RUNTIME_PATH"] = to_container_repo_path(self.visit_mission_runtime_path)
+        env["CHASECAR_GATHER_RUNTIME_PATH"] = to_container_repo_path(self.gather_mission_runtime_path)
         env["CHASECAR_INTENT_INBOX_PATH"] = to_container_repo_path(self.intent_inbox_path)
         env["CHASECAR_INTENT_ACK_PATH"] = to_container_repo_path(self.intent_ack_path)
         return env
@@ -2413,6 +2495,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
         try:
             self._clear_llm_proof_runtime_state()
             self._clear_visit_mission_runtime_state()
+            self._clear_gather_mission_runtime_state()
             session_id = make_session_id()
             project_name = f"chasecar_dashboard_{slugify_session(session_id)}"
             validation_dir = ensure_dir(SESSION_ROOT / session_id / "dashboard_validation")
@@ -2843,6 +2926,7 @@ echo "VISUAL_LOG=$LOG_FILE"
             )
             self._clear_llm_proof_runtime_state()
             self._clear_visit_mission_runtime_state()
+            self._clear_gather_mission_runtime_state()
             self._record_operator_event("Environment stopped.", category="environment")
         except Exception as exc:
             self._update_state(
@@ -3068,18 +3152,20 @@ pkill -f "fluxbox" 2>/dev/null || true
         try:
             if scenario.mode == "llm_proof":
                 self._clear_llm_proof_runtime_state()
-            if scenario.mode == "visit_mission":
+            if scenario.mode in {"visit_mission", "gather_mission"}:
                 self._clear_visit_mission_runtime_state()
+            if scenario.mode == "gather_mission":
+                self._clear_gather_mission_runtime_state()
             self._update_state(
                 scenario_state="running",
                 active_scenario=scenario.id,
                 scenario_message=f"running {scenario.id}",
                 latest_artifacts={},
                 motion_evidence=False,
-                proof_state="waiting" if scenario.mode in {"llm_proof", "visit_mission"} else self.state.get("proof_state", "waiting"),
+                proof_state="waiting" if scenario.mode in {"llm_proof", "visit_mission", "gather_mission"} else self.state.get("proof_state", "waiting"),
                 proof_verdict={},
-                mission_phase="setup" if scenario.mode == "visit_mission" else self.state.get("mission_phase", "idle"),
-                mission_status="running" if scenario.mode == "visit_mission" else self.state.get("mission_status", "idle"),
+                mission_phase="setup" if scenario.mode in {"visit_mission", "gather_mission"} else self.state.get("mission_phase", "idle"),
+                mission_status="running" if scenario.mode in {"visit_mission", "gather_mission"} else self.state.get("mission_status", "idle"),
                 search_bias_active=False,
                 current_target_id="",
                 visit_index=0,
@@ -3087,6 +3173,13 @@ pkill -f "fluxbox" 2>/dev/null || true
                 remaining_targets=[],
                 last_visit_result={},
                 mission_verdict={},
+                gather_phase="setup" if scenario.mode == "gather_mission" else "idle",
+                capture_state={},
+                zone_pose={},
+                zone_score={},
+                placed_targets=[],
+                capture_loss_count=0,
+                route_order=[],
             )
             self._record_operator_event(f"{scenario.label} scenario started.", category="scenario")
             self._write_operator_status(
@@ -3103,6 +3196,8 @@ pkill -f "fluxbox" 2>/dev/null || true
                 result = self._run_llm_proof_scenario(scenario)
             elif scenario.mode == "visit_mission":
                 result = self._run_visit_mission_scenario(scenario)
+            elif scenario.mode == "gather_mission":
+                result = self._run_gather_mission_scenario(scenario)
             else:
                 result = self._run_multi_target_scenario(scenario)
             artifacts = result.get("artifacts", {})
@@ -3123,6 +3218,13 @@ pkill -f "fluxbox" 2>/dev/null || true
                 remaining_targets=result.get("remaining_targets", []),
                 last_visit_result=result.get("last_visit_result", {}),
                 mission_verdict=result.get("mission_verdict", {}),
+                gather_phase=result.get("gather_phase", self.state.get("gather_phase", "idle")),
+                capture_state=result.get("capture_state", self.state.get("capture_state", {})),
+                zone_pose=result.get("zone_pose", self.state.get("zone_pose", {})),
+                zone_score=result.get("zone_score", self.state.get("zone_score", {})),
+                placed_targets=result.get("placed_targets", self.state.get("placed_targets", [])),
+                capture_loss_count=int(result.get("capture_loss_count", self.state.get("capture_loss_count", 0)) or 0),
+                route_order=result.get("route_order", self.state.get("route_order", [])),
             )
             self._record_operator_event(result.get("message", f"{scenario.label} complete"), category="scenario")
             self._write_operator_status(
@@ -3137,8 +3239,10 @@ pkill -f "fluxbox" 2>/dev/null || true
             self._cleanup_scenario_processes()
             if scenario.mode == "llm_proof":
                 self._clear_llm_proof_runtime_state()
-            if scenario.mode == "visit_mission":
+            if scenario.mode in {"visit_mission", "gather_mission"}:
                 self._clear_visit_mission_runtime_state()
+            if scenario.mode == "gather_mission":
+                self._clear_gather_mission_runtime_state()
             with self.state_lock:
                 environment_state = self.state.get("environment_state", "stopped")
             if environment_state == "environment_ready":
@@ -3149,10 +3253,17 @@ pkill -f "fluxbox" 2>/dev/null || true
                     motion_evidence=False,
                     last_error="",
                     last_result="scenario cancelled",
-                    proof_state="failed" if scenario.mode in {"llm_proof", "visit_mission"} else self.state.get("proof_state", "waiting"),
-                    mission_phase="failed" if scenario.mode == "visit_mission" else self.state.get("mission_phase", "idle"),
-                    mission_status="failed" if scenario.mode == "visit_mission" else self.state.get("mission_status", "idle"),
+                    proof_state="failed" if scenario.mode in {"llm_proof", "visit_mission", "gather_mission"} else self.state.get("proof_state", "waiting"),
+                    mission_phase="failed" if scenario.mode in {"visit_mission", "gather_mission"} else self.state.get("mission_phase", "idle"),
+                    mission_status="failed" if scenario.mode in {"visit_mission", "gather_mission"} else self.state.get("mission_status", "idle"),
                     search_bias_active=False,
+                    gather_phase="failed" if scenario.mode == "gather_mission" else "idle",
+                    capture_state={},
+                    zone_pose={},
+                    zone_score={},
+                    placed_targets=[],
+                    capture_loss_count=0,
+                    route_order=[],
                 )
             else:
                 self._update_state(
@@ -3166,6 +3277,13 @@ pkill -f "fluxbox" 2>/dev/null || true
                     mission_phase="idle",
                     mission_status="idle",
                     search_bias_active=False,
+                    gather_phase="idle",
+                    capture_state={},
+                    zone_pose={},
+                    zone_score={},
+                    placed_targets=[],
+                    capture_loss_count=0,
+                    route_order=[],
                 )
             self._record_operator_event(f"{scenario.label} scenario cancelled.", category="scenario")
         except Exception as exc:
@@ -3546,6 +3664,93 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "visited_targets": list(runtime.get("visited_targets", [])) if isinstance(runtime.get("visited_targets"), list) else [],
             "remaining_targets": list(runtime.get("remaining_targets", [])) if isinstance(runtime.get("remaining_targets"), list) else [],
             "last_visit_result": runtime.get("last_visit_result", {}) if isinstance(runtime.get("last_visit_result"), dict) else {},
+        }
+        self._write_scenario_result(scenario.id, payload)
+        return payload
+
+    def _run_gather_mission_scenario(self, scenario: ScenarioDefinition) -> Dict[str, Any]:
+        scenario_dir = self._scenarios_dir() or ensure_dir(self._current_validation_dir() or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation"))
+        log_path = ensure_dir(scenario_dir) / f"{scenario.id}.log"
+        env = self._scenario_env(scenario)
+        command = [
+            sys.executable,
+            str(SCRIPTS_DIR / "gather_mission_runner.py"),
+            "--dashboard-url",
+            str(self.state.get("dashboard_url", f"http://127.0.0.1:{self.port}") or f"http://127.0.0.1:{self.port}"),
+            "--scenario-id",
+            scenario.id,
+            "--scenario-label",
+            scenario.label,
+            "--visit-runtime-json",
+            str(self.visit_mission_runtime_path),
+            "--gather-runtime-json",
+            str(self.gather_mission_runtime_path),
+            "--keep-environment",
+        ]
+
+        with log_path.open("w", encoding="utf-8") as handle:
+            proc = subprocess.Popen(
+                command,
+                cwd=str(REPO_ROOT),
+                env=env,
+                stdout=handle,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            self.active_scenario_proc = proc
+            while proc.poll() is None:
+                if self.scenario_cancel.is_set():
+                    self._terminate_process(proc)
+                    raise RuntimeError("scenario cancelled")
+                time.sleep(1.0)
+
+        output = log_path.read_text(encoding="utf-8", errors="ignore") if log_path.exists() else ""
+        summary_path_raw = parse_marker(output, "GATHER_MISSION_SUMMARY=")
+        summary_path = Path(summary_path_raw) if summary_path_raw else None
+        summary = read_json(summary_path.with_name("summary.json")) if summary_path and summary_path.exists() else {}
+        verdict = read_json(summary_path) if summary_path and summary_path.exists() else {}
+        pass_flag = bool(verdict.get("pass")) if verdict else bool(summary.get("pass"))
+        mission_root = summary_path.parent if summary_path and summary_path.exists() else None
+        target_results = read_json(mission_root / "target_results.json") if mission_root is not None else {}
+        visit_runtime = self._visit_mission_runtime_state()
+        gather_runtime = self._gather_mission_runtime_state()
+        artifacts = {
+            "gather_mission": str(mission_root) if mission_root is not None else "",
+            "mission_verdict": str(summary_path) if summary_path and summary_path.exists() else "",
+            "target_results": str(mission_root / "target_results.json") if mission_root is not None else "",
+            "scorecard": str(mission_root / "scorecard.md") if mission_root is not None else "",
+            "log": str(log_path),
+        }
+        if proc.returncode not in {0, 2} and not verdict:
+            raise RuntimeError(output.strip() or "gather mission scenario failed")
+
+        payload = {
+            "scenario_id": scenario.id,
+            "phase": scenario.phase,
+            "pass": pass_flag,
+            "artifacts": artifacts,
+            "summary": summary,
+            "mission_verdict": verdict,
+            "proof_verdict": verdict,
+            "target_results": target_results,
+            "message": "Gather mission passed" if pass_flag else "Gather mission failed",
+            "motion_evidence": bool(pass_flag or gather_runtime.get("latest_control_command")),
+            "proof_state": str(visit_runtime.get("proof_state", "completed" if pass_flag else "failed") or ("completed" if pass_flag else "failed")),
+            "mission_phase": str(gather_runtime.get("mission_phase", "completed" if pass_flag else "failed") or ("completed" if pass_flag else "failed")),
+            "mission_status": str(gather_runtime.get("mission_status", "completed" if pass_flag else "failed") or ("completed" if pass_flag else "failed")),
+            "search_bias_active": bool(visit_runtime.get("search_bias_active", False)),
+            "current_target_id": str(gather_runtime.get("current_target_id", visit_runtime.get("current_target_id", "")) or ""),
+            "visit_index": int(gather_runtime.get("visit_index", visit_runtime.get("visit_index", 0)) or 0),
+            "visited_targets": list(visit_runtime.get("visited_targets", [])) if isinstance(visit_runtime.get("visited_targets"), list) else [],
+            "remaining_targets": list(gather_runtime.get("remaining_targets", [])) if isinstance(gather_runtime.get("remaining_targets"), list) else [],
+            "last_visit_result": visit_runtime.get("last_visit_result", {}) if isinstance(visit_runtime.get("last_visit_result"), dict) else {},
+            "gather_phase": str(gather_runtime.get("gather_phase", "completed" if pass_flag else "failed") or ("completed" if pass_flag else "failed")),
+            "capture_state": gather_runtime.get("capture_state", {}) if isinstance(gather_runtime.get("capture_state"), dict) else {},
+            "zone_pose": gather_runtime.get("zone_pose", {}) if isinstance(gather_runtime.get("zone_pose"), dict) else {},
+            "zone_score": gather_runtime.get("zone_score", {}) if isinstance(gather_runtime.get("zone_score"), dict) else {},
+            "placed_targets": list(gather_runtime.get("placed_targets", [])) if isinstance(gather_runtime.get("placed_targets"), list) else [],
+            "capture_loss_count": int(gather_runtime.get("capture_loss_count", 0) or 0),
+            "route_order": list(gather_runtime.get("route_order", [])) if isinstance(gather_runtime.get("route_order"), list) else [],
         }
         self._write_scenario_result(scenario.id, payload)
         return payload

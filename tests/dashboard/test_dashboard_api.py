@@ -24,12 +24,14 @@ def test_00_scenario_catalog_exposes_browser_demo_and_proof_fields(dashboard_cli
     assert "llm_turn_then_go_proof" in scenarios
     assert "visit_single_ball_proof" in scenarios
     assert "visit_three_ball_sequence" in scenarios
+    assert "corral_single_ball_place" in scenarios
     assert scenarios["llm_turn_then_go_proof"]["browser_default"] is True
     assert scenarios["llm_turn_then_go_proof"]["featured"] is True
     assert scenarios["m3_single_target"]["browser_default"] is True
     assert scenarios["multi_target_rehearsal"]["browser_default"] is False
     assert scenarios["visit_single_ball_proof"]["browser_default"] is False
     assert scenarios["visit_three_ball_sequence"]["browser_default"] is False
+    assert scenarios["corral_single_ball_place"]["browser_default"] is False
 
     state = dashboard_client.state()
     assert "proof_state" in state
@@ -44,6 +46,13 @@ def test_00_scenario_catalog_exposes_browser_demo_and_proof_fields(dashboard_cli
     assert "visited_targets" in state
     assert "remaining_targets" in state
     assert "mission_verdict" in state
+    assert "gather_phase" in state
+    assert "capture_state" in state
+    assert "zone_pose" in state
+    assert "zone_score" in state
+    assert "placed_targets" in state
+    assert "capture_loss_count" in state
+    assert "route_order" in state
     assert "world_stream_frame_count" in state
     assert "world_stream_latest_frame_utc" in state
     assert "world_stream_frame_age_s" in state

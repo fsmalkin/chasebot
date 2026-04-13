@@ -73,6 +73,7 @@ const controls = {
 
 const demoFlow = [
   { id: 'visit_route_planning', label: 'LLM Route Planning' },
+  { id: 'corral_single_ball_place', label: 'Single-Ball Corral' },
   { id: 'llm_turn_then_go_proof', label: 'LLM Turn + Go' },
   { id: 'visit_single_ball_proof', label: 'Visit Single Ball' },
   { id: 'visit_three_ball_sequence', label: 'Visit 3 Ball Sequence' },
@@ -811,6 +812,12 @@ function renderCameraState(state) {
     stateEls.debugVisualStatus.textContent = 'target locked';
   } else if (proofState === 'moving') {
     stateEls.debugVisualStatus.textContent = 'moving';
+  } else if (proofState === 'visiting') {
+    stateEls.debugVisualStatus.textContent = 'visiting';
+  } else if (proofState === 'capturing') {
+    stateEls.debugVisualStatus.textContent = 'capturing';
+  } else if (proofState === 'placing') {
+    stateEls.debugVisualStatus.textContent = 'placing';
   } else if (proofState === 'completed') {
     stateEls.debugVisualStatus.textContent = 'completed';
   } else if (proofState === 'failed') {

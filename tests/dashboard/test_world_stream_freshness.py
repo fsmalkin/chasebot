@@ -239,6 +239,7 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
     controller.lock_path = controller.runtime_dir / "dashboard_session.lock.json"
     controller.llm_proof_runtime_path = controller.runtime_dir / "llm_turn_then_go_runtime.json"
     controller.visit_mission_runtime_path = controller.runtime_dir / "visit_mission_runtime.json"
+    controller.gather_mission_runtime_path = controller.runtime_dir / "gather_mission_runtime.json"
     controller.intent_inbox_path = controller.runtime_dir / "intent_inbox.json"
     controller.intent_ack_path = controller.runtime_dir / "intent_ack.json"
     controller.peer_project_cleanup = "exclusive"
@@ -325,6 +326,13 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
         "remaining_targets": [],
         "last_visit_result": {},
         "mission_verdict": {},
+        "gather_phase": "idle",
+        "capture_state": {},
+        "zone_pose": {},
+        "zone_score": {},
+        "placed_targets": [],
+        "capture_loss_count": 0,
+        "route_order": [],
         "latest_operator_event": "",
         "recent_operator_events": [],
         "world_stream_url": "http://127.0.0.1:8891/vnc.html?autoconnect=1&resize=scale&path=websockify",
@@ -358,6 +366,7 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
     controller._current_visual_dir = lambda: tmp_path / "visual"
     controller._llm_supervisor_state = lambda: {}
     controller._visit_mission_runtime_state = lambda: {}
+    controller._gather_mission_runtime_state = lambda: {}
     return controller
 
 
@@ -1186,6 +1195,17 @@ def test_beta_dashboard_default_route_stays_inert_before_viewer_ready(tmp_path):
     assert state["operator_view_url"] == ""
 
 
+def test_beta_dashboard_includes_corral_menu_and_stage_mapping():
+    html_path = REPO_ROOT / "runtime/dashboard/beta_dashboard.html"
+    html = html_path.read_text(encoding="utf-8")
+
+    assert "pickScenario('corral_single_ball_place')" in html
+    assert "const CORRAL_STAGE_LABELS = ['Init','Visit','Capture','Place','Done'];" in html
+    assert "Acquiring the ball" in html
+    assert "Controlling the ball" in html
+    assert "Placing ball into the zone" in html
+
+
 def test_beta_dashboard_world_surface_prefers_world_feed_when_renderable():
     snapshots = _beta_dashboard_world_snapshots(
         {
@@ -1402,6 +1422,7 @@ def test_base_env_uses_instance_runtime_files(tmp_path):
     env = controller._base_env(session_id="20260412T120000Z", world_stream_port=8891, operator_view_port=14500)
 
     assert env["CHASECAR_VISIT_RUNTIME_PATH"].endswith("/runtime/visit_mission_runtime.json")
+    assert env["CHASECAR_GATHER_RUNTIME_PATH"].endswith("/runtime/gather_mission_runtime.json")
     assert env["CHASECAR_INTENT_INBOX_PATH"].endswith("/runtime/intent_inbox.json")
     assert env["CHASECAR_INTENT_ACK_PATH"].endswith("/runtime/intent_ack.json")
 
@@ -1447,6 +1468,144 @@ def test_run_visit_mission_scenario_uses_host_visit_runtime_path(tmp_path, monke
     path_index = command.index("--visit-runtime-json") + 1
     assert command[path_index] == str(controller.visit_mission_runtime_path)
     assert result["pass"] is True
+
+
+def test_request_scenario_run_corral_queues_after_sim_reset(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["environment_state"] = "environment_ready"
+    controller.state["scenario_state"] = "ready"
+    controller._refresh_control_plane_state = lambda force=False: None
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            self._alive = False
+            started.append(self)
+
+        def start(self) -> None:
+            self._alive = True
+
+        def is_alive(self) -> bool:
+            return self._alive
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_scenario_run("corral_single_ball_place")
+
+    assert status == 202
+    assert payload["accepted"] is True
+    assert "queued after sim reset" in payload["message"]
+    assert controller.pending_scenario_id == "corral_single_ball_place"
+    assert started
+    assert started[0].target == controller._reset_environment_worker
+
+
+def test_run_gather_mission_scenario_uses_host_runtime_paths(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    controller.state["dashboard_url"] = "http://127.0.0.1:8860/"
+    controller._scenarios_dir = lambda: tmp_path / "scenarios"
+    controller._current_validation_dir = lambda: tmp_path / "validation"
+    controller._visit_mission_runtime_state = lambda: {
+        "proof_state": "completed",
+        "visited_targets": ["ball_1"],
+        "last_visit_result": {"target_id": "ball_1", "pass": True},
+    }
+    controller._gather_mission_runtime_state = lambda: {
+        "mission_phase": "completed",
+        "mission_status": "completed",
+        "gather_phase": "completed",
+        "placed_targets": ["ball_1"],
+        "capture_loss_count": 0,
+        "route_order": ["ball_1"],
+        "artifact_dir": str(tmp_path / "mission"),
+    }
+    controller._scenario_env = lambda _scenario: {
+        "CHASECAR_VISIT_RUNTIME_PATH": "/workspaces/chasecar/runtime/dashboard/visit_mission_runtime.json",
+        "CHASECAR_GATHER_RUNTIME_PATH": "/workspaces/chasecar/runtime/dashboard/gather_mission_runtime.json",
+    }
+
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    mission_verdict_path = mission_root / "mission_verdict.json"
+    _write_json(mission_verdict_path, {"pass": True, "type": "gather_mission"})
+    _write_json(mission_root / "summary.json", {"pass": True})
+    _write_json(mission_root / "target_results.json", {"targets": []})
+
+    captured: dict[str, object] = {}
+
+    class _FakeProc:
+        def __init__(self, cmd, stdout_handle) -> None:
+            captured["cmd"] = list(cmd)
+            stdout_handle.write(f"GATHER_MISSION_SUMMARY={mission_verdict_path}\n")
+            stdout_handle.flush()
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+    def _fake_popen(command, **kwargs):
+        return _FakeProc(command, kwargs["stdout"])
+
+    monkeypatch.setattr(dashboard_service.subprocess, "Popen", _fake_popen)
+
+    result = controller._run_gather_mission_scenario(dashboard_service.SCENARIOS_BY_ID["corral_single_ball_place"])
+
+    command = captured["cmd"]
+    assert "--visit-runtime-json" in command
+    assert "--gather-runtime-json" in command
+    visit_index = command.index("--visit-runtime-json") + 1
+    gather_index = command.index("--gather-runtime-json") + 1
+    assert command[visit_index] == str(controller.visit_mission_runtime_path)
+    assert command[gather_index] == str(controller.gather_mission_runtime_path)
+    assert result["pass"] is True
+    assert result["artifacts"]["gather_mission"] == str(mission_root)
+
+
+def test_get_state_merges_gather_runtime_fields(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["active_scenario"] = "corral_single_ball_place"
+    controller._visit_mission_runtime_state = lambda: {
+        "proof_state": "placing",
+        "mission_phase": "place",
+        "mission_status": "running",
+        "current_target_id": "ball_1",
+        "visit_index": 1,
+        "visited_targets": [],
+        "remaining_targets": [],
+        "last_visit_result": {},
+        "latest_feedback": "Placing Ball 1 into the zone.",
+    }
+    controller._gather_mission_runtime_state = lambda: {
+        "mission_phase": "place",
+        "mission_status": "running",
+        "gather_phase": "place",
+        "current_target_id": "ball_1",
+        "visit_index": 1,
+        "placed_targets": [],
+        "remaining_targets": [],
+        "route_order": ["ball_1"],
+        "capture_state": {"captured": True},
+        "capture_loss_count": 0,
+        "zone_pose": {"x": 2.4, "y": 0.0, "radius_m": 0.2},
+        "zone_score": {"inside_zone": False},
+        "latest_feedback": "Placing Ball 1 into the zone.",
+        "artifact_dir": str(tmp_path / "mission"),
+        "mission_verdict": {"type": "gather_mission"},
+    }
+
+    state = controller.get_state()
+
+    assert state["proof_state"] == "placing"
+    assert state["mission_phase"] == "place"
+    assert state["gather_phase"] == "place"
+    assert state["capture_state"]["captured"] is True
+    assert state["zone_pose"]["radius_m"] == 0.2
+    assert state["route_order"] == ["ball_1"]
+    assert state["proof_artifact_dir"] == str(tmp_path / "mission")
+    assert state["latest_proof_feedback"] == "Placing Ball 1 into the zone."
 
 
 def test_wait_for_world_stream_ready_accepts_fresh_stream(tmp_path, monkeypatch):

@@ -368,6 +368,8 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
             <button class="dm-item" onclick="pickScenario('m3_left')">M3 Left</button>
             <button class="dm-item" onclick="pickScenario('m3_right')">M3 Right</button>
             <div class="dm-sep"></div>
+            <button class="dm-item" onclick="pickScenario('corral_single_ball_place')">Corral 1-ball</button>
+            <button class="dm-item" onclick="pickScenario('visit_route_planning')">LLM Route Plan</button>
             <button class="dm-item" onclick="pickScenario('visit_single_ball_proof')">Visit 1-ball</button>
             <button class="dm-item" onclick="pickScenario('visit_three_ball_sequence')">Visit 3-ball</button>
             <button class="dm-item" onclick="pickScenario('visit_m3_positions')">Visit M3 positions</button>
@@ -548,19 +550,41 @@ function renderAll() {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  Derived helpers
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const STAGE_LABELS = ['Init','Spawn','Search','Approach','Done'];
+const DEFAULT_STAGE_LABELS = ['Init','Spawn','Search','Approach','Done'];
+const CORRAL_STAGE_LABELS = ['Init','Visit','Capture','Place','Done'];
 
-// proof_state â†’ stage index (0=Init 1=Spawn 2=Search 3=Approach 4=Done)
+function currentScenarioId(s) {
+  const active = String(s.active_scenario || '').trim();
+  if (active) return active;
+  const verdict = s.mission_verdict || {};
+  return String(verdict.scenario_id || '').trim();
+}
+
+function isCorralScenario(s) {
+  return currentScenarioId(s) === 'corral_single_ball_place';
+}
+
+function stageLabelsForState(s) {
+  return isCorralScenario(s) ? CORRAL_STAGE_LABELS : DEFAULT_STAGE_LABELS;
+}
+
 function stageForState(s) {
   const scenario = s.scenario_state || 'idle';
   const ps       = (s.proof_state   || '').toLowerCase();
   const verdict  = s.proof_verdict  || {};
+  const stageLabels = stageLabelsForState(s);
 
-  if (verdict.pass === true || ps === 'completed') return 5; // past end = all done
-  if (scenario !== 'running') return 0;                      // Init is "now"
+  if (verdict.pass === true || ps === 'completed') return stageLabels.length;
+  if (scenario !== 'running') return 0;
+  if (isCorralScenario(s)) {
+    if (ps === 'visiting')   return 1;
+    if (ps === 'capturing')  return 2;
+    if (ps === 'placing')    return 3;
+    return 0;
+  }
   if (ps === 'searching')                          return 2;
   if (ps === 'target_locked' || ps === 'moving')   return 3;
-  return 1;                                                  // running + waiting = Spawn
+  return 1;
 }
 
 function isFailed(s) {
@@ -572,11 +596,17 @@ function deriveTopbar(s) {
   const scenario = s.scenario_state || 'idle';
   const ps       = (s.proof_state   || '').toLowerCase();
   const verdict  = s.proof_verdict  || {};
-  const active   = s.active_scenario || '';
+  const active   = currentScenarioId(s);
 
   if (verdict.pass === true  || ps === 'completed') return { dot:'ok',   phrase:'Proof passed OK',      sub: active };
   if (verdict.pass === false || ps === 'failed')    return { dot:'bad',  phrase:'Proof failed',         sub: active };
   if (scenario === 'running') {
+    if (isCorralScenario(s)) {
+      if (ps === 'visiting')  return { dot:'warn', phrase:'Acquiring the ball',        sub: active };
+      if (ps === 'capturing') return { dot:'warn', phrase:'Controlling the ball',      sub: active };
+      if (ps === 'placing')   return { dot:'warn', phrase:'Placing ball into the zone', sub: active };
+      if (ps === 'waiting')   return { dot:'warn', phrase:'Preparing corral run',       sub: active };
+    }
     if (ps === 'searching')                         return { dot:'warn', phrase:'Searching for ball',   sub: active };
     if (ps === 'target_locked' || ps === 'moving')  return { dot:'warn', phrase:'Approaching target',   sub: active };
     if (ps === 'waiting')                           return { dot:'warn', phrase:'Waiting for first turn',sub: active };
@@ -1108,13 +1138,14 @@ function imgFail(which) {
 }
 
 function renderStages() {
+  const stageLabels = stageLabelsForState(S);
   const nowIdx   = stageForState(S);  // 0-5; 5 = all complete
-  const allDone  = nowIdx >= STAGE_LABELS.length;
+  const allDone  = nowIdx >= stageLabels.length;
   const failed   = isFailed(S);
   const container = document.getElementById('stages');
   container.innerHTML = '';
 
-  STAGE_LABELS.forEach((label, i) => {
+  stageLabels.forEach((label, i) => {
     const st = document.createElement('div');
     st.className = 'st';
 
@@ -1134,7 +1165,7 @@ function renderStages() {
     st.appendChild(lbl);
     container.appendChild(st);
 
-    if (i < STAGE_LABELS.length - 1) {
+    if (i < stageLabels.length - 1) {
       const conn = document.createElement('div');
       conn.className = 'st-conn' + ((allDone || i < nowIdx) ? ' done' : '');
       container.appendChild(conn);
@@ -1345,7 +1376,7 @@ function renderL1() {
 function colorProofState(ps) {
   if (ps === 'completed') return 'ok';
   if (ps === 'failed')    return 'bad';
-  if (ps === 'searching' || ps === 'target_locked' || ps === 'moving') return 'warn';
+  if (ps === 'searching' || ps === 'target_locked' || ps === 'moving' || ps === 'visiting' || ps === 'capturing' || ps === 'placing') return 'warn';
   return 'dim';
 }
 

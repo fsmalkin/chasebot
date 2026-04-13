@@ -58,7 +58,10 @@ def _prepare_runtime_sdf(sim_share_dir: str, controller_config_path: str) -> str
 
     Jazzy's GazeboSimROS2ControlPlugin fails to initialize if parameters are empty.
     """
-    source_sdf = os.path.join(sim_share_dir, 'ros2_config', 'urdf', 'jetbot_core_ignition_v1.6.0.sdf')
+    source_sdf_name = os.environ.get('CHASECAR_ROBOT_SDF_NAME', 'jetbot_core_ignition_v1.7.0.sdf').strip() or 'jetbot_core_ignition_v1.7.0.sdf'
+    source_sdf = os.path.join(sim_share_dir, 'ros2_config', 'urdf', source_sdf_name)
+    if not os.path.isfile(source_sdf):
+        raise RuntimeError(f'Unable to locate requested robot SDF: {source_sdf}')
 
     with open(source_sdf, 'r', encoding='utf-8') as fp:
         sdf_text = fp.read()
@@ -93,7 +96,8 @@ def _prepare_runtime_sdf(sim_share_dir: str, controller_config_path: str) -> str
     runtime_sdf_text = sdf_text[:plugin_start] + plugin_block + sdf_text[plugin_end:]
     runtime_dir = os.path.join(tempfile.gettempdir(), 'chasecar_runtime')
     os.makedirs(runtime_dir, exist_ok=True)
-    runtime_sdf = os.path.join(runtime_dir, f'jetbot_core_ignition_v1.6.0.{os.getpid()}.sdf')
+    runtime_stub = os.path.splitext(os.path.basename(source_sdf_name))[0]
+    runtime_sdf = os.path.join(runtime_dir, f'{runtime_stub}.{os.getpid()}.sdf')
     with open(runtime_sdf, 'w', encoding='utf-8') as fp:
         fp.write(runtime_sdf_text)
     return runtime_sdf
