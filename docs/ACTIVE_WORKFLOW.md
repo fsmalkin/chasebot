@@ -22,12 +22,20 @@ Legacy compatibility:
    - `docker compose --profile isaac up`
 3. UAT orchestrator:
    - `docker compose --profile uat run uat-orchestrator`
+4. Telegram wait bridge:
+   - `docker compose --profile telegram up -d telegram-daemon`
 
 Windows wrappers:
 
 1. `scripts/run_compose_gate.ps1`
 2. `scripts/run_compose_isaac.ps1`
 3. `scripts/run_compose_uat.ps1`
+4. `scripts/run_telegram_wait_daemon.ps1`
+
+Telegram adjunct tools:
+
+1. `scripts/telegram_preflight.ps1`
+2. `scripts/register_telegram_mcp.ps1`
 
 Compose hygiene:
 
@@ -38,6 +46,21 @@ Compose hygiene:
    - `chasecar_gate_firstuat_<timestamp>`
 3. Preferred first operator entrypoint performs stale gate cleanup automatically:
    - `scripts/run_first_uat.ps1`
+
+## Telegram Wait Bridge
+
+This is an operator-adjacent service and does not participate in sim/UAT pass-fail.
+
+1. Preflight bot credentials:
+   - `powershell -ExecutionPolicy Bypass -File scripts/telegram_preflight.ps1 -CheckBot`
+2. Resolve the latest chat id when pairing a new bot/chat:
+   - `powershell -ExecutionPolicy Bypass -File scripts/telegram_preflight.ps1 -LatestChatId`
+3. Start the daemon:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_telegram_wait_daemon.ps1 -Action up -Build`
+4. Register the repo-local MCP entry:
+   - `powershell -ExecutionPolicy Bypass -File scripts/register_telegram_mcp.ps1`
+5. Operational note:
+   - `telegram_send` expects the human to reply directly to the Telegram prompt message so the daemon can match the response.
 
 ## First Operator Path
 

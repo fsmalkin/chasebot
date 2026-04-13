@@ -48,6 +48,9 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Route-planning parallel soak | `scripts/run_route_planning_parallel_soak.ps1 -Workers 2 -RunsPerWorker 1` |
 | Dashboard service | `scripts/run_dashboard_service.ps1` |
 | Dashboard validation | `scripts/run_dashboard_validation.ps1` |
+| Telegram preflight | `scripts/telegram_preflight.ps1 -CheckBot` |
+| Telegram daemon | `scripts/run_telegram_wait_daemon.ps1 -Action up -Build` |
+| Telegram MCP register | `scripts/register_telegram_mcp.ps1` |
 
 ## Compose Profiles
 
@@ -56,6 +59,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gate lane | `scripts/run_compose_gate.ps1` |
 | Isaac lane | `scripts/run_compose_isaac.ps1` |
 | UAT orchestrator | `scripts/run_compose_uat.ps1` |
+| Telegram wait bridge | `scripts/run_telegram_wait_daemon.ps1` |
 
 UAT modes: `prepare`, `coordinate`, `snapshot`, `orientation`, `nav2`, `multi_target`, `first_uat`, `full_replay`, `pre_llm`
 

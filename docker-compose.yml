@@ -275,8 +275,48 @@ services:
     working_dir: /workspaces/chasecar
     command: ["bash", "-lc", "bash /workspaces/chasecar/uat/orchestrator/run_uat_orchestrator.sh"]
 
+  telegram-daemon:
+    build:
+      context: .
+      dockerfile: containers/telegram-runtime/Dockerfile
+    image: chasecar/telegram-runtime:latest
+    profiles: ["telegram"]
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - telegram_wait_state:/app/data
+    working_dir: /app
+    command: ["python", "-m", "telegram_wait_bridge.wait_daemon"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "telegram_wait_bridge.healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  telegram-mcp-stdio:
+    build:
+      context: .
+      dockerfile: containers/telegram-runtime/Dockerfile
+    image: chasecar/telegram-runtime:latest
+    profiles: ["telegram"]
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - telegram_wait_state:/app/data
+    working_dir: /app
+    command: ["python", "-m", "telegram_wait_bridge.mcp_server"]
+    stdin_open: true
+    restart: "no"
+
 volumes:
   chasecar_ws:
     name: chasecar_ws
   isaac_cache:
   isaac_logs:
+  telegram_wait_state:

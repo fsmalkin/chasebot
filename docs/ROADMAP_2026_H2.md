@@ -125,27 +125,28 @@ Status update as of April 4, 2026:
 5. pivoting the roadmap slice to end-to-end VLA control
 6. replacing deterministic perception, planning, or execution loops with model-generated low-level action
 
-## Next Roadmap Slice: Single-Ball Corral / Place Through Dashboard UAT
+## Next Roadmap Slice: Surface-Aware Single-Ball Corral Placement
 
-The route-planning baseline is now the proved foundation, not the next open
-question. The current focus is not generic gather; it is single-ball
-corral/place repeatability through operator-visible dashboard UAT. Dashboard
-integration is already complete; the remaining milestone work is repeated live
-stability and then button promotion. Multi-ball gather comes after that
-one-ball proof, and onboard planning comes only after multi-ball gather is
-stable enough to benchmark meaningfully.
+The route-planning baseline is now the proved foundation, and single-ball
+corral/place through dashboard UAT is complete. The immediate next slice is not
+multi-ball gather yet. It is to model turf-like and grass-like surface friction
+in sim, then use that friction intentionally so placed balls settle in the zone
+instead of rolling through and overshooting after release. Multi-ball gather
+comes after that surface-aware one-ball behavior is stable, and onboard
+planning comes only after multi-ball gather is stable enough to benchmark
+meaningfully.
 
-For this first corral/place proof we assume smooth-surface operation such as
-soccer fields or similar turf-like practice surfaces. That keeps the milestone
-focused on controlled placement with a front catcher instead of trying to
-generalize a harder bump-and-roll behavior too early.
+For this next slice we still assume soccer fields or similar practice surfaces,
+but we no longer treat them as effectively frictionless. The next proof should
+make realistic surface friction work in favor of controlled placement, not
+fight against it.
 
 ```mermaid
 flowchart LR
-    A[Route-planning baseline] --> B[Single-ball corral headless gate]
-    B --> C[Dashboard integration complete]
-    C --> D[Dashboard 3/3 stabilization]
-    D --> E[Primary dashboard button promotion]
+    A[Route-planning baseline] --> B[Single-ball corral dashboard UAT complete]
+    B --> C[Research turf and grass surface simulation]
+    C --> D[Use friction to stop balls in-zone]
+    D --> E[Corral accel and decel optimization]
     E --> F[Three-ball gather]
     F --> G[Onboard planner evaluation]
 ```
@@ -172,7 +173,7 @@ Exit criterion for this step:
 
 1. keep the route-planning serial gate green while corral/place work is added
 
-### Step 2: Single-Ball Corral / Place Through Dashboard UAT
+### Step 2: Single-Ball Corral / Place Through Dashboard UAT - Complete
 
 Goal: the robot keeps one ball controlled at the front of the robot and places
 it into a designated area, then proves that behavior through the browser
@@ -193,13 +194,11 @@ Work:
 4. stabilize repeated operator-visible dashboard UAT on the one-ball flow until it is green `3/3`
 5. repoint and relabel the old `Run LLM Route Plan` primary button only after the dashboard proof is green
 
-Current status:
+Validated evidence:
 
-1. route-planning regression is already green
-2. the single-ball headless gate is already green
-3. dashboard integration is complete
-4. repeated live dashboard stability is the active blocker
-5. multi-ball gather and onboard planning remain deferred
+1. single-ball headless `5/5`: `artifacts/session/20260413T054235Z/gather_mission_repeatability/campaign_run_summary.json`
+2. clean browser/dashboard `3/3`: `artifacts/session/20260413T_CORRAL_DASHBOARD_UAT_GATE2/dashboard_uat_summary.json`
+3. milestone promotion commit: `98ca4a2`
 
 Acceptance:
 
@@ -222,28 +221,76 @@ Interfaces held constant in this slice:
 4. deferred provider seam: `plan_collection_route(...)`
 5. no frozen-contract changes in this slice
 
-### Step 3: Multi-Ball Gather To Zone
+### Step 3: Surface-Aware Single-Ball Corral Refinement
 
-Goal: extend the proven one-ball corral/place mechanics into a fuller gather
-task only after the dashboard proof is signed off.
+Goal: simulate the real practice surfaces we care about, then tune one-ball
+corral placement so surface friction helps the ball settle inside the zone
+instead of rolling through and overshooting.
 
-Why it comes later:
+Why this is next:
 
-1. the one-ball dashboard proof is the current trust gate
-2. multi-ball gather adds route-order, recovery, and obstacle-persistence complexity that should not delay the first operator-visible milestone
+1. fresh UAT showed the ball can still overshoot after it exits the catcher
+2. real turf and grass surfaces add friction that should arrest the ball earlier than the current sim surface does
+3. it is better to get one-ball place-and-settle behavior right before adding multi-ball gather complexity
 
 Work:
 
-1. introduce `gather_three_ball_zone` only after the one-ball dashboard milestone is complete
+1. research how to simulate turf-like and grass-like practice surfaces in the active Gazebo/SDF stack
+2. choose one canonical friction preset for short turf and one for short grass, then make them repeatable in sim
+3. rerun the one-ball corral proof on those surfaces and measure zone overshoot and settle distance
+4. tune the corral placement behavior so friction works to our advantage once the ball leaves the catcher
+5. keep `visit_route_planning` green while the surface and corral changes land
+
+Acceptance:
+
+1. at least one turf-like surface preset and one grass-like surface preset are reproducible in sim
+2. single-ball corral on the chosen canonical surface settles the ball inside the zone instead of obviously overshooting through the corral
+3. route-planning regression evidence remains green
+
+### Step 4: Corral Time Optimization
+
+Goal: reduce time-to-place after stable surface-aware placement is proven,
+without giving up control.
+
+Why this comes after surface-aware placement:
+
+1. faster push profiles are only useful once the ball settles predictably on the target surface
+2. acceleration and deceleration tuning should optimize a behavior that is already reliable, not mask an overshoot problem
+
+Work:
+
+1. add explicit acceleration and deceleration shaping to the corral approach and push phases
+2. compare mission time against the current surface-aware baseline
+3. keep placement control and zone settle behavior intact while reducing time
+
+Acceptance:
+
+1. mission time improves on the canonical surface-aware one-ball proof
+2. placement still settles inside the zone without reintroducing overshoot
+3. route-planning regression evidence remains green
+
+### Step 5: Multi-Ball Gather To Zone
+
+Goal: extend the proven one-ball corral/place mechanics into a fuller gather
+task only after the surface-aware one-ball placement work is signed off.
+
+Why it comes later:
+
+1. the next real risk is still one-ball placement quality on realistic surfaces
+2. multi-ball gather adds route-order, recovery, and obstacle-persistence complexity that should not delay friction-aware one-ball refinement
+
+Work:
+
+1. introduce `gather_three_ball_zone` only after the surface-aware one-ball milestones are complete
 2. preserve route-planning obstacle avoidance and self-contained resets while extending gather behavior
 3. score multi-ball runs with placed count, route order, mission time, zone score, and capture-loss events
 
 Acceptance:
 
-1. multi-ball gather completes end-to-end after the one-ball dashboard milestone is signed off
+1. multi-ball gather completes end-to-end after the surface-aware one-ball milestones are signed off
 2. route-planning protections remain green while gather complexity increases
 
-### Step 4: Onboard Model for Visit + Gather Planning
+### Step 6: Onboard Model for Visit + Gather Planning
 
 Goal: determine whether a local model on the Orin can take over high-level visit
 and gather planning after the task is stable enough to benchmark fairly.

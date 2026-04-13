@@ -112,6 +112,7 @@ Operator visual signoff order: single-target M3 first, then multi-target GUI reh
 | `ros2_scripts/` | ROS 2 nodes, detectors, relays (~90 Python files) |
 | `ros2_config/` | Launch files, configs, URDFs, worlds, behavior trees |
 | `containers/` | Docker container definitions (core-kilted, sim-gate, dashboard, etc.) |
+| `telegram_wait_bridge/` | Repo-local Telegram wait bridge and MCP runtime |
 | `runtime/` | Runtime contracts, TensorRT config, dashboard assets |
 | `compose/` | Docker Compose image lock |
 | `launch/` | Top-level launch files |
@@ -125,4 +126,5 @@ Key docs:
 - [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md) — canonical workflow and UAT sequencing
 - [docs/LLM_CONTROL_ARCHITECTURE.md](docs/LLM_CONTROL_ARCHITECTURE.md) — layered control architecture
 - [docs/FIRST_UAT_RUNBOOK.md](docs/FIRST_UAT_RUNBOOK.md) — first operator UAT procedure
+- [docs/TELEGRAM_MCP.md](docs/TELEGRAM_MCP.md) — repo-local Telegram wait bridge and MCP setup
 - [AGENTS.md](AGENTS.md) — coding agent execution guidance

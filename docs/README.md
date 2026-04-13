@@ -7,6 +7,7 @@
 - [FIRST_UAT_RUNBOOK.md](FIRST_UAT_RUNBOOK.md) — First operator UAT procedure and triage
 - [DASHBOARD_OPERATOR_GUIDE.md](DASHBOARD_OPERATOR_GUIDE.md) — Browser dashboard and Xpra operator view
 - [QUICK_REFERENCE_ROBOT_CONTROL.md](QUICK_REFERENCE_ROBOT_CONTROL.md) — Quick reference for robot control
+- [TELEGRAM_MCP.md](TELEGRAM_MCP.md) — Repo-local Telegram wait bridge and Codex MCP setup
 
 ### Architecture and Design
 - [LLM_CONTROL_ARCHITECTURE.md](LLM_CONTROL_ARCHITECTURE.md) — Layered LLM supervisor design (bounded intent, deterministic gating)
