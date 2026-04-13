@@ -90,6 +90,8 @@ fi
 if command -v rsync >/dev/null 2>&1; then
   rsync -a --delete \
     --exclude ".git/" \
+    --exclude ".tmp/" \
+    --exclude ".tmp_manual_runner/" \
     --exclude "artifacts/" \
     --exclude "build/" \
     --exclude "install/" \

@@ -62,6 +62,8 @@ DEFAULT_INFERENCE_DEVICE = "cuda:0"
 DEFAULT_MULTI_TARGET_CONFIG = "ros2_config/config/multi_target_nav2_fidelity.yaml"
 DEFAULT_NAV2_CONFIG = "ros2_config/config/nav2_readiness_fidelity.yaml"
 TARGET_MODEL_SDF = "ros2_config/frisbee_target_ball.sdf"
+BASELINE_ROBOT_SDF_NAME = "jetbot_core_ignition_v1.6.0.sdf"
+CORRAL_ROBOT_SDF_NAME = "jetbot_core_ignition_v1.7.0.sdf"
 TARGET_MODEL_NAME_NAV2 = "uat_nav2_target"
 TARGET_MODEL_NAME_SNAPSHOT = "uat_snapshot_target"
 TARGET_MODEL_NAME_PROOF = "llm_turn_then_go_target"
@@ -110,6 +112,7 @@ class ScenarioDefinition:
     mode: str
     browser_default: bool = False
     featured: bool = False
+    robot_sdf_name: str = BASELINE_ROBOT_SDF_NAME
     target_x: float = 1.10
     target_y: float = 0.00
     target_z: float = 0.05
@@ -238,6 +241,7 @@ SCENARIOS = [
         label="Corral Single Ball Place",
         description="Single-ball corral mission: visit, capture, and place the ball into the zone.",
         mode="gather_mission",
+        robot_sdf_name=CORRAL_ROBOT_SDF_NAME,
     ),
 ]
 SCENARIOS_BY_ID = {item.id: item for item in SCENARIOS}
@@ -2453,6 +2457,12 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
         env["CHASECAR_INTENT_ACK_PATH"] = to_container_repo_path(self.intent_ack_path)
         return env
 
+    def _robot_sdf_name_for_startup(self) -> str:
+        pending_scenario = SCENARIOS_BY_ID.get(str(self.pending_scenario_id or "").strip())
+        if pending_scenario is not None:
+            return pending_scenario.robot_sdf_name
+        return BASELINE_ROBOT_SDF_NAME
+
     def _refresh_session_container_ids(self, project_name: str) -> None:
         service_states = self._required_gate_service_states(project_name)
         self.sim_gate_container_id = str(service_states.get("sim-gate", {}).get("container_id", "") or "")
@@ -2588,6 +2598,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     world_stream_port=world_stream_port,
                     operator_view_port=operator_view_port,
                 )
+                env["CHASECAR_ROBOT_SDF_NAME"] = self._robot_sdf_name_for_startup()
                 self._update_state(
                     world_stream_port=world_stream_port,
                     operator_view_port=operator_view_port,
@@ -2980,6 +2991,7 @@ echo "VISUAL_LOG=$LOG_FILE"
             )
             self._world_stream_stale_since_monotonic = 0.0
             env = self._base_env(session_id=session_id, world_stream_port=world_stream_port, operator_view_port=operator_view_port)
+            env["CHASECAR_ROBOT_SDF_NAME"] = self._robot_sdf_name_for_startup()
             self._cleanup_scenario_processes()
             self._teardown_environment(env=env)
             self._update_state(
@@ -3013,6 +3025,7 @@ echo "VISUAL_LOG=$LOG_FILE"
                 world_stream_port=world_stream_port,
                 operator_view_port=operator_view_port,
             )
+            env["CHASECAR_ROBOT_SDF_NAME"] = self._robot_sdf_name_for_startup()
             self._update_state(
                 environment_state="stopping",
                 environment_message="resetting sim",
@@ -3317,6 +3330,7 @@ pkill -f "fluxbox" 2>/dev/null || true
         )
         env.update(
             {
+                "CHASECAR_ROBOT_SDF_NAME": scenario.robot_sdf_name,
                 "CHASECAR_NAV2_TARGET_X": f"{scenario.target_x:.3f}",
                 "CHASECAR_NAV2_TARGET_Y": f"{scenario.target_y:.3f}",
                 "CHASECAR_NAV2_TARGET_Z": f"{scenario.target_z:.3f}",

@@ -53,10 +53,10 @@ Changes:
 
       <!-- Passive U-catcher sized for 10 cm balls on smooth surfaces. -->
       <visual name="catcher_left_visual">
-        <pose>0.115 0.065 -0.022 0 0 0</pose>
+        <pose>0.155 0.060 -0.022 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.09 0.01 0.04</size>
+            <size>0.16 0.01 0.04</size>
           </box>
         </geometry>
         <material>
@@ -67,10 +67,10 @@ Changes:
       </visual>
 
       <visual name="catcher_right_visual">
-        <pose>0.115 -0.065 -0.022 0 0 0</pose>
+        <pose>0.155 -0.060 -0.022 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.09 0.01 0.04</size>
+            <size>0.16 0.01 0.04</size>
           </box>
         </geometry>
         <material>
@@ -84,7 +84,7 @@ Changes:
         <pose>0.075 0.000 -0.022 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.01 0.14 0.04</size>
+            <size>0.01 0.13 0.04</size>
           </box>
         </geometry>
         <material>
@@ -95,19 +95,19 @@ Changes:
       </visual>
 
       <collision name="catcher_left_collision">
-        <pose>0.115 0.065 -0.022 0 0 0</pose>
+        <pose>0.155 0.060 -0.022 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.09 0.01 0.04</size>
+            <size>0.16 0.01 0.04</size>
           </box>
         </geometry>
       </collision>
 
       <collision name="catcher_right_collision">
-        <pose>0.115 -0.065 -0.022 0 0 0</pose>
+        <pose>0.155 -0.060 -0.022 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.09 0.01 0.04</size>
+            <size>0.16 0.01 0.04</size>
           </box>
         </geometry>
       </collision>
@@ -116,7 +116,7 @@ Changes:
         <pose>0.075 0.000 -0.022 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.01 0.14 0.04</size>
+            <size>0.01 0.13 0.04</size>
           </box>
         </geometry>
       </collision>

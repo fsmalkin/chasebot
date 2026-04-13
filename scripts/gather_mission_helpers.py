@@ -14,6 +14,7 @@ DEFAULT_ZONE_WORLD_Y = 0.00
 DEFAULT_ZONE_RADIUS_M = 0.20
 DEFAULT_ZONE_DWELL_S = 1.0
 DEFAULT_CAPTURE_LOSS_GRACE_S = 1.0
+DEFAULT_TARGET_BALL_RADIUS_M = 0.05
 
 
 @dataclass(frozen=True)
@@ -42,10 +43,10 @@ class ZoneSpec:
 @dataclass(frozen=True)
 class CaptureEnvelope:
     min_x_m: float = 0.045
-    max_x_m: float = 0.200
+    max_x_m: float = 0.240
     max_abs_y_m: float = 0.055
-    recapture_max_x_m: float = 0.700
-    recapture_max_abs_y_m: float = 0.160
+    recapture_max_x_m: float = 0.850
+    recapture_max_abs_y_m: float = 0.180
     loss_grace_s: float = DEFAULT_CAPTURE_LOSS_GRACE_S
 
 
@@ -68,6 +69,7 @@ class CaptureSnapshot:
 class ZoneSnapshot:
     zone_distance_m: float
     inside_zone: bool
+    center_inside_zone: bool
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -252,9 +254,11 @@ def zone_snapshot(ball_pose: dict[str, Any], zone: ZoneSpec) -> ZoneSnapshot | N
     dx = ball_xy[0] - float(zone.world_x)
     dy = ball_xy[1] - float(zone.world_y)
     distance_m = math.hypot(dx, dy)
+    center_inside_zone = distance_m <= max(float(zone.radius_m), 0.0)
     return ZoneSnapshot(
         zone_distance_m=round(distance_m, 6),
-        inside_zone=distance_m <= max(float(zone.radius_m), 0.0),
+        inside_zone=distance_m <= max(float(zone.radius_m), 0.0) + DEFAULT_TARGET_BALL_RADIUS_M,
+        center_inside_zone=center_inside_zone,
     )
 
 
@@ -345,18 +349,60 @@ def compute_place_command(
     zone_x_m, zone_y_m = zone_rel
     zone_heading_rad = math.atan2(zone_y_m, max(zone_x_m, 1.0e-6))
     zone_distance = math.hypot(zone_x_m, zone_y_m)
+    zone_radius = max(zone.radius_m, 0.05)
+    ball_zone_score = zone_snapshot(ball_pose, zone)
+    ball_zone_distance = ball_zone_score.zone_distance_m if ball_zone_score else zone_distance
+    ball_to_zone_x_m = zone_x_m - capture.ball_x_m
+    ball_to_zone_y_m = zone_y_m - capture.ball_y_m
+    near_zone = ball_zone_distance < zone_radius + 0.35
+    final_approach = ball_zone_distance < zone_radius + 0.25
+    finish_push_corridor = (
+        near_zone
+        and ball_to_zone_x_m > 0.08
+        and abs(ball_to_zone_y_m) <= 0.20
+    )
     if not capture.captured:
         angular = clamp((capture.ball_y_m * 12.0) + (zone_heading_rad * 0.6), -1.0, 1.0)
-        linear = 0.12 if capture.within_recapture_window else 0.08
+        if finish_push_corridor and capture.within_recapture_window:
+            angular = clamp(capture.ball_y_m * 6.0, -0.25, 0.25)
+        elif near_zone:
+            angular = clamp((ball_to_zone_y_m * 9.0) + (zone_heading_rad * 0.45), -0.65, 0.65)
+        if final_approach and abs(ball_to_zone_y_m) <= 0.10:
+            angular = clamp(angular, -0.45, 0.45)
+        linear = 0.07 if capture.within_recapture_window else 0.03
+        if finish_push_corridor and capture.within_recapture_window:
+            linear = 0.04
+        if (
+            capture.within_recapture_window
+            and ball_zone_distance > zone_radius + 0.40
+            and abs(capture.ball_y_m) <= 0.02
+        ):
+            linear = 0.10
+        elif (
+            capture.within_recapture_window
+            and ball_zone_distance > zone_radius + 0.30
+            and abs(capture.ball_y_m) <= 0.04
+        ):
+            linear = max(linear, 0.085)
         if abs(capture.ball_y_m) > 0.05:
-            linear = min(linear, 0.08)
-        if zone_distance < max(zone.radius_m, 0.05) + 0.35:
             linear = min(linear, 0.03)
-        if zone_distance < max(zone.radius_m, 0.05) + 0.35 and abs(capture.ball_y_m) > 0.10:
-            linear = 0.0
-        if zone_distance < max(zone.radius_m, 0.05) + 0.25:
+        if near_zone:
+            linear = min(linear, 0.025)
+            if finish_push_corridor and capture.within_recapture_window:
+                linear = max(linear, 0.032)
+            if abs(ball_to_zone_y_m) <= 0.10 and ball_to_zone_x_m > -0.05:
+                linear = max(linear, 0.022)
+            elif abs(ball_to_zone_y_m) > 0.16:
+                linear = min(linear, 0.008)
+        if final_approach:
             linear = min(linear, 0.02)
-        turn_scale = max(0.40, 1.0 - min(abs(angular), 1.0) * 0.50)
+            if finish_push_corridor and capture.within_recapture_window:
+                linear = max(linear, 0.018)
+            if abs(ball_to_zone_y_m) <= 0.08 and ball_to_zone_x_m > -0.04:
+                linear = max(linear, 0.018)
+        if final_approach and abs(ball_to_zone_y_m) > 0.18 and ball_to_zone_x_m < 0.05 and not capture.within_recapture_window:
+            linear = 0.0
+        turn_scale = max(0.25, 1.0 - min(abs(angular), 1.0) * 0.60)
         return PlaceControlCommand(
             mode="place_recapture" if capture.within_recapture_window else "capture",
             linear_x=round(linear * turn_scale, 6),
@@ -366,16 +412,42 @@ def compute_place_command(
         )
 
     angular = clamp((capture.ball_y_m * 9.0) + (zone_heading_rad * 1.0), -1.0, 1.0)
-    linear = 0.12
-    if abs(capture.ball_y_m) > 0.08:
-        linear = min(linear, 0.08)
-    if zone_distance < max(zone.radius_m, 0.05) + 0.35:
+    if finish_push_corridor:
+        angular = clamp(capture.ball_y_m * 4.5, -0.22, 0.22)
+    elif near_zone:
+        angular = clamp((ball_to_zone_y_m * 8.0) + (zone_heading_rad * 0.55), -0.65, 0.65)
+    linear = 0.07
+    if finish_push_corridor:
         linear = 0.05
-    if zone_distance < max(zone.radius_m, 0.05) + 0.25:
-        linear = 0.08
-    if zone_distance < max(zone.radius_m, 0.05) + 0.12:
-        linear = 0.02
-    turn_scale = max(0.40, 1.0 - min(abs(angular), 1.0) * 0.45)
+    if (
+        ball_zone_distance > zone_radius + 0.40
+        and capture.ball_x_m > 0.20
+        and abs(capture.ball_y_m) <= 0.02
+    ):
+        linear = 0.09
+    elif (
+        ball_zone_distance > zone_radius + 0.30
+        and capture.ball_x_m > 0.18
+        and abs(capture.ball_y_m) <= 0.03
+    ):
+        linear = max(linear, 0.08)
+    if abs(capture.ball_y_m) > 0.05:
+        linear = min(linear, 0.04)
+    if near_zone:
+        linear = 0.035
+        if finish_push_corridor:
+            linear = 0.045
+        if abs(ball_to_zone_y_m) <= 0.04 and ball_to_zone_x_m > -0.03:
+            linear = max(linear, 0.038)
+    if final_approach:
+        linear = min(linear, 0.03)
+        if finish_push_corridor:
+            linear = max(linear, 0.04)
+    if ball_zone_distance < zone_radius + 0.12:
+        linear = 0.015
+    if ball_zone_distance < zone_radius + 0.10 and abs(ball_to_zone_y_m) > 0.06:
+        linear = 0.0
+    turn_scale = max(0.45, 1.0 - min(abs(angular), 1.0) * 0.35) if finish_push_corridor else max(0.30, 1.0 - min(abs(angular), 1.0) * 0.55)
     return PlaceControlCommand(
         mode="place",
         linear_x=round(linear * turn_scale, 6),

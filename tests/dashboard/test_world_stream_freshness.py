@@ -1200,10 +1200,23 @@ def test_beta_dashboard_includes_corral_menu_and_stage_mapping():
     html = html_path.read_text(encoding="utf-8")
 
     assert "pickScenario('corral_single_ball_place')" in html
+    assert "runScenario('corral_single_ball_place')" in html
+    assert "Run Single-Ball Corral" in html
     assert "const CORRAL_STAGE_LABELS = ['Init','Visit','Capture','Place','Done'];" in html
     assert "Acquiring the ball" in html
     assert "Controlling the ball" in html
     assert "Placing ball into the zone" in html
+
+
+def test_browser_dashboard_promotes_single_ball_corral_as_featured_demo():
+    js_path = REPO_ROOT / "runtime/dashboard/browser_dashboard.js"
+    js = js_path.read_text(encoding="utf-8")
+
+    assert "{ id: 'corral_single_ball_place', label: 'Single-Ball Corral' }" in js
+    assert "{ id: 'visit_route_planning', label: 'LLM Route Planning' }" in js
+    assert js.index("{ id: 'corral_single_ball_place', label: 'Single-Ball Corral' }") < js.index(
+        "{ id: 'visit_route_planning', label: 'LLM Route Planning' }"
+    )
 
 
 def test_beta_dashboard_world_surface_prefers_world_feed_when_renderable():
@@ -1501,6 +1514,19 @@ def test_request_scenario_run_corral_queues_after_sim_reset(monkeypatch, tmp_pat
     assert controller.pending_scenario_id == "corral_single_ball_place"
     assert started
     assert started[0].target == controller._reset_environment_worker
+
+
+def test_robot_sdf_name_for_startup_defaults_to_baseline(tmp_path):
+    controller = _make_controller(tmp_path)
+
+    assert controller._robot_sdf_name_for_startup() == dashboard_service.BASELINE_ROBOT_SDF_NAME
+
+
+def test_robot_sdf_name_for_startup_uses_pending_corral_scenario(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.pending_scenario_id = "corral_single_ball_place"
+
+    assert controller._robot_sdf_name_for_startup() == dashboard_service.CORRAL_ROBOT_SDF_NAME
 
 
 def test_run_gather_mission_scenario_uses_host_runtime_paths(tmp_path, monkeypatch):
@@ -2163,7 +2189,7 @@ def test_world_stream_observer_counts_only_fresh_callbacks(tmp_path, monkeypatch
     assert state2["world_stream_renderable"] is True
     assert state2["world_stream_transport_healthy"] is True
 
-    wall["value"] = 103.1
+    wall["value"] = 104.3
     state3 = observer.update()
     assert state3["frame_count"] == 3
     assert state3["received_frame_count"] == 3

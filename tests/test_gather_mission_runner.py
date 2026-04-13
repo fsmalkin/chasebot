@@ -175,11 +175,199 @@ def test_run_normalizes_failure_summary_and_marks_proof_failed(tmp_path, monkeyp
     assert runner.gather_runtime_state["gather_phase"] == "failed"
 
 
-def test_run_target_fails_fast_after_capture_timeout_on_place_loss_revisit(tmp_path, monkeypatch):
+def test_run_target_uses_full_revisit_after_capture_timeout_on_place_loss_recapture(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.max_retries_per_target = 2
     runner.args.max_place_loss_revisits = 1
 
+    visit_dispatches: list[str] = []
+    capture_zone_recovery_flags: list[bool] = []
+    monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s: None)
+    monkeypatch.setattr(
+        gather_runner,
+        "fetch_dashboard_state",
+        lambda dashboard_url, timeout_s=0: {
+            "brain": {"last_feedback_status": "", "last_feedback_text": ""},
+            "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
+        },
+    )
+    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: visit_dispatches.append(target_id))
+    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_target_reached"))
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 1.0, "y": 0.0, "z": 0.05})
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+
+    capture_results = [
+        (True, {"capture_state": {"captured": True}, "zone_score": {}}),
+        (False, {"failure_reason": "capture_timeout", "failure_stage": "capture"}),
+        (False, {"failure_reason": "capture_timeout", "failure_stage": "capture"}),
+    ]
+    place_results = [
+        (False, {"failure_reason": "capture_lost", "failure_stage": "place", "local_recovery_attempted": True}),
+    ]
+
+    def _capture_target(**kwargs):
+        capture_zone_recovery_flags.append(bool(kwargs.get("prefer_zone_recovery")))
+        return capture_results.pop(0)
+
+    monkeypatch.setattr(runner, "_capture_target", _capture_target)
+    monkeypatch.setattr(runner, "_place_target", lambda **kwargs: place_results.pop(0))
+
+    result = runner._run_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        route_index=1,
+        gather_sequence_path=tmp_path / "gather_sequence.jsonl",
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=tmp_path / "mission",
+    )
+
+    assert result["pass"] is False
+    assert result["failure_reason"] == "capture_timeout"
+    assert result["failure_stage"] == "capture"
+    assert result["attempt_kind"] == "place_loss_revisit"
+    assert result["revisit_attempted"] is True
+    assert visit_dispatches == ["ball_1", "ball_1"]
+    assert capture_zone_recovery_flags == [False, True, False]
+
+
+def test_place_target_bounds_local_recovery_and_keeps_zone_heading(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.place_timeout_s = 3.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    captured_ball = {"x": 0.10, "y": 0.0, "z": 0.05}
+    slipped_ball = {"x": 0.30, "y": 0.0, "z": 0.05}
+    states = [
+        ({}, robot_pose, captured_ball),
+        ({}, robot_pose, slipped_ball),
+        ({}, robot_pose, slipped_ball),
+        ({}, robot_pose, slipped_ball),
+        ({}, robot_pose, slipped_ball),
+        ({}, robot_pose, slipped_ball),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, robot_pose, slipped_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "capture_lost"
+    assert payload["failure_stage"] == "place"
+    assert payload["local_recovery_attempted"] is True
+    assert any(item["mode"] == "capture_recovery" for item in command_log)
+    assert command_log[-1]["mode"] == "capture_lost"
+    assert runner.gather_runtime_state["latest_control_command"]["mode"] == "capture_recovery"
+    assert abs(float(runner.gather_runtime_state["latest_control_command"]["angular_z"])) <= 0.75
+
+
+def test_place_target_switches_to_recovery_on_first_uncaptured_frame(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.place_timeout_s = 2.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    states = [
+        ({}, robot_pose, {"x": 0.10, "y": 0.0, "z": 0.05}),
+        ({}, robot_pose, {"x": 0.26, "y": 0.0, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.40, "y": 0.0, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.40, "y": 0.0, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, robot_pose, {"x": 2.40, "y": 0.0, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert "failure_reason" not in payload
+    assert command_log[0]["mode"] == "place"
+    assert any(item["mode"] == "capture_recovery" for item in command_log[1:])
+
+
+def test_run_target_preserves_local_recovery_history_across_full_revisit_failure(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.max_retries_per_target = 2
+    runner.args.max_place_loss_revisits = 1
+
+    capture_zone_recovery_flags: list[bool] = []
     monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s: None)
     monkeypatch.setattr(
         gather_runner,
@@ -199,12 +387,17 @@ def test_run_target_fails_fast_after_capture_timeout_on_place_loss_revisit(tmp_p
     capture_results = [
         (True, {"capture_state": {"captured": True}, "zone_score": {}}),
         (False, {"failure_reason": "capture_timeout", "failure_stage": "capture"}),
+        (False, {"failure_reason": "capture_timeout", "failure_stage": "capture"}),
     ]
     place_results = [
         (False, {"failure_reason": "capture_lost", "failure_stage": "place", "local_recovery_attempted": True}),
     ]
 
-    monkeypatch.setattr(runner, "_capture_target", lambda **kwargs: capture_results.pop(0))
+    def _capture_target(**kwargs):
+        capture_zone_recovery_flags.append(bool(kwargs.get("prefer_zone_recovery")))
+        return capture_results.pop(0)
+
+    monkeypatch.setattr(runner, "_capture_target", _capture_target)
     monkeypatch.setattr(runner, "_place_target", lambda **kwargs: place_results.pop(0))
 
     result = runner._run_target(
@@ -218,6 +411,185 @@ def test_run_target_fails_fast_after_capture_timeout_on_place_loss_revisit(tmp_p
 
     assert result["pass"] is False
     assert result["failure_reason"] == "capture_timeout"
-    assert result["failure_stage"] == "capture"
-    assert result["attempt_kind"] == "place_loss_revisit"
+    assert result["local_recovery_attempted"] is True
     assert result["revisit_attempted"] is True
+    assert result["attempt_kind"] == "place_loss_revisit"
+    assert capture_zone_recovery_flags == [False, True, False]
+
+
+def test_capture_target_prefers_zone_recovery_command_on_place_loss_revisit(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 1.9, "y": 0.08, "yaw": 0.0}
+    ball_states = [
+        {"x": 2.16, "y": 0.10, "z": 0.05},
+        {"x": 2.08, "y": 0.08, "z": 0.05},
+    ]
+
+    def _control_loop_state(**kwargs):
+        if ball_states:
+            return {}, robot_pose, ball_states.pop(0)
+        return {}, robot_pose, {"x": 2.08, "y": 0.08, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._capture_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        prefer_zone_recovery=True,
+    )
+
+    assert passed is True
+    assert payload["capture_state"]["captured"] is True
+    assert command_log[0]["mode"] == "place_recapture"
+
+
+def test_capture_target_holds_zone_dwell_during_zone_recovery(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 2.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 1.2, "y": 0.0, "yaw": 0.0}
+    zone_ball = {"x": 2.39, "y": 0.0, "z": 0.05}
+
+    def _control_loop_state(**kwargs):
+        return {}, robot_pose, zone_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._capture_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        prefer_zone_recovery=True,
+    )
+
+    assert passed is True
+    assert payload["zone_score"]["inside_zone"] is True
+    assert any(item["mode"] == "zone_dwell" for item in command_log)
+    assert command_log[-1]["mode"] == "placed"
+
+
+def test_capture_target_falls_back_to_capture_command_when_zone_recovery_leaves_recapture_window(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ball_states = [
+        {"x": 0.60, "y": 0.02, "z": 0.05},
+        {"x": 0.70, "y": 0.24, "z": 0.05},
+        {"x": 0.16, "y": 0.0, "z": 0.05},
+    ]
+
+    def _control_loop_state(**kwargs):
+        if ball_states:
+            return {}, robot_pose, ball_states.pop(0)
+        return {}, robot_pose, {"x": 0.16, "y": 0.0, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._capture_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        prefer_zone_recovery=True,
+    )
+
+    assert passed is True
+    assert payload["capture_state"]["captured"] is True
+    assert command_log[0]["mode"] == "place_recapture"
+    assert any(item["mode"] == "capture" for item in command_log[1:])

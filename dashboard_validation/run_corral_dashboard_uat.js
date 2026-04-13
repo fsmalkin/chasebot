@@ -7,6 +7,7 @@ const OUTPUT_ROOT = process.env.CORRAL_DASHBOARD_UAT_ROOT
   || 'D:/dev/chasecar/artifacts/session/20260412T_CORRAL_DASHBOARD_UAT';
 const VISUAL_ROOT = path.join(OUTPUT_ROOT, 'dashboard_visual_clean');
 const REQUIRED_GREEN_RUNS = Math.max(Number.parseInt(process.env.CORRAL_DASHBOARD_UAT_RUNS || '3', 10) || 3, 1);
+const CAPTURE_STAGE_SCREENSHOTS = process.env.CORRAL_DASHBOARD_UAT_CAPTURE_STAGES === '1';
 
 async function getState(page) {
   const response = await page.request.get(`${BASE_URL}/api/state`);
@@ -111,6 +112,8 @@ async function run() {
       let activeScenarioLabel = '';
       let sawWorldStreamRestart = false;
       let sawWorldStreamDegraded = false;
+      let degradedPollStreak = 0;
+      let maxDegradedPollStreak = 0;
 
       await page.goto(`${BASE_URL}/`);
       const preRunState = await getState(page);
@@ -118,7 +121,7 @@ async function run() {
       const latestEventBeforeRun = Array.isArray(preRunState.recent_operator_events) && preRunState.recent_operator_events.length
         ? String(preRunState.recent_operator_events[preRunState.recent_operator_events.length - 1].timestamp_utc || '')
         : '';
-      await page.screenshot({ path: path.join(runDir, 'before.png'), fullPage: true });
+      await page.screenshot({ path: path.join(runDir, 'before.png') });
       await page.evaluate(() => window.pickScenario('corral_single_ball_place'));
 
       try {
@@ -148,12 +151,39 @@ async function run() {
               sawActiveScenario = true;
               activeScenarioLabel = state.active_scenario_label || activeScenarioLabel;
             }
+            const missionVerdict = state.mission_verdict && typeof state.mission_verdict === 'object'
+              ? state.mission_verdict
+              : null;
+            if (
+              state.scenario_state === 'error'
+              && missionVerdict
+              && missionVerdict.scenario_id === 'corral_single_ball_place'
+            ) {
+              const missionError = missionVerdict.mission_error || state.last_result || state.scenario_message || 'unknown_error';
+              throw new Error(`Run ${runIndex} mission failed: ${missionError}`);
+            }
+            if (
+              state.scenario_state === 'ready'
+              && missionVerdict
+              && missionVerdict.scenario_id === 'corral_single_ball_place'
+              && missionVerdict.pass === false
+            ) {
+              const missionError = missionVerdict.mission_error || state.last_result || state.scenario_message || 'unknown_error';
+              throw new Error(`Run ${runIndex} mission finished failed: ${missionError}`);
+            }
             const restartAttemptsNow = Number.parseInt(String(state.world_stream_restart_attempts || '0'), 10) || 0;
             if (restartAttemptsNow > restartAttemptsBeforeRun) {
               sawWorldStreamRestart = true;
             }
-            if (state.world_stream_degraded === true || state.world_stream_ready === false) {
-              sawWorldStreamDegraded = true;
+            const runSurfaceActive = state.scenario_state === 'running' || sawRunning;
+            if (runSurfaceActive && (state.world_stream_degraded === true || state.world_stream_ready === false)) {
+              degradedPollStreak += 1;
+              maxDegradedPollStreak = Math.max(maxDegradedPollStreak, degradedPollStreak);
+              if (degradedPollStreak >= 2) {
+                sawWorldStreamDegraded = true;
+              }
+            } else {
+              degradedPollStreak = 0;
             }
             const recentEvents = Array.isArray(state.recent_operator_events) ? state.recent_operator_events : [];
             if (recentEvents.some((item) => {
@@ -176,12 +206,14 @@ async function run() {
                 gather_phase: state.gather_phase,
                 session_id: state.session_id,
               });
-              await page.screenshot({ path: path.join(runDir, `${proofState}.png`), fullPage: true });
+              if (CAPTURE_STAGE_SCREENSHOTS) {
+                await page.screenshot({ path: path.join(runDir, `${proofState}.png`) });
+              }
             }
           },
         );
 
-        await page.screenshot({ path: path.join(runDir, 'final.png'), fullPage: true });
+        await page.screenshot({ path: path.join(runDir, 'final.png') });
 
         const artifacts = finalState.latest_artifacts || {};
         const requiredArtifactKeys = ['gather_mission', 'mission_verdict', 'target_results', 'scorecard', 'log'];
@@ -243,6 +275,7 @@ async function run() {
           artifact_checks: artifactChecks,
           world_stream_restart_count_delta: worldStreamRestartCountDelta,
           world_stream_clean: worldStreamClean,
+          world_stream_degraded_poll_streak_max: maxDegradedPollStreak,
           screenshots: fs.readdirSync(runDir).sort().map((name) => path.join(runDir, name)),
           passed: true,
         });
@@ -255,6 +288,7 @@ async function run() {
           proof_states_seen: seenProofStates,
           world_stream_restart_count_delta: sawWorldStreamRestart ? 1 : 0,
           world_stream_clean: false,
+          world_stream_degraded_poll_streak_max: maxDegradedPollStreak,
           failure_reason: error && error.message ? error.message : String(error),
           screenshots: fs.readdirSync(runDir).sort().map((name) => path.join(runDir, name)),
           passed: false,

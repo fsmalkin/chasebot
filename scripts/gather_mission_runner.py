@@ -56,6 +56,8 @@ DEFAULT_TARGET_MODEL_SDF = REPO_ROOT / "ros2_config" / "frisbee_target_ball.sdf"
 DEFAULT_ZONE_MODEL_NAME = "corral_zone_marker"
 DEFAULT_ZONE_MODEL_SDF = REPO_ROOT / "ros2_config" / "corral_zone_marker.sdf"
 DEFAULT_MISSION_START_POSE = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+DEFAULT_PLACE_LOCAL_RECOVERY_WINDOW_S = 1.25
+DEFAULT_PLACE_RECOVERY_SETTLE_S = 0.20
 
 _dotenv_path = REPO_ROOT / ".env"
 if _dotenv_path.is_file():
@@ -932,6 +934,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         target: GatherTargetSpec,
         state_history_path: Path,
         mission_root: Path,
+        prefer_zone_recovery: bool = False,
     ) -> tuple[bool, dict[str, Any]]:
         deadline = time.monotonic() + max(self.args.capture_timeout_s, 0.1)
         zone_entry_monotonic: float | None = None
@@ -982,13 +985,41 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "zone_score": zone_score.to_dict(),
                     "final_ball_pose": ball_pose,
                 }
+            if prefer_zone_recovery and zone_score and zone_score.inside_zone:
+                self._set_manual_drive(False, mode="zone_dwell", rationale="Ball entered the zone during recapture; holding for dwell.")
+                time.sleep(self.args.poll_s)
+                continue
             if capture and capture.captured:
                 self._set_manual_drive(False, mode="captured", rationale="Ball captured.")
                 return True, {
                     "capture_state": capture.to_dict(),
                     "zone_score": zone_score.to_dict() if zone_score else {},
                 }
-            command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope) if robot_pose and ball_pose else None
+            if robot_pose and ball_pose:
+                if prefer_zone_recovery:
+                    use_zone_recovery = bool(
+                        capture
+                        and (
+                            capture.within_recapture_window
+                            or (
+                                zone_score is not None
+                                and float(zone_score.zone_distance_m) <= (float(self.zone.radius_m) + 0.35)
+                            )
+                        )
+                    )
+                    if use_zone_recovery:
+                        command = compute_place_command(
+                            robot_pose,
+                            ball_pose or {},
+                            zone=self.zone,
+                            envelope=self.capture_envelope,
+                        )
+                    else:
+                        command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope)
+                else:
+                    command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope)
+            else:
+                command = None
             if command is not None:
                 self._set_manual_drive(
                     True,
@@ -1016,6 +1047,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         zone_entry_monotonic: float | None = None
         last_captured_monotonic: float | None = None
         local_recovery_attempted = False
+        local_recovery_deadline_monotonic: float | None = None
+        local_recovery_started_monotonic: float | None = None
+        recaptured_settle_started_monotonic: float | None = None
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -1026,6 +1060,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 self._update_prior_from_ball_pose(target.id, ball_pose)
             if capture and capture.captured:
                 last_captured_monotonic = now_monotonic
+                if local_recovery_started_monotonic is not None:
+                    local_recovery_started_monotonic = None
+                    recaptured_settle_started_monotonic = now_monotonic
             inside_zone = bool(zone_score.inside_zone) if zone_score else False
             if inside_zone:
                 zone_entry_monotonic = zone_entry_monotonic or now_monotonic
@@ -1053,6 +1090,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "ball_pose": ball_pose,
                     "capture": capture.to_dict() if capture else {},
                     "zone_score": zone_score.to_dict() if zone_score else {},
+                    "local_recovery_active": bool(local_recovery_started_monotonic is not None),
+                    "local_recovery_attempted": bool(local_recovery_attempted),
                 },
             )
             if zone_score and zone_dwell_complete(
@@ -1071,27 +1110,47 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 self._set_manual_drive(False, mode="zone_dwell", rationale="Ball is inside the zone; holding for dwell.")
                 time.sleep(self.args.poll_s)
                 continue
-            local_recapture_active = bool(
-                capture
-                and capture.ball_ahead
-                and capture.ball_x_m <= 0.90
-                and abs(capture.ball_y_m) <= 0.25
-            )
-            local_recovery_viable = bool(
-                capture
-                and capture.ball_ahead
-                and capture.distance_m <= 2.50
-                and abs(capture.ball_y_m) <= 0.75
-            )
-            if capture and capture_loss_detected(
-                captured_now=bool(capture.captured or capture.within_recapture_window or local_recapture_active),
-                last_captured_monotonic=last_captured_monotonic,
-                now_monotonic=now_monotonic,
-                loss_grace_s=self.capture_envelope.loss_grace_s,
-            ):
+            local_recovery_viable = bool(capture and capture.within_recapture_window)
+            local_recovery_active = local_recovery_started_monotonic is not None
+            if local_recovery_active:
+                if (
+                    recaptured_settle_started_monotonic is None
+                    and (
+                        (not local_recovery_viable)
+                        or (
+                            local_recovery_deadline_monotonic is not None
+                            and now_monotonic >= local_recovery_deadline_monotonic
+                        )
+                    )
+                ):
+                    self._set_manual_drive(False, mode="capture_lost", rationale="Capture recovery expired during place.")
+                    return False, {
+                        "failure_reason": "capture_lost",
+                        "failure_stage": "place",
+                        "capture_state": capture.to_dict() if capture else {},
+                        "zone_score": zone_score.to_dict() if zone_score else {},
+                        "local_recovery_attempted": local_recovery_attempted,
+                    }
+            elif capture and not capture.captured:
                 if local_recovery_viable:
-                    local_recovery_attempted = True
-                    last_captured_monotonic = now_monotonic
+                    if not local_recovery_attempted:
+                        local_recovery_attempted = True
+                        local_recovery_deadline_monotonic = now_monotonic + DEFAULT_PLACE_LOCAL_RECOVERY_WINDOW_S
+                        self._append_runtime_event(
+                            f"{target.label}: short local recapture during place.",
+                            key=f"place_local_recovery:{target.id}",
+                        )
+                    elif local_recovery_deadline_monotonic is not None and now_monotonic >= local_recovery_deadline_monotonic:
+                        self._set_manual_drive(False, mode="capture_lost", rationale="Capture recovery budget exhausted during place.")
+                        return False, {
+                            "failure_reason": "capture_lost",
+                            "failure_stage": "place",
+                            "capture_state": capture.to_dict() if capture else {},
+                            "zone_score": zone_score.to_dict() if zone_score else {},
+                            "local_recovery_attempted": local_recovery_attempted,
+                        }
+                    local_recovery_started_monotonic = now_monotonic
+                    recaptured_settle_started_monotonic = None
                     self._update_gather_runtime_state(latest_feedback=f"Recovering {target.label} after brief capture loss.")
                 else:
                     self._set_manual_drive(False, mode="capture_lost", rationale="Capture lost during place.")
@@ -1102,8 +1161,41 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "zone_score": zone_score.to_dict() if zone_score else {},
                         "local_recovery_attempted": local_recovery_attempted,
                     }
-            command = compute_place_command(robot_pose, ball_pose or {}, zone=self.zone, envelope=self.capture_envelope) if robot_pose and ball_pose else None
+            elif capture_loss_detected(
+                captured_now=False,
+                last_captured_monotonic=last_captured_monotonic,
+                now_monotonic=now_monotonic,
+                loss_grace_s=self.capture_envelope.loss_grace_s,
+            ):
+                self._set_manual_drive(False, mode="capture_lost", rationale="Ball pose disappeared during place.")
+                return False, {
+                    "failure_reason": "capture_lost",
+                    "failure_stage": "place",
+                    "capture_state": capture.to_dict() if capture else {},
+                    "zone_score": zone_score.to_dict() if zone_score else {},
+                    "local_recovery_attempted": local_recovery_attempted,
+                }
+            if recaptured_settle_started_monotonic is not None:
+                settle_elapsed_s = now_monotonic - recaptured_settle_started_monotonic
+                if settle_elapsed_s < DEFAULT_PLACE_RECOVERY_SETTLE_S:
+                    self._set_manual_drive(False, mode="capture_settle", rationale="Ball recaptured; settling before place.")
+                    self._update_gather_runtime_state(latest_feedback=f"Stabilizing {target.label} after recapture.")
+                    time.sleep(self.args.poll_s)
+                    continue
+                recaptured_settle_started_monotonic = None
+            if local_recovery_started_monotonic is not None:
+                command = compute_place_command(robot_pose, ball_pose or {}, zone=self.zone, envelope=self.capture_envelope) if robot_pose and ball_pose else None
+            else:
+                command = compute_place_command(robot_pose, ball_pose or {}, zone=self.zone, envelope=self.capture_envelope) if robot_pose and ball_pose else None
             if command is not None:
+                if local_recovery_started_monotonic is not None:
+                    command = command.__class__(
+                        mode="capture_recovery",
+                        linear_x=min(float(command.linear_x), 0.12),
+                        angular_z=float(command.angular_z),
+                        target_speed_scale=min(float(command.target_speed_scale), 0.7),
+                        rationale="Briefly recenter the ball under the catcher before resuming place.",
+                    )
                 self._set_manual_drive(
                     True,
                     linear_x=command.linear_x,
@@ -1133,80 +1225,141 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
     ) -> dict[str, Any]:
         attempt = 0
         capture_loss_count = 0
-        place_loss_revisit_count = 0
+        place_loss_recapture_count = 0
+        place_loss_full_revisit_count = 0
+        local_recovery_attempted_any = False
+        resume_with_capture = False
+        resume_with_place_loss_revisit = False
         target_start_monotonic = time.monotonic()
         while attempt <= self.args.max_retries_per_target:
             attempt += 1
-            attempt_kind = "place_loss_revisit" if place_loss_revisit_count > 0 else ("initial_visit" if attempt == 1 else "retry_visit")
-            self._append_runtime_event(f"{target.label}: visit attempt {attempt}.", key=f"visit_attempt:{target.id}:{attempt}")
-            self._update_visit_runtime_state(
-                proof_state="visiting",
-                current_target_id=target.id,
-                visit_index=route_index,
-                remaining_targets=[item for item in self.gather_runtime_state.get("remaining_targets", []) if item != target.id],
-                mission_phase="visit",
-                latest_feedback=f"Visiting {target.label}.",
-            )
-            self._update_gather_runtime_state(
-                mission_phase="visit",
-                gather_phase="visit",
-                current_target_id=target.id,
-                visit_index=route_index,
-                latest_feedback=f"Visiting {target.label}.",
-            )
-            ball_pose = self._ball_truth_pose(session_id, target)
-            if ball_pose:
-                self._update_prior_from_ball_pose(target.id, ball_pose)
-            self._wait_for_nav2_ready(timeout_s=30.0)
-            baseline_state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
-            baseline_brain = baseline_state.get("brain", {}) if isinstance(baseline_state.get("brain"), dict) else {}
-            baseline_status = clean_text(baseline_brain.get("last_feedback_status"))
-            baseline_feedback = clean_text(baseline_brain.get("last_feedback_text") or baseline_state.get("last_feedback"))
-            self._dispatch_visit_target(target.id)
-            visit_pass, _last_state, visit_status = self._wait_for_visit_result(
-                timeout_s=self.args.visit_timeout_s,
-                baseline_status=baseline_status,
-                baseline_feedback=baseline_feedback,
-                target_id=target.id,
-            )
-            append_jsonl(
-                gather_sequence_path,
-                {
-                    "generated_utc": utc_now(),
-                    "event_type": "visit_result",
-                    "target_id": target.id,
-                    "attempt": attempt,
-                    "status": visit_status,
-                    "pass": visit_pass,
-                },
-            )
-            if not visit_pass:
-                if attempt > self.args.max_retries_per_target:
-                    self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} visit failed.")
-                    return self._target_failure_result(
-                        target=target,
-                        failure_reason=visit_status,
-                        failure_stage="visit",
-                        attempts=attempt,
-                        capture_loss_count=capture_loss_count,
-                        route_index=route_index,
-                        attempt_kind=attempt_kind,
-                        revisit_attempted=place_loss_revisit_count > 0,
+            direct_recapture_attempt = resume_with_capture
+            place_loss_revisit_attempt = resume_with_place_loss_revisit
+            if direct_recapture_attempt:
+                attempt_kind = "place_loss_recapture"
+            elif place_loss_revisit_attempt:
+                attempt_kind = "place_loss_revisit"
+            else:
+                attempt_kind = "initial_visit" if attempt == 1 else "retry_visit"
+            if direct_recapture_attempt:
+                self._append_runtime_event(
+                    f"{target.label}: direct recapture attempt {place_loss_recapture_count} after place-stage loss.",
+                    key=f"place_loss_recapture:{target.id}:{place_loss_recapture_count}",
+                )
+                self._update_visit_runtime_state(
+                    proof_state="capturing",
+                    current_target_id=target.id,
+                    visit_index=route_index,
+                    remaining_targets=[item for item in self.gather_runtime_state.get("remaining_targets", []) if item != target.id],
+                    mission_phase="capture",
+                    latest_feedback=f"Reacquiring {target.label} after place-stage loss.",
+                )
+                self._update_gather_runtime_state(
+                    mission_phase="capture",
+                    gather_phase="capture",
+                    current_target_id=target.id,
+                    visit_index=route_index,
+                    latest_feedback=f"Reacquiring {target.label} after place-stage loss.",
+                )
+                ball_pose = self._ball_truth_pose(session_id, target)
+                if ball_pose:
+                    self._update_prior_from_ball_pose(target.id, ball_pose)
+                resume_with_capture = False
+            else:
+                if place_loss_revisit_attempt:
+                    self._append_runtime_event(
+                        f"{target.label}: full revisit {place_loss_full_revisit_count} after place-stage loss.",
+                        key=f"place_loss_revisit:{target.id}:{place_loss_full_revisit_count}",
                     )
-                self._safe_stop()
-                self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
-                continue
+                    visit_feedback = f"Revisiting {target.label} after place-stage loss."
+                else:
+                    self._append_runtime_event(f"{target.label}: visit attempt {attempt}.", key=f"visit_attempt:{target.id}:{attempt}")
+                    visit_feedback = f"Visiting {target.label}."
+                self._update_visit_runtime_state(
+                    proof_state="visiting",
+                    current_target_id=target.id,
+                    visit_index=route_index,
+                    remaining_targets=[item for item in self.gather_runtime_state.get("remaining_targets", []) if item != target.id],
+                    mission_phase="visit",
+                    latest_feedback=visit_feedback,
+                )
+                self._update_gather_runtime_state(
+                    mission_phase="visit",
+                    gather_phase="visit",
+                    current_target_id=target.id,
+                    visit_index=route_index,
+                    latest_feedback=visit_feedback,
+                )
+                ball_pose = self._ball_truth_pose(session_id, target)
+                if ball_pose:
+                    self._update_prior_from_ball_pose(target.id, ball_pose)
+                resume_with_place_loss_revisit = False
+                self._wait_for_nav2_ready(timeout_s=30.0)
+                baseline_state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
+                baseline_brain = baseline_state.get("brain", {}) if isinstance(baseline_state.get("brain"), dict) else {}
+                baseline_status = clean_text(baseline_brain.get("last_feedback_status"))
+                baseline_feedback = clean_text(baseline_brain.get("last_feedback_text") or baseline_state.get("last_feedback"))
+                self._dispatch_visit_target(target.id)
+                visit_pass, _last_state, visit_status = self._wait_for_visit_result(
+                    timeout_s=self.args.visit_timeout_s,
+                    baseline_status=baseline_status,
+                    baseline_feedback=baseline_feedback,
+                    target_id=target.id,
+                )
+                append_jsonl(
+                    gather_sequence_path,
+                    {
+                        "generated_utc": utc_now(),
+                        "event_type": "visit_result",
+                        "target_id": target.id,
+                        "attempt": attempt,
+                        "status": visit_status,
+                        "pass": visit_pass,
+                    },
+                )
+                if not visit_pass:
+                    if attempt > self.args.max_retries_per_target:
+                        self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} visit failed.")
+                        return self._target_failure_result(
+                            target=target,
+                            failure_reason=visit_status,
+                            failure_stage="visit",
+                            attempts=attempt,
+                            capture_loss_count=capture_loss_count,
+                            route_index=route_index,
+                            attempt_kind=attempt_kind,
+                            local_recovery_attempted=local_recovery_attempted_any,
+                            revisit_attempted=place_loss_revisit_count > 0,
+                        )
+                    self._safe_stop()
+                    self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                    continue
 
-            self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
             capture_pass, capture_payload = self._capture_target(
                 session_id=session_id,
                 target=target,
                 state_history_path=state_history_path,
                 mission_root=mission_root,
+                prefer_zone_recovery=(attempt_kind == "place_loss_recapture"),
             )
             if not capture_pass:
                 capture_failure_reason = str(capture_payload.get("failure_reason", "capture_failed"))
                 capture_failure_stage = str(capture_payload.get("failure_stage", "capture"))
+                if (
+                    attempt_kind == "place_loss_recapture"
+                    and place_loss_full_revisit_count < 1
+                    and attempt <= self.args.max_retries_per_target
+                ):
+                    place_loss_full_revisit_count += 1
+                    self._append_runtime_event(
+                        f"{target.label}: full revisit after unsuccessful place-loss recapture.",
+                        key=f"place_loss_revisit_dispatch:{target.id}:{place_loss_full_revisit_count}",
+                    )
+                    self._safe_stop()
+                    self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                    resume_with_place_loss_revisit = True
+                    continue
                 if attempt > self.args.max_retries_per_target:
                     self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} capture failed.")
                     return self._target_failure_result(
@@ -1217,9 +1370,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         capture_loss_count=capture_loss_count,
                         route_index=route_index,
                         attempt_kind=attempt_kind,
-                        revisit_attempted=place_loss_revisit_count > 0,
+                        local_recovery_attempted=local_recovery_attempted_any,
+                        revisit_attempted=place_loss_full_revisit_count > 0,
                     )
-                if place_loss_revisit_count > 0:
+                if place_loss_full_revisit_count > 0:
                     self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} capture failed after revisit.")
                     return self._target_failure_result(
                         target=target,
@@ -1229,6 +1383,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         capture_loss_count=capture_loss_count,
                         route_index=route_index,
                         attempt_kind=attempt_kind,
+                        local_recovery_attempted=local_recovery_attempted_any,
                         revisit_attempted=True,
                     )
                 self._safe_stop()
@@ -1276,7 +1431,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     final_ball_pose=final_ball_pose,
                     place_time_s=time.monotonic() - target_start_monotonic,
                     attempt_kind=attempt_kind,
-                    revisit_attempted=place_loss_revisit_count > 0,
+                    revisit_attempted=place_loss_full_revisit_count > 0,
                 )
 
             place_pass, place_payload = self._place_target(
@@ -1325,26 +1480,38 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     final_ball_pose=final_ball_pose,
                     place_time_s=time.monotonic() - target_start_monotonic,
                     attempt_kind=attempt_kind,
-                    local_recovery_attempted=bool(place_payload.get("local_recovery_attempted", False)),
-                    revisit_attempted=place_loss_revisit_count > 0,
+                    local_recovery_attempted=local_recovery_attempted_any or bool(place_payload.get("local_recovery_attempted", False)),
+                    revisit_attempted=place_loss_full_revisit_count > 0,
                 )
 
             failure_reason = str(place_payload.get("failure_reason", "place_failed"))
             failure_stage = str(place_payload.get("failure_stage", "place"))
             local_recovery_attempted = bool(place_payload.get("local_recovery_attempted", False))
+            local_recovery_attempted_any = local_recovery_attempted_any or local_recovery_attempted
             if failure_reason == "capture_lost":
                 capture_loss_count += 1
                 self._update_gather_runtime_state(capture_loss_count=capture_loss_count)
-                if place_loss_revisit_count < max(int(self.args.max_place_loss_revisits), 0):
-                    place_loss_revisit_count += 1
+                if place_loss_full_revisit_count == 0 and place_loss_recapture_count < max(int(self.args.max_place_loss_revisits), 0):
+                    place_loss_recapture_count += 1
                     self._append_runtime_event(
-                        f"{target.label}: revisit after place-stage capture loss {place_loss_revisit_count}.",
-                        key=f"place_loss_revisit:{target.id}:{place_loss_revisit_count}",
+                        f"{target.label}: direct recapture after place-stage capture loss {place_loss_recapture_count}.",
+                        key=f"place_loss_recovery:{target.id}:{place_loss_recapture_count}",
                     )
                     self._safe_stop()
                     self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                    resume_with_capture = True
                     continue
-            if attempt > self.args.max_retries_per_target or (failure_reason == "capture_lost" and place_loss_revisit_count >= max(int(self.args.max_place_loss_revisits), 0)):
+                if place_loss_full_revisit_count < 1 and attempt <= self.args.max_retries_per_target:
+                    place_loss_full_revisit_count += 1
+                    self._append_runtime_event(
+                        f"{target.label}: full revisit after place-stage capture loss.",
+                        key=f"place_loss_revisit_dispatch:{target.id}:{place_loss_full_revisit_count}",
+                    )
+                    self._safe_stop()
+                    self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                    resume_with_place_loss_revisit = True
+                    continue
+            if attempt > self.args.max_retries_per_target or (failure_reason == "capture_lost" and place_loss_full_revisit_count >= 1 and place_loss_recapture_count >= max(int(self.args.max_place_loss_revisits), 0)):
                 self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} place failed.")
                 return self._target_failure_result(
                     target=target,
@@ -1354,8 +1521,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     capture_loss_count=capture_loss_count,
                     route_index=route_index,
                     attempt_kind=attempt_kind,
-                    local_recovery_attempted=local_recovery_attempted,
-                    revisit_attempted=place_loss_revisit_count > 0,
+                    local_recovery_attempted=local_recovery_attempted_any,
+                    revisit_attempted=place_loss_full_revisit_count > 0,
                 )
             self._safe_stop()
             self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
@@ -1368,7 +1535,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             capture_loss_count=capture_loss_count,
             route_index=route_index,
             attempt_kind="unreachable_state",
-            revisit_attempted=place_loss_revisit_count > 0,
+            revisit_attempted=place_loss_full_revisit_count > 0,
         )
 
     def run(self) -> dict[str, Any]:

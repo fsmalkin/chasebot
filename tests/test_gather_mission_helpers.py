@@ -42,6 +42,15 @@ def test_capture_snapshot_detects_captured_ball():
     assert snapshot.ball_ahead is True
 
 
+def test_capture_snapshot_accepts_forward_slip_with_longer_catcher():
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 0.23, "y": 0.0}
+    snapshot = capture_snapshot(robot_pose, ball_pose, CaptureEnvelope())
+    assert snapshot is not None
+    assert snapshot.captured is True
+    assert snapshot.within_recapture_window is True
+
+
 def test_capture_snapshot_detects_ball_behind_robot():
     robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
     ball_pose = {"x": -0.05, "y": 0.02}
@@ -56,6 +65,7 @@ def test_zone_snapshot_and_dwell_gate():
     score = zone_snapshot({"x": zone.world_x + 0.02, "y": zone.world_y - 0.01}, zone)
     assert score is not None
     assert score.inside_zone is True
+    assert score.center_inside_zone is True
     assert zone_dwell_complete(
         inside_zone=score.inside_zone,
         zone_entry_monotonic=5.0,
@@ -68,6 +78,14 @@ def test_zone_snapshot_and_dwell_gate():
         now_monotonic=6.2,
         dwell_s=zone.dwell_s,
     ) is False
+
+
+def test_zone_snapshot_counts_ball_overlap_as_inside_zone():
+    zone = build_zone_spec("corral_single_ball_place")
+    score = zone_snapshot({"x": zone.world_x + 0.23, "y": zone.world_y}, zone)
+    assert score is not None
+    assert score.inside_zone is True
+    assert score.center_inside_zone is False
 
 
 def test_capture_loss_detected_after_grace_period():
@@ -96,6 +114,83 @@ def test_compute_place_command_uses_gentle_recapture_when_ball_not_captured():
     assert command.mode == "place_recapture"
     assert command.linear_x > 0.0
     assert command.linear_x < 0.12
+
+
+def test_compute_place_command_pushes_faster_when_centered_recapture_is_far_from_zone():
+    zone = build_zone_spec("corral_single_ball_place")
+    command = compute_place_command(
+        {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        {"x": 0.35, "y": 0.0},
+        zone=zone,
+    )
+    assert command is not None
+    assert command.mode == "place_recapture"
+    assert command.linear_x >= 0.08
+    assert command.linear_x < 0.12
+
+
+def test_compute_place_command_limits_forward_speed_when_ball_is_captured():
+    zone = build_zone_spec("corral_single_ball_place")
+    command = compute_place_command(
+        {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        {"x": 0.15, "y": 0.0},
+        zone=zone,
+    )
+    assert command is not None
+    assert command.mode == "place"
+    assert command.linear_x > 0.0
+    assert command.linear_x <= 0.07
+
+
+def test_compute_place_command_pushes_faster_when_captured_ball_rides_front_rail():
+    zone = build_zone_spec("corral_single_ball_place")
+    command = compute_place_command(
+        {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        {"x": 0.22, "y": 0.0},
+        zone=zone,
+    )
+    assert command is not None
+    assert command.mode == "place"
+    assert command.linear_x >= 0.08
+    assert command.linear_x < 0.12
+
+
+def test_compute_place_command_softens_turns_near_zone_edge_during_recapture():
+    zone = build_zone_spec("corral_single_ball_place")
+    command = compute_place_command(
+        {"x": 1.070938, "y": 0.007575, "yaw": 0.252782},
+        {"x": 1.904784, "y": 0.134964},
+        zone=zone,
+    )
+    assert command is not None
+    assert command.linear_x > 0.0
+    assert abs(command.angular_z) <= 0.75
+
+
+def test_compute_place_command_holds_line_for_captured_finish_push_near_zone():
+    zone = build_zone_spec("corral_single_ball_place")
+    command = compute_place_command(
+        {"x": 1.697909, "y": 0.076122, "yaw": 0.113702},
+        {"x": 1.920374, "y": 0.126778},
+        zone=zone,
+    )
+    assert command is not None
+    assert command.mode == "place"
+    assert command.linear_x >= 0.04
+    assert abs(command.angular_z) <= 0.25
+
+
+def test_compute_place_command_holds_line_for_recapture_finish_push_near_zone():
+    zone = build_zone_spec("corral_single_ball_place")
+    command = compute_place_command(
+        {"x": 1.710093, "y": 0.077149, "yaw": -0.017281},
+        {"x": 1.960979, "y": 0.09264},
+        zone=zone,
+    )
+    assert command is not None
+    assert command.mode == "place_recapture"
+    assert command.linear_x >= 0.018
+    assert abs(command.angular_z) <= 0.25
 
 
 def test_summarize_runs_and_scorecard_markdown():
