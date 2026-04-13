@@ -32,6 +32,8 @@ def test_00_scenario_catalog_exposes_browser_demo_and_proof_fields(dashboard_cli
     assert scenarios["visit_single_ball_proof"]["browser_default"] is False
     assert scenarios["visit_three_ball_sequence"]["browser_default"] is False
     assert scenarios["corral_single_ball_place"]["browser_default"] is False
+    assert scenarios["corral_single_ball_place"]["world_file"] == "yolo_test_world_v6_clean_uat_short_turf.world"
+    assert scenarios["corral_single_ball_place"]["surface_profile"] == "short_turf"
 
     state = dashboard_client.state()
     assert "proof_state" in state
@@ -53,6 +55,7 @@ def test_00_scenario_catalog_exposes_browser_demo_and_proof_fields(dashboard_cli
     assert "placed_targets" in state
     assert "capture_loss_count" in state
     assert "route_order" in state
+    assert "surface_profile" in state
     assert "world_stream_frame_count" in state
     assert "world_stream_latest_frame_utc" in state
     assert "world_stream_frame_age_s" in state

@@ -20,6 +20,36 @@
             <radius>0.05</radius>
           </sphere>
         </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>1.2</mu>
+              <mu2>1.2</mu2>
+              <slip1>0.01</slip1>
+              <slip2>0.01</slip2>
+            </ode>
+            <torsional>
+              <coefficient>0.35</coefficient>
+              <use_patch_radius>true</use_patch_radius>
+              <patch_radius>0.03</patch_radius>
+              <ode>
+                <slip>0.0</slip>
+              </ode>
+            </torsional>
+          </friction>
+          <bounce>
+            <restitution_coefficient>0.02</restitution_coefficient>
+            <threshold>0.20</threshold>
+          </bounce>
+          <contact>
+            <ode>
+              <kp>250000.0</kp>
+              <kd>30.0</kd>
+              <max_vel>0.08</max_vel>
+              <min_depth>0.0005</min_depth>
+            </ode>
+          </contact>
+        </surface>
       </collision>
       <visual name="visual">
         <geometry>

@@ -15,7 +15,10 @@ from gather_mission_helpers import build_zone_spec  # noqa: E402
 from gather_mission_helpers import capture_loss_detected  # noqa: E402
 from gather_mission_helpers import capture_snapshot  # noqa: E402
 from gather_mission_helpers import compute_place_command  # noqa: E402
+from gather_mission_helpers import pose_delta_m  # noqa: E402
+from gather_mission_helpers import release_ready  # noqa: E402
 from gather_mission_helpers import summarize_runs  # noqa: E402
+from gather_mission_helpers import summarize_release_settle_trace  # noqa: E402
 from gather_mission_helpers import zone_dwell_complete  # noqa: E402
 from gather_mission_helpers import zone_snapshot  # noqa: E402
 
@@ -193,10 +196,65 @@ def test_compute_place_command_holds_line_for_recapture_finish_push_near_zone():
     assert abs(command.angular_z) <= 0.25
 
 
+def test_release_ready_requires_captured_ball_in_release_corridor():
+    zone = build_zone_spec("corral_single_ball_place")
+    capture = capture_snapshot({"x": 0.0, "y": 0.0, "yaw": 0.0}, {"x": 0.18, "y": 0.0})
+    zone_score = zone_snapshot({"x": zone.world_x + 0.015, "y": zone.world_y}, zone)
+
+    assert release_ready(capture=capture, zone_score=zone_score, zone=zone) is True
+
+
+def test_pose_delta_m_measures_ball_motion():
+    assert pose_delta_m({"x": 1.0, "y": 1.0}, {"x": 1.03, "y": 1.04}) == 0.05
+    assert pose_delta_m(None, {"x": 1.0, "y": 1.0}) is None
+
+
+def test_summarize_release_settle_trace_tracks_overshoot_after_zone_entry():
+    zone = build_zone_spec("corral_single_ball_place")
+    metrics = summarize_release_settle_trace(
+        surface_profile="short_turf",
+        zone=zone,
+        release_recontact_count=1,
+        release_samples=[
+            {"elapsed_s": 0.0, "zone_distance_m": 0.18, "inside_zone": True, "center_inside_zone": True},
+            {"elapsed_s": 0.6, "zone_distance_m": 0.26, "inside_zone": False, "center_inside_zone": False},
+            {"elapsed_s": 1.1, "zone_distance_m": 0.19, "inside_zone": True, "center_inside_zone": True},
+        ],
+    )
+
+    assert metrics.surface_profile == "short_turf"
+    assert metrics.max_overshoot_distance_m == 0.06
+    assert metrics.final_settle_distance_m == 0.19
+    assert metrics.release_recontact_count == 1
+    assert metrics.settled_inside_zone is True
+
+
 def test_summarize_runs_and_scorecard_markdown():
     runs = [
-        {"run_index": 1, "pass": True, "placed_count": 1, "capture_loss_count": 0, "mission_time_s": 12.3},
-        {"run_index": 2, "pass": True, "placed_count": 1, "capture_loss_count": 1, "mission_time_s": 13.7},
+        {
+            "run_index": 1,
+            "pass": True,
+            "surface_profile": "short_turf",
+            "placed_count": 1,
+            "capture_loss_count": 0,
+            "final_settle_distance_m": 0.14,
+            "max_overshoot_distance_m": 0.03,
+            "settle_time_s": 1.2,
+            "release_recontact_count": 0,
+            "mission_time_s": 12.3,
+        },
+        {
+            "run_index": 2,
+            "pass": True,
+            "surface_profile": "short_turf",
+            "placed_count": 1,
+            "capture_loss_count": 1,
+            "final_settle_distance_m": 0.16,
+            "max_overshoot_distance_m": 0.05,
+            "settle_time_s": 1.5,
+            "release_recontact_count": 1,
+            "mission_time_s": 13.7,
+        },
     ]
     summary = summarize_runs(runs)
     summary["promotion_gate_pass"] = True
@@ -206,5 +264,8 @@ def test_summarize_runs_and_scorecard_markdown():
         runs=runs,
     )
     assert summary["pass_count"] == 2
+    assert summary["surface_profiles"] == ["short_turf"]
+    assert summary["max_overshoot_distance_max_m"] == 0.05
     assert "PASS" in markdown
     assert "Run 01" in markdown
+    assert "short_turf" in markdown

@@ -1520,6 +1520,8 @@ def test_robot_sdf_name_for_startup_defaults_to_baseline(tmp_path):
     controller = _make_controller(tmp_path)
 
     assert controller._robot_sdf_name_for_startup() == dashboard_service.BASELINE_ROBOT_SDF_NAME
+    assert controller._world_file_for_startup() == dashboard_service.DEFAULT_WORLD_FILE
+    assert controller._surface_profile_for_startup() == dashboard_service.DEFAULT_SURFACE_PROFILE
 
 
 def test_robot_sdf_name_for_startup_uses_pending_corral_scenario(tmp_path):
@@ -1527,6 +1529,43 @@ def test_robot_sdf_name_for_startup_uses_pending_corral_scenario(tmp_path):
     controller.pending_scenario_id = "corral_single_ball_place"
 
     assert controller._robot_sdf_name_for_startup() == dashboard_service.CORRAL_ROBOT_SDF_NAME
+    assert controller._world_file_for_startup() == dashboard_service.SHORT_TURF_WORLD_FILE
+    assert controller._surface_profile_for_startup() == "short_turf"
+
+
+def test_request_scenario_run_accepts_world_and_surface_overrides(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["environment_state"] = "environment_ready"
+    controller.state["scenario_state"] = "ready"
+    controller._refresh_control_plane_state = lambda force=False: None
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            started.append(self)
+
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_scenario_run(
+        "corral_single_ball_place",
+        {"world_file": "yolo_test_world_v6_clean_uat_short_grass.world", "surface_profile": "short_grass"},
+    )
+
+    assert status == 202
+    assert payload["world_file"] == "yolo_test_world_v6_clean_uat_short_grass.world"
+    assert payload["surface_profile"] == "short_grass"
+    assert controller.pending_scenario_overrides["world_file"] == "yolo_test_world_v6_clean_uat_short_grass.world"
+    assert controller.pending_scenario_overrides["surface_profile"] == "short_grass"
+    assert started
 
 
 def test_run_gather_mission_scenario_uses_host_runtime_paths(tmp_path, monkeypatch):
@@ -1543,6 +1582,7 @@ def test_run_gather_mission_scenario_uses_host_runtime_paths(tmp_path, monkeypat
         "mission_phase": "completed",
         "mission_status": "completed",
         "gather_phase": "completed",
+        "surface_profile": "short_turf",
         "placed_targets": ["ball_1"],
         "capture_loss_count": 0,
         "route_order": ["ball_1"],
@@ -1551,6 +1591,8 @@ def test_run_gather_mission_scenario_uses_host_runtime_paths(tmp_path, monkeypat
     controller._scenario_env = lambda _scenario: {
         "CHASECAR_VISIT_RUNTIME_PATH": "/workspaces/chasecar/runtime/dashboard/visit_mission_runtime.json",
         "CHASECAR_GATHER_RUNTIME_PATH": "/workspaces/chasecar/runtime/dashboard/gather_mission_runtime.json",
+        "WORLD_FILE": "yolo_test_world_v6_clean_uat_short_turf.world",
+        "CHASECAR_SURFACE_PROFILE": "short_turf",
     }
 
     mission_root = tmp_path / "mission"
@@ -1580,14 +1622,21 @@ def test_run_gather_mission_scenario_uses_host_runtime_paths(tmp_path, monkeypat
     result = controller._run_gather_mission_scenario(dashboard_service.SCENARIOS_BY_ID["corral_single_ball_place"])
 
     command = captured["cmd"]
+    assert "--world-file" in command
+    assert "--surface-profile" in command
     assert "--visit-runtime-json" in command
     assert "--gather-runtime-json" in command
+    world_index = command.index("--world-file") + 1
+    surface_index = command.index("--surface-profile") + 1
     visit_index = command.index("--visit-runtime-json") + 1
     gather_index = command.index("--gather-runtime-json") + 1
+    assert command[world_index] == "yolo_test_world_v6_clean_uat_short_turf.world"
+    assert command[surface_index] == "short_turf"
     assert command[visit_index] == str(controller.visit_mission_runtime_path)
     assert command[gather_index] == str(controller.gather_mission_runtime_path)
     assert result["pass"] is True
     assert result["artifacts"]["gather_mission"] == str(mission_root)
+    assert result["surface_profile"] == "short_turf"
 
 
 def test_get_state_merges_gather_runtime_fields(tmp_path):
@@ -1616,6 +1665,7 @@ def test_get_state_merges_gather_runtime_fields(tmp_path):
         "mission_phase": "place",
         "mission_status": "running",
         "gather_phase": "place",
+        "surface_profile": "short_turf",
         "current_target_id": "ball_1",
         "visit_index": 1,
         "placed_targets": [],
@@ -1646,6 +1696,7 @@ def test_get_state_merges_gather_runtime_fields(tmp_path):
     assert state["capture_state"]["captured"] is True
     assert state["zone_pose"]["radius_m"] == 0.2
     assert state["route_order"] == ["ball_1"]
+    assert state["surface_profile"] == "short_turf"
     assert state["proof_artifact_dir"] == str(tmp_path / "mission")
     assert state["latest_proof_feedback"] == "Placing Ball 1 into the zone."
     assert [item["message"] for item in state["recent_operator_events"]] == ["Ball 1: visit attempt 1."]

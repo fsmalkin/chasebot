@@ -30,6 +30,8 @@ from llm_supervisor_core import read_json
 from llm_supervisor_core import utc_now
 from llm_supervisor_core import write_json
 from gather_mission_helpers import DEFAULT_ZONE_DWELL_S
+from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
+from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
 from gather_mission_helpers import CaptureEnvelope
 from gather_mission_helpers import GatherTargetSpec
 from gather_mission_helpers import build_gather_targets
@@ -40,6 +42,9 @@ from gather_mission_helpers import capture_snapshot
 from gather_mission_helpers import compute_capture_command
 from gather_mission_helpers import compute_place_command
 from gather_mission_helpers import normalize_angle
+from gather_mission_helpers import pose_delta_m
+from gather_mission_helpers import release_ready
+from gather_mission_helpers import summarize_release_settle_trace
 from gather_mission_helpers import world_pose_xyyaw
 from gather_mission_helpers import zone_dwell_complete
 from gather_mission_helpers import zone_snapshot
@@ -170,6 +175,8 @@ class GatherMissionRunner:
         self.zone = build_zone_spec(args.scenario_id)
         self.capture_envelope = CaptureEnvelope()
         self.docker = choose_docker_cli()
+        self.world_file = clean_text(args.world_file)
+        self.surface_profile = clean_text(args.surface_profile, "baseline")
         self.visit_runtime_state_path = resolve_visit_runtime_state_path(args.visit_runtime_json)
         self.gather_runtime_state_path = resolve_gather_runtime_state_path(args.gather_runtime_json)
         self.visit_runtime_state: dict[str, Any] = {}
@@ -233,8 +240,9 @@ class GatherMissionRunner:
         attempt_kind: str,
         local_recovery_attempted: bool = False,
         revisit_attempted: bool = False,
+        settle_metrics: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        return {
+        payload = {
             "target_id": target.id,
             "label": target.label,
             "pass": False,
@@ -246,7 +254,11 @@ class GatherMissionRunner:
             "route_index": int(route_index),
             "local_recovery_attempted": bool(local_recovery_attempted),
             "revisit_attempted": bool(revisit_attempted),
+            "surface_profile": self.surface_profile,
         }
+        if isinstance(settle_metrics, dict):
+            payload.update(settle_metrics)
+        return payload
 
     def _target_success_result(
         self,
@@ -260,8 +272,9 @@ class GatherMissionRunner:
         attempt_kind: str,
         local_recovery_attempted: bool = False,
         revisit_attempted: bool = False,
+        settle_metrics: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        return {
+        payload = {
             "target_id": target.id,
             "label": target.label,
             "pass": True,
@@ -274,7 +287,11 @@ class GatherMissionRunner:
             "place_time_s": round(float(place_time_s), 6),
             "local_recovery_attempted": bool(local_recovery_attempted),
             "revisit_attempted": bool(revisit_attempted),
+            "surface_profile": self.surface_profile,
         }
+        if isinstance(settle_metrics, dict):
+            payload.update(settle_metrics)
+        return payload
 
     def _request(self, method: str, path: str, payload: dict[str, Any] | None = None, timeout_s: float | None = None) -> tuple[int, dict[str, Any]]:
         return http_json(
@@ -591,6 +608,25 @@ fi
             return None
         return truth_world_xy(model_pose)
 
+    def _release_sample(
+        self,
+        *,
+        release_started_monotonic: float,
+        now_monotonic: float,
+        ball_pose: dict[str, Any] | None,
+        zone_score: Any,
+    ) -> dict[str, Any]:
+        sample = {
+            "elapsed_s": round(max(float(now_monotonic) - float(release_started_monotonic), 0.0), 6),
+            "ball_pose": ball_pose or {},
+            "zone_distance_m": 0.0,
+            "inside_zone": False,
+            "center_inside_zone": False,
+        }
+        if zone_score is not None:
+            sample.update(zone_score.to_dict())
+        return sample
+
     def _start_motion_bridge(self, compose_project: str, mission_root: Path) -> None:
         gate_stack_container = self._container_id(compose_project, "gate-stack")
         runtime_container_path = to_container_repo_path(self.gather_runtime_state_path)
@@ -673,6 +709,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "running": True,
             "scenario_id": str(self.args.scenario_id),
             "session_id": session_id,
+            "world_file": self.world_file,
+            "surface_profile": self.surface_profile,
             "proof_state": "waiting",
             "mission_phase": "setup",
             "mission_status": "running",
@@ -694,6 +732,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "running": True,
             "scenario_id": str(self.args.scenario_id),
             "session_id": session_id,
+            "world_file": self.world_file,
+            "surface_profile": self.surface_profile,
             "mission_phase": "setup",
             "mission_status": "running",
             "gather_phase": "setup",
@@ -711,6 +751,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "dwell_s": round(self.zone.dwell_s, 6),
             },
             "zone_score": {},
+            "settle_metrics": {},
             "manual_drive": {
                 "enabled": False,
                 "sequence": 0,
@@ -1050,6 +1091,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         local_recovery_deadline_monotonic: float | None = None
         local_recovery_started_monotonic: float | None = None
         recaptured_settle_started_monotonic: float | None = None
+        release_origin_monotonic: float | None = None
+        release_monitoring_active = False
+        release_samples: list[dict[str, Any]] = []
+        release_prev_ball_pose: dict[str, Any] | None = None
+        release_recontact_count = 0
+        release_inside_seen = False
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -1080,6 +1127,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 mission_phase="place",
                 latest_feedback=f"Placing {target.label} into the zone.",
             )
+            ball_motion_m = pose_delta_m(release_prev_ball_pose, ball_pose) if release_prev_ball_pose is not None else None
             append_jsonl(
                 state_history_path,
                 {
@@ -1092,19 +1140,164 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "zone_score": zone_score.to_dict() if zone_score else {},
                     "local_recovery_active": bool(local_recovery_started_monotonic is not None),
                     "local_recovery_attempted": bool(local_recovery_attempted),
+                    "release_monitoring_active": bool(release_monitoring_active),
+                    "release_recontact_count": int(release_recontact_count),
+                    "ball_motion_m": ball_motion_m,
                 },
             )
+            if release_monitoring_active and release_origin_monotonic is not None:
+                release_sample = self._release_sample(
+                    release_started_monotonic=release_origin_monotonic,
+                    now_monotonic=now_monotonic,
+                    ball_pose=ball_pose,
+                    zone_score=zone_score,
+                )
+                if ball_motion_m is not None:
+                    release_sample["ball_motion_m"] = ball_motion_m
+                release_samples.append(release_sample)
+                release_prev_ball_pose = dict(ball_pose or {})
+                if inside_zone:
+                    release_inside_seen = True
+                settle_metrics = summarize_release_settle_trace(
+                    surface_profile=self.surface_profile,
+                    zone=self.zone,
+                    release_samples=release_samples,
+                    release_recontact_count=release_recontact_count,
+                ).to_dict()
+                self._set_manual_drive(
+                    False,
+                    mode="release_settle",
+                    rationale=f"Ball entered the release corridor; letting {self.surface_profile} friction settle it.",
+                )
+                self._update_gather_runtime_state(
+                    latest_feedback=f"Letting {target.label} settle on {self.surface_profile}.",
+                    settle_metrics=settle_metrics,
+                )
+                if zone_score and zone_dwell_complete(
+                    inside_zone=zone_score.inside_zone,
+                    zone_entry_monotonic=zone_entry_monotonic,
+                    now_monotonic=now_monotonic,
+                    dwell_s=max(self.zone.dwell_s, DEFAULT_ZONE_DWELL_S),
+                ):
+                    return True, {
+                        "capture_state": capture.to_dict() if capture else {},
+                        "zone_score": zone_score.to_dict(),
+                        "final_ball_pose": ball_pose,
+                        "settle_metrics": settle_metrics,
+                        "release_recontact_count": release_recontact_count,
+                    }
+                release_elapsed_s = now_monotonic - release_origin_monotonic
+                if (
+                    not release_inside_seen
+                    and release_elapsed_s >= DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
+                    and capture
+                    and capture.within_recapture_window
+                    and release_recontact_count < 1
+                ):
+                    release_recontact_count += 1
+                    release_monitoring_active = False
+                    self._append_runtime_event(
+                        f"{target.label}: gentle recontact after short release on {self.surface_profile}.",
+                        key=f"release_recontact_short:{target.id}:{release_recontact_count}",
+                    )
+                    self._update_gather_runtime_state(
+                        latest_feedback=f"Recontacting {target.label} after short release.",
+                        settle_metrics=settle_metrics,
+                    )
+                elif release_inside_seen and zone_score and float(zone_score.zone_distance_m) > float(self.zone.radius_m) + 0.05:
+                    if capture and capture.within_recapture_window and release_recontact_count < 1:
+                        release_recontact_count += 1
+                        release_monitoring_active = False
+                        self._append_runtime_event(
+                            f"{target.label}: gentle recontact after release overshoot on {self.surface_profile}.",
+                            key=f"release_recontact_overshoot:{target.id}:{release_recontact_count}",
+                        )
+                        self._update_gather_runtime_state(
+                            latest_feedback=f"Recontacting {target.label} after release overshoot.",
+                            settle_metrics=settle_metrics,
+                        )
+                    else:
+                        self._set_manual_drive(False, mode="release_overshoot", rationale="Ball overshot beyond the zone after release.")
+                        return False, {
+                            "failure_reason": "release_overshoot",
+                            "failure_stage": "release",
+                            "capture_state": capture.to_dict() if capture else {},
+                            "zone_score": zone_score.to_dict() if zone_score else {},
+                            "local_recovery_attempted": local_recovery_attempted,
+                            "settle_metrics": settle_metrics,
+                            "release_recontact_count": release_recontact_count,
+                        }
+                elif (
+                    not release_inside_seen
+                    and release_elapsed_s >= 2.0
+                ):
+                    self._set_manual_drive(False, mode="release_stalled", rationale="Ball did not settle into the zone after release.")
+                    return False, {
+                        "failure_reason": "release_stalled",
+                        "failure_stage": "release",
+                        "capture_state": capture.to_dict() if capture else {},
+                        "zone_score": zone_score.to_dict() if zone_score else {},
+                        "local_recovery_attempted": local_recovery_attempted,
+                        "settle_metrics": settle_metrics,
+                        "release_recontact_count": release_recontact_count,
+                    }
+                time.sleep(self.args.poll_s)
+                continue
+            release_prev_ball_pose = dict(ball_pose or {}) if ball_pose else release_prev_ball_pose
+            if release_ready(capture=capture, zone_score=zone_score, zone=self.zone):
+                release_origin_monotonic = release_origin_monotonic or now_monotonic
+                release_monitoring_active = True
+                release_inside_seen = release_inside_seen or inside_zone
+                initial_sample = self._release_sample(
+                    release_started_monotonic=release_origin_monotonic,
+                    now_monotonic=now_monotonic,
+                    ball_pose=ball_pose,
+                    zone_score=zone_score,
+                )
+                if not release_samples or release_samples[-1] != initial_sample:
+                    release_samples.append(initial_sample)
+                self._set_manual_drive(
+                    False,
+                    mode="release_settle",
+                    rationale=f"Ball reached the release corridor; letting {self.surface_profile} friction settle it.",
+                )
+                self._update_gather_runtime_state(
+                    latest_feedback=f"Letting {target.label} settle on {self.surface_profile}.",
+                    settle_metrics=summarize_release_settle_trace(
+                        surface_profile=self.surface_profile,
+                        zone=self.zone,
+                        release_samples=release_samples,
+                        release_recontact_count=release_recontact_count,
+                    ).to_dict(),
+                )
+                time.sleep(self.args.poll_s)
+                continue
             if zone_score and zone_dwell_complete(
                 inside_zone=zone_score.inside_zone,
                 zone_entry_monotonic=zone_entry_monotonic,
                 now_monotonic=now_monotonic,
                 dwell_s=max(self.zone.dwell_s, DEFAULT_ZONE_DWELL_S),
             ):
+                settle_metrics = summarize_release_settle_trace(
+                    surface_profile=self.surface_profile,
+                    zone=self.zone,
+                    release_samples=[
+                        self._release_sample(
+                            release_started_monotonic=now_monotonic,
+                            now_monotonic=now_monotonic,
+                            ball_pose=ball_pose,
+                            zone_score=zone_score,
+                        )
+                    ],
+                    release_recontact_count=release_recontact_count,
+                ).to_dict()
                 self._set_manual_drive(False, mode="placed", rationale="Ball is dwelling inside the zone.")
                 return True, {
                     "capture_state": capture.to_dict() if capture else {},
                     "zone_score": zone_score.to_dict(),
                     "final_ball_pose": ball_pose,
+                    "settle_metrics": settle_metrics,
+                    "release_recontact_count": release_recontact_count,
                 }
             if zone_score and zone_score.inside_zone:
                 self._set_manual_drive(False, mode="zone_dwell", rationale="Ball is inside the zone; holding for dwell.")
@@ -1211,6 +1404,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "failure_reason": "place_timeout",
             "failure_stage": "place",
             "local_recovery_attempted": local_recovery_attempted,
+            "settle_metrics": summarize_release_settle_trace(
+                surface_profile=self.surface_profile,
+                zone=self.zone,
+                release_samples=release_samples,
+                release_recontact_count=release_recontact_count,
+            ).to_dict(),
+            "release_recontact_count": release_recontact_count,
         }
 
     def _run_target(
@@ -1329,7 +1529,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             route_index=route_index,
                             attempt_kind=attempt_kind,
                             local_recovery_attempted=local_recovery_attempted_any,
-                            revisit_attempted=place_loss_revisit_count > 0,
+                            revisit_attempted=place_loss_full_revisit_count > 0,
                         )
                     self._safe_stop()
                     self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
@@ -1372,6 +1572,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         attempt_kind=attempt_kind,
                         local_recovery_attempted=local_recovery_attempted_any,
                         revisit_attempted=place_loss_full_revisit_count > 0,
+                        settle_metrics=capture_payload.get("settle_metrics") if isinstance(capture_payload.get("settle_metrics"), dict) else None,
                     )
                 if place_loss_full_revisit_count > 0:
                     self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} capture failed after revisit.")
@@ -1385,6 +1586,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         attempt_kind=attempt_kind,
                         local_recovery_attempted=local_recovery_attempted_any,
                         revisit_attempted=True,
+                        settle_metrics=capture_payload.get("settle_metrics") if isinstance(capture_payload.get("settle_metrics"), dict) else None,
                     )
                 self._safe_stop()
                 self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
@@ -1423,6 +1625,23 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     latest_feedback=f"{target.label} placed in the zone.",
                 )
                 self._append_runtime_event(f"{target.label} placed in the corral zone.", key=f"placed:{target.id}")
+                settle_metrics = capture_payload.get("settle_metrics") if isinstance(capture_payload.get("settle_metrics"), dict) else None
+                if settle_metrics is None and final_ball_pose:
+                    zone_score = zone_snapshot(final_ball_pose, self.zone)
+                    if zone_score is not None:
+                        settle_metrics = summarize_release_settle_trace(
+                            surface_profile=self.surface_profile,
+                            zone=self.zone,
+                            release_samples=[
+                                self._release_sample(
+                                    release_started_monotonic=target_start_monotonic,
+                                    now_monotonic=time.monotonic(),
+                                    ball_pose=final_ball_pose,
+                                    zone_score=zone_score,
+                                )
+                            ],
+                            release_recontact_count=0,
+                        ).to_dict()
                 return self._target_success_result(
                     target=target,
                     attempts=attempt,
@@ -1432,6 +1651,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     place_time_s=time.monotonic() - target_start_monotonic,
                     attempt_kind=attempt_kind,
                     revisit_attempted=place_loss_full_revisit_count > 0,
+                    settle_metrics=settle_metrics,
                 )
 
             place_pass, place_payload = self._place_target(
@@ -1472,6 +1692,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     latest_feedback=f"{target.label} placed in the zone.",
                 )
                 self._append_runtime_event(f"{target.label} placed in the corral zone.", key=f"placed:{target.id}")
+                settle_metrics = place_payload.get("settle_metrics") if isinstance(place_payload.get("settle_metrics"), dict) else None
                 return self._target_success_result(
                     target=target,
                     attempts=attempt,
@@ -1482,6 +1703,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     attempt_kind=attempt_kind,
                     local_recovery_attempted=local_recovery_attempted_any or bool(place_payload.get("local_recovery_attempted", False)),
                     revisit_attempted=place_loss_full_revisit_count > 0,
+                    settle_metrics=settle_metrics,
                 )
 
             failure_reason = str(place_payload.get("failure_reason", "place_failed"))
@@ -1523,6 +1745,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     attempt_kind=attempt_kind,
                     local_recovery_attempted=local_recovery_attempted_any,
                     revisit_attempted=place_loss_full_revisit_count > 0,
+                    settle_metrics=place_payload.get("settle_metrics") if isinstance(place_payload.get("settle_metrics"), dict) else None,
                 )
             self._safe_stop()
             self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
@@ -1536,6 +1759,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             route_index=route_index,
             attempt_kind="unreachable_state",
             revisit_attempted=place_loss_full_revisit_count > 0,
+            settle_metrics={},
         )
 
     def run(self) -> dict[str, Any]:
@@ -1637,6 +1861,19 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             mission_time_s = round(time.monotonic() - mission_started_monotonic, 6)
             placed_targets = list(self.gather_runtime_state.get("placed_targets", []))
             capture_loss_count = int(self.gather_runtime_state.get("capture_loss_count", 0) or 0)
+            final_settle_distance_m = max(
+                [float(item.get("final_settle_distance_m", 0.0) or 0.0) for item in target_results if item.get("pass")],
+                default=0.0,
+            )
+            max_overshoot_distance_m = max(
+                [float(item.get("max_overshoot_distance_m", 0.0) or 0.0) for item in target_results],
+                default=0.0,
+            )
+            settle_time_s = max(
+                [float(item.get("settle_time_s", 0.0) or 0.0) for item in target_results if item.get("pass")],
+                default=0.0,
+            )
+            release_recontact_count = sum(int(item.get("release_recontact_count", 0) or 0) for item in target_results)
             mission_verdict = {
                 "generated_utc": utc_now(),
                 "type": "gather_mission",
@@ -1644,11 +1881,17 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "scenario_id": self.args.scenario_id,
                 "scenario_label": self.args.scenario_label,
                 "session_id": session_id,
+                "world_file": self.world_file,
+                "surface_profile": self.surface_profile,
                 "route_order": [item["selected_id"] for item in route_decisions],
                 "placed_targets": placed_targets,
                 "placed_count": len(placed_targets),
                 "total_targets": len(self.targets),
                 "capture_loss_count": capture_loss_count,
+                "final_settle_distance_m": round(final_settle_distance_m, 6),
+                "max_overshoot_distance_m": round(max_overshoot_distance_m, 6),
+                "settle_time_s": round(settle_time_s, 6),
+                "release_recontact_count": release_recontact_count,
                 "mission_time_s": mission_time_s,
                 "zone_pose": {
                     "x": round(self.zone.world_x, 6),
@@ -1669,10 +1912,16 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "scenario_id": self.args.scenario_id,
                 "scenario_label": self.args.scenario_label,
                 "session_id": session_id,
+                "world_file": self.world_file,
+                "surface_profile": self.surface_profile,
                 "route_order": mission_verdict["route_order"],
                 "placed_targets": placed_targets,
                 "placed_count": mission_verdict["placed_count"],
                 "capture_loss_count": capture_loss_count,
+                "final_settle_distance_m": mission_verdict["final_settle_distance_m"],
+                "max_overshoot_distance_m": mission_verdict["max_overshoot_distance_m"],
+                "settle_time_s": mission_verdict["settle_time_s"],
+                "release_recontact_count": mission_verdict["release_recontact_count"],
                 "mission_time_s": mission_time_s,
                 "mission_verdict_path": str(mission_root / "mission_verdict.json"),
                 "target_results_path": str(target_results_path),
@@ -1688,13 +1937,25 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "mission_time_min_s": summary["mission_time_s"],
                     "mission_time_max_s": summary["mission_time_s"],
                     "capture_loss_count_total": capture_loss_count,
+                    "surface_profiles": [self.surface_profile],
+                    "final_settle_distance_avg_m": summary["final_settle_distance_m"],
+                    "final_settle_distance_max_m": summary["final_settle_distance_m"],
+                    "max_overshoot_distance_max_m": summary["max_overshoot_distance_m"],
+                    "settle_time_avg_s": summary["settle_time_s"],
+                    "settle_time_max_s": summary["settle_time_s"],
+                    "release_recontact_count_total": summary["release_recontact_count"],
                 },
                 runs=[
                     {
                         "run_index": 1,
                         "pass": summary["pass"],
+                        "surface_profile": self.surface_profile,
                         "placed_count": summary["placed_count"],
                         "capture_loss_count": capture_loss_count,
+                        "final_settle_distance_m": summary["final_settle_distance_m"],
+                        "max_overshoot_distance_m": summary["max_overshoot_distance_m"],
+                        "settle_time_s": summary["settle_time_s"],
+                        "release_recontact_count": summary["release_recontact_count"],
                         "mission_time_s": summary["mission_time_s"],
                     }
                 ],
@@ -1708,6 +1969,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 mission_status="completed" if mission_verdict["pass"] else "failed",
                 current_target_id="",
                 latest_feedback="Gather mission completed." if mission_verdict["pass"] else f"Gather mission failed: {mission_error or 'mission_failed'}.",
+                surface_profile=self.surface_profile,
             )
             self._update_gather_runtime_state(
                 running=False,
@@ -1717,6 +1979,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 gather_phase="completed" if mission_verdict["pass"] else "failed",
                 current_target_id="",
                 latest_feedback="Gather mission completed." if mission_verdict["pass"] else f"Gather mission failed: {mission_error or 'mission_failed'}.",
+                surface_profile=self.surface_profile,
             )
             return summary
         finally:
@@ -1744,6 +2007,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reasoning-effort", default=os.environ.get("OPENAI_SUPERVISOR_REASONING_EFFORT") or os.environ.get("OPENAI_REASONING_EFFORT") or DEFAULT_REASONING_EFFORT)
     parser.add_argument("--scenario-id", default="corral_single_ball_place")
     parser.add_argument("--scenario-label", default="Corral Single Ball Place")
+    parser.add_argument("--world-file", default=os.environ.get("WORLD_FILE", ""))
+    parser.add_argument("--surface-profile", default=os.environ.get("CHASECAR_SURFACE_PROFILE", "baseline"))
     parser.add_argument("--artifact-kind", default="gather_mission")
     parser.add_argument("--poll-s", type=float, default=0.5)
     parser.add_argument("--timeout-s", type=float, default=30.0)

@@ -21,6 +21,8 @@ def _make_args(tmp_path: Path) -> SimpleNamespace:
         reasoning_effort="low",
         scenario_id="corral_single_ball_place",
         scenario_label="Corral Single Ball Place",
+        world_file="yolo_test_world_v6_clean_uat_short_turf.world",
+        surface_profile="short_turf",
         artifact_kind="gather_mission",
         poll_s=0.01,
         timeout_s=1.0,
@@ -123,8 +125,10 @@ def test_run_normalizes_success_summary_and_marks_proof_completed(tmp_path, monk
 
     assert summary["pass"] is True
     assert summary["placed_count"] == 1
+    assert summary["surface_profile"] == "short_turf"
     verdict = read_json(Path(summary["mission_verdict_path"]))
     assert verdict["type"] == "gather_mission"
+    assert verdict["surface_profile"] == "short_turf"
     assert verdict["route_order"] == ["ball_1"]
     assert Path(summary["scorecard_path"]).exists()
     assert runner.visit_runtime_state["proof_state"] == "completed"
@@ -171,6 +175,7 @@ def test_run_normalizes_failure_summary_and_marks_proof_failed(tmp_path, monkeyp
     assert summary["pass"] is False
     verdict = read_json(Path(summary["mission_verdict_path"]))
     assert verdict["mission_error"] == "capture_lost"
+    assert verdict["surface_profile"] == "short_turf"
     assert runner.visit_runtime_state["proof_state"] == "failed"
     assert runner.gather_runtime_state["gather_phase"] == "failed"
 

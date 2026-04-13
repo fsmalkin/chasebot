@@ -226,6 +226,16 @@ async function run() {
         const missingArtifacts = Object.entries(artifactChecks)
           .filter(([, ok]) => !ok)
           .map(([key]) => key);
+        const missionVerdict = finalState.mission_verdict || {};
+        const zonePose = missionVerdict.zone_pose && typeof missionVerdict.zone_pose === 'object'
+          ? missionVerdict.zone_pose
+          : {};
+        const zoneRadius = Number.parseFloat(String(zonePose.radius_m || '0.2')) || 0.2;
+        const finalSettleDistance = Number.parseFloat(String(missionVerdict.final_settle_distance_m || '0'));
+        const maxOvershootDistance = Number.parseFloat(String(missionVerdict.max_overshoot_distance_m || '0'));
+        const settleTime = Number.parseFloat(String(missionVerdict.settle_time_s || '0'));
+        const releaseRecontactCount = Number.parseInt(String(missionVerdict.release_recontact_count || '0'), 10) || 0;
+        const surfaceProfile = String(missionVerdict.surface_profile || finalState.surface_profile || '');
         const worldStreamRestartCountDelta = Math.max(
           (Number.parseInt(String(finalState.world_stream_restart_attempts || '0'), 10) || 0) - restartAttemptsBeforeRun,
           0,
@@ -257,6 +267,21 @@ async function run() {
         if (missingArtifacts.length) {
           throw new Error(`Run ${runIndex} missing required artifacts: ${missingArtifacts.join(', ')}`);
         }
+        if (!surfaceProfile) {
+          throw new Error(`Run ${runIndex} did not report a surface_profile.`);
+        }
+        if (!(finalSettleDistance <= zoneRadius)) {
+          throw new Error(`Run ${runIndex} settled outside the zone. final_settle_distance_m=${finalSettleDistance} zone_radius=${zoneRadius}`);
+        }
+        if (!(maxOvershootDistance <= 0.05)) {
+          throw new Error(`Run ${runIndex} exceeded overshoot allowance. max_overshoot_distance_m=${maxOvershootDistance}`);
+        }
+        if (!(settleTime <= 2.0)) {
+          throw new Error(`Run ${runIndex} settled too slowly. settle_time_s=${settleTime}`);
+        }
+        if (releaseRecontactCount > 1) {
+          throw new Error(`Run ${runIndex} exceeded release recontact budget. release_recontact_count=${releaseRecontactCount}`);
+        }
         if (!worldStreamClean) {
           throw new Error(
             `Run ${runIndex} was not operator-clean. restart_delta=${worldStreamRestartCountDelta} degraded_seen=${sawWorldStreamDegraded} restart_seen=${sawWorldStreamRestart}`,
@@ -271,6 +296,11 @@ async function run() {
           proof_states_seen: seenProofStates,
           mission_verdict: finalState.mission_verdict,
           placed_targets: finalState.placed_targets,
+          surface_profile: surfaceProfile,
+          final_settle_distance_m: finalSettleDistance,
+          max_overshoot_distance_m: maxOvershootDistance,
+          settle_time_s: settleTime,
+          release_recontact_count: releaseRecontactCount,
           latest_artifacts: artifacts,
           artifact_checks: artifactChecks,
           world_stream_restart_count_delta: worldStreamRestartCountDelta,

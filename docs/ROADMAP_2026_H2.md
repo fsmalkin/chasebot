@@ -125,30 +125,28 @@ Status update as of April 4, 2026:
 5. pivoting the roadmap slice to end-to-end VLA control
 6. replacing deterministic perception, planning, or execution loops with model-generated low-level action
 
-## Next Roadmap Slice: Surface-Aware Single-Ball Corral Placement
+## Next Roadmap Slice: Corral Time Optimization on Calibrated Turf
 
-The route-planning baseline is now the proved foundation, and single-ball
-corral/place through dashboard UAT is complete. The immediate next slice is not
-multi-ball gather yet. It is to model turf-like and grass-like surface friction
-in sim, then use that friction intentionally so placed balls settle in the zone
-instead of rolling through and overshooting after release. Multi-ball gather
-comes after that surface-aware one-ball behavior is stable, and onboard
-planning comes only after multi-ball gather is stable enough to benchmark
-meaningfully.
+The route-planning baseline is still the proved regression floor, and the
+single-ball corral path is now calibrated on realistic soccer-practice
+surfaces. The immediate next slice is no longer friction research. It is to use
+the calibrated `short_turf` surface as the canonical one-ball proof surface,
+then reduce time-to-place with explicit acceleration and deceleration shaping
+without giving up controlled in-zone settling. Multi-ball gather still comes
+after that one-ball time optimization slice, and onboard planning still waits
+until the fuller gather task is stable enough to benchmark meaningfully.
 
-For this next slice we still assume soccer fields or similar practice surfaces,
-but we no longer treat them as effectively frictionless. The next proof should
-make realistic surface friction work in favor of controlled placement, not
-fight against it.
+The important shift is that surface friction is now working for us instead of
+against us. The next proof should make the same controlled placement faster,
+not merely different.
 
 ```mermaid
 flowchart LR
     A[Route-planning baseline] --> B[Single-ball corral dashboard UAT complete]
-    B --> C[Research turf and grass surface simulation]
-    C --> D[Use friction to stop balls in-zone]
-    D --> E[Corral accel and decel optimization]
-    E --> F[Three-ball gather]
-    F --> G[Onboard planner evaluation]
+    B --> C[Surface-aware turf and grass calibration complete]
+    C --> D[Corral accel and decel optimization]
+    D --> E[Three-ball gather]
+    E --> F[Onboard planner evaluation]
 ```
 
 ### Step 1: Route-Planning Baseline - Complete
@@ -221,19 +219,19 @@ Interfaces held constant in this slice:
 4. deferred provider seam: `plan_collection_route(...)`
 5. no frozen-contract changes in this slice
 
-### Step 3: Surface-Aware Single-Ball Corral Refinement
+### Step 3: Surface-Aware Single-Ball Corral Refinement - Complete
 
 Goal: simulate the real practice surfaces we care about, then tune one-ball
 corral placement so surface friction helps the ball settle inside the zone
 instead of rolling through and overshooting.
 
-Why this is next:
+Why this mattered:
 
 1. fresh UAT showed the ball can still overshoot after it exits the catcher
 2. real turf and grass surfaces add friction that should arrest the ball earlier than the current sim surface does
 3. it is better to get one-ball place-and-settle behavior right before adding multi-ball gather complexity
 
-Work:
+Completed work:
 
 1. research how to simulate turf-like and grass-like practice surfaces in the active Gazebo/SDF stack
 2. choose one canonical friction preset for short turf and one for short grass, then make them repeatable in sim
@@ -241,13 +239,27 @@ Work:
 4. tune the corral placement behavior so friction works to our advantage once the ball leaves the catcher
 5. keep `visit_route_planning` green while the surface and corral changes land
 
+Validated evidence:
+
+1. route-planning regression pass: `artifacts/session/20260413T135805491949Z/visit_mission/20260413T135817Z/mission_verdict.json`
+2. canonical short-turf headless `5/5`: `artifacts/session/20260413T135949Z/gather_mission_repeatability/campaign_run_summary.json`
+3. secondary short-grass headless `3/3`: `artifacts/session/20260413T140714Z/gather_mission_repeatability/campaign_run_summary.json`
+4. dashboard UAT `3/3` on calibrated short turf: `artifacts/session/20260412T_CORRAL_DASHBOARD_UAT/dashboard_uat_summary.json`
+
 Acceptance:
 
 1. at least one turf-like surface preset and one grass-like surface preset are reproducible in sim
 2. single-ball corral on the chosen canonical surface settles the ball inside the zone instead of obviously overshooting through the corral
 3. route-planning regression evidence remains green
 
-### Step 4: Corral Time Optimization
+What this means:
+
+1. `short_turf` is now the canonical one-ball corral proof surface
+2. `short_grass` is credible as a secondary comparison surface
+3. gather artifacts now carry settle metrics (`surface_profile`, `final_settle_distance_m`, `max_overshoot_distance_m`, `settle_time_s`, `release_recontact_count`)
+4. future time optimization can target a stable, calibrated baseline instead of compensating for an unrealistic low-friction world
+
+### Step 4: Corral Time Optimization - Current Focus
 
 Goal: reduce time-to-place after stable surface-aware placement is proven,
 without giving up control.

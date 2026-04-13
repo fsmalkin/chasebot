@@ -15,6 +15,9 @@ DEFAULT_ZONE_RADIUS_M = 0.20
 DEFAULT_ZONE_DWELL_S = 1.0
 DEFAULT_CAPTURE_LOSS_GRACE_S = 1.0
 DEFAULT_TARGET_BALL_RADIUS_M = 0.05
+DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M = 0.01
+DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S = 0.75
+DEFAULT_RELEASE_ZONE_MARGIN_M = 0.035
 
 
 @dataclass(frozen=True)
@@ -82,6 +85,20 @@ class PlaceControlCommand:
     angular_z: float
     target_speed_scale: float
     rationale: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ReleaseSettleMetrics:
+    surface_profile: str
+    release_distance_to_zone_center_m: float
+    max_overshoot_distance_m: float
+    final_settle_distance_m: float
+    settle_time_s: float
+    release_recontact_count: int
+    settled_inside_zone: bool
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -274,6 +291,25 @@ def zone_dwell_complete(
     return (float(now_monotonic) - float(zone_entry_monotonic)) >= max(float(dwell_s), 0.0)
 
 
+def release_ready(
+    *,
+    capture: CaptureSnapshot | None,
+    zone_score: ZoneSnapshot | None,
+    zone: ZoneSpec,
+    release_margin_m: float = DEFAULT_RELEASE_ZONE_MARGIN_M,
+) -> bool:
+    if capture is None or zone_score is None:
+        return False
+    if zone_score.center_inside_zone:
+        return True
+    return (
+        capture.captured
+        and capture.ball_x_m >= 0.16
+        and abs(capture.ball_y_m) <= 0.03
+        and float(zone_score.zone_distance_m) <= max(float(zone.radius_m), 0.05) + max(float(release_margin_m), 0.0)
+    )
+
+
 def capture_loss_detected(
     *,
     captured_now: bool,
@@ -286,6 +322,14 @@ def capture_loss_detected(
     if last_captured_monotonic is None:
         return False
     return (float(now_monotonic) - float(last_captured_monotonic)) >= max(float(loss_grace_s), 0.0)
+
+
+def pose_delta_m(previous_pose: dict[str, Any] | None, current_pose: dict[str, Any] | None) -> float | None:
+    previous_xy = point_xy(previous_pose or {})
+    current_xy = point_xy(current_pose or {})
+    if previous_xy is None or current_xy is None:
+        return None
+    return round(math.hypot(current_xy[0] - previous_xy[0], current_xy[1] - previous_xy[1]), 6)
 
 
 def compute_capture_command(
@@ -457,6 +501,53 @@ def compute_place_command(
     )
 
 
+def summarize_release_settle_trace(
+    *,
+    surface_profile: str,
+    zone: ZoneSpec,
+    release_samples: list[dict[str, Any]],
+    release_recontact_count: int,
+) -> ReleaseSettleMetrics:
+    if not release_samples:
+        return ReleaseSettleMetrics(
+            surface_profile=str(surface_profile or ""),
+            release_distance_to_zone_center_m=0.0,
+            max_overshoot_distance_m=0.0,
+            final_settle_distance_m=0.0,
+            settle_time_s=0.0,
+            release_recontact_count=int(release_recontact_count),
+            settled_inside_zone=False,
+        )
+
+    first = release_samples[0]
+    last = release_samples[-1]
+    first_inside_index: int | None = None
+    for index, sample in enumerate(release_samples):
+        if bool(sample.get("inside_zone")) or bool(sample.get("center_inside_zone")):
+            first_inside_index = index
+            break
+    overshoot_samples = release_samples[first_inside_index:] if first_inside_index is not None else release_samples
+    max_overshoot_distance_m = 0.0
+    for sample in overshoot_samples:
+        distance = _number(sample.get("zone_distance_m"))
+        if distance is None:
+            continue
+        max_overshoot_distance_m = max(max_overshoot_distance_m, max(0.0, float(distance) - max(float(zone.radius_m), 0.0)))
+    settle_time_s = max(
+        (_number(last.get("elapsed_s")) or 0.0) - (_number(first.get("elapsed_s")) or 0.0),
+        0.0,
+    )
+    return ReleaseSettleMetrics(
+        surface_profile=str(surface_profile or ""),
+        release_distance_to_zone_center_m=round(_number(first.get("zone_distance_m")) or 0.0, 6),
+        max_overshoot_distance_m=round(max_overshoot_distance_m, 6),
+        final_settle_distance_m=round(_number(last.get("zone_distance_m")) or 0.0, 6),
+        settle_time_s=round(settle_time_s, 6),
+        release_recontact_count=int(release_recontact_count),
+        settled_inside_zone=bool(last.get("center_inside_zone") or last.get("inside_zone")),
+    )
+
+
 def campaign_pass(runs: list[dict[str, Any]]) -> bool:
     if not runs:
         return False
@@ -467,6 +558,23 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     mission_times = [float(item.get("mission_time_s", 0.0) or 0.0) for item in runs if item.get("pass")]
     placed_counts = [int(item.get("placed_count", 0) or 0) for item in runs]
     capture_losses = [int(item.get("capture_loss_count", 0) or 0) for item in runs]
+    settle_distances = [
+        float(item.get("final_settle_distance_m", 0.0) or 0.0)
+        for item in runs
+        if item.get("pass") and item.get("final_settle_distance_m") not in {None, ""}
+    ]
+    overshoot_distances = [
+        float(item.get("max_overshoot_distance_m", 0.0) or 0.0)
+        for item in runs
+        if item.get("max_overshoot_distance_m") not in {None, ""}
+    ]
+    settle_times = [
+        float(item.get("settle_time_s", 0.0) or 0.0)
+        for item in runs
+        if item.get("pass") and item.get("settle_time_s") not in {None, ""}
+    ]
+    release_recontacts = [int(item.get("release_recontact_count", 0) or 0) for item in runs]
+    surface_profiles = sorted({str(item.get("surface_profile", "") or "") for item in runs if str(item.get("surface_profile", "") or "").strip()})
     return {
         "pass_count": sum(1 for item in runs if bool(item.get("pass"))),
         "placed_count_max": max(placed_counts) if placed_counts else 0,
@@ -475,17 +583,30 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "mission_time_avg_s": round(sum(mission_times) / len(mission_times), 6) if mission_times else 0.0,
         "mission_time_min_s": round(min(mission_times), 6) if mission_times else 0.0,
         "mission_time_max_s": round(max(mission_times), 6) if mission_times else 0.0,
+        "surface_profiles": surface_profiles,
+        "final_settle_distance_avg_m": round(sum(settle_distances) / len(settle_distances), 6) if settle_distances else 0.0,
+        "final_settle_distance_max_m": round(max(settle_distances), 6) if settle_distances else 0.0,
+        "max_overshoot_distance_max_m": round(max(overshoot_distances), 6) if overshoot_distances else 0.0,
+        "settle_time_avg_s": round(sum(settle_times) / len(settle_times), 6) if settle_times else 0.0,
+        "settle_time_max_s": round(max(settle_times), 6) if settle_times else 0.0,
+        "release_recontact_count_total": sum(release_recontacts),
     }
 
 
 def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], runs: list[dict[str, Any]]) -> str:
+    surface_profiles = list(summary.get("surface_profiles", [])) if isinstance(summary.get("surface_profiles"), list) else []
     lines = [
         f"# {scenario_label} Scorecard",
         "",
+        f"- Surface profiles: `{', '.join(surface_profiles) if surface_profiles else 'unspecified'}`",
         f"- Pass rate: `{summary.get('pass_count', 0)}/{max(len(runs), 1)}`",
         f"- Promotion gate: `{'PASS' if summary.get('promotion_gate_pass') else 'FAIL'}`",
         f"- Mission time avg/min/max: `{summary.get('mission_time_avg_s', 0.0):.3f}s / {summary.get('mission_time_min_s', 0.0):.3f}s / {summary.get('mission_time_max_s', 0.0):.3f}s`",
         f"- Capture losses total: `{summary.get('capture_loss_count_total', 0)}`",
+        f"- Final settle distance avg/max: `{summary.get('final_settle_distance_avg_m', 0.0):.3f}m / {summary.get('final_settle_distance_max_m', 0.0):.3f}m`",
+        f"- Max overshoot distance: `{summary.get('max_overshoot_distance_max_m', 0.0):.3f}m`",
+        f"- Settle time avg/max: `{summary.get('settle_time_avg_s', 0.0):.3f}s / {summary.get('settle_time_max_s', 0.0):.3f}s`",
+        f"- Release recontacts total: `{summary.get('release_recontact_count_total', 0)}`",
         "",
         "## Runs",
         "",
@@ -494,9 +615,14 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         lines.append(
             f"- Run {int(item.get('run_index', 0) or 0):02d}: "
             f"`{'PASS' if item.get('pass') else 'FAIL'}` "
+            f"surface=`{str(item.get('surface_profile', '') or 'unspecified')}` "
             f"placed=`{int(item.get('placed_count', 0) or 0)}` "
             f"capture_losses=`{int(item.get('capture_loss_count', 0) or 0)}` "
-            f"mission_time=`{float(item.get('mission_time_s', 0.0) or 0.0):.3f}s`"
+            f"mission_time=`{float(item.get('mission_time_s', 0.0) or 0.0):.3f}s` "
+            f"settle=`{float(item.get('final_settle_distance_m', 0.0) or 0.0):.3f}m` "
+            f"overshoot=`{float(item.get('max_overshoot_distance_m', 0.0) or 0.0):.3f}m` "
+            f"settle_time=`{float(item.get('settle_time_s', 0.0) or 0.0):.3f}s` "
+            f"recontacts=`{int(item.get('release_recontact_count', 0) or 0)}`"
         )
     lines.append("")
     return "\n".join(lines)

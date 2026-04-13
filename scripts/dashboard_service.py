@@ -55,6 +55,9 @@ DEFAULT_RUNTIME_DIR = STATIC_DASHBOARD_DIR
 DEFAULT_RUNTIME_TARGET = "robot_fidelity_orin"
 DEFAULT_CORE_ROS_DISTRO = "kilted"
 DEFAULT_WORLD_FILE = "yolo_test_world_v6_clean_uat.world"
+DEFAULT_SURFACE_PROFILE = "baseline"
+SHORT_TURF_WORLD_FILE = "yolo_test_world_v6_clean_uat_short_turf.world"
+SHORT_GRASS_WORLD_FILE = "yolo_test_world_v6_clean_uat_short_grass.world"
 DEFAULT_WORLD_NAME = "yolo_test_world"
 DEFAULT_INFERENCE_BACKEND = "tensorrt_int8"
 DEFAULT_GATE_PROFILE = "compat"
@@ -113,6 +116,8 @@ class ScenarioDefinition:
     browser_default: bool = False
     featured: bool = False
     robot_sdf_name: str = BASELINE_ROBOT_SDF_NAME
+    world_file: str = DEFAULT_WORLD_FILE
+    surface_profile: str = DEFAULT_SURFACE_PROFILE
     target_x: float = 1.10
     target_y: float = 0.00
     target_z: float = 0.05
@@ -242,6 +247,8 @@ SCENARIOS = [
         description="Single-ball corral mission: visit, capture, and place the ball into the zone.",
         mode="gather_mission",
         robot_sdf_name=CORRAL_ROBOT_SDF_NAME,
+        world_file=SHORT_TURF_WORLD_FILE,
+        surface_profile="short_turf",
     ),
 ]
 SCENARIOS_BY_ID = {item.id: item for item in SCENARIOS}
@@ -445,6 +452,7 @@ class DashboardController:
         self.world_viewer_container_id = ""
         self.operator_view_container_id = ""
         self.pending_scenario_id = ""
+        self.pending_scenario_overrides: Dict[str, str] = {}
         self.build_on_next_start = True
         self.world_stream_restart_lock = threading.Lock()
         self._world_stream_stale_since_monotonic = 0.0
@@ -471,6 +479,7 @@ class DashboardController:
                 "runtime_target": DEFAULT_RUNTIME_TARGET,
                 "core_ros_distro": DEFAULT_CORE_ROS_DISTRO,
                 "world_file": DEFAULT_WORLD_FILE,
+                "surface_profile": DEFAULT_SURFACE_PROFILE,
                 "world_name": DEFAULT_WORLD_NAME,
                 "phase": "stopped",
                 "target_id": "",
@@ -656,6 +665,31 @@ class DashboardController:
     def _scenario_requires_clean_reset(self, scenario: ScenarioDefinition) -> bool:
         return scenario.id in SELF_CONTAINED_SCENARIO_IDS
 
+    def _normalize_world_file(self, raw_value: str, *, default_value: str) -> str:
+        candidate = str(raw_value or "").strip() or str(default_value or "").strip() or DEFAULT_WORLD_FILE
+        candidate_path = Path(candidate)
+        if not candidate_path.is_absolute():
+            candidate_path = (REPO_ROOT / "ros2_config" / "worlds" / candidate).resolve()
+        if not candidate_path.exists():
+            raise ValueError(f"unknown world_file: {candidate}")
+        return candidate_path.name
+
+    def _normalize_surface_profile(self, raw_value: str, *, default_value: str) -> str:
+        candidate = str(raw_value or "").strip() or str(default_value or "").strip() or DEFAULT_SURFACE_PROFILE
+        return candidate.replace(" ", "_")
+
+    def _scenario_pending_world_file(self) -> str:
+        pending_scenario = SCENARIOS_BY_ID.get(str(self.pending_scenario_id or "").strip())
+        default_world = pending_scenario.world_file if pending_scenario is not None else DEFAULT_WORLD_FILE
+        pending_overrides = getattr(self, "pending_scenario_overrides", {}) or {}
+        return self._normalize_world_file(str(pending_overrides.get("world_file", "") or ""), default_value=default_world)
+
+    def _scenario_pending_surface_profile(self) -> str:
+        pending_scenario = SCENARIOS_BY_ID.get(str(self.pending_scenario_id or "").strip())
+        default_surface = pending_scenario.surface_profile if pending_scenario is not None else DEFAULT_SURFACE_PROFILE
+        pending_overrides = getattr(self, "pending_scenario_overrides", {}) or {}
+        return self._normalize_surface_profile(str(pending_overrides.get("surface_profile", "") or ""), default_value=default_surface)
+
     def _launch_scenario_thread(self, scenario: ScenarioDefinition) -> None:
         self.scenario_cancel.clear()
         self.scenario_thread = threading.Thread(
@@ -671,6 +705,7 @@ class DashboardController:
         if not pending_scenario_id:
             return
         self.pending_scenario_id = ""
+        self.pending_scenario_overrides = {}
         scenario = SCENARIOS_BY_ID.get(pending_scenario_id)
         if scenario is None:
             return
@@ -1497,6 +1532,7 @@ class DashboardController:
         active_scenario_id = str(snapshot.get("active_scenario", "") or "")
         active_scenario = SCENARIOS_BY_ID.get(active_scenario_id)
         active_mode = active_scenario.mode if active_scenario else ""
+        snapshot["active_scenario_label"] = active_scenario.label if active_scenario else ""
         if not active_mode:
             mission_verdict_type = ""
             if isinstance(snapshot.get("mission_verdict"), dict):
@@ -1594,6 +1630,7 @@ class DashboardController:
         snapshot["placed_targets"] = list(gather_runtime.get("placed_targets", snapshot.get("placed_targets", [])) or [])
         snapshot["capture_loss_count"] = int(gather_runtime.get("capture_loss_count", snapshot.get("capture_loss_count", 0)) or 0)
         snapshot["route_order"] = list(gather_runtime.get("route_order", snapshot.get("route_order", [])) or [])
+        snapshot["surface_profile"] = str(gather_runtime.get("surface_profile", snapshot.get("surface_profile", DEFAULT_SURFACE_PROFILE)) or DEFAULT_SURFACE_PROFILE)
         if active_mode in {"visit_mission", "gather_mission"} and snapshot["current_target_id"]:
             snapshot["target_id"] = snapshot["current_target_id"]
         snapshot["policy"] = build_policy_snapshot(snapshot, sim_gate_ready=bool(self.sim_gate_container_id))
@@ -1747,10 +1784,16 @@ class DashboardController:
         self.lifecycle_thread.start()
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "sim reset queued"}
 
-    def request_scenario_run(self, scenario_id: str) -> tuple[int, Dict[str, Any]]:
+    def request_scenario_run(self, scenario_id: str, overrides: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
         scenario = SCENARIOS_BY_ID.get(scenario_id)
         if scenario is None:
             return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown scenario: {scenario_id}"}
+        overrides = dict(overrides or {})
+        try:
+            world_file = self._normalize_world_file(str(overrides.get("world_file", "") or ""), default_value=scenario.world_file)
+            surface_profile = self._normalize_surface_profile(str(overrides.get("surface_profile", "") or ""), default_value=scenario.surface_profile)
+        except ValueError as exc:
+            return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
         with self.state_lock:
             env_state = self.state["environment_state"]
             scenario_state = self.state["scenario_state"]
@@ -1766,11 +1809,29 @@ class DashboardController:
             if self._lifecycle_busy():
                 return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
             self.pending_scenario_id = scenario_id
+            self.pending_scenario_overrides = {
+                "world_file": world_file,
+                "surface_profile": surface_profile,
+            }
             self._record_operator_event(f"{scenario.label} queued after sim reset.", category="scenario")
-            self._update_state(scenario_message=f"{scenario.label} queued after sim reset")
+            self._update_state(
+                scenario_message=f"{scenario.label} queued after sim reset",
+                world_file=world_file,
+                surface_profile=surface_profile,
+            )
             self.lifecycle_thread = threading.Thread(target=self._reset_environment_worker, name="dashboard-reset", daemon=True)
             self.lifecycle_thread.start()
-            return HTTPStatus.ACCEPTED, {"accepted": True, "message": f"scenario {scenario_id} queued after sim reset"}
+            return HTTPStatus.ACCEPTED, {
+                "accepted": True,
+                "message": f"scenario {scenario_id} queued after sim reset",
+                "world_file": world_file,
+                "surface_profile": surface_profile,
+            }
+        if world_file != scenario.world_file or surface_profile != scenario.surface_profile:
+            return HTTPStatus.CONFLICT, {
+                "accepted": False,
+                "error": "scenario world override requires a clean-reset scenario",
+            }
         self._launch_scenario_thread(scenario)
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": f"scenario {scenario_id} queued"}
 
@@ -2463,6 +2524,12 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
             return pending_scenario.robot_sdf_name
         return BASELINE_ROBOT_SDF_NAME
 
+    def _world_file_for_startup(self) -> str:
+        return self._scenario_pending_world_file() if str(self.pending_scenario_id or "").strip() else DEFAULT_WORLD_FILE
+
+    def _surface_profile_for_startup(self) -> str:
+        return self._scenario_pending_surface_profile() if str(self.pending_scenario_id or "").strip() else DEFAULT_SURFACE_PROFILE
+
     def _refresh_session_container_ids(self, project_name: str) -> None:
         service_states = self._required_gate_service_states(project_name)
         self.sim_gate_container_id = str(service_states.get("sim-gate", {}).get("container_id", "") or "")
@@ -2535,6 +2602,8 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                 scenario_state="idle",
                 session_id=session_id,
                 compose_project=project_name,
+                world_file=self._world_file_for_startup(),
+                surface_profile=self._surface_profile_for_startup(),
                 environment_message="starting authoritative environment",
                 environment_failure_class="",
                 gate_service_states={},
@@ -2598,8 +2667,12 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     world_stream_port=world_stream_port,
                     operator_view_port=operator_view_port,
                 )
+                env["WORLD_FILE"] = self._world_file_for_startup()
+                env["CHASECAR_SURFACE_PROFILE"] = self._surface_profile_for_startup()
                 env["CHASECAR_ROBOT_SDF_NAME"] = self._robot_sdf_name_for_startup()
                 self._update_state(
+                    world_file=env["WORLD_FILE"],
+                    surface_profile=env["CHASECAR_SURFACE_PROFILE"],
                     world_stream_port=world_stream_port,
                     operator_view_port=operator_view_port,
                     operator_view_url="",
@@ -2704,6 +2777,8 @@ echo "TRUTH_LOG=$LOG_FILE"
                     scenario_state="ready",
                     environment_message="environment ready",
                     environment_failure_class="",
+                    world_file=env.get("WORLD_FILE", DEFAULT_WORLD_FILE),
+                    surface_profile=env.get("CHASECAR_SURFACE_PROFILE", DEFAULT_SURFACE_PROFILE),
                     gate_service_states=gate_service_states,
                     scenario_message="ready",
                     world_stream_url="",
@@ -2829,6 +2904,7 @@ echo "VISUAL_LOG=$LOG_FILE"
             pending_scenario_ready_to_launch = bool(str(self.pending_scenario_id or "").strip())
         except Exception as exc:
             self.pending_scenario_id = ""
+            self.pending_scenario_overrides = {}
             self._teardown_environment(
                 env=self._base_env(
                     session_id=self.state.get("session_id", ""),
@@ -2890,6 +2966,7 @@ echo "VISUAL_LOG=$LOG_FILE"
             return
         try:
             self.pending_scenario_id = ""
+            self.pending_scenario_overrides = {}
             with self.state_lock:
                 session_id = self.state.get("session_id", "")
                 world_stream_port = int(self.state.get("world_stream_port", 0) or 0)
@@ -2991,6 +3068,8 @@ echo "VISUAL_LOG=$LOG_FILE"
             )
             self._world_stream_stale_since_monotonic = 0.0
             env = self._base_env(session_id=session_id, world_stream_port=world_stream_port, operator_view_port=operator_view_port)
+            env["WORLD_FILE"] = self._world_file_for_startup()
+            env["CHASECAR_SURFACE_PROFILE"] = self._surface_profile_for_startup()
             env["CHASECAR_ROBOT_SDF_NAME"] = self._robot_sdf_name_for_startup()
             self._cleanup_scenario_processes()
             self._teardown_environment(env=env)
@@ -3025,6 +3104,8 @@ echo "VISUAL_LOG=$LOG_FILE"
                 world_stream_port=world_stream_port,
                 operator_view_port=operator_view_port,
             )
+            env["WORLD_FILE"] = self._world_file_for_startup()
+            env["CHASECAR_SURFACE_PROFILE"] = self._surface_profile_for_startup()
             env["CHASECAR_ROBOT_SDF_NAME"] = self._robot_sdf_name_for_startup()
             self._update_state(
                 environment_state="stopping",
@@ -3327,6 +3408,11 @@ pkill -f "fluxbox" 2>/dev/null || true
             session_id=session_id,
             world_stream_port=world_stream_port,
             operator_view_port=operator_view_port,
+        )
+        env["WORLD_FILE"] = self._normalize_world_file(str(self.state.get("world_file", "") or ""), default_value=scenario.world_file)
+        env["CHASECAR_SURFACE_PROFILE"] = self._normalize_surface_profile(
+            str(self.state.get("surface_profile", "") or ""),
+            default_value=scenario.surface_profile,
         )
         env.update(
             {
@@ -3706,6 +3792,10 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             scenario.id,
             "--scenario-label",
             scenario.label,
+            "--world-file",
+            str(env.get("WORLD_FILE", scenario.world_file)),
+            "--surface-profile",
+            str(env.get("CHASECAR_SURFACE_PROFILE", scenario.surface_profile)),
             "--visit-runtime-json",
             str(self.visit_mission_runtime_path),
             "--gather-runtime-json",
@@ -3776,6 +3866,7 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "placed_targets": list(gather_runtime.get("placed_targets", [])) if isinstance(gather_runtime.get("placed_targets"), list) else [],
             "capture_loss_count": int(gather_runtime.get("capture_loss_count", 0) or 0),
             "route_order": list(gather_runtime.get("route_order", [])) if isinstance(gather_runtime.get("route_order"), list) else [],
+            "surface_profile": str(gather_runtime.get("surface_profile", env.get("CHASECAR_SURFACE_PROFILE", scenario.surface_profile)) or ""),
         }
         self._write_scenario_result(scenario.id, payload)
         return payload
@@ -4055,7 +4146,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return self._json_response(status, payload)
         if path == "/api/scenario/run":
             scenario_id = str(body.get("scenario_id", "")).strip()
-            status, payload = controller.request_scenario_run(scenario_id)
+            status, payload = controller.request_scenario_run(scenario_id, body)
             return self._json_response(status, payload)
         if path == "/api/scenario/stop":
             status, payload = controller.request_scenario_stop()
