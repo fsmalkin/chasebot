@@ -336,33 +336,41 @@ To keep the demo honest and legible, this phase does not include:
 - autonomous environment lifecycle control by the LLM
 - end-to-end VLA control
 
-## Next Phase: Ball Corral / Place, Then Onboard Planning
+## Next Phase: Single-Ball Corral / Place Through Dashboard UAT
 
 The single-target and multi-target visit UAT phase is complete enough to serve
-as the baseline. Route planning is now the floor, not the next open milestone.
-The next browser-facing phase is ball corral/place into a designated area, with
-onboard planning promotion following after the gather task is stable enough to
-benchmark fairly.
+as the baseline. `visit_route_planning` is now the protected regression floor,
+not the next open milestone. The only active milestone is
+`corral_single_ball_place` through operator-visible dashboard UAT.
 
-For this first gather milestone, we assume smooth-surface operation such as
-soccer fields or similar turf-like practice surfaces.
+For this first corral/place milestone, we assume smooth-surface operation such
+as soccer fields or similar turf-like practice surfaces.
 
-### Route-Planning Baseline Snapshot
+### Status Snapshot
 
-Route planning now provides the regression floor for the next phase: the robot
-visits all 3 balls, avoids already-visited balls on later legs, and reruns as a
-self-contained one-click dashboard scenario.
+1. route-planning serial gate is complete and remains the regression floor
+2. single-ball corral/place headless gate is complete and is the pre-UAT proof
+3. dashboard backend/UI exposure for `corral_single_ball_place` is complete
+4. repeated live dashboard UAT hardening is the active blocker
+5. primary button promotion remains blocked until dashboard UAT passes `3/3`
+6. `gather_three_ball_zone` is paused on purpose until the one-ball dashboard proof is green
+7. onboard planning remains interface-scaffold only via `plan_collection_route(...)`
 
 ```mermaid
 flowchart LR
-    A[Spawn 3 balls] --> B[LLM chooses route]
-    B --> C[visit_target target_id]
-    C --> D[Depth-backed obstacle perception]
-    D --> E[Visited-target obstacle persistence]
-    E --> F[Nav2 costmaps plus controller]
-    F --> G[5 of 5 serial dashboard gate]
-    G --> H[Regression floor for gather work]
+    A[Route-planning regression floor] --> B[Single-ball offline and headless gate]
+    B --> C[Dashboard integration complete]
+    C --> D[Dashboard repeatability hardening active]
+    D --> E[Replace Run LLM Route Plan button]
+    E --> F[Three-ball gather later]
+    F --> G[Onboard planner later]
 ```
+
+### Regression Floor
+
+`visit_route_planning` provides the regression floor for this milestone: the
+robot visits all 3 balls, avoids already-visited balls on later legs, and
+reruns as a self-contained one-click dashboard scenario.
 
 Validated baseline evidence:
 
@@ -385,25 +393,64 @@ What changed to make that possible:
 3. visited targets are republished as persistent world-frame obstacle points so the next leg still sees them as obstacles
 4. dashboard clicks queue a reset before launch so each run starts from a fresh session
 
-Top-priority next step:
+Rule for this milestone:
 
-1. keep browser/dashboard UAT serial for operator trust and use it as the proof surface
-2. treat the parallel soak runner as regression infrastructure, not as the operator proof surface
-3. build the simulated catcher and corral/place proof above the current route-planning baseline
+1. `visit_route_planning` stays green after every catcher/corral change
+2. browser/dashboard UAT remains serial for operator trust
+3. the parallel soak runner remains regression infrastructure, not the operator proof surface
 
-See [ROADMAP_2026_H2.md](./ROADMAP_2026_H2.md) for the full 3-step plan:
+### Single-Ball Dashboard Promotion
 
-1. **Route-planning baseline complete** - keep the `5/5` serial gate and isolated soak green while gather work lands
-2. **Ball corral / place proof** - simulate the front-mounted catcher, capture a ball in a controlled push envelope, and place it into a designated zone
-3. **Onboard planning for visit + gather** - replay-compare candidate local models, shadow them in live sim, then promote only if they meet the full gather bar
+Active near-term scenario and intent for this phase:
 
-### New capabilities needed
+1. active scenario ID: `corral_single_ball_place`
+2. protected regression scenario ID: `visit_route_planning`
+3. no frozen-contract change in this slice
 
-- simulated front catcher geometry that supports controlled ball capture and push
-- designated corral zone with explicit scoring and event logging
-- a gather/place phase above the current visit flow, reusing the existing route planner underneath
-- browser-dashboard UAT scenarios for single-ball place and multi-ball gather
-- visit-and-gather scorecards that report route order, place time, zone score, and capture-loss events
+Promotion ladder:
+
+1. keep offline unit tests green for gather helpers, scoring, and the provider seam
+2. keep the headless route-planning regression green
+3. keep the headless single-ball corral/place gate at `5/5`
+4. keep `corral_single_ball_place` integrated into the dashboard control plane
+5. stabilize repeated dashboard-backed single-ball UAT until it passes `3/3`
+6. only then replace the existing `Run LLM Route Plan` primary button with the single-ball corral/place flow
+
+Latest evidence snapshot:
+
+1. a fresh route-planning regression pass exists
+2. a fresh single-ball headless `5/5` corral gate pass exists
+3. dashboard UAT has passing single runs for `corral_single_ball_place`
+4. the formal dashboard promotion gate remains below `3/3`, so the milestone is not promoted yet
+
+Operator-facing rule:
+
+1. before dashboard UAT passes, `corral_single_ball_place` may exist as a scenario but does not replace the primary route-planning action
+2. after dashboard UAT passes, the existing `Run LLM Route Plan` primary button is repointed and relabelled to the single-ball corral flow
+3. that button replacement is the promotion signal for this milestone
+
+Acceptance for this milestone:
+
+1. route-planning regression still green after catcher/corral work
+2. single-ball corral/place headless gate remains `5/5`
+3. dashboard-backed single-ball UAT passes `3/3`
+4. the browser surface promotes the new scenario into the existing primary button slot only after that pass
+5. no readiness claim is made for three-ball gather or onboard planning in this phase
+6. dashboard UAT is the first operator-visible handoff for this milestone, not the first engineering proof
+
+### Deferred Follow-Ons
+
+These are intentionally deferred until the single-ball dashboard milestone is
+signed off:
+
+1. `gather_three_ball_zone` as the later multi-ball gather scenario
+2. onboard `plan_collection_route(...)` promotion beyond interface scaffolding
+
+What is deferred in practice:
+
+1. no claims of readiness for three-ball gather in this phase
+2. no claims of readiness for onboard planning in this phase
+3. no primary-button replacement before single-ball dashboard proof is green
 
 ## Recommended Execution Order
 

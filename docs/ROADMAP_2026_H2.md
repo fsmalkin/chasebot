@@ -125,25 +125,29 @@ Status update as of April 4, 2026:
 5. pivoting the roadmap slice to end-to-end VLA control
 6. replacing deterministic perception, planning, or execution loops with model-generated low-level action
 
-## Next Roadmap Slice: Ball Corral / Place and Onboard Planning
+## Next Roadmap Slice: Single-Ball Corral / Place Through Dashboard UAT
 
 The route-planning baseline is now the proved foundation, not the next open
-question. The next slice upgrades the mission from "visit balls in a smart
-order" to "gather balls into a designated area," then uses that fuller task to
-evaluate whether an onboard planner can replace the cloud-backed planner.
+question. The current focus is not generic gather; it is single-ball
+corral/place repeatability through operator-visible dashboard UAT. Dashboard
+integration is already complete; the remaining milestone work is repeated live
+stability and then button promotion. Multi-ball gather comes after that
+one-ball proof, and onboard planning comes only after multi-ball gather is
+stable enough to benchmark meaningfully.
 
-For the first gather proof we assume smooth-surface operation such as soccer
-fields or similar turf-like practice surfaces. That keeps the milestone focused
-on controlled placement with a front catcher instead of trying to generalize a
-harder bump-and-roll behavior too early.
+For this first corral/place proof we assume smooth-surface operation such as
+soccer fields or similar turf-like practice surfaces. That keeps the milestone
+focused on controlled placement with a front catcher instead of trying to
+generalize a harder bump-and-roll behavior too early.
 
 ```mermaid
 flowchart LR
-    A[Route-planning baseline complete] --> B[Simulated catcher geometry]
-    B --> C[Single-ball corral or place proof]
-    C --> D[Multi-ball gather to zone]
-    D --> E[Onboard model shadow lane]
-    E --> F[Promote onboard planner]
+    A[Route-planning baseline] --> B[Single-ball corral headless gate]
+    B --> C[Dashboard integration complete]
+    C --> D[Dashboard 3/3 stabilization]
+    D --> E[Primary dashboard button promotion]
+    E --> F[Three-ball gather]
+    F --> G[Onboard planner evaluation]
 ```
 
 ### Step 1: Route-Planning Baseline - Complete
@@ -168,13 +172,13 @@ Exit criterion for this step:
 
 1. keep the route-planning serial gate green while corral/place work is added
 
-### Step 2: Ball Corral / Place Proof
+### Step 2: Single-Ball Corral / Place Through Dashboard UAT
 
-Goal: the robot gathers a ball by keeping it controlled at the front of the
-robot and placing it into a designated area, rather than relying on random
-post-contact rolling.
+Goal: the robot keeps one ball controlled at the front of the robot and places
+it into a designated area, then proves that behavior through the browser
+dashboard before the operator-facing primary action changes.
 
-Assumptions for the first proof:
+Assumptions for this proof:
 
 1. operating surface is smooth, like a soccer field or similar practice surface
 2. the robot gets a simulated front-mounted catcher shaped like a spur with a U opening outward
@@ -183,25 +187,68 @@ Assumptions for the first proof:
 
 Work:
 
-1. add and tune the simulated catcher geometry on the robot in Gazebo
-2. add a designated corral zone with explicit scoring and event logging
-3. create a single-ball browser-dashboard UAT scenario for corral/place
-4. instrument control metrics: capture acquired, capture lost, place complete, time-to-place, and zone occupancy
-5. extend from single-ball place to multi-ball gather-to-zone using the existing route planner as the upper layer
+1. keep `visit_route_planning` green as the regression baseline while catcher/corral work lands
+2. hold the single-ball corral/place proof green offline and headless before dashboard handoff
+3. keep `corral_single_ball_place` integrated in the dashboard control plane without promoting the primary button yet
+4. stabilize repeated operator-visible dashboard UAT on the one-ball flow until it is green `3/3`
+5. repoint and relabel the old `Run LLM Route Plan` primary button only after the dashboard proof is green
+
+Current status:
+
+1. route-planning regression is already green
+2. the single-ball headless gate is already green
+3. dashboard integration is complete
+4. repeated live dashboard stability is the active blocker
+5. multi-ball gather and onboard planning remain deferred
 
 Acceptance:
 
-1. single-ball corral/place passes `3/3` consecutive dashboard runs
-2. the robot keeps the ball controlled long enough to place it into the zone without depending on random ricochet behavior
-3. multi-ball gather-to-zone completes end-to-end with route planning still respecting obstacle avoidance and self-contained dashboard resets
-4. artifacts include route order, place times, zone score, and capture-loss events
+1. single-ball dashboard UAT passes `3/3`
+2. the ball is kept controlled and placed into the zone without ricochet dependence
+3. the old primary route-planning button is replaced by the new single-ball corral action only after that proof
+4. route-planning regression evidence remains green
 
-### Step 3: Onboard Model for Visit + Gather Planning
+Operator-facing promotion rule:
+
+1. before dashboard UAT passes, `corral_single_ball_place` may exist as a scenario but does not replace the primary route-planning action
+2. after dashboard UAT passes, the existing `Run LLM Route Plan` primary button is repointed or relabelled to the single-ball corral flow
+3. that button replacement is the promotion signal for this milestone
+
+Interfaces held constant in this slice:
+
+1. active UAT scenario: `corral_single_ball_place`
+2. protected regression scenario: `visit_route_planning`
+3. deferred later scenario: `gather_three_ball_zone`
+4. deferred provider seam: `plan_collection_route(...)`
+5. no frozen-contract changes in this slice
+
+### Step 3: Multi-Ball Gather To Zone
+
+Goal: extend the proven one-ball corral/place mechanics into a fuller gather
+task only after the dashboard proof is signed off.
+
+Why it comes later:
+
+1. the one-ball dashboard proof is the current trust gate
+2. multi-ball gather adds route-order, recovery, and obstacle-persistence complexity that should not delay the first operator-visible milestone
+
+Work:
+
+1. introduce `gather_three_ball_zone` only after the one-ball dashboard milestone is complete
+2. preserve route-planning obstacle avoidance and self-contained resets while extending gather behavior
+3. score multi-ball runs with placed count, route order, mission time, zone score, and capture-loss events
+
+Acceptance:
+
+1. multi-ball gather completes end-to-end after the one-ball dashboard milestone is signed off
+2. route-planning protections remain green while gather complexity increases
+
+### Step 4: Onboard Model for Visit + Gather Planning
 
 Goal: determine whether a local model on the Orin can take over high-level visit
 and gather planning after the task is stable enough to benchmark fairly.
 
-Why this comes after corral/place:
+Why this comes after multi-ball gather:
 
 1. route planning alone is now too small a target; the more useful benchmark is the full visit-and-gather loop
 2. gather introduces richer tradeoffs: which ball next, when to place, when to recover a lost ball, and how to sequence the corral zone efficiently
