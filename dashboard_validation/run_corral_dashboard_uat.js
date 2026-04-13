@@ -76,6 +76,7 @@ async function ensureEnvironmentReady(page) {
 
 async function run() {
   fs.mkdirSync(VISUAL_ROOT, { recursive: true });
+  const summaryPath = path.join(OUTPUT_ROOT, 'dashboard_uat_summary.json');
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1600, height: 1200 } });
 
@@ -83,6 +84,21 @@ async function run() {
     let readyState = await ensureEnvironmentReady(page);
     const results = [];
     let previousSessionId = readyState.session_id || '';
+    const writeSummary = (extra = {}) => {
+      const passCount = results.filter((item) => item.passed === true).length;
+      const summary = {
+        generated_utc: new Date().toISOString(),
+        type: 'corral_single_ball_dashboard_uat',
+        dashboard_url: BASE_URL,
+        pass_count: passCount,
+        required_green_runs: REQUIRED_GREEN_RUNS,
+        promotion_gate_pass: passCount === REQUIRED_GREEN_RUNS && results.length === REQUIRED_GREEN_RUNS,
+        runs: results,
+        ...extra,
+      };
+      fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2));
+      return summary;
+    };
 
     for (let runIndex = 1; runIndex <= REQUIRED_GREEN_RUNS; runIndex += 1) {
       const runDir = path.join(VISUAL_ROOT, `run_${String(runIndex).padStart(2, '0')}`);
@@ -93,111 +109,166 @@ async function run() {
       let sawNewSession = false;
       let sawActiveScenario = false;
       let activeScenarioLabel = '';
+      let sawWorldStreamRestart = false;
+      let sawWorldStreamDegraded = false;
 
       await page.goto(`${BASE_URL}/`);
+      const preRunState = await getState(page);
+      const restartAttemptsBeforeRun = Number.parseInt(String(preRunState.world_stream_restart_attempts || '0'), 10) || 0;
+      const latestEventBeforeRun = Array.isArray(preRunState.recent_operator_events) && preRunState.recent_operator_events.length
+        ? String(preRunState.recent_operator_events[preRunState.recent_operator_events.length - 1].timestamp_utc || '')
+        : '';
       await page.screenshot({ path: path.join(runDir, 'before.png'), fullPage: true });
       await page.evaluate(() => window.pickScenario('corral_single_ball_place'));
 
-      const finalState = await waitFor(
-        page,
-        (state) => (
-          state.scenario_state === 'ready'
-          && state.proof_state === 'completed'
-          && state.mission_verdict
-          && state.mission_verdict.pass === true
-          && state.mission_verdict.scenario_id === 'corral_single_ball_place'
-          && state.session_id
-          && state.session_id !== previousSessionId
-          && Array.isArray(state.placed_targets)
-          && state.placed_targets.length === 1
-        ),
-        12 * 60 * 1000,
-        `Corral run ${runIndex} did not complete successfully.`,
-        async (state) => {
-          if (state.scenario_state === 'running') {
-            sawRunning = true;
-          }
-          if (state.session_id && state.session_id !== previousSessionId) {
-            sawNewSession = true;
-          }
-          if (state.active_scenario === 'corral_single_ball_place') {
-            sawActiveScenario = true;
-            activeScenarioLabel = state.active_scenario_label || activeScenarioLabel;
-          }
-          const proofState = String(state.proof_state || '');
-          if (['visiting', 'capturing', 'placing', 'completed'].includes(proofState) && !seenSet.has(proofState)) {
-            seenSet.add(proofState);
-            seenProofStates.push({
-              proof_state: proofState,
-              mission_phase: state.mission_phase,
-              gather_phase: state.gather_phase,
-              session_id: state.session_id,
-            });
-            await page.screenshot({ path: path.join(runDir, `${proofState}.png`), fullPage: true });
-          }
-        },
-      );
+      try {
+        const finalState = await waitFor(
+          page,
+          (state) => (
+            state.scenario_state === 'ready'
+            && state.proof_state === 'completed'
+            && state.mission_verdict
+            && state.mission_verdict.pass === true
+            && state.mission_verdict.scenario_id === 'corral_single_ball_place'
+            && state.session_id
+            && state.session_id !== previousSessionId
+            && Array.isArray(state.placed_targets)
+            && state.placed_targets.length === 1
+          ),
+          12 * 60 * 1000,
+          `Corral run ${runIndex} did not complete successfully.`,
+          async (state) => {
+            if (state.scenario_state === 'running') {
+              sawRunning = true;
+            }
+            if (state.session_id && state.session_id !== previousSessionId) {
+              sawNewSession = true;
+            }
+            if (state.active_scenario === 'corral_single_ball_place') {
+              sawActiveScenario = true;
+              activeScenarioLabel = state.active_scenario_label || activeScenarioLabel;
+            }
+            const restartAttemptsNow = Number.parseInt(String(state.world_stream_restart_attempts || '0'), 10) || 0;
+            if (restartAttemptsNow > restartAttemptsBeforeRun) {
+              sawWorldStreamRestart = true;
+            }
+            if (state.world_stream_degraded === true || state.world_stream_ready === false) {
+              sawWorldStreamDegraded = true;
+            }
+            const recentEvents = Array.isArray(state.recent_operator_events) ? state.recent_operator_events : [];
+            if (recentEvents.some((item) => {
+              const eventTimestamp = String((item && item.timestamp_utc) || '');
+              if (latestEventBeforeRun && eventTimestamp && eventTimestamp <= latestEventBeforeRun) {
+                return false;
+              }
+              const message = String((item && item.message) || '');
+              return message.includes('World surface stale; restarting world stream controller.')
+                || message.includes('World surface recovered after stale stream.');
+            })) {
+              sawWorldStreamRestart = true;
+            }
+            const proofState = String(state.proof_state || '');
+            if (['visiting', 'capturing', 'placing', 'completed'].includes(proofState) && !seenSet.has(proofState)) {
+              seenSet.add(proofState);
+              seenProofStates.push({
+                proof_state: proofState,
+                mission_phase: state.mission_phase,
+                gather_phase: state.gather_phase,
+                session_id: state.session_id,
+              });
+              await page.screenshot({ path: path.join(runDir, `${proofState}.png`), fullPage: true });
+            }
+          },
+        );
 
-      await page.screenshot({ path: path.join(runDir, 'final.png'), fullPage: true });
+        await page.screenshot({ path: path.join(runDir, 'final.png'), fullPage: true });
 
-      const artifacts = finalState.latest_artifacts || {};
-      const requiredArtifactKeys = ['gather_mission', 'mission_verdict', 'target_results', 'scorecard', 'log'];
-      const artifactChecks = Object.fromEntries(
-        requiredArtifactKeys.map((key) => [
-          key,
-          typeof artifacts[key] === 'string' && artifacts[key] && fs.existsSync(artifacts[key]),
-        ]),
-      );
-      const missingArtifacts = Object.entries(artifactChecks)
-        .filter(([, ok]) => !ok)
-        .map(([key]) => key);
+        const artifacts = finalState.latest_artifacts || {};
+        const requiredArtifactKeys = ['gather_mission', 'mission_verdict', 'target_results', 'scorecard', 'log'];
+        const artifactChecks = Object.fromEntries(
+          requiredArtifactKeys.map((key) => [
+            key,
+            typeof artifacts[key] === 'string' && artifacts[key] && fs.existsSync(artifacts[key]),
+          ]),
+        );
+        const missingArtifacts = Object.entries(artifactChecks)
+          .filter(([, ok]) => !ok)
+          .map(([key]) => key);
+        const worldStreamRestartCountDelta = Math.max(
+          (Number.parseInt(String(finalState.world_stream_restart_attempts || '0'), 10) || 0) - restartAttemptsBeforeRun,
+          0,
+        );
+        const worldStreamClean = (
+          worldStreamRestartCountDelta === 0
+          && !sawWorldStreamRestart
+          && !sawWorldStreamDegraded
+          && finalState.world_stream_ready === true
+          && finalState.world_stream_degraded !== true
+        );
 
-      if (!sawRunning) {
-        throw new Error(`Run ${runIndex} never entered running state.`);
-      }
-      if (!sawNewSession) {
-        throw new Error(`Run ${runIndex} did not get a fresh self-contained session.`);
-      }
-      if (!sawActiveScenario) {
-        throw new Error(`Run ${runIndex} never surfaced corral_single_ball_place as the active scenario.`);
-      }
-      for (const requiredProof of ['visiting', 'capturing', 'placing', 'completed']) {
-        if (!seenSet.has(requiredProof)) {
+        if (!sawRunning) {
+          throw new Error(`Run ${runIndex} never entered running state.`);
+        }
+        if (!sawNewSession) {
+          throw new Error(`Run ${runIndex} did not get a fresh self-contained session.`);
+        }
+        if (!sawActiveScenario) {
+          throw new Error(`Run ${runIndex} never surfaced corral_single_ball_place as the active scenario.`);
+        }
+        for (const requiredProof of ['visiting', 'capturing', 'placing', 'completed']) {
+          if (!seenSet.has(requiredProof)) {
+            throw new Error(
+              `Run ${runIndex} did not expose proof state ${requiredProof}. Seen: ${Array.from(seenSet).join(', ')}`,
+            );
+          }
+        }
+        if (missingArtifacts.length) {
+          throw new Error(`Run ${runIndex} missing required artifacts: ${missingArtifacts.join(', ')}`);
+        }
+        if (!worldStreamClean) {
           throw new Error(
-            `Run ${runIndex} did not expose proof state ${requiredProof}. Seen: ${Array.from(seenSet).join(', ')}`,
+            `Run ${runIndex} was not operator-clean. restart_delta=${worldStreamRestartCountDelta} degraded_seen=${sawWorldStreamDegraded} restart_seen=${sawWorldStreamRestart}`,
           );
         }
-      }
-      if (missingArtifacts.length) {
-        throw new Error(`Run ${runIndex} missing required artifacts: ${missingArtifacts.join(', ')}`);
-      }
 
-      results.push({
-        run_index: runIndex,
-        session_id_before: previousSessionId,
-        session_id_after: finalState.session_id,
-        active_scenario_label_seen: activeScenarioLabel,
-        proof_states_seen: seenProofStates,
-        mission_verdict: finalState.mission_verdict,
-        placed_targets: finalState.placed_targets,
-        latest_artifacts: artifacts,
-        artifact_checks: artifactChecks,
-        screenshots: fs.readdirSync(runDir).sort().map((name) => path.join(runDir, name)),
-      });
-      previousSessionId = finalState.session_id || previousSessionId;
+        results.push({
+          run_index: runIndex,
+          session_id_before: previousSessionId,
+          session_id_after: finalState.session_id,
+          active_scenario_label_seen: activeScenarioLabel,
+          proof_states_seen: seenProofStates,
+          mission_verdict: finalState.mission_verdict,
+          placed_targets: finalState.placed_targets,
+          latest_artifacts: artifacts,
+          artifact_checks: artifactChecks,
+          world_stream_restart_count_delta: worldStreamRestartCountDelta,
+          world_stream_clean: worldStreamClean,
+          screenshots: fs.readdirSync(runDir).sort().map((name) => path.join(runDir, name)),
+          passed: true,
+        });
+        previousSessionId = finalState.session_id || previousSessionId;
+      } catch (error) {
+        results.push({
+          run_index: runIndex,
+          session_id_before: previousSessionId,
+          active_scenario_label_seen: activeScenarioLabel,
+          proof_states_seen: seenProofStates,
+          world_stream_restart_count_delta: sawWorldStreamRestart ? 1 : 0,
+          world_stream_clean: false,
+          failure_reason: error && error.message ? error.message : String(error),
+          screenshots: fs.readdirSync(runDir).sort().map((name) => path.join(runDir, name)),
+          passed: false,
+        });
+        const failedSummary = writeSummary({
+          failure_reason: error && error.message ? error.message : String(error),
+        });
+        console.log(`DASHBOARD_UAT_SUMMARY=${summaryPath}`);
+        console.log(JSON.stringify(failedSummary, null, 2));
+        throw error;
+      }
     }
 
-    const summary = {
-      generated_utc: new Date().toISOString(),
-      type: 'corral_single_ball_dashboard_uat',
-      dashboard_url: BASE_URL,
-      pass_count: results.length,
-      required_green_runs: REQUIRED_GREEN_RUNS,
-      promotion_gate_pass: results.length === REQUIRED_GREEN_RUNS,
-      runs: results,
-    };
-    const summaryPath = path.join(OUTPUT_ROOT, 'dashboard_uat_summary.json');
-    fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2));
+    const summary = writeSummary();
     console.log(`DASHBOARD_UAT_SUMMARY=${summaryPath}`);
     console.log(JSON.stringify(summary, null, 2));
   } finally {

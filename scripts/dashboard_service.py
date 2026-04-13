@@ -78,6 +78,7 @@ WORLD_STREAM_STALE_DEBOUNCE_S = 3.0
 WORLD_STREAM_WATCHDOG_POLL_S = 1.0
 WORLD_STREAM_TRANSPORT_WINDOW_S = 5.0
 WORLD_STREAM_TRANSPORT_MIN_FRAMES = 3
+WORLD_STREAM_TRANSPORT_MAX_AGE_S = 4.0
 WORLD_STREAM_RENDERABLE_GRACE_S = 10.0
 GATE_SERVICE_READY_TIMEOUT_S = 25.0
 GATE_SERVICE_POLL_S = 0.5
@@ -1233,7 +1234,7 @@ class DashboardController:
                 same_session_partition
                 and received_frame_count >= WORLD_STREAM_TRANSPORT_MIN_FRAMES
                 and latest_frame_age_s is not None
-                and latest_frame_age_s <= max(2.5, 0.1)
+                and latest_frame_age_s <= max(WORLD_STREAM_TRANSPORT_MAX_AGE_S, 0.1)
                 and not latest_frame_error
                 and not frames_stale
             )
@@ -1529,8 +1530,18 @@ class DashboardController:
         if not isinstance(gather_events, list):
             gather_events = []
         merged_events = []
+        seen_event_keys = set()
         for item in operator_events + proof_events + visit_events + gather_events:
             if isinstance(item, dict) and item.get("message"):
+                event_key = (
+                    str(item.get("timestamp_utc", "") or ""),
+                    str(item.get("source", "") or ""),
+                    str(item.get("category", "") or ""),
+                    str(item.get("message", "") or ""),
+                )
+                if event_key in seen_event_keys:
+                    continue
+                seen_event_keys.add(event_key)
                 merged_events.append(item)
         if merged_events:
             merged_events = sorted(merged_events, key=lambda item: str(item.get("timestamp_utc", "")))[-20:]

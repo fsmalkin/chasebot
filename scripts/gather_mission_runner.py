@@ -219,6 +219,61 @@ class GatherMissionRunner:
             state["updated_utc"] = event["timestamp_utc"]
             persist()
 
+    def _target_failure_result(
+        self,
+        *,
+        target: GatherTargetSpec,
+        failure_reason: str,
+        failure_stage: str,
+        attempts: int,
+        capture_loss_count: int,
+        route_index: int,
+        attempt_kind: str,
+        local_recovery_attempted: bool = False,
+        revisit_attempted: bool = False,
+    ) -> dict[str, Any]:
+        return {
+            "target_id": target.id,
+            "label": target.label,
+            "pass": False,
+            "failure_reason": str(failure_reason),
+            "failure_stage": str(failure_stage),
+            "attempts": int(attempts),
+            "attempt_kind": str(attempt_kind),
+            "capture_loss_count": int(capture_loss_count),
+            "route_index": int(route_index),
+            "local_recovery_attempted": bool(local_recovery_attempted),
+            "revisit_attempted": bool(revisit_attempted),
+        }
+
+    def _target_success_result(
+        self,
+        *,
+        target: GatherTargetSpec,
+        attempts: int,
+        capture_loss_count: int,
+        route_index: int,
+        final_ball_pose: dict[str, Any],
+        place_time_s: float,
+        attempt_kind: str,
+        local_recovery_attempted: bool = False,
+        revisit_attempted: bool = False,
+    ) -> dict[str, Any]:
+        return {
+            "target_id": target.id,
+            "label": target.label,
+            "pass": True,
+            "attempts": int(attempts),
+            "attempt_kind": str(attempt_kind),
+            "capture_loss_count": int(capture_loss_count),
+            "route_index": int(route_index),
+            "placed": True,
+            "final_ball_pose": final_ball_pose,
+            "place_time_s": round(float(place_time_s), 6),
+            "local_recovery_attempted": bool(local_recovery_attempted),
+            "revisit_attempted": bool(revisit_attempted),
+        }
+
     def _request(self, method: str, path: str, payload: dict[str, Any] | None = None, timeout_s: float | None = None) -> tuple[int, dict[str, Any]]:
         return http_json(
             f"{self.dashboard_url}{path}",
@@ -946,7 +1001,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             time.sleep(self.args.poll_s)
 
         self._set_manual_drive(False, mode="capture_timeout", rationale="Capture timed out.")
-        timeout_payload = {"failure_reason": "capture_timeout"}
+        timeout_payload = {"failure_reason": "capture_timeout", "failure_stage": "capture"}
         write_json(mission_root / f"{target.id}_capture_timeout.json", timeout_payload)
         return False, timeout_payload
 
@@ -960,6 +1015,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         deadline = time.monotonic() + max(self.args.place_timeout_s, 0.1)
         zone_entry_monotonic: float | None = None
         last_captured_monotonic: float | None = None
+        local_recovery_attempted = False
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -1034,13 +1090,17 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 loss_grace_s=self.capture_envelope.loss_grace_s,
             ):
                 if local_recovery_viable:
+                    local_recovery_attempted = True
                     last_captured_monotonic = now_monotonic
+                    self._update_gather_runtime_state(latest_feedback=f"Recovering {target.label} after brief capture loss.")
                 else:
                     self._set_manual_drive(False, mode="capture_lost", rationale="Capture lost during place.")
                     return False, {
                         "failure_reason": "capture_lost",
+                        "failure_stage": "place",
                         "capture_state": capture.to_dict(),
                         "zone_score": zone_score.to_dict() if zone_score else {},
+                        "local_recovery_attempted": local_recovery_attempted,
                     }
             command = compute_place_command(robot_pose, ball_pose or {}, zone=self.zone, envelope=self.capture_envelope) if robot_pose and ball_pose else None
             if command is not None:
@@ -1055,7 +1115,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             time.sleep(self.args.poll_s)
 
         self._set_manual_drive(False, mode="place_timeout", rationale="Place timed out.")
-        return False, {"failure_reason": "place_timeout"}
+        return False, {
+            "failure_reason": "place_timeout",
+            "failure_stage": "place",
+            "local_recovery_attempted": local_recovery_attempted,
+        }
 
     def _run_target(
         self,
@@ -1069,9 +1133,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
     ) -> dict[str, Any]:
         attempt = 0
         capture_loss_count = 0
+        place_loss_revisit_count = 0
         target_start_monotonic = time.monotonic()
         while attempt <= self.args.max_retries_per_target:
             attempt += 1
+            attempt_kind = "place_loss_revisit" if place_loss_revisit_count > 0 else ("initial_visit" if attempt == 1 else "retry_visit")
             self._append_runtime_event(f"{target.label}: visit attempt {attempt}.", key=f"visit_attempt:{target.id}:{attempt}")
             self._update_visit_runtime_state(
                 proof_state="visiting",
@@ -1117,15 +1183,16 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             if not visit_pass:
                 if attempt > self.args.max_retries_per_target:
                     self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} visit failed.")
-                    return {
-                        "target_id": target.id,
-                        "label": target.label,
-                        "pass": False,
-                        "failure_reason": visit_status,
-                        "attempts": attempt,
-                        "capture_loss_count": capture_loss_count,
-                        "route_index": route_index,
-                    }
+                    return self._target_failure_result(
+                        target=target,
+                        failure_reason=visit_status,
+                        failure_stage="visit",
+                        attempts=attempt,
+                        capture_loss_count=capture_loss_count,
+                        route_index=route_index,
+                        attempt_kind=attempt_kind,
+                        revisit_attempted=place_loss_revisit_count > 0,
+                    )
                 self._safe_stop()
                 self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
                 continue
@@ -1138,17 +1205,32 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 mission_root=mission_root,
             )
             if not capture_pass:
+                capture_failure_reason = str(capture_payload.get("failure_reason", "capture_failed"))
+                capture_failure_stage = str(capture_payload.get("failure_stage", "capture"))
                 if attempt > self.args.max_retries_per_target:
                     self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} capture failed.")
-                    return {
-                        "target_id": target.id,
-                        "label": target.label,
-                        "pass": False,
-                        "failure_reason": str(capture_payload.get("failure_reason", "capture_failed")),
-                        "attempts": attempt,
-                        "capture_loss_count": capture_loss_count,
-                        "route_index": route_index,
-                    }
+                    return self._target_failure_result(
+                        target=target,
+                        failure_reason=capture_failure_reason,
+                        failure_stage=capture_failure_stage,
+                        attempts=attempt,
+                        capture_loss_count=capture_loss_count,
+                        route_index=route_index,
+                        attempt_kind=attempt_kind,
+                        revisit_attempted=place_loss_revisit_count > 0,
+                    )
+                if place_loss_revisit_count > 0:
+                    self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} capture failed after revisit.")
+                    return self._target_failure_result(
+                        target=target,
+                        failure_reason=capture_failure_reason,
+                        failure_stage=capture_failure_stage,
+                        attempts=attempt,
+                        capture_loss_count=capture_loss_count,
+                        route_index=route_index,
+                        attempt_kind=attempt_kind,
+                        revisit_attempted=True,
+                    )
                 self._safe_stop()
                 self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
                 continue
@@ -1186,17 +1268,16 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     latest_feedback=f"{target.label} placed in the zone.",
                 )
                 self._append_runtime_event(f"{target.label} placed in the corral zone.", key=f"placed:{target.id}")
-                return {
-                    "target_id": target.id,
-                    "label": target.label,
-                    "pass": True,
-                    "attempts": attempt,
-                    "capture_loss_count": capture_loss_count,
-                    "route_index": route_index,
-                    "placed": True,
-                    "final_ball_pose": final_ball_pose,
-                    "place_time_s": round(time.monotonic() - target_start_monotonic, 6),
-                }
+                return self._target_success_result(
+                    target=target,
+                    attempts=attempt,
+                    capture_loss_count=capture_loss_count,
+                    route_index=route_index,
+                    final_ball_pose=final_ball_pose,
+                    place_time_s=time.monotonic() - target_start_monotonic,
+                    attempt_kind=attempt_kind,
+                    revisit_attempted=place_loss_revisit_count > 0,
+                )
 
             place_pass, place_payload = self._place_target(
                 session_id=session_id,
@@ -1236,45 +1317,59 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     latest_feedback=f"{target.label} placed in the zone.",
                 )
                 self._append_runtime_event(f"{target.label} placed in the corral zone.", key=f"placed:{target.id}")
-                return {
-                    "target_id": target.id,
-                    "label": target.label,
-                    "pass": True,
-                    "attempts": attempt,
-                    "capture_loss_count": capture_loss_count,
-                    "route_index": route_index,
-                    "placed": True,
-                    "final_ball_pose": final_ball_pose,
-                    "place_time_s": round(time.monotonic() - target_start_monotonic, 6),
-                }
+                return self._target_success_result(
+                    target=target,
+                    attempts=attempt,
+                    capture_loss_count=capture_loss_count,
+                    route_index=route_index,
+                    final_ball_pose=final_ball_pose,
+                    place_time_s=time.monotonic() - target_start_monotonic,
+                    attempt_kind=attempt_kind,
+                    local_recovery_attempted=bool(place_payload.get("local_recovery_attempted", False)),
+                    revisit_attempted=place_loss_revisit_count > 0,
+                )
 
             failure_reason = str(place_payload.get("failure_reason", "place_failed"))
+            failure_stage = str(place_payload.get("failure_stage", "place"))
+            local_recovery_attempted = bool(place_payload.get("local_recovery_attempted", False))
             if failure_reason == "capture_lost":
                 capture_loss_count += 1
                 self._update_gather_runtime_state(capture_loss_count=capture_loss_count)
-            if attempt > self.args.max_retries_per_target:
+                if place_loss_revisit_count < max(int(self.args.max_place_loss_revisits), 0):
+                    place_loss_revisit_count += 1
+                    self._append_runtime_event(
+                        f"{target.label}: revisit after place-stage capture loss {place_loss_revisit_count}.",
+                        key=f"place_loss_revisit:{target.id}:{place_loss_revisit_count}",
+                    )
+                    self._safe_stop()
+                    self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                    continue
+            if attempt > self.args.max_retries_per_target or (failure_reason == "capture_lost" and place_loss_revisit_count >= max(int(self.args.max_place_loss_revisits), 0)):
                 self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} place failed.")
-                return {
-                    "target_id": target.id,
-                    "label": target.label,
-                    "pass": False,
-                    "failure_reason": failure_reason,
-                    "attempts": attempt,
-                    "capture_loss_count": capture_loss_count,
-                    "route_index": route_index,
-                }
+                return self._target_failure_result(
+                    target=target,
+                    failure_reason=failure_reason,
+                    failure_stage=failure_stage,
+                    attempts=attempt,
+                    capture_loss_count=capture_loss_count,
+                    route_index=route_index,
+                    attempt_kind=attempt_kind,
+                    local_recovery_attempted=local_recovery_attempted,
+                    revisit_attempted=place_loss_revisit_count > 0,
+                )
             self._safe_stop()
             self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
 
-        return {
-            "target_id": target.id,
-            "label": target.label,
-            "pass": False,
-            "failure_reason": "unreachable_state",
-            "attempts": attempt,
-            "capture_loss_count": capture_loss_count,
-            "route_index": route_index,
-        }
+        return self._target_failure_result(
+            target=target,
+            failure_reason="unreachable_state",
+            failure_stage="mission",
+            attempts=attempt,
+            capture_loss_count=capture_loss_count,
+            route_index=route_index,
+            attempt_kind="unreachable_state",
+            revisit_attempted=place_loss_revisit_count > 0,
+        )
 
     def run(self) -> dict[str, Any]:
         ready_state, started_here = self._ensure_environment_ready()
@@ -1491,6 +1586,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--place-timeout-s", type=float, default=35.0)
     parser.add_argument("--pursuit-settle-timeout-s", type=float, default=8.0)
     parser.add_argument("--max-retries-per-target", type=int, default=2)
+    parser.add_argument("--max-place-loss-revisits", type=int, default=1)
     parser.add_argument("--target-model-name", default=DEFAULT_TARGET_MODEL_NAME)
     parser.add_argument("--target-model-sdf", default=str(DEFAULT_TARGET_MODEL_SDF))
     parser.add_argument("--zone-model-name", default=DEFAULT_ZONE_MODEL_NAME)

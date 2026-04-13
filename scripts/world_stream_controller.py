@@ -23,7 +23,7 @@ from sensor_msgs.msg import Image
 
 WORLD_STREAM_RECENT_WINDOW_S = 5.0
 WORLD_STREAM_TRANSPORT_MIN_FRAMES = 3
-WORLD_STREAM_TRANSPORT_MAX_AGE_S = 2.5
+WORLD_STREAM_TRANSPORT_MAX_AGE_S = 4.0
 WORLD_STREAM_RENDERABLE_MAX_AGE_S = 10.0
 
 
@@ -43,7 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-min-area-px", type=float, default=90.0)
     parser.add_argument("--scene-std-min", type=float, default=12.0)
     parser.add_argument("--scene-sat-min", type=float, default=30.0)
-    parser.add_argument("--healthy-stale-seconds", type=float, default=2.5)
+    parser.add_argument("--healthy-stale-seconds", type=float, default=4.0)
     return parser.parse_args()
 
 

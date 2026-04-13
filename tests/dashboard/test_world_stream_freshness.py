@@ -1577,6 +1577,14 @@ def test_get_state_merges_gather_runtime_fields(tmp_path):
         "remaining_targets": [],
         "last_visit_result": {},
         "latest_feedback": "Placing Ball 1 into the zone.",
+        "recent_operator_events": [
+            {
+                "timestamp_utc": "2026-04-12T23:00:00Z",
+                "message": "Ball 1: visit attempt 1.",
+                "category": "mission",
+                "source": "gather_mission",
+            }
+        ],
     }
     controller._gather_mission_runtime_state = lambda: {
         "mission_phase": "place",
@@ -1594,6 +1602,14 @@ def test_get_state_merges_gather_runtime_fields(tmp_path):
         "latest_feedback": "Placing Ball 1 into the zone.",
         "artifact_dir": str(tmp_path / "mission"),
         "mission_verdict": {"type": "gather_mission"},
+        "recent_operator_events": [
+            {
+                "timestamp_utc": "2026-04-12T23:00:00Z",
+                "message": "Ball 1: visit attempt 1.",
+                "category": "mission",
+                "source": "gather_mission",
+            }
+        ],
     }
 
     state = controller.get_state()
@@ -1606,6 +1622,7 @@ def test_get_state_merges_gather_runtime_fields(tmp_path):
     assert state["route_order"] == ["ball_1"]
     assert state["proof_artifact_dir"] == str(tmp_path / "mission")
     assert state["latest_proof_feedback"] == "Placing Ball 1 into the zone."
+    assert [item["message"] for item in state["recent_operator_events"]] == ["Ball 1: visit attempt 1."]
 
 
 def test_wait_for_world_stream_ready_accepts_fresh_stream(tmp_path, monkeypatch):

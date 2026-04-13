@@ -30,6 +30,7 @@ def _make_args(tmp_path: Path) -> SimpleNamespace:
         place_timeout_s=1.0,
         pursuit_settle_timeout_s=0.01,
         max_retries_per_target=0,
+        max_place_loss_revisits=1,
         target_model_name="visit_mission_target",
         target_model_sdf=str(tmp_path / "ball.sdf"),
         zone_model_name="corral_zone_marker",
@@ -172,3 +173,51 @@ def test_run_normalizes_failure_summary_and_marks_proof_failed(tmp_path, monkeyp
     assert verdict["mission_error"] == "capture_lost"
     assert runner.visit_runtime_state["proof_state"] == "failed"
     assert runner.gather_runtime_state["gather_phase"] == "failed"
+
+
+def test_run_target_fails_fast_after_capture_timeout_on_place_loss_revisit(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.max_retries_per_target = 2
+    runner.args.max_place_loss_revisits = 1
+
+    monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s: None)
+    monkeypatch.setattr(
+        gather_runner,
+        "fetch_dashboard_state",
+        lambda dashboard_url, timeout_s=0: {
+            "brain": {"last_feedback_status": "", "last_feedback_text": ""},
+            "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
+        },
+    )
+    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: None)
+    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_target_reached"))
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 1.0, "y": 0.0, "z": 0.05})
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+
+    capture_results = [
+        (True, {"capture_state": {"captured": True}, "zone_score": {}}),
+        (False, {"failure_reason": "capture_timeout", "failure_stage": "capture"}),
+    ]
+    place_results = [
+        (False, {"failure_reason": "capture_lost", "failure_stage": "place", "local_recovery_attempted": True}),
+    ]
+
+    monkeypatch.setattr(runner, "_capture_target", lambda **kwargs: capture_results.pop(0))
+    monkeypatch.setattr(runner, "_place_target", lambda **kwargs: place_results.pop(0))
+
+    result = runner._run_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        route_index=1,
+        gather_sequence_path=tmp_path / "gather_sequence.jsonl",
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=tmp_path / "mission",
+    )
+
+    assert result["pass"] is False
+    assert result["failure_reason"] == "capture_timeout"
+    assert result["failure_stage"] == "capture"
+    assert result["attempt_kind"] == "place_loss_revisit"
+    assert result["revisit_attempted"] is True
