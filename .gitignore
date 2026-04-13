@@ -21,10 +21,16 @@ runtime/dashboard/intent_ack.json
 runtime/dashboard/intent_inbox.json
 runtime/dashboard/llm_supervisor_state.json
 runtime/dashboard/llm_turn_then_go_runtime.json
+runtime/dashboard/gather_mission_runtime.json
 runtime/dashboard/visit_mission_runtime.json
+runtime/dashboard/*.stdout.log
+runtime/dashboard/*.stderr.log
+runtime/dashboard_live_*/
 runtime/dashboard_parallel/
+runtime/pytest_local/
 dashboard_validation/node_modules/
 dashboard_validation/test-results/
 dashboard_validation/playwright-report/
 test-results/
+.tmp/
 .env
