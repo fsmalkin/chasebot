@@ -52,6 +52,10 @@ powershell -ExecutionPolicy Bypass -File scripts/telegram_preflight.ps1 -SendCha
 powershell -ExecutionPolicy Bypass -File scripts/run_telegram_wait_daemon.ps1 -Action up -Build
 ```
 
+By default the wrapper uses compose project `chasecar_telegram`, so the runtime
+shows up as `chasecar_telegram-*` containers instead of inheriting a more
+generic repo-local compose prefix.
+
 Other daemon actions:
 
 - `-Action status`

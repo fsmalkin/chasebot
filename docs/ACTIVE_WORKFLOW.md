@@ -24,6 +24,7 @@ Legacy compatibility:
    - `docker compose --profile uat run uat-orchestrator`
 4. Telegram wait bridge:
    - `docker compose --profile telegram up -d telegram-daemon`
+   - repo wrapper uses dedicated compose project `chasecar_telegram` so the containers are clearly Telegram-specific
 
 Windows wrappers:
 
@@ -59,7 +60,9 @@ This is an operator-adjacent service and does not participate in sim/UAT pass-fa
    - `powershell -ExecutionPolicy Bypass -File scripts/run_telegram_wait_daemon.ps1 -Action up -Build`
 4. Register the repo-local MCP entry:
    - `powershell -ExecutionPolicy Bypass -File scripts/register_telegram_mcp.ps1`
-5. Operational note:
+5. Container naming note:
+   - Telegram bridge containers intentionally use compose project `chasecar_telegram` instead of inheriting the repo's generic local project prefix
+6. Operational note:
    - `telegram_send` expects the human to reply directly to the Telegram prompt message so the daemon can match the response.
 
 ## First Operator Path

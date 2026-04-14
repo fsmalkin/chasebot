@@ -1,5 +1,6 @@
 param(
-  [string]$ServerName = "chasecar-telegram-wait"
+  [string]$ServerName = "chasecar-telegram-wait",
+  [string]$ProjectName = "chasecar_telegram"
 )
 
 Set-StrictMode -Version Latest
@@ -14,7 +15,7 @@ try {
 catch {
 }
 
-codex mcp add $ServerName -- docker compose -f $ComposePath --project-directory $RepoRoot --profile telegram run --rm -T telegram-mcp-stdio
+codex mcp add $ServerName -- docker compose -f $ComposePath --project-directory $RepoRoot -p $ProjectName --profile telegram run --rm -T telegram-mcp-stdio
 if ($LASTEXITCODE -ne 0) {
   throw "Failed to register MCP server $ServerName"
 }

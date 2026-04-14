@@ -1,4 +1,5 @@
 param(
+  [string]$ProjectName = "chasecar_telegram",
   [ValidateSet("up", "down", "logs", "status", "build")]
   [string]$Action = "up",
   [switch]$Build,
@@ -15,7 +16,7 @@ function Invoke-Compose {
 
   Push-Location $RepoRoot
   try {
-    & docker compose @Arguments
+    & docker compose -p $ProjectName @Arguments
     if ($LASTEXITCODE -ne 0) {
       throw "docker compose failed with exit code $LASTEXITCODE"
     }
