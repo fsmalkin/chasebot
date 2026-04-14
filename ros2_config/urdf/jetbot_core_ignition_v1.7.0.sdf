@@ -51,9 +51,9 @@ Changes:
         </geometry>
       </collision>
 
-      <!-- Passive U-catcher sized for 10 cm balls on smooth surfaces. -->
+      <!-- Passive U-catcher widened so corral capture is less needle-threading. -->
       <visual name="catcher_left_visual">
-        <pose>0.155 0.060 -0.022 0 0 0</pose>
+        <pose>0.155 0.080 -0.022 0 0 0</pose>
         <geometry>
           <box>
             <size>0.16 0.01 0.04</size>
@@ -67,7 +67,7 @@ Changes:
       </visual>
 
       <visual name="catcher_right_visual">
-        <pose>0.155 -0.060 -0.022 0 0 0</pose>
+        <pose>0.155 -0.080 -0.022 0 0 0</pose>
         <geometry>
           <box>
             <size>0.16 0.01 0.04</size>
@@ -84,7 +84,7 @@ Changes:
         <pose>0.075 0.000 -0.022 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.01 0.13 0.04</size>
+            <size>0.01 0.17 0.04</size>
           </box>
         </geometry>
         <material>
@@ -95,7 +95,7 @@ Changes:
       </visual>
 
       <collision name="catcher_left_collision">
-        <pose>0.155 0.060 -0.022 0 0 0</pose>
+        <pose>0.155 0.080 -0.022 0 0 0</pose>
         <geometry>
           <box>
             <size>0.16 0.01 0.04</size>
@@ -126,7 +126,7 @@ Changes:
       </collision>
 
       <collision name="catcher_right_collision">
-        <pose>0.155 -0.060 -0.022 0 0 0</pose>
+        <pose>0.155 -0.080 -0.022 0 0 0</pose>
         <geometry>
           <box>
             <size>0.16 0.01 0.04</size>
@@ -160,7 +160,7 @@ Changes:
         <pose>0.075 0.000 -0.022 0 0 0</pose>
         <geometry>
           <box>
-            <size>0.01 0.13 0.04</size>
+            <size>0.01 0.17 0.04</size>
           </box>
         </geometry>
         <surface>

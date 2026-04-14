@@ -54,6 +54,15 @@ def test_capture_snapshot_accepts_forward_slip_with_longer_catcher():
     assert snapshot.within_recapture_window is True
 
 
+def test_capture_snapshot_accepts_wider_lateral_capture_with_broader_spur():
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 0.16, "y": 0.065}
+    snapshot = capture_snapshot(robot_pose, ball_pose, CaptureEnvelope())
+    assert snapshot is not None
+    assert snapshot.captured is True
+    assert snapshot.within_capture_window is True
+
+
 def test_capture_snapshot_detects_ball_behind_robot():
     robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
     ball_pose = {"x": -0.05, "y": 0.02}

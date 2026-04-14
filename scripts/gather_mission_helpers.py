@@ -47,9 +47,9 @@ class ZoneSpec:
 class CaptureEnvelope:
     min_x_m: float = 0.045
     max_x_m: float = 0.240
-    max_abs_y_m: float = 0.055
+    max_abs_y_m: float = 0.070
     recapture_max_x_m: float = 0.850
-    recapture_max_abs_y_m: float = 0.180
+    recapture_max_abs_y_m: float = 0.200
     loss_grace_s: float = DEFAULT_CAPTURE_LOSS_GRACE_S
 
 
