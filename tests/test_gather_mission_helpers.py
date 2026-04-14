@@ -125,7 +125,7 @@ def test_compute_place_command_uses_gentle_recapture_when_ball_not_captured():
     assert command is not None
     assert command.mode == "place_recapture"
     assert command.linear_x > 0.0
-    assert command.linear_x < 0.12
+    assert command.linear_x < 0.09
 
 
 def test_compute_place_command_pushes_faster_when_centered_recapture_is_far_from_zone():
@@ -137,8 +137,8 @@ def test_compute_place_command_pushes_faster_when_centered_recapture_is_far_from
     )
     assert command is not None
     assert command.mode == "place_recapture"
-    assert command.linear_x >= 0.08
-    assert command.linear_x < 0.12
+    assert command.linear_x >= 0.05
+    assert command.linear_x < 0.09
 
 
 def test_compute_place_command_limits_forward_speed_when_ball_is_captured():
@@ -151,7 +151,7 @@ def test_compute_place_command_limits_forward_speed_when_ball_is_captured():
     assert command is not None
     assert command.mode == "place"
     assert command.linear_x > 0.0
-    assert command.linear_x <= 0.07
+    assert command.linear_x <= 0.055
 
 
 def test_compute_place_command_pushes_faster_when_captured_ball_rides_front_rail():
@@ -163,8 +163,8 @@ def test_compute_place_command_pushes_faster_when_captured_ball_rides_front_rail
     )
     assert command is not None
     assert command.mode == "place"
-    assert command.linear_x >= 0.08
-    assert command.linear_x < 0.12
+    assert command.linear_x >= 0.045
+    assert command.linear_x < 0.09
 
 
 def test_compute_place_command_softens_turns_near_zone_edge_during_recapture():
@@ -188,7 +188,7 @@ def test_compute_place_command_holds_line_for_captured_finish_push_near_zone():
     )
     assert command is not None
     assert command.mode == "place"
-    assert command.linear_x >= 0.04
+    assert command.linear_x >= 0.025
     assert abs(command.angular_z) <= 0.25
 
 
@@ -201,7 +201,7 @@ def test_compute_place_command_holds_line_for_recapture_finish_push_near_zone():
     )
     assert command is not None
     assert command.mode == "place_recapture"
-    assert command.linear_x >= 0.018
+    assert command.linear_x >= 0.012
     assert abs(command.angular_z) <= 0.25
 
 
