@@ -125,28 +125,33 @@ Status update as of April 4, 2026:
 5. pivoting the roadmap slice to end-to-end VLA control
 6. replacing deterministic perception, planning, or execution loops with model-generated low-level action
 
-## Next Roadmap Slice: Corral Time Optimization on Calibrated Turf
+## Next Roadmap Slice: Corral Clean Retention on Calibrated Turf
 
 The route-planning baseline is still the proved regression floor, and the
 single-ball corral path is now calibrated on realistic soccer-practice
-surfaces. The immediate next slice is no longer friction research. It is to use
-the calibrated `short_turf` surface as the canonical one-ball proof surface,
-then reduce time-to-place with explicit acceleration and deceleration shaping
-without giving up controlled in-zone settling. Multi-ball gather still comes
-after that one-ball time optimization slice, and onboard planning still waits
-until the fuller gather task is stable enough to benchmark meaningfully.
+surfaces. The immediate next slice is no longer time optimization. It is to
+use the calibrated `short_turf` surface as the canonical one-ball proof
+surface, add explicit retention instrumentation at the stop-and-release moment,
+and then make the corral run fail unless the ball stays captured through place.
+Only after that clean-retention gate is green should we optimize acceleration
+and deceleration for time. Multi-ball gather still comes after the one-ball
+clean-retention milestone, and onboard planning still waits until the fuller
+gather task is stable enough to benchmark meaningfully.
 
 The important shift is that surface friction is now working for us instead of
-against us. The next proof should make the same controlled placement faster,
-not merely different.
+against us, but friction alone is not enough. The next proof should make the
+ball stay controlled in the spur through the release decision, not merely end
+up inside the zone after a recovery.
 
 ```mermaid
 flowchart LR
     A[Route-planning baseline] --> B[Single-ball corral dashboard UAT complete]
     B --> C[Surface-aware turf and grass calibration complete]
-    C --> D[Corral accel and decel optimization]
-    D --> E[Three-ball gather]
-    E --> F[Onboard planner evaluation]
+    C --> D[Retention instrumentation and clean-release proof]
+    D --> E[Corral clean-retention gate]
+    E --> F[Corral accel and decel optimization]
+    F --> G[Three-ball gather]
+    G --> H[Onboard planner evaluation]
 ```
 
 ### Step 1: Route-Planning Baseline - Complete
@@ -259,29 +264,61 @@ What this means:
 3. gather artifacts now carry settle metrics (`surface_profile`, `final_settle_distance_m`, `max_overshoot_distance_m`, `settle_time_s`, `release_recontact_count`)
 4. future time optimization can target a stable, calibrated baseline instead of compensating for an unrealistic low-friction world
 
-### Step 4: Corral Time Optimization - Current Focus
+### Step 4: Corral Clean Retention Gate - Current Focus
 
-Goal: reduce time-to-place after stable surface-aware placement is proven,
-without giving up control.
+Goal: make one-ball corral/place fail unless the ball stays retained in the
+spur during place on canonical `short_turf`.
 
-Why this comes after surface-aware placement:
+Why this comes before time optimization:
 
-1. faster push profiles are only useful once the ball settles predictably on the target surface
-2. acceleration and deceleration tuning should optimize a behavior that is already reliable, not mask an overshoot problem
+1. the current weak point is not speed; it is the ball bouncing or climbing out of the spur during place
+2. a successful final settle is no longer enough if the robot had to recover after a place-stage escape
+3. acceleration and deceleration tuning should optimize a behavior that is already clean, not compensate for poor retention
+
+Intermediate step to target first:
+
+1. add explicit instrumentation for the stop-and-release moment so we know whether the robot stopped with the ball still securely captured
+2. add explicit retained-release metrics to artifacts and scorecards, for example `stopped_with_ball_captured` and `release_started_with_capture`
+3. prove those metrics are populated and trustworthy in headless `short_turf` runs before making them part of the operator gate
+
+Work:
+
+1. reduce forward drive when the ball is high or laterally biased in the spur mouth
+2. add a stronger hold or settle phase before the final push when capture is marginal
+3. keep release conservative near the zone
+4. if controller-only changes are not enough, adjust front-lip or rail contact and geometry specifically to prevent climb-out during place
+5. update headless summaries, dashboard UAT summaries, and scorecards so clean retention is visible and derived from `capture_loss_count == 0`
+
+Acceptance:
+
+1. route-planning regression evidence remains green
+2. headless `short_turf` corral gate passes `5/5` and every run has `capture_loss_count == 0`
+3. dashboard UAT passes `3/3` and every run has `capture_loss_count == 0`
+4. retention artifacts explicitly show whether the robot stopped and began release with the ball still captured in the spur
+5. a run that settles inside the zone still fails this milestone if the ball escaped the spur during place
+
+### Step 5: Corral Time Optimization
+
+Goal: reduce time-to-place only after clean retention is proven.
+
+Why this comes later:
+
+1. faster push profiles are only useful once the ball stays retained predictably on the target surface
+2. acceleration and deceleration tuning should optimize a clean retained release, not mask a bounce-out problem
 
 Work:
 
 1. add explicit acceleration and deceleration shaping to the corral approach and push phases
-2. compare mission time against the current surface-aware baseline
-3. keep placement control and zone settle behavior intact while reducing time
+2. compare mission time against the clean-retention baseline
+3. keep clean retention and in-zone settle behavior intact while reducing time
 
 Acceptance:
 
-1. mission time improves on the canonical surface-aware one-ball proof
-2. placement still settles inside the zone without reintroducing overshoot
+1. mission time improves on the canonical clean-retention one-ball proof
+2. placement still settles inside the zone without reintroducing spur escape
 3. route-planning regression evidence remains green
 
-### Step 5: Multi-Ball Gather To Zone
+### Step 6: Multi-Ball Gather To Zone
 
 Goal: extend the proven one-ball corral/place mechanics into a fuller gather
 task only after the surface-aware one-ball placement work is signed off.
@@ -302,7 +339,7 @@ Acceptance:
 1. multi-ball gather completes end-to-end after the surface-aware one-ball milestones are signed off
 2. route-planning protections remain green while gather complexity increases
 
-### Step 6: Onboard Model for Visit + Gather Planning
+### Step 7: Onboard Model for Visit + Gather Planning
 
 Goal: determine whether a local model on the Orin can take over high-level visit
 and gather planning after the task is stable enough to benchmark fairly.
