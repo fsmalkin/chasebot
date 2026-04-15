@@ -87,11 +87,17 @@ async function run() {
     let previousSessionId = readyState.session_id || '';
     const writeSummary = (extra = {}) => {
       const passCount = results.filter((item) => item.passed === true).length;
+      const settledInCorralPassCount = results.filter((item) => item.settled_in_corral_pass === true).length;
+      const cleanRetentionPassCount = results.filter((item) => item.clean_retention_pass === true).length;
       const summary = {
         generated_utc: new Date().toISOString(),
         type: 'corral_single_ball_dashboard_uat',
         dashboard_url: BASE_URL,
         pass_count: passCount,
+        settled_in_corral_pass_count: settledInCorralPassCount,
+        settled_in_corral_fail_count: Math.max(results.length - settledInCorralPassCount, 0),
+        clean_retention_pass_count: cleanRetentionPassCount,
+        clean_retention_fail_count: Math.max(results.length - cleanRetentionPassCount, 0),
         required_green_runs: REQUIRED_GREEN_RUNS,
         promotion_gate_pass: passCount === REQUIRED_GREEN_RUNS && results.length === REQUIRED_GREEN_RUNS,
         runs: results,
@@ -231,6 +237,14 @@ async function run() {
           ? missionVerdict.zone_pose
           : {};
         const zoneRadius = Number.parseFloat(String(zonePose.radius_m || '0.2')) || 0.2;
+        const captureLossCount = Number.parseInt(String(missionVerdict.capture_loss_count || '0'), 10) || 0;
+        const stoppedWithBallCaptured = missionVerdict.stopped_with_ball_captured === true;
+        const releaseStartedWithCapture = missionVerdict.release_started_with_capture === true;
+        const cleanRetentionPass = missionVerdict.clean_retention_pass === true;
+        const finalCenterInsideZone = missionVerdict.final_center_inside_zone === true;
+        const ballStoppedInCorral = missionVerdict.ball_stopped_in_corral === true;
+        const rolledAwayAfterRelease = missionVerdict.rolled_away_after_release === true;
+        const settledInCorralPass = missionVerdict.settled_in_corral_pass === true;
         const finalSettleDistance = Number.parseFloat(String(missionVerdict.final_settle_distance_m || '0'));
         const maxOvershootDistance = Number.parseFloat(String(missionVerdict.max_overshoot_distance_m || '0'));
         const settleTime = Number.parseFloat(String(missionVerdict.settle_time_s || '0'));
@@ -270,6 +284,18 @@ async function run() {
         if (!surfaceProfile) {
           throw new Error(`Run ${runIndex} did not report a surface_profile.`);
         }
+        if (!finalCenterInsideZone) {
+          throw new Error(`Run ${runIndex} did not finish with the ball center inside the corral.`);
+        }
+        if (!ballStoppedInCorral) {
+          throw new Error(`Run ${runIndex} did not show the ball fully stopped in the corral.`);
+        }
+        if (rolledAwayAfterRelease) {
+          throw new Error(`Run ${runIndex} rolled away after release.`);
+        }
+        if (!settledInCorralPass) {
+          throw new Error(`Run ${runIndex} did not mark settled_in_corral_pass=true.`);
+        }
         if (!(finalSettleDistance <= zoneRadius)) {
           throw new Error(`Run ${runIndex} settled outside the zone. final_settle_distance_m=${finalSettleDistance} zone_radius=${zoneRadius}`);
         }
@@ -297,6 +323,14 @@ async function run() {
           mission_verdict: finalState.mission_verdict,
           placed_targets: finalState.placed_targets,
           surface_profile: surfaceProfile,
+          capture_loss_count: captureLossCount,
+          stopped_with_ball_captured: stoppedWithBallCaptured,
+          release_started_with_capture: releaseStartedWithCapture,
+          clean_retention_pass: cleanRetentionPass,
+          final_center_inside_zone: finalCenterInsideZone,
+          ball_stopped_in_corral: ballStoppedInCorral,
+          rolled_away_after_release: rolledAwayAfterRelease,
+          settled_in_corral_pass: settledInCorralPass,
           final_settle_distance_m: finalSettleDistance,
           max_overshoot_distance_m: maxOvershootDistance,
           settle_time_s: settleTime,
@@ -316,6 +350,8 @@ async function run() {
           session_id_before: previousSessionId,
           active_scenario_label_seen: activeScenarioLabel,
           proof_states_seen: seenProofStates,
+          clean_retention_pass: false,
+          settled_in_corral_pass: false,
           world_stream_restart_count_delta: sawWorldStreamRestart ? 1 : 0,
           world_stream_clean: false,
           world_stream_degraded_poll_streak_max: maxDegradedPollStreak,

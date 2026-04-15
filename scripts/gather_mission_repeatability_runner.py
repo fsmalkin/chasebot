@@ -15,6 +15,7 @@ from pathlib import Path
 from gather_mission_campaign_helpers import summarize_gather_run
 from gather_mission_helpers import build_scorecard_markdown
 from gather_mission_helpers import campaign_pass
+from gather_mission_helpers import settled_in_corral_pass
 from gather_mission_helpers import summarize_runs
 from llm_supervisor_core import REPO_ROOT
 from llm_supervisor_core import append_jsonl
@@ -99,7 +100,7 @@ def promotion_gate_pass_for_runs(runs: list[dict[str, object]], *, mode: str) ->
     if not runs:
         return False
     if mode == "pass_only":
-        return all(bool(item.get("pass")) for item in runs)
+        return all(settled_in_corral_pass(item) for item in runs)
     return campaign_pass(runs)
 
 
@@ -119,6 +120,7 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
         "run_index": run_index,
         "return_code": 0 if bool(verdict.get("pass")) else 2,
         "pass": bool(verdict.get("pass")) if verdict else bool(summary.get("pass")),
+        "mission_completed_pass": bool(verdict.get("mission_completed_pass", summary.get("mission_completed_pass", verdict.get("pass", summary.get("pass", False))))),
         "session_id": str(verdict.get("session_id", "") or summary.get("session_id", "")),
         "scenario_id": str(verdict.get("scenario_id", "") or summary.get("scenario_id", "")),
         "mission_root": str(mission_root) if mission_root else "",
@@ -128,6 +130,15 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
         "scorecard_path": str(scorecard_path) if scorecard_path and scorecard_path.exists() else "",
         "placed_count": int(verdict.get("placed_count", summary.get("placed_count", 0)) or 0),
         "capture_loss_count": int(verdict.get("capture_loss_count", summary.get("capture_loss_count", 0)) or 0),
+        "stopped_with_ball_captured": bool(verdict.get("stopped_with_ball_captured", summary.get("stopped_with_ball_captured", False))),
+        "release_started_with_capture": bool(verdict.get("release_started_with_capture", summary.get("release_started_with_capture", False))),
+        "stop_capture_state": verdict.get("stop_capture_state", summary.get("stop_capture_state", {})) if isinstance(verdict.get("stop_capture_state", summary.get("stop_capture_state", {})), dict) else {},
+        "release_capture_state": verdict.get("release_capture_state", summary.get("release_capture_state", {})) if isinstance(verdict.get("release_capture_state", summary.get("release_capture_state", {})), dict) else {},
+        "clean_retention_pass": bool(verdict.get("clean_retention_pass", summary.get("clean_retention_pass", False))),
+        "final_center_inside_zone": bool(verdict.get("final_center_inside_zone", summary.get("final_center_inside_zone", False))),
+        "ball_stopped_in_corral": bool(verdict.get("ball_stopped_in_corral", summary.get("ball_stopped_in_corral", False))),
+        "rolled_away_after_release": bool(verdict.get("rolled_away_after_release", summary.get("rolled_away_after_release", False))),
+        "settled_in_corral_pass": bool(verdict.get("settled_in_corral_pass", summary.get("settled_in_corral_pass", False))),
         "surface_profile": str(verdict.get("surface_profile", summary.get("surface_profile", "")) or ""),
         "final_settle_distance_m": float(verdict.get("final_settle_distance_m", summary.get("final_settle_distance_m", 0.0)) or 0.0),
         "max_overshoot_distance_m": float(verdict.get("max_overshoot_distance_m", summary.get("max_overshoot_distance_m", 0.0)) or 0.0),

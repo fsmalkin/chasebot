@@ -14,9 +14,15 @@ from gather_mission_helpers import build_scorecard_markdown  # noqa: E402
 from gather_mission_helpers import build_zone_spec  # noqa: E402
 from gather_mission_helpers import capture_loss_detected  # noqa: E402
 from gather_mission_helpers import capture_snapshot  # noqa: E402
+from gather_mission_helpers import clean_retention_pass  # noqa: E402
 from gather_mission_helpers import compute_place_command  # noqa: E402
+from gather_mission_helpers import compute_capture_command  # noqa: E402
+from gather_mission_helpers import front_escape_risk  # noqa: E402
+from gather_mission_helpers import marginal_capture  # noqa: E402
 from gather_mission_helpers import pose_delta_m  # noqa: E402
 from gather_mission_helpers import release_ready  # noqa: E402
+from gather_mission_helpers import secure_capture  # noqa: E402
+from gather_mission_helpers import settled_in_corral_pass  # noqa: E402
 from gather_mission_helpers import summarize_runs  # noqa: E402
 from gather_mission_helpers import summarize_release_settle_trace  # noqa: E402
 from gather_mission_helpers import zone_dwell_complete  # noqa: E402
@@ -61,6 +67,26 @@ def test_capture_snapshot_accepts_wider_lateral_capture_with_broader_spur():
     assert snapshot is not None
     assert snapshot.captured is True
     assert snapshot.within_capture_window is True
+
+
+def test_marginal_capture_detects_ball_near_front_or_side_of_spur():
+    centered = capture_snapshot({"x": 0.0, "y": 0.0, "yaw": 0.0}, {"x": 0.16, "y": 0.0}, CaptureEnvelope())
+    front_rail = capture_snapshot({"x": 0.0, "y": 0.0, "yaw": 0.0}, {"x": 0.07, "y": 0.0}, CaptureEnvelope())
+    lateral_bias = capture_snapshot({"x": 0.0, "y": 0.0, "yaw": 0.0}, {"x": 0.16, "y": 0.05}, CaptureEnvelope())
+
+    assert marginal_capture(centered) is False
+    assert marginal_capture(front_rail) is True
+    assert marginal_capture(lateral_bias) is True
+
+
+def test_front_escape_risk_detects_ball_riding_spur_mouth():
+    centered = capture_snapshot({"x": 0.0, "y": 0.0, "yaw": 0.0}, {"x": 0.18, "y": 0.0}, CaptureEnvelope())
+    front_loaded = capture_snapshot({"x": 0.0, "y": 0.0, "yaw": 0.0}, {"x": 0.31, "y": 0.0}, CaptureEnvelope())
+
+    assert secure_capture(centered, CaptureEnvelope()) is True
+    assert secure_capture(front_loaded, CaptureEnvelope()) is False
+    assert front_escape_risk(centered, CaptureEnvelope()) is False
+    assert front_escape_risk(front_loaded, CaptureEnvelope()) is True
 
 
 def test_capture_snapshot_detects_ball_behind_robot():
@@ -128,11 +154,23 @@ def test_compute_place_command_uses_gentle_recapture_when_ball_not_captured():
     assert command.linear_x < 0.09
 
 
+def test_compute_capture_command_reseats_ball_when_hard_captured_but_not_secure():
+    command = compute_capture_command(
+        {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        {"x": 0.31, "y": 0.0},
+        envelope=CaptureEnvelope(),
+    )
+    assert command is not None
+    assert command.mode == "capture_seat"
+    assert command.linear_x >= 0.05
+    assert abs(command.angular_z) <= 0.2
+
+
 def test_compute_place_command_pushes_faster_when_centered_recapture_is_far_from_zone():
     zone = build_zone_spec("corral_single_ball_place")
     command = compute_place_command(
         {"x": 0.0, "y": 0.0, "yaw": 0.0},
-        {"x": 0.35, "y": 0.0},
+        {"x": 0.41, "y": 0.0},
         zone=zone,
     )
     assert command is not None
@@ -151,20 +189,32 @@ def test_compute_place_command_limits_forward_speed_when_ball_is_captured():
     assert command is not None
     assert command.mode == "place"
     assert command.linear_x > 0.0
-    assert command.linear_x <= 0.055
+    assert command.linear_x <= 0.06
 
 
-def test_compute_place_command_pushes_faster_when_captured_ball_rides_front_rail():
+def test_compute_place_command_holds_for_marginal_capture_before_final_push():
     zone = build_zone_spec("corral_single_ball_place")
     command = compute_place_command(
         {"x": 0.0, "y": 0.0, "yaw": 0.0},
-        {"x": 0.22, "y": 0.0},
+        {"x": 0.07, "y": 0.05},
         zone=zone,
     )
     assert command is not None
-    assert command.mode == "place"
-    assert command.linear_x >= 0.045
-    assert command.linear_x < 0.09
+    assert command.mode == "place_settle"
+    assert command.linear_x == 0.0
+    assert abs(command.angular_z) <= 0.18
+
+
+def test_compute_place_command_eases_forward_when_captured_ball_rides_front_rail():
+    zone = build_zone_spec("corral_single_ball_place")
+    command = compute_place_command(
+        {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        {"x": 0.31, "y": 0.0},
+        zone=zone,
+    )
+    assert command is not None
+    assert command.mode == "place_retention"
+    assert command.linear_x >= 0.04
 
 
 def test_compute_place_command_softens_turns_near_zone_edge_during_recapture():
@@ -187,8 +237,8 @@ def test_compute_place_command_holds_line_for_captured_finish_push_near_zone():
         zone=zone,
     )
     assert command is not None
-    assert command.mode == "place"
-    assert command.linear_x >= 0.025
+    assert command.mode in {"place", "place_retention"}
+    assert command.linear_x >= 0.012
     assert abs(command.angular_z) <= 0.25
 
 
@@ -200,7 +250,7 @@ def test_compute_place_command_holds_line_for_recapture_finish_push_near_zone():
         zone=zone,
     )
     assert command is not None
-    assert command.mode == "place_recapture"
+    assert command.mode in {"place", "place_recapture", "place_retention"}
     assert command.linear_x >= 0.012
     assert abs(command.angular_z) <= 0.25
 
@@ -236,6 +286,29 @@ def test_summarize_release_settle_trace_tracks_overshoot_after_zone_entry():
     assert metrics.final_settle_distance_m == 0.19
     assert metrics.release_recontact_count == 1
     assert metrics.settled_inside_zone is True
+    assert metrics.final_center_inside_zone is True
+    assert metrics.ball_stopped_in_corral is False
+    assert metrics.rolled_away_after_release is True
+    assert metrics.settled_in_corral_pass is False
+
+
+def test_summarize_release_settle_trace_marks_stopped_ball_centered_in_corral():
+    zone = build_zone_spec("corral_single_ball_place")
+    metrics = summarize_release_settle_trace(
+        surface_profile="short_turf",
+        zone=zone,
+        release_recontact_count=1,
+        release_samples=[
+            {"elapsed_s": 0.0, "zone_distance_m": 0.16, "inside_zone": True, "center_inside_zone": True, "ball_motion_m": 0.009},
+            {"elapsed_s": 0.6, "zone_distance_m": 0.15, "inside_zone": True, "center_inside_zone": True, "ball_motion_m": 0.008},
+            {"elapsed_s": 1.1, "zone_distance_m": 0.14, "inside_zone": True, "center_inside_zone": True, "ball_motion_m": 0.004},
+        ],
+    )
+
+    assert metrics.final_center_inside_zone is True
+    assert metrics.ball_stopped_in_corral is True
+    assert metrics.rolled_away_after_release is False
+    assert metrics.settled_in_corral_pass is True
 
 
 def test_summarize_runs_and_scorecard_markdown():
@@ -243,9 +316,17 @@ def test_summarize_runs_and_scorecard_markdown():
         {
             "run_index": 1,
             "pass": True,
+            "mission_completed_pass": True,
             "surface_profile": "short_turf",
             "placed_count": 1,
             "capture_loss_count": 0,
+            "stopped_with_ball_captured": True,
+            "release_started_with_capture": True,
+            "clean_retention_pass": True,
+            "final_center_inside_zone": True,
+            "ball_stopped_in_corral": True,
+            "rolled_away_after_release": False,
+            "settled_in_corral_pass": True,
             "final_settle_distance_m": 0.14,
             "max_overshoot_distance_m": 0.03,
             "settle_time_s": 1.2,
@@ -255,9 +336,17 @@ def test_summarize_runs_and_scorecard_markdown():
         {
             "run_index": 2,
             "pass": True,
+            "mission_completed_pass": True,
             "surface_profile": "short_turf",
             "placed_count": 1,
             "capture_loss_count": 1,
+            "stopped_with_ball_captured": True,
+            "release_started_with_capture": True,
+            "clean_retention_pass": False,
+            "final_center_inside_zone": True,
+            "ball_stopped_in_corral": True,
+            "rolled_away_after_release": False,
+            "settled_in_corral_pass": True,
             "final_settle_distance_m": 0.16,
             "max_overshoot_distance_m": 0.05,
             "settle_time_s": 1.5,
@@ -273,8 +362,83 @@ def test_summarize_runs_and_scorecard_markdown():
         runs=runs,
     )
     assert summary["pass_count"] == 2
+    assert summary["settled_in_corral_pass_count"] == 2
+    assert summary["clean_retention_pass_count"] == 1
+    assert summary["clean_retention_fail_count"] == 1
     assert summary["surface_profiles"] == ["short_turf"]
     assert summary["max_overshoot_distance_max_m"] == 0.05
     assert "PASS" in markdown
     assert "Run 01" in markdown
     assert "short_turf" in markdown
+    assert "settled=`True`" in markdown
+    assert "clean_retention" in markdown
+
+
+def test_clean_retention_pass_requires_zero_capture_loss_and_retained_release():
+    assert clean_retention_pass(
+        {
+            "pass": True,
+            "mission_completed_pass": True,
+            "capture_loss_count": 0,
+            "stopped_with_ball_captured": True,
+            "release_started_with_capture": True,
+        }
+    ) is True
+    assert clean_retention_pass(
+        {
+            "pass": True,
+            "mission_completed_pass": True,
+            "capture_loss_count": 1,
+            "stopped_with_ball_captured": True,
+            "release_started_with_capture": True,
+        }
+    ) is False
+
+
+def test_settled_in_corral_pass_requires_center_inside_stop_and_no_rollaway():
+    assert settled_in_corral_pass(
+        {
+            "pass": True,
+            "mission_completed_pass": True,
+            "capture_loss_count": 1,
+            "final_center_inside_zone": True,
+            "ball_stopped_in_corral": True,
+            "rolled_away_after_release": False,
+        }
+    ) is True
+    assert settled_in_corral_pass(
+        {
+            "pass": True,
+            "mission_completed_pass": True,
+            "final_center_inside_zone": False,
+            "ball_stopped_in_corral": True,
+            "rolled_away_after_release": False,
+        }
+    ) is False
+    assert settled_in_corral_pass(
+        {
+            "pass": True,
+            "mission_completed_pass": True,
+            "final_center_inside_zone": True,
+            "ball_stopped_in_corral": False,
+            "rolled_away_after_release": False,
+        }
+    ) is False
+    assert settled_in_corral_pass(
+        {
+            "pass": True,
+            "mission_completed_pass": True,
+            "final_center_inside_zone": True,
+            "ball_stopped_in_corral": True,
+            "rolled_away_after_release": True,
+        }
+    ) is False
+    assert clean_retention_pass(
+        {
+            "pass": True,
+            "mission_completed_pass": True,
+            "capture_loss_count": 0,
+            "stopped_with_ball_captured": False,
+            "release_started_with_capture": True,
+        }
+    ) is False

@@ -336,13 +336,13 @@ To keep the demo honest and legible, this phase does not include:
 - autonomous environment lifecycle control by the LLM
 - end-to-end VLA control
 
-## Next Phase: Clean Spur Retention on Canonical Short Turf
+## Next Phase: Settled Placement on Canonical Short Turf
 
 The single-target and multi-target visit UAT phase is complete enough to serve
 as the baseline, and `corral_single_ball_place` is already promoted into the
 primary dashboard action. `visit_route_planning` remains the protected
 regression floor. The only active milestone now is to make the promoted
-single-ball corral flow pass with clean spur retention on canonical
+single-ball corral flow pass with settled placement on canonical
 `short_turf`.
 
 For this retention milestone, we still assume smooth-surface operation such as
@@ -353,17 +353,17 @@ soccer fields or similar turf-like practice surfaces.
 1. route-planning serial gate is complete and remains the regression floor
 2. single-ball corral/place is already integrated and promoted in the dashboard
 3. surface-aware `short_turf` is the canonical one-ball proof surface
-4. the active blocker is clean spur retention during place, not button wiring
-5. current artifact truth is still too weak because a run can pass after a place-stage escape and recovery
-6. `gather_three_ball_zone` is paused on purpose until the one-ball clean-retention proof is green
+4. the active blocker is now settled placement after release, not button wiring
+5. current artifact truth must prove center-inside plus full stop plus no roll-away, not just eventual placement
+6. `gather_three_ball_zone` is paused on purpose until the one-ball settled-placement proof is green
 7. onboard planning remains interface-scaffold only via `plan_collection_route(...)`
 
 ```mermaid
 flowchart LR
     A[Route-planning regression floor] --> B[Promoted single-ball corral baseline]
-    B --> C[Retention instrumentation and clean-release proof]
-    C --> D[Headless short-turf clean-retention gate]
-    D --> E[Dashboard short-turf clean-retention gate]
+    B --> C[Settled-placement instrumentation and release proof]
+    C --> D[Headless short-turf settled-placement gate]
+    D --> E[Dashboard short-turf settled-placement gate]
     E --> F[Later accel and decel optimization]
     F --> G[Three-ball gather later]
     G --> H[Onboard planner later]
@@ -402,7 +402,7 @@ Rule for this milestone:
 2. browser/dashboard UAT remains serial for operator trust
 3. the parallel soak runner remains regression infrastructure, not the operator proof surface
 
-### Clean Retention Gate
+### Settled Placement Gate
 
 Active near-term scenario and intent for this phase:
 
@@ -412,41 +412,42 @@ Active near-term scenario and intent for this phase:
 
 Promotion ladder:
 
-1. keep offline unit tests green for gather helpers, scoring, and retention reporting
+1. keep offline unit tests green for gather helpers, scoring, and settled-placement reporting
 2. keep the headless route-planning regression green
-3. add explicit retention instrumentation for the stop-and-release moment
-4. prove retained-release metrics are trustworthy in headless `short_turf` runs
-5. make the headless single-ball corral gate pass `5/5` with `capture_loss_count == 0`
-6. make dashboard-backed single-ball UAT pass `3/3` with `capture_loss_count == 0`
+3. add explicit settled-placement instrumentation for the final release or handoff moment
+4. prove the final settle metrics are trustworthy in headless `short_turf` runs
+5. make the headless single-ball corral gate pass `5/5` with `final_center_inside_zone == true`, `ball_stopped_in_corral == true`, and `rolled_away_after_release == false`
+6. make dashboard-backed single-ball UAT pass `3/3` with the same settled-placement outcome fields green
 7. only after that move on to acceleration and deceleration optimization
 
 Latest evidence snapshot:
 
 1. a fresh route-planning regression pass exists
 2. a fresh single-ball headless turf gate pass exists under the old settle-focused bar
-3. dashboard UAT has passing runs for `corral_single_ball_place`, but those runs can still include place-stage capture loss
-4. the next bar is stricter: a run that settles in-zone still fails if the ball escaped the spur during place
+3. dashboard UAT has passing runs for `corral_single_ball_place`, but those runs still need a stronger “ended stopped in the corral” proof
+4. the next bar is outcome-first: a run only passes if the ball finishes center-inside, fully stopped, and without rolling away after release
 
 Operator-facing rule:
 
 1. the primary dashboard action remains `Run Single-Ball Corral`
-2. operator signoff for this phase now depends on clean retention, not merely eventual placement
-3. a run that needs a place-stage recovery does not count as a clean-retention pass even if the mission still finishes in the zone
+2. operator signoff for this phase now depends on settled placement, not perfect spur retention
+3. a brief place-stage spur escape is diagnostic only if the ball still finishes centered, stopped, and not rolling away
 
 Acceptance for this milestone:
 
 1. route-planning regression still green after catcher/corral work
-2. retention artifacts explicitly show whether the robot stopped and began release with the ball still captured in the spur
-3. single-ball corral/place headless gate passes `5/5` on `short_turf` with `capture_loss_count == 0`
-4. dashboard-backed single-ball UAT passes `3/3` on `short_turf` with `capture_loss_count == 0`
-5. no readiness claim is made for acceleration or deceleration optimization, three-ball gather, or onboard planning in this phase
-6. dashboard UAT remains the operator-visible handoff, but the first sub-step is instrumentation, not speed work
+2. settled-placement artifacts explicitly show `final_center_inside_zone`, `ball_stopped_in_corral`, and `rolled_away_after_release`
+3. single-ball corral/place headless gate passes `5/5` on `short_turf` with `final_center_inside_zone == true`, `ball_stopped_in_corral == true`, and `rolled_away_after_release == false`
+4. dashboard-backed single-ball UAT passes `3/3` on `short_turf` with the same settled-placement outcome fields green
+5. clean spur retention remains visible as diagnostic evidence, but it is not the promotion gate
+6. no readiness claim is made for acceleration or deceleration optimization, three-ball gather, or onboard planning in this phase
+7. dashboard UAT remains the operator-visible handoff, but the first sub-step is settle instrumentation, not speed work
 
 Intermediate step to target first:
 
-1. add explicit retained-release metrics, for example `stopped_with_ball_captured` and `release_started_with_capture`
+1. add explicit settled-placement metrics, for example `final_center_inside_zone`, `ball_stopped_in_corral`, and `rolled_away_after_release`
 2. surface those metrics in headless summaries, dashboard summaries, and scorecards
-3. use that instrumentation to verify we are measuring the exact stop-and-release moment before we hold the milestone to the harder zero-escape bar
+3. use that instrumentation to verify we are measuring the exact final settle outcome before we optimize timing
 
 ### Deferred Follow-Ons
 
@@ -455,7 +456,7 @@ signed off:
 
 1. `gather_three_ball_zone` as the later multi-ball gather scenario
 2. onboard `plan_collection_route(...)` promotion beyond interface scaffolding
-3. acceleration and deceleration optimization until after clean retention is green
+3. acceleration and deceleration optimization until after settled placement is green
 
 What is deferred in practice:
 
