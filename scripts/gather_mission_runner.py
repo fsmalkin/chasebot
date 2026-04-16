@@ -249,6 +249,7 @@ class GatherMissionRunner:
         stop_capture_state: dict[str, Any] | None = None,
         release_capture_state: dict[str, Any] | None = None,
         clean_retention_pass: bool = False,
+        final_inside_retrieval_corral: bool = False,
         final_center_inside_zone: bool = False,
         ball_stopped_in_corral: bool = False,
         rolled_away_after_release: bool = False,
@@ -280,6 +281,7 @@ class GatherMissionRunner:
             "stop_capture_state": stop_capture_state if isinstance(stop_capture_state, dict) else {},
             "release_capture_state": release_capture_state if isinstance(release_capture_state, dict) else {},
             "clean_retention_pass": bool(clean_retention_pass),
+            "final_inside_retrieval_corral": bool(final_inside_retrieval_corral),
             "final_center_inside_zone": bool(final_center_inside_zone),
             "ball_stopped_in_corral": bool(ball_stopped_in_corral),
             "rolled_away_after_release": bool(rolled_away_after_release),
@@ -307,6 +309,7 @@ class GatherMissionRunner:
         stop_capture_state: dict[str, Any] | None = None,
         release_capture_state: dict[str, Any] | None = None,
         clean_retention_pass: bool | None = None,
+        final_inside_retrieval_corral: bool = False,
         final_center_inside_zone: bool = False,
         ball_stopped_in_corral: bool = False,
         rolled_away_after_release: bool = False,
@@ -317,6 +320,7 @@ class GatherMissionRunner:
         post_visit_revisit_count: int = 0,
     ) -> dict[str, Any]:
         settle_payload = settle_metrics if isinstance(settle_metrics, dict) else {}
+        final_inside_retrieval_corral = bool(settle_payload.get("final_inside_retrieval_corral", final_inside_retrieval_corral))
         final_center_inside_zone = bool(settle_payload.get("final_center_inside_zone", final_center_inside_zone))
         ball_stopped_in_corral = bool(settle_payload.get("ball_stopped_in_corral", ball_stopped_in_corral))
         rolled_away_after_release = bool(settle_payload.get("rolled_away_after_release", rolled_away_after_release))
@@ -328,9 +332,10 @@ class GatherMissionRunner:
             else bool(clean_retention_pass)
         )
         settled_pass = (
-            bool(final_center_inside_zone)
+            bool(final_inside_retrieval_corral)
             and bool(ball_stopped_in_corral)
             and not bool(rolled_away_after_release)
+            and int(post_visit_revisit_count) == 0
             if settled_in_corral_pass is None
             else bool(settled_in_corral_pass)
         )
@@ -359,6 +364,7 @@ class GatherMissionRunner:
             "stop_capture_state": stop_capture_state if isinstance(stop_capture_state, dict) else {},
             "release_capture_state": release_capture_state if isinstance(release_capture_state, dict) else {},
             "clean_retention_pass": retention_pass,
+            "final_inside_retrieval_corral": bool(final_inside_retrieval_corral),
             "final_center_inside_zone": bool(final_center_inside_zone),
             "ball_stopped_in_corral": bool(ball_stopped_in_corral),
             "rolled_away_after_release": bool(rolled_away_after_release),
@@ -822,7 +828,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "zone_pose": {
                 "x": round(self.zone.world_x, 6),
                 "y": round(self.zone.world_y, 6),
-                "radius_m": round(self.zone.radius_m, 6),
+                "radius_m": round(self.zone.retrieval_radius_m, 6),
+                "control_radius_m": round(self.zone.control_radius_m, 6),
                 "dwell_s": round(self.zone.dwell_s, 6),
             },
             "zone_score": {},
@@ -959,7 +966,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     zone_details={
                         "world_x": round(self.zone.world_x, 6),
                         "world_y": round(self.zone.world_y, 6),
-                        "radius_m": round(self.zone.radius_m, 6),
+                        "radius_m": round(self.zone.retrieval_radius_m, 6),
+                        "control_radius_m": round(self.zone.control_radius_m, 6),
                     },
                     placed_targets=list(self.gather_runtime_state.get("placed_targets", [])),
                     mission_state={
@@ -1132,7 +1140,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     and zone_score is not None
                     and (
                         capture.within_recapture_window
-                        or float(zone_score.zone_distance_m) <= (float(self.zone.radius_m) + 0.35)
+                        or float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
                     )
                 )
                 if prefer_zone_recovery:
@@ -1143,7 +1151,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             capture.within_recapture_window
                             or (
                                 zone_score is not None
-                                and float(zone_score.zone_distance_m) <= (float(self.zone.radius_m) + 0.35)
+                                and float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
                             )
                         )
                     )
@@ -1328,6 +1336,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         def _settle_fields(metrics: dict[str, Any] | None = None) -> dict[str, Any]:
             active_metrics = metrics if isinstance(metrics, dict) else _settle_metrics()
             return {
+                "final_inside_retrieval_corral": bool(active_metrics.get("final_inside_retrieval_corral", False)),
                 "final_center_inside_zone": bool(active_metrics.get("final_center_inside_zone", False)),
                 "ball_stopped_in_corral": bool(active_metrics.get("ball_stopped_in_corral", False)),
                 "rolled_away_after_release": bool(active_metrics.get("rolled_away_after_release", False)),
@@ -1373,7 +1382,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 )
             ]
             release_prev_ball_pose = dict(current_ball_pose or {}) if current_ball_pose else None
-            release_inside_seen = bool(current_zone_score.center_inside_zone) if current_zone_score else False
+            release_inside_seen = bool(current_zone_score.center_inside_retrieval_corral) if current_zone_score else False
             self._set_manual_drive(False, mode="release_settle", rationale=rationale)
             self._update_gather_runtime_state(
                 latest_feedback=feedback,
@@ -1440,7 +1449,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     release_sample["ball_motion_m"] = ball_motion_m
                 release_samples.append(release_sample)
                 release_prev_ball_pose = dict(ball_pose or {})
-                if zone_score and zone_score.center_inside_zone:
+                if zone_score and zone_score.center_inside_retrieval_corral:
                     release_inside_seen = True
                 settle_metrics = _settle_metrics()
                 self._set_manual_drive(
@@ -1464,8 +1473,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         **_retention_fields(),
                     }
                 release_elapsed_s = now_monotonic - release_origin_monotonic
-                within_zone_overlap = bool(zone_score and zone_score.inside_zone)
-                center_inside_now = bool(zone_score and zone_score.center_inside_zone)
+                within_zone_overlap = bool(zone_score and zone_score.inside_retrieval_corral)
+                center_inside_now = bool(zone_score and zone_score.center_inside_retrieval_corral)
                 if within_zone_overlap and (ball_motion_m is None or ball_motion_m > DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M):
                     self._update_gather_runtime_state(
                         latest_feedback=f"Letting {target.label} keep settling inside the corral overlap.",
@@ -1474,7 +1483,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     time.sleep(self.args.poll_s)
                     continue
                 if (
-                    not bool(settle_metrics.get("final_center_inside_zone", False))
+                    not bool(settle_metrics.get("final_inside_retrieval_corral", False))
                     and not within_zone_overlap
                     and release_elapsed_s >= DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
                     and capture
@@ -1511,7 +1520,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         zone_edge_correction_started_monotonic = now_monotonic
                         _reset_release_monitor(ball_pose)
                         feedback = (
-                            f"Recontacting {target.label} after an edge settle outside center."
+                            f"Recontacting {target.label} after an edge settle outside the retrieval corral."
                             if within_zone_overlap and not (capture and capture.within_recapture_window)
                             else f"Recontacting {target.label} after release roll-away."
                         )
@@ -1559,7 +1568,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             key=f"release_recontact_edge:{target.id}:{release_recontact_count}",
                         )
                         self._update_gather_runtime_state(
-                            latest_feedback=f"Nudging {target.label} back toward corral center after it stopped on the edge.",
+                            latest_feedback=f"Nudging {target.label} back into the retrieval corral after it stopped on the edge.",
                             settle_metrics=settle_metrics,
                         )
                     elif (
@@ -1581,7 +1590,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             settle_metrics=settle_metrics,
                         )
                     else:
-                        self._set_manual_drive(False, mode="release_unsettled", rationale="Ball did not finish centered and stopped in the corral.")
+                        self._set_manual_drive(False, mode="release_unsettled", rationale="Ball did not finish retrieved and stopped in the corral.")
                         return False, {
                             "failure_reason": "release_unsettled",
                             "failure_stage": "release",
@@ -1597,6 +1606,22 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 time.sleep(self.args.poll_s)
                 continue
             release_prev_ball_pose = dict(ball_pose or {}) if ball_pose else release_prev_ball_pose
+            if (
+                zone_score
+                and zone_score.center_inside_retrieval_corral
+                and (ball_motion_m is None or ball_motion_m <= 0.05)
+            ):
+                escaped_zone_correction_started_monotonic = None
+                _begin_release_monitor(
+                    now_monotonic=now_monotonic,
+                    current_capture=capture,
+                    current_ball_pose=ball_pose,
+                    current_zone_score=zone_score,
+                    rationale=f"Ball reached the practical retrieval corral; verifying settle on {self.surface_profile}.",
+                    feedback=f"Letting {target.label} settle inside the retrieval corral.",
+                )
+                time.sleep(self.args.poll_s)
+                continue
             if zone_score and zone_score.center_inside_zone:
                 escaped_zone_correction_started_monotonic = None
                 _begin_release_monitor(
@@ -1883,6 +1908,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if "clean_retention_pass" in payload
                     else None
                 ),
+                "final_inside_retrieval_corral": bool(payload.get("final_inside_retrieval_corral", False)),
                 "final_center_inside_zone": bool(payload.get("final_center_inside_zone", False)),
                 "ball_stopped_in_corral": bool(payload.get("ball_stopped_in_corral", False)),
                 "rolled_away_after_release": bool(payload.get("rolled_away_after_release", False)),
@@ -2447,14 +2473,16 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             zone_edge_correction_count = int(final_result.get("zone_edge_correction_count", 0) or 0)
             place_controller_reentry_count = int(final_result.get("place_controller_reentry_count", 0) or 0)
             post_visit_revisit_count = int(final_result.get("post_visit_revisit_count", 0) or 0)
+            final_inside_retrieval_corral = bool(final_result.get("final_inside_retrieval_corral", False))
             final_center_inside_zone = bool(final_result.get("final_center_inside_zone", False))
             ball_stopped_in_corral = bool(final_result.get("ball_stopped_in_corral", False))
             rolled_away_after_release = bool(final_result.get("rolled_away_after_release", False))
             settled_in_corral_pass = (
                 mission_completed_pass
-                and final_center_inside_zone
+                and final_inside_retrieval_corral
                 and ball_stopped_in_corral
                 and not rolled_away_after_release
+                and post_visit_revisit_count == 0
             )
             final_settle_distance_m = float(final_result.get("final_settle_distance_m", 0.0) or 0.0)
             max_overshoot_distance_m = max(
@@ -2490,6 +2518,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "stop_capture_state": stop_capture_state,
                 "release_capture_state": release_capture_state,
                 "clean_retention_pass": clean_retention_pass,
+                "final_inside_retrieval_corral": final_inside_retrieval_corral,
                 "final_center_inside_zone": final_center_inside_zone,
                 "ball_stopped_in_corral": ball_stopped_in_corral,
                 "rolled_away_after_release": rolled_away_after_release,
@@ -2502,7 +2531,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "zone_pose": {
                     "x": round(self.zone.world_x, 6),
                     "y": round(self.zone.world_y, 6),
-                    "radius_m": round(self.zone.radius_m, 6),
+                    "radius_m": round(self.zone.retrieval_radius_m, 6),
+                    "control_radius_m": round(self.zone.control_radius_m, 6),
                     "dwell_s": round(self.zone.dwell_s, 6),
                 },
                 "mission_error": final_mission_error,
@@ -2534,6 +2564,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "stop_capture_state": stop_capture_state,
                 "release_capture_state": release_capture_state,
                 "clean_retention_pass": clean_retention_pass,
+                "final_inside_retrieval_corral": final_inside_retrieval_corral,
                 "final_center_inside_zone": final_center_inside_zone,
                 "ball_stopped_in_corral": ball_stopped_in_corral,
                 "rolled_away_after_release": rolled_away_after_release,
@@ -2555,6 +2586,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "promotion_gate_pass": summary["pass"],
                     "settled_in_corral_pass_count": 1 if settled_in_corral_pass else 0,
                     "settled_in_corral_fail_count": 0 if settled_in_corral_pass else 1,
+                    "final_inside_retrieval_corral_count": 1 if final_inside_retrieval_corral else 0,
                     "final_center_inside_zone_count": 1 if final_center_inside_zone else 0,
                     "ball_stopped_in_corral_count": 1 if ball_stopped_in_corral else 0,
                     "rolled_away_after_release_count": 1 if rolled_away_after_release else 0,
@@ -2592,6 +2624,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "stopped_with_ball_captured": stopped_with_ball_captured,
                         "release_started_with_capture": release_started_with_capture,
                         "clean_retention_pass": clean_retention_pass,
+                        "final_inside_retrieval_corral": final_inside_retrieval_corral,
                         "final_center_inside_zone": final_center_inside_zone,
                         "ball_stopped_in_corral": ball_stopped_in_corral,
                         "rolled_away_after_release": rolled_away_after_release,

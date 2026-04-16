@@ -78,7 +78,8 @@ def test_init_runtime_state_seeds_dashboard_friendly_fields(tmp_path, monkeypatc
     assert runner.visit_runtime_state["proof_state"] == "waiting"
     assert runner.visit_runtime_state["artifact_dir"] == str(mission_root)
     assert runner.gather_runtime_state["gather_phase"] == "setup"
-    assert runner.gather_runtime_state["zone_pose"]["radius_m"] > 0.0
+    assert runner.gather_runtime_state["zone_pose"]["radius_m"] == 0.762
+    assert runner.gather_runtime_state["zone_pose"]["control_radius_m"] == 0.2
     assert runner.gather_runtime_state["artifact_dir"] == str(mission_root)
 
 
@@ -119,6 +120,7 @@ def test_run_normalizes_success_summary_and_marks_proof_completed(tmp_path, monk
             "stop_capture_state": {"captured": True, "ball_x_m": 0.16, "ball_y_m": 0.0},
             "release_capture_state": {"captured": True, "ball_x_m": 0.16, "ball_y_m": 0.0},
             "clean_retention_pass": True,
+            "final_inside_retrieval_corral": True,
             "final_center_inside_zone": True,
             "ball_stopped_in_corral": True,
             "rolled_away_after_release": False,
@@ -152,6 +154,7 @@ def test_run_normalizes_success_summary_and_marks_proof_completed(tmp_path, monk
     assert verdict["place_controller_reentry_count"] == 0
     assert verdict["post_visit_revisit_count"] == 0
     assert verdict["settled_in_corral_pass"] is True
+    assert verdict["final_inside_retrieval_corral"] is True
     assert verdict["final_center_inside_zone"] is True
     assert verdict["ball_stopped_in_corral"] is True
     assert verdict["rolled_away_after_release"] is False
@@ -251,6 +254,7 @@ def test_run_passes_when_target_settles_in_corral_even_with_capture_loss_diagnos
                 "stop_capture_state": {"captured": True},
                 "release_capture_state": {"captured": True},
                 "clean_retention_pass": False,
+                "final_inside_retrieval_corral": True,
                 "final_center_inside_zone": True,
                 "ball_stopped_in_corral": True,
                 "rolled_away_after_release": False,
@@ -280,6 +284,7 @@ def test_run_passes_when_target_settles_in_corral_even_with_capture_loss_diagnos
     assert verdict["place_controller_reentry_count"] == 1
     assert verdict["post_visit_revisit_count"] == 0
     assert verdict["settled_in_corral_pass"] is True
+    assert verdict["final_inside_retrieval_corral"] is True
     assert verdict["final_center_inside_zone"] is True
     assert verdict["ball_stopped_in_corral"] is True
     assert verdict["rolled_away_after_release"] is False
@@ -325,6 +330,7 @@ def test_run_target_keeps_place_control_after_near_zone_place_failure(tmp_path, 
                 "allow_full_revisit": False,
                 "zone_edge_correction_count": 1,
                 "settle_metrics": {
+                    "final_inside_retrieval_corral": True,
                     "final_center_inside_zone": True,
                     "ball_stopped_in_corral": False,
                     "rolled_away_after_release": False,
@@ -345,6 +351,7 @@ def test_run_target_keeps_place_control_after_near_zone_place_failure(tmp_path, 
                     "settle_time_s": 1.4,
                     "release_recontact_count": 0,
                     "settled_inside_zone": True,
+                    "final_inside_retrieval_corral": True,
                     "final_center_inside_zone": True,
                     "ball_stopped_in_corral": True,
                     "rolled_away_after_release": False,
@@ -577,6 +584,70 @@ def test_place_target_allows_small_zone_edge_drift_to_settle_without_failure(tmp
     assert any(item["mode"] == "release_settle" for item in command_log)
 
 
+def test_place_target_starts_release_monitor_when_ball_enters_outer_retrieval_corral(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.place_timeout_s = 6.0
+    runner.args.poll_s = 0.5
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 1.60, "y": 0.0, "yaw": 0.0}
+    states = [
+        ({}, robot_pose, {"x": 2.55, "y": 0.00, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.56, "y": 0.00, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.565, "y": 0.00, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.565, "y": 0.00, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.565, "y": 0.00, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.565, "y": 0.00, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, robot_pose, {"x": 2.565, "y": 0.00, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["settled_in_corral_pass"] is True
+    assert payload["final_inside_retrieval_corral"] is True
+    assert payload["ball_stopped_in_corral"] is True
+    assert any(item["mode"] == "release_settle" for item in command_log)
+
+
 def test_place_target_keeps_waiting_while_ball_stays_inside_overlap_and_is_still_moving(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.place_timeout_s = 15.0
@@ -749,6 +820,7 @@ def test_run_target_prefers_local_recapture_over_retry_visit_after_post_visit_ca
                     "settle_time_s": 1.5,
                     "release_recontact_count": 0,
                     "settled_inside_zone": True,
+                    "final_inside_retrieval_corral": True,
                     "final_center_inside_zone": True,
                     "ball_stopped_in_corral": True,
                     "rolled_away_after_release": False,
@@ -818,6 +890,7 @@ def test_run_target_uses_place_controller_reentry_after_release_unsettled(tmp_pa
                 "allow_full_revisit": False,
                 "zone_edge_correction_count": 1,
                 "settle_metrics": {
+                    "final_inside_retrieval_corral": True,
                     "final_center_inside_zone": True,
                     "ball_stopped_in_corral": False,
                     "rolled_away_after_release": False,
@@ -838,6 +911,7 @@ def test_run_target_uses_place_controller_reentry_after_release_unsettled(tmp_pa
                     "settle_time_s": 1.6,
                     "release_recontact_count": 1,
                     "settled_inside_zone": True,
+                    "final_inside_retrieval_corral": True,
                     "final_center_inside_zone": True,
                     "ball_stopped_in_corral": True,
                     "rolled_away_after_release": False,
@@ -915,6 +989,7 @@ def test_run_target_stops_after_visit_before_capture_handoff(tmp_path, monkeypat
                     "settle_time_s": 1.2,
                     "release_recontact_count": 0,
                     "settled_inside_zone": True,
+                    "final_inside_retrieval_corral": True,
                     "final_center_inside_zone": True,
                     "ball_stopped_in_corral": True,
                     "rolled_away_after_release": False,

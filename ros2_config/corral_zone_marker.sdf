@@ -7,20 +7,20 @@
       <visual name="zone_disc_visual">
         <geometry>
           <cylinder>
-            <radius>0.20</radius>
+            <radius>0.762</radius>
             <length>0.002</length>
           </cylinder>
         </geometry>
         <material>
-          <ambient>0.10 0.55 0.18 0.45</ambient>
-          <diffuse>0.10 0.55 0.18 0.45</diffuse>
-          <specular>0.15 0.15 0.15 0.45</specular>
+          <ambient>0.10 0.55 0.18 0.28</ambient>
+          <diffuse>0.10 0.55 0.18 0.28</diffuse>
+          <specular>0.15 0.15 0.15 0.28</specular>
         </material>
       </visual>
       <visual name="zone_ring_visual">
         <geometry>
           <cylinder>
-            <radius>0.21</radius>
+            <radius>0.772</radius>
             <length>0.004</length>
           </cylinder>
         </geometry>
@@ -28,6 +28,19 @@
           <ambient>0.15 0.80 0.24 0.80</ambient>
           <diffuse>0.15 0.80 0.24 0.80</diffuse>
           <specular>0.20 0.20 0.20 0.80</specular>
+        </material>
+      </visual>
+      <visual name="control_ring_visual">
+        <geometry>
+          <cylinder>
+            <radius>0.20</radius>
+            <length>0.004</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.92 0.74 0.18 0.70</ambient>
+          <diffuse>0.92 0.74 0.18 0.70</diffuse>
+          <specular>0.30 0.24 0.10 0.70</specular>
         </material>
       </visual>
     </link>

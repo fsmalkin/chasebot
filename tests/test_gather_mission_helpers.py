@@ -115,8 +115,12 @@ def test_zone_snapshot_and_dwell_gate():
     zone = build_zone_spec("corral_single_ball_place")
     score = zone_snapshot({"x": zone.world_x + 0.02, "y": zone.world_y - 0.01}, zone)
     assert score is not None
+    assert zone.retrieval_radius_m == 0.762
+    assert zone.control_radius_m == 0.20
     assert score.inside_zone is True
     assert score.center_inside_zone is True
+    assert score.inside_retrieval_corral is True
+    assert score.center_inside_retrieval_corral is True
     assert zone_dwell_complete(
         inside_zone=score.inside_zone,
         zone_entry_monotonic=5.0,
@@ -137,6 +141,18 @@ def test_zone_snapshot_counts_ball_overlap_as_inside_zone():
     assert score is not None
     assert score.inside_zone is True
     assert score.center_inside_zone is False
+    assert score.inside_retrieval_corral is True
+    assert score.center_inside_retrieval_corral is True
+
+
+def test_zone_snapshot_distinguishes_outer_retrieval_from_inner_control():
+    zone = build_zone_spec("corral_single_ball_place")
+    score = zone_snapshot({"x": zone.world_x + 0.45, "y": zone.world_y}, zone)
+    assert score is not None
+    assert score.inside_zone is False
+    assert score.center_inside_zone is False
+    assert score.inside_retrieval_corral is True
+    assert score.center_inside_retrieval_corral is True
 
 
 def test_capture_loss_detected_after_grace_period():
@@ -218,6 +234,19 @@ def test_compute_place_command_holds_for_marginal_capture_before_final_push():
     assert abs(command.angular_z) <= 0.18
 
 
+def test_compute_place_command_holds_when_ball_is_already_inside_retrieval_corral():
+    zone = build_zone_spec("corral_single_ball_place")
+    command = compute_place_command(
+        {"x": 1.85, "y": 0.0, "yaw": 0.0},
+        {"x": 2.55, "y": 0.02},
+        zone=zone,
+    )
+    assert command is not None
+    assert command.mode == "retrieval_hold"
+    assert command.linear_x <= 0.006
+    assert abs(command.angular_z) <= 0.18
+
+
 def test_compute_place_command_eases_forward_when_captured_ball_rides_front_rail():
     zone = build_zone_spec("corral_single_ball_place")
     command = compute_place_command(
@@ -250,8 +279,8 @@ def test_compute_place_command_holds_line_for_captured_finish_push_near_zone():
         zone=zone,
     )
     assert command is not None
-    assert command.mode in {"place", "place_retention"}
-    assert command.linear_x >= 0.012
+    assert command.mode in {"place", "place_retention", "retrieval_hold"}
+    assert command.linear_x >= 0.0
     assert abs(command.angular_z) <= 0.25
 
 
@@ -263,8 +292,8 @@ def test_compute_place_command_holds_line_for_recapture_finish_push_near_zone():
         zone=zone,
     )
     assert command is not None
-    assert command.mode in {"place", "place_recapture", "place_retention"}
-    assert command.linear_x >= 0.012
+    assert command.mode in {"place", "place_recapture", "place_retention", "retrieval_hold"}
+    assert command.linear_x >= 0.0
     assert abs(command.angular_z) <= 0.25
 
 
@@ -288,17 +317,18 @@ def test_summarize_release_settle_trace_tracks_overshoot_after_zone_entry():
         zone=zone,
         release_recontact_count=1,
         release_samples=[
-            {"elapsed_s": 0.0, "zone_distance_m": 0.18, "inside_zone": True, "center_inside_zone": True},
-            {"elapsed_s": 0.6, "zone_distance_m": 0.26, "inside_zone": False, "center_inside_zone": False},
-            {"elapsed_s": 1.1, "zone_distance_m": 0.19, "inside_zone": True, "center_inside_zone": True},
+            {"elapsed_s": 0.0, "zone_distance_m": 0.18, "inside_zone": True, "center_inside_zone": True, "inside_retrieval_corral": True, "center_inside_retrieval_corral": True},
+            {"elapsed_s": 0.6, "zone_distance_m": 0.80, "inside_zone": False, "center_inside_zone": False, "inside_retrieval_corral": False, "center_inside_retrieval_corral": False},
+            {"elapsed_s": 1.1, "zone_distance_m": 0.19, "inside_zone": True, "center_inside_zone": True, "inside_retrieval_corral": True, "center_inside_retrieval_corral": True},
         ],
     )
 
     assert metrics.surface_profile == "short_turf"
-    assert metrics.max_overshoot_distance_m == 0.06
+    assert metrics.max_overshoot_distance_m == 0.038
     assert metrics.final_settle_distance_m == 0.19
     assert metrics.release_recontact_count == 1
     assert metrics.settled_inside_zone is True
+    assert metrics.final_inside_retrieval_corral is True
     assert metrics.final_center_inside_zone is True
     assert metrics.ball_stopped_in_corral is False
     assert metrics.rolled_away_after_release is True
@@ -312,12 +342,13 @@ def test_summarize_release_settle_trace_marks_stopped_ball_centered_in_corral():
         zone=zone,
         release_recontact_count=1,
         release_samples=[
-            {"elapsed_s": 0.0, "zone_distance_m": 0.16, "inside_zone": True, "center_inside_zone": True, "ball_motion_m": 0.009},
-            {"elapsed_s": 0.6, "zone_distance_m": 0.15, "inside_zone": True, "center_inside_zone": True, "ball_motion_m": 0.008},
-            {"elapsed_s": 1.1, "zone_distance_m": 0.14, "inside_zone": True, "center_inside_zone": True, "ball_motion_m": 0.004},
+            {"elapsed_s": 0.0, "zone_distance_m": 0.16, "inside_zone": True, "center_inside_zone": True, "inside_retrieval_corral": True, "center_inside_retrieval_corral": True, "ball_motion_m": 0.009},
+            {"elapsed_s": 0.6, "zone_distance_m": 0.15, "inside_zone": True, "center_inside_zone": True, "inside_retrieval_corral": True, "center_inside_retrieval_corral": True, "ball_motion_m": 0.008},
+            {"elapsed_s": 1.1, "zone_distance_m": 0.14, "inside_zone": True, "center_inside_zone": True, "inside_retrieval_corral": True, "center_inside_retrieval_corral": True, "ball_motion_m": 0.004},
         ],
     )
 
+    assert metrics.final_inside_retrieval_corral is True
     assert metrics.final_center_inside_zone is True
     assert metrics.ball_stopped_in_corral is True
     assert metrics.rolled_away_after_release is False
@@ -340,6 +371,7 @@ def test_summarize_runs_and_scorecard_markdown():
             "stopped_with_ball_captured": True,
             "release_started_with_capture": True,
             "clean_retention_pass": True,
+            "final_inside_retrieval_corral": True,
             "final_center_inside_zone": True,
             "ball_stopped_in_corral": True,
             "rolled_away_after_release": False,
@@ -364,6 +396,7 @@ def test_summarize_runs_and_scorecard_markdown():
             "stopped_with_ball_captured": True,
             "release_started_with_capture": True,
             "clean_retention_pass": False,
+            "final_inside_retrieval_corral": True,
             "final_center_inside_zone": True,
             "ball_stopped_in_corral": True,
             "rolled_away_after_release": False,
@@ -384,6 +417,7 @@ def test_summarize_runs_and_scorecard_markdown():
     )
     assert summary["pass_count"] == 2
     assert summary["settled_in_corral_pass_count"] == 2
+    assert summary["final_inside_retrieval_corral_count"] == 2
     assert summary["clean_retention_pass_count"] == 1
     assert summary["clean_retention_fail_count"] == 1
     assert summary["surface_profiles"] == ["short_turf"]
@@ -421,42 +455,73 @@ def test_clean_retention_pass_requires_zero_capture_loss_and_retained_release():
     ) is False
 
 
-def test_settled_in_corral_pass_requires_center_inside_stop_and_no_rollaway():
+def test_settled_in_corral_pass_requires_retrieval_inside_stop_no_rollaway_and_no_revisit():
     assert settled_in_corral_pass(
         {
             "pass": True,
             "mission_completed_pass": True,
             "capture_loss_count": 1,
-            "final_center_inside_zone": True,
+            "final_inside_retrieval_corral": True,
+            "final_center_inside_zone": False,
             "ball_stopped_in_corral": True,
             "rolled_away_after_release": False,
+            "post_visit_revisit_count": 0,
         }
     ) is True
     assert settled_in_corral_pass(
         {
             "pass": True,
             "mission_completed_pass": True,
+            "capture_loss_count": 1,
+            "final_inside_retrieval_corral": True,
+            "final_center_inside_zone": True,
+            "ball_stopped_in_corral": True,
+            "rolled_away_after_release": False,
+            "post_visit_revisit_count": 0,
+        }
+    ) is True
+    assert settled_in_corral_pass(
+        {
+            "pass": True,
+            "mission_completed_pass": True,
+            "final_inside_retrieval_corral": False,
             "final_center_inside_zone": False,
             "ball_stopped_in_corral": True,
             "rolled_away_after_release": False,
+            "post_visit_revisit_count": 0,
         }
     ) is False
     assert settled_in_corral_pass(
         {
             "pass": True,
             "mission_completed_pass": True,
+            "final_inside_retrieval_corral": True,
             "final_center_inside_zone": True,
             "ball_stopped_in_corral": False,
             "rolled_away_after_release": False,
+            "post_visit_revisit_count": 0,
         }
     ) is False
     assert settled_in_corral_pass(
         {
             "pass": True,
             "mission_completed_pass": True,
+            "final_inside_retrieval_corral": True,
             "final_center_inside_zone": True,
             "ball_stopped_in_corral": True,
             "rolled_away_after_release": True,
+            "post_visit_revisit_count": 0,
+        }
+    ) is False
+    assert settled_in_corral_pass(
+        {
+            "pass": True,
+            "mission_completed_pass": True,
+            "final_inside_retrieval_corral": True,
+            "final_center_inside_zone": True,
+            "ball_stopped_in_corral": True,
+            "rolled_away_after_release": False,
+            "post_visit_revisit_count": 1,
         }
     ) is False
     assert clean_retention_pass(

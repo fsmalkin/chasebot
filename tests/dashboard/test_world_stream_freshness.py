@@ -1673,7 +1673,7 @@ def test_get_state_merges_gather_runtime_fields(tmp_path):
         "route_order": ["ball_1"],
         "capture_state": {"captured": True},
         "capture_loss_count": 0,
-        "zone_pose": {"x": 2.4, "y": 0.0, "radius_m": 0.2},
+        "zone_pose": {"x": 2.4, "y": 0.0, "radius_m": 0.762, "control_radius_m": 0.2},
         "zone_score": {"inside_zone": False},
         "latest_feedback": "Placing Ball 1 into the zone.",
         "artifact_dir": str(tmp_path / "mission"),
@@ -1694,7 +1694,8 @@ def test_get_state_merges_gather_runtime_fields(tmp_path):
     assert state["mission_phase"] == "place"
     assert state["gather_phase"] == "place"
     assert state["capture_state"]["captured"] is True
-    assert state["zone_pose"]["radius_m"] == 0.2
+    assert state["zone_pose"]["radius_m"] == 0.762
+    assert state["zone_pose"]["control_radius_m"] == 0.2
     assert state["route_order"] == ["ball_1"]
     assert state["surface_profile"] == "short_turf"
     assert state["proof_artifact_dir"] == str(tmp_path / "mission")

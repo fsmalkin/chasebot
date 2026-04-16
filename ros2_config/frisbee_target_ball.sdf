@@ -14,6 +14,10 @@
           <iyz>0</iyz>
         </inertia>
       </inertial>
+      <velocity_decay>
+        <linear>1.2</linear>
+        <angular>2.0</angular>
+      </velocity_decay>
       <collision name="collision">
         <geometry>
           <sphere>
@@ -23,29 +27,29 @@
         <surface>
           <friction>
             <ode>
-              <mu>1.2</mu>
-              <mu2>1.2</mu2>
-              <slip1>0.01</slip1>
-              <slip2>0.01</slip2>
+              <mu>4.0</mu>
+              <mu2>4.0</mu2>
+              <slip1>0.0</slip1>
+              <slip2>0.0</slip2>
             </ode>
             <torsional>
-              <coefficient>0.35</coefficient>
+              <coefficient>1.5</coefficient>
               <use_patch_radius>true</use_patch_radius>
-              <patch_radius>0.03</patch_radius>
+              <patch_radius>0.04</patch_radius>
               <ode>
                 <slip>0.0</slip>
               </ode>
             </torsional>
           </friction>
           <bounce>
-            <restitution_coefficient>0.02</restitution_coefficient>
-            <threshold>0.20</threshold>
+            <restitution_coefficient>0.0</restitution_coefficient>
+            <threshold>0.05</threshold>
           </bounce>
           <contact>
             <ode>
               <kp>250000.0</kp>
               <kd>30.0</kd>
-              <max_vel>0.08</max_vel>
+              <max_vel>0.02</max_vel>
               <min_depth>0.0005</min_depth>
             </ode>
           </contact>

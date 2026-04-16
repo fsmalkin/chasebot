@@ -251,6 +251,7 @@ async function run() {
         const stoppedWithBallCaptured = missionVerdict.stopped_with_ball_captured === true;
         const releaseStartedWithCapture = missionVerdict.release_started_with_capture === true;
         const cleanRetentionPass = missionVerdict.clean_retention_pass === true;
+        const finalInsideRetrievalCorral = missionVerdict.final_inside_retrieval_corral === true;
         const finalCenterInsideZone = missionVerdict.final_center_inside_zone === true;
         const ballStoppedInCorral = missionVerdict.ball_stopped_in_corral === true;
         const rolledAwayAfterRelease = missionVerdict.rolled_away_after_release === true;
@@ -294,8 +295,8 @@ async function run() {
         if (!surfaceProfile) {
           throw new Error(`Run ${runIndex} did not report a surface_profile.`);
         }
-        if (!finalCenterInsideZone) {
-          throw new Error(`Run ${runIndex} did not finish with the ball center inside the corral.`);
+        if (!finalInsideRetrievalCorral) {
+          throw new Error(`Run ${runIndex} did not finish with the ball center inside the retrieval corral.`);
         }
         if (!ballStoppedInCorral) {
           throw new Error(`Run ${runIndex} did not show the ball fully stopped in the corral.`);
@@ -344,6 +345,7 @@ async function run() {
           stopped_with_ball_captured: stoppedWithBallCaptured,
           release_started_with_capture: releaseStartedWithCapture,
           clean_retention_pass: cleanRetentionPass,
+          final_inside_retrieval_corral: finalInsideRetrievalCorral,
           final_center_inside_zone: finalCenterInsideZone,
           ball_stopped_in_corral: ballStoppedInCorral,
           rolled_away_after_release: rolledAwayAfterRelease,

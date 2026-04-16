@@ -11,7 +11,8 @@ from typing import Any
 
 DEFAULT_ZONE_WORLD_X = 2.40
 DEFAULT_ZONE_WORLD_Y = 0.00
-DEFAULT_ZONE_RADIUS_M = 0.20
+DEFAULT_CONTROL_ZONE_RADIUS_M = 0.20
+DEFAULT_RETRIEVAL_CORRAL_RADIUS_M = 0.762
 DEFAULT_ZONE_DWELL_S = 1.0
 DEFAULT_CAPTURE_LOSS_GRACE_S = 1.0
 DEFAULT_TARGET_BALL_RADIUS_M = 0.05
@@ -40,9 +41,14 @@ class ZoneSpec:
     label: str
     world_x: float
     world_y: float
-    radius_m: float = DEFAULT_ZONE_RADIUS_M
+    retrieval_radius_m: float = DEFAULT_RETRIEVAL_CORRAL_RADIUS_M
+    control_radius_m: float = DEFAULT_CONTROL_ZONE_RADIUS_M
     dwell_s: float = DEFAULT_ZONE_DWELL_S
     z_m: float = 0.001
+
+    @property
+    def radius_m(self) -> float:
+        return float(self.retrieval_radius_m)
 
 
 @dataclass(frozen=True)
@@ -75,8 +81,11 @@ class CaptureSnapshot:
 @dataclass(frozen=True)
 class ZoneSnapshot:
     zone_distance_m: float
+    retrieval_distance_m: float
     inside_zone: bool
     center_inside_zone: bool
+    inside_retrieval_corral: bool
+    center_inside_retrieval_corral: bool
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -103,6 +112,7 @@ class ReleaseSettleMetrics:
     settle_time_s: float
     release_recontact_count: int
     settled_inside_zone: bool
+    final_inside_retrieval_corral: bool
     final_center_inside_zone: bool
     ball_stopped_in_corral: bool
     rolled_away_after_release: bool
@@ -161,7 +171,7 @@ def zone_edge_correction_eligible(
     return bool(
         capture
         and capture.within_recapture_window
-        and float(zone_score.zone_distance_m) <= (max(float(zone.radius_m), 0.0) + max(float(margin_m), 0.0))
+        and float(zone_score.zone_distance_m) <= (max(float(zone.control_radius_m), 0.0) + max(float(margin_m), 0.0))
     )
 
 
@@ -171,9 +181,10 @@ def settled_in_corral_pass(run: dict[str, Any]) -> bool:
     mission_like_pass = bool(run.get("mission_completed_pass", run.get("pass", False)))
     return (
         mission_like_pass
-        and bool(run.get("final_center_inside_zone", False))
+        and bool(run.get("final_inside_retrieval_corral", False))
         and bool(run.get("ball_stopped_in_corral", False))
         and not bool(run.get("rolled_away_after_release", False))
+        and int(run.get("post_visit_revisit_count", 0) or 0) == 0
     )
 
 
@@ -263,7 +274,8 @@ def route_target_specs_for_provider(targets: list[GatherTargetSpec], *, zone: Zo
                 "zone_world": {
                     "x": round(zone.world_x, 6),
                     "y": round(zone.world_y, 6),
-                    "radius_m": round(zone.radius_m, 6),
+                    "radius_m": round(zone.retrieval_radius_m, 6),
+                    "control_radius_m": round(zone.control_radius_m, 6),
                 },
             }
         )
@@ -344,11 +356,16 @@ def zone_snapshot(ball_pose: dict[str, Any], zone: ZoneSpec) -> ZoneSnapshot | N
     dx = ball_xy[0] - float(zone.world_x)
     dy = ball_xy[1] - float(zone.world_y)
     distance_m = math.hypot(dx, dy)
-    center_inside_zone = distance_m <= max(float(zone.radius_m), 0.0)
+    control_radius_m = max(float(zone.control_radius_m), 0.0)
+    retrieval_radius_m = max(float(zone.retrieval_radius_m), 0.0)
+    center_inside_zone = distance_m <= control_radius_m
     return ZoneSnapshot(
         zone_distance_m=round(distance_m, 6),
-        inside_zone=distance_m <= max(float(zone.radius_m), 0.0) + DEFAULT_TARGET_BALL_RADIUS_M,
+        retrieval_distance_m=round(distance_m, 6),
+        inside_zone=distance_m <= control_radius_m + DEFAULT_TARGET_BALL_RADIUS_M,
         center_inside_zone=center_inside_zone,
+        inside_retrieval_corral=distance_m <= retrieval_radius_m + DEFAULT_TARGET_BALL_RADIUS_M,
+        center_inside_retrieval_corral=distance_m <= retrieval_radius_m,
     )
 
 
@@ -378,7 +395,7 @@ def release_ready(
     return (
         secure_capture(capture)
         and capture.ball_x_m >= 0.16
-        and float(zone_score.zone_distance_m) <= max(float(zone.radius_m), 0.05) + max(float(release_margin_m), 0.0)
+        and float(zone_score.zone_distance_m) <= max(float(zone.control_radius_m), 0.05) + max(float(release_margin_m), 0.0)
     )
 
 
@@ -477,9 +494,10 @@ def compute_place_command(
     zone_x_m, zone_y_m = zone_rel
     zone_heading_rad = math.atan2(zone_y_m, max(zone_x_m, 1.0e-6))
     zone_distance = math.hypot(zone_x_m, zone_y_m)
-    zone_radius = max(zone.radius_m, 0.05)
+    zone_radius = max(zone.control_radius_m, 0.05)
     ball_zone_score = zone_snapshot(ball_pose, zone)
     ball_zone_distance = ball_zone_score.zone_distance_m if ball_zone_score else zone_distance
+    inside_retrieval_corral = bool(ball_zone_score and ball_zone_score.center_inside_retrieval_corral)
     ball_to_zone_x_m = zone_x_m - capture.ball_x_m
     ball_to_zone_y_m = zone_y_m - capture.ball_y_m
     near_zone = ball_zone_distance < zone_radius + 0.35
@@ -490,6 +508,18 @@ def compute_place_command(
         and abs(ball_to_zone_y_m) <= 0.20
     )
     if not capture.captured:
+        if inside_retrieval_corral:
+            angular = clamp((ball_to_zone_y_m * 5.0) + (zone_heading_rad * 0.25), -0.25, 0.25)
+            linear = 0.0
+            if capture.within_recapture_window and abs(ball_to_zone_y_m) > 0.16:
+                linear = 0.006
+            return PlaceControlCommand(
+                mode="retrieval_hold" if capture.within_recapture_window else "capture",
+                linear_x=round(linear, 6),
+                angular_z=round(angular, 6),
+                target_speed_scale=0.25 if linear > 0.0 else 0.0,
+                rationale="Ball is already inside the retrieval corral; stop injecting speed and let it settle.",
+            )
         angular = clamp((capture.ball_y_m * 12.0) + (zone_heading_rad * 0.6), -1.0, 1.0)
         if finish_push_corridor and capture.within_recapture_window:
             angular = clamp(capture.ball_y_m * 6.0, -0.25, 0.25)
@@ -547,6 +577,19 @@ def compute_place_command(
             angular_z=round(angular, 6),
             target_speed_scale=0.0,
             rationale="Ball is marginally captured; hold and settle before the final push.",
+        )
+
+    if inside_retrieval_corral:
+        angular = clamp((ball_to_zone_y_m * 5.0) + (zone_heading_rad * 0.25), -0.18, 0.18)
+        linear = 0.0
+        if abs(ball_to_zone_y_m) > 0.14 and capture.ball_x_m < 0.18:
+            linear = 0.006
+        return PlaceControlCommand(
+            mode="retrieval_hold",
+            linear_x=round(linear, 6),
+            angular_z=round(angular, 6),
+            target_speed_scale=0.25 if linear > 0.0 else 0.0,
+            rationale="Ball is already practically retrieved; hold position and let turf friction finish the settle.",
         )
 
     if front_escape_risk(capture, active_envelope) and not release_ready(capture=capture, zone_score=ball_zone_score, zone=zone):
@@ -626,6 +669,7 @@ def summarize_release_settle_trace(
             settle_time_s=0.0,
             release_recontact_count=int(release_recontact_count),
             settled_inside_zone=False,
+            final_inside_retrieval_corral=False,
             final_center_inside_zone=False,
             ball_stopped_in_corral=False,
             rolled_away_after_release=False,
@@ -636,7 +680,7 @@ def summarize_release_settle_trace(
     last = release_samples[-1]
     first_inside_index: int | None = None
     for index, sample in enumerate(release_samples):
-        if bool(sample.get("inside_zone")) or bool(sample.get("center_inside_zone")):
+        if bool(sample.get("inside_retrieval_corral")) or bool(sample.get("center_inside_retrieval_corral")):
             first_inside_index = index
             break
     overshoot_samples = release_samples[first_inside_index:] if first_inside_index is not None else release_samples
@@ -645,17 +689,20 @@ def summarize_release_settle_trace(
         distance = _number(sample.get("zone_distance_m"))
         if distance is None:
             continue
-        max_overshoot_distance_m = max(max_overshoot_distance_m, max(0.0, float(distance) - max(float(zone.radius_m), 0.0)))
-    center_inside_seen = False
+        max_overshoot_distance_m = max(
+            max_overshoot_distance_m,
+            max(0.0, float(distance) - max(float(zone.retrieval_radius_m), 0.0)),
+        )
+    retrieval_center_inside_seen = False
     rolled_away_after_release = False
     stable_start_elapsed_s: float | None = None
     ball_stopped_in_corral = False
     for sample in release_samples:
-        center_inside = bool(sample.get("center_inside_zone", False))
+        retrieval_center_inside = bool(sample.get("center_inside_retrieval_corral", False))
         elapsed_s = _number(sample.get("elapsed_s")) or 0.0
         ball_motion_m = _number(sample.get("ball_motion_m"))
-        if center_inside:
-            center_inside_seen = True
+        if retrieval_center_inside:
+            retrieval_center_inside_seen = True
             if ball_motion_m is not None and ball_motion_m <= DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M:
                 stable_start_elapsed_s = elapsed_s if stable_start_elapsed_s is None else stable_start_elapsed_s
                 if (elapsed_s - stable_start_elapsed_s) >= DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S:
@@ -663,16 +710,17 @@ def summarize_release_settle_trace(
             else:
                 stable_start_elapsed_s = None
             continue
-        if center_inside_seen:
+        if retrieval_center_inside_seen:
             rolled_away_after_release = True
         stable_start_elapsed_s = None
     settle_time_s = max(
         (_number(last.get("elapsed_s")) or 0.0) - (_number(first.get("elapsed_s")) or 0.0),
         0.0,
     )
+    final_inside_retrieval_corral = bool(last.get("center_inside_retrieval_corral", False))
     final_center_inside_zone = bool(last.get("center_inside_zone", False))
-    settled_inside_zone = bool(last.get("center_inside_zone") or last.get("inside_zone"))
-    settled_pass = final_center_inside_zone and ball_stopped_in_corral and not rolled_away_after_release
+    settled_inside_zone = bool(last.get("center_inside_retrieval_corral") or last.get("inside_retrieval_corral"))
+    settled_pass = final_inside_retrieval_corral and ball_stopped_in_corral and not rolled_away_after_release
     return ReleaseSettleMetrics(
         surface_profile=str(surface_profile or ""),
         release_distance_to_zone_center_m=round(_number(first.get("zone_distance_m")) or 0.0, 6),
@@ -681,6 +729,7 @@ def summarize_release_settle_trace(
         settle_time_s=round(settle_time_s, 6),
         release_recontact_count=int(release_recontact_count),
         settled_inside_zone=settled_inside_zone,
+        final_inside_retrieval_corral=final_inside_retrieval_corral,
         final_center_inside_zone=final_center_inside_zone,
         ball_stopped_in_corral=ball_stopped_in_corral,
         rolled_away_after_release=rolled_away_after_release,
@@ -709,6 +758,7 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     capture_losses = [int(item.get("capture_loss_count", 0) or 0) for item in runs]
     stopped_with_capture_flags = [bool(item.get("stopped_with_ball_captured", False)) for item in runs]
     release_started_with_capture_flags = [bool(item.get("release_started_with_capture", False)) for item in runs]
+    final_inside_retrieval_flags = [bool(item.get("final_inside_retrieval_corral", False)) for item in runs]
     final_center_inside_flags = [bool(item.get("final_center_inside_zone", False)) for item in runs]
     ball_stopped_flags = [bool(item.get("ball_stopped_in_corral", False)) for item in runs]
     rolled_away_flags = [bool(item.get("rolled_away_after_release", False)) for item in runs]
@@ -740,6 +790,7 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "capture_loss_count_total": sum(capture_losses),
         "settled_in_corral_pass_count": sum(1 for flag in settled_flags if flag),
         "settled_in_corral_fail_count": sum(1 for flag in settled_flags if not flag),
+        "final_inside_retrieval_corral_count": sum(1 for flag in final_inside_retrieval_flags if flag),
         "final_center_inside_zone_count": sum(1 for flag in final_center_inside_flags if flag),
         "ball_stopped_in_corral_count": sum(1 for flag in ball_stopped_flags if flag),
         "rolled_away_after_release_count": sum(1 for flag in rolled_away_flags if flag),
@@ -774,6 +825,7 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         f"- Pass rate: `{summary.get('pass_count', 0)}/{max(len(runs), 1)}`",
         f"- Promotion gate: `{'PASS' if summary.get('promotion_gate_pass') else 'FAIL'}`",
         f"- Settled placement pass/fail: `{summary.get('settled_in_corral_pass_count', 0)}/{summary.get('settled_in_corral_fail_count', 0)}`",
+        f"- Final inside retrieval corral: `{summary.get('final_inside_retrieval_corral_count', 0)}/{max(len(runs), 1)}`",
         f"- Final center inside zone: `{summary.get('final_center_inside_zone_count', 0)}/{max(len(runs), 1)}`",
         f"- Ball stopped in corral: `{summary.get('ball_stopped_in_corral_count', 0)}/{max(len(runs), 1)}`",
         f"- Rolled away after release: `{summary.get('rolled_away_after_release_count', 0)}`",
@@ -802,6 +854,7 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
             f"handoff=`{str(item.get('handoff_kind', '') or 'unspecified')}` "
             f"surface=`{str(item.get('surface_profile', '') or 'unspecified')}` "
             f"placed=`{int(item.get('placed_count', 0) or 0)}` "
+            f"retrieved=`{bool(item.get('final_inside_retrieval_corral', False))}` "
             f"center_inside=`{bool(item.get('final_center_inside_zone', False))}` "
             f"stopped=`{bool(item.get('ball_stopped_in_corral', False))}` "
             f"rolled_away=`{bool(item.get('rolled_away_after_release', False))}` "

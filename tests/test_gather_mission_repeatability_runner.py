@@ -96,6 +96,7 @@ def test_promotion_gate_pass_for_runs_requires_settled_corral_outcome():
             "pass": True,
             "mission_completed_pass": True,
             "capture_loss_count": 0,
+            "final_inside_retrieval_corral": True,
             "final_center_inside_zone": True,
             "ball_stopped_in_corral": True,
             "rolled_away_after_release": False,
@@ -105,6 +106,7 @@ def test_promotion_gate_pass_for_runs_requires_settled_corral_outcome():
             "pass": True,
             "mission_completed_pass": True,
             "capture_loss_count": 1,
+            "final_inside_retrieval_corral": True,
             "final_center_inside_zone": True,
             "ball_stopped_in_corral": False,
             "rolled_away_after_release": False,
@@ -133,6 +135,7 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
                 "stopped_with_ball_captured": True,
                 "release_started_with_capture": True,
                 "clean_retention_pass": False,
+                "final_inside_retrieval_corral": True,
                 "final_center_inside_zone": True,
                 "ball_stopped_in_corral": False,
                 "rolled_away_after_release": False,
@@ -156,6 +159,7 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
                 "stop_capture_state": {"captured": True},
                 "release_capture_state": {"captured": True},
                 "clean_retention_pass": False,
+                "final_inside_retrieval_corral": True,
                 "final_center_inside_zone": True,
                 "ball_stopped_in_corral": False,
                 "rolled_away_after_release": False,
@@ -180,6 +184,7 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
     assert summary["stopped_with_ball_captured"] is True
     assert summary["release_started_with_capture"] is True
     assert summary["clean_retention_pass"] is False
+    assert summary["final_inside_retrieval_corral"] is True
     assert summary["final_center_inside_zone"] is True
     assert summary["ball_stopped_in_corral"] is False
     assert summary["rolled_away_after_release"] is False

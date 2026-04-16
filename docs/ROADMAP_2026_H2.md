@@ -125,32 +125,35 @@ Status update as of April 4, 2026:
 5. pivoting the roadmap slice to end-to-end VLA control
 6. replacing deterministic perception, planning, or execution loops with model-generated low-level action
 
-## Next Roadmap Slice: Practical Retrieval Corral on Calibrated Turf
+## Next Roadmap Slice: 5-Foot Retrieval Corral on Canonical `short_turf`
 
 The route-planning baseline is still the proved regression floor, and the
-single-ball corral path is now calibrated on realistic soccer-practice
-surfaces. The immediate next slice is to use the calibrated `short_turf`
-surface as the canonical one-ball proof surface and make the corral run pass
-when the ball finishes inside a larger practical retrieval corral, comes fully
-to rest there, and does not meaningfully roll away after the final release or
-handoff. Clean spur retention remains useful diagnostic evidence, but it is no
-longer the operator gate. Only after that retrieval-corral gate is green
-should we optimize acceleration and deceleration for time. Multi-ball gather
-still comes after the one-ball retrieval milestone, and onboard planning still
-waits until the fuller gather task is stable enough to benchmark meaningfully.
+single-ball corral path now has an explicit dual-radius scoring model on
+realistic soccer-practice surfaces. The immediate next slice is to keep
+`short_turf` as the canonical one-ball proof surface and make the corral run
+pass when the ball finishes inside a 5-foot diameter retrieval corral, comes
+fully to rest there, and does not meaningfully roll away after the final
+release or handoff. Clean spur retention remains useful diagnostic evidence,
+but it is no longer the operator gate. Only after that retrieval-corral gate
+is green should we optimize acceleration and deceleration for time. Multi-ball
+gather still comes after the one-ball retrieval milestone, and onboard
+planning still waits until the fuller gather task is stable enough to
+benchmark meaningfully.
 
 The important shift is that the product outcome is now explicit: we care about
 the ball ending up retrieved and stopped in the corral area, not whether it
-stayed perfectly centered under the spur. In the later multi-ball milestone,
-already retrieved balls helping arrest later balls through collisions is a
-valid assist, not an anti-goal.
+stayed perfectly centered under the spur. The outer retrieval ring is now a
+5-foot diameter circle (`0.762 m` radius), while the inner `0.20 m` control
+ring stays in place for release and correction heuristics. In the later
+multi-ball milestone, already retrieved balls helping arrest later balls
+through collisions is a valid assist, not an anti-goal.
 
 ```mermaid
 flowchart LR
-    A[Route-planning baseline] --> B[Single-ball corral dashboard UAT complete]
-    B --> C[Surface-aware turf and grass calibration complete]
-    C --> D[Retrieval-corral sizing and proof]
-    D --> E[Corral practical retrieval gate]
+    A[Route-planning baseline] --> B[5-foot dual-ring corral implemented]
+    B --> C[Short-turf settle repeatability]
+    C --> D[Headless 5/5 retrieval-corral gate]
+    D --> E[Dashboard 3/3 retrieval-corral gate]
     E --> F[Corral accel and decel optimization]
     F --> G[Three-ball gather]
     G --> H[Onboard planner evaluation]
@@ -226,7 +229,7 @@ Interfaces held constant in this slice:
 4. deferred provider seam: `plan_collection_route(...)`
 5. no frozen-contract changes in this slice
 
-### Step 3: Surface-Aware Single-Ball Corral Refinement - Complete
+### Step 3: Surface-Aware Single-Ball Corral Refinement - Infrastructure Complete, Validation Reopened
 
 Goal: simulate the real practice surfaces we care about, then tune one-ball
 corral placement so surface friction helps the ball settle inside the zone
@@ -246,17 +249,25 @@ Completed work:
 4. tune the corral placement behavior so friction works to our advantage once the ball leaves the catcher
 5. keep `visit_route_planning` green while the surface and corral changes land
 
-Validated evidence:
+Historical evidence under the earlier tighter settle bar:
 
 1. route-planning regression pass: `artifacts/session/20260413T135805491949Z/visit_mission/20260413T135817Z/mission_verdict.json`
 2. canonical short-turf headless `5/5`: `artifacts/session/20260413T135949Z/gather_mission_repeatability/campaign_run_summary.json`
 3. secondary short-grass headless `3/3`: `artifacts/session/20260413T140714Z/gather_mission_repeatability/campaign_run_summary.json`
 4. dashboard UAT `3/3` on calibrated short turf: `artifacts/session/20260412T_CORRAL_DASHBOARD_UAT/dashboard_uat_summary.json`
 
-Acceptance:
+Checkpoint truth after the 5-foot retrieval-corral promotion:
+
+1. the surface presets and contact seams still exist and remain the right structure
+2. the live one-ball gate has to be treated as open again because the scoring bar changed and the latest `short_turf` runs are still failing the new settled-placement proof
+3. fresh failing checkpoints:
+   - `artifacts/session/20260416T023444Z/gather_mission_repeatability/campaign_run_summary.json`
+   - `artifacts/session/20260416T023035Z/gather_mission_repeatability/campaign_run_summary.json`
+
+Acceptance for this step now means infrastructure only:
 
 1. at least one turf-like surface preset and one grass-like surface preset are reproducible in sim
-2. single-ball corral on the chosen canonical surface settles the ball inside the zone instead of obviously overshooting through the corral
+2. the canonical one-ball surface remains `short_turf`, with `short_grass` kept as a secondary comparison surface
 3. route-planning regression evidence remains green
 
 What this means:
@@ -264,14 +275,14 @@ What this means:
 1. `short_turf` is now the canonical one-ball corral proof surface
 2. `short_grass` is credible as a secondary comparison surface
 3. gather artifacts now carry settle metrics (`surface_profile`, `final_settle_distance_m`, `max_overshoot_distance_m`, `settle_time_s`, `release_recontact_count`)
-4. future time optimization can target a stable, calibrated baseline instead of compensating for an unrealistic low-friction world
+4. future time optimization will target a calibrated baseline, but the one-ball settled-placement proof is still unresolved under the 5-foot gate
 
-### Step 4: Corral Practical Retrieval Gate - Current Focus
+### Step 4: 5-Foot Retrieval Corral - Current Focus
 
 Goal: make one-ball corral/place pass on canonical `short_turf` only when the
-ball finishes inside a larger practical retrieval corral, comes to a complete
-stop there, and does not meaningfully roll away after the final release or
-handoff.
+ball finishes inside a 5-foot diameter practical retrieval corral, comes to a
+complete stop there, and does not meaningfully roll away after the final
+release or handoff.
 
 Why this comes before time optimization:
 
@@ -279,25 +290,34 @@ Why this comes before time optimization:
 2. the operator outcome is "ball ends up retrieved and stopped in the corral area," not "ball stayed perfectly retained in the spur"
 3. acceleration and deceleration tuning should optimize a behavior that already settles correctly inside the retrieval area on the target surface
 
-Immediate instrumentation step:
+Implemented checkpoint:
 
-1. define a larger practical retrieval corral on `short_turf` that matches what a soccer player would consider retrieved
-2. add explicit retrieval-placement metrics at the final release or handoff moment
-3. record whether the ball finishes inside that retrieval corral, whether it actually stops there, and whether it rolls away after release
-4. keep tight center-settle and clean-retention metrics as diagnostics, not milestone blockers
+1. outer retrieval corral fixed at `5 ft` diameter (`0.762 m` radius)
+2. inner control ring remains `0.20 m`
+3. artifacts and dashboard state now carry `final_inside_retrieval_corral`, `ball_stopped_in_corral`, and `rolled_away_after_release`
+4. visible corral marker now shows both rings
+
+Fresh checkpoint evidence:
+
+1. route-planning regression still green after the latest corral/contact tuning:
+   - `artifacts/session/20260416T023747Z/visit_mission_repeatability/campaign_run_summary.json`
+2. latest live `short_turf` corral checkpoints are still failing the new settled-placement bar:
+   - `artifacts/session/20260416T023444Z/gather_mission_repeatability/campaign_run_summary.json`
+   - `artifacts/session/20260416T023035Z/gather_mission_repeatability/campaign_run_summary.json`
 
 Work:
 
-1. make the final settle path authoritative even when the ball reaches the zone during capture or recovery
-2. enlarge the effective acceptance area from tight center settle to a practical retrieval footprint
-3. tune release behavior so turf friction helps the ball stop inside that retrieval area instead of rolling through it
+1. keep the final settle path authoritative even when the ball reaches the zone during capture or recovery
+2. keep release and correction heuristics anchored to the inner control ring while the outer ring remains the operator pass area
+3. tune release behavior and the `short_turf` contact model so friction helps the ball stop inside that 5-foot retrieval area instead of slowly drifting through it
 4. keep minimal post-release correction only when needed to get the ball fully inside the retrieval area and stopped
-5. update headless summaries, dashboard UAT summaries, and scorecards so practical retrieved placement is the primary gate and clean retention is secondary evidence
+5. prevent post-visit revisit churn from reappearing while settle tuning lands
+6. keep headless summaries, dashboard UAT summaries, and scorecards aligned to the 5-foot retrieval outcome as the primary gate
 
 Acceptance:
 
 1. route-planning regression evidence remains green
-2. headless `short_turf` corral gate passes `5/5` with `final_inside_retrieval_corral == true`, `ball_stopped_in_corral == true`, and `rolled_away_after_release == false`
+2. headless `short_turf` corral gate passes `5/5` with `final_inside_retrieval_corral == true`, `ball_stopped_in_corral == true`, `rolled_away_after_release == false`, and `post_visit_revisit_count == 0`
 3. dashboard UAT passes `3/3` with the same retrieval-placement outcome fields green
 4. `final_center_inside_zone` and clean spur retention remain visible in artifacts, but they are diagnostic rather than gating
 5. a run that reaches the corral still fails this milestone if the ball does not finish inside the practical retrieval area and stopped there

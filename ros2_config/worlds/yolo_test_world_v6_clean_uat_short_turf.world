@@ -49,15 +49,15 @@
           <surface>
             <friction>
               <ode>
-                <mu>18</mu>
-                <mu2>16</mu2>
-                <slip1>0.01</slip1>
-                <slip2>0.01</slip2>
+                <mu>40</mu>
+                <mu2>36</mu2>
+                <slip1>0.0</slip1>
+                <slip2>0.0</slip2>
               </ode>
               <torsional>
-                <coefficient>0.42</coefficient>
+                <coefficient>1.4</coefficient>
                 <use_patch_radius>true</use_patch_radius>
-                <patch_radius>0.03</patch_radius>
+                <patch_radius>0.05</patch_radius>
                 <ode>
                   <slip>0.0</slip>
                 </ode>
@@ -67,7 +67,7 @@
               <ode>
                 <kp>400000.0</kp>
                 <kd>40.0</kd>
-                <max_vel>0.08</max_vel>
+                <max_vel>0.02</max_vel>
                 <min_depth>0.0005</min_depth>
               </ode>
             </contact>
