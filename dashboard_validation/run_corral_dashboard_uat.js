@@ -245,6 +245,7 @@ async function run() {
         const zoneRadius = Number.parseFloat(String(zonePose.radius_m || '0.2')) || 0.2;
         const captureLossCount = Number.parseInt(String(missionVerdict.capture_loss_count || '0'), 10) || 0;
         const handoffKind = String(missionVerdict.handoff_kind || '');
+        const settleExitReason = String(missionVerdict.settle_exit_reason || '');
         const zoneEdgeCorrectionCount = Number.parseInt(String(missionVerdict.zone_edge_correction_count || '0'), 10) || 0;
         const placeControllerReentryCount = Number.parseInt(String(missionVerdict.place_controller_reentry_count || '0'), 10) || 0;
         const postVisitRevisitCount = Number.parseInt(String(missionVerdict.post_visit_revisit_count || '0'), 10) || 0;
@@ -338,6 +339,7 @@ async function run() {
           placed_targets: finalState.placed_targets,
           surface_profile: surfaceProfile,
           handoff_kind: handoffKind,
+          settle_exit_reason: settleExitReason,
           capture_loss_count: captureLossCount,
           zone_edge_correction_count: zoneEdgeCorrectionCount,
           place_controller_reentry_count: placeControllerReentryCount,

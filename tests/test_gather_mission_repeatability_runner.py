@@ -129,6 +129,7 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
                 "mission_completed_pass": True,
                 "capture_loss_count": 1,
                 "handoff_kind": "zone_entry",
+                "settle_exit_reason": "timeout",
                 "zone_edge_correction_count": 2,
                 "place_controller_reentry_count": 1,
                 "post_visit_revisit_count": 0,
@@ -151,6 +152,7 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
                 "mission_completed_pass": True,
                 "capture_loss_count": 1,
                 "handoff_kind": "zone_entry",
+                "settle_exit_reason": "timeout",
                 "zone_edge_correction_count": 2,
                 "place_controller_reentry_count": 1,
                 "post_visit_revisit_count": 0,
@@ -178,6 +180,7 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
     assert summary["mission_completed_pass"] is True
     assert summary["capture_loss_count"] == 1
     assert summary["handoff_kind"] == "zone_entry"
+    assert summary["settle_exit_reason"] == "timeout"
     assert summary["zone_edge_correction_count"] == 2
     assert summary["place_controller_reentry_count"] == 1
     assert summary["post_visit_revisit_count"] == 0

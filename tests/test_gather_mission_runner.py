@@ -111,6 +111,7 @@ def test_run_normalizes_success_summary_and_marks_proof_completed(tmp_path, monk
             "capture_loss_count": 0,
             "route_index": 1,
             "handoff_kind": "soft_capture",
+            "settle_exit_reason": "settled",
             "zone_edge_correction_count": 1,
             "place_controller_reentry_count": 0,
             "post_visit_revisit_count": 0,
@@ -150,6 +151,7 @@ def test_run_normalizes_success_summary_and_marks_proof_completed(tmp_path, monk
     assert verdict["surface_profile"] == "short_turf"
     assert verdict["route_order"] == ["ball_1"]
     assert verdict["handoff_kind"] == "soft_capture"
+    assert verdict["settle_exit_reason"] == "settled"
     assert verdict["zone_edge_correction_count"] == 1
     assert verdict["place_controller_reentry_count"] == 0
     assert verdict["post_visit_revisit_count"] == 0
@@ -193,6 +195,7 @@ def test_run_normalizes_failure_summary_and_marks_proof_failed(tmp_path, monkeyp
             "attempts": 1,
             "capture_loss_count": 1,
             "route_index": 1,
+            "settle_exit_reason": "rolled_out",
         },
     )
     monkeypatch.setattr(
@@ -207,6 +210,7 @@ def test_run_normalizes_failure_summary_and_marks_proof_failed(tmp_path, monkeyp
     verdict = read_json(Path(summary["mission_verdict_path"]))
     assert verdict["mission_error"] == "capture_lost"
     assert verdict["surface_profile"] == "short_turf"
+    assert verdict["settle_exit_reason"] == "rolled_out"
     assert verdict["settled_in_corral_pass"] is False
     assert verdict["clean_retention_pass"] is False
     assert runner.visit_runtime_state["proof_state"] == "failed"
@@ -243,9 +247,10 @@ def test_run_passes_when_target_settles_in_corral_even_with_capture_loss_diagnos
                 "pass": True,
             "attempts": 1,
             "capture_loss_count": 1,
-            "route_index": 1,
-            "handoff_kind": "zone_entry",
-            "zone_edge_correction_count": 2,
+                "route_index": 1,
+                "handoff_kind": "zone_entry",
+                "settle_exit_reason": "corrected",
+                "zone_edge_correction_count": 2,
             "place_controller_reentry_count": 1,
             "post_visit_revisit_count": 0,
             "placed": True,
@@ -280,6 +285,7 @@ def test_run_passes_when_target_settles_in_corral_even_with_capture_loss_diagnos
     assert summary["pass"] is True
     assert verdict["mission_completed_pass"] is True
     assert verdict["handoff_kind"] == "zone_entry"
+    assert verdict["settle_exit_reason"] == "corrected"
     assert verdict["zone_edge_correction_count"] == 2
     assert verdict["place_controller_reentry_count"] == 1
     assert verdict["post_visit_revisit_count"] == 0
@@ -458,7 +464,7 @@ def test_place_target_bounds_local_recovery_and_keeps_zone_heading(tmp_path, mon
 
 def test_place_target_switches_to_recovery_on_first_uncaptured_frame(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
-    runner.args.place_timeout_s = 2.0
+    runner.args.place_timeout_s = 4.0
     runner.args.poll_s = 0.25
     mission_root = tmp_path / "mission"
     mission_root.mkdir(parents=True, exist_ok=True)
@@ -515,6 +521,69 @@ def test_place_target_switches_to_recovery_on_first_uncaptured_frame(tmp_path, m
     assert "failure_reason" not in payload
     assert command_log[0]["mode"] == "place"
     assert any(item["mode"] in {"capture_recovery", "capture_recovery_hold"} for item in command_log[1:])
+
+
+def test_place_target_turns_more_aggressively_when_ball_slips_behind_inside_corral(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.place_timeout_s = 1.5
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 1.02517, "y": -0.023582, "yaw": 1.98}
+    states = [
+        ({}, robot_pose, {"x": 1.20, "y": -0.03, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.82, "y": -0.16, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.84, "y": -0.17, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.86, "y": -0.17, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, robot_pose, {"x": 2.88, "y": -0.17, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] in {"place_timeout", "release_roll_away"}
+    assert any(item["mode"] == "capture_recovery_turn" for item in command_log)
+    turn_commands = [item for item in command_log if item["mode"] == "capture_recovery_turn"]
+    assert all(item["linear_x"] == 0.0 for item in turn_commands)
+    assert all(abs(float(item["angular_z"])) >= 0.8 for item in turn_commands)
 
 
 def test_place_target_allows_small_zone_edge_drift_to_settle_without_failure(tmp_path, monkeypatch):
@@ -715,10 +784,122 @@ def test_place_target_keeps_waiting_while_ball_stays_inside_overlap_and_is_still
     assert any(item["mode"] == "release_settle" for item in command_log)
 
 
-def test_run_target_counts_post_visit_revisit_when_ball_leaves_local_correction_range(tmp_path, monkeypatch):
+def test_place_target_does_not_start_release_monitor_at_outer_edge_with_captured_ball(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.place_timeout_s = 1.25
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+    sample_index = {"value": 0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 1.324551, "y": -0.063129, "yaw": -0.073522}
+
+    def _control_loop_state(**kwargs):
+        offset_x = 0.00 + (0.01 * sample_index["value"])
+        offset_y = -0.103485 - (0.001 * sample_index["value"])
+        sample_index["value"] += 1
+        return {}, robot_pose, {"x": 1.66878 + offset_x, "y": offset_y, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert all(item["mode"] != "release_settle" for item in command_log[:-1])
+
+
+def test_place_target_keeps_local_correction_active_when_ball_is_centered_but_robot_is_still_far_back(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.place_timeout_s = 1.25
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+    sample_index = {"value": 0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 1.05, "y": -0.01, "yaw": 0.49}
+
+    def _control_loop_state(**kwargs):
+        offset_x = 0.00 + (0.02 * sample_index["value"])
+        offset_y = -0.12 - (0.001 * sample_index["value"])
+        sample_index["value"] += 1
+        return {}, robot_pose, {"x": 2.26 + offset_x, "y": offset_y, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert any(item["mode"] in {"capture_recovery", "capture_recovery_hold", "retrieval_shepherd"} for item in command_log)
+    assert all(item["mode"] != "release_settle" for item in command_log[:-1])
+
+
+def test_run_target_fails_settled_placement_loss_when_ball_leaves_local_correction_range(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.max_retries_per_target = 2
-    runner.args.max_place_loss_revisits = 1
 
     capture_zone_recovery_flags: list[bool] = []
     monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s: None)
@@ -739,8 +920,6 @@ def test_run_target_counts_post_visit_revisit_when_ball_leaves_local_correction_
 
     capture_results = [
         (True, {"capture_state": {"captured": True}, "zone_score": {}, "handoff_kind": "secure_capture"}),
-        (False, {"failure_reason": "capture_timeout", "failure_stage": "capture", "allow_full_revisit": True}),
-        (False, {"failure_reason": "capture_timeout", "failure_stage": "capture", "allow_full_revisit": True}),
     ]
     place_results = [
         (
@@ -749,7 +928,18 @@ def test_run_target_counts_post_visit_revisit_when_ball_leaves_local_correction_
                 "failure_reason": "capture_lost",
                 "failure_stage": "place",
                 "local_recovery_attempted": True,
-                "allow_full_revisit": True,
+                "allow_full_revisit": False,
+            },
+        ),
+        (
+            False,
+            {
+                "failure_reason": "release_roll_away",
+                "failure_stage": "release",
+                "local_recovery_attempted": True,
+                "allow_full_revisit": False,
+                "rolled_away_after_release": True,
+                "settle_exit_reason": "rolled_out",
             },
         ),
     ]
@@ -771,16 +961,18 @@ def test_run_target_counts_post_visit_revisit_when_ball_leaves_local_correction_
     )
 
     assert result["pass"] is False
-    assert result["failure_reason"] == "capture_timeout"
+    assert result["failure_reason"] == "release_roll_away"
     assert result["local_recovery_attempted"] is True
-    assert result["revisit_attempted"] is True
-    assert result["attempt_kind"] == "place_loss_revisit"
+    assert result["revisit_attempted"] is False
+    assert result["attempt_kind"] == "place_controller_reentry"
     assert result["handoff_kind"] == "secure_capture"
-    assert result["post_visit_revisit_count"] == 1
-    assert capture_zone_recovery_flags == [False, True, False]
+    assert result["post_visit_revisit_count"] == 0
+    assert result["rolled_away_after_release"] is True
+    assert result["settle_exit_reason"] == "rolled_out"
+    assert capture_zone_recovery_flags == [False]
 
 
-def test_run_target_prefers_local_recapture_over_retry_visit_after_post_visit_capture_timeout(tmp_path, monkeypatch):
+def test_run_target_uses_local_gather_recapture_after_post_visit_capture_timeout(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.max_retries_per_target = 2
 
@@ -804,7 +996,7 @@ def test_run_target_prefers_local_recapture_over_retry_visit_after_post_visit_ca
     monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
 
     capture_results = [
-        (False, {"failure_reason": "capture_timeout", "failure_stage": "capture", "allow_full_revisit": True}),
+        (False, {"failure_reason": "capture_timeout", "failure_stage": "capture", "allow_full_revisit": False}),
         (True, {"capture_state": {"captured": True}, "zone_score": {}, "handoff_kind": "soft_capture"}),
     ]
     place_results = [
@@ -812,6 +1004,7 @@ def test_run_target_prefers_local_recapture_over_retry_visit_after_post_visit_ca
             True,
             {
                 "final_ball_pose": {"x": 2.36, "y": 0.0, "z": 0.05},
+                "settle_exit_reason": "corrected",
                 "settle_metrics": {
                     "surface_profile": "short_turf",
                     "release_distance_to_zone_center_m": 0.18,
@@ -849,6 +1042,7 @@ def test_run_target_prefers_local_recapture_over_retry_visit_after_post_visit_ca
     assert result["pass"] is True
     assert result["attempt_kind"] == "place_loss_recapture"
     assert result["post_visit_revisit_count"] == 0
+    assert result["settle_exit_reason"] == "corrected"
     assert visit_dispatches == ["ball_1"]
     assert capture_zone_recovery_flags == [False, True]
 
@@ -1189,6 +1383,63 @@ def test_capture_target_hands_off_to_place_verification_when_ball_reaches_zone(t
     assert payload["entered_zone_during_capture"] is True
     assert payload["handoff_kind"] == "zone_entry"
     assert command_log[-1]["mode"] == "capture_handoff"
+
+
+def test_capture_target_does_not_handoff_on_overlap_only_zone_entry(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 1.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 1.043484, "y": -0.053114, "yaw": 0.402599}
+    overlap_only_zone_ball = {"x": 2.197246, "y": -0.133356, "z": 0.05}
+
+    def _control_loop_state(**kwargs):
+        return {}, robot_pose, overlap_only_zone_ball
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._capture_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "capture_timeout"
+    assert payload["zone_score"]["inside_zone"] is True
+    assert payload["zone_score"]["center_inside_zone"] is False
+    assert payload["allow_full_revisit"] is False
+    assert all(item["mode"] != "capture_handoff" for item in command_log)
 
 
 def test_capture_target_hands_off_after_stable_soft_capture(tmp_path, monkeypatch):

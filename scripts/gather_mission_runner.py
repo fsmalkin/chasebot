@@ -138,6 +138,22 @@ def clean_number(value: Any) -> float | None:
     return numeric
 
 
+def default_settle_exit_reason(
+    *,
+    failure_reason: str = "",
+    settled_in_corral_pass: bool = False,
+    corrected: bool = False,
+    rolled_away_after_release: bool = False,
+) -> str:
+    if settled_in_corral_pass:
+        return "corrected" if corrected else "settled"
+    if rolled_away_after_release or str(failure_reason or "").strip() in {"release_roll_away", "capture_lost"}:
+        return "rolled_out"
+    if str(failure_reason or "").strip() in {"release_unsettled", "place_timeout", "capture_timeout"}:
+        return "timeout"
+    return ""
+
+
 def truth_world_xy(pose: dict[str, Any]) -> dict[str, float] | None:
     position = pose.get("position") if isinstance(pose.get("position"), dict) else {}
     x = clean_number(position.get("x"))
@@ -258,7 +274,17 @@ class GatherMissionRunner:
         zone_edge_correction_count: int = 0,
         place_controller_reentry_count: int = 0,
         post_visit_revisit_count: int = 0,
+        settle_exit_reason: str = "",
     ) -> dict[str, Any]:
+        resolved_settle_exit_reason = clean_text(
+            settle_exit_reason,
+            default_settle_exit_reason(
+                failure_reason=str(failure_reason),
+                settled_in_corral_pass=bool(settled_in_corral_pass),
+                corrected=bool(zone_edge_correction_count or place_controller_reentry_count),
+                rolled_away_after_release=bool(rolled_away_after_release),
+            ),
+        )
         payload = {
             "target_id": target.id,
             "label": target.label,
@@ -286,9 +312,11 @@ class GatherMissionRunner:
             "ball_stopped_in_corral": bool(ball_stopped_in_corral),
             "rolled_away_after_release": bool(rolled_away_after_release),
             "settled_in_corral_pass": bool(settled_in_corral_pass),
+            "settle_exit_reason": resolved_settle_exit_reason,
         }
         if isinstance(settle_metrics, dict):
             payload.update(settle_metrics)
+            payload["settle_exit_reason"] = clean_text(payload.get("settle_exit_reason"), resolved_settle_exit_reason)
         return payload
 
     def _target_success_result(
@@ -318,6 +346,7 @@ class GatherMissionRunner:
         zone_edge_correction_count: int = 0,
         place_controller_reentry_count: int = 0,
         post_visit_revisit_count: int = 0,
+        settle_exit_reason: str = "",
     ) -> dict[str, Any]:
         settle_payload = settle_metrics if isinstance(settle_metrics, dict) else {}
         final_inside_retrieval_corral = bool(settle_payload.get("final_inside_retrieval_corral", final_inside_retrieval_corral))
@@ -341,6 +370,21 @@ class GatherMissionRunner:
         )
         if settled_in_corral_pass is None and settle_payload:
             settled_pass = bool(settle_payload.get("settled_in_corral_pass", settled_pass))
+        resolved_settle_exit_reason = clean_text(
+            settle_payload.get("settle_exit_reason") if isinstance(settle_payload, dict) else "",
+            clean_text(
+                settle_exit_reason,
+                default_settle_exit_reason(
+                    settled_in_corral_pass=bool(settled_pass),
+                    corrected=bool(
+                        zone_edge_correction_count
+                        or place_controller_reentry_count
+                        or int(settle_payload.get("release_recontact_count", 0) or 0)
+                    ),
+                    rolled_away_after_release=bool(rolled_away_after_release),
+                ),
+            ),
+        )
         payload = {
             "target_id": target.id,
             "label": target.label,
@@ -369,9 +413,11 @@ class GatherMissionRunner:
             "ball_stopped_in_corral": bool(ball_stopped_in_corral),
             "rolled_away_after_release": bool(rolled_away_after_release),
             "settled_in_corral_pass": bool(settled_pass),
+            "settle_exit_reason": resolved_settle_exit_reason,
         }
         if settle_payload:
             payload.update(settle_payload)
+            payload["settle_exit_reason"] = clean_text(payload.get("settle_exit_reason"), resolved_settle_exit_reason)
         return payload
 
     def _request(self, method: str, path: str, payload: dict[str, Any] | None = None, timeout_s: float | None = None) -> tuple[int, dict[str, Any]]:
@@ -1062,6 +1108,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
     ) -> tuple[bool, dict[str, Any]]:
         deadline = time.monotonic() + max(self.args.capture_timeout_s, 0.1)
         captured_started_monotonic: float | None = None
+        zone_centered_started_monotonic: float | None = None
+        previous_ball_pose: dict[str, Any] | None = None
         last_capture = None
         last_zone_score = None
         while time.monotonic() < deadline:
@@ -1069,12 +1117,19 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             _dashboard_state, robot_pose, ball_pose = self._control_loop_state(session_id=session_id, target=target)
             capture = capture_snapshot(robot_pose, ball_pose or {}, self.capture_envelope) if robot_pose and ball_pose else None
             zone_score = zone_snapshot(ball_pose or {}, self.zone) if ball_pose else None
+            ball_motion_m = pose_delta_m(previous_ball_pose, ball_pose) if previous_ball_pose is not None else None
             last_capture = capture
             last_zone_score = zone_score
             if capture and capture.captured:
                 captured_started_monotonic = now_monotonic if captured_started_monotonic is None else captured_started_monotonic
             else:
                 captured_started_monotonic = None
+            if zone_score and zone_score.center_inside_zone:
+                zone_centered_started_monotonic = (
+                    now_monotonic if zone_centered_started_monotonic is None else zone_centered_started_monotonic
+                )
+            else:
+                zone_centered_started_monotonic = None
             self._update_gather_runtime_state(
                 mission_phase="capture",
                 gather_phase="capture",
@@ -1099,9 +1154,20 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "ball_pose": ball_pose,
                     "capture": capture.to_dict() if capture else {},
                     "zone_score": zone_score.to_dict() if zone_score else {},
+                    "ball_motion_m": ball_motion_m,
                 },
             )
-            if zone_score and zone_score.inside_zone:
+            zone_entry_handoff_ready = bool(
+                zone_score
+                and zone_score.center_inside_zone
+                and zone_centered_started_monotonic is not None
+                and (now_monotonic - zone_centered_started_monotonic) >= 0.5
+                and (
+                    ball_motion_m is None
+                    or ball_motion_m <= max(DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M * 2.0, 0.02)
+                )
+            )
+            if zone_entry_handoff_ready:
                 self._set_manual_drive(False, mode="capture_handoff", rationale="Ball reached zone during capture; handing off to place verification.")
                 return True, {
                     "capture_state": capture.to_dict() if capture else {},
@@ -1236,6 +1302,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     rationale=command.rationale,
                 )
                 self._update_gather_runtime_state(latest_control_command=command.to_dict())
+            previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
             time.sleep(self.args.poll_s)
 
         self._set_manual_drive(False, mode="capture_timeout", rationale="Capture timed out.")
@@ -1252,7 +1319,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "capture_state": last_capture_payload,
             "zone_score": last_zone_payload,
             "zone_edge_correction_eligible": bool(correction_eligible),
-            "allow_full_revisit": not bool(correction_eligible),
+            "allow_full_revisit": False,
         }
         write_json(mission_root / f"{target.id}_capture_timeout.json", timeout_payload)
         return False, timeout_payload
@@ -1283,6 +1350,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         release_capture_state: dict[str, Any] = {}
         release_started_with_capture = False
         zone_edge_correction_count = 0
+        retrieval_centered_started_monotonic: float | None = None
+        control_centered_started_monotonic: float | None = None
+        pre_release_still_started_monotonic: float | None = None
 
         def _record_stop_capture(current_capture: Any) -> None:
             nonlocal stop_capture_state
@@ -1325,6 +1395,21 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 ),
             }
 
+        def _local_settle_correction_eligible(
+            *,
+            current_capture: Any = None,
+            current_zone_score: Any = None,
+        ) -> bool:
+            if current_zone_score and bool(current_zone_score.inside_retrieval_corral):
+                return True
+            return bool(
+                current_capture
+                and current_capture.within_recapture_window
+                and current_zone_score
+                and float(current_zone_score.zone_distance_m)
+                <= (float(self.zone.retrieval_radius_m) + 0.12)
+            )
+
         def _settle_metrics() -> dict[str, Any]:
             return summarize_release_settle_trace(
                 surface_profile=self.surface_profile,
@@ -1341,7 +1426,46 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "ball_stopped_in_corral": bool(active_metrics.get("ball_stopped_in_corral", False)),
                 "rolled_away_after_release": bool(active_metrics.get("rolled_away_after_release", False)),
                 "settled_in_corral_pass": bool(active_metrics.get("settled_in_corral_pass", False)),
+                "settle_exit_reason": clean_text(active_metrics.get("settle_exit_reason")),
             }
+
+        def _settle_monitor_ready(
+            *,
+            current_capture: Any = None,
+            current_zone_score: Any = None,
+            ball_motion_m: float | None = None,
+            now_monotonic: float,
+        ) -> bool:
+            if not current_zone_score or not bool(current_zone_score.center_inside_retrieval_corral):
+                return False
+            if bool(current_zone_score.center_inside_zone):
+                corridor_ready = True
+            else:
+                corridor_ready = float(current_zone_score.zone_distance_m) <= max(
+                    float(self.zone.control_radius_m) + 0.20,
+                    float(self.zone.retrieval_radius_m) - 0.10,
+                )
+            if not corridor_ready:
+                return False
+            dwell_started = (
+                control_centered_started_monotonic
+                if bool(current_zone_score.center_inside_zone)
+                else retrieval_centered_started_monotonic
+            )
+            if dwell_started is None or (now_monotonic - dwell_started) < 0.5:
+                return False
+            if current_capture and (current_capture.captured or current_capture.within_recapture_window):
+                required_still_s = 0.5
+            else:
+                required_still_s = DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
+            if (
+                pre_release_still_started_monotonic is None
+                or (now_monotonic - pre_release_still_started_monotonic) < required_still_s
+            ):
+                return False
+            if current_capture and (current_capture.captured or current_capture.within_recapture_window):
+                return ball_motion_m is None or ball_motion_m <= max(DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M * 2.0, 0.02)
+            return ball_motion_m is not None and ball_motion_m <= DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
 
         def _reset_release_monitor(current_ball_pose: dict[str, Any] | None = None) -> None:
             nonlocal release_monitoring_active
@@ -1399,6 +1523,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 zone_score=zone_score,
                 zone=self.zone,
             )
+            local_settle_correction_eligible = _local_settle_correction_eligible(
+                current_capture=capture,
+                current_zone_score=zone_score,
+            )
             if ball_pose:
                 self._update_prior_from_ball_pose(target.id, ball_pose)
             if capture and capture.captured:
@@ -1406,6 +1534,22 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 if local_recovery_started_monotonic is not None:
                     local_recovery_started_monotonic = None
                     recaptured_settle_started_monotonic = now_monotonic
+            if zone_score and zone_score.center_inside_retrieval_corral:
+                retrieval_centered_started_monotonic = (
+                    now_monotonic
+                    if retrieval_centered_started_monotonic is None
+                    else retrieval_centered_started_monotonic
+                )
+            else:
+                retrieval_centered_started_monotonic = None
+            if zone_score and zone_score.center_inside_zone:
+                control_centered_started_monotonic = (
+                    now_monotonic
+                    if control_centered_started_monotonic is None
+                    else control_centered_started_monotonic
+                )
+            else:
+                control_centered_started_monotonic = None
             self._update_gather_runtime_state(
                 mission_phase="place",
                 gather_phase="place",
@@ -1419,6 +1563,24 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 latest_feedback=f"Placing {target.label} into the zone.",
             )
             ball_motion_m = pose_delta_m(release_prev_ball_pose, ball_pose) if release_prev_ball_pose is not None else None
+            still_motion_threshold = (
+                max(DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M * 2.0, 0.02)
+                if capture and (capture.captured or capture.within_recapture_window)
+                else DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
+            )
+            if (
+                zone_score
+                and zone_score.center_inside_retrieval_corral
+                and ball_motion_m is not None
+                and ball_motion_m <= still_motion_threshold
+            ):
+                pre_release_still_started_monotonic = (
+                    now_monotonic
+                    if pre_release_still_started_monotonic is None
+                    else pre_release_still_started_monotonic
+                )
+            else:
+                pre_release_still_started_monotonic = None
             append_jsonl(
                 state_history_path,
                 {
@@ -1431,7 +1593,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "zone_score": zone_score.to_dict() if zone_score else {},
                     "local_recovery_active": bool(local_recovery_started_monotonic is not None),
                     "local_recovery_attempted": bool(local_recovery_attempted),
-                    "zone_edge_correction_eligible": bool(zone_edge_eligible),
+                    "zone_edge_correction_eligible": bool(local_settle_correction_eligible),
                     "zone_edge_correction_count": int(zone_edge_correction_count),
                     "release_monitoring_active": bool(release_monitoring_active),
                     "release_recontact_count": int(release_recontact_count),
@@ -1462,14 +1624,19 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     settle_metrics=settle_metrics,
                 )
                 if bool(settle_metrics.get("settled_in_corral_pass", False)):
+                    settle_exit_reason = default_settle_exit_reason(
+                        settled_in_corral_pass=True,
+                        corrected=bool(zone_edge_correction_count or release_recontact_count),
+                    )
                     return True, {
                         "capture_state": capture.to_dict() if capture else {},
                         "zone_score": zone_score.to_dict() if zone_score else {},
                         "final_ball_pose": ball_pose,
-                        "settle_metrics": settle_metrics,
+                        "settle_metrics": {**settle_metrics, "settle_exit_reason": settle_exit_reason},
                         "release_recontact_count": release_recontact_count,
+                        "settle_exit_reason": settle_exit_reason,
                         **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
-                        **_settle_fields(settle_metrics),
+                        **_settle_fields({**settle_metrics, "settle_exit_reason": settle_exit_reason}),
                         **_retention_fields(),
                     }
                 release_elapsed_s = now_monotonic - release_origin_monotonic
@@ -1488,6 +1655,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     and release_elapsed_s >= DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
                     and capture
                     and capture.within_recapture_window
+                    and local_settle_correction_eligible
                     and release_recontact_count < 1
                 ):
                     release_recontact_count += 1
@@ -1511,7 +1679,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     elif (
                         release_recontact_count < 1
                         and (
-                            (capture and capture.within_recapture_window)
+                            local_settle_correction_eligible
                             or within_zone_overlap
                         )
                     ):
@@ -1534,16 +1702,21 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         )
                     else:
                         self._set_manual_drive(False, mode="release_roll_away", rationale="Ball rolled away from the corral after release.")
+                        settle_exit_reason = default_settle_exit_reason(
+                            failure_reason="release_roll_away",
+                            rolled_away_after_release=True,
+                        )
                         return False, {
                             "failure_reason": "release_roll_away",
                             "failure_stage": "release",
                             "capture_state": capture.to_dict() if capture else {},
                             "zone_score": zone_score.to_dict() if zone_score else {},
                             "local_recovery_attempted": local_recovery_attempted,
-                            "settle_metrics": settle_metrics,
+                            "settle_metrics": {**settle_metrics, "settle_exit_reason": settle_exit_reason},
                             "release_recontact_count": release_recontact_count,
-                            **_place_diagnostics(current_capture=capture, current_zone_score=zone_score),
-                            **_settle_fields(settle_metrics),
+                            "settle_exit_reason": settle_exit_reason,
+                            **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
+                            **_settle_fields({**settle_metrics, "settle_exit_reason": settle_exit_reason}),
                             **_retention_fields(),
                         }
                 elif release_elapsed_s >= max(DEFAULT_RELEASE_SETTLE_MAX_WAIT_S, DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S + 3.0):
@@ -1574,7 +1747,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     elif (
                         release_recontact_count < 1
                         and (
-                            (not within_zone_overlap and capture and capture.within_recapture_window)
+                            (not within_zone_overlap and local_settle_correction_eligible)
                         )
                     ):
                         release_recontact_count += 1
@@ -1591,25 +1764,42 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         )
                     else:
                         self._set_manual_drive(False, mode="release_unsettled", rationale="Ball did not finish retrieved and stopped in the corral.")
+                        settle_exit_reason = default_settle_exit_reason(failure_reason="release_unsettled")
                         return False, {
                             "failure_reason": "release_unsettled",
                             "failure_stage": "release",
                             "capture_state": capture.to_dict() if capture else {},
                             "zone_score": zone_score.to_dict() if zone_score else {},
                             "local_recovery_attempted": local_recovery_attempted,
-                            "settle_metrics": settle_metrics,
+                            "settle_metrics": {**settle_metrics, "settle_exit_reason": settle_exit_reason},
                             "release_recontact_count": release_recontact_count,
-                            **_place_diagnostics(current_capture=capture, current_zone_score=zone_score),
-                            **_settle_fields(settle_metrics),
+                            "settle_exit_reason": settle_exit_reason,
+                            **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
+                            **_settle_fields({**settle_metrics, "settle_exit_reason": settle_exit_reason}),
                             **_retention_fields(),
                         }
                 time.sleep(self.args.poll_s)
                 continue
             release_prev_ball_pose = dict(ball_pose or {}) if ball_pose else release_prev_ball_pose
+            settle_monitor_ready = _settle_monitor_ready(
+                current_capture=capture,
+                current_zone_score=zone_score,
+                ball_motion_m=ball_motion_m,
+                now_monotonic=now_monotonic,
+            )
+            settle_shepherd_needed = bool(
+                zone_score
+                and zone_score.center_inside_retrieval_corral
+                and capture
+                and capture.ball_ahead
+                and not capture.captured
+                and not capture.within_recapture_window
+                and not settle_monitor_ready
+            )
             if (
                 zone_score
                 and zone_score.center_inside_retrieval_corral
-                and (ball_motion_m is None or ball_motion_m <= 0.05)
+                and settle_monitor_ready
             ):
                 escaped_zone_correction_started_monotonic = None
                 _begin_release_monitor(
@@ -1622,7 +1812,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 )
                 time.sleep(self.args.poll_s)
                 continue
-            if zone_score and zone_score.center_inside_zone:
+            if zone_score and zone_score.center_inside_zone and settle_monitor_ready:
                 escaped_zone_correction_started_monotonic = None
                 _begin_release_monitor(
                     now_monotonic=now_monotonic,
@@ -1634,7 +1824,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 )
                 time.sleep(self.args.poll_s)
                 continue
-            if release_ready(capture=capture, zone_score=zone_score, zone=self.zone):
+            if (
+                release_ready(capture=capture, zone_score=zone_score, zone=self.zone)
+                and capture
+                and (capture.captured or capture.within_recapture_window)
+            ):
                 marginal_capture_started_monotonic = None
                 escaped_zone_correction_started_monotonic = None
                 _begin_release_monitor(
@@ -1648,7 +1842,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 time.sleep(self.args.poll_s)
                 continue
             local_recovery_viable = bool(capture and capture.within_recapture_window)
-            if zone_edge_eligible or local_recovery_viable:
+            if local_settle_correction_eligible or local_recovery_viable:
                 escaped_zone_correction_started_monotonic = None
             else:
                 escaped_zone_correction_started_monotonic = (
@@ -1658,7 +1852,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 )
             local_recovery_active = local_recovery_started_monotonic is not None
             if local_recovery_active:
-                if recaptured_settle_started_monotonic is None and (not local_recovery_viable) and (not zone_edge_eligible):
+                if recaptured_settle_started_monotonic is None and (not local_recovery_viable) and (not local_settle_correction_eligible):
                     escape_elapsed_s = (
                         now_monotonic - escaped_zone_correction_started_monotonic
                         if escaped_zone_correction_started_monotonic is not None
@@ -1671,20 +1865,22 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         )
                         time.sleep(self.args.poll_s)
                         continue
-                    self._set_manual_drive(False, mode="capture_lost", rationale="Capture recovery expired during place.")
+                    self._set_manual_drive(False, mode="release_roll_away", rationale="Ball left the corral correction window during place.")
                     return False, {
-                        "failure_reason": "capture_lost",
-                        "failure_stage": "place",
+                        "failure_reason": "release_roll_away",
+                        "failure_stage": "release",
                         "capture_state": capture.to_dict() if capture else {},
                         "zone_score": zone_score.to_dict() if zone_score else {},
                         "local_recovery_attempted": local_recovery_attempted,
-                        **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=True),
-                        **_settle_fields(),
+                        "rolled_away_after_release": True,
+                        "settle_exit_reason": "rolled_out",
+                        **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
+                        **_settle_fields({"rolled_away_after_release": True, "settle_exit_reason": "rolled_out"}),
                         **_retention_fields(),
                     }
             elif capture and not capture.captured:
                 marginal_capture_started_monotonic = None
-                if local_recovery_viable or zone_edge_eligible:
+                if local_recovery_viable or local_settle_correction_eligible:
                     if not local_recovery_attempted:
                         local_recovery_attempted = True
                         self._append_runtime_event(
@@ -1693,12 +1889,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         )
                     local_recovery_started_monotonic = now_monotonic
                     recaptured_settle_started_monotonic = None
-                    if zone_edge_eligible and zone_edge_correction_started_monotonic is None:
+                    if local_settle_correction_eligible and zone_edge_correction_started_monotonic is None:
                         zone_edge_correction_started_monotonic = now_monotonic
                         zone_edge_correction_count += 1
                     feedback = (
                         f"Gently correcting {target.label} near the corral edge."
-                        if zone_edge_eligible
+                        if local_settle_correction_eligible
                         else f"Recovering {target.label} after brief capture loss."
                     )
                     self._update_gather_runtime_state(latest_feedback=feedback)
@@ -1715,15 +1911,17 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         )
                         time.sleep(self.args.poll_s)
                         continue
-                    self._set_manual_drive(False, mode="capture_lost", rationale="Capture lost during place.")
+                    self._set_manual_drive(False, mode="release_roll_away", rationale="Ball left the corral correction window during place.")
                     return False, {
-                        "failure_reason": "capture_lost",
-                        "failure_stage": "place",
+                        "failure_reason": "release_roll_away",
+                        "failure_stage": "release",
                         "capture_state": capture.to_dict(),
                         "zone_score": zone_score.to_dict() if zone_score else {},
                         "local_recovery_attempted": local_recovery_attempted,
-                        **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=True),
-                        **_settle_fields(),
+                        "rolled_away_after_release": True,
+                        "settle_exit_reason": "rolled_out",
+                        **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
+                        **_settle_fields({"rolled_away_after_release": True, "settle_exit_reason": "rolled_out"}),
                         **_retention_fields(),
                     }
             elif capture_loss_detected(
@@ -1738,22 +1936,24 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if escaped_zone_correction_started_monotonic is not None
                     else DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S
                 )
-                if zone_edge_eligible or escape_elapsed_s < DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S:
+                if local_settle_correction_eligible or escape_elapsed_s < DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S:
                     self._set_manual_drive(False, mode="zone_edge_wait", rationale="Holding briefly while the ball pose recovers near the corral.")
                     self._update_gather_runtime_state(
                         latest_feedback=f"Holding for {target.label} to settle back into view near the corral.",
                     )
                     time.sleep(self.args.poll_s)
                     continue
-                self._set_manual_drive(False, mode="capture_lost", rationale="Ball pose disappeared during place.")
+                self._set_manual_drive(False, mode="release_roll_away", rationale="Ball left the corral correction window during place.")
                 return False, {
-                    "failure_reason": "capture_lost",
-                    "failure_stage": "place",
+                    "failure_reason": "release_roll_away",
+                    "failure_stage": "release",
                     "capture_state": capture.to_dict() if capture else {},
                     "zone_score": zone_score.to_dict() if zone_score else {},
                     "local_recovery_attempted": local_recovery_attempted,
-                    **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=True),
-                    **_settle_fields(),
+                    "rolled_away_after_release": True,
+                    "settle_exit_reason": "rolled_out",
+                    **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
+                    **_settle_fields({"rolled_away_after_release": True, "settle_exit_reason": "rolled_out"}),
                     **_retention_fields(),
                 }
             if recaptured_settle_started_monotonic is not None:
@@ -1794,11 +1994,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 command = compute_place_command(robot_pose, ball_pose or {}, zone=self.zone, envelope=self.capture_envelope) if robot_pose and ball_pose else None
             if command is not None:
                 if (
-                    zone_edge_eligible
+                    local_settle_correction_eligible
                     and zone_score
-                    and zone_score.inside_zone
+                    and zone_score.inside_retrieval_corral
                     and ball_motion_m is not None
                     and ball_motion_m > DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
+                    and not settle_shepherd_needed
                 ):
                     self._set_manual_drive(False, mode="zone_edge_wait", rationale="Ball is still moving inside the corral overlap; let it settle before nudging again.")
                     self._update_gather_runtime_state(
@@ -1819,7 +2020,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     recovery_scale = min(float(command.target_speed_scale), 0.55)
                     recovery_mode = "capture_recovery"
                     recovery_rationale = "Briefly recenter the ball under the catcher before resuming place."
-                    if capture and capture.within_recapture_window and (
+                    if capture and not capture.ball_ahead:
+                        recovery_linear = 0.0
+                        recovery_angular = clamp(0.90 if float(capture.ball_y_m) >= 0.0 else -0.90, -0.90, 0.90)
+                        recovery_scale = 0.0
+                        recovery_mode = "capture_recovery_turn"
+                        recovery_rationale = "Ball slipped behind inside the corral; turn in place quickly before it escapes."
+                    elif capture and capture.within_recapture_window and (
                         float(capture.ball_x_m) > 0.40 or abs(float(capture.ball_y_m)) > 0.08
                     ):
                         recovery_linear = 0.0
@@ -1834,7 +2041,22 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         target_speed_scale=recovery_scale,
                         rationale=recovery_rationale,
                     )
-                elif zone_edge_eligible and command.mode in {"place_recapture", "capture", "place"}:
+                elif settle_shepherd_needed and command.mode in {"retrieval_hold", "capture", "place_recapture", "place"}:
+                    shepherd_linear = 0.02
+                    if float(capture.ball_x_m) > 0.95:
+                        shepherd_linear = 0.03
+                    elif float(capture.ball_x_m) > 0.75:
+                        shepherd_linear = 0.025
+                    if abs(float(capture.ball_y_m)) > 0.12:
+                        shepherd_linear = 0.0
+                    command = command.__class__(
+                        mode="retrieval_shepherd" if shepherd_linear > 0.0 else "retrieval_hold",
+                        linear_x=round(shepherd_linear, 6),
+                        angular_z=clamp(float(command.angular_z), -0.30, 0.30),
+                        target_speed_scale=0.40 if shepherd_linear > 0.0 else 0.0,
+                        rationale="Ball is inside the retrieval corral but still rolling away from the robot; keep a gentle shepherd until settle is credible.",
+                    )
+                elif local_settle_correction_eligible and command.mode in {"place_recapture", "capture", "place"}:
                     zone_edge_correction_started_monotonic = (
                         now_monotonic
                         if zone_edge_correction_started_monotonic is None
@@ -1865,8 +2087,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "local_recovery_attempted": local_recovery_attempted,
             "settle_metrics": _settle_metrics(),
             "release_recontact_count": release_recontact_count,
-            **_place_diagnostics(),
-            **_settle_fields(),
+            "settle_exit_reason": "timeout",
+            **_place_diagnostics(allow_full_revisit=False),
+            **_settle_fields({"settle_exit_reason": "timeout"}),
             **_retention_fields(),
         }
 
@@ -1908,15 +2131,6 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if "clean_retention_pass" in payload
                     else None
                 ),
-                "final_inside_retrieval_corral": bool(payload.get("final_inside_retrieval_corral", False)),
-                "final_center_inside_zone": bool(payload.get("final_center_inside_zone", False)),
-                "ball_stopped_in_corral": bool(payload.get("ball_stopped_in_corral", False)),
-                "rolled_away_after_release": bool(payload.get("rolled_away_after_release", False)),
-                "settled_in_corral_pass": (
-                    bool(payload["settled_in_corral_pass"])
-                    if "settled_in_corral_pass" in payload
-                    else None
-                ),
             }
 
         def _ownership_kwargs(payload: dict[str, Any] | None) -> dict[str, Any]:
@@ -1927,6 +2141,67 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "zone_edge_correction_count": int(payload.get("zone_edge_correction_count", 0) or 0),
                 "place_controller_reentry_count": int(place_controller_reentry_count),
                 "post_visit_revisit_count": int(post_visit_revisit_count),
+            }
+
+        def _settle_kwargs(payload: dict[str, Any] | None) -> dict[str, Any]:
+            if not isinstance(payload, dict):
+                return {}
+            zone_payload = payload.get("zone_score", {}) if isinstance(payload.get("zone_score"), dict) else {}
+            settle_metrics = payload.get("settle_metrics", {}) if isinstance(payload.get("settle_metrics"), dict) else {}
+            final_inside_retrieval_corral = bool(
+                settle_metrics.get("final_inside_retrieval_corral", zone_payload.get("center_inside_retrieval_corral", False))
+            )
+            final_center_inside_zone = bool(
+                settle_metrics.get("final_center_inside_zone", zone_payload.get("center_inside_zone", False))
+            )
+            ball_stopped_in_corral = bool(settle_metrics.get("ball_stopped_in_corral", False))
+            rolled_away_after_release = bool(settle_metrics.get("rolled_away_after_release", payload.get("rolled_away_after_release", False)))
+            settled_pass = bool(settle_metrics.get("settled_in_corral_pass", payload.get("settled_in_corral_pass", False)))
+            return {
+                "final_inside_retrieval_corral": final_inside_retrieval_corral,
+                "final_center_inside_zone": final_center_inside_zone,
+                "ball_stopped_in_corral": ball_stopped_in_corral,
+                "rolled_away_after_release": rolled_away_after_release,
+                "settled_in_corral_pass": settled_pass,
+                "settle_exit_reason": clean_text(
+                    payload.get("settle_exit_reason"),
+                    clean_text(
+                        settle_metrics.get("settle_exit_reason") if isinstance(settle_metrics, dict) else "",
+                        default_settle_exit_reason(
+                            failure_reason=str(payload.get("failure_reason", "")),
+                            settled_in_corral_pass=settled_pass,
+                            corrected=bool(
+                                int(payload.get("zone_edge_correction_count", 0) or 0)
+                                or int(place_controller_reentry_count)
+                                or int(settle_metrics.get("release_recontact_count", 0) or 0)
+                            ),
+                            rolled_away_after_release=rolled_away_after_release,
+                        ),
+                    ),
+                ),
+            }
+
+        def _normalize_post_visit_capture_failure(payload: dict[str, Any]) -> dict[str, Any]:
+            zone_payload = payload.get("zone_score", {}) if isinstance(payload.get("zone_score"), dict) else {}
+            correction_eligible = bool(payload.get("zone_edge_correction_eligible", False))
+            final_inside_retrieval_corral = bool(zone_payload.get("center_inside_retrieval_corral", False))
+            final_center_inside_zone = bool(zone_payload.get("center_inside_zone", False))
+            rolled_away_after_release = not correction_eligible and not final_inside_retrieval_corral
+            failure_reason = "release_roll_away" if rolled_away_after_release else "release_unsettled"
+            return {
+                **payload,
+                "failure_reason": failure_reason,
+                "failure_stage": "release",
+                "allow_full_revisit": False,
+                "final_inside_retrieval_corral": final_inside_retrieval_corral,
+                "final_center_inside_zone": final_center_inside_zone,
+                "ball_stopped_in_corral": False,
+                "rolled_away_after_release": rolled_away_after_release,
+                "settled_in_corral_pass": False,
+                "settle_exit_reason": default_settle_exit_reason(
+                    failure_reason=failure_reason,
+                    rolled_away_after_release=rolled_away_after_release,
+                ),
             }
 
         while attempt <= self.args.max_retries_per_target:
@@ -2086,37 +2361,39 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     capture_failure_reason = str(capture_payload.get("failure_reason", "capture_failed"))
                     capture_failure_stage = str(capture_payload.get("failure_stage", "capture"))
                     zone_edge_correction_count += int(capture_payload.get("zone_edge_correction_count", 0) or 0)
-                    allow_full_revisit = bool(capture_payload.get("allow_full_revisit", False))
-                    if direct_recapture_attempt and not allow_full_revisit and attempt <= self.args.max_retries_per_target:
+                    if direct_recapture_attempt and attempt <= self.args.max_retries_per_target:
+                        place_loss_recapture_count += 1
                         self._append_runtime_event(
-                            f"{target.label}: keeping place control after recapture timeout near the corral.",
-                            key=f"place_controller_hold:{target.id}:{attempt}",
+                            f"{target.label}: keeping place ownership after place-stage recapture timeout {place_loss_recapture_count}.",
+                            key=f"place_controller_hold:{target.id}:{place_loss_recapture_count}:{capture_failure_reason}",
                         )
                         self._safe_stop()
                         self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
                         resume_with_place_controller = True
                         continue
-                    if direct_recapture_attempt and allow_full_revisit and place_loss_full_revisit_count < 1 and attempt <= self.args.max_retries_per_target:
-                        place_loss_full_revisit_count += 1
-                        self._append_runtime_event(
-                            f"{target.label}: full revisit after leaving local correction range.",
-                            key=f"place_loss_revisit_dispatch:{target.id}:{place_loss_full_revisit_count}",
-                        )
-                        self._safe_stop()
-                        self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
-                        resume_with_place_loss_revisit = True
-                        continue
-                    if visit_completed_once and not direct_recapture_attempt and attempt <= self.args.max_retries_per_target:
+                    if visit_completed_once and attempt <= self.args.max_retries_per_target:
                         place_loss_recapture_count += 1
                         self._append_runtime_event(
-                            f"{target.label}: local recapture after post-visit capture timeout {place_loss_recapture_count}.",
+                            f"{target.label}: local gather recapture after post-visit capture timeout {place_loss_recapture_count}.",
                             key=f"post_visit_capture_recapture:{target.id}:{place_loss_recapture_count}",
                         )
                         self._safe_stop()
                         self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
                         resume_with_capture = True
                         continue
-                    if attempt > self.args.max_retries_per_target or place_loss_full_revisit_count > 0:
+                    if visit_completed_once:
+                        capture_failure_reason = str(
+                            _normalize_post_visit_capture_failure(capture_payload).get("failure_reason", capture_failure_reason)
+                        )
+                        capture_failure_stage = str(
+                            _normalize_post_visit_capture_failure(capture_payload).get("failure_stage", capture_failure_stage)
+                        )
+                    if attempt > self.args.max_retries_per_target or place_loss_full_revisit_count > 0 or visit_completed_once:
+                        normalized_capture_failure = (
+                            _normalize_post_visit_capture_failure(capture_payload)
+                            if visit_completed_once
+                            else capture_payload
+                        )
                         self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} capture failed.")
                         return self._target_failure_result(
                             target=target,
@@ -2128,12 +2405,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             attempt_kind=attempt_kind,
                             local_recovery_attempted=local_recovery_attempted_any,
                             revisit_attempted=post_visit_revisit_count > 0,
-                            settle_metrics=capture_payload.get("settle_metrics") if isinstance(capture_payload.get("settle_metrics"), dict) else None,
+                            settle_metrics=normalized_capture_failure.get("settle_metrics") if isinstance(normalized_capture_failure.get("settle_metrics"), dict) else None,
                             handoff_kind=clean_text(active_handoff_kind, "unspecified"),
                             zone_edge_correction_count=zone_edge_correction_count,
                             place_controller_reentry_count=place_controller_reentry_count,
                             post_visit_revisit_count=post_visit_revisit_count,
-                            **_retention_kwargs(capture_payload),
+                            **_retention_kwargs(normalized_capture_failure),
+                            **_settle_kwargs(normalized_capture_failure),
                         )
                     self._safe_stop()
                     self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
@@ -2214,6 +2492,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     place_controller_reentry_count=place_controller_reentry_count,
                     post_visit_revisit_count=post_visit_revisit_count,
                     **_retention_kwargs(capture_payload),
+                    **_settle_kwargs(capture_payload),
                 )
 
             place_pass, place_payload = self._place_target(
@@ -2272,6 +2551,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     place_controller_reentry_count=place_controller_reentry_count,
                     post_visit_revisit_count=post_visit_revisit_count,
                     **_retention_kwargs(place_payload),
+                    **_settle_kwargs(place_payload),
                 )
 
             failure_reason = str(place_payload.get("failure_reason", "place_failed"))
@@ -2282,10 +2562,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             if failure_reason == "capture_lost":
                 capture_loss_count += 1
                 self._update_gather_runtime_state(capture_loss_count=capture_loss_count)
-            allow_full_revisit = bool(place_payload.get("allow_full_revisit", False))
             if place_recovery_failure:
                 recovery_label = "place-stage correction" if failure_reason == "capture_lost" else "release-stage correction"
-                if not allow_full_revisit and attempt <= self.args.max_retries_per_target:
+                if failure_reason != "release_roll_away" and attempt <= self.args.max_retries_per_target:
                     self._append_runtime_event(
                         f"{target.label}: keeping place ownership during {recovery_label}.",
                         key=f"place_correction_reentry:{target.id}:{attempt}:{failure_reason}",
@@ -2294,27 +2573,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
                     resume_with_place_controller = True
                     continue
-                if place_loss_full_revisit_count == 0 and place_loss_recapture_count < max(int(self.args.max_place_loss_revisits), 0):
-                    place_loss_recapture_count += 1
-                    self._append_runtime_event(
-                        f"{target.label}: direct recapture after {recovery_label} {place_loss_recapture_count}.",
-                        key=f"place_loss_recovery:{target.id}:{place_loss_recapture_count}:{failure_reason}",
-                    )
-                    self._safe_stop()
-                    self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
-                    resume_with_capture = True
-                    continue
-                if allow_full_revisit and place_loss_full_revisit_count < 1 and attempt <= self.args.max_retries_per_target:
-                    place_loss_full_revisit_count += 1
-                    self._append_runtime_event(
-                        f"{target.label}: full revisit after {recovery_label}.",
-                        key=f"place_loss_revisit_dispatch:{target.id}:{place_loss_full_revisit_count}:{failure_reason}",
-                    )
-                    self._safe_stop()
-                    self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
-                    resume_with_place_loss_revisit = True
-                    continue
-            if attempt > self.args.max_retries_per_target or (place_recovery_failure and allow_full_revisit and place_loss_full_revisit_count >= 1 and place_loss_recapture_count >= max(int(self.args.max_place_loss_revisits), 0)):
+            if attempt > self.args.max_retries_per_target or place_recovery_failure:
                 self._update_visit_runtime_state(proof_state="failed", mission_phase="failed", latest_feedback=f"{target.label} place failed.")
                 return self._target_failure_result(
                     target=target,
@@ -2332,12 +2591,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     place_controller_reentry_count=place_controller_reentry_count,
                     post_visit_revisit_count=post_visit_revisit_count,
                     **_retention_kwargs(place_payload),
+                    **_settle_kwargs(place_payload),
                 )
-            if not allow_full_revisit and attempt <= self.args.max_retries_per_target:
-                self._safe_stop()
-                self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
-                resume_with_place_controller = True
-                continue
             self._safe_stop()
             self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
 
@@ -2473,6 +2728,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             zone_edge_correction_count = int(final_result.get("zone_edge_correction_count", 0) or 0)
             place_controller_reentry_count = int(final_result.get("place_controller_reentry_count", 0) or 0)
             post_visit_revisit_count = int(final_result.get("post_visit_revisit_count", 0) or 0)
+            settle_exit_reason = clean_text(final_result.get("settle_exit_reason"))
             final_inside_retrieval_corral = bool(final_result.get("final_inside_retrieval_corral", False))
             final_center_inside_zone = bool(final_result.get("final_center_inside_zone", False))
             ball_stopped_in_corral = bool(final_result.get("ball_stopped_in_corral", False))
@@ -2513,6 +2769,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "zone_edge_correction_count": zone_edge_correction_count,
                 "place_controller_reentry_count": place_controller_reentry_count,
                 "post_visit_revisit_count": post_visit_revisit_count,
+                "settle_exit_reason": settle_exit_reason,
                 "stopped_with_ball_captured": stopped_with_ball_captured,
                 "release_started_with_capture": release_started_with_capture,
                 "stop_capture_state": stop_capture_state,
@@ -2559,6 +2816,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "zone_edge_correction_count": zone_edge_correction_count,
                 "place_controller_reentry_count": place_controller_reentry_count,
                 "post_visit_revisit_count": post_visit_revisit_count,
+                "settle_exit_reason": settle_exit_reason,
                 "stopped_with_ball_captured": stopped_with_ball_captured,
                 "release_started_with_capture": release_started_with_capture,
                 "stop_capture_state": stop_capture_state,
@@ -2596,6 +2854,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "mission_time_min_s": summary["mission_time_s"],
                     "mission_time_max_s": summary["mission_time_s"],
                     "handoff_kinds": [handoff_kind],
+                    "settle_exit_reasons": [settle_exit_reason] if settle_exit_reason else [],
                     "capture_loss_count_total": capture_loss_count,
                     "stopped_with_ball_captured_count": 1 if stopped_with_ball_captured else 0,
                     "release_started_with_capture_count": 1 if release_started_with_capture else 0,
@@ -2616,6 +2875,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "pass": summary["pass"],
                         "surface_profile": self.surface_profile,
                         "handoff_kind": handoff_kind,
+                        "settle_exit_reason": settle_exit_reason,
                         "placed_count": summary["placed_count"],
                         "capture_loss_count": capture_loss_count,
                         "zone_edge_correction_count": zone_edge_correction_count,

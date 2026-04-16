@@ -782,6 +782,13 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     place_controller_reentry_counts = [int(item.get("place_controller_reentry_count", 0) or 0) for item in runs]
     post_visit_revisit_counts = [int(item.get("post_visit_revisit_count", 0) or 0) for item in runs]
     handoff_kinds = sorted({str(item.get("handoff_kind", "") or "") for item in runs if str(item.get("handoff_kind", "") or "").strip()})
+    settle_exit_reasons = sorted(
+        {
+            str(item.get("settle_exit_reason", "") or "")
+            for item in runs
+            if str(item.get("settle_exit_reason", "") or "").strip()
+        }
+    )
     surface_profiles = sorted({str(item.get("surface_profile", "") or "") for item in runs if str(item.get("surface_profile", "") or "").strip()})
     return {
         "pass_count": sum(1 for flag in settled_flags if flag),
@@ -812,6 +819,7 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "zone_edge_correction_count_total": sum(zone_edge_correction_counts),
         "place_controller_reentry_count_total": sum(place_controller_reentry_counts),
         "post_visit_revisit_count_total": sum(post_visit_revisit_counts),
+        "settle_exit_reasons": settle_exit_reasons,
     }
 
 
@@ -822,6 +830,7 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         "",
         f"- Surface profiles: `{', '.join(surface_profiles) if surface_profiles else 'unspecified'}`",
         f"- Handoff kinds: `{', '.join(summary.get('handoff_kinds', [])) if summary.get('handoff_kinds') else 'unspecified'}`",
+        f"- Settle exits: `{', '.join(summary.get('settle_exit_reasons', [])) if summary.get('settle_exit_reasons') else 'unspecified'}`",
         f"- Pass rate: `{summary.get('pass_count', 0)}/{max(len(runs), 1)}`",
         f"- Promotion gate: `{'PASS' if summary.get('promotion_gate_pass') else 'FAIL'}`",
         f"- Settled placement pass/fail: `{summary.get('settled_in_corral_pass_count', 0)}/{summary.get('settled_in_corral_fail_count', 0)}`",
@@ -852,6 +861,7 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
             f"- Run {int(item.get('run_index', 0) or 0):02d}: "
             f"`{'PASS' if settled_ok else 'FAIL'}` "
             f"handoff=`{str(item.get('handoff_kind', '') or 'unspecified')}` "
+            f"settle_exit=`{str(item.get('settle_exit_reason', '') or 'unspecified')}` "
             f"surface=`{str(item.get('surface_profile', '') or 'unspecified')}` "
             f"placed=`{int(item.get('placed_count', 0) or 0)}` "
             f"retrieved=`{bool(item.get('final_inside_retrieval_corral', False))}` "

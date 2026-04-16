@@ -151,6 +151,7 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
         "placed_count": int(verdict.get("placed_count", summary.get("placed_count", 0)) or 0),
         "capture_loss_count": int(verdict.get("capture_loss_count", summary.get("capture_loss_count", 0)) or 0),
         "handoff_kind": str(verdict.get("handoff_kind", summary.get("handoff_kind", "")) or ""),
+        "settle_exit_reason": str(verdict.get("settle_exit_reason", summary.get("settle_exit_reason", "")) or ""),
         "zone_edge_correction_count": int(verdict.get("zone_edge_correction_count", summary.get("zone_edge_correction_count", 0)) or 0),
         "place_controller_reentry_count": int(verdict.get("place_controller_reentry_count", summary.get("place_controller_reentry_count", 0)) or 0),
         "post_visit_revisit_count": int(verdict.get("post_visit_revisit_count", summary.get("post_visit_revisit_count", 0)) or 0),

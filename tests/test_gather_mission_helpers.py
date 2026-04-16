@@ -363,6 +363,7 @@ def test_summarize_runs_and_scorecard_markdown():
             "mission_completed_pass": True,
             "surface_profile": "short_turf",
             "handoff_kind": "soft_capture",
+            "settle_exit_reason": "settled",
             "placed_count": 1,
             "capture_loss_count": 0,
             "zone_edge_correction_count": 1,
@@ -388,6 +389,7 @@ def test_summarize_runs_and_scorecard_markdown():
             "mission_completed_pass": True,
             "surface_profile": "short_turf",
             "handoff_kind": "zone_entry",
+            "settle_exit_reason": "corrected",
             "placed_count": 1,
             "capture_loss_count": 1,
             "zone_edge_correction_count": 2,
@@ -422,6 +424,7 @@ def test_summarize_runs_and_scorecard_markdown():
     assert summary["clean_retention_fail_count"] == 1
     assert summary["surface_profiles"] == ["short_turf"]
     assert summary["handoff_kinds"] == ["soft_capture", "zone_entry"]
+    assert summary["settle_exit_reasons"] == ["corrected", "settled"]
     assert summary["zone_edge_correction_count_total"] == 3
     assert summary["place_controller_reentry_count_total"] == 2
     assert summary["post_visit_revisit_count_total"] == 0
@@ -430,6 +433,7 @@ def test_summarize_runs_and_scorecard_markdown():
     assert "Run 01" in markdown
     assert "short_turf" in markdown
     assert "handoff=`soft_capture`" in markdown
+    assert "settle_exit=`settled`" in markdown
     assert "settled=`True`" in markdown
     assert "clean_retention" in markdown
 
