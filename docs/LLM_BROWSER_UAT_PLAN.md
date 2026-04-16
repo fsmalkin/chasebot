@@ -336,34 +336,38 @@ To keep the demo honest and legible, this phase does not include:
 - autonomous environment lifecycle control by the LLM
 - end-to-end VLA control
 
-## Next Phase: Settled Placement on Canonical Short Turf
+## Next Phase: Practical Retrieval Corral on Canonical Short Turf
 
 The single-target and multi-target visit UAT phase is complete enough to serve
 as the baseline, and `corral_single_ball_place` is already promoted into the
 primary dashboard action. `visit_route_planning` remains the protected
 regression floor. The only active milestone now is to make the promoted
-single-ball corral flow pass with settled placement on canonical
-`short_turf`.
+single-ball corral flow pass on canonical `short_turf` with a larger,
+soccer-practical retrieval corral rather than a tight dead-center settle
+under the spur.
 
-For this retention milestone, we still assume smooth-surface operation such as
-soccer fields or similar turf-like practice surfaces.
+For this milestone, we still assume smooth-surface operation such as soccer
+fields or similar turf-like practice surfaces. The practical product bar is
+that a soccer player would consider the ball retrieved: it ends up contained
+inside the corral area, comes to rest there, and does not meaningfully roll
+away after the final release or handoff.
 
 ### Status Snapshot
 
 1. route-planning serial gate is complete and remains the regression floor
 2. single-ball corral/place is already integrated and promoted in the dashboard
 3. surface-aware `short_turf` is the canonical one-ball proof surface
-4. the active blocker is now settled placement after release, not button wiring
-5. current artifact truth must prove center-inside plus full stop plus no roll-away, not just eventual placement
-6. `gather_three_ball_zone` is paused on purpose until the one-ball settled-placement proof is green
+4. the active blocker is now practical retrieved placement after release, not button wiring
+5. current artifact truth must prove inside the retrieval corral plus full stop plus no meaningful roll-away, not just eventual placement
+6. `gather_three_ball_zone` is paused on purpose until the one-ball retrieval-corral proof is green
 7. onboard planning remains interface-scaffold only via `plan_collection_route(...)`
 
 ```mermaid
 flowchart LR
     A[Route-planning regression floor] --> B[Promoted single-ball corral baseline]
-    B --> C[Settled-placement instrumentation and release proof]
-    C --> D[Headless short-turf settled-placement gate]
-    D --> E[Dashboard short-turf settled-placement gate]
+    B --> C[Retrieval-corral sizing and release proof]
+    C --> D[Headless short-turf retrieval-corral gate]
+    D --> E[Dashboard short-turf retrieval-corral gate]
     E --> F[Later accel and decel optimization]
     F --> G[Three-ball gather later]
     G --> H[Onboard planner later]
@@ -402,7 +406,7 @@ Rule for this milestone:
 2. browser/dashboard UAT remains serial for operator trust
 3. the parallel soak runner remains regression infrastructure, not the operator proof surface
 
-### Settled Placement Gate
+### Practical Retrieval Gate
 
 Active near-term scenario and intent for this phase:
 
@@ -412,51 +416,52 @@ Active near-term scenario and intent for this phase:
 
 Promotion ladder:
 
-1. keep offline unit tests green for gather helpers, scoring, and settled-placement reporting
+1. keep offline unit tests green for gather helpers, scoring, and retrieval-placement reporting
 2. keep the headless route-planning regression green
-3. add explicit settled-placement instrumentation for the final release or handoff moment
-4. prove the final settle metrics are trustworthy in headless `short_turf` runs
-5. make the headless single-ball corral gate pass `5/5` with `final_center_inside_zone == true`, `ball_stopped_in_corral == true`, and `rolled_away_after_release == false`
-6. make dashboard-backed single-ball UAT pass `3/3` with the same settled-placement outcome fields green
-7. only after that move on to acceleration and deceleration optimization
+3. define a larger practical retrieval corral on `short_turf` that matches what an operator would consider retrieved
+4. add explicit retrieval-placement instrumentation for the final release or handoff moment
+5. prove the final settle metrics are trustworthy in headless `short_turf` runs
+6. make the headless single-ball corral gate pass `5/5` with `final_inside_retrieval_corral == true`, `ball_stopped_in_corral == true`, and `rolled_away_after_release == false`
+7. make dashboard-backed single-ball UAT pass `3/3` with the same retrieval-placement outcome fields green
+8. only after that move on to acceleration and deceleration optimization
 
 Latest evidence snapshot:
 
 1. a fresh route-planning regression pass exists
-2. a fresh single-ball headless turf gate pass exists under the old settle-focused bar
-3. dashboard UAT has passing runs for `corral_single_ball_place`, but those runs still need a stronger “ended stopped in the corral” proof
-4. the next bar is outcome-first: a run only passes if the ball finishes center-inside, fully stopped, and without rolling away after release
+2. a fresh single-ball headless turf gate pass exists under the older tighter settle bar
+3. dashboard UAT has passing runs for `corral_single_ball_place`, but those runs still need a stronger practical "retrieved and stopped in the larger corral" proof
+4. the next bar is outcome-first: a run only passes if the ball finishes inside the practical retrieval corral, fully stopped, and without meaningful roll-away after release
 
 Operator-facing rule:
 
 1. the primary dashboard action remains `Run Single-Ball Corral`
-2. operator signoff for this phase now depends on settled placement, not perfect spur retention
-3. a brief place-stage spur escape is diagnostic only if the ball still finishes centered, stopped, and not rolling away
+2. operator signoff for this phase now depends on practical retrieved placement, not perfect spur retention or dead-center settle
+3. a brief place-stage spur escape is diagnostic only if the ball still finishes contained, stopped, and not rolling away from the corral area
 
 Acceptance for this milestone:
 
 1. route-planning regression still green after catcher/corral work
-2. settled-placement artifacts explicitly show `final_center_inside_zone`, `ball_stopped_in_corral`, and `rolled_away_after_release`
-3. single-ball corral/place headless gate passes `5/5` on `short_turf` with `final_center_inside_zone == true`, `ball_stopped_in_corral == true`, and `rolled_away_after_release == false`
-4. dashboard-backed single-ball UAT passes `3/3` on `short_turf` with the same settled-placement outcome fields green
-5. clean spur retention remains visible as diagnostic evidence, but it is not the promotion gate
+2. retrieval-placement artifacts explicitly show `final_inside_retrieval_corral`, `ball_stopped_in_corral`, and `rolled_away_after_release`
+3. single-ball corral/place headless gate passes `5/5` on `short_turf` with `final_inside_retrieval_corral == true`, `ball_stopped_in_corral == true`, and `rolled_away_after_release == false`
+4. dashboard-backed single-ball UAT passes `3/3` on `short_turf` with the same retrieval-placement outcome fields green
+5. `final_center_inside_zone` and clean spur retention remain visible as diagnostics, but they are not the promotion gate
 6. no readiness claim is made for acceleration or deceleration optimization, three-ball gather, or onboard planning in this phase
-7. dashboard UAT remains the operator-visible handoff, but the first sub-step is settle instrumentation, not speed work
+7. dashboard UAT remains the operator-visible handoff, but the first sub-step is defining the practical retrieval area and instrumenting it, not speed work
 
 Intermediate step to target first:
 
-1. add explicit settled-placement metrics, for example `final_center_inside_zone`, `ball_stopped_in_corral`, and `rolled_away_after_release`
-2. surface those metrics in headless summaries, dashboard summaries, and scorecards
-3. use that instrumentation to verify we are measuring the exact final settle outcome before we optimize timing
+1. define a larger practical retrieval corral on `short_turf` that would count as retrieved for a soccer player or operator
+2. add explicit retrieval-placement metrics, for example `final_inside_retrieval_corral`, `ball_stopped_in_corral`, and `rolled_away_after_release`
+3. keep tighter center-settle and spur-retention measures as diagnostics while we verify the practical retrieval outcome before we optimize timing
 
 ### Deferred Follow-Ons
 
 These are intentionally deferred until the single-ball dashboard milestone is
 signed off:
 
-1. `gather_three_ball_zone` as the later multi-ball gather scenario
+1. `gather_three_ball_zone` as the later multi-ball gather scenario, where already retrieved balls in the corral may help arrest later balls through collisions
 2. onboard `plan_collection_route(...)` promotion beyond interface scaffolding
-3. acceleration and deceleration optimization until after settled placement is green
+3. acceleration and deceleration optimization until after practical retrieved placement is green
 
 What is deferred in practice:
 
