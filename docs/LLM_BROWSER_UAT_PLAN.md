@@ -336,44 +336,48 @@ To keep the demo honest and legible, this phase does not include:
 - autonomous environment lifecycle control by the LLM
 - end-to-end VLA control
 
-## Next Phase: 5-Foot Retrieval Corral on Canonical Short Turf
+## Next Phase: Practical Retrieval Baseline Locked, Physics Fidelity Next
 
-The single-target and multi-target visit UAT phase is complete enough to serve
-as the baseline, and `corral_single_ball_place` is already promoted into the
-primary dashboard action. `visit_route_planning` remains the protected
-regression floor. The only active milestone now is to make the promoted
-single-ball corral flow pass on canonical `short_turf` with an explicit
-5-foot diameter operator pass area rather than a tight dead-center settle
-under the spur.
+The single-target and multi-target visit UAT phase remains the baseline, and
+`corral_single_ball_place` remains the promoted primary dashboard action.
+`visit_route_planning` stays the protected regression floor. Using the
+committed shorter spur geometry, the current one-ball corral behavior is now
+acceptable enough as a development baseline to keep moving.
 
-For this milestone, we still assume smooth-surface operation such as soccer
-fields or similar turf-like practice surfaces. The practical product bar is
-that a soccer player would consider the ball retrieved: it ends up contained
-inside the 5-foot corral area, comes to rest there, and does not meaningfully
-roll away after the final release or handoff. The current control model keeps
-the tighter inner `0.20 m` control ring for release and correction decisions
-while the outer `0.762 m` radius ring is the operator-visible scoring area.
+The next uncertainty is not dashboard wiring or whether the robot can do the
+basic task. It is simulation fidelity. The current `short_turf` world plus red
+target ball likely behaves as a conservative lower-friction proxy compared with
+a real soccer ball on turf or grass, so the next slice is to calibrate that
+surface and ball realism without reopening the product bar. This is an
+engineering inference from current sim behavior and operator review, not a
+closed field-verified proof.
+
+For this phase, we still assume smooth-surface operation such as soccer fields
+or similar turf-like practice surfaces. The practical product bar remains that
+a soccer player would consider the ball retrieved: it ends up contained inside
+the 5-foot corral area, comes to rest there, and does not meaningfully roll
+away after the final release or handoff. The current control model keeps the
+tighter inner `0.20 m` control ring for release and correction decisions while
+the outer `0.762 m` radius ring is the operator-visible scoring area.
 
 ### Status Snapshot
 
 1. route-planning serial gate is complete and remains the regression floor
-2. single-ball corral/place is already integrated and promoted in the dashboard
-3. the dual-radius corral model is implemented: outer `5 ft` retrieval corral plus inner `0.20 m` control ring
-4. `short_turf` remains the canonical one-ball proof surface
-5. the active blocker is now live settled-placement repeatability after release, not dashboard wiring
-6. current artifact truth must prove inside the 5-foot retrieval corral plus full stop plus no meaningful roll-away, not just eventual placement
-7. `gather_three_ball_zone` is paused on purpose until the one-ball retrieval-corral proof is green
+2. single-ball corral/place is integrated, promoted, and acceptable enough as the working one-ball baseline
+3. the committed shorter spur geometry is the baseline again; the longer local spur variant is not part of the active plan
+4. the dual-radius corral model is implemented: outer `5 ft` retrieval corral plus inner `0.20 m` control ring
+5. `short_turf` remains the canonical one-ball simulation surface, but the open question is now conservative physics realism rather than dashboard integration
+6. the current strict sim evidence is mixed, so surface and ball fidelity calibration is the next engineering slice
+7. `gather_three_ball_zone` remains paused until that fidelity slice is good enough to support multi-ball work
 8. onboard planning remains interface-scaffold only via `plan_collection_route(...)`
 
 ```mermaid
 flowchart LR
-    A[Route-planning regression floor] --> B[5-foot dual-ring corral implemented]
-    B --> C[Short-turf settle and stop proof]
-    C --> D[Headless short-turf retrieval-corral gate]
-    D --> E[Dashboard short-turf retrieval-corral gate]
-    E --> F[Later accel and decel optimization]
-    F --> G[Three-ball gather later]
-    G --> H[Onboard planner later]
+    A[Route-planning regression floor] --> B[Operator-acceptable one-ball 5-foot retrieval baseline]
+    B --> C[Surface and ball fidelity calibration]
+    C --> D[Three-ball gather in the retrieval corral]
+    D --> E[Accel and decel optimization]
+    E --> F[Onboard planner later]
 ```
 
 ### Regression Floor
@@ -409,7 +413,7 @@ Rule for this milestone:
 2. browser/dashboard UAT remains serial for operator trust
 3. the parallel soak runner remains regression infrastructure, not the operator proof surface
 
-### Practical Retrieval Gate
+### Practical Retrieval Baseline
 
 Active near-term scenario and intent for this phase:
 
@@ -417,16 +421,16 @@ Active near-term scenario and intent for this phase:
 2. protected regression scenario ID: `visit_route_planning`
 3. no frozen-contract change in this slice
 
-Promotion ladder:
+Near-term execution order:
 
 1. keep offline unit tests green for gather helpers, scoring, and retrieval-placement reporting
 2. keep the headless route-planning regression green
 3. keep the explicit `5 ft` retrieval corral plus `0.20 m` control ring fixed in the scenario, marker, and artifacts
-4. keep explicit retrieval-placement instrumentation for the final release or handoff moment
-5. prove the final settle metrics are trustworthy in headless `short_turf` runs
-6. make the headless single-ball corral gate pass `5/5` with `final_inside_retrieval_corral == true`, `ball_stopped_in_corral == true`, `rolled_away_after_release == false`, and `post_visit_revisit_count == 0`
-7. make dashboard-backed single-ball UAT pass `3/3` with the same retrieval-placement outcome fields green
-8. only after that move on to acceleration and deceleration optimization
+4. keep the current one-ball flow usable as the practical retrieval baseline instead of reopening dashboard-promotion work
+5. calibrate `short_turf`, `short_grass`, and the active ball/contact model against a more soccer-like friction story
+6. use that calibrated baseline to start `gather_three_ball_zone`
+7. optimize acceleration and deceleration only after multi-ball mechanics are stable enough to speed up
+8. evaluate onboard planning after the visit-and-gather mechanics are stable enough to benchmark fairly
 
 Latest evidence snapshot:
 
@@ -435,32 +439,33 @@ Latest evidence snapshot:
 2. the 5-foot scoring split is implemented in code and surfaced in runtime state:
    - outer retrieval radius `0.762 m`
    - inner control radius `0.20 m`
-3. latest live `short_turf` corral checkpoints are still red under the new settled-placement bar:
+3. operator review now considers the committed-baseline one-ball behavior acceptable enough to continue development from here
+4. latest strict `short_turf` corral checkpoints remain mixed under the sim-only settled-placement bar:
    - `artifacts/session/20260416T023444Z/gather_mission_repeatability/campaign_run_summary.json`
    - `artifacts/session/20260416T023035Z/gather_mission_repeatability/campaign_run_summary.json`
-4. the current failure mode is release-to-settle behavior: the ball can enter the outer corral, but the run still fails to certify a clean stopped placement before dropping back into a failed path
+5. the current engineering inference is that the red ball plus `short_turf` lane is conservative relative to a real soccer ball on grass or turf; this is the next thing to calibrate, not a reason to reopen dashboard wiring or the basic one-ball control path
 
 Operator-facing rule:
 
 1. the primary dashboard action remains `Run Single-Ball Corral`
-2. operator signoff for this phase now depends on practical retrieved placement, not perfect spur retention or dead-center settle
-3. a brief place-stage spur escape is diagnostic only if the ball still finishes contained, stopped, and not rolling away from the corral area
+2. the current one-ball flow is acceptable as the working development baseline, but that does not yet claim the sim matches field physics exactly
+3. operator signoff for this branch remains practical retrieved placement, not perfect spur retention or dead-center settle
+4. a brief place-stage spur escape is diagnostic only if the ball still finishes contained, stopped, and not rolling away from the corral area
 
-Acceptance for this milestone:
+Acceptance for keeping this branch green while we move forward:
 
 1. route-planning regression still green after catcher/corral work
 2. retrieval-placement artifacts explicitly show `final_inside_retrieval_corral`, `ball_stopped_in_corral`, and `rolled_away_after_release`
-3. single-ball corral/place headless gate passes `5/5` on `short_turf` with `final_inside_retrieval_corral == true`, `ball_stopped_in_corral == true`, `rolled_away_after_release == false`, and `post_visit_revisit_count == 0`
-4. dashboard-backed single-ball UAT passes `3/3` on `short_turf` with the same retrieval-placement outcome fields green
-5. `final_center_inside_zone` and clean spur retention remain visible as diagnostics, but they are not the promotion gate
-6. no readiness claim is made for acceleration or deceleration optimization, three-ball gather, or onboard planning in this phase
-7. dashboard UAT remains the operator-visible handoff, but the first sub-step is defining the practical retrieval area and instrumenting it, not speed work
+3. the one-ball corral flow remains acceptable as the working development baseline under the 5-foot practical retrieval bar
+4. `final_center_inside_zone` and clean spur retention remain visible as diagnostics, but they are not the promotion gate
+5. no readiness claim is made for exact field-physics match, acceleration or deceleration optimization, three-ball gather, or onboard planning in this phase
+6. the next engineering milestone is conservative surface and ball calibration, not reopening button promotion or re-litigating whether the one-ball task is basically viable
 
-Intermediate step to target first:
+Immediate next step:
 
-1. keep the outer `5 ft` retrieval corral and inner `0.20 m` control ring fixed while we tune settle behavior
-2. make `short_turf` release-to-settle behavior reliably end with the ball stopped inside the outer corral
-3. keep tighter center-settle and spur-retention measures as diagnostics while we verify the practical retrieval outcome before we optimize timing
+1. keep the outer `5 ft` retrieval corral and inner `0.20 m` control ring fixed
+2. treat the current one-ball behavior as the baseline to preserve
+3. calibrate the ball and surface model so the sim better reflects soccer-ball damping on turf and grass
 
 ### Deferred Follow-Ons
 
