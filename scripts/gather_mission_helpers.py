@@ -188,6 +188,28 @@ def settled_in_corral_pass(run: dict[str, Any]) -> bool:
     )
 
 
+def final_three_ball_corral_pass(run: dict[str, Any]) -> bool:
+    if not isinstance(run, dict):
+        return False
+    mission_like_pass = bool(run.get("mission_completed_pass", run.get("pass", False)))
+    return (
+        mission_like_pass
+        and bool(run.get("final_all_targets_inside_retrieval_corral", False))
+        and bool(run.get("final_all_targets_stopped", False))
+        and bool(run.get("final_three_ball_corral_pass", False))
+        and int(run.get("post_visit_revisit_count", 0) or 0) == 0
+    )
+
+
+def gather_run_pass(run: dict[str, Any]) -> bool:
+    if not isinstance(run, dict):
+        return False
+    scenario_id = str(run.get("scenario_id", "") or "").strip()
+    if scenario_id == "gather_three_ball_zone" or "final_three_ball_corral_pass" in run:
+        return final_three_ball_corral_pass(run)
+    return settled_in_corral_pass(run)
+
+
 def clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
 
@@ -740,21 +762,20 @@ def summarize_release_settle_trace(
 def campaign_pass(runs: list[dict[str, Any]]) -> bool:
     if not runs:
         return False
-    return all(
-        settled_in_corral_pass(item) and int(item.get("post_visit_revisit_count", 0) or 0) == 0
-        for item in runs
-    )
+    return all(gather_run_pass(item) for item in runs)
 
 
 def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     settled_flags = [settled_in_corral_pass(item) for item in runs]
+    run_pass_flags = [gather_run_pass(item) for item in runs]
     clean_retention_flags = [clean_retention_pass(item) for item in runs]
     mission_times = [
         float(item.get("mission_time_s", 0.0) or 0.0)
-        for item, settled_ok in zip(runs, settled_flags)
-        if settled_ok
+        for item, run_pass in zip(runs, run_pass_flags)
+        if run_pass
     ]
     placed_counts = [int(item.get("placed_count", 0) or 0) for item in runs]
+    retrieved_counts = [int(item.get("retrieved_count", 0) or 0) for item in runs]
     capture_losses = [int(item.get("capture_loss_count", 0) or 0) for item in runs]
     stopped_with_capture_flags = [bool(item.get("stopped_with_ball_captured", False)) for item in runs]
     release_started_with_capture_flags = [bool(item.get("release_started_with_capture", False)) for item in runs]
@@ -762,10 +783,13 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     final_center_inside_flags = [bool(item.get("final_center_inside_zone", False)) for item in runs]
     ball_stopped_flags = [bool(item.get("ball_stopped_in_corral", False)) for item in runs]
     rolled_away_flags = [bool(item.get("rolled_away_after_release", False)) for item in runs]
+    final_all_targets_inside_flags = [bool(item.get("final_all_targets_inside_retrieval_corral", False)) for item in runs]
+    final_all_targets_stopped_flags = [bool(item.get("final_all_targets_stopped", False)) for item in runs]
+    final_three_ball_flags = [bool(item.get("final_three_ball_corral_pass", False)) for item in runs]
     settle_distances = [
         float(item.get("final_settle_distance_m", 0.0) or 0.0)
-        for item, settled_ok in zip(runs, settled_flags)
-        if settled_ok and item.get("final_settle_distance_m") not in {None, ""}
+        for item, run_pass in zip(runs, run_pass_flags)
+        if run_pass and item.get("final_settle_distance_m") not in {None, ""}
     ]
     overshoot_distances = [
         float(item.get("max_overshoot_distance_m", 0.0) or 0.0)
@@ -774,8 +798,8 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     settle_times = [
         float(item.get("settle_time_s", 0.0) or 0.0)
-        for item, settled_ok in zip(runs, settled_flags)
-        if settled_ok and item.get("settle_time_s") not in {None, ""}
+        for item, run_pass in zip(runs, run_pass_flags)
+        if run_pass and item.get("settle_time_s") not in {None, ""}
     ]
     release_recontacts = [int(item.get("release_recontact_count", 0) or 0) for item in runs]
     zone_edge_correction_counts = [int(item.get("zone_edge_correction_count", 0) or 0) for item in runs]
@@ -790,8 +814,8 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         }
     )
     surface_profiles = sorted({str(item.get("surface_profile", "") or "") for item in runs if str(item.get("surface_profile", "") or "").strip()})
-    return {
-        "pass_count": sum(1 for flag in settled_flags if flag),
+    summary = {
+        "pass_count": sum(1 for flag in run_pass_flags if flag),
         "placed_count_max": max(placed_counts) if placed_counts else 0,
         "placed_count_min": min(placed_counts) if placed_counts else 0,
         "capture_loss_count_total": sum(capture_losses),
@@ -821,10 +845,27 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "post_visit_revisit_count_total": sum(post_visit_revisit_counts),
         "settle_exit_reasons": settle_exit_reasons,
     }
+    if any("final_three_ball_corral_pass" in item for item in runs):
+        summary.update(
+            {
+                "retrieved_count_avg": round(sum(retrieved_counts) / len(retrieved_counts), 6) if retrieved_counts else 0.0,
+                "retrieved_count_max": max(retrieved_counts) if retrieved_counts else 0,
+                "final_all_targets_inside_retrieval_corral_count": sum(1 for flag in final_all_targets_inside_flags if flag),
+                "final_all_targets_stopped_count": sum(1 for flag in final_all_targets_stopped_flags if flag),
+                "final_three_ball_corral_pass_count": sum(1 for flag in final_three_ball_flags if flag),
+                "final_three_ball_corral_fail_count": sum(1 for flag in final_three_ball_flags if not flag),
+            }
+        )
+    return summary
 
 
 def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], runs: list[dict[str, Any]]) -> str:
     surface_profiles = list(summary.get("surface_profiles", [])) if isinstance(summary.get("surface_profiles"), list) else []
+    multi_ball = bool(
+        summary.get("final_three_ball_corral_pass_count")
+        or summary.get("final_three_ball_corral_fail_count")
+        or any("final_three_ball_corral_pass" in item for item in runs)
+    )
     lines = [
         f"# {scenario_label} Scorecard",
         "",
@@ -854,12 +895,20 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         "## Runs",
         "",
     ]
+    if multi_ball:
+        lines[10:10] = [
+            f"- Retrieved count avg/max: `{summary.get('retrieved_count_avg', 0.0):.3f} / {summary.get('retrieved_count_max', 0)}`",
+            f"- Final all targets inside retrieval corral: `{summary.get('final_all_targets_inside_retrieval_corral_count', 0)}/{max(len(runs), 1)}`",
+            f"- Final all targets stopped: `{summary.get('final_all_targets_stopped_count', 0)}/{max(len(runs), 1)}`",
+            f"- Final three-ball corral pass/fail: `{summary.get('final_three_ball_corral_pass_count', 0)}/{summary.get('final_three_ball_corral_fail_count', 0)}`",
+        ]
     for item in runs:
         settled_ok = settled_in_corral_pass(item)
+        run_pass = gather_run_pass(item)
         retention_ok = clean_retention_pass(item)
         lines.append(
             f"- Run {int(item.get('run_index', 0) or 0):02d}: "
-            f"`{'PASS' if settled_ok else 'FAIL'}` "
+            f"`{'PASS' if run_pass else 'FAIL'}` "
             f"handoff=`{str(item.get('handoff_kind', '') or 'unspecified')}` "
             f"settle_exit=`{str(item.get('settle_exit_reason', '') or 'unspecified')}` "
             f"surface=`{str(item.get('surface_profile', '') or 'unspecified')}` "
@@ -882,5 +931,13 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
             f"place_reentries=`{int(item.get('place_controller_reentry_count', 0) or 0)}` "
             f"post_visit_revisits=`{int(item.get('post_visit_revisit_count', 0) or 0)}`"
         )
+        if multi_ball:
+            lines.append(
+                "  "
+                + f"retrieved_count=`{int(item.get('retrieved_count', 0) or 0)}` "
+                + f"all_inside=`{bool(item.get('final_all_targets_inside_retrieval_corral', False))}` "
+                + f"all_stopped=`{bool(item.get('final_all_targets_stopped', False))}` "
+                + f"three_ball_pass=`{bool(item.get('final_three_ball_corral_pass', False))}`"
+            )
     lines.append("")
     return "\n".join(lines)

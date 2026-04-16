@@ -344,6 +344,26 @@ Worker rules:
 4. each worker launches a separate compose project/session and tears it down at the end
 5. promotion evidence comes from `route_planning_parallel_soak/campaign_summary.json`, not from dashboard clicks
 
+## Corral Surface Calibration
+
+Use this to compare one-ball corral behavior across the three surface lanes without changing the operator-facing dashboard flow.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_corral_surface_calibration.ps1 -RunsPerLane 3`
+
+Calibration contract:
+
+1. runs exactly three lanes through the existing one-ball repeatability flow:
+   - `baseline`
+   - `short_turf`
+   - `short_grass`
+2. respects the existing scenario/runtime seam:
+   - `WORLD_FILE`
+   - `CHASECAR_SURFACE_PROFILE`
+3. emits a lane comparison summary plus a human-readable scorecard
+4. does not promote the operator lane by itself; dashboard promotion still requires a separate one-ball sanity run on the chosen lane
+
 ## Headless Milestone Path (Current Preferred)
 
 Use this while iterating before operator-facing GUI rehearsal:
@@ -439,6 +459,10 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/campaign_summary.json`
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/dashboard_service.log`
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/repeatability.log`
+14. Corral surface calibration:
+   - `artifacts/session/<campaign_id>/corral_surface_calibration/campaign_summary.json`
+   - `artifacts/session/<campaign_id>/corral_surface_calibration/scorecard.md`
+   - `artifacts/session/<campaign_id>/corral_surface_calibration/logs/<surface_profile>.log`
 
 ## Failure Triage Path
 

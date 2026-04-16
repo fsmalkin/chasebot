@@ -25,6 +25,7 @@ def test_00_scenario_catalog_exposes_browser_demo_and_proof_fields(dashboard_cli
     assert "visit_single_ball_proof" in scenarios
     assert "visit_three_ball_sequence" in scenarios
     assert "corral_single_ball_place" in scenarios
+    assert "gather_three_ball_zone" in scenarios
     assert scenarios["llm_turn_then_go_proof"]["browser_default"] is True
     assert scenarios["llm_turn_then_go_proof"]["featured"] is True
     assert scenarios["m3_single_target"]["browser_default"] is True
@@ -32,8 +33,11 @@ def test_00_scenario_catalog_exposes_browser_demo_and_proof_fields(dashboard_cli
     assert scenarios["visit_single_ball_proof"]["browser_default"] is False
     assert scenarios["visit_three_ball_sequence"]["browser_default"] is False
     assert scenarios["corral_single_ball_place"]["browser_default"] is False
+    assert scenarios["gather_three_ball_zone"]["browser_default"] is False
     assert scenarios["corral_single_ball_place"]["world_file"] == "yolo_test_world_v6_clean_uat_short_turf.world"
     assert scenarios["corral_single_ball_place"]["surface_profile"] == "short_turf"
+    assert scenarios["gather_three_ball_zone"]["world_file"] == "yolo_test_world_v6_clean_uat_short_turf.world"
+    assert scenarios["gather_three_ball_zone"]["surface_profile"] == "short_turf"
 
     state = dashboard_client.state()
     assert "proof_state" in state
@@ -52,6 +56,7 @@ def test_00_scenario_catalog_exposes_browser_demo_and_proof_fields(dashboard_cli
     assert "capture_state" in state
     assert "zone_pose" in state
     assert "zone_score" in state
+    assert "final_corral_audit" in state
     assert "placed_targets" in state
     assert "capture_loss_count" in state
     assert "route_order" in state

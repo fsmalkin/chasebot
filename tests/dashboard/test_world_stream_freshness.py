@@ -1200,12 +1200,15 @@ def test_beta_dashboard_includes_corral_menu_and_stage_mapping():
     html = html_path.read_text(encoding="utf-8")
 
     assert "pickScenario('corral_single_ball_place')" in html
+    assert "pickScenario('gather_three_ball_zone')" in html
     assert "runScenario('corral_single_ball_place')" in html
     assert "Run Single-Ball Corral" in html
     assert "const CORRAL_STAGE_LABELS = ['Init','Visit','Capture','Place','Done'];" in html
     assert "Acquiring the ball" in html
     assert "Controlling the ball" in html
     assert "Placing ball into the zone" in html
+    assert "routeOrderText" in html
+    assert "final_three_ball_corral_pass" in html
 
 
 def test_browser_dashboard_promotes_single_ball_corral_as_featured_demo():
@@ -1213,10 +1216,26 @@ def test_browser_dashboard_promotes_single_ball_corral_as_featured_demo():
     js = js_path.read_text(encoding="utf-8")
 
     assert "{ id: 'corral_single_ball_place', label: 'Single-Ball Corral' }" in js
+    assert "{ id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' }" in js
     assert "{ id: 'visit_route_planning', label: 'LLM Route Planning' }" in js
     assert js.index("{ id: 'corral_single_ball_place', label: 'Single-Ball Corral' }") < js.index(
+        "{ id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' }"
+    )
+    assert js.index("{ id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' }") < js.index(
         "{ id: 'visit_route_planning', label: 'LLM Route Planning' }"
     )
+    assert "renderMissionSnapshot(state);" in js
+    assert "final_three_ball_corral_pass" in js
+
+
+def test_browser_dashboard_includes_multi_ball_mission_snapshot_panel():
+    html_path = REPO_ROOT / "runtime/dashboard/browser_dashboard.html"
+    html = html_path.read_text(encoding="utf-8")
+
+    assert 'id="mission-summary"' in html
+    assert 'id="retrieved-count-detail"' in html
+    assert 'id="corral-audit-list"' in html
+    assert "Gather 3 Ball Zone" in html
 
 
 def test_beta_dashboard_world_surface_prefers_world_feed_when_renderable():
@@ -1516,6 +1535,39 @@ def test_request_scenario_run_corral_queues_after_sim_reset(monkeypatch, tmp_pat
     assert started[0].target == controller._reset_environment_worker
 
 
+def test_request_scenario_run_three_ball_gather_queues_after_sim_reset(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["environment_state"] = "environment_ready"
+    controller.state["scenario_state"] = "ready"
+    controller._refresh_control_plane_state = lambda force=False: None
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            self._alive = False
+            started.append(self)
+
+        def start(self) -> None:
+            self._alive = True
+
+        def is_alive(self) -> bool:
+            return self._alive
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_scenario_run("gather_three_ball_zone")
+
+    assert status == 202
+    assert payload["accepted"] is True
+    assert "queued after sim reset" in payload["message"]
+    assert controller.pending_scenario_id == "gather_three_ball_zone"
+    assert started
+    assert started[0].target == controller._reset_environment_worker
+
+
 def test_robot_sdf_name_for_startup_defaults_to_baseline(tmp_path):
     controller = _make_controller(tmp_path)
 
@@ -1527,6 +1579,15 @@ def test_robot_sdf_name_for_startup_defaults_to_baseline(tmp_path):
 def test_robot_sdf_name_for_startup_uses_pending_corral_scenario(tmp_path):
     controller = _make_controller(tmp_path)
     controller.pending_scenario_id = "corral_single_ball_place"
+
+    assert controller._robot_sdf_name_for_startup() == dashboard_service.CORRAL_ROBOT_SDF_NAME
+    assert controller._world_file_for_startup() == dashboard_service.SHORT_TURF_WORLD_FILE
+    assert controller._surface_profile_for_startup() == "short_turf"
+
+
+def test_robot_sdf_name_for_startup_uses_pending_three_ball_gather_scenario(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.pending_scenario_id = "gather_three_ball_zone"
 
     assert controller._robot_sdf_name_for_startup() == dashboard_service.CORRAL_ROBOT_SDF_NAME
     assert controller._world_file_for_startup() == dashboard_service.SHORT_TURF_WORLD_FILE
@@ -1639,6 +1700,74 @@ def test_run_gather_mission_scenario_uses_host_runtime_paths(tmp_path, monkeypat
     assert result["surface_profile"] == "short_turf"
 
 
+def test_run_three_ball_gather_scenario_returns_aggregate_corral_fields(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    controller.state["dashboard_url"] = "http://127.0.0.1:8860/"
+    controller._scenarios_dir = lambda: tmp_path / "scenarios"
+    controller._current_validation_dir = lambda: tmp_path / "validation"
+    controller._visit_mission_runtime_state = lambda: {
+        "proof_state": "completed",
+        "visited_targets": ["ball_a", "ball_b", "ball_c"],
+        "last_visit_result": {"target_id": "ball_c", "pass": True},
+    }
+    controller._gather_mission_runtime_state = lambda: {
+        "mission_phase": "completed",
+        "mission_status": "completed",
+        "gather_phase": "completed",
+        "surface_profile": "short_turf",
+        "placed_targets": ["ball_a", "ball_b", "ball_c"],
+        "capture_loss_count": 0,
+        "route_order": ["ball_b", "ball_a", "ball_c"],
+        "artifact_dir": str(tmp_path / "mission"),
+    }
+    controller._scenario_env = lambda _scenario: {
+        "CHASECAR_VISIT_RUNTIME_PATH": "/workspaces/chasecar/runtime/dashboard/visit_mission_runtime.json",
+        "CHASECAR_GATHER_RUNTIME_PATH": "/workspaces/chasecar/runtime/dashboard/gather_mission_runtime.json",
+        "WORLD_FILE": "yolo_test_world_v6_clean_uat_short_turf.world",
+        "CHASECAR_SURFACE_PROFILE": "short_turf",
+    }
+
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    mission_verdict_path = mission_root / "mission_verdict.json"
+    _write_json(
+        mission_verdict_path,
+        {
+            "pass": True,
+            "type": "gather_mission",
+            "final_corral_audit": {
+                "ball_a": {"distance_to_zone_center_m": 0.2, "inside_retrieval_corral": True, "stopped_in_corral": True},
+                "ball_b": {"distance_to_zone_center_m": 0.2, "inside_retrieval_corral": True, "stopped_in_corral": True},
+                "ball_c": {"distance_to_zone_center_m": 0.2, "inside_retrieval_corral": True, "stopped_in_corral": True},
+            },
+            "final_all_targets_inside_retrieval_corral": True,
+            "final_all_targets_stopped": True,
+            "final_three_ball_corral_pass": True,
+            "retrieved_count": 3,
+        },
+    )
+    _write_json(mission_root / "summary.json", {"pass": True})
+    _write_json(mission_root / "target_results.json", {"targets": []})
+
+    class _FakeProc:
+        def __init__(self, cmd, stdout_handle) -> None:
+            stdout_handle.write(f"GATHER_MISSION_SUMMARY={mission_verdict_path}\n")
+            stdout_handle.flush()
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(dashboard_service.subprocess, "Popen", lambda command, **kwargs: _FakeProc(command, kwargs["stdout"]))
+
+    result = controller._run_gather_mission_scenario(dashboard_service.SCENARIOS_BY_ID["gather_three_ball_zone"])
+
+    assert result["pass"] is True
+    assert set(result["final_corral_audit"].keys()) == {"ball_a", "ball_b", "ball_c"}
+    assert result["mission_verdict"]["final_three_ball_corral_pass"] is True
+    assert result["mission_verdict"]["retrieved_count"] == 3
+
+
 def test_get_state_merges_gather_runtime_fields(tmp_path):
     controller = _make_controller(tmp_path)
     controller.state["active_scenario"] = "corral_single_ball_place"
@@ -1675,6 +1804,9 @@ def test_get_state_merges_gather_runtime_fields(tmp_path):
         "capture_loss_count": 0,
         "zone_pose": {"x": 2.4, "y": 0.0, "radius_m": 0.762, "control_radius_m": 0.2},
         "zone_score": {"inside_zone": False},
+        "final_corral_audit": {
+            "ball_1": {"distance_to_zone_center_m": 0.18, "inside_retrieval_corral": True, "stopped_in_corral": False},
+        },
         "latest_feedback": "Placing Ball 1 into the zone.",
         "artifact_dir": str(tmp_path / "mission"),
         "mission_verdict": {"type": "gather_mission"},
@@ -1698,6 +1830,7 @@ def test_get_state_merges_gather_runtime_fields(tmp_path):
     assert state["zone_pose"]["control_radius_m"] == 0.2
     assert state["route_order"] == ["ball_1"]
     assert state["surface_profile"] == "short_turf"
+    assert state["final_corral_audit"]["ball_1"]["inside_retrieval_corral"] is True
     assert state["proof_artifact_dir"] == str(tmp_path / "mission")
     assert state["latest_proof_feedback"] == "Placing Ball 1 into the zone."
     assert [item["message"] for item in state["recent_operator_events"]] == ["Ball 1: visit attempt 1."]

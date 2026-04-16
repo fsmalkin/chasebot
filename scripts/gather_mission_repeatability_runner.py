@@ -15,6 +15,7 @@ from pathlib import Path
 from gather_mission_campaign_helpers import summarize_gather_run
 from gather_mission_helpers import build_scorecard_markdown
 from gather_mission_helpers import campaign_pass
+from gather_mission_helpers import gather_run_pass
 from gather_mission_helpers import settled_in_corral_pass
 from gather_mission_helpers import summarize_runs
 from llm_supervisor_core import REPO_ROOT
@@ -115,10 +116,7 @@ def wait_for_dashboard_slot(dashboard_url: str, timeout_s: float) -> None:
 def promotion_gate_pass_for_runs(runs: list[dict[str, object]], *, mode: str) -> bool:
     if not runs:
         return False
-    settled_without_revisit = all(
-        settled_in_corral_pass(item) and int(item.get("post_visit_revisit_count", 0) or 0) == 0
-        for item in runs
-    )
+    settled_without_revisit = all(gather_run_pass(item) for item in runs)
     if mode == "pass_only":
         return settled_without_revisit
     return campaign_pass(runs) and settled_without_revisit
@@ -165,6 +163,28 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
         "ball_stopped_in_corral": bool(verdict.get("ball_stopped_in_corral", summary.get("ball_stopped_in_corral", False))),
         "rolled_away_after_release": bool(verdict.get("rolled_away_after_release", summary.get("rolled_away_after_release", False))),
         "settled_in_corral_pass": bool(verdict.get("settled_in_corral_pass", summary.get("settled_in_corral_pass", False))),
+        "final_corral_audit": verdict.get("final_corral_audit", summary.get("final_corral_audit", {}))
+        if isinstance(verdict.get("final_corral_audit", summary.get("final_corral_audit", {})), dict)
+        else {},
+        "final_all_targets_inside_retrieval_corral": bool(
+            verdict.get(
+                "final_all_targets_inside_retrieval_corral",
+                summary.get("final_all_targets_inside_retrieval_corral", False),
+            )
+        ),
+        "final_all_targets_stopped": bool(
+            verdict.get(
+                "final_all_targets_stopped",
+                summary.get("final_all_targets_stopped", False),
+            )
+        ),
+        "final_three_ball_corral_pass": bool(
+            verdict.get(
+                "final_three_ball_corral_pass",
+                summary.get("final_three_ball_corral_pass", False),
+            )
+        ),
+        "retrieved_count": int(verdict.get("retrieved_count", summary.get("retrieved_count", 0)) or 0),
         "surface_profile": str(verdict.get("surface_profile", summary.get("surface_profile", "")) or ""),
         "final_settle_distance_m": float(verdict.get("final_settle_distance_m", summary.get("final_settle_distance_m", 0.0)) or 0.0),
         "max_overshoot_distance_m": float(verdict.get("max_overshoot_distance_m", summary.get("max_overshoot_distance_m", 0.0)) or 0.0),

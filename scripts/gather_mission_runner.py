@@ -754,6 +754,121 @@ fi
             sample.update(zone_score.to_dict())
         return sample
 
+    def _final_corral_audit_snapshot(
+        self,
+        *,
+        session_id: str,
+        previous_poses: dict[str, dict[str, float] | None] | None = None,
+    ) -> dict[str, Any]:
+        current_poses: dict[str, dict[str, float] | None] = {}
+        final_corral_audit: dict[str, dict[str, Any]] = {}
+        for target in self.targets:
+            ball_pose = self._ball_truth_pose(session_id, target)
+            current_poses[target.id] = dict(ball_pose) if isinstance(ball_pose, dict) else None
+            zone_score = zone_snapshot(ball_pose or {}, self.zone) if ball_pose else None
+            ball_motion_m = pose_delta_m((previous_poses or {}).get(target.id), ball_pose)
+            entry: dict[str, Any] = {
+                "distance_to_zone_center_m": (
+                    round(float(zone_score.retrieval_distance_m), 6) if zone_score is not None else None
+                ),
+                "inside_retrieval_corral": bool(zone_score and zone_score.center_inside_retrieval_corral),
+                "stopped_in_corral": bool(
+                    zone_score
+                    and zone_score.center_inside_retrieval_corral
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
+                ),
+            }
+            if ball_motion_m is not None:
+                entry["ball_motion_m"] = round(float(ball_motion_m), 6)
+            final_corral_audit[target.id] = entry
+        retrieved_count = sum(1 for entry in final_corral_audit.values() if bool(entry.get("inside_retrieval_corral", False)))
+        final_all_targets_inside_retrieval_corral = bool(final_corral_audit) and retrieved_count == len(self.targets)
+        latest_all_targets_stopped = bool(final_corral_audit) and all(
+            bool(entry.get("inside_retrieval_corral", False)) and bool(entry.get("stopped_in_corral", False))
+            for entry in final_corral_audit.values()
+        )
+        return {
+            "final_corral_audit": final_corral_audit,
+            "retrieved_count": retrieved_count,
+            "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
+            "latest_all_targets_stopped": latest_all_targets_stopped,
+            "current_poses": current_poses,
+        }
+
+    def _run_final_corral_audit(self, *, session_id: str, state_history_path: Path) -> dict[str, Any]:
+        self._safe_stop()
+        self._set_manual_drive(
+            False,
+            mode="final_corral_audit",
+            rationale="Holding the robot still while auditing all placed balls in the retrieval corral.",
+        )
+        deadline = time.monotonic() + max(
+            DEFAULT_RELEASE_SETTLE_MAX_WAIT_S,
+            DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S + 1.0,
+        )
+        stable_started_monotonic: float | None = None
+        previous_poses: dict[str, dict[str, float] | None] = {}
+        latest_snapshot = self._final_corral_audit_snapshot(session_id=session_id, previous_poses=None)
+        latest_snapshot["final_all_targets_stopped"] = False
+        latest_snapshot["final_three_ball_corral_pass"] = False
+        while time.monotonic() < deadline:
+            now_monotonic = time.monotonic()
+            snapshot = self._final_corral_audit_snapshot(
+                session_id=session_id,
+                previous_poses=previous_poses if previous_poses else None,
+            )
+            previous_poses = snapshot.pop("current_poses", {})
+            all_inside = bool(snapshot.get("final_all_targets_inside_retrieval_corral", False))
+            latest_all_targets_stopped = bool(snapshot.get("latest_all_targets_stopped", False))
+            if all_inside and latest_all_targets_stopped:
+                stable_started_monotonic = (
+                    now_monotonic if stable_started_monotonic is None else stable_started_monotonic
+                )
+            else:
+                stable_started_monotonic = None
+            stable_window_complete = bool(
+                stable_started_monotonic is not None
+                and (now_monotonic - stable_started_monotonic) >= DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
+            )
+            snapshot["final_all_targets_stopped"] = stable_window_complete
+            snapshot["final_three_ball_corral_pass"] = stable_window_complete and all_inside
+            latest_snapshot = snapshot
+            append_jsonl(
+                state_history_path,
+                {
+                    "generated_utc": utc_now(),
+                    "phase": "final_corral_audit",
+                    "targets": snapshot.get("final_corral_audit", {}),
+                    "retrieved_count": int(snapshot.get("retrieved_count", 0) or 0),
+                    "final_all_targets_inside_retrieval_corral": bool(snapshot.get("final_all_targets_inside_retrieval_corral", False)),
+                    "latest_all_targets_stopped": latest_all_targets_stopped,
+                    "stable_window_complete": stable_window_complete,
+                },
+            )
+            self._update_gather_runtime_state(
+                mission_phase="final_corral_audit",
+                gather_phase="final_corral_audit",
+                latest_feedback="Auditing all gathered balls inside the retrieval corral.",
+                final_corral_audit=snapshot.get("final_corral_audit", {}),
+            )
+            if bool(snapshot.get("final_three_ball_corral_pass", False)):
+                self._append_runtime_event(
+                    "Final three-ball corral audit passed.",
+                    category="mission",
+                    key=f"final_corral_audit_pass:{session_id}",
+                )
+                return latest_snapshot
+            time.sleep(self.args.poll_s)
+        self._append_runtime_event(
+            "Final three-ball corral audit timed out before all balls settled inside the retrieval corral.",
+            category="warn",
+            key=f"final_corral_audit_timeout:{session_id}",
+        )
+        latest_snapshot["final_all_targets_stopped"] = False
+        latest_snapshot["final_three_ball_corral_pass"] = False
+        return latest_snapshot
+
     def _start_motion_bridge(self, compose_project: str, mission_root: Path) -> None:
         gate_stack_container = self._container_id(compose_project, "gate-stack")
         runtime_container_path = to_container_repo_path(self.gather_runtime_state_path)
@@ -879,6 +994,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "dwell_s": round(self.zone.dwell_s, 6),
             },
             "zone_score": {},
+            "final_corral_audit": {},
             "settle_metrics": {},
             "manual_drive": {
                 "enabled": False,
@@ -2725,9 +2841,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and release_started_with_capture
             )
             handoff_kind = clean_text(final_result.get("handoff_kind"), "unspecified")
-            zone_edge_correction_count = int(final_result.get("zone_edge_correction_count", 0) or 0)
-            place_controller_reentry_count = int(final_result.get("place_controller_reentry_count", 0) or 0)
-            post_visit_revisit_count = int(final_result.get("post_visit_revisit_count", 0) or 0)
+            zone_edge_correction_count = sum(int(item.get("zone_edge_correction_count", 0) or 0) for item in target_results)
+            place_controller_reentry_count = sum(int(item.get("place_controller_reentry_count", 0) or 0) for item in target_results)
+            post_visit_revisit_count = sum(int(item.get("post_visit_revisit_count", 0) or 0) for item in target_results)
             settle_exit_reason = clean_text(final_result.get("settle_exit_reason"))
             final_inside_retrieval_corral = bool(final_result.get("final_inside_retrieval_corral", False))
             final_center_inside_zone = bool(final_result.get("final_center_inside_zone", False))
@@ -2746,14 +2862,51 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 default=0.0,
             )
             settle_time_s = float(final_result.get("settle_time_s", 0.0) or 0.0)
-            release_recontact_count = int(final_result.get("release_recontact_count", 0) or 0)
+            release_recontact_count = sum(int(item.get("release_recontact_count", 0) or 0) for item in target_results)
+            final_corral_audit: dict[str, Any] = {}
+            final_all_targets_inside_retrieval_corral = False
+            final_all_targets_stopped = False
+            final_three_ball_corral_pass = False
+            retrieved_count = 0
+            if self.args.scenario_id == "gather_three_ball_zone":
+                if mission_completed_pass:
+                    final_corral_snapshot = self._run_final_corral_audit(
+                        session_id=session_id,
+                        state_history_path=state_history_path,
+                    )
+                else:
+                    final_corral_snapshot = self._final_corral_audit_snapshot(
+                        session_id=session_id,
+                        previous_poses=None,
+                    )
+                    final_corral_snapshot["final_all_targets_stopped"] = False
+                    final_corral_snapshot["final_three_ball_corral_pass"] = False
+                final_corral_audit = (
+                    final_corral_snapshot.get("final_corral_audit", {})
+                    if isinstance(final_corral_snapshot.get("final_corral_audit"), dict)
+                    else {}
+                )
+                final_all_targets_inside_retrieval_corral = bool(
+                    final_corral_snapshot.get("final_all_targets_inside_retrieval_corral", False)
+                )
+                final_all_targets_stopped = bool(final_corral_snapshot.get("final_all_targets_stopped", False))
+                retrieved_count = int(final_corral_snapshot.get("retrieved_count", 0) or 0)
+                final_three_ball_corral_pass = (
+                    mission_completed_pass
+                    and final_all_targets_inside_retrieval_corral
+                    and final_all_targets_stopped
+                    and post_visit_revisit_count == 0
+                )
             final_mission_error = mission_error
-            if mission_completed_pass and not settled_in_corral_pass and not final_mission_error:
+            if self.args.scenario_id == "gather_three_ball_zone":
+                if mission_completed_pass and not final_three_ball_corral_pass and not final_mission_error:
+                    final_mission_error = "final_corral_audit_failed"
+            elif mission_completed_pass and not settled_in_corral_pass and not final_mission_error:
                 final_mission_error = "settled_in_corral_failed"
             mission_verdict = {
                 "generated_utc": utc_now(),
                 "type": "gather_mission",
-                "pass": settled_in_corral_pass,
+                "pass": final_three_ball_corral_pass if self.args.scenario_id == "gather_three_ball_zone" else settled_in_corral_pass,
                 "mission_completed_pass": mission_completed_pass,
                 "scenario_id": self.args.scenario_id,
                 "scenario_label": self.args.scenario_label,
@@ -2780,6 +2933,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "ball_stopped_in_corral": ball_stopped_in_corral,
                 "rolled_away_after_release": rolled_away_after_release,
                 "settled_in_corral_pass": settled_in_corral_pass,
+                "final_corral_audit": final_corral_audit,
+                "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
+                "final_all_targets_stopped": final_all_targets_stopped,
+                "final_three_ball_corral_pass": final_three_ball_corral_pass,
+                "retrieved_count": retrieved_count,
                 "final_settle_distance_m": round(final_settle_distance_m, 6),
                 "max_overshoot_distance_m": round(max_overshoot_distance_m, 6),
                 "settle_time_s": round(settle_time_s, 6),
@@ -2827,6 +2985,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "ball_stopped_in_corral": ball_stopped_in_corral,
                 "rolled_away_after_release": rolled_away_after_release,
                 "settled_in_corral_pass": settled_in_corral_pass,
+                "final_corral_audit": final_corral_audit,
+                "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
+                "final_all_targets_stopped": final_all_targets_stopped,
+                "final_three_ball_corral_pass": final_three_ball_corral_pass,
+                "retrieved_count": retrieved_count,
                 "final_settle_distance_m": mission_verdict["final_settle_distance_m"],
                 "max_overshoot_distance_m": mission_verdict["max_overshoot_distance_m"],
                 "settle_time_s": mission_verdict["settle_time_s"],
@@ -2868,6 +3031,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "zone_edge_correction_count_total": zone_edge_correction_count,
                     "place_controller_reentry_count_total": place_controller_reentry_count,
                     "post_visit_revisit_count_total": post_visit_revisit_count,
+                    "final_all_targets_inside_retrieval_corral_count": 1 if final_all_targets_inside_retrieval_corral else 0,
+                    "final_all_targets_stopped_count": 1 if final_all_targets_stopped else 0,
+                    "final_three_ball_corral_pass_count": 1 if final_three_ball_corral_pass else 0,
+                    "final_three_ball_corral_fail_count": 0 if final_three_ball_corral_pass else 1,
+                    "retrieved_count_avg": float(retrieved_count),
+                    "retrieved_count_max": retrieved_count,
                 },
                 runs=[
                     {
@@ -2889,6 +3058,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "ball_stopped_in_corral": ball_stopped_in_corral,
                         "rolled_away_after_release": rolled_away_after_release,
                         "settled_in_corral_pass": settled_in_corral_pass,
+                        "final_corral_audit": final_corral_audit,
+                        "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
+                        "final_all_targets_stopped": final_all_targets_stopped,
+                        "final_three_ball_corral_pass": final_three_ball_corral_pass,
+                        "retrieved_count": retrieved_count,
                         "final_settle_distance_m": summary["final_settle_distance_m"],
                         "max_overshoot_distance_m": summary["max_overshoot_distance_m"],
                         "settle_time_s": summary["settle_time_s"],
@@ -2905,7 +3079,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 mission_phase="completed" if mission_verdict["pass"] else "failed",
                 mission_status="completed" if mission_verdict["pass"] else "failed",
                 current_target_id="",
-                latest_feedback="Gather mission completed." if mission_verdict["pass"] else f"Gather mission failed: {mission_error or 'mission_failed'}.",
+                latest_feedback="Gather mission completed." if mission_verdict["pass"] else f"Gather mission failed: {final_mission_error or 'mission_failed'}.",
                 surface_profile=self.surface_profile,
             )
             self._update_gather_runtime_state(
@@ -2915,8 +3089,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 mission_status="completed" if mission_verdict["pass"] else "failed",
                 gather_phase="completed" if mission_verdict["pass"] else "failed",
                 current_target_id="",
-                latest_feedback="Gather mission completed." if mission_verdict["pass"] else f"Gather mission failed: {mission_error or 'mission_failed'}.",
+                latest_feedback="Gather mission completed." if mission_verdict["pass"] else f"Gather mission failed: {final_mission_error or 'mission_failed'}.",
                 surface_profile=self.surface_profile,
+                final_corral_audit=final_corral_audit,
             )
             return summary
         finally:
@@ -2926,7 +3101,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 compose_project = clean_text(current_state.get("compose_project"))
                 if compose_project:
                     self._stop_motion_bridge(compose_project)
-                self._clear_mission_models(current_state)
+                if bool(getattr(self.args, "cleanup_mission_models", False)):
+                    self._clear_mission_models(current_state)
             except Exception:
                 pass
             if self._started_here and not self.args.keep_environment:
@@ -2964,6 +3140,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gather-runtime-json", default=str(DEFAULT_GATHER_RUNTIME_STATE_PATH))
     parser.add_argument("--motion-loop-hz", type=float, default=10.0)
     parser.add_argument("--keep-environment", action="store_true")
+    parser.add_argument("--cleanup-mission-models", action="store_true")
     return parser.parse_args()
 
 

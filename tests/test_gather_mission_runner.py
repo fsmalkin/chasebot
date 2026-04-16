@@ -41,12 +41,21 @@ def _make_args(tmp_path: Path) -> SimpleNamespace:
         gather_runtime_json=str(tmp_path / "gather_mission_runtime.json"),
         motion_loop_hz=10.0,
         keep_environment=True,
+        cleanup_mission_models=False,
     )
 
 
 def _make_runner(tmp_path: Path, monkeypatch) -> gather_runner.GatherMissionRunner:
     monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
     return gather_runner.GatherMissionRunner(_make_args(tmp_path))
+
+
+def _make_three_ball_runner(tmp_path: Path, monkeypatch) -> gather_runner.GatherMissionRunner:
+    args = _make_args(tmp_path)
+    args.scenario_id = "gather_three_ball_zone"
+    args.scenario_label = "Gather Three Ball Zone"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+    return gather_runner.GatherMissionRunner(args)
 
 
 def test_resolve_gather_runtime_state_path_prefers_explicit_arg(tmp_path, monkeypatch):
@@ -215,6 +224,274 @@ def test_run_normalizes_failure_summary_and_marks_proof_failed(tmp_path, monkeyp
     assert verdict["clean_retention_pass"] is False
     assert runner.visit_runtime_state["proof_state"] == "failed"
     assert runner.gather_runtime_state["gather_phase"] == "failed"
+
+
+def test_run_preserves_mission_models_by_default(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    monkeypatch.setattr(gather_runner, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gather_runner, "current_utc_stamp", lambda: "20260416T000002Z")
+
+    ready_state = {"session_id": "session-keep", "compose_project": "proj", "world_name": "yolo_test_world"}
+    monkeypatch.setattr(runner, "_ensure_environment_ready", lambda: (ready_state, False))
+    monkeypatch.setattr(runner, "_wait_for_robot_pose", lambda timeout_s: ready_state)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_spawn_mission_models", lambda ready_state, mission_root: None)
+    monkeypatch.setattr(runner, "_wait_for_truth_models", lambda session_id, expected_truth_models, timeout_s: None)
+    monkeypatch.setattr(runner, "_start_motion_bridge", lambda compose_project, mission_root: None)
+    monkeypatch.setattr(runner, "_stop_motion_bridge", lambda compose_project: None)
+    cleanup_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_clear_mission_models", lambda state: cleanup_calls.append(dict(state)))
+    monkeypatch.setattr(runner, "_plan_collection_route", lambda remaining_ids, state: list(remaining_ids))
+    monkeypatch.setattr(
+        runner,
+        "_run_target",
+        lambda **kwargs: {
+            "target_id": "ball_1",
+            "label": "Ball 1",
+            "pass": False,
+            "failure_reason": "release_roll_away",
+            "attempts": 1,
+            "capture_loss_count": 0,
+            "route_index": 1,
+            "settle_exit_reason": "rolled_out",
+        },
+    )
+    monkeypatch.setattr(gather_runner, "fetch_dashboard_state", lambda dashboard_url, timeout_s=0: ready_state)
+
+    runner.run()
+
+    assert cleanup_calls == []
+
+
+def test_run_can_cleanup_mission_models_when_requested(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.cleanup_mission_models = True
+    monkeypatch.setattr(gather_runner, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gather_runner, "current_utc_stamp", lambda: "20260416T000003Z")
+
+    ready_state = {"session_id": "session-clean", "compose_project": "proj", "world_name": "yolo_test_world"}
+    monkeypatch.setattr(runner, "_ensure_environment_ready", lambda: (ready_state, False))
+    monkeypatch.setattr(runner, "_wait_for_robot_pose", lambda timeout_s: ready_state)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_spawn_mission_models", lambda ready_state, mission_root: None)
+    monkeypatch.setattr(runner, "_wait_for_truth_models", lambda session_id, expected_truth_models, timeout_s: None)
+    monkeypatch.setattr(runner, "_start_motion_bridge", lambda compose_project, mission_root: None)
+    monkeypatch.setattr(runner, "_stop_motion_bridge", lambda compose_project: None)
+    cleanup_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_clear_mission_models", lambda state: cleanup_calls.append(dict(state)))
+    monkeypatch.setattr(runner, "_plan_collection_route", lambda remaining_ids, state: list(remaining_ids))
+    monkeypatch.setattr(
+        runner,
+        "_run_target",
+        lambda **kwargs: {
+            "target_id": "ball_1",
+            "label": "Ball 1",
+            "pass": False,
+            "failure_reason": "release_roll_away",
+            "attempts": 1,
+            "capture_loss_count": 0,
+            "route_index": 1,
+            "settle_exit_reason": "rolled_out",
+        },
+    )
+    monkeypatch.setattr(gather_runner, "fetch_dashboard_state", lambda dashboard_url, timeout_s=0: ready_state)
+
+    runner.run()
+
+    assert len(cleanup_calls) == 1
+    assert cleanup_calls[0]["compose_project"] == "proj"
+
+
+def test_run_final_corral_audit_requires_stable_window_for_all_three_targets(tmp_path, monkeypatch):
+    runner = _make_three_ball_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-3ball", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+
+    poses = {
+        "ball_a": {"x": 2.22, "y": 0.12, "z": 0.05},
+        "ball_b": {"x": 2.46, "y": -0.03, "z": 0.05},
+        "ball_c": {"x": 2.58, "y": 0.06, "z": 0.05},
+    }
+    monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: poses[target.id])
+
+    audit = runner._run_final_corral_audit(
+        session_id="session-3ball",
+        state_history_path=tmp_path / "final_corral_audit.jsonl",
+    )
+
+    assert audit["retrieved_count"] == 3
+    assert audit["final_all_targets_inside_retrieval_corral"] is True
+    assert audit["final_all_targets_stopped"] is True
+    assert audit["final_three_ball_corral_pass"] is True
+    assert set(audit["final_corral_audit"].keys()) == {"ball_a", "ball_b", "ball_c"}
+    assert all(entry["inside_retrieval_corral"] for entry in audit["final_corral_audit"].values())
+
+
+def test_run_for_three_ball_zone_uses_final_corral_audit_not_last_target_only(tmp_path, monkeypatch):
+    runner = _make_three_ball_runner(tmp_path, monkeypatch)
+    monkeypatch.setattr(gather_runner, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(gather_runner, "current_utc_stamp", lambda: "20260416T000100Z")
+
+    ready_state = {"session_id": "session-4", "compose_project": "proj", "world_name": "yolo_test_world"}
+    monkeypatch.setattr(runner, "_ensure_environment_ready", lambda: (ready_state, False))
+    monkeypatch.setattr(runner, "_wait_for_robot_pose", lambda timeout_s: ready_state)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_spawn_mission_models", lambda ready_state, mission_root: None)
+    monkeypatch.setattr(runner, "_wait_for_truth_models", lambda session_id, expected_truth_models, timeout_s: None)
+    monkeypatch.setattr(runner, "_start_motion_bridge", lambda compose_project, mission_root: None)
+    monkeypatch.setattr(runner, "_stop_motion_bridge", lambda compose_project: None)
+    monkeypatch.setattr(runner, "_clear_mission_models", lambda state: None)
+    monkeypatch.setattr(runner, "_plan_collection_route", lambda remaining_ids, state: list(remaining_ids))
+
+    target_results = iter(
+        [
+            {
+                "target_id": "ball_a",
+                "label": "Ball A (far left)",
+                "pass": True,
+                "attempts": 1,
+                "capture_loss_count": 0,
+                "route_index": 1,
+                "handoff_kind": "soft_capture",
+                "settle_exit_reason": "settled",
+                "zone_edge_correction_count": 0,
+                "place_controller_reentry_count": 0,
+                "post_visit_revisit_count": 0,
+                "placed": True,
+                "stopped_with_ball_captured": True,
+                "release_started_with_capture": True,
+                "clean_retention_pass": True,
+                "final_inside_retrieval_corral": True,
+                "final_center_inside_zone": True,
+                "ball_stopped_in_corral": True,
+                "rolled_away_after_release": False,
+                "settled_in_corral_pass": True,
+                "final_ball_pose": {"x": 2.4, "y": 0.10, "z": 0.05},
+                "place_time_s": 6.0,
+                "final_settle_distance_m": 0.16,
+                "max_overshoot_distance_m": 0.01,
+                "settle_time_s": 1.0,
+                "release_recontact_count": 0,
+            },
+            {
+                "target_id": "ball_b",
+                "label": "Ball B (near center)",
+                "pass": True,
+                "attempts": 1,
+                "capture_loss_count": 0,
+                "route_index": 2,
+                "handoff_kind": "zone_entry",
+                "settle_exit_reason": "corrected",
+                "zone_edge_correction_count": 1,
+                "place_controller_reentry_count": 0,
+                "post_visit_revisit_count": 0,
+                "placed": True,
+                "stopped_with_ball_captured": True,
+                "release_started_with_capture": True,
+                "clean_retention_pass": True,
+                "final_inside_retrieval_corral": True,
+                "final_center_inside_zone": True,
+                "ball_stopped_in_corral": True,
+                "rolled_away_after_release": False,
+                "settled_in_corral_pass": True,
+                "final_ball_pose": {"x": 2.4, "y": 0.00, "z": 0.05},
+                "place_time_s": 7.0,
+                "final_settle_distance_m": 0.10,
+                "max_overshoot_distance_m": 0.02,
+                "settle_time_s": 1.1,
+                "release_recontact_count": 0,
+            },
+            {
+                "target_id": "ball_c",
+                "label": "Ball C (far right)",
+                "pass": True,
+                "attempts": 1,
+                "capture_loss_count": 0,
+                "route_index": 3,
+                "handoff_kind": "soft_capture",
+                "settle_exit_reason": "settled",
+                "zone_edge_correction_count": 0,
+                "place_controller_reentry_count": 0,
+                "post_visit_revisit_count": 0,
+                "placed": True,
+                "stopped_with_ball_captured": True,
+                "release_started_with_capture": True,
+                "clean_retention_pass": True,
+                "final_inside_retrieval_corral": True,
+                "final_center_inside_zone": True,
+                "ball_stopped_in_corral": True,
+                "rolled_away_after_release": False,
+                "settled_in_corral_pass": True,
+                "final_ball_pose": {"x": 2.45, "y": -0.04, "z": 0.05},
+                "place_time_s": 8.0,
+                "final_settle_distance_m": 0.12,
+                "max_overshoot_distance_m": 0.03,
+                "settle_time_s": 1.2,
+                "release_recontact_count": 0,
+            },
+        ]
+    )
+
+    def _run_target_success(**kwargs):
+        result = next(target_results)
+        placed = list(runner.gather_runtime_state.get("placed_targets", []))
+        if result["target_id"] not in placed:
+            placed.append(result["target_id"])
+        remaining = [item.id for item in runner.targets if item.id not in placed]
+        runner.gather_runtime_state["placed_targets"] = placed
+        runner.gather_runtime_state["remaining_targets"] = remaining
+        runner.visit_runtime_state["visited_targets"] = placed
+        return result
+
+    monkeypatch.setattr(runner, "_run_target", _run_target_success)
+    monkeypatch.setattr(
+        runner,
+        "_run_final_corral_audit",
+        lambda **kwargs: {
+            "final_corral_audit": {
+                "ball_a": {"distance_to_zone_center_m": 0.18, "inside_retrieval_corral": True, "stopped_in_corral": True},
+                "ball_b": {"distance_to_zone_center_m": 0.92, "inside_retrieval_corral": False, "stopped_in_corral": False},
+                "ball_c": {"distance_to_zone_center_m": 0.16, "inside_retrieval_corral": True, "stopped_in_corral": True},
+            },
+            "retrieved_count": 2,
+            "final_all_targets_inside_retrieval_corral": False,
+            "final_all_targets_stopped": False,
+            "final_three_ball_corral_pass": False,
+        },
+    )
+    monkeypatch.setattr(
+        gather_runner,
+        "fetch_dashboard_state",
+        lambda dashboard_url, timeout_s=0: {"belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}}},
+    )
+
+    summary = runner.run()
+
+    verdict = read_json(Path(summary["mission_verdict_path"]))
+    assert summary["pass"] is False
+    assert verdict["mission_completed_pass"] is True
+    assert verdict["final_three_ball_corral_pass"] is False
+    assert verdict["retrieved_count"] == 2
+    assert verdict["final_all_targets_inside_retrieval_corral"] is False
+    assert verdict["mission_error"] == "final_corral_audit_failed"
 
 
 def test_run_passes_when_target_settles_in_corral_even_with_capture_loss_diagnostic(tmp_path, monkeypatch):

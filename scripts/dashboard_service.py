@@ -99,7 +99,7 @@ OPERATOR_VIEW_PORT_END = 14520
 OPERATOR_VIEW_HEARTBEAT_STALE_S = 5.0
 REQUIRED_GATE_SERVICES = ("sim-gate", "world-viewer", "gate-stack", "operator-view")
 HEADLESS_SOAK_GATE_SERVICES = ("sim-gate", "gate-stack")
-SELF_CONTAINED_SCENARIO_IDS = {"visit_route_planning", "corral_single_ball_place"}
+SELF_CONTAINED_SCENARIO_IDS = {"visit_route_planning", "corral_single_ball_place", "gather_three_ball_zone"}
 
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 POWERSHELL_EXE = shutil.which("powershell.exe") or shutil.which("powershell") or "powershell.exe"
@@ -245,6 +245,17 @@ SCENARIOS = [
         target_id="ball_1",
         label="Corral Single Ball Place",
         description="Single-ball corral mission: visit, capture, and place the ball into the zone.",
+        mode="gather_mission",
+        robot_sdf_name=CORRAL_ROBOT_SDF_NAME,
+        world_file=SHORT_TURF_WORLD_FILE,
+        surface_profile="short_turf",
+    ),
+    ScenarioDefinition(
+        id="gather_three_ball_zone",
+        phase="gather_three_ball_zone",
+        target_id="ball_sequence",
+        label="Gather Three Ball Zone",
+        description="Three-ball gather mission: visit, capture, and retrieve all balls into the shared corral.",
         mode="gather_mission",
         robot_sdf_name=CORRAL_ROBOT_SDF_NAME,
         world_file=SHORT_TURF_WORLD_FILE,
@@ -518,6 +529,7 @@ class DashboardController:
                 "capture_state": {},
                 "zone_pose": {},
                 "zone_score": {},
+                "final_corral_audit": {},
                 "placed_targets": [],
                 "capture_loss_count": 0,
                 "route_order": [],
@@ -829,6 +841,7 @@ class DashboardController:
                 "capture_loss_count": 0,
                 "zone_pose": {},
                 "zone_score": {},
+                "final_corral_audit": {},
                 "latest_control_command": {},
                 "latest_feedback": "",
                 "mission_verdict": {},
@@ -1627,6 +1640,13 @@ class DashboardController:
         snapshot["capture_state"] = gather_runtime.get("capture_state", snapshot.get("capture_state", {})) if isinstance(gather_runtime.get("capture_state", snapshot.get("capture_state", {})), dict) else {}
         snapshot["zone_pose"] = gather_runtime.get("zone_pose", snapshot.get("zone_pose", {})) if isinstance(gather_runtime.get("zone_pose", snapshot.get("zone_pose", {})), dict) else {}
         snapshot["zone_score"] = gather_runtime.get("zone_score", snapshot.get("zone_score", {})) if isinstance(gather_runtime.get("zone_score", snapshot.get("zone_score", {})), dict) else {}
+        snapshot["final_corral_audit"] = gather_runtime.get(
+            "final_corral_audit",
+            gather_verdict.get("final_corral_audit", snapshot.get("final_corral_audit", {})),
+        ) if isinstance(
+            gather_runtime.get("final_corral_audit", gather_verdict.get("final_corral_audit", snapshot.get("final_corral_audit", {}))),
+            dict,
+        ) else {}
         snapshot["placed_targets"] = list(gather_runtime.get("placed_targets", snapshot.get("placed_targets", [])) or [])
         snapshot["capture_loss_count"] = int(gather_runtime.get("capture_loss_count", snapshot.get("capture_loss_count", 0)) or 0)
         snapshot["route_order"] = list(gather_runtime.get("route_order", snapshot.get("route_order", [])) or [])
@@ -3863,6 +3883,10 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "capture_state": gather_runtime.get("capture_state", {}) if isinstance(gather_runtime.get("capture_state"), dict) else {},
             "zone_pose": gather_runtime.get("zone_pose", {}) if isinstance(gather_runtime.get("zone_pose"), dict) else {},
             "zone_score": gather_runtime.get("zone_score", {}) if isinstance(gather_runtime.get("zone_score"), dict) else {},
+            "final_corral_audit": gather_runtime.get(
+                "final_corral_audit",
+                verdict.get("final_corral_audit", {}),
+            ) if isinstance(gather_runtime.get("final_corral_audit", verdict.get("final_corral_audit", {})), dict) else {},
             "placed_targets": list(gather_runtime.get("placed_targets", [])) if isinstance(gather_runtime.get("placed_targets"), list) else [],
             "capture_loss_count": int(gather_runtime.get("capture_loss_count", 0) or 0),
             "route_order": list(gather_runtime.get("route_order", [])) if isinstance(gather_runtime.get("route_order"), list) else [],

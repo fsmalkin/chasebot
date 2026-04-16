@@ -705,6 +705,29 @@
         <div class="demo-list" id="demo-list"></div>
       </section>
 
+      <section class="drawer-section">
+        <h2>Mission Snapshot</h2>
+        <div class="watch-item" id="mission-summary" data-testid="mission-summary">
+          Use <strong>Gather 3 Ball Zone</strong> in Demos for multi-ball UAT. The primary action stays on the single-ball corral baseline.
+        </div>
+        <dl class="control-kv">
+          <dt>Mission Phase</dt><dd id="mission-phase-detail" data-testid="mission-phase-detail">idle</dd>
+          <dt>Gather Phase</dt><dd id="gather-phase-detail" data-testid="gather-phase-detail">idle</dd>
+          <dt>Surface</dt><dd id="surface-profile-detail" data-testid="surface-profile-detail">baseline</dd>
+          <dt>Current Target</dt><dd id="current-target-detail" data-testid="current-target-detail">n/a</dd>
+          <dt>Placed / Remaining</dt><dd id="placement-count-detail" data-testid="placement-count-detail">0 / 0</dd>
+          <dt>Retrieved</dt><dd id="retrieved-count-detail" data-testid="retrieved-count-detail">0</dd>
+          <dt>Route Order</dt><dd id="route-order-detail" data-testid="route-order-detail">n/a</dd>
+          <dt>Corral Verdict</dt><dd id="corral-verdict-detail" data-testid="corral-verdict-detail">pending</dd>
+        </dl>
+        <div>
+          <div class="lane-label">Final Corral Audit</div>
+          <ul class="watch-list" id="corral-audit-list" data-testid="corral-audit-list">
+            <li class="watch-item">Final audit pending.</li>
+          </ul>
+        </div>
+      </section>
+
       <details class="advanced-shell">
         <summary id="advanced-toggle" data-testid="advanced-toggle">Advanced Controls</summary>
         <div class="advanced-shell-body">

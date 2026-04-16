@@ -56,6 +56,28 @@ def summarize_gather_run(
         "ball_stopped_in_corral": bool(verdict.get("ball_stopped_in_corral", summary.get("ball_stopped_in_corral", False))),
         "rolled_away_after_release": bool(verdict.get("rolled_away_after_release", summary.get("rolled_away_after_release", False))),
         "settled_in_corral_pass": bool(verdict.get("settled_in_corral_pass", summary.get("settled_in_corral_pass", False))),
+        "final_corral_audit": verdict.get("final_corral_audit", summary.get("final_corral_audit", {}))
+        if isinstance(verdict.get("final_corral_audit", summary.get("final_corral_audit", {})), dict)
+        else {},
+        "final_all_targets_inside_retrieval_corral": bool(
+            verdict.get(
+                "final_all_targets_inside_retrieval_corral",
+                summary.get("final_all_targets_inside_retrieval_corral", False),
+            )
+        ),
+        "final_all_targets_stopped": bool(
+            verdict.get(
+                "final_all_targets_stopped",
+                summary.get("final_all_targets_stopped", False),
+            )
+        ),
+        "final_three_ball_corral_pass": bool(
+            verdict.get(
+                "final_three_ball_corral_pass",
+                summary.get("final_three_ball_corral_pass", False),
+            )
+        ),
+        "retrieved_count": int(verdict.get("retrieved_count", summary.get("retrieved_count", 0)) or 0),
         "final_settle_distance_m": float(verdict.get("final_settle_distance_m", summary.get("final_settle_distance_m", 0.0)) or 0.0),
         "max_overshoot_distance_m": float(verdict.get("max_overshoot_distance_m", summary.get("max_overshoot_distance_m", 0.0)) or 0.0),
         "settle_time_s": float(verdict.get("settle_time_s", summary.get("settle_time_s", 0.0)) or 0.0),

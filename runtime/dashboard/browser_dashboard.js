@@ -23,6 +23,16 @@ const stateEls = {
   demoList: document.getElementById('demo-list'),
   runLogChip: document.getElementById('run-log-chip'),
   runLogList: document.getElementById('run-log-list'),
+  missionSummary: document.getElementById('mission-summary'),
+  missionPhaseDetail: document.getElementById('mission-phase-detail'),
+  gatherPhaseDetail: document.getElementById('gather-phase-detail'),
+  surfaceProfileDetail: document.getElementById('surface-profile-detail'),
+  currentTargetDetail: document.getElementById('current-target-detail'),
+  placementCountDetail: document.getElementById('placement-count-detail'),
+  retrievedCountDetail: document.getElementById('retrieved-count-detail'),
+  routeOrderDetail: document.getElementById('route-order-detail'),
+  corralVerdictDetail: document.getElementById('corral-verdict-detail'),
+  corralAuditList: document.getElementById('corral-audit-list'),
   controlModeDetail: document.getElementById('control-mode-detail'),
   warmServices: document.getElementById('warm-services'),
   composeProject: document.getElementById('compose-project'),
@@ -73,6 +83,7 @@ const controls = {
 
 const demoFlow = [
   { id: 'corral_single_ball_place', label: 'Single-Ball Corral' },
+  { id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' },
   { id: 'visit_route_planning', label: 'LLM Route Planning' },
   { id: 'llm_turn_then_go_proof', label: 'LLM Turn + Go' },
   { id: 'visit_single_ball_proof', label: 'Visit Single Ball' },
@@ -179,6 +190,17 @@ function formatPoint(value) {
     return 'n/a';
   }
   return `x=${x.toFixed(2)}, y=${y.toFixed(2)}`;
+}
+
+function boolText(value, yes = 'yes', no = 'no', fallback = 'pending') {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  return value ? yes : no;
+}
+
+function listSummary(values, fallback = 'n/a') {
+  return Array.isArray(values) && values.length ? values.join(' -> ') : fallback;
 }
 
 function prettifyIntent(intentName) {
@@ -691,6 +713,64 @@ function renderTopRail(state) {
   stateEls.sessionId.textContent = envState === 'stopped' ? 'n/a' : selectText(state.session_id, 'n/a');
 }
 
+function renderMissionSnapshot(state) {
+  const activeScenarioId = selectText(state.active_scenario, '');
+  const activeScenarioLabel = selectText(state.active_scenario_label, scenarioLabel(activeScenarioId));
+  const missionVerdict = state.mission_verdict && typeof state.mission_verdict === 'object' ? state.mission_verdict : {};
+  const finalCorralAudit = state.final_corral_audit && typeof state.final_corral_audit === 'object' && Object.keys(state.final_corral_audit).length
+    ? state.final_corral_audit
+    : (missionVerdict.final_corral_audit && typeof missionVerdict.final_corral_audit === 'object' ? missionVerdict.final_corral_audit : {});
+  const placedTargets = Array.isArray(state.placed_targets) ? state.placed_targets : [];
+  const remainingTargets = Array.isArray(state.remaining_targets) ? state.remaining_targets : [];
+  const routeOrder = Array.isArray(state.route_order) ? state.route_order : [];
+  const retrievedCount = Number(missionVerdict.retrieved_count);
+
+  let summary = 'Use Gather 3 Ball Zone in Demos for multi-ball UAT. The primary action stays on the single-ball corral baseline.';
+  if (activeScenarioId === 'gather_three_ball_zone') {
+    summary = `${activeScenarioLabel} is the multi-ball UAT lane. Pass requires all 3 balls to finish stopped inside the 5-foot corral.`;
+  } else if (activeScenarioId === 'corral_single_ball_place') {
+    summary = `${activeScenarioLabel} is the one-ball baseline. Use it as the quick settle sanity check before three-ball UAT.`;
+  } else if (activeScenarioId === 'visit_route_planning') {
+    summary = 'LLM Route Planning remains the protected regression floor while gather work advances.';
+  } else if (activeScenarioId) {
+    summary = `${activeScenarioLabel} is active. Gather 3 Ball Zone remains available as a secondary UAT path from Demos.`;
+  }
+
+  let corralVerdict = 'pending';
+  if (activeScenarioId === 'gather_three_ball_zone' || 'final_three_ball_corral_pass' in missionVerdict) {
+    corralVerdict = boolText(missionVerdict.final_three_ball_corral_pass, 'pass', 'fail');
+  } else if (activeScenarioId === 'corral_single_ball_place' || 'settled_in_corral_pass' in missionVerdict) {
+    corralVerdict = boolText(missionVerdict.settled_in_corral_pass, 'pass', 'fail');
+  }
+
+  stateEls.missionSummary.textContent = summary;
+  stateEls.missionPhaseDetail.textContent = selectText(state.mission_phase, 'idle');
+  stateEls.gatherPhaseDetail.textContent = selectText(state.gather_phase, 'idle');
+  stateEls.surfaceProfileDetail.textContent = selectText(state.surface_profile, 'baseline');
+  stateEls.currentTargetDetail.textContent = selectText(state.current_target_id, 'n/a');
+  stateEls.placementCountDetail.textContent = `${placedTargets.length} / ${remainingTargets.length}`;
+  stateEls.retrievedCountDetail.textContent = Number.isFinite(retrievedCount)
+    ? String(retrievedCount)
+    : (activeScenarioId === 'gather_three_ball_zone' ? String(placedTargets.length) : String(placedTargets.length ? 1 : 0));
+  stateEls.routeOrderDetail.textContent = listSummary(routeOrder);
+  stateEls.corralVerdictDetail.textContent = corralVerdict;
+
+  const auditEntries = Object.entries(finalCorralAudit);
+  stateEls.corralAuditList.innerHTML = auditEntries.length
+    ? auditEntries.map(([targetId, audit]) => {
+      const inside = boolText(audit && audit.inside_retrieval_corral, 'inside', 'out', 'pending');
+      const stopped = boolText(audit && audit.stopped_in_corral, 'stopped', 'moving', 'pending');
+      const distance = formatMeters(audit && audit.distance_to_zone_center_m);
+      return `
+        <li class="watch-item">
+          <strong>${selectText(targetId, 'target')}</strong>
+          <span>${inside} | ${stopped} | ${distance}</span>
+        </li>
+      `;
+    }).join('')
+    : '<li class="watch-item">Final audit pending.</li>';
+}
+
 function renderDemoButtons(state, completed) {
   const controlsState = state.controls || {};
   const activeScenario = selectText(state.active_scenario, '');
@@ -843,6 +923,7 @@ function renderState(state) {
   renderTopRail(state);
   renderControls(state, completed);
   renderRunLog(events);
+  renderMissionSnapshot(state);
   renderControlDetail(state);
   renderShadowBrain(state);
   renderCameraState(state);

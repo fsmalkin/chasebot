@@ -118,6 +118,23 @@ def test_promotion_gate_pass_for_runs_requires_settled_corral_outcome():
     assert repeatability_runner.promotion_gate_pass_for_runs(runs, mode="strict") is False
 
 
+def test_promotion_gate_pass_for_runs_supports_three_ball_final_corral_outcome():
+    runs = [
+        {
+            "scenario_id": "gather_three_ball_zone",
+            "pass": True,
+            "mission_completed_pass": True,
+            "final_all_targets_inside_retrieval_corral": True,
+            "final_all_targets_stopped": True,
+            "final_three_ball_corral_pass": True,
+            "post_visit_revisit_count": 0,
+        }
+    ]
+
+    assert repeatability_runner.promotion_gate_pass_for_runs(runs, mode="pass_only") is True
+    assert repeatability_runner.promotion_gate_pass_for_runs(runs, mode="strict") is True
+
+
 def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path):
     mission_root = tmp_path / "mission"
     mission_root.mkdir(parents=True, exist_ok=True)
@@ -192,6 +209,39 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
     assert summary["ball_stopped_in_corral"] is False
     assert summary["rolled_away_after_release"] is False
     assert summary["settled_in_corral_pass"] is False
+
+
+def test_summarize_gather_artifacts_reads_three_ball_final_audit_fields(tmp_path: Path):
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    verdict_path = mission_root / "mission_verdict.json"
+    payload = {
+        "pass": True,
+        "mission_completed_pass": True,
+        "scenario_id": "gather_three_ball_zone",
+        "final_corral_audit": {
+            "ball_a": {"distance_to_zone_center_m": 0.2, "inside_retrieval_corral": True, "stopped_in_corral": True},
+            "ball_b": {"distance_to_zone_center_m": 0.2, "inside_retrieval_corral": True, "stopped_in_corral": True},
+            "ball_c": {"distance_to_zone_center_m": 0.2, "inside_retrieval_corral": True, "stopped_in_corral": True},
+        },
+        "final_all_targets_inside_retrieval_corral": True,
+        "final_all_targets_stopped": True,
+        "final_three_ball_corral_pass": True,
+        "retrieved_count": 3,
+        "placed_count": 3,
+        "surface_profile": "short_turf",
+    }
+    (mission_root / "summary.json").write_text(json.dumps(payload), encoding="utf-8")
+    verdict_path.write_text(json.dumps(payload), encoding="utf-8")
+    (mission_root / "target_results.json").write_text(json.dumps({"targets": []}), encoding="utf-8")
+
+    summary = repeatability_runner.summarize_gather_artifacts(run_index=1, mission_verdict_path=str(verdict_path))
+
+    assert summary["final_all_targets_inside_retrieval_corral"] is True
+    assert summary["final_all_targets_stopped"] is True
+    assert summary["final_three_ball_corral_pass"] is True
+    assert summary["retrieved_count"] == 3
+    assert set(summary["final_corral_audit"].keys()) == {"ball_a", "ball_b", "ball_c"}
 
 
 def test_run_dashboard_scenario_once_ignores_stale_error_result(monkeypatch):

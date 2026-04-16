@@ -369,6 +369,7 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
             <button class="dm-item" onclick="pickScenario('m3_right')">M3 Right</button>
             <div class="dm-sep"></div>
             <button class="dm-item" onclick="pickScenario('corral_single_ball_place')">Corral 1-ball</button>
+            <button class="dm-item" onclick="pickScenario('gather_three_ball_zone')">Gather 3-ball</button>
             <button class="dm-item" onclick="pickScenario('visit_route_planning')">LLM Route Plan</button>
             <button class="dm-item" onclick="pickScenario('visit_single_ball_proof')">Visit 1-ball</button>
             <button class="dm-item" onclick="pickScenario('visit_three_ball_sequence')">Visit 3-ball</button>
@@ -561,7 +562,8 @@ function currentScenarioId(s) {
 }
 
 function isCorralScenario(s) {
-  return currentScenarioId(s) === 'corral_single_ball_place';
+  const scenarioId = currentScenarioId(s);
+  return scenarioId === 'corral_single_ball_place' || scenarioId === 'gather_three_ball_zone';
 }
 
 function stageLabelsForState(s) {
@@ -1357,10 +1359,8 @@ function renderL1() {
   const scenario = S.scenario_state || '-';
   const brain    = S.brain || {};
   const verdict  = S.proof_verdict || {};
-
-  document.getElementById('l1-summary').textContent =
-    ps !== '-' ? `${ps} | ${scenario}` : scenario;
-  document.getElementById('kv-l1').innerHTML = kv([
+  const scenarioId = currentScenarioId(S);
+  const cells = [
     ['Proof state',    ps,                       colorProofState(ps)],
     ['Scenario',       S.active_scenario||scenario, colorScenario(scenario)],
     ['Target locked',  fmt(brain.target_locked), colorBool(brain.target_locked)],
@@ -1370,7 +1370,20 @@ function renderL1() {
                                                   verdict.pass ? 'ok' : verdict.pass===false ? 'bad' : 'dim'],
     ['Unsafe reasons', brain.unsafe_reasons||S.unsafe_reasons||'none', 'dim'],
     ['Status text',    S.status_text||'-',        'dim'],
-  ]);
+  ];
+
+  if (scenarioId === 'gather_three_ball_zone' || verdict.final_three_ball_corral_pass != null) {
+    cells.push(
+      ['Retrieved', fmt(verdict.retrieved_count ?? (S.placed_targets||[]).length), 'dim'],
+      ['Route order', routeOrderText(S), 'dim'],
+      ['Final corral', verdict.final_three_ball_corral_pass == null ? '-' : verdict.final_three_ball_corral_pass ? 'pass' : 'fail',
+        verdict.final_three_ball_corral_pass ? 'ok' : verdict.final_three_ball_corral_pass === false ? 'bad' : 'dim']
+    );
+  }
+
+  document.getElementById('l1-summary').textContent =
+    ps !== '-' ? `${ps} | ${scenario}` : scenario;
+  document.getElementById('kv-l1').innerHTML = kv(cells);
 }
 
 function colorProofState(ps) {
@@ -1436,6 +1449,10 @@ function fmtPose(p)        { if (!p) return '-'; const {x,y,yaw} = p; return `${
 function colorBool(v)      { if (v == null) return 'dim'; return v ? 'ok' : 'bad'; }
 function colorPhase(p)     { if (!p||p==='-') return 'dim'; if (p.includes('done')||p.includes('success')) return 'ok'; if (p.includes('fail')) return 'bad'; return 'warn'; }
 function colorScenario(s)  { if (s==='running') return 'ok'; if (s==='idle') return 'dim'; return 'warn'; }
+function routeOrderText(s) {
+  const route = Array.isArray(s.route_order) ? s.route_order : [];
+  return route.length ? route.join(' -> ') : '-';
+}
 function colorGate(g)      { if (!g||g==='-') return 'dim'; return g==='ready'?'ok':g==='waiting'?'warn':'bad'; }
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

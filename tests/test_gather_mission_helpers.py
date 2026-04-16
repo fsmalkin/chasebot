@@ -17,7 +17,9 @@ from gather_mission_helpers import capture_snapshot  # noqa: E402
 from gather_mission_helpers import clean_retention_pass  # noqa: E402
 from gather_mission_helpers import compute_place_command  # noqa: E402
 from gather_mission_helpers import compute_capture_command  # noqa: E402
+from gather_mission_helpers import final_three_ball_corral_pass  # noqa: E402
 from gather_mission_helpers import front_escape_risk  # noqa: E402
+from gather_mission_helpers import gather_run_pass  # noqa: E402
 from gather_mission_helpers import marginal_capture  # noqa: E402
 from gather_mission_helpers import pose_delta_m  # noqa: E402
 from gather_mission_helpers import release_ready  # noqa: E402
@@ -537,3 +539,91 @@ def test_settled_in_corral_pass_requires_retrieval_inside_stop_no_rollaway_and_n
             "release_started_with_capture": True,
         }
     ) is False
+
+
+def test_final_three_ball_corral_pass_requires_all_targets_inside_stopped_and_no_revisit():
+    run = {
+        "scenario_id": "gather_three_ball_zone",
+        "pass": True,
+        "mission_completed_pass": True,
+        "final_all_targets_inside_retrieval_corral": True,
+        "final_all_targets_stopped": True,
+        "final_three_ball_corral_pass": True,
+        "post_visit_revisit_count": 0,
+    }
+    assert final_three_ball_corral_pass(run) is True
+    assert gather_run_pass(run) is True
+    assert final_three_ball_corral_pass({**run, "final_all_targets_stopped": False, "final_three_ball_corral_pass": False}) is False
+    assert gather_run_pass({**run, "post_visit_revisit_count": 1}) is False
+
+
+def test_summarize_runs_and_scorecard_include_multi_ball_final_audit_fields():
+    runs = [
+        {
+            "run_index": 1,
+            "scenario_id": "gather_three_ball_zone",
+            "pass": True,
+            "mission_completed_pass": True,
+            "placed_count": 3,
+            "retrieved_count": 3,
+            "capture_loss_count": 0,
+            "surface_profile": "short_turf",
+            "handoff_kind": "zone_entry",
+            "settle_exit_reason": "settled",
+            "post_visit_revisit_count": 0,
+            "final_all_targets_inside_retrieval_corral": True,
+            "final_all_targets_stopped": True,
+            "final_three_ball_corral_pass": True,
+            "final_corral_audit": {
+                "ball_a": {"distance_to_zone_center_m": 0.20, "inside_retrieval_corral": True, "stopped_in_corral": True},
+                "ball_b": {"distance_to_zone_center_m": 0.18, "inside_retrieval_corral": True, "stopped_in_corral": True},
+                "ball_c": {"distance_to_zone_center_m": 0.21, "inside_retrieval_corral": True, "stopped_in_corral": True},
+            },
+            "mission_time_s": 32.0,
+            "zone_edge_correction_count": 1,
+            "place_controller_reentry_count": 0,
+            "release_recontact_count": 0,
+        },
+        {
+            "run_index": 2,
+            "scenario_id": "gather_three_ball_zone",
+            "pass": False,
+            "mission_completed_pass": True,
+            "placed_count": 3,
+            "retrieved_count": 2,
+            "capture_loss_count": 0,
+            "surface_profile": "short_turf",
+            "handoff_kind": "zone_entry",
+            "settle_exit_reason": "settled",
+            "post_visit_revisit_count": 0,
+            "final_all_targets_inside_retrieval_corral": False,
+            "final_all_targets_stopped": False,
+            "final_three_ball_corral_pass": False,
+            "final_corral_audit": {
+                "ball_a": {"distance_to_zone_center_m": 0.20, "inside_retrieval_corral": True, "stopped_in_corral": True},
+                "ball_b": {"distance_to_zone_center_m": 0.85, "inside_retrieval_corral": False, "stopped_in_corral": False},
+                "ball_c": {"distance_to_zone_center_m": 0.21, "inside_retrieval_corral": True, "stopped_in_corral": True},
+            },
+            "mission_time_s": 38.0,
+            "zone_edge_correction_count": 2,
+            "place_controller_reentry_count": 0,
+            "release_recontact_count": 0,
+        },
+    ]
+
+    summary = summarize_runs(runs)
+    markdown = build_scorecard_markdown(
+        scenario_label="Gather Three Ball Zone",
+        summary={**summary, "promotion_gate_pass": False},
+        runs=runs,
+    )
+
+    assert summary["pass_count"] == 1
+    assert summary["retrieved_count_avg"] == 2.5
+    assert summary["retrieved_count_max"] == 3
+    assert summary["final_all_targets_inside_retrieval_corral_count"] == 1
+    assert summary["final_all_targets_stopped_count"] == 1
+    assert summary["final_three_ball_corral_pass_count"] == 1
+    assert summary["final_three_ball_corral_fail_count"] == 1
+    assert "Final three-ball corral pass/fail" in markdown
+    assert "retrieved_count=`3`" in markdown

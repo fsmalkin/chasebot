@@ -125,20 +125,19 @@ Status update as of April 4, 2026:
 5. pivoting the roadmap slice to end-to-end VLA control
 6. replacing deterministic perception, planning, or execution loops with model-generated low-level action
 
-## Next Roadmap Slice: Practical Retrieval Baseline, Then Physics Fidelity
+## Next Roadmap Slice: Practical Retrieval Baseline Locked, Multi-Ball Gather Next
 
 The route-planning baseline is still the proved regression floor, and the
 single-ball corral path now has an explicit dual-radius scoring model on
 realistic soccer-practice surfaces. Using the committed shorter spur geometry,
 the current one-ball flow is acceptable enough as the working development
-baseline. The next slice is no longer "prove the task exists." It is "make the
-simulation fidelity more believable for the task we already have."
+baseline. The next slice is no longer calibration-first. It is
+`gather_three_ball_zone` under the same practical retrieval bar.
 
-The active engineering question is whether the current `short_turf` world plus
-red target ball is a conservative lower-friction proxy relative to a real
-soccer ball on grass or turf. The working hypothesis is yes, which means the
-next slice is surface and ball calibration. This is an inference from current
-sim behavior and operator review, not yet a closed field-verified proof.
+Surface and ball fidelity remain an open realism question, and the calibration
+harness remains useful, but that thread no longer blocks the roadmap. We are
+treating the current one-ball 5-foot diameter retrieval behavior as good
+enough to scale into multi-ball gather, then optimize time later.
 
 The important product outcome stays explicit: we care about the ball ending up
 retrieved and stopped in the corral area, not whether it stayed perfectly
@@ -151,10 +150,10 @@ collisions is a valid assist, not an anti-goal.
 ```mermaid
 flowchart LR
     A[Route-planning baseline] --> B[Operator-acceptable one-ball retrieval baseline]
-    B --> C[Surface and ball fidelity calibration]
-    C --> D[Three-ball gather]
-    D --> E[Corral accel and decel optimization]
-    E --> F[Onboard planner evaluation]
+    B --> C[Three-ball gather in 5-foot diameter corral]
+    C --> D[Corral accel and decel optimization]
+    D --> E[Onboard planner evaluation]
+    B -.-> F[Surface and ball fidelity follow-up if needed]
 ```
 
 ### Step 1: Route-Planning Baseline - Complete
@@ -265,15 +264,15 @@ Checkpoint truth after the 5-foot retrieval-corral promotion:
 Acceptance for this step now means infrastructure only:
 
 1. at least one turf-like surface preset and one grass-like surface preset are reproducible in sim
-2. the canonical one-ball surface remains `short_turf`, with `short_grass` kept as a secondary comparison surface
+2. the surface-comparison seam exists even though the canonical calibrated lane is now reopened
 3. route-planning regression evidence remains green
 
 What this means:
 
-1. `short_turf` is now the canonical one-ball corral proof surface
-2. `short_grass` is credible as a secondary comparison surface
+1. `short_turf` remains the intended default one-ball comparison surface
+2. `short_grass` is credible as a secondary comparison surface and fallback candidate
 3. gather artifacts now carry settle metrics (`surface_profile`, `final_settle_distance_m`, `max_overshoot_distance_m`, `settle_time_s`, `release_recontact_count`)
-4. future multi-ball and speed work will build on this surface structure, but surface realism remains an open calibration task
+4. future multi-ball and speed work will build on this surface structure, but the canonical lane decision remains an open calibration task
 
 ### Step 4: 5-Foot Practical Retrieval Baseline - Accepted Checkpoint
 
@@ -309,78 +308,112 @@ Acceptance for this checkpoint:
 3. `final_center_inside_zone` and clean spur retention remain visible in artifacts, but they are diagnostic rather than gating
 4. no claim is made yet that the simulation exactly matches real grass or turf behavior
 
-### Step 5: Surface and Ball Fidelity Calibration - Current Focus
+### Step 5: Multi-Ball Gather To 5-Foot Diameter Corral - Current Focus
 
-Goal: calibrate the simulation so the working one-ball baseline better matches a
-real soccer ball on turf and grass, without reopening the basic control or
-dashboard milestone.
+Goal: extend the accepted one-ball practical-retrieval baseline into
+`gather_three_ball_zone` using the same 5-foot diameter corral and the same
+operator-facing success bar.
 
 Why this is the next slice:
 
-1. the current sim risk is probably conservative roll-through, not lack of basic task viability
-2. a real soccer ball on grass or turf likely has more rolling resistance than the current simulated red ball
-3. multi-ball gather should build on a believable one-ball physics baseline rather than on a known pessimistic proxy
+1. the one-ball flow is already acceptable enough to serve as a mechanical baseline
+2. multi-ball gather is the next product milestone that actually exercises sequencing and already-placed-ball interactions
+3. acceleration and deceleration tuning should optimize a multi-ball behavior we trust, not a single-ball-only proof
+4. exact surface fidelity is still open, but it no longer blocks this next milestone
 
 Work:
 
-1. compare the active red ball contact model against a more soccer-like friction and damping story
-2. keep `short_turf` as the canonical comparison surface and `short_grass` as the secondary comparison surface
-3. decide whether the current `short_turf` lane should be treated as a lower-bound conservative lane or replaced by a more realistic default
-4. rerun one-ball headless and dashboard checks after any ball/surface calibration change
-5. keep the 5-foot retrieval area and inner control ring fixed while the physics model is tuned
-6. keep `visit_route_planning` green while the calibration work lands
+1. expose `gather_three_ball_zone` in the dashboard as a secondary gather scenario on the same `short_turf` lane
+2. add a final mission-stage corral audit so multi-ball pass/fail comes from the final state of all three balls, not only the last placed ball
+3. keep the 5-foot diameter retrieval corral (`0.762 m` radius) and `0.20 m` inner control ring fixed
+4. preserve the current practical-retrieval pass bar:
+   - ball center finishes inside the outer corral
+   - ball stops there
+   - ball does not meaningfully roll away
+5. keep `visit_route_planning` green while multi-ball gather work lands
+6. stabilize the shared short-turf place/release behavior so the first gathered ball stops failing before the full three-ball gate
+7. keep surface and ball fidelity calibration available as a realism follow-up rather than the blocking lane
+
+Current truth:
+
+1. the one-ball practical-retrieval baseline is accepted enough to keep moving, but fresh strict `short_turf` reruns are still mixed:
+   - `artifacts/session/20260416T184447Z/gather_mission_repeatability/campaign_run_summary.json`
+2. `visit_route_planning` remains green and protected:
+   - `artifacts/session/20260416T184326Z/visit_mission_repeatability/campaign_run_summary.json`
+3. the 5-foot diameter corral model is already implemented and operator-visible
+4. `gather_three_ball_zone` is now wired into the dashboard as a secondary gather scenario on `short_turf`
+5. the final multi-ball corral audit fields are implemented and emitted in live artifacts:
+   - `final_corral_audit`
+   - `final_all_targets_inside_retrieval_corral`
+   - `final_all_targets_stopped`
+   - `final_three_ball_corral_pass`
+   - `retrieved_count`
+6. the first fresh three-ball sanity run populated those fields, but it still failed on the first-ball release/settle path before any full three-ball proof:
+   - `artifacts/session/20260416T184739Z/gather_mission_repeatability/campaign_run_summary.json`
+7. the calibration harness exists, but it did not lock a canonical surface yet:
+   - `artifacts/session/pre_tune_surface_calibration/corral_surface_calibration/campaign_summary.json`
+   - `artifacts/session/halfstep_probe_surface_calibration/corral_surface_calibration/campaign_summary.json`
+8. that unresolved fidelity question is now treated as a known follow-up, not the gate in front of multi-ball gather
 
 Acceptance:
 
 1. route-planning regression evidence remains green
-2. the sim-fidelity docs clearly state what is exact, what is approximated, and what is still an inference
-3. one-ball corral behavior remains acceptable as a practical retrieval baseline after calibration updates
-4. the team has a documented canonical lane for continuing into multi-ball gather work
+2. `gather_three_ball_zone` reaches `placed_count == 3` and `retrieved_count == 3`
+3. `final_all_targets_inside_retrieval_corral == true`, `final_all_targets_stopped == true`, and `final_three_ball_corral_pass == true`
+4. `post_visit_revisit_count == 0` in the promotion bundle
+5. already retrieved balls remain in the world and behave as normal obstacles or passive stopping aids
+6. one-ball baseline behavior is not regressed while multi-ball gather lands
 
-### Step 6: Multi-Ball Gather To Zone
+### Step 6: Corral Time Optimization
 
-Goal: extend the proven one-ball corral/place mechanics into a fuller gather
-task only after the surface-aware one-ball placement work is signed off.
+Goal: reduce time-to-place only after multi-ball practical retrieval behavior
+is stable enough to trust.
 
 Why it comes later:
 
-1. the next real risk is still one-ball placement quality on realistic surfaces
-2. multi-ball gather adds route-order, recovery, and obstacle-persistence complexity that should not delay friction-aware one-ball refinement
-3. once multiple retrieved balls are in the corral, ball-to-ball collisions can be a useful stopping aid rather than something to tune away
-
-Work:
-
-1. introduce `gather_three_ball_zone` only after the surface-aware one-ball milestones are complete
-2. preserve route-planning obstacle avoidance and self-contained resets while extending gather behavior
-3. score multi-ball runs with placed count, route order, mission time, zone score, and capture-loss events
-
-Acceptance:
-
-1. multi-ball gather completes end-to-end after the surface-aware one-ball milestones are signed off
-2. route-planning protections remain green while gather complexity increases
-
-### Step 7: Corral Time Optimization
-
-Goal: reduce time-to-place only after practical retrieval behavior and surface
-fidelity are good enough to trust.
-
-Why this comes later:
-
-1. faster push profiles are only useful once the ball already settles correctly on the target surface
+1. faster push profiles are only useful once the multi-ball gather mechanic already works
 2. acceleration and deceleration tuning should optimize practical retrieval, not mask a release or roll-away problem
-3. multi-ball mechanics are the higher-value product milestone once the one-ball baseline is good enough
+3. multi-ball mechanics are the higher-value product milestone right now
 
 Work:
 
 1. add explicit acceleration and deceleration shaping to the corral approach and push phases
-2. compare mission time against the practical retrieval baseline
+2. compare mission time against the multi-ball practical retrieval baseline
 3. keep contained stop behavior and no-roll-away placement intact while reducing time
 
 Acceptance:
 
-1. mission time improves on the canonical practical-retrieval baseline
+1. mission time improves on the canonical multi-ball practical-retrieval baseline
 2. placement still finishes inside the practical retrieval corral without reintroducing roll-through or roll-away
 3. route-planning regression evidence remains green
+
+### Step 7: Surface and Ball Fidelity Follow-Up
+
+Goal: revisit simulation realism after multi-ball mechanics are in place if the
+current conservative one-ball and multi-ball behavior still appears materially
+different from likely field behavior.
+
+Why this comes later:
+
+1. the product team is willing to move forward on the practical baseline now
+2. the calibration harness already exists and can be reused when realism becomes the limiting factor again
+3. this keeps the current milestone focused on task completion and throughput instead of reopening the same one-ball debate
+
+Work:
+
+1. compare the active red ball contact model across:
+   - `baseline`
+   - `short_turf`
+   - `short_grass`
+2. use `scripts/run_corral_surface_calibration.ps1` as the repeatable comparison harness
+3. decide whether `short_turf` remains the intended default or whether `short_grass` should become the promoted calibrated lane
+4. rerun one-ball and multi-ball checks after any realism change
+
+Acceptance:
+
+1. the sim-fidelity docs clearly state what is exact, what is approximated, and what is still an inference
+2. the team has a clearer answer on whether the active lane is realistic or conservative
+3. route-planning and gather baselines remain green after any realism change
 
 ### Step 8: Onboard Model for Visit + Gather Planning
 
