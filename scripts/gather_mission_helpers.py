@@ -19,6 +19,7 @@ DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M = 0.01
 DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S = 1.0
 DEFAULT_RELEASE_SETTLE_MAX_WAIT_S = 6.0
 DEFAULT_RELEASE_ZONE_MARGIN_M = 0.07
+DEFAULT_ZONE_EDGE_CORRECTION_MARGIN_M = 0.12
 
 
 @dataclass(frozen=True)
@@ -143,6 +144,24 @@ def clean_retention_pass(run: dict[str, Any]) -> bool:
         and int(run.get("capture_loss_count", 0) or 0) == 0
         and bool(run.get("stopped_with_ball_captured", False))
         and bool(run.get("release_started_with_capture", False))
+    )
+
+
+def zone_edge_correction_eligible(
+    *,
+    capture: CaptureSnapshot | None,
+    zone_score: ZoneSnapshot | None,
+    zone: ZoneSpec,
+    margin_m: float = DEFAULT_ZONE_EDGE_CORRECTION_MARGIN_M,
+) -> bool:
+    if zone_score is None:
+        return False
+    if bool(zone_score.inside_zone):
+        return True
+    return bool(
+        capture
+        and capture.within_recapture_window
+        and float(zone_score.zone_distance_m) <= (max(float(zone.radius_m), 0.0) + max(float(margin_m), 0.0))
     )
 
 
@@ -672,7 +691,10 @@ def summarize_release_settle_trace(
 def campaign_pass(runs: list[dict[str, Any]]) -> bool:
     if not runs:
         return False
-    return all(settled_in_corral_pass(item) for item in runs)
+    return all(
+        settled_in_corral_pass(item) and int(item.get("post_visit_revisit_count", 0) or 0) == 0
+        for item in runs
+    )
 
 
 def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -706,6 +728,10 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         if settled_ok and item.get("settle_time_s") not in {None, ""}
     ]
     release_recontacts = [int(item.get("release_recontact_count", 0) or 0) for item in runs]
+    zone_edge_correction_counts = [int(item.get("zone_edge_correction_count", 0) or 0) for item in runs]
+    place_controller_reentry_counts = [int(item.get("place_controller_reentry_count", 0) or 0) for item in runs]
+    post_visit_revisit_counts = [int(item.get("post_visit_revisit_count", 0) or 0) for item in runs]
+    handoff_kinds = sorted({str(item.get("handoff_kind", "") or "") for item in runs if str(item.get("handoff_kind", "") or "").strip()})
     surface_profiles = sorted({str(item.get("surface_profile", "") or "") for item in runs if str(item.get("surface_profile", "") or "").strip()})
     return {
         "pass_count": sum(1 for flag in settled_flags if flag),
@@ -725,12 +751,16 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "mission_time_min_s": round(min(mission_times), 6) if mission_times else 0.0,
         "mission_time_max_s": round(max(mission_times), 6) if mission_times else 0.0,
         "surface_profiles": surface_profiles,
+        "handoff_kinds": handoff_kinds,
         "final_settle_distance_avg_m": round(sum(settle_distances) / len(settle_distances), 6) if settle_distances else 0.0,
         "final_settle_distance_max_m": round(max(settle_distances), 6) if settle_distances else 0.0,
         "max_overshoot_distance_max_m": round(max(overshoot_distances), 6) if overshoot_distances else 0.0,
         "settle_time_avg_s": round(sum(settle_times) / len(settle_times), 6) if settle_times else 0.0,
         "settle_time_max_s": round(max(settle_times), 6) if settle_times else 0.0,
         "release_recontact_count_total": sum(release_recontacts),
+        "zone_edge_correction_count_total": sum(zone_edge_correction_counts),
+        "place_controller_reentry_count_total": sum(place_controller_reentry_counts),
+        "post_visit_revisit_count_total": sum(post_visit_revisit_counts),
     }
 
 
@@ -740,6 +770,7 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         f"# {scenario_label} Scorecard",
         "",
         f"- Surface profiles: `{', '.join(surface_profiles) if surface_profiles else 'unspecified'}`",
+        f"- Handoff kinds: `{', '.join(summary.get('handoff_kinds', [])) if summary.get('handoff_kinds') else 'unspecified'}`",
         f"- Pass rate: `{summary.get('pass_count', 0)}/{max(len(runs), 1)}`",
         f"- Promotion gate: `{'PASS' if summary.get('promotion_gate_pass') else 'FAIL'}`",
         f"- Settled placement pass/fail: `{summary.get('settled_in_corral_pass_count', 0)}/{summary.get('settled_in_corral_fail_count', 0)}`",
@@ -755,6 +786,9 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         f"- Max overshoot distance: `{summary.get('max_overshoot_distance_max_m', 0.0):.3f}m`",
         f"- Settle time avg/max: `{summary.get('settle_time_avg_s', 0.0):.3f}s / {summary.get('settle_time_max_s', 0.0):.3f}s`",
         f"- Release recontacts total: `{summary.get('release_recontact_count_total', 0)}`",
+        f"- Zone-edge corrections total: `{summary.get('zone_edge_correction_count_total', 0)}`",
+        f"- Place controller reentries total: `{summary.get('place_controller_reentry_count_total', 0)}`",
+        f"- Post-visit revisits total: `{summary.get('post_visit_revisit_count_total', 0)}`",
         "",
         "## Runs",
         "",
@@ -765,6 +799,7 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         lines.append(
             f"- Run {int(item.get('run_index', 0) or 0):02d}: "
             f"`{'PASS' if settled_ok else 'FAIL'}` "
+            f"handoff=`{str(item.get('handoff_kind', '') or 'unspecified')}` "
             f"surface=`{str(item.get('surface_profile', '') or 'unspecified')}` "
             f"placed=`{int(item.get('placed_count', 0) or 0)}` "
             f"center_inside=`{bool(item.get('final_center_inside_zone', False))}` "
@@ -779,7 +814,10 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
             f"settle=`{float(item.get('final_settle_distance_m', 0.0) or 0.0):.3f}m` "
             f"overshoot=`{float(item.get('max_overshoot_distance_m', 0.0) or 0.0):.3f}m` "
             f"settle_time=`{float(item.get('settle_time_s', 0.0) or 0.0):.3f}s` "
-            f"recontacts=`{int(item.get('release_recontact_count', 0) or 0)}`"
+            f"recontacts=`{int(item.get('release_recontact_count', 0) or 0)}` "
+            f"zone_edge_corrections=`{int(item.get('zone_edge_correction_count', 0) or 0)}` "
+            f"place_reentries=`{int(item.get('place_controller_reentry_count', 0) or 0)}` "
+            f"post_visit_revisits=`{int(item.get('post_visit_revisit_count', 0) or 0)}`"
         )
     lines.append("")
     return "\n".join(lines)

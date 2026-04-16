@@ -96,12 +96,32 @@ def ensure_environment_ready(dashboard_url: str, timeout_s: float) -> None:
     raise RuntimeError(f"Dashboard environment did not become ready before gather repeatability run. Last state: {json.dumps(last_state, indent=2, sort_keys=True)}")
 
 
+def wait_for_dashboard_slot(dashboard_url: str, timeout_s: float) -> None:
+    deadline = time.monotonic() + max(timeout_s, 30.0)
+    last_state: dict[str, object] = {}
+    while time.monotonic() < deadline:
+        ensure_environment_ready(dashboard_url, timeout_s=min(max(timeout_s, 5.0), 30.0))
+        status, current_state = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=10.0)
+        if status == 200:
+            last_state = current_state
+            environment_state = str(current_state.get("environment_state", "") or "").strip().lower()
+            scenario_state = str(current_state.get("scenario_state", "") or "").strip().lower()
+            if environment_state == "environment_ready" and scenario_state != "running":
+                return
+        time.sleep(1.0)
+    raise RuntimeError(f"Dashboard scenario slot did not become ready before gather repeatability run. Last state: {json.dumps(last_state, indent=2, sort_keys=True)}")
+
+
 def promotion_gate_pass_for_runs(runs: list[dict[str, object]], *, mode: str) -> bool:
     if not runs:
         return False
+    settled_without_revisit = all(
+        settled_in_corral_pass(item) and int(item.get("post_visit_revisit_count", 0) or 0) == 0
+        for item in runs
+    )
     if mode == "pass_only":
-        return all(settled_in_corral_pass(item) for item in runs)
-    return campaign_pass(runs)
+        return settled_without_revisit
+    return campaign_pass(runs) and settled_without_revisit
 
 
 def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> dict[str, object]:
@@ -130,6 +150,10 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
         "scorecard_path": str(scorecard_path) if scorecard_path and scorecard_path.exists() else "",
         "placed_count": int(verdict.get("placed_count", summary.get("placed_count", 0)) or 0),
         "capture_loss_count": int(verdict.get("capture_loss_count", summary.get("capture_loss_count", 0)) or 0),
+        "handoff_kind": str(verdict.get("handoff_kind", summary.get("handoff_kind", "")) or ""),
+        "zone_edge_correction_count": int(verdict.get("zone_edge_correction_count", summary.get("zone_edge_correction_count", 0)) or 0),
+        "place_controller_reentry_count": int(verdict.get("place_controller_reentry_count", summary.get("place_controller_reentry_count", 0)) or 0),
+        "post_visit_revisit_count": int(verdict.get("post_visit_revisit_count", summary.get("post_visit_revisit_count", 0)) or 0),
         "stopped_with_ball_captured": bool(verdict.get("stopped_with_ball_captured", summary.get("stopped_with_ball_captured", False))),
         "release_started_with_capture": bool(verdict.get("release_started_with_capture", summary.get("release_started_with_capture", False))),
         "stop_capture_state": verdict.get("stop_capture_state", summary.get("stop_capture_state", {})) if isinstance(verdict.get("stop_capture_state", summary.get("stop_capture_state", {})), dict) else {},
@@ -152,11 +176,38 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
     }
 
 
+def _latest_mission_verdict_path(state: dict[str, object]) -> str:
+    artifacts = state.get("latest_artifacts", {}) if isinstance(state.get("latest_artifacts"), dict) else {}
+    return str(artifacts.get("mission_verdict", "") or "")
+
+
+def _fresh_dashboard_result_available(
+    state: dict[str, object],
+    *,
+    scenario_id: str,
+    previous_session_id: str,
+    previous_mission_verdict_path: str,
+) -> bool:
+    mission_verdict = state.get("mission_verdict", {}) if isinstance(state.get("mission_verdict"), dict) else {}
+    if str(mission_verdict.get("scenario_id", "") or "") != scenario_id:
+        return False
+    current_mission_verdict_path = _latest_mission_verdict_path(state)
+    if not current_mission_verdict_path:
+        return False
+    current_session_id = str(state.get("session_id", "") or "")
+    if previous_session_id and current_session_id == previous_session_id and current_mission_verdict_path == previous_mission_verdict_path:
+        return False
+    if previous_mission_verdict_path and current_mission_verdict_path == previous_mission_verdict_path:
+        return False
+    return True
+
+
 def run_dashboard_scenario_once(args: argparse.Namespace, *, run_index: int) -> tuple[dict[str, object], str]:
     status, before_state = http_json(f"{args.dashboard_url.rstrip('/')}/api/state", timeout_s=10.0)
     if status != 200:
         raise RuntimeError(f"Unable to fetch dashboard state before run {run_index}.")
     previous_session_id = str(before_state.get("session_id", "") or "")
+    previous_mission_verdict_path = _latest_mission_verdict_path(before_state)
     payload = {"scenario_id": args.scenario_id}
     if args.world_file.strip():
         payload["world_file"] = args.world_file.strip()
@@ -179,19 +230,24 @@ def run_dashboard_scenario_once(args: argparse.Namespace, *, run_index: int) -> 
             time.sleep(1.0)
             continue
         last_state = current_state
-        mission_verdict = current_state.get("mission_verdict", {}) if isinstance(current_state.get("mission_verdict"), dict) else {}
-        if current_state.get("scenario_state") == "ready" and mission_verdict.get("scenario_id") == args.scenario_id:
-            if previous_session_id and str(current_state.get("session_id", "") or "") == previous_session_id:
-                time.sleep(1.0)
-                continue
-            artifacts = current_state.get("latest_artifacts", {}) if isinstance(current_state.get("latest_artifacts"), dict) else {}
-            mission_verdict_path = str(artifacts.get("mission_verdict", "") or "")
+        current_scenario_state = str(current_state.get("scenario_state", "") or "").strip().lower()
+        if current_scenario_state == "ready" and _fresh_dashboard_result_available(
+            current_state,
+            scenario_id=args.scenario_id,
+            previous_session_id=previous_session_id,
+            previous_mission_verdict_path=previous_mission_verdict_path,
+        ):
+            mission_verdict_path = _latest_mission_verdict_path(current_state)
             if mission_verdict_path:
                 summary = summarize_gather_artifacts(run_index=run_index, mission_verdict_path=mission_verdict_path)
                 return summary, json.dumps(current_state, indent=2, sort_keys=True)
-        if current_state.get("scenario_state") == "error" and mission_verdict.get("scenario_id") == args.scenario_id:
-            artifacts = current_state.get("latest_artifacts", {}) if isinstance(current_state.get("latest_artifacts"), dict) else {}
-            mission_verdict_path = str(artifacts.get("mission_verdict", "") or "")
+        if current_scenario_state == "error" and _fresh_dashboard_result_available(
+            current_state,
+            scenario_id=args.scenario_id,
+            previous_session_id=previous_session_id,
+            previous_mission_verdict_path=previous_mission_verdict_path,
+        ):
+            mission_verdict_path = _latest_mission_verdict_path(current_state)
             if mission_verdict_path:
                 summary = summarize_gather_artifacts(run_index=run_index, mission_verdict_path=mission_verdict_path)
                 return summary, json.dumps(current_state, indent=2, sort_keys=True)
@@ -207,12 +263,12 @@ def main() -> int:
     history_path = campaign_root / "history.jsonl"
     logs_root = ensure_dir(campaign_root / "logs")
     wait_for_dashboard(args.dashboard_url, timeout_s=90.0)
-    ensure_environment_ready(args.dashboard_url, timeout_s=120.0)
 
     runs: list[dict[str, object]] = []
     for run_index in range(1, max(args.runs, 1) + 1):
         output_log_path = logs_root / f"run_{run_index:02d}.log"
         if args.execution_mode == "dashboard_scenario":
+            wait_for_dashboard_slot(args.dashboard_url, timeout_s=120.0)
             try:
                 run_summary, output = run_dashboard_scenario_once(args, run_index=run_index)
             except Exception as exc:

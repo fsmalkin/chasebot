@@ -89,6 +89,9 @@ async function run() {
       const passCount = results.filter((item) => item.passed === true).length;
       const settledInCorralPassCount = results.filter((item) => item.settled_in_corral_pass === true).length;
       const cleanRetentionPassCount = results.filter((item) => item.clean_retention_pass === true).length;
+      const zoneEdgeCorrectionCountTotal = results.reduce((sum, item) => sum + (Number(item.zone_edge_correction_count || 0) || 0), 0);
+      const placeControllerReentryCountTotal = results.reduce((sum, item) => sum + (Number(item.place_controller_reentry_count || 0) || 0), 0);
+      const postVisitRevisitCountTotal = results.reduce((sum, item) => sum + (Number(item.post_visit_revisit_count || 0) || 0), 0);
       const summary = {
         generated_utc: new Date().toISOString(),
         type: 'corral_single_ball_dashboard_uat',
@@ -98,6 +101,9 @@ async function run() {
         settled_in_corral_fail_count: Math.max(results.length - settledInCorralPassCount, 0),
         clean_retention_pass_count: cleanRetentionPassCount,
         clean_retention_fail_count: Math.max(results.length - cleanRetentionPassCount, 0),
+        zone_edge_correction_count_total: zoneEdgeCorrectionCountTotal,
+        place_controller_reentry_count_total: placeControllerReentryCountTotal,
+        post_visit_revisit_count_total: postVisitRevisitCountTotal,
         required_green_runs: REQUIRED_GREEN_RUNS,
         promotion_gate_pass: passCount === REQUIRED_GREEN_RUNS && results.length === REQUIRED_GREEN_RUNS,
         runs: results,
@@ -238,6 +244,10 @@ async function run() {
           : {};
         const zoneRadius = Number.parseFloat(String(zonePose.radius_m || '0.2')) || 0.2;
         const captureLossCount = Number.parseInt(String(missionVerdict.capture_loss_count || '0'), 10) || 0;
+        const handoffKind = String(missionVerdict.handoff_kind || '');
+        const zoneEdgeCorrectionCount = Number.parseInt(String(missionVerdict.zone_edge_correction_count || '0'), 10) || 0;
+        const placeControllerReentryCount = Number.parseInt(String(missionVerdict.place_controller_reentry_count || '0'), 10) || 0;
+        const postVisitRevisitCount = Number.parseInt(String(missionVerdict.post_visit_revisit_count || '0'), 10) || 0;
         const stoppedWithBallCaptured = missionVerdict.stopped_with_ball_captured === true;
         const releaseStartedWithCapture = missionVerdict.release_started_with_capture === true;
         const cleanRetentionPass = missionVerdict.clean_retention_pass === true;
@@ -308,6 +318,9 @@ async function run() {
         if (releaseRecontactCount > 1) {
           throw new Error(`Run ${runIndex} exceeded release recontact budget. release_recontact_count=${releaseRecontactCount}`);
         }
+        if (postVisitRevisitCount > 0) {
+          throw new Error(`Run ${runIndex} dispatched a full revisit after the first successful visit. post_visit_revisit_count=${postVisitRevisitCount}`);
+        }
         if (!worldStreamClean) {
           throw new Error(
             `Run ${runIndex} was not operator-clean. restart_delta=${worldStreamRestartCountDelta} degraded_seen=${sawWorldStreamDegraded} restart_seen=${sawWorldStreamRestart}`,
@@ -323,7 +336,11 @@ async function run() {
           mission_verdict: finalState.mission_verdict,
           placed_targets: finalState.placed_targets,
           surface_profile: surfaceProfile,
+          handoff_kind: handoffKind,
           capture_loss_count: captureLossCount,
+          zone_edge_correction_count: zoneEdgeCorrectionCount,
+          place_controller_reentry_count: placeControllerReentryCount,
+          post_visit_revisit_count: postVisitRevisitCount,
           stopped_with_ball_captured: stoppedWithBallCaptured,
           release_started_with_capture: releaseStartedWithCapture,
           clean_retention_pass: cleanRetentionPass,

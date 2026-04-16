@@ -26,6 +26,7 @@ from gather_mission_helpers import settled_in_corral_pass  # noqa: E402
 from gather_mission_helpers import summarize_runs  # noqa: E402
 from gather_mission_helpers import summarize_release_settle_trace  # noqa: E402
 from gather_mission_helpers import zone_dwell_complete  # noqa: E402
+from gather_mission_helpers import zone_edge_correction_eligible  # noqa: E402
 from gather_mission_helpers import zone_snapshot  # noqa: E402
 
 
@@ -58,6 +59,18 @@ def test_capture_snapshot_accepts_forward_slip_with_longer_catcher():
     assert snapshot is not None
     assert snapshot.captured is True
     assert snapshot.within_recapture_window is True
+
+
+def test_zone_edge_correction_eligible_accepts_inside_zone_or_near_zone_recapture():
+    zone = build_zone_spec("corral_single_ball_place")
+    capture = capture_snapshot({"x": 2.0, "y": 0.0, "yaw": 0.0}, {"x": 2.18, "y": 0.01}, CaptureEnvelope())
+    inside_zone_score = zone_snapshot({"x": 2.58, "y": 0.0}, zone)
+    near_zone_score = zone_snapshot({"x": 2.68, "y": 0.0}, zone)
+    far_zone_score = zone_snapshot({"x": 2.90, "y": 0.0}, zone)
+
+    assert zone_edge_correction_eligible(capture=capture, zone_score=inside_zone_score, zone=zone) is True
+    assert zone_edge_correction_eligible(capture=capture, zone_score=near_zone_score, zone=zone) is True
+    assert zone_edge_correction_eligible(capture=capture, zone_score=far_zone_score, zone=zone) is False
 
 
 def test_capture_snapshot_accepts_wider_lateral_capture_with_broader_spur():
@@ -318,8 +331,12 @@ def test_summarize_runs_and_scorecard_markdown():
             "pass": True,
             "mission_completed_pass": True,
             "surface_profile": "short_turf",
+            "handoff_kind": "soft_capture",
             "placed_count": 1,
             "capture_loss_count": 0,
+            "zone_edge_correction_count": 1,
+            "place_controller_reentry_count": 1,
+            "post_visit_revisit_count": 0,
             "stopped_with_ball_captured": True,
             "release_started_with_capture": True,
             "clean_retention_pass": True,
@@ -338,8 +355,12 @@ def test_summarize_runs_and_scorecard_markdown():
             "pass": True,
             "mission_completed_pass": True,
             "surface_profile": "short_turf",
+            "handoff_kind": "zone_entry",
             "placed_count": 1,
             "capture_loss_count": 1,
+            "zone_edge_correction_count": 2,
+            "place_controller_reentry_count": 1,
+            "post_visit_revisit_count": 0,
             "stopped_with_ball_captured": True,
             "release_started_with_capture": True,
             "clean_retention_pass": False,
@@ -366,10 +387,15 @@ def test_summarize_runs_and_scorecard_markdown():
     assert summary["clean_retention_pass_count"] == 1
     assert summary["clean_retention_fail_count"] == 1
     assert summary["surface_profiles"] == ["short_turf"]
+    assert summary["handoff_kinds"] == ["soft_capture", "zone_entry"]
+    assert summary["zone_edge_correction_count_total"] == 3
+    assert summary["place_controller_reentry_count_total"] == 2
+    assert summary["post_visit_revisit_count_total"] == 0
     assert summary["max_overshoot_distance_max_m"] == 0.05
     assert "PASS" in markdown
     assert "Run 01" in markdown
     assert "short_turf" in markdown
+    assert "handoff=`soft_capture`" in markdown
     assert "settled=`True`" in markdown
     assert "clean_retention" in markdown
 
