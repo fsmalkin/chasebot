@@ -491,6 +491,7 @@ class DashboardController:
                 "core_ros_distro": DEFAULT_CORE_ROS_DISTRO,
                 "world_file": DEFAULT_WORLD_FILE,
                 "surface_profile": DEFAULT_SURFACE_PROFILE,
+                "robot_sdf_name": BASELINE_ROBOT_SDF_NAME,
                 "world_name": DEFAULT_WORLD_NAME,
                 "phase": "stopped",
                 "target_id": "",
@@ -1718,13 +1719,40 @@ class DashboardController:
             return None
         return path
 
-    def request_start(self) -> tuple[int, Dict[str, Any]]:
+    def _normalize_robot_sdf_name(self, raw_value: str, *, default_value: str) -> str:
+        candidate = str(raw_value or "").strip() or str(default_value or "").strip() or BASELINE_ROBOT_SDF_NAME
+        candidate_path = REPO_ROOT / "ros2_config" / "urdf" / candidate
+        if not candidate_path.exists():
+            raise ValueError(f"unknown robot_sdf_name: {candidate}")
+        return candidate_path.name
+
+    def _resolve_environment_profile(self, overrides: Optional[Dict[str, Any]] = None) -> tuple[str, str, str]:
+        payload = dict(overrides or {})
+        scenario_id = str(payload.get("scenario_id", "") or "").strip()
+        scenario = SCENARIOS_BY_ID.get(scenario_id) if scenario_id else None
+        with self.state_lock:
+            state_world = str(self.state.get("world_file", "") or DEFAULT_WORLD_FILE)
+            state_surface = str(self.state.get("surface_profile", "") or DEFAULT_SURFACE_PROFILE)
+            state_robot = str(self.state.get("robot_sdf_name", "") or BASELINE_ROBOT_SDF_NAME)
+        default_world = scenario.world_file if scenario is not None else state_world
+        default_surface = scenario.surface_profile if scenario is not None else state_surface
+        default_robot = scenario.robot_sdf_name if scenario is not None else state_robot
+        world_file = self._normalize_world_file(str(payload.get("world_file", "") or ""), default_value=default_world)
+        surface_profile = self._normalize_surface_profile(str(payload.get("surface_profile", "") or ""), default_value=default_surface)
+        robot_sdf_name = self._normalize_robot_sdf_name(str(payload.get("robot_sdf_name", "") or ""), default_value=default_robot)
+        return world_file, surface_profile, robot_sdf_name
+
+    def request_start(self, overrides: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
         with self.state_lock:
             env_state = self.state["environment_state"]
         if env_state == "environment_ready":
             return HTTPStatus.OK, {"accepted": False, "message": "environment already ready", "state": self.get_state()}
         if env_state == "starting":
             return HTTPStatus.OK, {"accepted": False, "message": "environment start already in progress", "state": self.get_state()}
+        try:
+            world_file, surface_profile, robot_sdf_name = self._resolve_environment_profile(overrides)
+        except ValueError as exc:
+            return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
         self._refresh_control_plane_state(force=True)
         with self.state_lock:
             if not self.state.get("control_plane_ready", False):
@@ -1744,6 +1772,9 @@ class DashboardController:
             scenario_message="",
             last_error="",
             phase="starting",
+            world_file=world_file,
+            surface_profile=surface_profile,
+            robot_sdf_name=robot_sdf_name,
             target_id="",
             target_transition_active=False,
             world_stream_recovery_state="idle",
@@ -1788,11 +1819,15 @@ class DashboardController:
         self.lifecycle_thread.start()
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "environment refresh queued"}
 
-    def request_reset_sim(self) -> tuple[int, Dict[str, Any]]:
+    def request_reset_sim(self, overrides: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
         with self.state_lock:
             env_state = self.state["environment_state"]
         if env_state not in {"environment_ready", "error"}:
             return HTTPStatus.CONFLICT, {"accepted": False, "error": "environment not ready for reset"}
+        try:
+            world_file, surface_profile, robot_sdf_name = self._resolve_environment_profile(overrides)
+        except ValueError as exc:
+            return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
         self._refresh_control_plane_state(force=True)
         with self.state_lock:
             if not self.state.get("control_plane_ready", False):
@@ -1800,6 +1835,12 @@ class DashboardController:
         if self._lifecycle_busy():
             return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
         self.pending_scenario_id = ""
+        self.pending_scenario_overrides = {}
+        self._update_state(
+            world_file=world_file,
+            surface_profile=surface_profile,
+            robot_sdf_name=robot_sdf_name,
+        )
         self.lifecycle_thread = threading.Thread(target=self._reset_environment_worker, name="dashboard-reset", daemon=True)
         self.lifecycle_thread.start()
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "sim reset queued"}
@@ -2542,13 +2583,23 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
         pending_scenario = SCENARIOS_BY_ID.get(str(self.pending_scenario_id or "").strip())
         if pending_scenario is not None:
             return pending_scenario.robot_sdf_name
-        return BASELINE_ROBOT_SDF_NAME
+        with self.state_lock:
+            current_robot = str(self.state.get("robot_sdf_name", "") or BASELINE_ROBOT_SDF_NAME)
+        return self._normalize_robot_sdf_name(current_robot, default_value=BASELINE_ROBOT_SDF_NAME)
 
     def _world_file_for_startup(self) -> str:
-        return self._scenario_pending_world_file() if str(self.pending_scenario_id or "").strip() else DEFAULT_WORLD_FILE
+        if str(self.pending_scenario_id or "").strip():
+            return self._scenario_pending_world_file()
+        with self.state_lock:
+            current_world = str(self.state.get("world_file", "") or DEFAULT_WORLD_FILE)
+        return self._normalize_world_file(current_world, default_value=DEFAULT_WORLD_FILE)
 
     def _surface_profile_for_startup(self) -> str:
-        return self._scenario_pending_surface_profile() if str(self.pending_scenario_id or "").strip() else DEFAULT_SURFACE_PROFILE
+        if str(self.pending_scenario_id or "").strip():
+            return self._scenario_pending_surface_profile()
+        with self.state_lock:
+            current_surface = str(self.state.get("surface_profile", "") or DEFAULT_SURFACE_PROFILE)
+        return self._normalize_surface_profile(current_surface, default_value=DEFAULT_SURFACE_PROFILE)
 
     def _refresh_session_container_ids(self, project_name: str) -> None:
         service_states = self._required_gate_service_states(project_name)
@@ -4157,7 +4208,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
 
         if path == "/api/env/start":
-            status, payload = controller.request_start()
+            status, payload = controller.request_start(body)
             return self._json_response(status, payload)
         if path == "/api/env/stop":
             status, payload = controller.request_stop()
@@ -4166,7 +4217,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             status, payload = controller.request_refresh()
             return self._json_response(status, payload)
         if path == "/api/sim/reset":
-            status, payload = controller.request_reset_sim()
+            status, payload = controller.request_reset_sim(body)
             return self._json_response(status, payload)
         if path == "/api/scenario/run":
             scenario_id = str(body.get("scenario_id", "")).strip()

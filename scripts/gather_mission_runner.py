@@ -32,8 +32,10 @@ from llm_supervisor_core import write_json
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_MAX_WAIT_S
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
+from gather_mission_helpers import DEFAULT_STAGE_READY_DWELL_S
 from gather_mission_helpers import CaptureEnvelope
 from gather_mission_helpers import GatherTargetSpec
+from gather_mission_helpers import approach_side_verdict
 from gather_mission_helpers import build_gather_targets
 from gather_mission_helpers import build_scorecard_markdown
 from gather_mission_helpers import build_zone_spec
@@ -42,6 +44,9 @@ from gather_mission_helpers import capture_loss_detected
 from gather_mission_helpers import capture_snapshot
 from gather_mission_helpers import compute_capture_command
 from gather_mission_helpers import compute_place_command
+from gather_mission_helpers import compute_stage_command
+from gather_mission_helpers import first_contact_push_alignment_deg
+from gather_mission_helpers import goal_side_approach_snapshot
 from gather_mission_helpers import normalize_angle
 from gather_mission_helpers import pose_delta_m
 from gather_mission_helpers import release_ready
@@ -72,6 +77,7 @@ DEFAULT_SETTLE_NO_CHASE_ESCAPE_MARGIN_M = 0.08
 DEFAULT_SETTLE_NO_CHASE_ESCAPE_TIMEOUT_S = 0.75
 DEFAULT_MULTI_BALL_ADVANCE_DWELL_S = 0.5
 DEFAULT_MULTI_BALL_ADVANCE_MOTION_TOLERANCE_M = 0.04
+DEFAULT_STAGE_TIMEOUT_S = 6.0
 
 _dotenv_path = REPO_ROOT / ".env"
 if _dotenv_path.is_file():
@@ -191,11 +197,48 @@ def build_provider(provider_name: str, *, model: str, reasoning_effort: str):
     raise ValueError(f"Unsupported provider: {provider_name}")
 
 
+def _load_target_layout_override(raw_value: str) -> list[GatherTargetSpec]:
+    raw_text = str(raw_value or "").strip()
+    if not raw_text:
+        return []
+    candidate_path = Path(raw_text)
+    if candidate_path.is_file():
+        payload = read_json(candidate_path)
+    else:
+        payload = json.loads(raw_text)
+    items = payload.get("targets", []) if isinstance(payload, dict) else payload
+    if not isinstance(items, list) or not items:
+        raise ValueError("Target layout override must provide a non-empty target list.")
+    targets: list[GatherTargetSpec] = []
+    for index, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            raise ValueError("Each target override entry must be an object.")
+        target_id = clean_text(item.get("id"), f"ball_{index}")
+        label = clean_text(item.get("label"), target_id)
+        forward_m = clean_number(item.get("forward_m"))
+        lateral_m = clean_number(item.get("lateral_m"))
+        if forward_m is None or lateral_m is None:
+            raise ValueError(f"Target override {target_id} requires numeric forward_m and lateral_m.")
+        targets.append(
+            GatherTargetSpec(
+                id=target_id,
+                label=label,
+                start_visible=bool(item.get("start_visible", False)),
+                forward_m=float(forward_m),
+                lateral_m=float(lateral_m),
+                z_m=float(clean_number(item.get("z_m")) or 0.05),
+                visit_tolerance_m=float(clean_number(item.get("visit_tolerance_m")) or 0.35),
+                min_dwell_s=float(clean_number(item.get("min_dwell_s")) or 1.0),
+            )
+        )
+    return targets
+
+
 class GatherMissionRunner:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
         self.dashboard_url = args.dashboard_url.rstrip("/")
-        self.targets = build_gather_targets(args.scenario_id)
+        self.targets = _load_target_layout_override(getattr(args, "target_layout_json", "")) or build_gather_targets(args.scenario_id)
         self.targets_by_id = {item.id: item for item in self.targets}
         self.zone = build_zone_spec(args.scenario_id)
         self.capture_envelope = CaptureEnvelope()
@@ -285,6 +328,13 @@ class GatherMissionRunner:
         settle_no_chase_activated: bool = False,
         settle_no_chase_exit_reason: str = "none",
         release_gate_blocked_reason: str = "none",
+        approach_side_verdict: dict[str, Any] | None = None,
+        staging_pose_reached: bool = False,
+        entered_goal_side_before_capture: bool = False,
+        first_contact_push_alignment_deg: float | None = None,
+        push_direction_yaw_deg: float = 0.0,
+        stage_time_s: float = 0.0,
+        approach_failure_reason: str = "",
     ) -> dict[str, Any]:
         resolved_settle_exit_reason = clean_text(
             settle_exit_reason,
@@ -327,6 +377,13 @@ class GatherMissionRunner:
             "settle_no_chase_activated": bool(settle_no_chase_activated),
             "settle_no_chase_exit_reason": clean_text(settle_no_chase_exit_reason, "none"),
             "release_gate_blocked_reason": clean_text(release_gate_blocked_reason, "none"),
+            "approach_side_verdict": approach_side_verdict if isinstance(approach_side_verdict, dict) else {},
+            "staging_pose_reached": bool(staging_pose_reached),
+            "entered_goal_side_before_capture": bool(entered_goal_side_before_capture),
+            "first_contact_push_alignment_deg": clean_number(first_contact_push_alignment_deg),
+            "push_direction_yaw_deg": round(float(push_direction_yaw_deg), 6),
+            "stage_time_s": round(float(stage_time_s), 6),
+            "approach_failure_reason": clean_text(approach_failure_reason),
         }
         if isinstance(settle_metrics, dict):
             payload.update(settle_metrics)
@@ -365,6 +422,13 @@ class GatherMissionRunner:
         settle_no_chase_activated: bool = False,
         settle_no_chase_exit_reason: str = "none",
         release_gate_blocked_reason: str = "none",
+        approach_side_verdict: dict[str, Any] | None = None,
+        staging_pose_reached: bool = False,
+        entered_goal_side_before_capture: bool = False,
+        first_contact_push_alignment_deg: float | None = None,
+        push_direction_yaw_deg: float = 0.0,
+        stage_time_s: float = 0.0,
+        approach_failure_reason: str = "",
     ) -> dict[str, Any]:
         settle_payload = settle_metrics if isinstance(settle_metrics, dict) else {}
         final_inside_retrieval_corral = bool(settle_payload.get("final_inside_retrieval_corral", final_inside_retrieval_corral))
@@ -444,6 +508,13 @@ class GatherMissionRunner:
             "settle_no_chase_activated": bool(settle_no_chase_activated),
             "settle_no_chase_exit_reason": clean_text(settle_no_chase_exit_reason, "none"),
             "release_gate_blocked_reason": clean_text(release_gate_blocked_reason, "none"),
+            "approach_side_verdict": approach_side_verdict if isinstance(approach_side_verdict, dict) else {},
+            "staging_pose_reached": bool(staging_pose_reached),
+            "entered_goal_side_before_capture": bool(entered_goal_side_before_capture),
+            "first_contact_push_alignment_deg": clean_number(first_contact_push_alignment_deg),
+            "push_direction_yaw_deg": round(float(push_direction_yaw_deg), 6),
+            "stage_time_s": round(float(stage_time_s), 6),
+            "approach_failure_reason": clean_text(approach_failure_reason),
         }
         if settle_payload:
             payload.update(settle_payload)
@@ -1267,6 +1338,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         state_history_path: Path,
         mission_root: Path,
         prefer_zone_recovery: bool = False,
+        enable_goal_side_stage: bool = False,
     ) -> tuple[bool, dict[str, Any]]:
         deadline = time.monotonic() + max(self.args.capture_timeout_s, 0.1)
         captured_started_monotonic: float | None = None
@@ -1274,14 +1346,73 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         previous_ball_pose: dict[str, Any] | None = None
         last_capture = None
         last_zone_score = None
+        stage_started_monotonic = time.monotonic() if enable_goal_side_stage else None
+        stage_ready_started_monotonic: float | None = None
+        stage_completed = not enable_goal_side_stage
+        staging_pose_reached_once = False
+        entered_goal_side_before_capture = False
+        first_contact_alignment_value: float | None = None
+        stage_time_s = 0.0
+        push_direction_yaw_deg = 0.0
+        approach_failure_reason = ""
+        last_approach_snapshot: dict[str, Any] = {}
+
+        def _approach_result_payload(*, failure_reason: str = "") -> dict[str, Any]:
+            if failure_reason:
+                verdict = {"pass": False, "reason": str(failure_reason)}
+            elif not enable_goal_side_stage and first_contact_alignment_value is None:
+                verdict = {"pass": True, "reason": ""}
+            else:
+                verdict = approach_side_verdict(
+                    entered_goal_side_before_capture=entered_goal_side_before_capture,
+                    staging_pose_reached=staging_pose_reached_once if enable_goal_side_stage else True,
+                    first_contact_push_alignment_deg=first_contact_alignment_value,
+                )
+            return {
+                "approach_side_verdict": verdict,
+                "staging_pose_reached": bool(staging_pose_reached_once if enable_goal_side_stage else True),
+                "entered_goal_side_before_capture": bool(entered_goal_side_before_capture),
+                "first_contact_push_alignment_deg": (
+                    round(float(first_contact_alignment_value), 6)
+                    if first_contact_alignment_value is not None
+                    else None
+                ),
+                "push_direction_yaw_deg": round(float(push_direction_yaw_deg), 6),
+                "stage_time_s": round(float(stage_time_s), 6),
+                "approach_failure_reason": str(failure_reason or verdict.get("reason", "") or ""),
+            }
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
             _dashboard_state, robot_pose, ball_pose = self._control_loop_state(session_id=session_id, target=target)
             capture = capture_snapshot(robot_pose, ball_pose or {}, self.capture_envelope) if robot_pose and ball_pose else None
             zone_score = zone_snapshot(ball_pose or {}, self.zone) if ball_pose else None
+            approach_snapshot = (
+                goal_side_approach_snapshot(robot_pose, ball_pose or {}, zone=self.zone)
+                if robot_pose and ball_pose
+                else None
+            )
             ball_motion_m = pose_delta_m(previous_ball_pose, ball_pose) if previous_ball_pose is not None else None
             last_capture = capture
             last_zone_score = zone_score
+            if isinstance(approach_snapshot, dict):
+                last_approach_snapshot = approach_snapshot
+                push_direction_yaw_deg = float(clean_number(approach_snapshot.get("push_direction_yaw_deg")) or 0.0)
+                if (
+                    not stage_completed
+                    and not (zone_score and zone_score.center_inside_retrieval_corral)
+                    and bool(approach_snapshot.get("robot_on_goal_side", False))
+                ):
+                    entered_goal_side_before_capture = True
+                    approach_failure_reason = "entered_goal_side_before_capture"
+            if (
+                first_contact_alignment_value is None
+                and capture
+                and capture.captured
+                and robot_pose
+                and ball_pose
+                and (stage_completed or not enable_goal_side_stage)
+            ):
+                first_contact_alignment_value = first_contact_push_alignment_deg(robot_pose, ball_pose or {}, zone=self.zone)
             if capture and capture.captured:
                 captured_started_monotonic = now_monotonic if captured_started_monotonic is None else captured_started_monotonic
             else:
@@ -1292,6 +1423,102 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 )
             else:
                 zone_centered_started_monotonic = None
+            if not stage_completed:
+                if isinstance(approach_snapshot, dict) and bool(approach_snapshot.get("staging_pose_reached", False)):
+                    staging_pose_reached_once = True
+                    stage_ready_started_monotonic = (
+                        now_monotonic
+                        if stage_ready_started_monotonic is None
+                        else stage_ready_started_monotonic
+                    )
+                else:
+                    stage_ready_started_monotonic = None
+                stage_command = (
+                    compute_stage_command(robot_pose, ball_pose or {}, zone=self.zone)
+                    if robot_pose and ball_pose
+                    else None
+                )
+                self._update_gather_runtime_state(
+                    mission_phase="stage",
+                    gather_phase="stage",
+                    capture_state=capture.to_dict() if capture else {},
+                    zone_score=zone_score.to_dict() if zone_score else {},
+                    latest_feedback=f"Staging behind {target.label} before first contact.",
+                )
+                self._update_visit_runtime_state(
+                    proof_state="capturing",
+                    mission_phase="stage",
+                    latest_feedback=f"Staging behind {target.label} before first contact.",
+                )
+                append_jsonl(
+                    state_history_path,
+                    {
+                        "generated_utc": utc_now(),
+                        "phase": "stage",
+                        "target_id": target.id,
+                        "robot_pose": robot_pose,
+                        "ball_pose": ball_pose,
+                        "capture": capture.to_dict() if capture else {},
+                        "zone_score": zone_score.to_dict() if zone_score else {},
+                        "approach_side": approach_snapshot or {},
+                        "selected_command": stage_command.to_dict() if stage_command else {},
+                        "ball_motion_m": ball_motion_m,
+                    },
+                )
+                if (
+                    stage_ready_started_monotonic is not None
+                    and (now_monotonic - stage_ready_started_monotonic) >= DEFAULT_STAGE_READY_DWELL_S
+                ):
+                    stage_completed = True
+                    stage_time_s = now_monotonic - float(stage_started_monotonic or now_monotonic)
+                    self._set_manual_drive(
+                        enabled=False,
+                        mode="stage_ready",
+                        rationale="Robot is staged behind the ball; handing off to capture.",
+                    )
+                    self._update_gather_runtime_state(
+                        latest_feedback=f"Staged behind {target.label}; starting capture.",
+                    )
+                    previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                    time.sleep(self.args.poll_s)
+                    continue
+                if (
+                    stage_started_monotonic is not None
+                    and (now_monotonic - stage_started_monotonic) >= DEFAULT_STAGE_TIMEOUT_S
+                ):
+                    stage_time_s = now_monotonic - float(stage_started_monotonic)
+                    if not approach_failure_reason:
+                        approach_failure_reason = (
+                            "staging_pose_not_reached"
+                            if not staging_pose_reached_once
+                            else "goal_side_stage_timeout"
+                        )
+                    self._set_manual_drive(
+                        enabled=False,
+                        mode="stage_timeout",
+                        rationale="Goal-side staging timed out before first contact.",
+                    )
+                    timeout_payload = {
+                        "failure_reason": "goal_side_stage_timeout",
+                        "failure_stage": "stage",
+                        "capture_state": capture.to_dict() if capture else {},
+                        "zone_score": zone_score.to_dict() if zone_score else {},
+                        **_approach_result_payload(failure_reason=approach_failure_reason),
+                    }
+                    write_json(mission_root / f"{target.id}_stage_timeout.json", timeout_payload)
+                    return False, timeout_payload
+                if stage_command is not None:
+                    self._set_manual_drive(
+                        enabled=True,
+                        linear_x=stage_command.linear_x,
+                        angular_z=stage_command.angular_z,
+                        mode=stage_command.mode,
+                        rationale=stage_command.rationale,
+                    )
+                    self._update_gather_runtime_state(latest_control_command=stage_command.to_dict())
+                previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                time.sleep(self.args.poll_s)
+                continue
             self._update_gather_runtime_state(
                 mission_phase="capture",
                 gather_phase="capture",
@@ -1336,6 +1563,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "zone_score": zone_score.to_dict(),
                     "entered_zone_during_capture": True,
                     "handoff_kind": "zone_entry",
+                    **_approach_result_payload(),
                 }
             if secure_capture(capture, self.capture_envelope):
                 self._set_manual_drive(False, mode="captured", rationale="Ball captured.")
@@ -1343,6 +1571,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "capture_state": capture.to_dict(),
                     "zone_score": zone_score.to_dict() if zone_score else {},
                     "handoff_kind": "secure_capture",
+                    **_approach_result_payload(),
                 }
             soft_capture_handoff_ready = bool(
                 capture
@@ -1358,6 +1587,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "zone_score": zone_score.to_dict() if zone_score else {},
                     "soft_capture_handoff": True,
                     "handoff_kind": "soft_capture",
+                    **_approach_result_payload(),
                 }
             handoff_near_zone_control = False
             if robot_pose and ball_pose:
@@ -1482,6 +1712,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "zone_score": last_zone_payload,
             "zone_edge_correction_eligible": bool(correction_eligible),
             "allow_full_revisit": False,
+            **_approach_result_payload(failure_reason=approach_failure_reason),
         }
         write_json(mission_root / f"{target.id}_capture_timeout.json", timeout_payload)
         return False, timeout_payload
@@ -2498,6 +2729,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         resume_with_place_controller = False
         resume_with_place_loss_revisit = False
         target_start_monotonic = time.monotonic()
+        approach_memory: dict[str, Any] = {}
 
         def _retention_kwargs(payload: dict[str, Any] | None) -> dict[str, Any]:
             if not isinstance(payload, dict):
@@ -2523,6 +2755,50 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "release_gate_blocked_reason": clean_text(payload.get("release_gate_blocked_reason"), "none"),
             }
 
+        def _approach_kwargs(payload: dict[str, Any] | None) -> dict[str, Any]:
+            if isinstance(payload, dict):
+                current = {
+                "approach_side_verdict": payload.get("approach_side_verdict", {})
+                if isinstance(payload.get("approach_side_verdict"), dict)
+                else {},
+                "staging_pose_reached": bool(payload.get("staging_pose_reached", False)),
+                "entered_goal_side_before_capture": bool(payload.get("entered_goal_side_before_capture", False)),
+                "first_contact_push_alignment_deg": clean_number(payload.get("first_contact_push_alignment_deg")),
+                "push_direction_yaw_deg": float(clean_number(payload.get("push_direction_yaw_deg")) or 0.0),
+                    "stage_time_s": float(clean_number(payload.get("stage_time_s")) or 0.0),
+                    "approach_failure_reason": clean_text(payload.get("approach_failure_reason")),
+                }
+                if current["approach_side_verdict"]:
+                    existing_verdict = approach_memory.get("approach_side_verdict")
+                    current_pass = bool(current["approach_side_verdict"].get("pass", False))
+                    existing_pass = bool(existing_verdict.get("pass", False)) if isinstance(existing_verdict, dict) else True
+                    if not isinstance(existing_verdict, dict) or not existing_verdict or (not current_pass) or existing_pass:
+                        approach_memory["approach_side_verdict"] = dict(current["approach_side_verdict"])
+                if current["staging_pose_reached"]:
+                    approach_memory["staging_pose_reached"] = True
+                if current["entered_goal_side_before_capture"]:
+                    approach_memory["entered_goal_side_before_capture"] = True
+                if current["first_contact_push_alignment_deg"] is not None and clean_number(approach_memory.get("first_contact_push_alignment_deg")) is None:
+                    approach_memory["first_contact_push_alignment_deg"] = current["first_contact_push_alignment_deg"]
+                if current["push_direction_yaw_deg"] or "push_direction_yaw_deg" in payload:
+                    approach_memory["push_direction_yaw_deg"] = current["push_direction_yaw_deg"]
+                if current["stage_time_s"] > 0.0:
+                    approach_memory["stage_time_s"] = current["stage_time_s"]
+                if current["approach_failure_reason"] and not clean_text(approach_memory.get("approach_failure_reason")):
+                    approach_memory["approach_failure_reason"] = current["approach_failure_reason"]
+            return {
+                "approach_side_verdict": (
+                    dict(approach_memory["approach_side_verdict"])
+                    if isinstance(approach_memory.get("approach_side_verdict"), dict)
+                    else {}
+                ),
+                "staging_pose_reached": bool(approach_memory.get("staging_pose_reached", False)),
+                "entered_goal_side_before_capture": bool(approach_memory.get("entered_goal_side_before_capture", False)),
+                "first_contact_push_alignment_deg": clean_number(approach_memory.get("first_contact_push_alignment_deg")),
+                "push_direction_yaw_deg": float(clean_number(approach_memory.get("push_direction_yaw_deg")) or 0.0),
+                "stage_time_s": float(clean_number(approach_memory.get("stage_time_s")) or 0.0),
+                "approach_failure_reason": clean_text(approach_memory.get("approach_failure_reason")),
+            }
         def _ownership_kwargs(payload: dict[str, Any] | None) -> dict[str, Any]:
             if not isinstance(payload, dict):
                 return {}
@@ -2622,6 +2898,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 attempt_kind = "place_loss_revisit"
             else:
                 attempt_kind = "initial_visit" if not visit_completed_once else "retry_visit"
+            enable_goal_side_stage = attempt_kind in {"initial_visit", "retry_visit", "place_loss_revisit"}
 
             if place_controller_reentry_attempt:
                 place_controller_reentry_count += 1
@@ -2780,7 +3057,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     state_history_path=state_history_path,
                     mission_root=mission_root,
                     prefer_zone_recovery=direct_recapture_attempt or force_local_capture_attempt,
+                    enable_goal_side_stage=enable_goal_side_stage,
                 )
+                _approach_kwargs(capture_payload)
                 if not capture_pass:
                     capture_failure_reason = str(capture_payload.get("failure_reason", "capture_failed"))
                     capture_failure_stage = str(capture_payload.get("failure_stage", "capture"))
@@ -2837,6 +3116,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             **_retention_kwargs(normalized_capture_failure),
                             **_settle_kwargs(normalized_capture_failure),
                             **_control_diag_kwargs(normalized_capture_failure),
+                            **_approach_kwargs(normalized_capture_failure),
                         )
                     self._safe_stop()
                     self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
@@ -2919,6 +3199,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_retention_kwargs(capture_payload),
                     **_settle_kwargs(capture_payload),
                     **_control_diag_kwargs(capture_payload),
+                    **_approach_kwargs(capture_payload),
                 )
 
             place_pass, place_payload = self._place_target(
@@ -2979,6 +3260,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_retention_kwargs(place_payload),
                     **_settle_kwargs(place_payload),
                     **_control_diag_kwargs(place_payload),
+                    **_approach_kwargs(capture_payload),
                 )
 
             failure_reason = str(place_payload.get("failure_reason", "place_failed"))
@@ -3020,6 +3302,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_retention_kwargs(place_payload),
                     **_settle_kwargs(place_payload),
                     **_control_diag_kwargs(place_payload),
+                    **_approach_kwargs(capture_payload),
                 )
             self._safe_stop()
             self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
@@ -3162,6 +3445,17 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             settle_no_chase_activated = bool(final_result.get("settle_no_chase_activated", False))
             settle_no_chase_exit_reason = clean_text(final_result.get("settle_no_chase_exit_reason"), "none")
             release_gate_blocked_reason = clean_text(final_result.get("release_gate_blocked_reason"), "none")
+            approach_side_verdict = (
+                final_result.get("approach_side_verdict", {})
+                if isinstance(final_result.get("approach_side_verdict"), dict)
+                else {}
+            )
+            staging_pose_reached = bool(final_result.get("staging_pose_reached", False))
+            entered_goal_side_before_capture = bool(final_result.get("entered_goal_side_before_capture", False))
+            first_contact_push_alignment = clean_number(final_result.get("first_contact_push_alignment_deg"))
+            push_direction_yaw_deg = float(clean_number(final_result.get("push_direction_yaw_deg")) or 0.0)
+            stage_time_s = float(clean_number(final_result.get("stage_time_s")) or 0.0)
+            approach_failure_reason = clean_text(final_result.get("approach_failure_reason"))
             final_inside_retrieval_corral = bool(final_result.get("final_inside_retrieval_corral", False))
             final_center_inside_zone = bool(final_result.get("final_center_inside_zone", False))
             ball_stopped_in_corral = bool(final_result.get("ball_stopped_in_corral", False))
@@ -3243,6 +3537,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "settle_no_chase_activated": settle_no_chase_activated,
                 "settle_no_chase_exit_reason": settle_no_chase_exit_reason,
                 "release_gate_blocked_reason": release_gate_blocked_reason,
+                "approach_side_verdict": approach_side_verdict,
+                "staging_pose_reached": staging_pose_reached,
+                "entered_goal_side_before_capture": entered_goal_side_before_capture,
+                "first_contact_push_alignment_deg": first_contact_push_alignment,
+                "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
+                "stage_time_s": round(stage_time_s, 6),
+                "approach_failure_reason": approach_failure_reason,
                 "stopped_with_ball_captured": stopped_with_ball_captured,
                 "release_started_with_capture": release_started_with_capture,
                 "stop_capture_state": stop_capture_state,
@@ -3298,6 +3599,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "settle_no_chase_activated": settle_no_chase_activated,
                 "settle_no_chase_exit_reason": settle_no_chase_exit_reason,
                 "release_gate_blocked_reason": release_gate_blocked_reason,
+                "approach_side_verdict": approach_side_verdict,
+                "staging_pose_reached": staging_pose_reached,
+                "entered_goal_side_before_capture": entered_goal_side_before_capture,
+                "first_contact_push_alignment_deg": first_contact_push_alignment,
+                "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
+                "stage_time_s": round(stage_time_s, 6),
+                "approach_failure_reason": approach_failure_reason,
                 "stopped_with_ball_captured": stopped_with_ball_captured,
                 "release_started_with_capture": release_started_with_capture,
                 "stop_capture_state": stop_capture_state,
@@ -3344,6 +3652,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "settle_no_chase_activated_count": 1 if settle_no_chase_activated else 0,
                     "settle_no_chase_exit_reasons": [settle_no_chase_exit_reason] if settle_no_chase_exit_reason and settle_no_chase_exit_reason != "none" else [],
                     "release_gate_blocked_reasons": [release_gate_blocked_reason] if release_gate_blocked_reason and release_gate_blocked_reason != "none" else [],
+                    "approach_side_pass_count": 1 if bool(approach_side_verdict.get("pass", False)) else 0,
+                    "approach_side_fail_count": 0 if bool(approach_side_verdict.get("pass", False)) else 1,
+                    "entered_goal_side_before_capture_count": 1 if entered_goal_side_before_capture else 0,
+                    "staging_pose_reached_count": 1 if staging_pose_reached else 0,
+                    "first_contact_push_alignment_avg_deg": round(float(first_contact_push_alignment or 0.0), 6),
                     "capture_loss_count_total": capture_loss_count,
                     "stopped_with_ball_captured_count": 1 if stopped_with_ball_captured else 0,
                     "release_started_with_capture_count": 1 if release_started_with_capture else 0,
@@ -3374,6 +3687,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "settle_no_chase_activated": settle_no_chase_activated,
                         "settle_no_chase_exit_reason": settle_no_chase_exit_reason,
                         "release_gate_blocked_reason": release_gate_blocked_reason,
+                        "approach_side_verdict": approach_side_verdict,
+                        "staging_pose_reached": staging_pose_reached,
+                        "entered_goal_side_before_capture": entered_goal_side_before_capture,
+                        "first_contact_push_alignment_deg": first_contact_push_alignment,
+                        "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
+                        "stage_time_s": round(stage_time_s, 6),
+                        "approach_failure_reason": approach_failure_reason,
                         "placed_count": summary["placed_count"],
                         "capture_loss_count": capture_loss_count,
                         "zone_edge_correction_count": zone_edge_correction_count,
@@ -3467,6 +3787,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--zone-model-sdf", default=str(DEFAULT_ZONE_MODEL_SDF))
     parser.add_argument("--visit-runtime-json", default=str(DEFAULT_VISIT_RUNTIME_STATE_PATH))
     parser.add_argument("--gather-runtime-json", default=str(DEFAULT_GATHER_RUNTIME_STATE_PATH))
+    parser.add_argument("--target-layout-json", default="")
     parser.add_argument("--motion-loop-hz", type=float, default=10.0)
     parser.add_argument("--keep-environment", action="store_true")
     parser.add_argument("--cleanup-mission-models", action="store_true")

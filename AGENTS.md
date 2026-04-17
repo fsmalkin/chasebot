@@ -46,6 +46,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Visible ball campaign | `scripts/run_llm_visible_ball_campaign.ps1` |
 | Visit mission repeat | `scripts/run_visit_mission_repeatability.ps1` |
 | Corral surface calibration | `scripts/run_corral_surface_calibration.ps1 -RunsPerLane 3` |
+| Goal-side matrix | `scripts/run_gather_goal_side_matrix.ps1` |
 | Route-planning parallel soak | `scripts/run_route_planning_parallel_soak.ps1 -Workers 2 -RunsPerWorker 1` |
 | Dashboard service | `scripts/run_dashboard_service.ps1` |
 | Dashboard validation | `scripts/run_dashboard_validation.ps1` |

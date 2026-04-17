@@ -58,6 +58,7 @@ def _install_world_stream_stubs() -> None:
     if "numpy" not in sys.modules:
         np_stub = ModuleType("numpy")
         np_stub.uint8 = int
+        np_stub.isscalar = lambda value: isinstance(value, (int, float, complex, bool, str, bytes))
         np_stub.full = lambda *args, **kwargs: None
         np_stub.zeros = lambda *args, **kwargs: None
         np_stub.frombuffer = lambda *_args, **_kwargs: b""
@@ -1626,6 +1627,80 @@ def test_request_scenario_run_accepts_world_and_surface_overrides(monkeypatch, t
     assert payload["surface_profile"] == "short_grass"
     assert controller.pending_scenario_overrides["world_file"] == "yolo_test_world_v6_clean_uat_short_grass.world"
     assert controller.pending_scenario_overrides["surface_profile"] == "short_grass"
+    assert started
+
+
+def test_request_start_accepts_environment_profile_overrides(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["environment_state"] = "stopped"
+    controller._refresh_control_plane_state = lambda force=False: None
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            started.append(self)
+
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_start(
+        {
+            "scenario_id": "corral_single_ball_place",
+            "world_file": "yolo_test_world_v6_clean_uat_short_grass.world",
+            "surface_profile": "short_grass",
+        }
+    )
+
+    assert status == 202
+    assert payload["accepted"] is True
+    assert controller.state["world_file"] == "yolo_test_world_v6_clean_uat_short_grass.world"
+    assert controller.state["surface_profile"] == "short_grass"
+    assert controller.state["robot_sdf_name"] == dashboard_service.CORRAL_ROBOT_SDF_NAME
+    assert started
+
+
+def test_request_reset_sim_accepts_environment_profile_overrides(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["environment_state"] = "environment_ready"
+    controller._refresh_control_plane_state = lambda force=False: None
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            started.append(self)
+
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_reset_sim(
+        {
+            "scenario_id": "gather_three_ball_zone",
+            "world_file": "yolo_test_world_v6_clean_uat_short_turf.world",
+            "surface_profile": "short_turf",
+        }
+    )
+
+    assert status == 202
+    assert payload["accepted"] is True
+    assert controller.state["world_file"] == "yolo_test_world_v6_clean_uat_short_turf.world"
+    assert controller.state["surface_profile"] == "short_turf"
+    assert controller.state["robot_sdf_name"] == dashboard_service.CORRAL_ROBOT_SDF_NAME
     assert started
 
 

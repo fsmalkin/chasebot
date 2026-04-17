@@ -323,6 +323,98 @@ def test_run_can_cleanup_mission_models_when_requested(tmp_path, monkeypatch):
     assert cleanup_calls[0]["compose_project"] == "proj"
 
 
+def test_run_target_uses_goal_side_stage_for_initial_visit_and_skips_it_on_local_recapture(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.max_retries_per_target = 1
+    runner.gather_runtime_state.update({"remaining_targets": [runner.targets[0].id], "placed_targets": []})
+    runner.visit_runtime_state.update({"remaining_targets": [runner.targets[0].id], "visited_targets": []})
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    call_flags: list[tuple[bool, bool]] = []
+
+    monkeypatch.setattr(gather_runner, "fetch_dashboard_state", lambda dashboard_url, timeout_s=0: {"brain": {}, "last_feedback": ""})
+    monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s=30.0: {})
+    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: None)
+    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_pass"))
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: {})
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_append_runtime_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 0.73, "y": 0.0, "z": 0.05})
+
+    def fake_capture_target(*, prefer_zone_recovery: bool, enable_goal_side_stage: bool, **kwargs):
+        call_flags.append((prefer_zone_recovery, enable_goal_side_stage))
+        if len(call_flags) == 1:
+            return False, {
+                "pass": False,
+                "failure_reason": "capture_timeout",
+                "failure_stage": "capture",
+                "capture_state": {},
+                "zone_score": {},
+                "approach_side_verdict": {"pass": True, "reason": ""},
+                "staging_pose_reached": True,
+                "entered_goal_side_before_capture": False,
+                "first_contact_push_alignment_deg": 5.0,
+                "push_direction_yaw_deg": 0.0,
+                "stage_time_s": 0.5,
+                "approach_failure_reason": "",
+            }
+        return True, {
+            "pass": True,
+            "capture_state": {"captured": True, "ball_x_m": 0.18, "ball_y_m": 0.0},
+            "zone_score": {"center_inside_zone": True, "center_inside_retrieval_corral": True},
+            "final_ball_pose": {"x": 2.45, "y": 0.0, "z": 0.05},
+            "handoff_kind": "secure_capture",
+            "stopped_with_ball_captured": True,
+            "release_started_with_capture": True,
+            "stop_capture_state": {"captured": True},
+            "release_capture_state": {"captured": True},
+            "clean_retention_pass": True,
+            "final_inside_retrieval_corral": True,
+            "final_center_inside_zone": True,
+            "ball_stopped_in_corral": True,
+            "rolled_away_after_release": False,
+            "settled_in_corral_pass": True,
+            "settle_metrics": {
+                "final_inside_retrieval_corral": True,
+                "final_center_inside_zone": True,
+                "ball_stopped_in_corral": True,
+                "rolled_away_after_release": False,
+                "settled_in_corral_pass": True,
+                "settle_exit_reason": "settled",
+                "release_recontact_count": 0,
+            },
+            "approach_side_verdict": {"pass": True, "reason": ""},
+            "staging_pose_reached": True,
+            "entered_goal_side_before_capture": False,
+            "first_contact_push_alignment_deg": 5.0,
+            "push_direction_yaw_deg": 0.0,
+            "stage_time_s": 0.5,
+            "approach_failure_reason": "",
+        }
+
+    monkeypatch.setattr(runner, "_capture_target", fake_capture_target)
+
+    result = runner._run_target(
+        session_id="session-1",
+        target=target,
+        route_index=1,
+        gather_sequence_path=tmp_path / "gather_sequence.jsonl",
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert call_flags == [(False, True), (True, False)]
+    assert result["pass"] is True
+    assert result["attempts"] == 2
+    assert result["settled_in_corral_pass"] is True
+    assert result["approach_side_verdict"] == {"pass": True, "reason": ""}
+
+
 def test_run_final_corral_audit_requires_stable_window_for_all_three_targets(tmp_path, monkeypatch):
     runner = _make_three_ball_runner(tmp_path, monkeypatch)
     runner.args.poll_s = 0.25
@@ -361,6 +453,58 @@ def test_run_final_corral_audit_requires_stable_window_for_all_three_targets(tmp
     assert audit["final_three_ball_corral_pass"] is True
     assert set(audit["final_corral_audit"].keys()) == {"ball_a", "ball_b", "ball_c"}
     assert all(entry["inside_retrieval_corral"] for entry in audit["final_corral_audit"].values())
+
+
+def test_capture_target_goal_side_stage_timeout_returns_stage_failure(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 10.0
+    runner.args.poll_s = 0.5
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    manual_drive_calls: list[dict[str, object]] = []
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: manual_drive_calls.append({"args": args, **kwargs}))
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: (
+            {},
+            {"x": 0.0, "y": 0.0, "yaw": 0.0},
+            {"x": 1.0, "y": 0.0, "z": 0.05},
+        ),
+    )
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-timeout",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    timeout_path = mission_root / f"{target.id}_stage_timeout.json"
+    timeout_payload = read_json(timeout_path)
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "stage"
+    assert payload["failure_reason"] == "goal_side_stage_timeout"
+    assert payload["approach_failure_reason"] == "staging_pose_not_reached"
+    assert timeout_payload["failure_stage"] == "stage"
+    assert timeout_payload["failure_reason"] == "goal_side_stage_timeout"
+    assert any(call["mode"].startswith("stage_") for call in manual_drive_calls)
 
 
 def test_run_for_three_ball_zone_uses_final_corral_audit_not_last_target_only(tmp_path, monkeypatch):

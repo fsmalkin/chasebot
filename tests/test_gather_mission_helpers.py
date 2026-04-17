@@ -13,8 +13,10 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from gather_mission_helpers import CaptureEnvelope  # noqa: E402
 from gather_mission_helpers import DEFAULT_MULTI_BALL_SPAWN_RADIUS_M  # noqa: E402
+from gather_mission_helpers import DEFAULT_FIRST_CONTACT_ALIGNMENT_PASS_DEG  # noqa: E402
 from gather_mission_helpers import DEFAULT_ZONE_WORLD_X  # noqa: E402
 from gather_mission_helpers import DEFAULT_ZONE_WORLD_Y  # noqa: E402
+from gather_mission_helpers import approach_side_verdict  # noqa: E402
 from gather_mission_helpers import build_gather_targets  # noqa: E402
 from gather_mission_helpers import build_scorecard_markdown  # noqa: E402
 from gather_mission_helpers import build_zone_spec  # noqa: E402
@@ -23,9 +25,12 @@ from gather_mission_helpers import capture_snapshot  # noqa: E402
 from gather_mission_helpers import clean_retention_pass  # noqa: E402
 from gather_mission_helpers import compute_place_command  # noqa: E402
 from gather_mission_helpers import compute_capture_command  # noqa: E402
+from gather_mission_helpers import compute_stage_command  # noqa: E402
+from gather_mission_helpers import first_contact_push_alignment_deg  # noqa: E402
 from gather_mission_helpers import final_three_ball_corral_pass  # noqa: E402
 from gather_mission_helpers import front_escape_risk  # noqa: E402
 from gather_mission_helpers import gather_run_pass  # noqa: E402
+from gather_mission_helpers import goal_side_approach_snapshot  # noqa: E402
 from gather_mission_helpers import marginal_capture  # noqa: E402
 from gather_mission_helpers import pose_delta_m  # noqa: E402
 from gather_mission_helpers import release_ready  # noqa: E402
@@ -87,6 +92,80 @@ def test_zone_edge_correction_eligible_accepts_inside_zone_or_near_zone_recaptur
     assert zone_edge_correction_eligible(capture=capture, zone_score=inside_zone_score, zone=zone) is True
     assert zone_edge_correction_eligible(capture=capture, zone_score=near_zone_score, zone=zone) is True
     assert zone_edge_correction_eligible(capture=capture, zone_score=far_zone_score, zone=zone) is False
+
+
+def test_goal_side_approach_snapshot_enforces_staging_and_goal_side_geometry():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 1.0, "y": 0.0}
+
+    goal_side_snapshot = goal_side_approach_snapshot(
+        {"x": 1.12, "y": 0.0, "yaw": 0.0},
+        ball_pose,
+        zone=zone,
+    )
+    assert goal_side_snapshot is not None
+    assert goal_side_snapshot["robot_on_goal_side"] is True
+    assert goal_side_snapshot["entered_goal_side_before_capture"] is True
+    assert goal_side_snapshot["approach_failure_reason"] == "entered_goal_side_before_capture"
+
+    staged_snapshot = goal_side_approach_snapshot(
+        {"x": 0.55, "y": 0.0, "yaw": 0.0},
+        ball_pose,
+        zone=zone,
+    )
+    assert staged_snapshot is not None
+    assert staged_snapshot["staging_pose_reached"] is True
+    assert staged_snapshot["robot_on_goal_side"] is False
+    assert staged_snapshot["robot_longitudinal_projection_m"] == pytest.approx(-0.45, abs=1e-6)
+
+    lateral_miss_snapshot = goal_side_approach_snapshot(
+        {"x": 0.55, "y": 0.19, "yaw": 0.0},
+        ball_pose,
+        zone=zone,
+    )
+    assert lateral_miss_snapshot is not None
+    assert lateral_miss_snapshot["staging_pose_reached"] is False
+    assert lateral_miss_snapshot["robot_lateral_error_m"] == pytest.approx(0.19, abs=1e-6)
+
+    aligned_command = compute_stage_command({"x": 0.55, "y": 0.0, "yaw": 0.0}, ball_pose, zone=zone)
+    assert aligned_command is not None
+    assert aligned_command.mode == "stage_ready"
+
+    yaw_miss_command = compute_stage_command({"x": 0.55, "y": 0.0, "yaw": math.radians(30.0)}, ball_pose, zone=zone)
+    assert yaw_miss_command is not None
+    assert yaw_miss_command.mode == "stage_align"
+
+
+def test_first_contact_alignment_verdict_passes_and_fails_on_angle_gate():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 1.0, "y": 0.0}
+
+    aligned_robot_pose = {"x": 0.55, "y": 0.0, "yaw": math.radians(DEFAULT_FIRST_CONTACT_ALIGNMENT_PASS_DEG - 5.0)}
+    aligned_angle = first_contact_push_alignment_deg(aligned_robot_pose, ball_pose, zone=zone)
+    assert aligned_angle == pytest.approx(DEFAULT_FIRST_CONTACT_ALIGNMENT_PASS_DEG - 5.0, abs=1e-6)
+    assert (
+        approach_side_verdict(
+            entered_goal_side_before_capture=False,
+            staging_pose_reached=True,
+            first_contact_push_alignment_deg=aligned_angle,
+        )
+        == {"pass": True, "reason": ""}
+    )
+
+    misaligned_robot_pose = {"x": 0.55, "y": 0.0, "yaw": math.radians(DEFAULT_FIRST_CONTACT_ALIGNMENT_PASS_DEG + 5.0)}
+    misaligned_angle = first_contact_push_alignment_deg(misaligned_robot_pose, ball_pose, zone=zone)
+    assert misaligned_angle == pytest.approx(DEFAULT_FIRST_CONTACT_ALIGNMENT_PASS_DEG + 5.0, abs=1e-6)
+    assert approach_side_verdict(
+        entered_goal_side_before_capture=False,
+        staging_pose_reached=True,
+        first_contact_push_alignment_deg=misaligned_angle,
+    ) == {"pass": False, "reason": "misaligned_first_contact"}
+
+    assert approach_side_verdict(
+        entered_goal_side_before_capture=True,
+        staging_pose_reached=True,
+        first_contact_push_alignment_deg=aligned_angle,
+    ) == {"pass": False, "reason": "entered_goal_side_before_capture"}
 
 
 def test_capture_snapshot_accepts_wider_lateral_capture_with_broader_spur():

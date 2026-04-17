@@ -44,14 +44,18 @@ def test_ensure_environment_ready_starts_dashboard_when_stopped(monkeypatch):
             return 200, next(state_responses)
         if url.endswith("/api/env/start"):
             assert method == "POST"
-            assert payload == {}
+            assert payload == {"scenario_id": "corral_single_ball_place", "world_file": "short_turf.world"}
             return 202, {"accepted": True, "message": "environment start queued"}
         raise AssertionError(f"unexpected url: {url}")
 
     monkeypatch.setattr(repeatability_runner, "http_json", fake_http_json)
     monkeypatch.setattr(repeatability_runner.time, "sleep", lambda *_args, **_kwargs: None)
 
-    repeatability_runner.ensure_environment_ready("http://127.0.0.1:8860", timeout_s=5.0)
+    repeatability_runner.ensure_environment_ready(
+        "http://127.0.0.1:8860",
+        timeout_s=5.0,
+        startup_payload={"scenario_id": "corral_single_ball_place", "world_file": "short_turf.world"},
+    )
 
     assert calls == [
         ("GET", "http://127.0.0.1:8860/api/state"),
@@ -59,6 +63,84 @@ def test_ensure_environment_ready_starts_dashboard_when_stopped(monkeypatch):
         ("GET", "http://127.0.0.1:8860/api/state"),
         ("GET", "http://127.0.0.1:8860/api/state"),
     ]
+
+
+def test_prepare_direct_environment_resets_ready_session_with_profile(monkeypatch):
+    responses = iter(
+        [
+            (200, {"environment_state": "environment_ready", "session_id": "old-session"}),
+            (202, {"accepted": True, "message": "sim reset queued"}),
+            (200, {"environment_state": "starting", "session_id": "old-session"}),
+            (200, {"environment_state": "environment_ready", "session_id": "new-session"}),
+        ]
+    )
+    calls: list[tuple[str, str, object]] = []
+
+    def fake_http_json(url: str, *, timeout_s: float, method: str = "GET", payload=None):
+        calls.append((method, url, payload))
+        return next(responses)
+
+    monkeypatch.setattr(repeatability_runner, "http_json", fake_http_json)
+    monkeypatch.setattr(repeatability_runner.time, "sleep", lambda *_args, **_kwargs: None)
+
+    args = repeatability_runner.argparse.Namespace(
+        dashboard_url="http://127.0.0.1:8860",
+        scenario_id="corral_single_ball_place",
+        world_file="yolo_test_world_v6_clean_uat_short_turf.world",
+        surface_profile="short_turf",
+        timeout_s=30.0,
+    )
+
+    ready_state = repeatability_runner.prepare_direct_environment(args)
+
+    assert ready_state["session_id"] == "new-session"
+    assert calls[1] == (
+        "POST",
+        "http://127.0.0.1:8860/api/sim/reset",
+        {
+            "scenario_id": "corral_single_ball_place",
+            "world_file": "yolo_test_world_v6_clean_uat_short_turf.world",
+            "surface_profile": "short_turf",
+        },
+    )
+
+
+def test_prepare_direct_environment_starts_stopped_session_with_profile(monkeypatch):
+    responses = iter(
+        [
+            (200, {"environment_state": "stopped", "session_id": ""}),
+            (200, {"environment_state": "stopped"}),
+            (202, {"accepted": True, "message": "environment start queued"}),
+            (200, {"environment_state": "starting", "session_id": ""}),
+            (200, {"environment_state": "environment_ready", "session_id": "fresh-session"}),
+            (200, {"environment_state": "environment_ready", "session_id": "fresh-session"}),
+        ]
+    )
+    calls: list[tuple[str, str, object]] = []
+
+    def fake_http_json(url: str, *, timeout_s: float, method: str = "GET", payload=None):
+        calls.append((method, url, payload))
+        return next(responses)
+
+    monkeypatch.setattr(repeatability_runner, "http_json", fake_http_json)
+    monkeypatch.setattr(repeatability_runner.time, "sleep", lambda *_args, **_kwargs: None)
+
+    args = repeatability_runner.argparse.Namespace(
+        dashboard_url="http://127.0.0.1:8860",
+        scenario_id="gather_three_ball_zone",
+        world_file="yolo_test_world_v6_clean_uat_short_turf.world",
+        surface_profile="short_turf",
+        timeout_s=30.0,
+    )
+
+    ready_state = repeatability_runner.prepare_direct_environment(args)
+
+    assert ready_state["session_id"] == "fresh-session"
+    assert ("POST", "http://127.0.0.1:8860/api/env/start", {
+        "scenario_id": "gather_three_ball_zone",
+        "world_file": "yolo_test_world_v6_clean_uat_short_turf.world",
+        "surface_profile": "short_turf",
+    }) in calls
 
 
 def test_wait_for_dashboard_slot_waits_until_scenario_not_running(monkeypatch):
@@ -239,6 +321,13 @@ def test_summarize_gather_artifacts_reads_three_ball_final_audit_fields(tmp_path
         "retrieved_count": 3,
         "placed_count": 3,
         "surface_profile": "short_turf",
+        "approach_side_verdict": {"pass": True, "reason": ""},
+        "staging_pose_reached": True,
+        "entered_goal_side_before_capture": False,
+        "first_contact_push_alignment_deg": 11.5,
+        "push_direction_yaw_deg": 0.0,
+        "stage_time_s": 0.75,
+        "approach_failure_reason": "",
         "settle_no_chase_activated": True,
         "settle_no_chase_exit_reason": "corrected",
         "release_gate_blocked_reason": "no_secure_capture",
@@ -257,6 +346,11 @@ def test_summarize_gather_artifacts_reads_three_ball_final_audit_fields(tmp_path
     assert summary["settle_no_chase_exit_reason"] == "corrected"
     assert summary["release_gate_blocked_reason"] == "no_secure_capture"
     assert set(summary["final_corral_audit"].keys()) == {"ball_a", "ball_b", "ball_c"}
+    assert summary["mission_verdict"]["approach_side_verdict"] == {"pass": True, "reason": ""}
+    assert summary["mission_verdict"]["entered_goal_side_before_capture"] is False
+    assert summary["mission_verdict"]["first_contact_push_alignment_deg"] == 11.5
+    assert summary["summary"]["approach_side_verdict"] == {"pass": True, "reason": ""}
+    assert summary["summary"]["staging_pose_reached"] is True
 
 
 def test_run_dashboard_scenario_once_ignores_stale_error_result(monkeypatch):

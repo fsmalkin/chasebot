@@ -364,6 +364,22 @@ Calibration contract:
 3. emits a lane comparison summary plus a human-readable scorecard
 4. does not promote the operator lane by itself; dashboard promotion still requires a separate one-ball sanity run on the chosen lane
 
+## Gather Goal-Side Matrix
+
+Use this headless harness to exercise the approach-side contract on short turf without the operator dashboard.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_gather_goal_side_matrix.ps1`
+
+Matrix contract:
+
+1. runs `corral_single_ball_place` in direct repeatability mode
+2. uses `short_turf` and a test-only `--target-layout-json` override to place the ball at `+45`, `0`, `-45`, and `180 backside`
+3. forwards the override through `gather_mission_repeatability_runner.py` into `gather_mission_runner.py`
+4. emits a matrix campaign summary plus one repeatability campaign per case
+5. is intended for non-operator headless triage and campaign rollups, not dashboard promotion
+
 ## Headless Milestone Path (Current Preferred)
 
 Use this while iterating before operator-facing GUI rehearsal:
@@ -463,6 +479,12 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<campaign_id>/corral_surface_calibration/campaign_summary.json`
    - `artifacts/session/<campaign_id>/corral_surface_calibration/scorecard.md`
    - `artifacts/session/<campaign_id>/corral_surface_calibration/logs/<surface_profile>.log`
+15. Gather goal-side matrix:
+   - `artifacts/session/<campaign_id>/gather_goal_side_matrix/campaign_summary.json`
+   - `artifacts/session/<campaign_id>/gather_goal_side_matrix/scorecard.md`
+   - `artifacts/session/<campaign_id>/gather_goal_side_matrix/logs/*.log`
+   - `artifacts/session/<campaign_id>/gather_goal_side_matrix/target_layouts/*.json`
+   - `artifacts/session/<campaign_id>_<case>/gather_mission_repeatability/campaign_run_summary.json`
 
 ## Failure Triage Path
 

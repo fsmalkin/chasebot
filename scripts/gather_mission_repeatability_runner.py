@@ -45,6 +45,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gather-runtime-json", default=os.environ.get("CHASECAR_GATHER_RUNTIME_PATH", ""))
     parser.add_argument("--world-file", default=os.environ.get("WORLD_FILE", ""))
     parser.add_argument("--surface-profile", default=os.environ.get("CHASECAR_SURFACE_PROFILE", ""))
+    parser.add_argument("--target-layout-json", default="", help="Test-only target layout override for direct-mode gather runs.")
     parser.add_argument("--execution-mode", choices=("dashboard_scenario", "direct"), default="dashboard_scenario")
     parser.add_argument("--promotion-gate-mode", choices=("strict", "pass_only"), default="pass_only")
     return parser.parse_args()
@@ -63,7 +64,41 @@ def wait_for_dashboard(dashboard_url: str, timeout_s: float) -> None:
     raise RuntimeError("Dashboard API did not become ready before gather repeatability run.")
 
 
-def ensure_environment_ready(dashboard_url: str, timeout_s: float) -> None:
+def _environment_request_payload(args: argparse.Namespace) -> dict[str, object]:
+    payload: dict[str, object] = {"scenario_id": args.scenario_id}
+    if str(args.world_file or "").strip():
+        payload["world_file"] = str(args.world_file).strip()
+    if str(args.surface_profile or "").strip():
+        payload["surface_profile"] = str(args.surface_profile).strip()
+    return payload
+
+
+def wait_for_environment_ready(
+    dashboard_url: str,
+    *,
+    timeout_s: float,
+    previous_session_id: str = "",
+) -> dict[str, object]:
+    deadline = time.monotonic() + max(timeout_s, 30.0)
+    last_state: dict[str, object] = {}
+    while time.monotonic() < deadline:
+        status, current_state = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=10.0)
+        if status == 200:
+            last_state = current_state
+            current_environment_state = str(current_state.get("environment_state", "") or "").strip().lower()
+            current_session_id = str(current_state.get("session_id", "") or "")
+            if current_environment_state == "environment_ready" and (not previous_session_id or current_session_id != previous_session_id):
+                return current_state
+            if current_environment_state == "error":
+                raise RuntimeError(f"Dashboard environment failed to start: {json.dumps(current_state, indent=2, sort_keys=True)}")
+        time.sleep(1.0)
+    raise RuntimeError(
+        "Dashboard environment did not become ready before gather repeatability run. "
+        f"Last state: {json.dumps(last_state, indent=2, sort_keys=True)}"
+    )
+
+
+def ensure_environment_ready(dashboard_url: str, timeout_s: float, *, startup_payload: dict[str, object] | None = None) -> None:
     base_url = dashboard_url.rstrip("/")
     status, state = http_json(f"{base_url}/api/state", timeout_s=10.0)
     if status != 200:
@@ -75,26 +110,13 @@ def ensure_environment_ready(dashboard_url: str, timeout_s: float) -> None:
     status, response = http_json(
         f"{base_url}/api/env/start",
         method="POST",
-        payload={},
+        payload=dict(startup_payload or {}),
         timeout_s=15.0,
     )
     accepted = status in {200, 202} and bool(response.get("accepted", False))
     if not accepted and environment_state != "starting":
         raise RuntimeError(f"Dashboard environment start rejected: {response}")
-
-    deadline = time.monotonic() + max(timeout_s, 30.0)
-    last_state: dict[str, object] = state
-    while time.monotonic() < deadline:
-        status, current_state = http_json(f"{base_url}/api/state", timeout_s=10.0)
-        if status == 200:
-            last_state = current_state
-            current_environment_state = str(current_state.get("environment_state", "") or "").strip().lower()
-            if current_environment_state == "environment_ready":
-                return
-            if current_environment_state == "error":
-                raise RuntimeError(f"Dashboard environment failed to start: {json.dumps(current_state, indent=2, sort_keys=True)}")
-        time.sleep(1.0)
-    raise RuntimeError(f"Dashboard environment did not become ready before gather repeatability run. Last state: {json.dumps(last_state, indent=2, sort_keys=True)}")
+    wait_for_environment_ready(dashboard_url, timeout_s=timeout_s)
 
 
 def wait_for_dashboard_slot(dashboard_url: str, timeout_s: float) -> None:
@@ -122,6 +144,91 @@ def promotion_gate_pass_for_runs(runs: list[dict[str, object]], *, mode: str) ->
     return campaign_pass(runs) and settled_without_revisit
 
 
+def _float_list_from_runs(runs: list[dict[str, object]], key: str) -> list[float]:
+    values: list[float] = []
+    for item in runs:
+        raw_value = item.get(key)
+        if raw_value in {None, ""}:
+            continue
+        try:
+            values.append(float(raw_value))
+        except (TypeError, ValueError):
+            continue
+    return values
+
+
+def _approach_side_rollup(runs: list[dict[str, object]]) -> dict[str, object]:
+    approach_side_pass_flags = [bool(item.get("approach_side_pass", False)) for item in runs]
+    staging_pose_reached_flags = [bool(item.get("staging_pose_reached", False)) for item in runs]
+    entered_goal_side_flags = [bool(item.get("entered_goal_side_before_capture", False)) for item in runs]
+    approach_reasons = sorted(
+        {
+            str(item.get("approach_side_reason", "") or "")
+            for item in runs
+            if str(item.get("approach_side_reason", "") or "").strip()
+        }
+    )
+    approach_failure_reasons = sorted(
+        {
+            str(item.get("approach_failure_reason", "") or "")
+            for item in runs
+            if str(item.get("approach_failure_reason", "") or "").strip()
+        }
+    )
+    first_contact_alignments = _float_list_from_runs(runs, "first_contact_push_alignment_deg")
+    push_direction_yaws = _float_list_from_runs(runs, "push_direction_yaw_deg")
+    stage_times = _float_list_from_runs(runs, "stage_time_s")
+    return {
+        "approach_side_pass_count": sum(1 for flag in approach_side_pass_flags if flag),
+        "approach_side_fail_count": sum(1 for flag in approach_side_pass_flags if not flag),
+        "staging_pose_reached_count": sum(1 for flag in staging_pose_reached_flags if flag),
+        "entered_goal_side_before_capture_count": sum(1 for flag in entered_goal_side_flags if flag),
+        "first_contact_push_alignment_avg_deg": round(sum(first_contact_alignments) / len(first_contact_alignments), 6) if first_contact_alignments else 0.0,
+        "first_contact_push_alignment_min_deg": round(min(first_contact_alignments), 6) if first_contact_alignments else 0.0,
+        "first_contact_push_alignment_max_deg": round(max(first_contact_alignments), 6) if first_contact_alignments else 0.0,
+        "push_direction_yaw_avg_deg": round(sum(push_direction_yaws) / len(push_direction_yaws), 6) if push_direction_yaws else 0.0,
+        "push_direction_yaw_min_deg": round(min(push_direction_yaws), 6) if push_direction_yaws else 0.0,
+        "push_direction_yaw_max_deg": round(max(push_direction_yaws), 6) if push_direction_yaws else 0.0,
+        "stage_time_avg_s": round(sum(stage_times) / len(stage_times), 6) if stage_times else 0.0,
+        "stage_time_min_s": round(min(stage_times), 6) if stage_times else 0.0,
+        "stage_time_max_s": round(max(stage_times), 6) if stage_times else 0.0,
+        "approach_side_reasons": approach_reasons,
+        "approach_failure_reasons": approach_failure_reasons,
+    }
+
+
+def _enrich_run_with_approach_side_fields(run_summary: dict[str, object]) -> dict[str, object]:
+    mission_verdict_path = str(run_summary.get("mission_verdict_path", "") or "")
+    if not mission_verdict_path:
+        return run_summary
+    verdict_path = Path(mission_verdict_path)
+    if not verdict_path.exists():
+        return run_summary
+    verdict = read_json(verdict_path)
+    summary_path = str(run_summary.get("summary_path", "") or "")
+    summary = read_json(Path(summary_path)) if summary_path and Path(summary_path).exists() else {}
+    merged = verdict if isinstance(verdict, dict) and verdict else summary if isinstance(summary, dict) else {}
+    approach_side_verdict = merged.get("approach_side_verdict", {}) if isinstance(merged.get("approach_side_verdict"), dict) else {}
+    run_summary.update(
+        {
+            "approach_side_verdict": approach_side_verdict,
+            "approach_side_pass": bool(approach_side_verdict.get("pass", False)),
+            "approach_side_reason": str(approach_side_verdict.get("reason", "") or ""),
+            "staging_pose_reached": bool(merged.get("staging_pose_reached", run_summary.get("staging_pose_reached", False))),
+            "entered_goal_side_before_capture": bool(
+                merged.get("entered_goal_side_before_capture", run_summary.get("entered_goal_side_before_capture", False))
+            ),
+            "first_contact_push_alignment_deg": float(
+                merged.get("first_contact_push_alignment_deg", run_summary.get("first_contact_push_alignment_deg", 0.0)) or 0.0
+            ),
+            "push_direction_yaw_deg": float(merged.get("push_direction_yaw_deg", run_summary.get("push_direction_yaw_deg", 0.0)) or 0.0),
+            "stage_time_s": float(merged.get("stage_time_s", run_summary.get("stage_time_s", 0.0)) or 0.0),
+            "approach_failure_reason": str(merged.get("approach_failure_reason", run_summary.get("approach_failure_reason", "")) or ""),
+        }
+    )
+    return run_summary
+
+
 def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> dict[str, object]:
     verdict_path = Path(mission_verdict_path)
     mission_root = verdict_path.parent if verdict_path.exists() else None
@@ -133,6 +240,8 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
     summary = read_json(summary_path) if summary_path and summary_path.exists() else {}
     target_results_payload = read_json(target_results_path) if target_results_path and target_results_path.exists() else {}
     target_results = list(target_results_payload.get("targets", [])) if isinstance(target_results_payload.get("targets"), list) else []
+    merged = verdict if verdict else summary
+    approach_side_verdict = merged.get("approach_side_verdict", {}) if isinstance(merged.get("approach_side_verdict"), dict) else {}
 
     return {
         "run_index": run_index,
@@ -195,6 +304,15 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
         "release_recontact_count": int(verdict.get("release_recontact_count", summary.get("release_recontact_count", 0)) or 0),
         "mission_time_s": float(verdict.get("mission_time_s", summary.get("mission_time_s", 0.0)) or 0.0),
         "route_order": list(verdict.get("route_order", summary.get("route_order", [])) or []),
+        "approach_side_verdict": approach_side_verdict,
+        "approach_side_pass": bool(approach_side_verdict.get("pass", False)),
+        "approach_side_reason": str(approach_side_verdict.get("reason", "") or ""),
+        "staging_pose_reached": bool(merged.get("staging_pose_reached", False)),
+        "entered_goal_side_before_capture": bool(merged.get("entered_goal_side_before_capture", False)),
+        "first_contact_push_alignment_deg": float(merged.get("first_contact_push_alignment_deg", 0.0) or 0.0),
+        "push_direction_yaw_deg": float(merged.get("push_direction_yaw_deg", 0.0) or 0.0),
+        "stage_time_s": float(merged.get("stage_time_s", 0.0) or 0.0),
+        "approach_failure_reason": str(merged.get("approach_failure_reason", "") or ""),
         "target_results": target_results,
         "mission_verdict": verdict,
         "summary": summary,
@@ -281,6 +399,63 @@ def run_dashboard_scenario_once(args: argparse.Namespace, *, run_index: int) -> 
     raise RuntimeError(f"Dashboard scenario did not finish before timeout. Last state: {json.dumps(last_state, indent=2, sort_keys=True)}")
 
 
+def prepare_direct_environment(args: argparse.Namespace) -> dict[str, object]:
+    base_url = args.dashboard_url.rstrip("/")
+    payload = _environment_request_payload(args)
+    status, state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+    if status != 200:
+        raise RuntimeError("Unable to fetch dashboard state before direct gather run.")
+    environment_state = str(state.get("environment_state", "") or "").strip().lower()
+    previous_session_id = str(state.get("session_id", "") or "")
+    if environment_state == "environment_ready":
+        status, response = http_json(
+            f"{base_url}/api/sim/reset",
+            method="POST",
+            payload=payload,
+            timeout_s=15.0,
+        )
+        if status not in {200, 202} or not bool(response.get("accepted", False)):
+            raise RuntimeError(f"Dashboard sim reset rejected before direct gather run: {response}")
+        return wait_for_environment_ready(
+            args.dashboard_url,
+            timeout_s=max(args.timeout_s, 120.0),
+            previous_session_id=previous_session_id,
+        )
+    if environment_state == "stopped":
+        ensure_environment_ready(
+            args.dashboard_url,
+            timeout_s=max(args.timeout_s, 120.0),
+            startup_payload=payload,
+        )
+        status, ready_state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+        if status != 200:
+            raise RuntimeError("Unable to fetch dashboard state after direct gather environment start.")
+        return ready_state
+    status, stop_response = http_json(
+        f"{base_url}/api/env/stop",
+        method="POST",
+        payload={},
+        timeout_s=15.0,
+    )
+    if status not in {200, 202}:
+        raise RuntimeError(f"Dashboard environment stop rejected before direct gather run: {stop_response}")
+    deadline = time.monotonic() + 180.0
+    while time.monotonic() < deadline:
+        status, current_state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+        if status == 200 and str(current_state.get("environment_state", "") or "").strip().lower() == "stopped":
+            ensure_environment_ready(
+                args.dashboard_url,
+                timeout_s=max(args.timeout_s, 120.0),
+                startup_payload=payload,
+            )
+            status, ready_state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+            if status != 200:
+                raise RuntimeError("Unable to fetch dashboard state after restarting direct gather environment.")
+            return ready_state
+        time.sleep(1.0)
+    raise RuntimeError("Dashboard environment did not stop before restarting direct gather run.")
+
+
 def main() -> int:
     args = parse_args()
     campaign_id = args.campaign_id.strip() or current_utc_stamp()
@@ -324,6 +499,7 @@ def main() -> int:
                     "failure_reason": str(exc),
                 }
         else:
+            prepare_direct_environment(args)
             command = [
                 sys.executable,
                 str(REPO_ROOT / "scripts" / "gather_mission_runner.py"),
@@ -344,6 +520,8 @@ def main() -> int:
                 command.extend(["--visit-runtime-json", args.visit_runtime_json.strip()])
             if args.gather_runtime_json.strip():
                 command.extend(["--gather-runtime-json", args.gather_runtime_json.strip()])
+            if args.target_layout_json.strip():
+                command.extend(["--target-layout-json", args.target_layout_json.strip()])
             proc = subprocess.run(
                 command,
                 cwd=str(REPO_ROOT),
@@ -353,6 +531,7 @@ def main() -> int:
             )
             output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
             run_summary = summarize_gather_run(run_index=run_index, return_code=proc.returncode, output=output)
+            run_summary = _enrich_run_with_approach_side_fields(run_summary)
         output_log_path.write_text(output, encoding="utf-8")
         run_summary["generated_utc"] = utc_now()
         run_summary["output_log_path"] = str(output_log_path)
@@ -360,6 +539,7 @@ def main() -> int:
         runs.append(run_summary)
 
     rollup = summarize_runs(runs)
+    approach_side_rollup = _approach_side_rollup(runs)
     promotion_gate_pass = promotion_gate_pass_for_runs(runs, mode=args.promotion_gate_mode)
     summary = {
         "generated_utc": utc_now(),
@@ -370,11 +550,13 @@ def main() -> int:
         "execution_mode": args.execution_mode,
         "requested_world_file": args.world_file.strip(),
         "requested_surface_profile": args.surface_profile.strip(),
+        "requested_target_layout_json": args.target_layout_json.strip(),
         "required_green_runs": max(args.runs, 1),
         "promotion_gate_mode": args.promotion_gate_mode,
         "promotion_gate_pass": promotion_gate_pass,
         "history_path": str(history_path),
         "runs": runs,
+        **approach_side_rollup,
         **rollup,
     }
     write_json(campaign_root / "campaign_run_summary.json", summary)
@@ -383,6 +565,20 @@ def main() -> int:
         summary=summary,
         runs=runs,
     )
+    approach_side_lines = [
+        "",
+        "## Approach Side Rollup",
+        "",
+        f"- Approach side pass/fail: `{summary.get('approach_side_pass_count', 0)}/{summary.get('approach_side_fail_count', 0)}`",
+        f"- Staging pose reached: `{summary.get('staging_pose_reached_count', 0)}/{max(len(runs), 1)}`",
+        f"- Entered goal side before capture: `{summary.get('entered_goal_side_before_capture_count', 0)}/{max(len(runs), 1)}`",
+        f"- First contact push alignment avg/min/max: `{summary.get('first_contact_push_alignment_avg_deg', 0.0):.3f}deg / {summary.get('first_contact_push_alignment_min_deg', 0.0):.3f}deg / {summary.get('first_contact_push_alignment_max_deg', 0.0):.3f}deg`",
+        f"- Push direction yaw avg/min/max: `{summary.get('push_direction_yaw_avg_deg', 0.0):.3f}deg / {summary.get('push_direction_yaw_min_deg', 0.0):.3f}deg / {summary.get('push_direction_yaw_max_deg', 0.0):.3f}deg`",
+        f"- Stage time avg/min/max: `{summary.get('stage_time_avg_s', 0.0):.3f}s / {summary.get('stage_time_min_s', 0.0):.3f}s / {summary.get('stage_time_max_s', 0.0):.3f}s`",
+        f"- Approach-side reasons: `{', '.join(summary.get('approach_side_reasons', [])) if summary.get('approach_side_reasons') else 'none'}`",
+        f"- Approach failure reasons: `{', '.join(summary.get('approach_failure_reasons', [])) if summary.get('approach_failure_reasons') else 'none'}`",
+    ]
+    scorecard = scorecard.rstrip() + "\n".join(approach_side_lines) + "\n"
     (campaign_root / "scorecard.md").write_text(scorecard, encoding="utf-8")
     print(f"GATHER_MISSION_REPEATABILITY_SUMMARY={campaign_root / 'campaign_run_summary.json'}")
     print(json.dumps(summary, indent=2, sort_keys=True))
