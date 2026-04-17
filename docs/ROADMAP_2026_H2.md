@@ -331,8 +331,12 @@ Work:
    - ball stops there
    - ball does not meaningfully roll away
 5. keep `visit_route_planning` green while multi-ball gather work lands
-6. stabilize the shared short-turf place/release behavior so the first gathered ball stops failing before the full three-ball gate
-7. keep surface and ball fidelity calibration available as a realism follow-up rather than the blocking lane
+6. use the intentionally wider three-ball spawn layout so the gather milestone exercises real travel and sequencing:
+   - `ball_b`: `1.55 m` forward
+   - `ball_a` and `ball_c`: `2.35 m` forward, `+/- 0.85 m` lateral
+7. keep non-push travel intentionally fast so the robot moves on quickly once a ball is practically retrieved
+8. stabilize the wider/faster `short_turf` lane until the later target legs stop timing out
+9. keep surface and ball fidelity calibration available as a realism follow-up rather than the blocking lane
 
 Current truth:
 
@@ -354,6 +358,16 @@ Current truth:
    - `artifacts/session/pre_tune_surface_calibration/corral_surface_calibration/campaign_summary.json`
    - `artifacts/session/halfstep_probe_surface_calibration/corral_surface_calibration/campaign_summary.json`
 8. that unresolved fidelity question is now treated as a known follow-up, not the gate in front of multi-ball gather
+9. the active three-ball checkpoint now uses a wider gather layout and faster non-push transit
+10. the protected regression floor stayed green after the faster transit tuning:
+   - `artifacts/session/20260417T040105820076Z/visit_mission/20260417T040503Z/mission_verdict.json`
+11. the earlier delay before starting the second ball is materially improved in the latest live trace:
+   - `ball_b` completed at `04:02:20.475Z`
+   - `ball_a` visit attempt started at `04:02:21.599Z`
+   - gap: about `1.1 s`
+   - trace: `artifacts/session/20260417T040105820076Z/gather_mission/20260417T040116Z/gather_sequence.jsonl`
+12. the current blocker is no longer the old first-ball hesitation; the wider/faster live run now fails later on `ball_a` with `visit_target_timeout` / `waypoint_vision_diverged`:
+   - `artifacts/session/20260417T040027Z/gather_mission_repeatability/campaign_run_summary.json`
 
 Acceptance:
 

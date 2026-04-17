@@ -150,6 +150,9 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
                 "zone_edge_correction_count": 2,
                 "place_controller_reentry_count": 1,
                 "post_visit_revisit_count": 0,
+                "settle_no_chase_activated": True,
+                "settle_no_chase_exit_reason": "settled",
+                "release_gate_blocked_reason": "none",
                 "stopped_with_ball_captured": True,
                 "release_started_with_capture": True,
                 "clean_retention_pass": False,
@@ -173,6 +176,9 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
                 "zone_edge_correction_count": 2,
                 "place_controller_reentry_count": 1,
                 "post_visit_revisit_count": 0,
+                "settle_no_chase_activated": True,
+                "settle_no_chase_exit_reason": "settled",
+                "release_gate_blocked_reason": "none",
                 "stopped_with_ball_captured": True,
                 "release_started_with_capture": True,
                 "stop_capture_state": {"captured": True},
@@ -201,6 +207,9 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
     assert summary["zone_edge_correction_count"] == 2
     assert summary["place_controller_reentry_count"] == 1
     assert summary["post_visit_revisit_count"] == 0
+    assert summary["settle_no_chase_activated"] is True
+    assert summary["settle_no_chase_exit_reason"] == "settled"
+    assert summary["release_gate_blocked_reason"] == "none"
     assert summary["stopped_with_ball_captured"] is True
     assert summary["release_started_with_capture"] is True
     assert summary["clean_retention_pass"] is False
@@ -230,6 +239,9 @@ def test_summarize_gather_artifacts_reads_three_ball_final_audit_fields(tmp_path
         "retrieved_count": 3,
         "placed_count": 3,
         "surface_profile": "short_turf",
+        "settle_no_chase_activated": True,
+        "settle_no_chase_exit_reason": "corrected",
+        "release_gate_blocked_reason": "no_secure_capture",
     }
     (mission_root / "summary.json").write_text(json.dumps(payload), encoding="utf-8")
     verdict_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -241,6 +253,9 @@ def test_summarize_gather_artifacts_reads_three_ball_final_audit_fields(tmp_path
     assert summary["final_all_targets_stopped"] is True
     assert summary["final_three_ball_corral_pass"] is True
     assert summary["retrieved_count"] == 3
+    assert summary["settle_no_chase_activated"] is True
+    assert summary["settle_no_chase_exit_reason"] == "corrected"
+    assert summary["release_gate_blocked_reason"] == "no_secure_capture"
     assert set(summary["final_corral_audit"].keys()) == {"ball_a", "ball_b", "ball_c"}
 
 

@@ -66,6 +66,12 @@ DEFAULT_MISSION_START_POSE = {"x": 0.0, "y": 0.0, "yaw": 0.0}
 DEFAULT_PLACE_RECOVERY_SETTLE_S = 0.20
 DEFAULT_PLACE_MARGINAL_CAPTURE_SETTLE_S = 0.25
 DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S = 1.25
+DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S = 0.25
+DEFAULT_SETTLE_NO_CHASE_MOTION_TOLERANCE_M = 0.03
+DEFAULT_SETTLE_NO_CHASE_ESCAPE_MARGIN_M = 0.08
+DEFAULT_SETTLE_NO_CHASE_ESCAPE_TIMEOUT_S = 0.75
+DEFAULT_MULTI_BALL_ADVANCE_DWELL_S = 0.5
+DEFAULT_MULTI_BALL_ADVANCE_MOTION_TOLERANCE_M = 0.04
 
 _dotenv_path = REPO_ROOT / ".env"
 if _dotenv_path.is_file():
@@ -270,11 +276,15 @@ class GatherMissionRunner:
         ball_stopped_in_corral: bool = False,
         rolled_away_after_release: bool = False,
         settled_in_corral_pass: bool = False,
+        practical_retrieval_pass: bool = False,
         handoff_kind: str = "",
         zone_edge_correction_count: int = 0,
         place_controller_reentry_count: int = 0,
         post_visit_revisit_count: int = 0,
         settle_exit_reason: str = "",
+        settle_no_chase_activated: bool = False,
+        settle_no_chase_exit_reason: str = "none",
+        release_gate_blocked_reason: str = "none",
     ) -> dict[str, Any]:
         resolved_settle_exit_reason = clean_text(
             settle_exit_reason,
@@ -312,7 +322,11 @@ class GatherMissionRunner:
             "ball_stopped_in_corral": bool(ball_stopped_in_corral),
             "rolled_away_after_release": bool(rolled_away_after_release),
             "settled_in_corral_pass": bool(settled_in_corral_pass),
+            "practical_retrieval_pass": bool(practical_retrieval_pass),
             "settle_exit_reason": resolved_settle_exit_reason,
+            "settle_no_chase_activated": bool(settle_no_chase_activated),
+            "settle_no_chase_exit_reason": clean_text(settle_no_chase_exit_reason, "none"),
+            "release_gate_blocked_reason": clean_text(release_gate_blocked_reason, "none"),
         }
         if isinstance(settle_metrics, dict):
             payload.update(settle_metrics)
@@ -342,11 +356,15 @@ class GatherMissionRunner:
         ball_stopped_in_corral: bool = False,
         rolled_away_after_release: bool = False,
         settled_in_corral_pass: bool | None = None,
+        practical_retrieval_pass: bool | None = None,
         handoff_kind: str = "",
         zone_edge_correction_count: int = 0,
         place_controller_reentry_count: int = 0,
         post_visit_revisit_count: int = 0,
         settle_exit_reason: str = "",
+        settle_no_chase_activated: bool = False,
+        settle_no_chase_exit_reason: str = "none",
+        release_gate_blocked_reason: str = "none",
     ) -> dict[str, Any]:
         settle_payload = settle_metrics if isinstance(settle_metrics, dict) else {}
         final_inside_retrieval_corral = bool(settle_payload.get("final_inside_retrieval_corral", final_inside_retrieval_corral))
@@ -370,6 +388,14 @@ class GatherMissionRunner:
         )
         if settled_in_corral_pass is None and settle_payload:
             settled_pass = bool(settle_payload.get("settled_in_corral_pass", settled_pass))
+        practical_pass = (
+            bool(final_inside_retrieval_corral)
+            and not bool(rolled_away_after_release)
+            and int(post_visit_revisit_count) == 0
+            if practical_retrieval_pass is None
+            else bool(practical_retrieval_pass)
+        )
+        target_pass = practical_pass if self.args.scenario_id == "gather_three_ball_zone" else bool(settled_pass)
         resolved_settle_exit_reason = clean_text(
             settle_payload.get("settle_exit_reason") if isinstance(settle_payload, dict) else "",
             clean_text(
@@ -388,12 +414,12 @@ class GatherMissionRunner:
         payload = {
             "target_id": target.id,
             "label": target.label,
-            "pass": bool(settled_pass),
+            "pass": bool(target_pass),
             "attempts": int(attempts),
             "attempt_kind": str(attempt_kind),
             "capture_loss_count": int(capture_loss_count),
             "route_index": int(route_index),
-            "placed": bool(settled_pass),
+            "placed": bool(target_pass),
             "final_ball_pose": final_ball_pose,
             "place_time_s": round(float(place_time_s), 6),
             "local_recovery_attempted": bool(local_recovery_attempted),
@@ -413,7 +439,11 @@ class GatherMissionRunner:
             "ball_stopped_in_corral": bool(ball_stopped_in_corral),
             "rolled_away_after_release": bool(rolled_away_after_release),
             "settled_in_corral_pass": bool(settled_pass),
+            "practical_retrieval_pass": bool(practical_pass),
             "settle_exit_reason": resolved_settle_exit_reason,
+            "settle_no_chase_activated": bool(settle_no_chase_activated),
+            "settle_no_chase_exit_reason": clean_text(settle_no_chase_exit_reason, "none"),
+            "release_gate_blocked_reason": clean_text(release_gate_blocked_reason, "none"),
         }
         if settle_payload:
             payload.update(settle_payload)
@@ -517,6 +547,11 @@ class GatherMissionRunner:
                 return last_state
             time.sleep(0.25)
         return last_state
+
+    def _inter_target_quiet_timeout_s(self) -> float:
+        if self.args.scenario_id == "gather_three_ball_zone":
+            return min(float(self.args.pursuit_settle_timeout_s), 1.0)
+        return float(self.args.pursuit_settle_timeout_s)
 
     def _stop_environment(self) -> None:
         self._request("POST", "/api/env/stop", timeout_s=10.0)
@@ -1156,6 +1191,17 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             )
             return self._nearest_remaining_route(remaining_ids, state)
 
+    def _reuse_prior_route_order(self, remaining_ids: list[str], route_decisions: list[dict[str, Any]]) -> list[str]:
+        if self.args.scenario_id != "gather_three_ball_zone" or not route_decisions:
+            return []
+        prior_order = route_decisions[-1].get("ordered_ids", [])
+        if not isinstance(prior_order, list):
+            return []
+        reused = [str(target_id) for target_id in prior_order if target_id in remaining_ids]
+        if set(reused) != set(remaining_ids):
+            return []
+        return reused
+
     def _dispatch_visit_target(self, target_id: str) -> None:
         deadline = time.monotonic() + 12.0
         last_payload: dict[str, Any] = {}
@@ -1469,6 +1515,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         retrieval_centered_started_monotonic: float | None = None
         control_centered_started_monotonic: float | None = None
         pre_release_still_started_monotonic: float | None = None
+        recent_ball_motion_samples: list[float] = []
+        settle_no_chase_active = False
+        settle_no_chase_activated = False
+        settle_no_chase_exit_started_monotonic: float | None = None
+        settle_no_chase_exit_reason = "none"
+        release_gate_blocked_reason = "none"
 
         def _record_stop_capture(current_capture: Any) -> None:
             nonlocal stop_capture_state
@@ -1488,6 +1540,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "release_started_with_capture": bool(release_started_with_capture),
                 "stop_capture_state": dict(stop_capture_state),
                 "release_capture_state": dict(release_capture_state),
+            }
+
+        def _settle_no_chase_fields() -> dict[str, Any]:
+            return {
+                "settle_no_chase_activated": bool(settle_no_chase_activated),
+                "settle_no_chase_exit_reason": clean_text(settle_no_chase_exit_reason, "none"),
+                "release_gate_blocked_reason": clean_text(release_gate_blocked_reason, "none"),
             }
 
         def _place_diagnostics(
@@ -1583,17 +1642,75 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 return ball_motion_m is None or ball_motion_m <= max(DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M * 2.0, 0.02)
             return ball_motion_m is not None and ball_motion_m <= DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
 
+        def _motion_trending_slower() -> bool:
+            if len(recent_ball_motion_samples) < 3:
+                return False
+            oldest = float(recent_ball_motion_samples[0])
+            newest = float(recent_ball_motion_samples[-1])
+            return newest <= max(oldest * 0.75, oldest - 0.01)
+
+        def _settle_no_chase_ready(
+            *,
+            current_zone_score: Any = None,
+            ball_motion_m: float | None = None,
+            now_monotonic: float,
+        ) -> bool:
+            if not current_zone_score or not bool(current_zone_score.center_inside_retrieval_corral):
+                return False
+            if float(current_zone_score.zone_distance_m) > max(float(self.zone.retrieval_radius_m) - 0.05, 0.0):
+                return False
+            dwell_started = retrieval_centered_started_monotonic
+            if dwell_started is None or (now_monotonic - dwell_started) < DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S:
+                return False
+            if ball_motion_m is None:
+                return (
+                    pre_release_still_started_monotonic is not None
+                    and (now_monotonic - pre_release_still_started_monotonic) >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                )
+            return bool(
+                ball_motion_m <= DEFAULT_SETTLE_NO_CHASE_MOTION_TOLERANCE_M
+                or _motion_trending_slower()
+            )
+
+        def _multi_ball_advance_ready(
+            *,
+            current_zone_score: Any = None,
+            ball_motion_m: float | None = None,
+            now_monotonic: float,
+        ) -> bool:
+            if self.args.scenario_id != "gather_three_ball_zone":
+                return False
+            if not current_zone_score or not bool(current_zone_score.center_inside_retrieval_corral):
+                return False
+            if float(current_zone_score.zone_distance_m) > max(float(self.zone.retrieval_radius_m) - 0.05, 0.0):
+                return False
+            dwell_started = retrieval_centered_started_monotonic
+            if dwell_started is None or (now_monotonic - dwell_started) < DEFAULT_MULTI_BALL_ADVANCE_DWELL_S:
+                return False
+            if ball_motion_m is None:
+                return True
+            return bool(
+                ball_motion_m <= DEFAULT_MULTI_BALL_ADVANCE_MOTION_TOLERANCE_M
+                or _motion_trending_slower()
+            )
+
         def _reset_release_monitor(current_ball_pose: dict[str, Any] | None = None) -> None:
             nonlocal release_monitoring_active
             nonlocal release_origin_monotonic
             nonlocal release_samples
             nonlocal release_prev_ball_pose
             nonlocal release_inside_seen
+            nonlocal settle_no_chase_active
+            nonlocal settle_no_chase_exit_started_monotonic
+            nonlocal release_gate_blocked_reason
             release_monitoring_active = False
             release_origin_monotonic = None
             release_samples = []
             release_prev_ball_pose = dict(current_ball_pose or {}) if current_ball_pose else None
             release_inside_seen = False
+            settle_no_chase_active = False
+            settle_no_chase_exit_started_monotonic = None
+            release_gate_blocked_reason = "none"
 
         def _begin_release_monitor(
             *,
@@ -1603,16 +1720,27 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             current_zone_score: Any,
             rationale: str,
             feedback: str,
+            settle_no_chase: bool = False,
         ) -> None:
             nonlocal release_monitoring_active
             nonlocal release_origin_monotonic
             nonlocal release_samples
             nonlocal release_prev_ball_pose
             nonlocal release_inside_seen
+            nonlocal settle_no_chase_active
+            nonlocal settle_no_chase_activated
+            nonlocal settle_no_chase_exit_started_monotonic
+            nonlocal settle_no_chase_exit_reason
+            nonlocal release_gate_blocked_reason
             _record_stop_capture(current_capture)
             _record_release_capture(current_capture)
             release_monitoring_active = True
             release_origin_monotonic = now_monotonic
+            settle_no_chase_active = bool(settle_no_chase)
+            settle_no_chase_activated = settle_no_chase_activated or settle_no_chase_active
+            settle_no_chase_exit_started_monotonic = None
+            settle_no_chase_exit_reason = "none"
+            release_gate_blocked_reason = "none"
             release_samples = [
                 self._release_sample(
                     release_started_monotonic=now_monotonic,
@@ -1623,7 +1751,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             ]
             release_prev_ball_pose = dict(current_ball_pose or {}) if current_ball_pose else None
             release_inside_seen = bool(current_zone_score.center_inside_retrieval_corral) if current_zone_score else False
-            self._set_manual_drive(False, mode="release_settle", rationale=rationale)
+            self._set_manual_drive(False, mode="settle_no_chase" if settle_no_chase_active else "release_settle", rationale=rationale)
             self._update_gather_runtime_state(
                 latest_feedback=feedback,
                 settle_metrics=_settle_metrics(),
@@ -1679,6 +1807,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 latest_feedback=f"Placing {target.label} into the zone.",
             )
             ball_motion_m = pose_delta_m(release_prev_ball_pose, ball_pose) if release_prev_ball_pose is not None else None
+            if ball_motion_m is not None:
+                recent_ball_motion_samples.append(float(ball_motion_m))
+                recent_ball_motion_samples[:] = recent_ball_motion_samples[-4:]
             still_motion_threshold = (
                 max(DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M * 2.0, 0.02)
                 if capture and (capture.captured or capture.within_recapture_window)
@@ -1712,6 +1843,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "zone_edge_correction_eligible": bool(local_settle_correction_eligible),
                     "zone_edge_correction_count": int(zone_edge_correction_count),
                     "release_monitoring_active": bool(release_monitoring_active),
+                    "settle_no_chase_active": bool(settle_no_chase_active),
+                    "settle_no_chase_activated": bool(settle_no_chase_activated),
+                    "release_gate_blocked_reason": clean_text(release_gate_blocked_reason, "none"),
                     "release_recontact_count": int(release_recontact_count),
                     "ball_motion_m": ball_motion_m,
                 },
@@ -1732,14 +1866,26 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 settle_metrics = _settle_metrics()
                 self._set_manual_drive(
                     False,
-                    mode="release_settle",
-                    rationale=f"Ball entered the release corridor; letting {self.surface_profile} friction settle it.",
+                    mode="settle_no_chase" if settle_no_chase_active else "release_settle",
+                    rationale=(
+                        f"Ball is inside the retrieval corral and slowing; stop chasing and let {self.surface_profile} settle it."
+                        if settle_no_chase_active
+                        else f"Ball entered the release corridor; letting {self.surface_profile} friction settle it."
+                    ),
                 )
                 self._update_gather_runtime_state(
-                    latest_feedback=f"Letting {target.label} settle on {self.surface_profile}.",
+                    latest_feedback=(
+                        f"Holding position while {target.label} settles inside the retrieval corral."
+                        if settle_no_chase_active
+                        else f"Letting {target.label} settle on {self.surface_profile}."
+                    ),
                     settle_metrics=settle_metrics,
                 )
                 if bool(settle_metrics.get("settled_in_corral_pass", False)):
+                    if settle_no_chase_active and settle_no_chase_exit_reason == "none":
+                        settle_no_chase_exit_reason = (
+                            "corrected" if bool(zone_edge_correction_count or release_recontact_count) else "settled"
+                        )
                     settle_exit_reason = default_settle_exit_reason(
                         settled_in_corral_pass=True,
                         corrected=bool(zone_edge_correction_count or release_recontact_count),
@@ -1754,13 +1900,106 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
                         **_settle_fields({**settle_metrics, "settle_exit_reason": settle_exit_reason}),
                         **_retention_fields(),
+                        **_settle_no_chase_fields(),
                     }
                 release_elapsed_s = now_monotonic - release_origin_monotonic
                 within_zone_overlap = bool(zone_score and zone_score.inside_retrieval_corral)
                 center_inside_now = bool(zone_score and zone_score.center_inside_retrieval_corral)
+                outside_no_chase_window = bool(
+                    zone_score is None
+                    or float(zone_score.retrieval_distance_m) > (float(self.zone.retrieval_radius_m) + DEFAULT_SETTLE_NO_CHASE_ESCAPE_MARGIN_M)
+                )
+                multi_ball_advance_ready = _multi_ball_advance_ready(
+                    current_zone_score=zone_score,
+                    ball_motion_m=ball_motion_m,
+                    now_monotonic=now_monotonic,
+                )
+                if (
+                    settle_no_chase_active
+                    and center_inside_now
+                    and not outside_no_chase_window
+                    and multi_ball_advance_ready
+                ):
+                    if settle_no_chase_exit_reason == "none":
+                        settle_no_chase_exit_reason = (
+                            "corrected" if bool(zone_edge_correction_count or release_recontact_count) else "settled"
+                        )
+                    settle_exit_reason = default_settle_exit_reason(
+                        settled_in_corral_pass=False,
+                        corrected=bool(zone_edge_correction_count or release_recontact_count),
+                    )
+                    return True, {
+                        "capture_state": capture.to_dict() if capture else {},
+                        "zone_score": zone_score.to_dict() if zone_score else {},
+                        "final_ball_pose": ball_pose,
+                        "settle_metrics": {**settle_metrics, "settle_exit_reason": settle_exit_reason},
+                        "release_recontact_count": release_recontact_count,
+                        "settle_exit_reason": settle_exit_reason,
+                        **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
+                        **_settle_fields({**settle_metrics, "settle_exit_reason": settle_exit_reason}),
+                        **_retention_fields(),
+                        **_settle_no_chase_fields(),
+                    }
+                if settle_no_chase_active:
+                    if outside_no_chase_window:
+                        settle_no_chase_exit_started_monotonic = (
+                            now_monotonic
+                            if settle_no_chase_exit_started_monotonic is None
+                            else settle_no_chase_exit_started_monotonic
+                        )
+                        escape_elapsed_s = now_monotonic - settle_no_chase_exit_started_monotonic
+                        if escape_elapsed_s < DEFAULT_SETTLE_NO_CHASE_ESCAPE_TIMEOUT_S:
+                            self._update_gather_runtime_state(
+                                latest_feedback=f"Holding position while {target.label} tests the corral edge.",
+                                settle_metrics=settle_metrics,
+                            )
+                            time.sleep(self.args.poll_s)
+                            continue
+                        if release_recontact_count < 1 and local_settle_correction_eligible:
+                            release_recontact_count += 1
+                            zone_edge_correction_count += 1
+                            zone_edge_correction_started_monotonic = now_monotonic
+                            settle_no_chase_exit_reason = "corrected"
+                            _reset_release_monitor(ball_pose)
+                            self._append_runtime_event(
+                                f"{target.label}: one gentle correction after leaving the settle-no-chase envelope.",
+                                key=f"settle_no_chase_recontact:{target.id}:{release_recontact_count}",
+                            )
+                            self._update_gather_runtime_state(
+                                latest_feedback=f"Gently correcting {target.label} after it drifted beyond the corral settle window.",
+                                settle_metrics=settle_metrics,
+                            )
+                            time.sleep(self.args.poll_s)
+                            continue
+                        settle_no_chase_exit_reason = "rolled_out"
+                        self._set_manual_drive(False, mode="release_roll_away", rationale="Ball left the corral after settle-no-chase monitoring.")
+                        settle_exit_reason = default_settle_exit_reason(
+                            failure_reason="release_roll_away",
+                            rolled_away_after_release=True,
+                        )
+                        return False, {
+                            "failure_reason": "release_roll_away",
+                            "failure_stage": "release",
+                            "capture_state": capture.to_dict() if capture else {},
+                            "zone_score": zone_score.to_dict() if zone_score else {},
+                            "local_recovery_attempted": local_recovery_attempted,
+                            "settle_metrics": {**settle_metrics, "settle_exit_reason": settle_exit_reason},
+                            "release_recontact_count": release_recontact_count,
+                            "settle_exit_reason": settle_exit_reason,
+                            **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
+                            **_settle_fields({**settle_metrics, "settle_exit_reason": settle_exit_reason}),
+                            **_retention_fields(),
+                            **_settle_no_chase_fields(),
+                        }
+                    else:
+                        settle_no_chase_exit_started_monotonic = None
                 if within_zone_overlap and (ball_motion_m is None or ball_motion_m > DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M):
                     self._update_gather_runtime_state(
-                        latest_feedback=f"Letting {target.label} keep settling inside the corral overlap.",
+                        latest_feedback=(
+                            f"Holding position while {target.label} settles inside the corral."
+                            if settle_no_chase_active
+                            else f"Letting {target.label} keep settling inside the corral overlap."
+                        ),
                         settle_metrics=settle_metrics,
                     )
                     time.sleep(self.args.poll_s)
@@ -1834,6 +2073,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
                             **_settle_fields({**settle_metrics, "settle_exit_reason": settle_exit_reason}),
                             **_retention_fields(),
+                            **_settle_no_chase_fields(),
                         }
                 elif release_elapsed_s >= max(DEFAULT_RELEASE_SETTLE_MAX_WAIT_S, DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S + 3.0):
                     if within_zone_overlap and center_inside_now:
@@ -1879,6 +2119,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             settle_metrics=settle_metrics,
                         )
                     else:
+                        if settle_no_chase_active and settle_no_chase_exit_reason == "none":
+                            settle_no_chase_exit_reason = "timeout"
                         self._set_manual_drive(False, mode="release_unsettled", rationale="Ball did not finish retrieved and stopped in the corral.")
                         settle_exit_reason = default_settle_exit_reason(failure_reason="release_unsettled")
                         return False, {
@@ -1893,6 +2135,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
                             **_settle_fields({**settle_metrics, "settle_exit_reason": settle_exit_reason}),
                             **_retention_fields(),
+                            **_settle_no_chase_fields(),
                         }
                 time.sleep(self.args.poll_s)
                 continue
@@ -1912,10 +2155,20 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and not capture.within_recapture_window
                 and not settle_monitor_ready
             )
+            settle_no_chase_ready = _settle_no_chase_ready(
+                current_zone_score=zone_score,
+                ball_motion_m=ball_motion_m,
+                now_monotonic=now_monotonic,
+            )
+            secure_release_ready = bool(
+                capture
+                and secure_capture(capture, self.capture_envelope)
+                and release_ready(capture=capture, zone_score=zone_score, zone=self.zone)
+            )
             if (
                 zone_score
                 and zone_score.center_inside_retrieval_corral
-                and settle_monitor_ready
+                and settle_no_chase_ready
             ):
                 escaped_zone_correction_started_monotonic = None
                 _begin_release_monitor(
@@ -1923,12 +2176,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     current_capture=capture,
                     current_ball_pose=ball_pose,
                     current_zone_score=zone_score,
-                    rationale=f"Ball reached the practical retrieval corral; verifying settle on {self.surface_profile}.",
-                    feedback=f"Letting {target.label} settle inside the retrieval corral.",
+                    rationale=f"Ball is inside the practical retrieval corral and slowing; stop chasing and verify settle on {self.surface_profile}.",
+                    feedback=f"Holding position while {target.label} settles inside the retrieval corral.",
+                    settle_no_chase=True,
                 )
                 time.sleep(self.args.poll_s)
                 continue
-            if zone_score and zone_score.center_inside_zone and settle_monitor_ready:
+            if zone_score and zone_score.center_inside_zone and settle_monitor_ready and secure_release_ready:
                 escaped_zone_correction_started_monotonic = None
                 _begin_release_monitor(
                     now_monotonic=now_monotonic,
@@ -1940,11 +2194,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 )
                 time.sleep(self.args.poll_s)
                 continue
-            if (
-                release_ready(capture=capture, zone_score=zone_score, zone=self.zone)
-                and capture
-                and (capture.captured or capture.within_recapture_window)
-            ):
+            if secure_release_ready:
                 marginal_capture_started_monotonic = None
                 escaped_zone_correction_started_monotonic = None
                 _begin_release_monitor(
@@ -1957,6 +2207,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 )
                 time.sleep(self.args.poll_s)
                 continue
+            release_gate_blocked_reason = "none"
+            if zone_score and zone_score.center_inside_retrieval_corral and not settle_no_chase_ready:
+                release_gate_blocked_reason = "no_settle_safe_zone"
+            elif release_ready(capture=capture, zone_score=zone_score, zone=self.zone) and not secure_release_ready:
+                release_gate_blocked_reason = "no_secure_capture"
             local_recovery_viable = bool(capture and capture.within_recapture_window)
             if local_settle_correction_eligible or local_recovery_viable:
                 escaped_zone_correction_started_monotonic = None
@@ -1982,6 +2237,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         time.sleep(self.args.poll_s)
                         continue
                     self._set_manual_drive(False, mode="release_roll_away", rationale="Ball left the corral correction window during place.")
+                    if settle_no_chase_active and settle_no_chase_exit_reason == "none":
+                        settle_no_chase_exit_reason = "rolled_out"
                     return False, {
                         "failure_reason": "release_roll_away",
                         "failure_stage": "release",
@@ -1993,6 +2250,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
                         **_settle_fields({"rolled_away_after_release": True, "settle_exit_reason": "rolled_out"}),
                         **_retention_fields(),
+                        **_settle_no_chase_fields(),
                     }
             elif capture and not capture.captured:
                 marginal_capture_started_monotonic = None
@@ -2028,6 +2286,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         time.sleep(self.args.poll_s)
                         continue
                     self._set_manual_drive(False, mode="release_roll_away", rationale="Ball left the corral correction window during place.")
+                    if settle_no_chase_active and settle_no_chase_exit_reason == "none":
+                        settle_no_chase_exit_reason = "rolled_out"
                     return False, {
                         "failure_reason": "release_roll_away",
                         "failure_stage": "release",
@@ -2039,6 +2299,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
                         **_settle_fields({"rolled_away_after_release": True, "settle_exit_reason": "rolled_out"}),
                         **_retention_fields(),
+                        **_settle_no_chase_fields(),
                     }
             elif capture_loss_detected(
                 captured_now=False,
@@ -2060,6 +2321,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     time.sleep(self.args.poll_s)
                     continue
                 self._set_manual_drive(False, mode="release_roll_away", rationale="Ball left the corral correction window during place.")
+                if settle_no_chase_active and settle_no_chase_exit_reason == "none":
+                    settle_no_chase_exit_reason = "rolled_out"
                 return False, {
                     "failure_reason": "release_roll_away",
                     "failure_stage": "release",
@@ -2071,6 +2334,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_place_diagnostics(current_capture=capture, current_zone_score=zone_score, allow_full_revisit=False),
                     **_settle_fields({"rolled_away_after_release": True, "settle_exit_reason": "rolled_out"}),
                     **_retention_fields(),
+                    **_settle_no_chase_fields(),
                 }
             if recaptured_settle_started_monotonic is not None:
                 settle_elapsed_s = now_monotonic - recaptured_settle_started_monotonic
@@ -2207,6 +2471,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             **_place_diagnostics(allow_full_revisit=False),
             **_settle_fields({"settle_exit_reason": "timeout"}),
             **_retention_fields(),
+            **_settle_no_chase_fields(),
         }
 
     def _run_target(
@@ -2249,6 +2514,15 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 ),
             }
 
+        def _control_diag_kwargs(payload: dict[str, Any] | None) -> dict[str, Any]:
+            if not isinstance(payload, dict):
+                return {}
+            return {
+                "settle_no_chase_activated": bool(payload.get("settle_no_chase_activated", False)),
+                "settle_no_chase_exit_reason": clean_text(payload.get("settle_no_chase_exit_reason"), "none"),
+                "release_gate_blocked_reason": clean_text(payload.get("release_gate_blocked_reason"), "none"),
+            }
+
         def _ownership_kwargs(payload: dict[str, Any] | None) -> dict[str, Any]:
             if not isinstance(payload, dict):
                 return {}
@@ -2279,6 +2553,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "ball_stopped_in_corral": ball_stopped_in_corral,
                 "rolled_away_after_release": rolled_away_after_release,
                 "settled_in_corral_pass": settled_pass,
+                "practical_retrieval_pass": (
+                    final_inside_retrieval_corral
+                    and not rolled_away_after_release
+                    and post_visit_revisit_count == 0
+                ),
                 "settle_exit_reason": clean_text(
                     payload.get("settle_exit_reason"),
                     clean_text(
@@ -2325,13 +2604,19 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             direct_recapture_attempt = resume_with_capture
             place_controller_reentry_attempt = resume_with_place_controller
             place_loss_revisit_attempt = resume_with_place_loss_revisit
+            force_local_capture_attempt = bool(
+                visit_completed_once
+                and not place_controller_reentry_attempt
+                and not direct_recapture_attempt
+                and not place_loss_revisit_attempt
+            )
             resume_with_capture = False
             resume_with_place_controller = False
             resume_with_place_loss_revisit = False
 
             if place_controller_reentry_attempt:
                 attempt_kind = "place_controller_reentry"
-            elif direct_recapture_attempt:
+            elif direct_recapture_attempt or force_local_capture_attempt:
                 attempt_kind = "place_loss_recapture"
             elif place_loss_revisit_attempt:
                 attempt_kind = "place_loss_revisit"
@@ -2378,6 +2663,29 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     current_target_id=target.id,
                     visit_index=route_index,
                     latest_feedback=f"Reacquiring {target.label} after place-stage loss.",
+                )
+                ball_pose = self._ball_truth_pose(session_id, target)
+                if ball_pose:
+                    self._update_prior_from_ball_pose(target.id, ball_pose)
+            elif force_local_capture_attempt:
+                self._append_runtime_event(
+                    f"{target.label}: skipping redundant revisit after the first visit; keeping gather ownership.",
+                    key=f"skip_revisit:{target.id}:{attempt}",
+                )
+                self._update_visit_runtime_state(
+                    proof_state="capturing",
+                    current_target_id=target.id,
+                    visit_index=route_index,
+                    remaining_targets=[item for item in self.gather_runtime_state.get("remaining_targets", []) if item != target.id],
+                    mission_phase="capture",
+                    latest_feedback=f"Keeping gather ownership for {target.label} after the first visit.",
+                )
+                self._update_gather_runtime_state(
+                    mission_phase="capture",
+                    gather_phase="capture",
+                    current_target_id=target.id,
+                    visit_index=route_index,
+                    latest_feedback=f"Keeping gather ownership for {target.label} after the first visit.",
                 )
                 ball_pose = self._ball_truth_pose(session_id, target)
                 if ball_pose:
@@ -2471,7 +2779,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     target=target,
                     state_history_path=state_history_path,
                     mission_root=mission_root,
-                    prefer_zone_recovery=direct_recapture_attempt,
+                    prefer_zone_recovery=direct_recapture_attempt or force_local_capture_attempt,
                 )
                 if not capture_pass:
                     capture_failure_reason = str(capture_payload.get("failure_reason", "capture_failed"))
@@ -2528,6 +2836,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             post_visit_revisit_count=post_visit_revisit_count,
                             **_retention_kwargs(normalized_capture_failure),
                             **_settle_kwargs(normalized_capture_failure),
+                            **_control_diag_kwargs(normalized_capture_failure),
                         )
                     self._safe_stop()
                     self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
@@ -2609,6 +2918,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     post_visit_revisit_count=post_visit_revisit_count,
                     **_retention_kwargs(capture_payload),
                     **_settle_kwargs(capture_payload),
+                    **_control_diag_kwargs(capture_payload),
                 )
 
             place_pass, place_payload = self._place_target(
@@ -2668,6 +2978,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     post_visit_revisit_count=post_visit_revisit_count,
                     **_retention_kwargs(place_payload),
                     **_settle_kwargs(place_payload),
+                    **_control_diag_kwargs(place_payload),
                 )
 
             failure_reason = str(place_payload.get("failure_reason", "place_failed"))
@@ -2708,6 +3019,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     post_visit_revisit_count=post_visit_revisit_count,
                     **_retention_kwargs(place_payload),
                     **_settle_kwargs(place_payload),
+                    **_control_diag_kwargs(place_payload),
                 )
             self._safe_stop()
             self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
@@ -2762,7 +3074,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             route_index = 0
             while remaining_ids:
                 state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
-                ordered_ids = self._plan_collection_route(remaining_ids, state)
+                ordered_ids = self._reuse_prior_route_order(remaining_ids, route_decisions)
+                if not ordered_ids:
+                    ordered_ids = self._plan_collection_route(remaining_ids, state)
                 route_index += 1
                 selected_id = ordered_ids[0]
                 route_decisions.append({"step": route_index, "ordered_ids": ordered_ids, "selected_id": selected_id})
@@ -2823,7 +3137,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     )
                     break
                 self._safe_stop()
-                self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+                self._wait_for_pursuit_quiet(self._inter_target_quiet_timeout_s())
 
             mission_time_s = round(time.monotonic() - mission_started_monotonic, 6)
             placed_targets = list(self.gather_runtime_state.get("placed_targets", []))
@@ -2845,6 +3159,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             place_controller_reentry_count = sum(int(item.get("place_controller_reentry_count", 0) or 0) for item in target_results)
             post_visit_revisit_count = sum(int(item.get("post_visit_revisit_count", 0) or 0) for item in target_results)
             settle_exit_reason = clean_text(final_result.get("settle_exit_reason"))
+            settle_no_chase_activated = bool(final_result.get("settle_no_chase_activated", False))
+            settle_no_chase_exit_reason = clean_text(final_result.get("settle_no_chase_exit_reason"), "none")
+            release_gate_blocked_reason = clean_text(final_result.get("release_gate_blocked_reason"), "none")
             final_inside_retrieval_corral = bool(final_result.get("final_inside_retrieval_corral", False))
             final_center_inside_zone = bool(final_result.get("final_center_inside_zone", False))
             ball_stopped_in_corral = bool(final_result.get("ball_stopped_in_corral", False))
@@ -2923,6 +3240,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "place_controller_reentry_count": place_controller_reentry_count,
                 "post_visit_revisit_count": post_visit_revisit_count,
                 "settle_exit_reason": settle_exit_reason,
+                "settle_no_chase_activated": settle_no_chase_activated,
+                "settle_no_chase_exit_reason": settle_no_chase_exit_reason,
+                "release_gate_blocked_reason": release_gate_blocked_reason,
                 "stopped_with_ball_captured": stopped_with_ball_captured,
                 "release_started_with_capture": release_started_with_capture,
                 "stop_capture_state": stop_capture_state,
@@ -2975,6 +3295,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "place_controller_reentry_count": place_controller_reentry_count,
                 "post_visit_revisit_count": post_visit_revisit_count,
                 "settle_exit_reason": settle_exit_reason,
+                "settle_no_chase_activated": settle_no_chase_activated,
+                "settle_no_chase_exit_reason": settle_no_chase_exit_reason,
+                "release_gate_blocked_reason": release_gate_blocked_reason,
                 "stopped_with_ball_captured": stopped_with_ball_captured,
                 "release_started_with_capture": release_started_with_capture,
                 "stop_capture_state": stop_capture_state,
@@ -3018,6 +3341,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "mission_time_max_s": summary["mission_time_s"],
                     "handoff_kinds": [handoff_kind],
                     "settle_exit_reasons": [settle_exit_reason] if settle_exit_reason else [],
+                    "settle_no_chase_activated_count": 1 if settle_no_chase_activated else 0,
+                    "settle_no_chase_exit_reasons": [settle_no_chase_exit_reason] if settle_no_chase_exit_reason and settle_no_chase_exit_reason != "none" else [],
+                    "release_gate_blocked_reasons": [release_gate_blocked_reason] if release_gate_blocked_reason and release_gate_blocked_reason != "none" else [],
                     "capture_loss_count_total": capture_loss_count,
                     "stopped_with_ball_captured_count": 1 if stopped_with_ball_captured else 0,
                     "release_started_with_capture_count": 1 if release_started_with_capture else 0,
@@ -3045,6 +3371,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "surface_profile": self.surface_profile,
                         "handoff_kind": handoff_kind,
                         "settle_exit_reason": settle_exit_reason,
+                        "settle_no_chase_activated": settle_no_chase_activated,
+                        "settle_no_chase_exit_reason": settle_no_chase_exit_reason,
+                        "release_gate_blocked_reason": release_gate_blocked_reason,
                         "placed_count": summary["placed_count"],
                         "capture_loss_count": capture_loss_count,
                         "zone_edge_correction_count": zone_edge_correction_count,

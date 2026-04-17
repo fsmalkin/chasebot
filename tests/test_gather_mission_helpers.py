@@ -43,6 +43,9 @@ def test_build_gather_targets_for_three_ball_zone():
     targets = build_gather_targets("gather_three_ball_zone")
     assert [item.id for item in targets] == ["ball_a", "ball_b", "ball_c"]
     assert targets[1].start_visible is True
+    assert targets[0].forward_m > targets[1].forward_m
+    assert targets[0].lateral_m > 0.8
+    assert targets[2].lateral_m < -0.8
 
 
 def test_capture_snapshot_detects_captured_ball():
@@ -366,6 +369,9 @@ def test_summarize_runs_and_scorecard_markdown():
             "surface_profile": "short_turf",
             "handoff_kind": "soft_capture",
             "settle_exit_reason": "settled",
+            "settle_no_chase_activated": True,
+            "settle_no_chase_exit_reason": "settled",
+            "release_gate_blocked_reason": "none",
             "placed_count": 1,
             "capture_loss_count": 0,
             "zone_edge_correction_count": 1,
@@ -392,6 +398,9 @@ def test_summarize_runs_and_scorecard_markdown():
             "surface_profile": "short_turf",
             "handoff_kind": "zone_entry",
             "settle_exit_reason": "corrected",
+            "settle_no_chase_activated": False,
+            "settle_no_chase_exit_reason": "none",
+            "release_gate_blocked_reason": "no_secure_capture",
             "placed_count": 1,
             "capture_loss_count": 1,
             "zone_edge_correction_count": 2,
@@ -427,6 +436,9 @@ def test_summarize_runs_and_scorecard_markdown():
     assert summary["surface_profiles"] == ["short_turf"]
     assert summary["handoff_kinds"] == ["soft_capture", "zone_entry"]
     assert summary["settle_exit_reasons"] == ["corrected", "settled"]
+    assert summary["settle_no_chase_activated_count"] == 1
+    assert summary["settle_no_chase_exit_reasons"] == ["settled"]
+    assert summary["release_gate_blocked_reasons"] == ["no_secure_capture"]
     assert summary["zone_edge_correction_count_total"] == 3
     assert summary["place_controller_reentry_count_total"] == 2
     assert summary["post_visit_revisit_count_total"] == 0
@@ -436,6 +448,8 @@ def test_summarize_runs_and_scorecard_markdown():
     assert "short_turf" in markdown
     assert "handoff=`soft_capture`" in markdown
     assert "settle_exit=`settled`" in markdown
+    assert "settle_no_chase=`True`" in markdown
+    assert "release_gate=`none`" in markdown
     assert "settled=`True`" in markdown
     assert "clean_retention" in markdown
 
@@ -570,6 +584,9 @@ def test_summarize_runs_and_scorecard_include_multi_ball_final_audit_fields():
             "surface_profile": "short_turf",
             "handoff_kind": "zone_entry",
             "settle_exit_reason": "settled",
+            "settle_no_chase_activated": True,
+            "settle_no_chase_exit_reason": "settled",
+            "release_gate_blocked_reason": "none",
             "post_visit_revisit_count": 0,
             "final_all_targets_inside_retrieval_corral": True,
             "final_all_targets_stopped": True,
@@ -595,6 +612,9 @@ def test_summarize_runs_and_scorecard_include_multi_ball_final_audit_fields():
             "surface_profile": "short_turf",
             "handoff_kind": "zone_entry",
             "settle_exit_reason": "settled",
+            "settle_no_chase_activated": False,
+            "settle_no_chase_exit_reason": "none",
+            "release_gate_blocked_reason": "no_secure_capture",
             "post_visit_revisit_count": 0,
             "final_all_targets_inside_retrieval_corral": False,
             "final_all_targets_stopped": False,
@@ -625,5 +645,7 @@ def test_summarize_runs_and_scorecard_include_multi_ball_final_audit_fields():
     assert summary["final_all_targets_stopped_count"] == 1
     assert summary["final_three_ball_corral_pass_count"] == 1
     assert summary["final_three_ball_corral_fail_count"] == 1
+    assert summary["settle_no_chase_activated_count"] == 1
+    assert summary["release_gate_blocked_reasons"] == ["no_secure_capture"]
     assert "Final three-ball corral pass/fail" in markdown
     assert "retrieved_count=`3`" in markdown

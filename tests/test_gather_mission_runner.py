@@ -92,6 +92,25 @@ def test_init_runtime_state_seeds_dashboard_friendly_fields(tmp_path, monkeypatc
     assert runner.gather_runtime_state["artifact_dir"] == str(mission_root)
 
 
+def test_inter_target_quiet_timeout_is_shorter_for_three_ball(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    three_ball_runner = _make_three_ball_runner(tmp_path, monkeypatch)
+    runner.args.pursuit_settle_timeout_s = 8.0
+    three_ball_runner.args.pursuit_settle_timeout_s = 8.0
+
+    assert runner._inter_target_quiet_timeout_s() == runner.args.pursuit_settle_timeout_s
+    assert three_ball_runner._inter_target_quiet_timeout_s() == 1.0
+
+
+def test_reuse_prior_route_order_is_enabled_for_three_ball(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    three_ball_runner = _make_three_ball_runner(tmp_path, monkeypatch)
+    prior = [{"step": 1, "ordered_ids": ["ball_b", "ball_a", "ball_c"], "selected_id": "ball_b"}]
+
+    assert runner._reuse_prior_route_order(["ball_a", "ball_c"], prior) == []
+    assert three_ball_runner._reuse_prior_route_order(["ball_a", "ball_c"], prior) == ["ball_a", "ball_c"]
+
+
 def test_run_normalizes_success_summary_and_marks_proof_completed(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     monkeypatch.setattr(gather_runner, "REPO_ROOT", tmp_path)
@@ -800,7 +819,7 @@ def test_place_target_switches_to_recovery_on_first_uncaptured_frame(tmp_path, m
     assert any(item["mode"] in {"capture_recovery", "capture_recovery_hold"} for item in command_log[1:])
 
 
-def test_place_target_turns_more_aggressively_when_ball_slips_behind_inside_corral(tmp_path, monkeypatch):
+def test_place_target_prefers_no_chase_or_turn_recovery_when_ball_slips_behind_inside_corral(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.place_timeout_s = 1.5
     runner.args.poll_s = 0.25
@@ -857,10 +876,11 @@ def test_place_target_turns_more_aggressively_when_ball_slips_behind_inside_corr
 
     assert passed is False
     assert payload["failure_reason"] in {"place_timeout", "release_roll_away"}
-    assert any(item["mode"] == "capture_recovery_turn" for item in command_log)
+    assert any(item["mode"] in {"capture_recovery_turn", "settle_no_chase"} for item in command_log)
     turn_commands = [item for item in command_log if item["mode"] == "capture_recovery_turn"]
-    assert all(item["linear_x"] == 0.0 for item in turn_commands)
-    assert all(abs(float(item["angular_z"])) >= 0.8 for item in turn_commands)
+    if turn_commands:
+        assert all(item["linear_x"] == 0.0 for item in turn_commands)
+        assert all(abs(float(item["angular_z"])) >= 0.8 for item in turn_commands)
 
 
 def test_place_target_allows_small_zone_edge_drift_to_settle_without_failure(tmp_path, monkeypatch):
@@ -927,7 +947,7 @@ def test_place_target_allows_small_zone_edge_drift_to_settle_without_failure(tmp
     assert payload["settled_in_corral_pass"] is True
     assert payload["release_recontact_count"] <= 1
     assert payload["rolled_away_after_release"] is False
-    assert any(item["mode"] == "release_settle" for item in command_log)
+    assert any(item["mode"] in {"release_settle", "settle_no_chase"} for item in command_log)
 
 
 def test_place_target_starts_release_monitor_when_ball_enters_outer_retrieval_corral(tmp_path, monkeypatch):
@@ -991,7 +1011,10 @@ def test_place_target_starts_release_monitor_when_ball_enters_outer_retrieval_co
     assert payload["settled_in_corral_pass"] is True
     assert payload["final_inside_retrieval_corral"] is True
     assert payload["ball_stopped_in_corral"] is True
-    assert any(item["mode"] == "release_settle" for item in command_log)
+    assert payload["settle_no_chase_activated"] is True
+    assert payload["settle_no_chase_exit_reason"] in {"settled", "corrected"}
+    assert payload["release_gate_blocked_reason"] == "none"
+    assert any(item["mode"] == "settle_no_chase" for item in command_log)
 
 
 def test_place_target_keeps_waiting_while_ball_stays_inside_overlap_and_is_still_moving(tmp_path, monkeypatch):
@@ -1058,10 +1081,10 @@ def test_place_target_keeps_waiting_while_ball_stays_inside_overlap_and_is_still
     assert passed is True
     assert payload["settled_in_corral_pass"] is True
     assert payload["release_recontact_count"] == 0
-    assert any(item["mode"] == "release_settle" for item in command_log)
+    assert any(item["mode"] in {"release_settle", "settle_no_chase"} for item in command_log)
 
 
-def test_place_target_does_not_start_release_monitor_at_outer_edge_with_captured_ball(tmp_path, monkeypatch):
+def test_place_target_avoids_normal_release_settle_at_outer_edge_with_captured_ball(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.place_timeout_s = 1.25
     runner.args.poll_s = 0.25
@@ -1114,10 +1137,11 @@ def test_place_target_does_not_start_release_monitor_at_outer_edge_with_captured
 
     assert passed is False
     assert payload["failure_reason"] == "place_timeout"
+    assert payload["settle_no_chase_activated"] is True
     assert all(item["mode"] != "release_settle" for item in command_log[:-1])
 
 
-def test_place_target_keeps_local_correction_active_when_ball_is_centered_but_robot_is_still_far_back(tmp_path, monkeypatch):
+def test_place_target_can_latch_practical_retrieval_when_robot_is_still_far_back(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.place_timeout_s = 1.25
     runner.args.poll_s = 0.25
@@ -1170,8 +1194,73 @@ def test_place_target_keeps_local_correction_active_when_ball_is_centered_but_ro
 
     assert passed is False
     assert payload["failure_reason"] == "place_timeout"
-    assert any(item["mode"] in {"capture_recovery", "capture_recovery_hold", "retrieval_shepherd"} for item in command_log)
+    assert payload["settle_no_chase_activated"] is True
+    assert any(item["mode"] in {"capture_recovery", "capture_recovery_hold", "retrieval_shepherd", "settle_no_chase"} for item in command_log)
     assert all(item["mode"] != "release_settle" for item in command_log[:-1])
+
+
+def test_place_target_three_ball_advances_after_practical_retrieval_without_full_stop(tmp_path, monkeypatch):
+    runner = _make_three_ball_runner(tmp_path, monkeypatch)
+    runner.args.place_timeout_s = 2.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+
+    robot_pose = {"x": 1.48, "y": 0.0, "yaw": 0.0}
+    states = [
+        ({}, robot_pose, {"x": 2.38, "y": 0.0, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.40, "y": 0.0, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.42, "y": 0.0, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.435, "y": 0.0, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.447, "y": 0.0, "z": 0.05}),
+        ({}, robot_pose, {"x": 2.456, "y": 0.0, "z": 0.05}),
+    ]
+
+    def _control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {}, robot_pose, {"x": 2.462, "y": 0.0, "z": 0.05}
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(runner, "_control_loop_state", _control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_b"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["final_inside_retrieval_corral"] is True
+    assert payload["settled_in_corral_pass"] is False
+    assert payload["settle_no_chase_activated"] is True
+    assert any(item["mode"] == "settle_no_chase" for item in command_log)
 
 
 def test_run_target_fails_settled_placement_loss_when_ball_leaves_local_correction_range(tmp_path, monkeypatch):
@@ -1247,6 +1336,77 @@ def test_run_target_fails_settled_placement_loss_when_ball_leaves_local_correcti
     assert result["rolled_away_after_release"] is True
     assert result["settle_exit_reason"] == "rolled_out"
     assert capture_zone_recovery_flags == [False]
+
+
+def test_run_target_three_ball_accepts_practical_retrieval_before_final_audit(tmp_path, monkeypatch):
+    runner = _make_three_ball_runner(tmp_path, monkeypatch)
+    runner.args.max_retries_per_target = 1
+
+    visit_dispatches: list[str] = []
+    monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s: None)
+    monkeypatch.setattr(
+        gather_runner,
+        "fetch_dashboard_state",
+        lambda dashboard_url, timeout_s=0: {
+            "brain": {"last_feedback_status": "", "last_feedback_text": ""},
+            "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
+        },
+    )
+    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: visit_dispatches.append(target_id))
+    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_target_reached"))
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 2.45, "y": 0.0, "z": 0.05})
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_capture_target",
+        lambda **kwargs: (True, {"capture_state": {"captured": False}, "zone_score": {}, "handoff_kind": "zone_entry"}),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_place_target",
+        lambda **kwargs: (
+            True,
+            {
+                "final_ball_pose": {"x": 2.45, "y": 0.0, "z": 0.05},
+                "settle_no_chase_activated": True,
+                "settle_exit_reason": "settled",
+                "settle_metrics": {
+                    "surface_profile": "short_turf",
+                    "release_distance_to_zone_center_m": 0.18,
+                    "max_overshoot_distance_m": 0.0,
+                    "final_settle_distance_m": 0.05,
+                    "settle_time_s": 0.5,
+                    "release_recontact_count": 0,
+                    "settled_inside_zone": False,
+                    "final_inside_retrieval_corral": True,
+                    "final_center_inside_zone": False,
+                    "ball_stopped_in_corral": False,
+                    "rolled_away_after_release": False,
+                    "settled_in_corral_pass": False,
+                },
+            },
+        ),
+    )
+
+    result = runner._run_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_b"],
+        route_index=1,
+        gather_sequence_path=tmp_path / "gather_sequence.jsonl",
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=tmp_path / "mission",
+    )
+
+    assert result["pass"] is True
+    assert result["placed"] is True
+    assert result["practical_retrieval_pass"] is True
+    assert result["settled_in_corral_pass"] is False
+    assert result["final_inside_retrieval_corral"] is True
+    assert result["post_visit_revisit_count"] == 0
+    assert visit_dispatches == ["ball_b"]
 
 
 def test_run_target_uses_local_gather_recapture_after_post_visit_capture_timeout(tmp_path, monkeypatch):

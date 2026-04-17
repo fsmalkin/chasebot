@@ -251,22 +251,22 @@ def build_gather_targets(scenario_id: str) -> list[GatherTargetSpec]:
                 id="ball_a",
                 label="Ball A (far left)",
                 start_visible=False,
-                forward_m=1.75,
-                lateral_m=0.60,
+                forward_m=2.35,
+                lateral_m=0.85,
             ),
             GatherTargetSpec(
                 id="ball_b",
                 label="Ball B (near center)",
                 start_visible=True,
-                forward_m=1.10,
+                forward_m=1.55,
                 lateral_m=0.00,
             ),
             GatherTargetSpec(
                 id="ball_c",
                 label="Ball C (far right)",
                 start_visible=False,
-                forward_m=1.75,
-                lateral_m=-0.60,
+                forward_m=2.35,
+                lateral_m=-0.85,
             ),
         ]
     raise ValueError(f"Unsupported gather mission scenario: {scenario_id}")
@@ -805,12 +805,27 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     zone_edge_correction_counts = [int(item.get("zone_edge_correction_count", 0) or 0) for item in runs]
     place_controller_reentry_counts = [int(item.get("place_controller_reentry_count", 0) or 0) for item in runs]
     post_visit_revisit_counts = [int(item.get("post_visit_revisit_count", 0) or 0) for item in runs]
+    settle_no_chase_flags = [bool(item.get("settle_no_chase_activated", False)) for item in runs]
     handoff_kinds = sorted({str(item.get("handoff_kind", "") or "") for item in runs if str(item.get("handoff_kind", "") or "").strip()})
     settle_exit_reasons = sorted(
         {
             str(item.get("settle_exit_reason", "") or "")
             for item in runs
             if str(item.get("settle_exit_reason", "") or "").strip()
+        }
+    )
+    settle_no_chase_exit_reasons = sorted(
+        {
+            str(item.get("settle_no_chase_exit_reason", "") or "")
+            for item in runs
+            if str(item.get("settle_no_chase_exit_reason", "") or "").strip() and str(item.get("settle_no_chase_exit_reason", "") or "").strip() != "none"
+        }
+    )
+    release_gate_blocked_reasons = sorted(
+        {
+            str(item.get("release_gate_blocked_reason", "") or "")
+            for item in runs
+            if str(item.get("release_gate_blocked_reason", "") or "").strip() and str(item.get("release_gate_blocked_reason", "") or "").strip() != "none"
         }
     )
     surface_profiles = sorted({str(item.get("surface_profile", "") or "") for item in runs if str(item.get("surface_profile", "") or "").strip()})
@@ -843,7 +858,10 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "zone_edge_correction_count_total": sum(zone_edge_correction_counts),
         "place_controller_reentry_count_total": sum(place_controller_reentry_counts),
         "post_visit_revisit_count_total": sum(post_visit_revisit_counts),
+        "settle_no_chase_activated_count": sum(1 for flag in settle_no_chase_flags if flag),
         "settle_exit_reasons": settle_exit_reasons,
+        "settle_no_chase_exit_reasons": settle_no_chase_exit_reasons,
+        "release_gate_blocked_reasons": release_gate_blocked_reasons,
     }
     if any("final_three_ball_corral_pass" in item for item in runs):
         summary.update(
@@ -872,6 +890,9 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         f"- Surface profiles: `{', '.join(surface_profiles) if surface_profiles else 'unspecified'}`",
         f"- Handoff kinds: `{', '.join(summary.get('handoff_kinds', [])) if summary.get('handoff_kinds') else 'unspecified'}`",
         f"- Settle exits: `{', '.join(summary.get('settle_exit_reasons', [])) if summary.get('settle_exit_reasons') else 'unspecified'}`",
+        f"- Settle-no-chase activations: `{summary.get('settle_no_chase_activated_count', 0)}/{max(len(runs), 1)}`",
+        f"- Settle-no-chase exits: `{', '.join(summary.get('settle_no_chase_exit_reasons', [])) if summary.get('settle_no_chase_exit_reasons') else 'none'}`",
+        f"- Release gate blocks: `{', '.join(summary.get('release_gate_blocked_reasons', [])) if summary.get('release_gate_blocked_reasons') else 'none'}`",
         f"- Pass rate: `{summary.get('pass_count', 0)}/{max(len(runs), 1)}`",
         f"- Promotion gate: `{'PASS' if summary.get('promotion_gate_pass') else 'FAIL'}`",
         f"- Settled placement pass/fail: `{summary.get('settled_in_corral_pass_count', 0)}/{summary.get('settled_in_corral_fail_count', 0)}`",
@@ -911,6 +932,8 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
             f"`{'PASS' if run_pass else 'FAIL'}` "
             f"handoff=`{str(item.get('handoff_kind', '') or 'unspecified')}` "
             f"settle_exit=`{str(item.get('settle_exit_reason', '') or 'unspecified')}` "
+            f"settle_no_chase=`{bool(item.get('settle_no_chase_activated', False))}` "
+            f"release_gate=`{str(item.get('release_gate_blocked_reason', '') or 'none')}` "
             f"surface=`{str(item.get('surface_profile', '') or 'unspecified')}` "
             f"placed=`{int(item.get('placed_count', 0) or 0)}` "
             f"retrieved=`{bool(item.get('final_inside_retrieval_corral', False))}` "

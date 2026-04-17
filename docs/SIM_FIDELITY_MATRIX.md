@@ -47,9 +47,22 @@ Track which physical constraints are simulated exactly, approximated, or not sim
   - `short_turf` remains the active operator-default lane until later evidence justifies a change
 - Current multi-ball engineering truth:
   - `gather_three_ball_zone` is now exposed in the dashboard as a secondary scenario on `short_turf`
+  - the active three-ball checkpoint uses a wider gather layout:
+    - `ball_b`: `1.55 m` forward
+    - `ball_a` and `ball_c`: `2.35 m` forward, `+/- 0.85 m` lateral
+  - the active non-push Nav2 transit lane is intentionally faster:
+    - `max_vel_x = 0.42`
+    - `max_speed_xy = 0.42`
+    - `acc_lim_x = 3.5`
+    - `decel_lim_x = -3.5`
   - final multi-ball scoring now records `final_corral_audit`, `final_all_targets_inside_retrieval_corral`, `final_all_targets_stopped`, `final_three_ball_corral_pass`, and `retrieved_count`
   - the first fresh three-ball sanity run emitted those fields at `artifacts/session/20260416T184739Z/gather_mission_repeatability/campaign_run_summary.json`
-  - that run still failed on the same release/settle behavior that also showed up in the fresh one-ball rerun at `artifacts/session/20260416T184447Z/gather_mission_repeatability/campaign_run_summary.json`
+  - fresh protected regression evidence after the faster transit tuning is still green:
+    - `artifacts/session/20260417T040105820076Z/visit_mission/20260417T040503Z/mission_verdict.json`
+  - the latest wider/faster three-ball checkpoint materially improved time-to-second-ball, with about `1.1 s` between `ball_b` completion and the next `ball_a` visit attempt:
+    - `artifacts/session/20260417T040105820076Z/gather_mission/20260417T040116Z/gather_sequence.jsonl`
+  - the current live blocker is now the later `ball_a` timeout on the wider/faster lane rather than the earlier long hesitation after the first retrieval:
+    - `artifacts/session/20260417T040027Z/gather_mission_repeatability/campaign_run_summary.json`
 - Historical surface-calibration passes under the earlier tighter settle bar:
   - `artifacts/session/20260413T135949Z/gather_mission_repeatability/campaign_run_summary.json`
   - `artifacts/session/20260413T140714Z/gather_mission_repeatability/campaign_run_summary.json`
