@@ -21,6 +21,7 @@ DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S = 1.0
 DEFAULT_RELEASE_SETTLE_MAX_WAIT_S = 6.0
 DEFAULT_RELEASE_ZONE_MARGIN_M = 0.07
 DEFAULT_ZONE_EDGE_CORRECTION_MARGIN_M = 0.12
+DEFAULT_MULTI_BALL_SPAWN_RADIUS_M = 3.048
 
 
 @dataclass(frozen=True)
@@ -234,6 +235,14 @@ def _number(value: Any) -> float | None:
     return numeric
 
 
+def _spawn_on_corral_arc(*, angle_deg: float) -> tuple[float, float]:
+    angle_rad = math.radians(angle_deg)
+    return (
+        DEFAULT_ZONE_WORLD_X + (DEFAULT_MULTI_BALL_SPAWN_RADIUS_M * math.cos(angle_rad)),
+        DEFAULT_ZONE_WORLD_Y + (DEFAULT_MULTI_BALL_SPAWN_RADIUS_M * math.sin(angle_rad)),
+    )
+
+
 def build_gather_targets(scenario_id: str) -> list[GatherTargetSpec]:
     if scenario_id == "corral_single_ball_place":
         return [
@@ -246,27 +255,30 @@ def build_gather_targets(scenario_id: str) -> list[GatherTargetSpec]:
             )
         ]
     if scenario_id == "gather_three_ball_zone":
+        left_forward_m, left_lateral_m = _spawn_on_corral_arc(angle_deg=45.0)
+        center_forward_m, center_lateral_m = _spawn_on_corral_arc(angle_deg=0.0)
+        right_forward_m, right_lateral_m = _spawn_on_corral_arc(angle_deg=-45.0)
         return [
             GatherTargetSpec(
                 id="ball_a",
                 label="Ball A (far left)",
                 start_visible=False,
-                forward_m=2.35,
-                lateral_m=0.85,
+                forward_m=left_forward_m,
+                lateral_m=left_lateral_m,
             ),
             GatherTargetSpec(
                 id="ball_b",
                 label="Ball B (near center)",
                 start_visible=True,
-                forward_m=1.55,
-                lateral_m=0.00,
+                forward_m=center_forward_m,
+                lateral_m=center_lateral_m,
             ),
             GatherTargetSpec(
                 id="ball_c",
                 label="Ball C (far right)",
                 start_visible=False,
-                forward_m=2.35,
-                lateral_m=-0.85,
+                forward_m=right_forward_m,
+                lateral_m=right_lateral_m,
             ),
         ]
     raise ValueError(f"Unsupported gather mission scenario: {scenario_id}")

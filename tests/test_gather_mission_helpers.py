@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
@@ -9,6 +12,9 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from gather_mission_helpers import CaptureEnvelope  # noqa: E402
+from gather_mission_helpers import DEFAULT_MULTI_BALL_SPAWN_RADIUS_M  # noqa: E402
+from gather_mission_helpers import DEFAULT_ZONE_WORLD_X  # noqa: E402
+from gather_mission_helpers import DEFAULT_ZONE_WORLD_Y  # noqa: E402
 from gather_mission_helpers import build_gather_targets  # noqa: E402
 from gather_mission_helpers import build_scorecard_markdown  # noqa: E402
 from gather_mission_helpers import build_zone_spec  # noqa: E402
@@ -43,9 +49,14 @@ def test_build_gather_targets_for_three_ball_zone():
     targets = build_gather_targets("gather_three_ball_zone")
     assert [item.id for item in targets] == ["ball_a", "ball_b", "ball_c"]
     assert targets[1].start_visible is True
-    assert targets[0].forward_m > targets[1].forward_m
-    assert targets[0].lateral_m > 0.8
-    assert targets[2].lateral_m < -0.8
+    for target in targets:
+        assert math.hypot(
+            target.forward_m - DEFAULT_ZONE_WORLD_X,
+            target.lateral_m - DEFAULT_ZONE_WORLD_Y,
+        ) == pytest.approx(DEFAULT_MULTI_BALL_SPAWN_RADIUS_M, abs=1e-6)
+    assert targets[1].forward_m > targets[0].forward_m
+    assert targets[0].lateral_m > 2.0
+    assert targets[2].lateral_m < -2.0
 
 
 def test_capture_snapshot_detects_captured_ball():
