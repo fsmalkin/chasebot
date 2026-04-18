@@ -86,10 +86,10 @@ def test_capture_snapshot_accepts_forward_slip_with_longer_catcher():
     assert snapshot.within_recapture_window is True
 
 
-def test_capture_entry_snapshot_requires_exact_corridor():
+def test_capture_entry_snapshot_uses_two_band_ready_corridor():
     zone = build_zone_spec("corral_single_ball_place")
     ready_snapshot = capture_entry_snapshot(
-        {"x": 0.55, "y": 0.0, "yaw": 0.0},
+        {"x": 0.46, "y": -0.05, "yaw": 0.0},
         {"x": 1.0, "y": 0.0, "z": 0.05},
         zone=zone,
         envelope=CaptureEnvelope(),
@@ -98,7 +98,7 @@ def test_capture_entry_snapshot_requires_exact_corridor():
     assert ready_snapshot["capture_entry_reached"] is True
 
     off_axis_snapshot = capture_entry_snapshot(
-        {"x": 0.55, "y": -0.09, "yaw": 0.0},
+        {"x": 0.45, "y": -0.06, "yaw": 0.0},
         {"x": 1.0, "y": 0.0, "z": 0.05},
         zone=zone,
         envelope=CaptureEnvelope(),
@@ -106,11 +106,20 @@ def test_capture_entry_snapshot_requires_exact_corridor():
     assert off_axis_snapshot is not None
     assert off_axis_snapshot["capture_entry_reached"] is False
 
+    long_gap_snapshot = capture_entry_snapshot(
+        {"x": 0.44, "y": -0.04, "yaw": 0.0},
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        zone=zone,
+        envelope=CaptureEnvelope(),
+    )
+    assert long_gap_snapshot is not None
+    assert long_gap_snapshot["capture_entry_reached"] is False
 
-def test_compute_capture_entry_command_is_ready_in_corridor_and_bounded_outside_it():
+
+def test_compute_capture_entry_command_uses_centered_close_speedup_and_bounds_off_axis():
     zone = build_zone_spec("corral_single_ball_place")
     ready_command = compute_capture_entry_command(
-        {"x": 0.55, "y": 0.0, "yaw": 0.0},
+        {"x": 0.46, "y": -0.05, "yaw": 0.0},
         {"x": 1.0, "y": 0.0, "z": 0.05},
         zone=zone,
         envelope=CaptureEnvelope(),
@@ -118,15 +127,26 @@ def test_compute_capture_entry_command_is_ready_in_corridor_and_bounded_outside_
     assert ready_command is not None
     assert ready_command.mode == "capture_entry_ready"
 
+    centered_close_command = compute_capture_entry_command(
+        {"x": 0.44, "y": -0.01, "yaw": 0.0},
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        zone=zone,
+        envelope=CaptureEnvelope(),
+    )
+    assert centered_close_command is not None
+    assert centered_close_command.mode == "capture_entry"
+    assert centered_close_command.linear_x == pytest.approx(0.07, abs=1e-6)
+    assert abs(centered_close_command.angular_z) <= 0.25
+
     closing_command = compute_capture_entry_command(
-        {"x": 0.55, "y": -0.09, "yaw": 0.0},
+        {"x": 0.46, "y": -0.09, "yaw": 0.0},
         {"x": 1.0, "y": 0.0, "z": 0.05},
         zone=zone,
         envelope=CaptureEnvelope(),
     )
     assert closing_command is not None
     assert closing_command.mode == "capture_entry"
-    assert 0.0 < closing_command.linear_x <= 0.055
+    assert 0.0 < closing_command.linear_x < 0.07
     assert closing_command.angular_z > 0.0
 
 
@@ -212,6 +232,37 @@ def test_pre_stage_and_stage_commands_back_off_from_near_front_pose():
     assert stage_command.linear_x < 0.0
 
 
+def test_pre_stage_escape_goal_side_covers_matrix_start_geometries():
+    zone = build_zone_spec("corral_single_ball_place")
+
+    for ball_pose in (
+        {"x": 4.555261, "y": 2.155261},
+        {"x": 5.448, "y": 0.0},
+        {"x": 4.555261, "y": -2.155261},
+    ):
+        pre_stage_command = compute_pre_stage_command(
+            {"x": 0.0, "y": 0.0, "yaw": 0.0},
+            ball_pose,
+            zone=zone,
+        )
+
+        assert pre_stage_command is not None
+        assert pre_stage_command.mode == "pre_stage_escape_goal_side"
+        assert pre_stage_command.linear_x < 0.0
+
+
+def test_pre_stage_escape_goal_side_replaces_stalled_goal_side_orbit():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 4.555261, "y": 2.155261}
+    stalled_orbit_pose = {"x": 3.636369, "y": 2.85088, "yaw": 0.652304}
+
+    pre_stage_command = compute_pre_stage_command(stalled_orbit_pose, ball_pose, zone=zone)
+
+    assert pre_stage_command is not None
+    assert pre_stage_command.mode == "pre_stage_escape_goal_side"
+    assert pre_stage_command.linear_x < 0.0
+
+
 def test_pre_stage_and_stage_align_follow_signed_push_yaw_error():
     zone = build_zone_spec("corral_single_ball_place")
     ball_pose = {"x": 3.8, "y": 0.0}
@@ -241,6 +292,18 @@ def test_pre_stage_prefers_align_once_inside_arrival_radius():
     assert pre_stage_command is not None
     assert pre_stage_command.mode == "pre_stage_align"
     assert pre_stage_command.angular_z > 0.0
+
+
+def test_pre_stage_turns_to_recover_yaw_once_it_has_crossed_behind_ball():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 3.8, "y": 0.0}
+    crossed_behind_pose = {"x": 4.2, "y": 0.0, "yaw": 0.0}
+
+    pre_stage_command = compute_pre_stage_command(crossed_behind_pose, ball_pose, zone=zone)
+
+    assert pre_stage_command is not None
+    assert pre_stage_command.mode == "pre_stage_turn"
+    assert pre_stage_command.angular_z != 0.0
 
 
 def test_first_contact_alignment_verdict_passes_and_fails_on_angle_gate():

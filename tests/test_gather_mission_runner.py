@@ -719,6 +719,111 @@ def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_
     assert "capture" not in phase_entries
 
 
+def test_capture_target_centered_extended_corridor_hands_off_before_capture_timeout(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 1.2
+    runner.args.poll_s = 0.1
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    phase_entries: list[str] = []
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: (
+            {},
+            {"x": 0.46, "y": -0.01, "yaw": 0.0},
+            {"x": 1.0, "y": 0.0, "z": 0.05},
+        ),
+    )
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-capture-entry-centered-pass",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "capture"
+    assert payload["capture_entry_reached"] is True
+    assert payload["capture_entry_time_s"] >= 0.3
+    assert "capture_entry" in phase_entries
+    assert "capture" in phase_entries
+    assert phase_entries.index("capture_entry") < phase_entries.index("capture")
+
+
+def test_capture_target_off_axis_extended_corridor_still_times_out_in_capture_entry(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 10.0
+    runner.args.poll_s = 0.5
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    phase_entries: list[str] = []
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: (
+            {},
+            {"x": 0.46, "y": -0.09, "yaw": 0.0},
+            {"x": 1.0, "y": 0.0, "z": 0.05},
+        ),
+    )
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-capture-entry-off-axis-timeout",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "capture_entry"
+    assert payload["capture_entry_reached"] is False
+    assert payload["capture_entry_time_s"] >= 4.0
+    assert phase_entries.count("capture_entry") > 0
+    assert "capture" not in phase_entries
+
+
 def test_capture_target_records_capture_entry_before_generic_capture_timeout(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.capture_timeout_s = 1.2
@@ -750,7 +855,7 @@ def test_capture_target_records_capture_entry_before_generic_capture_timeout(tmp
         "_control_loop_state",
         lambda **kwargs: (
             {},
-            {"x": 0.55, "y": 0.0, "yaw": 0.0},
+            {"x": 0.46, "y": -0.01, "yaw": 0.0},
             {"x": 1.0, "y": 0.0, "z": 0.05},
         ),
     )

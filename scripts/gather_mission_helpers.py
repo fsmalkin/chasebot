@@ -29,6 +29,11 @@ DEFAULT_PRE_STAGE_READY_YAW_ERROR_DEG = 35.0
 DEFAULT_PRE_STAGE_READY_DWELL_S = 0.25
 DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M = 0.30
 DEFAULT_PRE_STAGE_ORBIT_OFFSET_M = 1.00
+DEFAULT_PRE_STAGE_ESCAPE_TRIGGER_PROJECTION_M = 0.15
+DEFAULT_PRE_STAGE_ESCAPE_RELEASE_PROJECTION_M = -0.10
+DEFAULT_PRE_STAGE_ESCAPE_RELEASE_LATERAL_ERROR_M = 0.75
+DEFAULT_PRE_STAGE_ESCAPE_RELEASE_DISTANCE_M = 2.0
+DEFAULT_PRE_STAGE_ESCAPE_LINEAR_X_MPS = -0.08
 DEFAULT_STAGE_BEHIND_BALL_DISTANCE_M = 0.45
 DEFAULT_STAGE_READY_LONGITUDINAL_PROJECTION_M = -0.18
 DEFAULT_STAGE_READY_LATERAL_ERROR_M = 0.18
@@ -37,6 +42,11 @@ DEFAULT_STAGE_READY_DWELL_S = 0.4
 DEFAULT_STAGE_ARRIVAL_RADIUS_M = 0.20
 DEFAULT_CAPTURE_ENTRY_READY_BALL_X_M = 0.45
 DEFAULT_CAPTURE_ENTRY_READY_ABS_BALL_Y_M = 0.08
+DEFAULT_CAPTURE_ENTRY_CENTERED_READY_BALL_X_M = 0.55
+DEFAULT_CAPTURE_ENTRY_CENTERED_READY_ABS_BALL_Y_M = 0.05
+DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MIN_BALL_X_M = 0.50
+DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MAX_ABS_BALL_Y_M = 0.03
+DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MAX_BEARING_RAD = 0.06
 DEFAULT_CAPTURE_ENTRY_READY_DWELL_S = 0.30
 DEFAULT_CAPTURE_ENTRY_TIMEOUT_S = 4.0
 DEFAULT_GOAL_SIDE_VIOLATION_PROJECTION_M = 0.0
@@ -690,6 +700,48 @@ def compute_pre_stage_command(
     *,
     zone: ZoneSpec,
 ) -> PlaceControlCommand | None:
+    def _orbit_candidate(
+        *,
+        flank_sign: float,
+        orbit_offset_m: float,
+        behind_bias_m: float,
+    ) -> dict[str, Any] | None:
+        orbit_pose = {
+            "x": round(
+                float(pre_stage_pose.get("x", 0.0))
+                + (flank_sign * orbit_offset_m * -math.sin(push_direction_yaw))
+                - (behind_bias_m * math.cos(push_direction_yaw)),
+                6,
+            ),
+            "y": round(
+                float(pre_stage_pose.get("y", 0.0))
+                + (flank_sign * orbit_offset_m * math.cos(push_direction_yaw))
+                - (behind_bias_m * math.sin(push_direction_yaw)),
+                6,
+            ),
+        }
+        orbit_rel = relative_point_robot_frame(robot_pose, orbit_pose)
+        if orbit_rel is None:
+            return None
+        orbit_x_m, orbit_y_m = orbit_rel
+        heading_error = math.atan2(orbit_y_m, orbit_x_m)
+        ball_xy = point_xy(ball_pose)
+        orbit_xy = point_xy(orbit_pose)
+        behind_progress_m = 0.0
+        if ball_xy is not None and orbit_xy is not None:
+            behind_progress_m = -(
+                ((orbit_xy[0] - ball_xy[0]) * math.cos(push_direction_yaw))
+                + ((orbit_xy[1] - ball_xy[1]) * math.sin(push_direction_yaw))
+            )
+        return {
+            "flank_sign": flank_sign,
+            "orbit_pose": orbit_pose,
+            "orbit_x_m": orbit_x_m,
+            "orbit_y_m": orbit_y_m,
+            "heading_error": heading_error,
+            "behind_progress_m": behind_progress_m,
+        }
+
     snapshot = pre_stage_arrival_snapshot(robot_pose, ball_pose, zone=zone)
     if not isinstance(snapshot, dict):
         return None
@@ -706,26 +758,77 @@ def compute_pre_stage_command(
     push_direction_yaw_deg = float(_number(snapshot.get("push_direction_yaw_deg")) or 0.0)
     push_direction_yaw = math.radians(push_direction_yaw_deg)
     robot_xyyaw = world_pose_xyyaw(robot_pose)
-    robot_yaw = float(robot_xyyaw[2]) if robot_xyyaw is not None else 0.0
-    if robot_on_goal_side or robot_longitudinal_projection_m > -0.05:
-        flank_sign = 1.0 if robot_lateral_signed_m >= 0.0 else -1.0
-        orbit_pose = {
-            "x": round(
-                float(pre_stage_pose.get("x", 0.0))
-                + (flank_sign * DEFAULT_PRE_STAGE_ORBIT_OFFSET_M * -math.sin(push_direction_yaw)),
-                6,
-            ),
-            "y": round(
-                float(pre_stage_pose.get("y", 0.0))
-                + (flank_sign * DEFAULT_PRE_STAGE_ORBIT_OFFSET_M * math.cos(push_direction_yaw)),
-                6,
-            ),
-        }
-        orbit_rel = relative_point_robot_frame(robot_pose, orbit_pose)
-        if orbit_rel is None:
-            return None
-        orbit_x_m, orbit_y_m = orbit_rel
-        heading_error = math.atan2(orbit_y_m, orbit_x_m)
+    if robot_xyyaw is None:
+        return None
+    robot_x, robot_y, robot_yaw = robot_xyyaw
+    orbit_offset_m = DEFAULT_PRE_STAGE_ORBIT_OFFSET_M + min(
+        0.35,
+        max(0.0, robot_longitudinal_projection_m) * 0.06,
+    )
+    behind_bias_m = min(
+        0.75,
+        max(0.0, robot_longitudinal_projection_m + 0.05) * 0.15,
+    )
+    orbit_candidates = [
+        candidate
+        for candidate in (
+            _orbit_candidate(flank_sign=1.0, orbit_offset_m=orbit_offset_m, behind_bias_m=behind_bias_m),
+            _orbit_candidate(flank_sign=-1.0, orbit_offset_m=orbit_offset_m, behind_bias_m=behind_bias_m),
+        )
+        if isinstance(candidate, dict)
+    ]
+    if not orbit_candidates:
+        return None
+    orbit_candidate = min(
+        orbit_candidates,
+        key=lambda candidate: (
+            abs(float(candidate["heading_error"])),
+            -float(candidate["behind_progress_m"]),
+            abs(float(candidate["flank_sign"] - (-1.0 if robot_lateral_signed_m < 0.0 else 1.0))),
+        ),
+    )
+    orbit_pose = orbit_candidate["orbit_pose"]
+    orbit_x_m = float(orbit_candidate["orbit_x_m"])
+    orbit_y_m = float(orbit_candidate["orbit_y_m"])
+    heading_error = float(orbit_candidate["heading_error"])
+    if (
+        robot_on_goal_side
+        or robot_longitudinal_projection_m > DEFAULT_PRE_STAGE_ESCAPE_TRIGGER_PROJECTION_M
+    ):
+        escape_release_ready = (
+            robot_longitudinal_projection_m <= 0.75
+            and abs(robot_lateral_signed_m) <= DEFAULT_PRE_STAGE_ESCAPE_RELEASE_LATERAL_ERROR_M
+            and pre_stage_distance_m <= DEFAULT_PRE_STAGE_ESCAPE_RELEASE_DISTANCE_M
+        )
+        if (
+            robot_longitudinal_projection_m > DEFAULT_PRE_STAGE_ESCAPE_RELEASE_PROJECTION_M
+            and not escape_release_ready
+        ):
+            desired_escape_yaw = normalize_angle(
+                math.atan2(
+                    float(orbit_pose.get("y", 0.0)) - robot_y,
+                    float(orbit_pose.get("x", 0.0)) - robot_x,
+                )
+                + math.pi
+            )
+            escape_yaw_error = normalize_angle(desired_escape_yaw - robot_yaw)
+            angular = clamp((escape_yaw_error * 1.35) + (orbit_y_m * 0.04), -0.8, 0.8)
+            if abs(angular) < 0.20 and abs(escape_yaw_error) > 0.20:
+                angular = 0.20 if escape_yaw_error >= 0.0 else -0.20
+            if abs(escape_yaw_error) > 1.0:
+                linear = -0.02
+            elif abs(escape_yaw_error) > 0.45:
+                linear = DEFAULT_PRE_STAGE_ESCAPE_LINEAR_X_MPS
+            else:
+                linear = -0.12
+            return PlaceControlCommand(
+                mode="pre_stage_escape_goal_side",
+                linear_x=linear,
+                angular_z=round(angular, 6),
+                target_speed_scale=0.0,
+                rationale="Reverse-arc toward the stronger flank waypoint until the robot is no longer trapped on the goal side.",
+            )
+    if robot_longitudinal_projection_m > -0.05:
         if orbit_x_m < 0.0 or abs(heading_error) > 0.35:
             angular = clamp((heading_error * 1.6), -0.8, 0.8)
             if abs(angular) < 0.20:
@@ -738,7 +841,10 @@ def compute_pre_stage_command(
                 rationale="Turn toward the flank waypoint so the coarse arrival comes from behind the ball.",
             )
         angular = clamp((orbit_y_m * 1.1), -0.8, 0.8)
-        linear = min(0.30, max(0.08, orbit_x_m * 0.24))
+        linear = min(
+            0.30,
+            max(0.14 if robot_longitudinal_projection_m > 0.0 else 0.08, orbit_x_m * 0.24),
+        )
         return PlaceControlCommand(
             mode="pre_stage_orbit",
             linear_x=round(linear, 6),
@@ -747,16 +853,32 @@ def compute_pre_stage_command(
             rationale="Orbit to a flank waypoint so the coarse arrival reaches the behind-ball side first.",
         )
     heading_error = math.atan2(pre_stage_y_m, max(pre_stage_x_m, 1.0e-6))
-    if pre_stage_distance_m > DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M and (pre_stage_x_m < 0.0 or abs(heading_error) > 0.45):
-        angular = clamp((heading_error * 1.6), -0.8, 0.8)
+    recover_push_yaw = robot_longitudinal_projection_m <= -0.10 and yaw_error_deg > 90.0
+    if pre_stage_distance_m > DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M and (
+        pre_stage_x_m < 0.0
+        or abs(heading_error) > 0.45
+        or recover_push_yaw
+    ):
+        if recover_push_yaw:
+            desired_push_yaw_error = normalize_angle(push_direction_yaw - robot_yaw)
+            angular = clamp((desired_push_yaw_error * 1.1) + (pre_stage_y_m * 0.4), -0.8, 0.8)
+        else:
+            angular = clamp((heading_error * 1.6), -0.8, 0.8)
         if abs(angular) < 0.20:
-            angular = 0.20 if heading_error >= 0.0 else -0.20
+            if recover_push_yaw:
+                angular = 0.20 if desired_push_yaw_error >= 0.0 else -0.20
+            else:
+                angular = 0.20 if heading_error >= 0.0 else -0.20
         return PlaceControlCommand(
             mode="pre_stage_turn",
             linear_x=0.0,
             angular_z=round(angular, 6),
             target_speed_scale=0.0,
-            rationale="Rotate first so the coarse arrival stays behind the ball.",
+            rationale=(
+                "Rotate back onto the push line now that the robot has crossed behind the ball."
+                if recover_push_yaw
+                else "Rotate first so the coarse arrival stays behind the ball."
+            ),
         )
     if pre_stage_distance_m > DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M:
         angular = clamp((pre_stage_y_m * 1.2), -0.8, 0.8)
@@ -879,8 +1001,16 @@ def capture_entry_snapshot(
         "bearing_rad": float(capture.bearing_rad),
         "capture_entry_reached": bool(
             capture.ball_ahead
-            and float(capture.ball_x_m) <= float(ready_ball_x_m)
-            and abs(float(capture.ball_y_m)) <= float(ready_abs_ball_y_m)
+            and (
+                (
+                    float(capture.ball_x_m) <= float(ready_ball_x_m)
+                    and abs(float(capture.ball_y_m)) <= float(ready_abs_ball_y_m)
+                )
+                or (
+                    float(capture.ball_x_m) <= DEFAULT_CAPTURE_ENTRY_CENTERED_READY_BALL_X_M
+                    and abs(float(capture.ball_y_m)) <= DEFAULT_CAPTURE_ENTRY_CENTERED_READY_ABS_BALL_Y_M
+                )
+            )
         ),
     }
 
@@ -916,6 +1046,19 @@ def compute_capture_entry_command(
     ball_y_m = float(snapshot.get("ball_y_m", 0.0) or 0.0)
     bearing_rad = float(snapshot.get("bearing_rad", 0.0) or 0.0)
     ball_x_m = float(snapshot.get("ball_x_m", 0.0) or 0.0)
+    if (
+        ball_x_m > DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MIN_BALL_X_M
+        and abs(ball_y_m) <= DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MAX_ABS_BALL_Y_M
+        and abs(bearing_rad) <= DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MAX_BEARING_RAD
+    ):
+        angular = clamp((ball_y_m * 9.0) + (bearing_rad * 0.85), -0.25, 0.25)
+        return PlaceControlCommand(
+            mode="capture_entry",
+            linear_x=0.07,
+            angular_z=round(angular, 6),
+            target_speed_scale=0.45,
+            rationale="The ball is already centered; close the final capture gap before oscillation reopens it.",
+        )
     angular = clamp((ball_y_m * 9.0) + (bearing_rad * 0.85), -0.45, 0.45)
     linear = 0.045
     if abs(ball_y_m) > 0.06:
