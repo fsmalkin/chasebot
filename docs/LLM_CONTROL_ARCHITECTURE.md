@@ -7,6 +7,7 @@ This note captures the current intended control architecture for Chasecar's LLM 
 - the LLM handles only high-level bounded decision-making
 - deterministic policy and validation sit between the model and the robot
 - lower-level subsystems own the real-time control loops
+- slower deterministic orchestration loops may sit above those fast loops inside the executor layer
 - escalation between layers is explicit rather than implicit
 
 This is a design and implementation note for the current stack. It is not a roadmap expansion.
@@ -21,6 +22,7 @@ That means:
 - it chooses at most one next bounded action
 - it never bypasses deterministic gating
 - it never owns fast control loops
+- it may rely on slower deterministic recovery or orchestration loops below it
 - it can escalate to safer or lower-level behaviors, but not replace them
 
 ## Layered Architecture
@@ -49,6 +51,7 @@ graph TB
         Acquire["acquire_target"]
         Plan["plan_to_target"]
         Track["track_target"]
+        Gather["deterministic gather manager<br/>(planned bounded recovery layer)"]
         Stop["safe_stop / abort"]
     end
 
@@ -64,7 +67,7 @@ graph TB
     Dispatch -- "valid intent" --> L3
     L3 -- "feedback + state" --> Digest
     L4 -- "perception signals" --> Digest
-    Search & Acquire & Plan & Track & Stop --> L4
+    Search & Acquire & Plan & Track & Gather & Stop --> L4
 ```
 
 ### Layer 1: LLM Supervisor
@@ -152,6 +155,13 @@ Current executor responsibilities:
 
 This layer is where high-level intent becomes concrete robot behavior.
 
+Planned near-term extension for gather:
+
+- a deterministic gather-manager sublayer may sit inside Layer 3 above the local gather heuristics
+- it may consume bounded gather state such as behind-ball progress, goal-side status, capture-entry readiness, retry history, and loss/recovery signals
+- it may emit bounded phase directives such as `recover_goal_side`, `stabilize_pre_stage`, `stabilize_stage`, `close_capture_gap`, `handoff_to_capture`, and `recover_after_handoff`
+- it must not publish real-time steering directly and must not replace low-level control loops
+
 ### Layer 4: Lower-Level Subsystems And Control Loops
 
 Role:
@@ -168,14 +178,16 @@ Examples in the current stack:
 - cmd_vel publication
 - bounded search-turn loop inside the executor
 
-These loops should remain non-LLM and deterministic.
+These loops should remain non-LLM and deterministic. Slower deterministic
+phase or recovery orchestration above them is acceptable, but it must not own
+real-time steering.
 
 ## Escalation Model
 
 The intended escalation model is:
 
 1. lower-level loops try to do the local job first
-2. executor manages bounded behavior state across those loops
+2. executor, including any deterministic gather-manager sublayer, manages bounded behavior state across those loops
 3. supervisor re-evaluates when the state changes meaningfully
 4. supervisor escalates only by choosing another frozen intent
 
@@ -307,7 +319,11 @@ This design does not currently include:
 - direct end-to-end vision-language-action control
 - LLM ownership of environment lifecycle or scenario orchestration
 - LLM ownership of real-time steering or controller loops
+- early live gather-supervisor control; any gather-brain exploration before deterministic gather mechanics stabilize should stay shadow-mode only
 
 ## Current Design Principle
 
-The LLM should be the highest-level bounded decision layer in the stack, not the place where low-level robot competence lives.
+The LLM should be the highest-level bounded decision layer in the stack, not
+the place where low-level robot competence lives. Near-term gather redesign may
+add more deterministic orchestration inside Layer 3, but it should not move
+fast control into the model layer.

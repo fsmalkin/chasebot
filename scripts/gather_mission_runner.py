@@ -190,6 +190,7 @@ def resolve_approach_result_fields(
     capture_entry_reached: bool = False,
     capture_entry_time_s: float = 0.0,
     approach_failure_reason: str = "",
+    latest_approach_progress: dict[str, Any] | None = None,
     fresh_attempt_approach: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     resolved = {
@@ -207,44 +208,62 @@ def resolve_approach_result_fields(
         "capture_entry_time_s": float(clean_number(capture_entry_time_s) or 0.0),
         "approach_failure_reason": clean_text(approach_failure_reason),
     }
-    fresh = fresh_attempt_approach if isinstance(fresh_attempt_approach, dict) else {}
-    if not fresh:
+
+    def _apply_structured_approach_progress(progress: dict[str, Any]) -> None:
+        pre_stage = progress.get("pre_stage", {}) if isinstance(progress.get("pre_stage"), dict) else {}
+        stage = progress.get("stage", {}) if isinstance(progress.get("stage"), dict) else {}
+        capture_entry = progress.get("capture_entry", {}) if isinstance(progress.get("capture_entry"), dict) else {}
+        progress_pre_stage_pose_world = (
+            pre_stage.get("pose_world", {})
+            if isinstance(pre_stage.get("pose_world"), dict)
+            else {}
+        )
+        if progress_pre_stage_pose_world:
+            resolved["pre_stage_pose_world"] = dict(progress_pre_stage_pose_world)
+        resolved["pre_stage_pose_reached"] = bool(pre_stage.get("pose_reached", resolved["pre_stage_pose_reached"]))
+        pre_stage_time_value = clean_number(pre_stage.get("time_s"))
+        if pre_stage_time_value is not None:
+            resolved["pre_stage_time_s"] = float(pre_stage_time_value)
+        resolved["pre_stage_handoff_pass"] = bool(pre_stage.get("handoff_pass", resolved["pre_stage_handoff_pass"]))
+        resolved["approach_side_verdict"] = {
+            "pass": bool(progress.get("pass", False)),
+            "reason": clean_text(progress.get("reason")),
+        }
+        resolved["staging_pose_reached"] = bool(stage.get("pose_reached", resolved["staging_pose_reached"]))
+        stage_time_value = clean_number(stage.get("time_s"))
+        if stage_time_value is not None:
+            resolved["stage_time_s"] = float(stage_time_value)
+        resolved["entered_goal_side_before_capture"] = bool(
+            capture_entry.get("entered_goal_side_before_capture", resolved["entered_goal_side_before_capture"])
+        )
+        if "first_contact_push_alignment_deg" in capture_entry:
+            resolved["first_contact_push_alignment_deg"] = clean_number(capture_entry.get("first_contact_push_alignment_deg"))
+        capture_entry_time_value = clean_number(capture_entry.get("time_s"))
+        capture_entry_failure_reason = clean_text(capture_entry.get("failure_reason"))
+        capture_entry_reached_progress = bool(
+            capture_entry.get(
+                "reached",
+                capture_entry.get("pass", resolved["capture_entry_reached"]),
+            )
+        )
+        if capture_entry_time_value is not None and capture_entry_time_value > 0.0:
+            capture_entry_reached_progress = True
+        if capture_entry_failure_reason.startswith("capture_entry"):
+            capture_entry_reached_progress = True
+        resolved["capture_entry_reached"] = capture_entry_reached_progress
+        if capture_entry_time_value is not None:
+            resolved["capture_entry_time_s"] = float(capture_entry_time_value)
+        if "push_direction_yaw_deg" in capture_entry:
+            resolved["push_direction_yaw_deg"] = float(clean_number(capture_entry.get("push_direction_yaw_deg")) or 0.0)
+        resolved["approach_failure_reason"] = clean_text(
+            capture_entry_failure_reason,
+            clean_text(progress.get("reason")),
+        )
+
+    latest = latest_approach_progress if isinstance(latest_approach_progress, dict) else {}
+    if latest:
+        _apply_structured_approach_progress(latest)
         return resolved
-    pre_stage = fresh.get("pre_stage", {}) if isinstance(fresh.get("pre_stage"), dict) else {}
-    stage = fresh.get("stage", {}) if isinstance(fresh.get("stage"), dict) else {}
-    capture_entry = fresh.get("capture_entry", {}) if isinstance(fresh.get("capture_entry"), dict) else {}
-    fresh_pre_stage_pose_world = pre_stage.get("pose_world", {}) if isinstance(pre_stage.get("pose_world"), dict) else {}
-    if fresh_pre_stage_pose_world:
-        resolved["pre_stage_pose_world"] = dict(fresh_pre_stage_pose_world)
-    resolved["pre_stage_pose_reached"] = bool(pre_stage.get("pose_reached", resolved["pre_stage_pose_reached"]))
-    pre_stage_time_value = clean_number(pre_stage.get("time_s"))
-    if pre_stage_time_value is not None:
-        resolved["pre_stage_time_s"] = float(pre_stage_time_value)
-    resolved["pre_stage_handoff_pass"] = bool(pre_stage.get("handoff_pass", resolved["pre_stage_handoff_pass"]))
-    resolved["approach_side_verdict"] = {
-        "pass": bool(fresh.get("pass", False)),
-        "reason": clean_text(fresh.get("reason")),
-    }
-    resolved["staging_pose_reached"] = bool(stage.get("pose_reached", resolved["staging_pose_reached"]))
-    stage_time_value = clean_number(stage.get("time_s"))
-    if stage_time_value is not None:
-        resolved["stage_time_s"] = float(stage_time_value)
-    resolved["entered_goal_side_before_capture"] = bool(
-        capture_entry.get("entered_goal_side_before_capture", resolved["entered_goal_side_before_capture"])
-    )
-    if "first_contact_push_alignment_deg" in capture_entry:
-        resolved["first_contact_push_alignment_deg"] = clean_number(capture_entry.get("first_contact_push_alignment_deg"))
-    if "pass" in capture_entry:
-        resolved["capture_entry_reached"] = bool(capture_entry.get("pass", resolved["capture_entry_reached"]))
-    capture_entry_time_value = clean_number(capture_entry.get("time_s"))
-    if capture_entry_time_value is not None:
-        resolved["capture_entry_time_s"] = float(capture_entry_time_value)
-    if "push_direction_yaw_deg" in capture_entry:
-        resolved["push_direction_yaw_deg"] = float(clean_number(capture_entry.get("push_direction_yaw_deg")) or 0.0)
-    resolved["approach_failure_reason"] = clean_text(
-        capture_entry.get("failure_reason"),
-        clean_text(fresh.get("reason")),
-    )
     return resolved
 
 
@@ -423,6 +442,7 @@ class GatherMissionRunner:
         capture_entry_reached: bool = False,
         capture_entry_time_s: float = 0.0,
         approach_failure_reason: str = "",
+        latest_approach_progress: dict[str, Any] | None = None,
         fresh_attempt_approach: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         approach_fields = resolve_approach_result_fields(
@@ -439,6 +459,7 @@ class GatherMissionRunner:
             capture_entry_reached=capture_entry_reached,
             capture_entry_time_s=capture_entry_time_s,
             approach_failure_reason=approach_failure_reason,
+            latest_approach_progress=latest_approach_progress,
             fresh_attempt_approach=fresh_attempt_approach,
         )
         resolved_settle_exit_reason = clean_text(
@@ -495,6 +516,11 @@ class GatherMissionRunner:
             "capture_entry_reached": bool(approach_fields["capture_entry_reached"]),
             "capture_entry_time_s": round(float(approach_fields["capture_entry_time_s"]), 6),
             "approach_failure_reason": clean_text(approach_fields["approach_failure_reason"]),
+            "latest_approach_progress": (
+                dict(latest_approach_progress)
+                if isinstance(latest_approach_progress, dict)
+                else {}
+            ),
             "fresh_attempt_approach": (
                 dict(fresh_attempt_approach)
                 if isinstance(fresh_attempt_approach, dict)
@@ -551,6 +577,7 @@ class GatherMissionRunner:
         capture_entry_reached: bool = False,
         capture_entry_time_s: float = 0.0,
         approach_failure_reason: str = "",
+        latest_approach_progress: dict[str, Any] | None = None,
         fresh_attempt_approach: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         approach_fields = resolve_approach_result_fields(
@@ -567,6 +594,7 @@ class GatherMissionRunner:
             capture_entry_reached=capture_entry_reached,
             capture_entry_time_s=capture_entry_time_s,
             approach_failure_reason=approach_failure_reason,
+            latest_approach_progress=latest_approach_progress,
             fresh_attempt_approach=fresh_attempt_approach,
         )
         settle_payload = settle_metrics if isinstance(settle_metrics, dict) else {}
@@ -660,6 +688,11 @@ class GatherMissionRunner:
             "capture_entry_reached": bool(approach_fields["capture_entry_reached"]),
             "capture_entry_time_s": round(float(approach_fields["capture_entry_time_s"]), 6),
             "approach_failure_reason": clean_text(approach_fields["approach_failure_reason"]),
+            "latest_approach_progress": (
+                dict(latest_approach_progress)
+                if isinstance(latest_approach_progress, dict)
+                else {}
+            ),
             "fresh_attempt_approach": (
                 dict(fresh_attempt_approach)
                 if isinstance(fresh_attempt_approach, dict)
@@ -1705,7 +1738,17 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             else:
                 zone_centered_started_monotonic = None
             if not stage_completed:
-                if isinstance(approach_snapshot, dict) and bool(approach_snapshot.get("staging_pose_reached", False)):
+                stage_command = (
+                    compute_stage_command(robot_pose, ball_pose or {}, zone=self.zone)
+                    if robot_pose and ball_pose
+                    else None
+                )
+                stage_ready_signal = bool(
+                    isinstance(approach_snapshot, dict) and approach_snapshot.get("staging_pose_reached", False)
+                ) or bool(stage_command and stage_command.mode == "stage_ready")
+                if stage_command and stage_command.mode in {"stage_align", "stage_ready"}:
+                    staging_pose_reached_once = True
+                if stage_ready_signal:
                     staging_pose_reached_once = True
                     stage_ready_started_monotonic = (
                         now_monotonic
@@ -1714,11 +1757,6 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     )
                 else:
                     stage_ready_started_monotonic = None
-                stage_command = (
-                    compute_stage_command(robot_pose, ball_pose or {}, zone=self.zone)
-                    if robot_pose and ball_pose
-                    else None
-                )
                 self._update_gather_runtime_state(
                     mission_phase="stage",
                     gather_phase="stage",
@@ -3184,7 +3222,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         resume_with_place_loss_revisit = False
         resume_with_fresh_approach = False
         target_start_monotonic = time.monotonic()
-        approach_memory: dict[str, Any] = {}
+        latest_approach_progress_memory: dict[str, Any] = {}
+        latest_approach_progress_rank: tuple[int, ...] | None = None
+        latest_approach_progress_sequence = 0
+        active_attempt_approach_index: int | None = None
+        active_attempt_approach_memory: dict[str, Any] = {}
         fresh_attempt_index: int | None = None
         fresh_attempt_approach_memory: dict[str, Any] = {}
         fresh_attempt_kinds = {"initial_visit", "retry_visit", "place_loss_revisit"}
@@ -3213,80 +3255,188 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "release_gate_blocked_reason": clean_text(payload.get("release_gate_blocked_reason"), "none"),
             }
 
-        def _approach_kwargs(payload: dict[str, Any] | None) -> dict[str, Any]:
-            if isinstance(payload, dict):
-                current = {
-                    "pre_stage_pose_world": payload.get("pre_stage_pose_world", {})
-                    if isinstance(payload.get("pre_stage_pose_world"), dict)
-                    else {},
-                    "pre_stage_pose_reached": bool(payload.get("pre_stage_pose_reached", False)),
-                    "pre_stage_time_s": float(clean_number(payload.get("pre_stage_time_s")) or 0.0),
-                    "pre_stage_handoff_pass": bool(payload.get("pre_stage_handoff_pass", False)),
-                    "approach_side_verdict": payload.get("approach_side_verdict", {})
-                    if isinstance(payload.get("approach_side_verdict"), dict)
-                    else {},
-                    "staging_pose_reached": bool(payload.get("staging_pose_reached", False)),
-                    "entered_goal_side_before_capture": bool(payload.get("entered_goal_side_before_capture", False)),
-                    "first_contact_push_alignment_deg": clean_number(payload.get("first_contact_push_alignment_deg")),
-                    "push_direction_yaw_deg": float(clean_number(payload.get("push_direction_yaw_deg")) or 0.0),
-                    "stage_time_s": float(clean_number(payload.get("stage_time_s")) or 0.0),
-                    "capture_entry_reached": bool(payload.get("capture_entry_reached", False)),
-                    "capture_entry_time_s": float(clean_number(payload.get("capture_entry_time_s")) or 0.0),
-                    "approach_failure_reason": clean_text(payload.get("approach_failure_reason")),
-                }
-                if current["approach_side_verdict"]:
-                    existing_verdict = approach_memory.get("approach_side_verdict")
-                    current_pass = bool(current["approach_side_verdict"].get("pass", False))
-                    existing_pass = bool(existing_verdict.get("pass", False)) if isinstance(existing_verdict, dict) else True
-                    if not isinstance(existing_verdict, dict) or not existing_verdict or (not current_pass) or existing_pass:
-                        approach_memory["approach_side_verdict"] = dict(current["approach_side_verdict"])
-                if current["pre_stage_pose_world"]:
-                    approach_memory["pre_stage_pose_world"] = dict(current["pre_stage_pose_world"])
-                if current["pre_stage_pose_reached"]:
-                    approach_memory["pre_stage_pose_reached"] = True
-                if current["pre_stage_time_s"] > 0.0:
-                    approach_memory["pre_stage_time_s"] = current["pre_stage_time_s"]
-                if current["pre_stage_handoff_pass"]:
-                    approach_memory["pre_stage_handoff_pass"] = True
-                if current["staging_pose_reached"]:
-                    approach_memory["staging_pose_reached"] = True
-                if current["entered_goal_side_before_capture"]:
-                    approach_memory["entered_goal_side_before_capture"] = True
-                if current["first_contact_push_alignment_deg"] is not None and clean_number(approach_memory.get("first_contact_push_alignment_deg")) is None:
-                    approach_memory["first_contact_push_alignment_deg"] = current["first_contact_push_alignment_deg"]
-                if current["push_direction_yaw_deg"] or "push_direction_yaw_deg" in payload:
-                    approach_memory["push_direction_yaw_deg"] = current["push_direction_yaw_deg"]
-                if current["stage_time_s"] > 0.0:
-                    approach_memory["stage_time_s"] = current["stage_time_s"]
-                if current["capture_entry_reached"]:
-                    approach_memory["capture_entry_reached"] = True
-                if current["capture_entry_time_s"] > 0.0:
-                    approach_memory["capture_entry_time_s"] = current["capture_entry_time_s"]
-                if current["approach_failure_reason"] and not clean_text(approach_memory.get("approach_failure_reason")):
-                    approach_memory["approach_failure_reason"] = current["approach_failure_reason"]
+        def _approach_fields_from_memory(memory: dict[str, Any] | None) -> dict[str, Any]:
+            memory = memory if isinstance(memory, dict) else {}
             return {
                 "pre_stage_pose_world": (
-                    dict(approach_memory["pre_stage_pose_world"])
-                    if isinstance(approach_memory.get("pre_stage_pose_world"), dict)
+                    dict(memory["pre_stage_pose_world"])
+                    if isinstance(memory.get("pre_stage_pose_world"), dict)
                     else {}
                 ),
-                "pre_stage_pose_reached": bool(approach_memory.get("pre_stage_pose_reached", False)),
-                "pre_stage_time_s": float(clean_number(approach_memory.get("pre_stage_time_s")) or 0.0),
-                "pre_stage_handoff_pass": bool(approach_memory.get("pre_stage_handoff_pass", False)),
+                "pre_stage_pose_reached": bool(memory.get("pre_stage_pose_reached", False)),
+                "pre_stage_time_s": float(clean_number(memory.get("pre_stage_time_s")) or 0.0),
+                "pre_stage_handoff_pass": bool(memory.get("pre_stage_handoff_pass", False)),
                 "approach_side_verdict": (
-                    dict(approach_memory["approach_side_verdict"])
-                    if isinstance(approach_memory.get("approach_side_verdict"), dict)
+                    dict(memory["approach_side_verdict"])
+                    if isinstance(memory.get("approach_side_verdict"), dict)
                     else {}
                 ),
-                "staging_pose_reached": bool(approach_memory.get("staging_pose_reached", False)),
-                "entered_goal_side_before_capture": bool(approach_memory.get("entered_goal_side_before_capture", False)),
-                "first_contact_push_alignment_deg": clean_number(approach_memory.get("first_contact_push_alignment_deg")),
-                "push_direction_yaw_deg": float(clean_number(approach_memory.get("push_direction_yaw_deg")) or 0.0),
-                "stage_time_s": float(clean_number(approach_memory.get("stage_time_s")) or 0.0),
-                "capture_entry_reached": bool(approach_memory.get("capture_entry_reached", False)),
-                "capture_entry_time_s": float(clean_number(approach_memory.get("capture_entry_time_s")) or 0.0),
-                "approach_failure_reason": clean_text(approach_memory.get("approach_failure_reason")),
+                "staging_pose_reached": bool(memory.get("staging_pose_reached", False)),
+                "entered_goal_side_before_capture": bool(memory.get("entered_goal_side_before_capture", False)),
+                "first_contact_push_alignment_deg": clean_number(memory.get("first_contact_push_alignment_deg")),
+                "push_direction_yaw_deg": float(clean_number(memory.get("push_direction_yaw_deg")) or 0.0),
+                "stage_time_s": float(clean_number(memory.get("stage_time_s")) or 0.0),
+                "capture_entry_reached": bool(memory.get("capture_entry_reached", False)),
+                "capture_entry_time_s": float(clean_number(memory.get("capture_entry_time_s")) or 0.0),
+                "approach_failure_reason": clean_text(memory.get("approach_failure_reason")),
             }
+
+        def _update_approach_memory(memory: dict[str, Any], payload: dict[str, Any] | None) -> None:
+            if not isinstance(payload, dict):
+                return
+            current = {
+                "pre_stage_pose_world": payload.get("pre_stage_pose_world", {})
+                if isinstance(payload.get("pre_stage_pose_world"), dict)
+                else {},
+                "pre_stage_pose_reached": bool(payload.get("pre_stage_pose_reached", False)),
+                "pre_stage_time_s": float(clean_number(payload.get("pre_stage_time_s")) or 0.0),
+                "pre_stage_handoff_pass": bool(payload.get("pre_stage_handoff_pass", False)),
+                "approach_side_verdict": payload.get("approach_side_verdict", {})
+                if isinstance(payload.get("approach_side_verdict"), dict)
+                else {},
+                "staging_pose_reached": bool(payload.get("staging_pose_reached", False)),
+                "entered_goal_side_before_capture": bool(payload.get("entered_goal_side_before_capture", False)),
+                "first_contact_push_alignment_deg": clean_number(payload.get("first_contact_push_alignment_deg")),
+                "push_direction_yaw_deg": float(clean_number(payload.get("push_direction_yaw_deg")) or 0.0),
+                "stage_time_s": float(clean_number(payload.get("stage_time_s")) or 0.0),
+                "capture_entry_reached": bool(payload.get("capture_entry_reached", False)),
+                "capture_entry_time_s": float(clean_number(payload.get("capture_entry_time_s")) or 0.0),
+                "approach_failure_reason": clean_text(payload.get("approach_failure_reason")),
+            }
+            if current["pre_stage_pose_world"]:
+                memory["pre_stage_pose_world"] = dict(current["pre_stage_pose_world"])
+            if current["pre_stage_pose_reached"]:
+                memory["pre_stage_pose_reached"] = True
+            if current["pre_stage_time_s"] > 0.0:
+                memory["pre_stage_time_s"] = current["pre_stage_time_s"]
+            if current["pre_stage_handoff_pass"]:
+                memory["pre_stage_handoff_pass"] = True
+            if current["approach_side_verdict"]:
+                memory["approach_side_verdict"] = dict(current["approach_side_verdict"])
+            if current["staging_pose_reached"]:
+                memory["staging_pose_reached"] = True
+            if current["entered_goal_side_before_capture"]:
+                memory["entered_goal_side_before_capture"] = True
+            if current["first_contact_push_alignment_deg"] is not None:
+                memory["first_contact_push_alignment_deg"] = current["first_contact_push_alignment_deg"]
+            if current["push_direction_yaw_deg"] or "push_direction_yaw_deg" in payload:
+                memory["push_direction_yaw_deg"] = current["push_direction_yaw_deg"]
+            if current["stage_time_s"] > 0.0:
+                memory["stage_time_s"] = current["stage_time_s"]
+            if current["capture_entry_reached"]:
+                memory["capture_entry_reached"] = True
+            if current["capture_entry_time_s"] > 0.0:
+                memory["capture_entry_time_s"] = current["capture_entry_time_s"]
+            if current["approach_failure_reason"]:
+                memory["approach_failure_reason"] = current["approach_failure_reason"]
+
+        def _approach_progress_rank(
+            fields: dict[str, Any],
+            *,
+            attempt_index: int,
+            sequence: int,
+        ) -> tuple[int, ...]:
+            return (
+                1 if fields.get("capture_entry_reached", False) else 0,
+                1 if fields.get("staging_pose_reached", False) else 0,
+                1 if fields.get("pre_stage_handoff_pass", False) else 0,
+                1 if fields.get("pre_stage_pose_reached", False) else 0,
+                1 if isinstance(fields.get("pre_stage_pose_world"), dict) and fields.get("pre_stage_pose_world") else 0,
+                1 if float(clean_number(fields.get("capture_entry_time_s")) or 0.0) > 0.0 else 0,
+                1 if float(clean_number(fields.get("stage_time_s")) or 0.0) > 0.0 else 0,
+                1 if float(clean_number(fields.get("pre_stage_time_s")) or 0.0) > 0.0 else 0,
+                int(attempt_index),
+                int(sequence),
+            )
+
+        def _record_latest_approach_progress(payload: dict[str, Any] | None) -> None:
+            nonlocal active_attempt_approach_index
+            nonlocal active_attempt_approach_memory
+            nonlocal latest_approach_progress_memory
+            nonlocal latest_approach_progress_rank
+            nonlocal latest_approach_progress_sequence
+            if not isinstance(payload, dict) or attempt_kind not in fresh_attempt_kinds:
+                return
+            if active_attempt_approach_index != int(attempt):
+                active_attempt_approach_index = int(attempt)
+                active_attempt_approach_memory = {}
+            _update_approach_memory(active_attempt_approach_memory, payload)
+            candidate = _approach_fields_from_memory(active_attempt_approach_memory)
+            latest_approach_progress_sequence += 1
+            candidate_rank = _approach_progress_rank(
+                candidate,
+                attempt_index=int(attempt),
+                sequence=latest_approach_progress_sequence,
+            )
+            if latest_approach_progress_rank is None or candidate_rank >= latest_approach_progress_rank:
+                latest_approach_progress_rank = candidate_rank
+                latest_approach_progress_memory = _approach_fields_from_memory(candidate)
+
+        def _approach_kwargs(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+            if isinstance(payload, dict):
+                _record_latest_approach_progress(payload)
+            return _approach_fields_from_memory(latest_approach_progress_memory)
+
+        def _approach_progress_snapshot_kwargs(memory: dict[str, Any], *, field_name: str) -> dict[str, Any]:
+            if not isinstance(memory, dict) or not memory:
+                return {field_name: {}}
+            fields = _approach_fields_from_memory(memory)
+            verdict = fields["approach_side_verdict"]
+            entered_goal_side = bool(fields["entered_goal_side_before_capture"])
+            pre_stage_pose_reached = bool(fields["pre_stage_pose_reached"])
+            staging_pose_reached = bool(fields["staging_pose_reached"])
+            capture_entry_reached = bool(fields["capture_entry_reached"])
+            if verdict:
+                reason = clean_text(verdict.get("reason"))
+                progress_pass = bool(verdict.get("pass", False))
+                if not reason and not progress_pass:
+                    reason = clean_text(fields["approach_failure_reason"])
+            elif entered_goal_side:
+                reason = "entered_goal_side_before_capture"
+                progress_pass = False
+            elif not pre_stage_pose_reached:
+                reason = clean_text(fields["approach_failure_reason"], "pre_stage_pose_not_reached")
+                progress_pass = False
+            elif not staging_pose_reached:
+                reason = clean_text(fields["approach_failure_reason"], "staging_pose_not_reached")
+                progress_pass = False
+            elif not capture_entry_reached:
+                reason = clean_text(fields["approach_failure_reason"], "capture_entry_not_reached")
+                progress_pass = False
+            else:
+                reason = ""
+                progress_pass = True
+            return {
+                field_name: {
+                    "pass": progress_pass,
+                    "reason": reason,
+                    "pre_stage": {
+                        "pose_world": dict(fields["pre_stage_pose_world"]),
+                        "pose_reached": pre_stage_pose_reached,
+                        "time_s": float(fields["pre_stage_time_s"]),
+                        "handoff_pass": bool(fields["pre_stage_handoff_pass"]),
+                    },
+                    "stage": {
+                        "pose_reached": staging_pose_reached,
+                        "time_s": float(fields["stage_time_s"]),
+                    },
+                    "capture_entry": {
+                        "pass": progress_pass and capture_entry_reached,
+                        "reached": capture_entry_reached,
+                        "entered_goal_side_before_capture": entered_goal_side,
+                        "first_contact_push_alignment_deg": clean_number(fields["first_contact_push_alignment_deg"]),
+                        "push_direction_yaw_deg": float(fields["push_direction_yaw_deg"]),
+                        "time_s": float(fields["capture_entry_time_s"]),
+                        "failure_reason": "" if reason == "" else clean_text(fields["approach_failure_reason"], reason),
+                    },
+                }
+            }
+
+        def _latest_approach_progress_kwargs() -> dict[str, Any]:
+            return _approach_progress_snapshot_kwargs(
+                latest_approach_progress_memory,
+                field_name="latest_approach_progress",
+            )
 
         def _record_fresh_attempt_approach(
             payload: dict[str, Any] | None,
@@ -3301,97 +3451,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 fresh_attempt_index = int(attempt_index)
             if int(attempt_index) != int(fresh_attempt_index):
                 return
-            current = {
-                "pre_stage_pose_world": payload.get("pre_stage_pose_world", {})
-                if isinstance(payload.get("pre_stage_pose_world"), dict)
-                else {},
-                "pre_stage_pose_reached": bool(payload.get("pre_stage_pose_reached", False)),
-                "pre_stage_time_s": float(clean_number(payload.get("pre_stage_time_s")) or 0.0),
-                "pre_stage_handoff_pass": bool(payload.get("pre_stage_handoff_pass", False)),
-                "staging_pose_reached": bool(payload.get("staging_pose_reached", False)),
-                "entered_goal_side_before_capture": bool(payload.get("entered_goal_side_before_capture", False)),
-                "first_contact_push_alignment_deg": clean_number(payload.get("first_contact_push_alignment_deg")),
-                "push_direction_yaw_deg": float(clean_number(payload.get("push_direction_yaw_deg")) or 0.0),
-                "stage_time_s": float(clean_number(payload.get("stage_time_s")) or 0.0),
-                "capture_entry_reached": bool(payload.get("capture_entry_reached", False)),
-                "capture_entry_time_s": float(clean_number(payload.get("capture_entry_time_s")) or 0.0),
-                "approach_failure_reason": clean_text(payload.get("approach_failure_reason")),
-            }
-            if current["pre_stage_pose_world"] and not isinstance(fresh_attempt_approach_memory.get("pre_stage_pose_world"), dict):
-                fresh_attempt_approach_memory["pre_stage_pose_world"] = dict(current["pre_stage_pose_world"])
-            if current["pre_stage_pose_reached"]:
-                fresh_attempt_approach_memory["pre_stage_pose_reached"] = True
-            if current["pre_stage_time_s"] > 0.0:
-                fresh_attempt_approach_memory["pre_stage_time_s"] = current["pre_stage_time_s"]
-            if current["pre_stage_handoff_pass"]:
-                fresh_attempt_approach_memory["pre_stage_handoff_pass"] = True
-            if current["staging_pose_reached"]:
-                fresh_attempt_approach_memory["staging_pose_reached"] = True
-            if current["entered_goal_side_before_capture"]:
-                fresh_attempt_approach_memory["entered_goal_side_before_capture"] = True
-            if (
-                current["first_contact_push_alignment_deg"] is not None
-                and clean_number(fresh_attempt_approach_memory.get("first_contact_push_alignment_deg")) is None
-            ):
-                fresh_attempt_approach_memory["first_contact_push_alignment_deg"] = current["first_contact_push_alignment_deg"]
-            if current["push_direction_yaw_deg"] or "push_direction_yaw_deg" in payload:
-                fresh_attempt_approach_memory["push_direction_yaw_deg"] = current["push_direction_yaw_deg"]
-            if current["stage_time_s"] > 0.0:
-                fresh_attempt_approach_memory["stage_time_s"] = current["stage_time_s"]
-            if current["capture_entry_reached"]:
-                fresh_attempt_approach_memory["capture_entry_reached"] = True
-            if current["capture_entry_time_s"] > 0.0:
-                fresh_attempt_approach_memory["capture_entry_time_s"] = current["capture_entry_time_s"]
-            if current["approach_failure_reason"] and not clean_text(fresh_attempt_approach_memory.get("approach_failure_reason")):
-                fresh_attempt_approach_memory["approach_failure_reason"] = current["approach_failure_reason"]
+            _update_approach_memory(fresh_attempt_approach_memory, payload)
 
         def _fresh_attempt_approach_kwargs() -> dict[str, Any]:
-            if fresh_attempt_index is None and not fresh_attempt_approach_memory:
-                return {"fresh_attempt_approach": {}}
-            entered_goal_side = bool(fresh_attempt_approach_memory.get("entered_goal_side_before_capture", False))
-            pre_stage_pose_reached = bool(fresh_attempt_approach_memory.get("pre_stage_pose_reached", False))
-            staging_pose_reached = bool(fresh_attempt_approach_memory.get("staging_pose_reached", False))
-            capture_entry_reached = bool(fresh_attempt_approach_memory.get("capture_entry_reached", False))
-            if entered_goal_side:
-                reason = "entered_goal_side_before_capture"
-            elif not pre_stage_pose_reached:
-                reason = clean_text(fresh_attempt_approach_memory.get("approach_failure_reason"), "pre_stage_pose_not_reached")
-            elif not staging_pose_reached:
-                reason = clean_text(fresh_attempt_approach_memory.get("approach_failure_reason"), "staging_pose_not_reached")
-            elif not capture_entry_reached:
-                reason = clean_text(fresh_attempt_approach_memory.get("approach_failure_reason"), "capture_entry_not_reached")
-            else:
-                reason = ""
-            return {
-                "fresh_attempt_approach": {
-                    "pass": reason == "",
-                    "reason": reason,
-                    "pre_stage": {
-                        "pose_world": (
-                            dict(fresh_attempt_approach_memory["pre_stage_pose_world"])
-                            if isinstance(fresh_attempt_approach_memory.get("pre_stage_pose_world"), dict)
-                            else {}
-                        ),
-                        "pose_reached": pre_stage_pose_reached,
-                        "time_s": float(clean_number(fresh_attempt_approach_memory.get("pre_stage_time_s")) or 0.0),
-                        "handoff_pass": bool(fresh_attempt_approach_memory.get("pre_stage_handoff_pass", False)),
-                    },
-                    "stage": {
-                        "pose_reached": staging_pose_reached,
-                        "time_s": float(clean_number(fresh_attempt_approach_memory.get("stage_time_s")) or 0.0),
-                    },
-                    "capture_entry": {
-                        "pass": reason == "" and capture_entry_reached,
-                        "entered_goal_side_before_capture": entered_goal_side,
-                        "first_contact_push_alignment_deg": clean_number(
-                            fresh_attempt_approach_memory.get("first_contact_push_alignment_deg")
-                        ),
-                        "push_direction_yaw_deg": float(clean_number(fresh_attempt_approach_memory.get("push_direction_yaw_deg")) or 0.0),
-                        "time_s": float(clean_number(fresh_attempt_approach_memory.get("capture_entry_time_s")) or 0.0),
-                        "failure_reason": "" if reason == "" else reason,
-                    },
-                }
-            }
+            return _approach_progress_snapshot_kwargs(
+                fresh_attempt_approach_memory,
+                field_name="fresh_attempt_approach",
+            )
         def _ownership_kwargs(payload: dict[str, Any] | None) -> dict[str, Any]:
             if not isinstance(payload, dict):
                 return {}
@@ -3630,6 +3696,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             place_controller_reentry_count=place_controller_reentry_count,
                             post_visit_revisit_count=post_visit_revisit_count,
                             **_approach_kwargs(pre_stage_payload),
+                            **_latest_approach_progress_kwargs(),
                             **_fresh_attempt_approach_kwargs(),
                         )
                     self._safe_stop()
@@ -3681,6 +3748,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                 place_controller_reentry_count=place_controller_reentry_count,
                                 post_visit_revisit_count=post_visit_revisit_count,
                                 **_approach_kwargs(capture_payload),
+                                **_latest_approach_progress_kwargs(),
                                 **_fresh_attempt_approach_kwargs(),
                             )
                         self._append_runtime_event(
@@ -3744,6 +3812,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             **_settle_kwargs(normalized_capture_failure),
                             **_control_diag_kwargs(normalized_capture_failure),
                             **_approach_kwargs(normalized_capture_failure),
+                            **_latest_approach_progress_kwargs(),
                             **_fresh_attempt_approach_kwargs(),
                         )
                     self._safe_stop()
@@ -3828,6 +3897,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_settle_kwargs(capture_payload),
                     **_control_diag_kwargs(capture_payload),
                     **_approach_kwargs(capture_payload),
+                    **_latest_approach_progress_kwargs(),
                     **_fresh_attempt_approach_kwargs(),
                 )
 
@@ -3890,6 +3960,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_settle_kwargs(place_payload),
                     **_control_diag_kwargs(place_payload),
                     **_approach_kwargs(capture_payload),
+                    **_latest_approach_progress_kwargs(),
                     **_fresh_attempt_approach_kwargs(),
                 )
 
@@ -3933,6 +4004,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_settle_kwargs(place_payload),
                     **_control_diag_kwargs(place_payload),
                     **_approach_kwargs(capture_payload),
+                    **_latest_approach_progress_kwargs(),
                     **_fresh_attempt_approach_kwargs(),
                 )
             self._safe_stop()
@@ -3953,6 +4025,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             zone_edge_correction_count=zone_edge_correction_count,
             place_controller_reentry_count=place_controller_reentry_count,
             post_visit_revisit_count=post_visit_revisit_count,
+            **_latest_approach_progress_kwargs(),
             **_fresh_attempt_approach_kwargs(),
         )
 
@@ -4103,6 +4176,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 if isinstance(final_result.get("fresh_attempt_approach"), dict)
                 else {}
             )
+            latest_approach_progress = (
+                final_result.get("latest_approach_progress", {})
+                if isinstance(final_result.get("latest_approach_progress"), dict)
+                else {}
+            )
             approach_fields = resolve_approach_result_fields(
                 pre_stage_pose_world=pre_stage_pose_world,
                 pre_stage_pose_reached=pre_stage_pose_reached,
@@ -4117,6 +4195,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 capture_entry_reached=capture_entry_reached,
                 capture_entry_time_s=capture_entry_time_s,
                 approach_failure_reason=approach_failure_reason,
+                latest_approach_progress=latest_approach_progress,
                 fresh_attempt_approach=fresh_attempt_approach,
             )
             pre_stage_pose_world = dict(approach_fields["pre_stage_pose_world"])
@@ -4226,6 +4305,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "capture_entry_reached": capture_entry_reached,
                 "capture_entry_time_s": round(capture_entry_time_s, 6),
                 "approach_failure_reason": approach_failure_reason,
+                "latest_approach_progress": latest_approach_progress,
                 "fresh_attempt_approach": fresh_attempt_approach,
                 "stopped_with_ball_captured": stopped_with_ball_captured,
                 "release_started_with_capture": release_started_with_capture,
@@ -4295,6 +4375,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "capture_entry_reached": capture_entry_reached,
                 "capture_entry_time_s": round(capture_entry_time_s, 6),
                 "approach_failure_reason": approach_failure_reason,
+                "latest_approach_progress": latest_approach_progress,
                 "fresh_attempt_approach": fresh_attempt_approach,
                 "stopped_with_ball_captured": stopped_with_ball_captured,
                 "release_started_with_capture": release_started_with_capture,
@@ -4396,6 +4477,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "capture_entry_reached": capture_entry_reached,
                         "capture_entry_time_s": round(capture_entry_time_s, 6),
                         "approach_failure_reason": approach_failure_reason,
+                        "latest_approach_progress": latest_approach_progress,
                         "fresh_attempt_approach": fresh_attempt_approach,
                         "placed_count": summary["placed_count"],
                         "capture_loss_count": capture_loss_count,

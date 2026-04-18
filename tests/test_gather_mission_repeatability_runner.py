@@ -245,6 +245,27 @@ def test_approach_side_rollup_uses_fresh_attempt_fields_even_when_run_fails():
         },
         {
             "pass": False,
+            "latest_approach_progress": {
+                "pass": False,
+                "reason": "capture_entry_timeout",
+                "pre_stage": {
+                    "pose_world": {"x": 1.45, "y": 0.18, "yaw_deg": 90.0},
+                    "pose_reached": True,
+                    "time_s": 1.5,
+                    "handoff_pass": True,
+                },
+                "stage": {
+                    "pose_reached": True,
+                    "time_s": 2.25,
+                },
+                "capture_entry": {
+                    "pass": False,
+                    "entered_goal_side_before_capture": False,
+                    "first_contact_push_alignment_deg": 18.0,
+                    "push_direction_yaw_deg": 170.0,
+                    "failure_reason": "capture_entry_timeout",
+                },
+            },
             "fresh_attempt_approach": {
                 "pass": False,
                 "reason": "entered_goal_side_before_capture",
@@ -273,17 +294,83 @@ def test_approach_side_rollup_uses_fresh_attempt_fields_even_when_run_fails():
 
     assert rollup["fresh_attempt_approach_pass_count"] == 1
     assert rollup["fresh_attempt_approach_fail_count"] == 1
+    assert rollup["fresh_attempt_pre_stage_pose_reached_count"] == 1
     assert rollup["approach_side_pass_count"] == 1
-    assert rollup["pre_stage_pose_reached_count"] == 1
-    assert rollup["pre_stage_handoff_pass_count"] == 1
+    assert rollup["pre_stage_pose_reached_count"] == 2
+    assert rollup["pre_stage_handoff_pass_count"] == 2
     assert rollup["fresh_attempt_capture_entry_pass_count"] == 1
-    assert rollup["pre_stage_time_avg_s"] == 1.0
+    assert rollup["pre_stage_time_avg_s"] == 1.125
     assert rollup["pre_stage_time_min_s"] == 0.75
-    assert rollup["pre_stage_time_max_s"] == 1.25
-    assert rollup["staging_pose_reached_count"] == 1
-    assert rollup["entered_goal_side_before_capture_count"] == 1
+    assert rollup["pre_stage_time_max_s"] == 1.5
+    assert rollup["staging_pose_reached_count"] == 2
+    assert rollup["entered_goal_side_before_capture_count"] == 0
+    assert rollup["approach_side_reasons"] == ["capture_entry_timeout"]
     assert rollup["fresh_attempt_approach_reasons"] == ["entered_goal_side_before_capture"]
     assert rollup["fresh_attempt_capture_entry_failure_reasons"] == ["entered_goal_side_before_capture"]
+
+
+def test_approach_side_rollup_uses_latest_retry_progress_for_top_level_counts():
+    runs = [
+        {
+            "pass": False,
+            "fresh_attempt_approach": {
+                "pass": False,
+                "reason": "entered_goal_side_before_capture",
+                "pre_stage": {
+                    "pose_world": {"x": 0.1, "y": 0.0, "yaw_deg": 90.0},
+                    "pose_reached": True,
+                    "time_s": 1.0,
+                    "handoff_pass": True,
+                },
+                "stage": {
+                    "pose_reached": True,
+                    "time_s": 0.75,
+                },
+                "capture_entry": {
+                    "pass": False,
+                    "entered_goal_side_before_capture": True,
+                    "first_contact_push_alignment_deg": None,
+                    "push_direction_yaw_deg": 15.0,
+                    "failure_reason": "entered_goal_side_before_capture",
+                },
+            },
+            "latest_approach_progress": {
+                "pass": False,
+                "reason": "capture_entry_timeout",
+                "pre_stage": {
+                    "pose_world": {"x": 0.25, "y": 0.05, "yaw_deg": 90.0},
+                    "pose_reached": True,
+                    "time_s": 2.5,
+                    "handoff_pass": True,
+                },
+                "stage": {
+                    "pose_reached": True,
+                    "time_s": 1.5,
+                },
+                "capture_entry": {
+                    "pass": False,
+                    "entered_goal_side_before_capture": False,
+                    "first_contact_push_alignment_deg": 7.5,
+                    "push_direction_yaw_deg": 90.0,
+                    "time_s": 4.0,
+                    "failure_reason": "capture_entry_timeout",
+                },
+            },
+        }
+    ]
+
+    rollup = repeatability_runner._approach_side_rollup(runs)
+
+    assert rollup["fresh_attempt_capture_entry_goal_side_entry_count"] == 1
+    assert rollup["fresh_attempt_approach_reasons"] == ["entered_goal_side_before_capture"]
+    assert rollup["fresh_attempt_pre_stage_time_avg_s"] == 1.0
+    assert rollup["entered_goal_side_before_capture_count"] == 0
+    assert rollup["approach_side_reasons"] == ["capture_entry_timeout"]
+    assert rollup["approach_failure_reasons"] == ["capture_entry_timeout"]
+    assert rollup["pre_stage_time_avg_s"] == 2.5
+    assert rollup["stage_time_avg_s"] == 1.5
+    assert rollup["latest_approach_progress_pass_count"] == 0
+    assert rollup["latest_approach_capture_entry_goal_side_entry_count"] == 0
 
 
 def test_enrich_run_with_approach_side_fields_preserves_summary_fresh_attempt(tmp_path: Path):
@@ -535,13 +622,13 @@ def test_summarize_gather_artifacts_prefers_close_in_pre_stage_without_goal_side
         "scenario_id": "corral_single_ball_place",
         "failure_reason": "capture_entry_timeout",
         "failure_stage": "capture_entry",
-        "approach_side_verdict": {"pass": False, "reason": "entered_goal_side_before_capture"},
-        "pre_stage_pose_reached": False,
-        "pre_stage_handoff_pass": False,
-        "staging_pose_reached": False,
-        "entered_goal_side_before_capture": True,
-        "approach_failure_reason": "entered_goal_side_before_capture",
-        "fresh_attempt_approach": {
+        "approach_side_verdict": {"pass": False, "reason": "capture_entry_timeout"},
+        "pre_stage_pose_reached": True,
+        "pre_stage_handoff_pass": True,
+        "staging_pose_reached": True,
+        "entered_goal_side_before_capture": False,
+        "approach_failure_reason": "capture_entry_timeout",
+        "latest_approach_progress": {
             "pass": False,
             "reason": "capture_entry_timeout",
             "pre_stage": {
@@ -563,6 +650,28 @@ def test_summarize_gather_artifacts_prefers_close_in_pre_stage_without_goal_side
                 "failure_reason": "capture_entry_timeout",
             },
         },
+        "fresh_attempt_approach": {
+            "pass": False,
+            "reason": "entered_goal_side_before_capture",
+            "pre_stage": {
+                "pose_world": {},
+                "pose_reached": False,
+                "time_s": 0.0,
+                "handoff_pass": False,
+            },
+            "stage": {
+                "pose_reached": False,
+                "time_s": 0.0,
+            },
+            "capture_entry": {
+                "pass": False,
+                "entered_goal_side_before_capture": True,
+                "first_contact_push_alignment_deg": None,
+                "push_direction_yaw_deg": 0.0,
+                "time_s": 0.0,
+                "failure_reason": "entered_goal_side_before_capture",
+            },
+        },
     }
     (mission_root / "summary.json").write_text(json.dumps(payload), encoding="utf-8")
     verdict_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -575,9 +684,9 @@ def test_summarize_gather_artifacts_prefers_close_in_pre_stage_without_goal_side
     assert summary["entered_goal_side_before_capture"] is False
     assert summary["approach_side_verdict"] == {"pass": False, "reason": "capture_entry_timeout"}
     assert summary["approach_side_reason"] == "capture_entry_timeout"
-    assert summary["fresh_attempt_approach"]["pre_stage"]["pose_reached"] is True
-    assert summary["fresh_attempt_approach"]["capture_entry"]["entered_goal_side_before_capture"] is False
-    assert summary["fresh_attempt_approach"]["capture_entry"]["failure_reason"] == "capture_entry_timeout"
+    assert summary["fresh_attempt_approach"]["pre_stage"]["pose_reached"] is False
+    assert summary["fresh_attempt_approach"]["capture_entry"]["entered_goal_side_before_capture"] is True
+    assert summary["fresh_attempt_approach"]["capture_entry"]["failure_reason"] == "entered_goal_side_before_capture"
 
 
 def test_summarize_gather_artifacts_reads_three_ball_final_audit_fields(tmp_path: Path):
@@ -642,15 +751,15 @@ def test_summarize_gather_artifacts_recomputes_fresh_approach_for_place_timeout(
         "failure_reason": "place_timeout",
         "failure_stage": "place",
         "surface_profile": "short_turf",
-        "approach_side_verdict": {"pass": False, "reason": "missing_first_contact_alignment"},
-        "pre_stage_pose_reached": False,
-        "pre_stage_handoff_pass": False,
-        "staging_pose_reached": False,
-        "capture_entry_reached": False,
-        "capture_entry_time_s": 0.0,
+        "approach_side_verdict": {"pass": True, "reason": ""},
+        "pre_stage_pose_reached": True,
+        "pre_stage_handoff_pass": True,
+        "staging_pose_reached": True,
+        "capture_entry_reached": True,
+        "capture_entry_time_s": 3.141,
         "first_contact_push_alignment_deg": None,
-        "approach_failure_reason": "missing_first_contact_alignment",
-        "fresh_attempt_approach": {
+        "approach_failure_reason": "",
+        "latest_approach_progress": {
             "pass": True,
             "reason": "",
             "pre_stage": {
@@ -672,6 +781,28 @@ def test_summarize_gather_artifacts_recomputes_fresh_approach_for_place_timeout(
                 "failure_reason": "",
             },
         },
+        "fresh_attempt_approach": {
+            "pass": False,
+            "reason": "entered_goal_side_before_capture",
+            "pre_stage": {
+                "pose_world": {},
+                "pose_reached": False,
+                "time_s": 0.0,
+                "handoff_pass": False,
+            },
+            "stage": {
+                "pose_reached": False,
+                "time_s": 0.0,
+            },
+            "capture_entry": {
+                "pass": False,
+                "entered_goal_side_before_capture": True,
+                "first_contact_push_alignment_deg": None,
+                "push_direction_yaw_deg": 0.0,
+                "time_s": 0.0,
+                "failure_reason": "entered_goal_side_before_capture",
+            },
+        },
     }
     (mission_root / "summary.json").write_text(json.dumps(payload), encoding="utf-8")
     verdict_path.write_text(json.dumps(payload), encoding="utf-8")
@@ -683,9 +814,9 @@ def test_summarize_gather_artifacts_recomputes_fresh_approach_for_place_timeout(
     assert summary["summary"]["failure_reason"] == "place_timeout"
     assert summary["approach_side_verdict"] == {"pass": True, "reason": ""}
     assert summary["approach_side_reason"] == ""
-    assert summary["fresh_attempt_approach"]["pass"] is True
-    assert summary["fresh_attempt_approach"]["capture_entry"]["pass"] is True
-    assert summary["fresh_attempt_approach"]["capture_entry"]["failure_reason"] == ""
+    assert summary["fresh_attempt_approach"]["pass"] is False
+    assert summary["fresh_attempt_approach"]["capture_entry"]["pass"] is False
+    assert summary["fresh_attempt_approach"]["capture_entry"]["failure_reason"] == "entered_goal_side_before_capture"
 
 
 def test_summarize_gather_artifacts_preserves_close_in_pre_stage_success_before_capture_entry_timeout(tmp_path: Path):
@@ -699,16 +830,16 @@ def test_summarize_gather_artifacts_preserves_close_in_pre_stage_success_before_
         "failure_reason": "capture_entry_timeout",
         "failure_stage": "capture_entry",
         "surface_profile": "short_turf",
-        "approach_side_verdict": {"pass": False, "reason": "entered_goal_side_before_capture"},
-        "pre_stage_pose_reached": False,
-        "pre_stage_handoff_pass": False,
-        "staging_pose_reached": False,
-        "capture_entry_reached": False,
-        "capture_entry_time_s": 0.0,
+        "approach_side_verdict": {"pass": False, "reason": "capture_entry_timeout"},
+        "pre_stage_pose_reached": True,
+        "pre_stage_handoff_pass": True,
+        "staging_pose_reached": True,
+        "capture_entry_reached": True,
+        "capture_entry_time_s": 4.0,
         "entered_goal_side_before_capture": False,
         "first_contact_push_alignment_deg": None,
-        "approach_failure_reason": "entered_goal_side_before_capture",
-        "fresh_attempt_approach": {
+        "approach_failure_reason": "capture_entry_timeout",
+        "latest_approach_progress": {
             "pass": False,
             "reason": "capture_entry_timeout",
             "pre_stage": {
@@ -726,8 +857,30 @@ def test_summarize_gather_artifacts_preserves_close_in_pre_stage_success_before_
                 "entered_goal_side_before_capture": False,
                 "first_contact_push_alignment_deg": None,
                 "push_direction_yaw_deg": -135.0,
-                "time_s": 0.0,
+                "time_s": 4.0,
                 "failure_reason": "capture_entry_timeout",
+            },
+        },
+        "fresh_attempt_approach": {
+            "pass": False,
+            "reason": "entered_goal_side_before_capture",
+            "pre_stage": {
+                "pose_world": {},
+                "pose_reached": False,
+                "time_s": 0.0,
+                "handoff_pass": False,
+            },
+            "stage": {
+                "pose_reached": False,
+                "time_s": 0.0,
+            },
+            "capture_entry": {
+                "pass": False,
+                "entered_goal_side_before_capture": True,
+                "first_contact_push_alignment_deg": None,
+                "push_direction_yaw_deg": 0.0,
+                "time_s": 0.0,
+                "failure_reason": "entered_goal_side_before_capture",
             },
         },
     }
@@ -739,14 +892,18 @@ def test_summarize_gather_artifacts_preserves_close_in_pre_stage_success_before_
 
     assert summary["mission_verdict"]["failure_reason"] == "capture_entry_timeout"
     assert summary["summary"]["failure_reason"] == "capture_entry_timeout"
+    assert summary["pre_stage_pose_world"] == {"x": 5.191657, "y": 2.791657}
     assert summary["pre_stage_pose_reached"] is True
     assert summary["pre_stage_handoff_pass"] is True
     assert summary["staging_pose_reached"] is True
+    assert summary["capture_entry_reached"] is True
+    assert summary["capture_entry_time_s"] == 4.0
     assert summary["entered_goal_side_before_capture"] is False
     assert summary["approach_side_verdict"] == {"pass": False, "reason": "capture_entry_timeout"}
     assert summary["approach_side_reason"] == "capture_entry_timeout"
-    assert summary["fresh_attempt_approach"]["pre_stage"]["pose_reached"] is True
-    assert summary["fresh_attempt_approach"]["capture_entry"]["failure_reason"] == "capture_entry_timeout"
+    assert summary["latest_approach_progress"]["capture_entry"]["time_s"] == 4.0
+    assert summary["fresh_attempt_approach"]["pre_stage"]["pose_reached"] is False
+    assert summary["fresh_attempt_approach"]["capture_entry"]["failure_reason"] == "entered_goal_side_before_capture"
 
 
 def test_run_dashboard_scenario_once_ignores_stale_error_result(monkeypatch):

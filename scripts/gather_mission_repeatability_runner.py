@@ -232,15 +232,20 @@ def _default_fresh_attempt_approach() -> dict[str, object]:
     }
 
 
-def _fresh_attempt_approach_from_sources(
+def _default_latest_approach_progress() -> dict[str, object]:
+    return _default_fresh_attempt_approach()
+
+
+def _approach_progress_from_sources(
     merged: dict[str, object] | None,
     *,
     fallback: dict[str, object] | None = None,
+    explicit_keys: tuple[str, ...],
 ) -> dict[str, object]:
     merged = merged if isinstance(merged, dict) else {}
     fallback = fallback if isinstance(fallback, dict) else {}
-    fallback_explicit = _dict_value(fallback.get("fresh_attempt_approach"))
-    merged_explicit = _dict_value(merged.get("fresh_attempt_approach"))
+    fallback_explicit = _merged_source_dict(*[_dict_value(fallback.get(key)) for key in explicit_keys])
+    merged_explicit = _merged_source_dict(*[_dict_value(merged.get(key)) for key in explicit_keys])
     explicit = _merged_source_dict(fallback_explicit, merged_explicit)
     explicit_pre_stage = _merged_source_dict(_dict_value(fallback_explicit.get("pre_stage")), _dict_value(explicit.get("pre_stage")))
     explicit_stage = _merged_source_dict(_dict_value(fallback_explicit.get("stage")), _dict_value(explicit.get("stage")))
@@ -360,6 +365,18 @@ def _fresh_attempt_approach_from_sources(
     if not overall_reason and not overall_pass:
         overall_reason = legacy_reason
     capture_entry_pass = bool(explicit_capture_entry.get("pass", overall_pass))
+    capture_entry_reached = bool(
+        explicit_capture_entry.get(
+            "reached",
+            explicit.get(
+                "capture_entry_reached",
+                merged.get(
+                    "capture_entry_reached",
+                    fallback.get("capture_entry_reached", capture_entry_pass),
+                ),
+            ),
+        )
+    )
     capture_entry_failure_reason = _first_text(
         explicit_capture_entry.get("failure_reason"),
         explicit_capture_entry.get("reason"),
@@ -395,22 +412,53 @@ def _fresh_attempt_approach_from_sources(
         "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
         "failure_reason": capture_entry_failure_reason,
     }
+    if (
+        "reached" in explicit_capture_entry
+        or "capture_entry_reached" in explicit
+        or "capture_entry_reached" in merged
+        or "capture_entry_reached" in fallback
+    ):
+        normalized["capture_entry"]["reached"] = capture_entry_reached
     return normalized
 
 
-def _legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach: dict[str, object]) -> dict[str, object]:
-    fresh_attempt = (
-        fresh_attempt_approach
-        if isinstance(fresh_attempt_approach, dict) and fresh_attempt_approach
-        else _default_fresh_attempt_approach()
+def _fresh_attempt_approach_from_sources(
+    merged: dict[str, object] | None,
+    *,
+    fallback: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return _approach_progress_from_sources(
+        merged,
+        fallback=fallback,
+        explicit_keys=("fresh_attempt_approach",),
     )
-    pre_stage = _dict_value(fresh_attempt.get("pre_stage"))
-    stage = _dict_value(fresh_attempt.get("stage"))
-    capture_entry = _dict_value(fresh_attempt.get("capture_entry"))
+
+
+def _latest_approach_progress_from_sources(
+    merged: dict[str, object] | None,
+    *,
+    fallback: dict[str, object] | None = None,
+) -> dict[str, object]:
+    return _approach_progress_from_sources(
+        merged,
+        fallback=fallback,
+        explicit_keys=("fresh_attempt_approach", "latest_approach_progress"),
+    )
+
+
+def _legacy_approach_fields_from_approach_progress(approach_progress: dict[str, object]) -> dict[str, object]:
+    progress = (
+        approach_progress
+        if isinstance(approach_progress, dict) and approach_progress
+        else _default_latest_approach_progress()
+    )
+    pre_stage = _dict_value(progress.get("pre_stage"))
+    stage = _dict_value(progress.get("stage"))
+    capture_entry = _dict_value(progress.get("capture_entry"))
     return {
         "approach_side_verdict": {
-            "pass": bool(fresh_attempt.get("pass", False)),
-            "reason": _clean_text(fresh_attempt.get("reason")),
+            "pass": bool(progress.get("pass", False)),
+            "reason": _clean_text(progress.get("reason")),
         },
         "pre_stage_pose_world": _first_dict(pre_stage.get("pose_world")),
         "pre_stage_pose_reached": bool(pre_stage.get("pose_reached", False)),
@@ -424,109 +472,137 @@ def _legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach: dict[str,
         ),
         "push_direction_yaw_deg": float(_float_value(capture_entry.get("push_direction_yaw_deg"), default=0.0) or 0.0),
         "stage_time_s": float(_float_value(stage.get("time_s"), default=0.0) or 0.0),
+        "capture_entry_reached": bool(capture_entry.get("reached", capture_entry.get("pass", False)))
+        or float(_float_value(capture_entry.get("time_s"), default=0.0) or 0.0) > 0.0
+        or _clean_text(capture_entry.get("failure_reason")).startswith("capture_entry"),
+        "capture_entry_time_s": float(_float_value(capture_entry.get("time_s"), default=0.0) or 0.0),
         "approach_failure_reason": _first_text(
             capture_entry.get("failure_reason"),
-            fresh_attempt.get("reason"),
+            progress.get("reason"),
         ),
     }
 
 
+def _legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach: dict[str, object]) -> dict[str, object]:
+    return _legacy_approach_fields_from_approach_progress(fresh_attempt_approach)
+
+
 def _approach_side_rollup(runs: list[dict[str, object]]) -> dict[str, object]:
     fresh_attempts = [_fresh_attempt_approach_from_sources(item, fallback=item) for item in runs]
-    approach_pass_flags = [bool(item.get("pass", False)) for item in fresh_attempts]
-    pre_stage_pose_reached_flags = [
-        bool((_dict_value(item.get("pre_stage"))).get("pose_reached", False))
-        for item in fresh_attempts
-    ]
-    pre_stage_handoff_pass_flags = [
-        bool((_dict_value(item.get("pre_stage"))).get("handoff_pass", False))
-        for item in fresh_attempts
-    ]
-    stage_pose_reached_flags = [
-        bool((_dict_value(item.get("stage"))).get("pose_reached", False))
-        for item in fresh_attempts
-    ]
-    capture_entry_pass_flags = [
-        bool((_dict_value(item.get("capture_entry"))).get("pass", False))
-        for item in fresh_attempts
-    ]
-    entered_goal_side_flags = [
-        bool((_dict_value(item.get("capture_entry"))).get("entered_goal_side_before_capture", False))
-        for item in fresh_attempts
-    ]
-    approach_reasons = sorted({_clean_text(item.get("reason")) for item in fresh_attempts if _clean_text(item.get("reason"))})
-    approach_failure_reasons = sorted(
-        {
-            _clean_text((_dict_value(item.get("capture_entry"))).get("failure_reason"))
-            for item in fresh_attempts
-            if _clean_text((_dict_value(item.get("capture_entry"))).get("failure_reason"))
+    latest_attempts = [_latest_approach_progress_from_sources(item, fallback=item) for item in runs]
+
+    def _rollup(
+        progresses: list[dict[str, object]],
+        *,
+        pass_prefix: str,
+        metric_prefix: str,
+    ) -> dict[str, object]:
+        approach_pass_flags = [bool(item.get("pass", False)) for item in progresses]
+        pre_stage_pose_reached_flags = [
+            bool((_dict_value(item.get("pre_stage"))).get("pose_reached", False))
+            for item in progresses
+        ]
+        pre_stage_handoff_pass_flags = [
+            bool((_dict_value(item.get("pre_stage"))).get("handoff_pass", False))
+            for item in progresses
+        ]
+        stage_pose_reached_flags = [
+            bool((_dict_value(item.get("stage"))).get("pose_reached", False))
+            for item in progresses
+        ]
+        capture_entry_pass_flags = [
+            bool((_dict_value(item.get("capture_entry"))).get("pass", False))
+            for item in progresses
+        ]
+        entered_goal_side_flags = [
+            bool((_dict_value(item.get("capture_entry"))).get("entered_goal_side_before_capture", False))
+            for item in progresses
+        ]
+        approach_reasons = sorted({_clean_text(item.get("reason")) for item in progresses if _clean_text(item.get("reason"))})
+        approach_failure_reasons = sorted(
+            {
+                _clean_text((_dict_value(item.get("capture_entry"))).get("failure_reason"))
+                for item in progresses
+                if _clean_text((_dict_value(item.get("capture_entry"))).get("failure_reason"))
+            }
+        )
+        pre_stage_times = [
+            float(_float_value((_dict_value(item.get("pre_stage"))).get("time_s"), default=0.0) or 0.0)
+            for item in progresses
+            if (_dict_value(item.get("pre_stage"))).get("time_s") not in {None, ""}
+        ]
+        stage_times = [
+            float(_float_value((_dict_value(item.get("stage"))).get("time_s"), default=0.0) or 0.0)
+            for item in progresses
+            if (_dict_value(item.get("stage"))).get("time_s") not in {None, ""}
+        ]
+        first_contact_alignments = [
+            float(_float_value((_dict_value(item.get("capture_entry"))).get("first_contact_push_alignment_deg"), default=0.0) or 0.0)
+            for item in progresses
+            if (_dict_value(item.get("capture_entry"))).get("first_contact_push_alignment_deg") not in {None, ""}
+        ]
+        push_direction_yaws = [
+            float(_float_value((_dict_value(item.get("capture_entry"))).get("push_direction_yaw_deg"), default=0.0) or 0.0)
+            for item in progresses
+            if (_dict_value(item.get("capture_entry"))).get("push_direction_yaw_deg") not in {None, ""}
+        ]
+        return {
+            f"{pass_prefix}_pass_count": sum(1 for flag in approach_pass_flags if flag),
+            f"{pass_prefix}_fail_count": sum(1 for flag in approach_pass_flags if not flag),
+            f"{metric_prefix}_pre_stage_pose_reached_count": sum(1 for flag in pre_stage_pose_reached_flags if flag),
+            f"{metric_prefix}_pre_stage_handoff_pass_count": sum(1 for flag in pre_stage_handoff_pass_flags if flag),
+            f"{metric_prefix}_stage_pose_reached_count": sum(1 for flag in stage_pose_reached_flags if flag),
+            f"{metric_prefix}_capture_entry_pass_count": sum(1 for flag in capture_entry_pass_flags if flag),
+            f"{metric_prefix}_capture_entry_goal_side_entry_count": sum(1 for flag in entered_goal_side_flags if flag),
+            f"{metric_prefix}_first_contact_push_alignment_avg_deg": round(sum(first_contact_alignments) / len(first_contact_alignments), 6) if first_contact_alignments else 0.0,
+            f"{metric_prefix}_first_contact_push_alignment_min_deg": round(min(first_contact_alignments), 6) if first_contact_alignments else 0.0,
+            f"{metric_prefix}_first_contact_push_alignment_max_deg": round(max(first_contact_alignments), 6) if first_contact_alignments else 0.0,
+            f"{metric_prefix}_push_direction_yaw_avg_deg": round(sum(push_direction_yaws) / len(push_direction_yaws), 6) if push_direction_yaws else 0.0,
+            f"{metric_prefix}_push_direction_yaw_min_deg": round(min(push_direction_yaws), 6) if push_direction_yaws else 0.0,
+            f"{metric_prefix}_push_direction_yaw_max_deg": round(max(push_direction_yaws), 6) if push_direction_yaws else 0.0,
+            f"{metric_prefix}_stage_time_avg_s": round(sum(stage_times) / len(stage_times), 6) if stage_times else 0.0,
+            f"{metric_prefix}_stage_time_min_s": round(min(stage_times), 6) if stage_times else 0.0,
+            f"{metric_prefix}_stage_time_max_s": round(max(stage_times), 6) if stage_times else 0.0,
+            f"{metric_prefix}_pre_stage_time_avg_s": round(sum(pre_stage_times) / len(pre_stage_times), 6) if pre_stage_times else 0.0,
+            f"{metric_prefix}_pre_stage_time_min_s": round(min(pre_stage_times), 6) if pre_stage_times else 0.0,
+            f"{metric_prefix}_pre_stage_time_max_s": round(max(pre_stage_times), 6) if pre_stage_times else 0.0,
+            f"{pass_prefix}_reasons": approach_reasons,
+            f"{metric_prefix}_capture_entry_failure_reasons": approach_failure_reasons,
         }
+
+    fresh_rollup = _rollup(
+        fresh_attempts,
+        pass_prefix="fresh_attempt_approach",
+        metric_prefix="fresh_attempt",
     )
-    pre_stage_times = [
-        float(_float_value((_dict_value(item.get("pre_stage"))).get("time_s"), default=0.0) or 0.0)
-        for item in fresh_attempts
-        if (_dict_value(item.get("pre_stage"))).get("time_s") not in {None, ""}
-    ]
-    stage_times = [
-        float(_float_value((_dict_value(item.get("stage"))).get("time_s"), default=0.0) or 0.0)
-        for item in fresh_attempts
-        if (_dict_value(item.get("stage"))).get("time_s") not in {None, ""}
-    ]
-    first_contact_alignments = [
-        float(_float_value((_dict_value(item.get("capture_entry"))).get("first_contact_push_alignment_deg"), default=0.0) or 0.0)
-        for item in fresh_attempts
-        if (_dict_value(item.get("capture_entry"))).get("first_contact_push_alignment_deg") not in {None, ""}
-    ]
-    push_direction_yaws = [
-        float(_float_value((_dict_value(item.get("capture_entry"))).get("push_direction_yaw_deg"), default=0.0) or 0.0)
-        for item in fresh_attempts
-        if (_dict_value(item.get("capture_entry"))).get("push_direction_yaw_deg") not in {None, ""}
-    ]
-    fresh_rollup = {
-        "fresh_attempt_approach_pass_count": sum(1 for flag in approach_pass_flags if flag),
-        "fresh_attempt_approach_fail_count": sum(1 for flag in approach_pass_flags if not flag),
-        "fresh_attempt_pre_stage_pose_reached_count": sum(1 for flag in pre_stage_pose_reached_flags if flag),
-        "fresh_attempt_pre_stage_handoff_pass_count": sum(1 for flag in pre_stage_handoff_pass_flags if flag),
-        "fresh_attempt_stage_pose_reached_count": sum(1 for flag in stage_pose_reached_flags if flag),
-        "fresh_attempt_capture_entry_pass_count": sum(1 for flag in capture_entry_pass_flags if flag),
-        "fresh_attempt_capture_entry_goal_side_entry_count": sum(1 for flag in entered_goal_side_flags if flag),
-        "fresh_attempt_first_contact_push_alignment_avg_deg": round(sum(first_contact_alignments) / len(first_contact_alignments), 6) if first_contact_alignments else 0.0,
-        "fresh_attempt_first_contact_push_alignment_min_deg": round(min(first_contact_alignments), 6) if first_contact_alignments else 0.0,
-        "fresh_attempt_first_contact_push_alignment_max_deg": round(max(first_contact_alignments), 6) if first_contact_alignments else 0.0,
-        "fresh_attempt_push_direction_yaw_avg_deg": round(sum(push_direction_yaws) / len(push_direction_yaws), 6) if push_direction_yaws else 0.0,
-        "fresh_attempt_push_direction_yaw_min_deg": round(min(push_direction_yaws), 6) if push_direction_yaws else 0.0,
-        "fresh_attempt_push_direction_yaw_max_deg": round(max(push_direction_yaws), 6) if push_direction_yaws else 0.0,
-        "fresh_attempt_stage_time_avg_s": round(sum(stage_times) / len(stage_times), 6) if stage_times else 0.0,
-        "fresh_attempt_stage_time_min_s": round(min(stage_times), 6) if stage_times else 0.0,
-        "fresh_attempt_stage_time_max_s": round(max(stage_times), 6) if stage_times else 0.0,
-        "fresh_attempt_pre_stage_time_avg_s": round(sum(pre_stage_times) / len(pre_stage_times), 6) if pre_stage_times else 0.0,
-        "fresh_attempt_pre_stage_time_min_s": round(min(pre_stage_times), 6) if pre_stage_times else 0.0,
-        "fresh_attempt_pre_stage_time_max_s": round(max(pre_stage_times), 6) if pre_stage_times else 0.0,
-        "fresh_attempt_approach_reasons": approach_reasons,
-        "fresh_attempt_capture_entry_failure_reasons": approach_failure_reasons,
-    }
+    latest_rollup = _rollup(
+        latest_attempts,
+        pass_prefix="latest_approach_progress",
+        metric_prefix="latest_approach",
+    )
     return {
         **fresh_rollup,
-        "approach_side_pass_count": fresh_rollup["fresh_attempt_approach_pass_count"],
-        "approach_side_fail_count": fresh_rollup["fresh_attempt_approach_fail_count"],
-        "pre_stage_pose_reached_count": fresh_rollup["fresh_attempt_pre_stage_pose_reached_count"],
-        "pre_stage_handoff_pass_count": fresh_rollup["fresh_attempt_pre_stage_handoff_pass_count"],
-        "staging_pose_reached_count": fresh_rollup["fresh_attempt_stage_pose_reached_count"],
-        "entered_goal_side_before_capture_count": fresh_rollup["fresh_attempt_capture_entry_goal_side_entry_count"],
-        "first_contact_push_alignment_avg_deg": fresh_rollup["fresh_attempt_first_contact_push_alignment_avg_deg"],
-        "first_contact_push_alignment_min_deg": fresh_rollup["fresh_attempt_first_contact_push_alignment_min_deg"],
-        "first_contact_push_alignment_max_deg": fresh_rollup["fresh_attempt_first_contact_push_alignment_max_deg"],
-        "push_direction_yaw_avg_deg": fresh_rollup["fresh_attempt_push_direction_yaw_avg_deg"],
-        "push_direction_yaw_min_deg": fresh_rollup["fresh_attempt_push_direction_yaw_min_deg"],
-        "push_direction_yaw_max_deg": fresh_rollup["fresh_attempt_push_direction_yaw_max_deg"],
-        "stage_time_avg_s": fresh_rollup["fresh_attempt_stage_time_avg_s"],
-        "stage_time_min_s": fresh_rollup["fresh_attempt_stage_time_min_s"],
-        "stage_time_max_s": fresh_rollup["fresh_attempt_stage_time_max_s"],
-        "pre_stage_time_avg_s": fresh_rollup["fresh_attempt_pre_stage_time_avg_s"],
-        "pre_stage_time_min_s": fresh_rollup["fresh_attempt_pre_stage_time_min_s"],
-        "pre_stage_time_max_s": fresh_rollup["fresh_attempt_pre_stage_time_max_s"],
-        "approach_side_reasons": fresh_rollup["fresh_attempt_approach_reasons"],
-        "approach_failure_reasons": fresh_rollup["fresh_attempt_capture_entry_failure_reasons"],
+        **latest_rollup,
+        "approach_side_pass_count": latest_rollup["latest_approach_progress_pass_count"],
+        "approach_side_fail_count": latest_rollup["latest_approach_progress_fail_count"],
+        "pre_stage_pose_reached_count": latest_rollup["latest_approach_pre_stage_pose_reached_count"],
+        "pre_stage_handoff_pass_count": latest_rollup["latest_approach_pre_stage_handoff_pass_count"],
+        "staging_pose_reached_count": latest_rollup["latest_approach_stage_pose_reached_count"],
+        "entered_goal_side_before_capture_count": latest_rollup["latest_approach_capture_entry_goal_side_entry_count"],
+        "first_contact_push_alignment_avg_deg": latest_rollup["latest_approach_first_contact_push_alignment_avg_deg"],
+        "first_contact_push_alignment_min_deg": latest_rollup["latest_approach_first_contact_push_alignment_min_deg"],
+        "first_contact_push_alignment_max_deg": latest_rollup["latest_approach_first_contact_push_alignment_max_deg"],
+        "push_direction_yaw_avg_deg": latest_rollup["latest_approach_push_direction_yaw_avg_deg"],
+        "push_direction_yaw_min_deg": latest_rollup["latest_approach_push_direction_yaw_min_deg"],
+        "push_direction_yaw_max_deg": latest_rollup["latest_approach_push_direction_yaw_max_deg"],
+        "stage_time_avg_s": latest_rollup["latest_approach_stage_time_avg_s"],
+        "stage_time_min_s": latest_rollup["latest_approach_stage_time_min_s"],
+        "stage_time_max_s": latest_rollup["latest_approach_stage_time_max_s"],
+        "pre_stage_time_avg_s": latest_rollup["latest_approach_pre_stage_time_avg_s"],
+        "pre_stage_time_min_s": latest_rollup["latest_approach_pre_stage_time_min_s"],
+        "pre_stage_time_max_s": latest_rollup["latest_approach_pre_stage_time_max_s"],
+        "approach_side_reasons": latest_rollup["latest_approach_progress_reasons"],
+        "approach_failure_reasons": latest_rollup["latest_approach_capture_entry_failure_reasons"],
     }
 
 
@@ -534,24 +610,28 @@ def _enrich_run_with_approach_side_fields(run_summary: dict[str, object]) -> dic
     mission_verdict_path = str(run_summary.get("mission_verdict_path", "") or "")
     if not mission_verdict_path:
         fresh_attempt_approach = _default_fresh_attempt_approach()
+        latest_approach_progress = _default_latest_approach_progress()
         run_summary.update(
             {
                 "fresh_attempt_approach": fresh_attempt_approach,
+                "latest_approach_progress": latest_approach_progress,
                 "approach_side_pass": False,
                 "approach_side_reason": "",
-                **_legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach),
+                **_legacy_approach_fields_from_approach_progress(latest_approach_progress),
             }
         )
         return run_summary
     verdict_path = Path(mission_verdict_path)
     if not verdict_path.exists():
         fresh_attempt_approach = _default_fresh_attempt_approach()
+        latest_approach_progress = _default_latest_approach_progress()
         run_summary.update(
             {
                 "fresh_attempt_approach": fresh_attempt_approach,
+                "latest_approach_progress": latest_approach_progress,
                 "approach_side_pass": False,
                 "approach_side_reason": "",
-                **_legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach),
+                **_legacy_approach_fields_from_approach_progress(latest_approach_progress),
             }
         )
         return run_summary
@@ -563,12 +643,17 @@ def _enrich_run_with_approach_side_fields(run_summary: dict[str, object]) -> dic
         merged,
         fallback=_merged_source_dict(run_summary, summary),
     )
-    legacy_fields = _legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach)
+    latest_approach_progress = _latest_approach_progress_from_sources(
+        merged,
+        fallback=_merged_source_dict(run_summary, summary),
+    )
+    legacy_fields = _legacy_approach_fields_from_approach_progress(latest_approach_progress)
     run_summary.update(
         {
             "fresh_attempt_approach": fresh_attempt_approach,
-            "approach_side_pass": bool(fresh_attempt_approach.get("pass", False)),
-            "approach_side_reason": _clean_text(fresh_attempt_approach.get("reason")),
+            "latest_approach_progress": latest_approach_progress,
+            "approach_side_pass": bool(latest_approach_progress.get("pass", False)),
+            "approach_side_reason": _clean_text(latest_approach_progress.get("reason")),
             **legacy_fields,
         }
     )
@@ -588,7 +673,8 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
     target_results = list(target_results_payload.get("targets", [])) if isinstance(target_results_payload.get("targets"), list) else []
     merged = _merged_source_dict(summary, verdict)
     fresh_attempt_approach = _fresh_attempt_approach_from_sources(merged, fallback=summary)
-    legacy_approach_fields = _legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach)
+    latest_approach_progress = _latest_approach_progress_from_sources(merged, fallback=summary)
+    legacy_approach_fields = _legacy_approach_fields_from_approach_progress(latest_approach_progress)
     approach_side_verdict = legacy_approach_fields["approach_side_verdict"]
 
     return {
@@ -653,6 +739,7 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
         "mission_time_s": float(verdict.get("mission_time_s", summary.get("mission_time_s", 0.0)) or 0.0),
         "route_order": list(verdict.get("route_order", summary.get("route_order", [])) or []),
         "fresh_attempt_approach": fresh_attempt_approach,
+        "latest_approach_progress": latest_approach_progress,
         "approach_side_verdict": approach_side_verdict,
         "approach_side_pass": bool(approach_side_verdict.get("pass", False)),
         "approach_side_reason": str(approach_side_verdict.get("reason", "") or ""),
@@ -818,6 +905,7 @@ def main() -> int:
             except Exception as exc:
                 output = str(exc)
                 fresh_attempt_approach = _default_fresh_attempt_approach()
+                latest_approach_progress = _default_latest_approach_progress()
                 run_summary = {
                     "run_index": run_index,
                     "return_code": 2,
@@ -842,7 +930,8 @@ def main() -> int:
                     "mission_verdict": {},
                     "summary": {},
                     "fresh_attempt_approach": fresh_attempt_approach,
-                    **_legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach),
+                    "latest_approach_progress": latest_approach_progress,
+                    **_legacy_approach_fields_from_approach_progress(latest_approach_progress),
                     "approach_side_pass": False,
                     "approach_side_reason": "",
                     "failure_reason": str(exc),

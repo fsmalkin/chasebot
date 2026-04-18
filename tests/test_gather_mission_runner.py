@@ -623,10 +623,146 @@ def test_run_target_retries_fresh_approach_after_capture_entry_failure(tmp_path,
     assert result["fresh_attempt_approach"]["capture_entry"]["pass"] is False
 
 
-def test_target_failure_result_prefers_fresh_attempt_pass_over_stale_alignment_headline(tmp_path, monkeypatch):
+def test_run_target_uses_latest_retry_progress_for_terminal_capture_entry_timeout(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.max_retries_per_target = 1
+    runner.visit_runtime_state.update({"remaining_targets": [runner.targets[0].id], "visited_targets": []})
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    call_flags: list[tuple[bool, bool]] = []
+    pre_stage_calls: list[str] = []
+    pre_stage_payloads = iter(
+        [
+            {
+                "pre_stage_pose_world": {"x": 0.10, "y": 0.00},
+                "pre_stage_pose_reached": True,
+                "pre_stage_time_s": 1.0,
+                "pre_stage_handoff_pass": True,
+            },
+            {
+                "pre_stage_pose_world": {"x": 0.25, "y": 0.05},
+                "pre_stage_pose_reached": True,
+                "pre_stage_time_s": 2.5,
+                "pre_stage_handoff_pass": True,
+            },
+        ]
+    )
+
+    monkeypatch.setattr(gather_runner, "fetch_dashboard_state", lambda dashboard_url, timeout_s=0: {"brain": {}, "last_feedback": ""})
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_append_runtime_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 0.73, "y": 0.0, "z": 0.05})
+    monkeypatch.setattr(
+        runner,
+        "_pre_stage_target",
+        lambda **kwargs: (
+            pre_stage_calls.append(str(kwargs["target"].id)),
+            True,
+            next(pre_stage_payloads),
+        )[1:],
+    )
+
+    def fake_capture_target(*, prefer_zone_recovery: bool, enable_goal_side_stage: bool, **kwargs):
+        call_flags.append((prefer_zone_recovery, enable_goal_side_stage))
+        if len(call_flags) == 1:
+            return False, {
+                "failure_reason": "capture_entry_goal_side_loss",
+                "failure_stage": "capture_entry",
+                "capture_state": {},
+                "zone_score": {},
+                "approach_side_verdict": {"pass": False, "reason": "entered_goal_side_before_capture"},
+                "staging_pose_reached": True,
+                "entered_goal_side_before_capture": True,
+                "first_contact_push_alignment_deg": None,
+                "push_direction_yaw_deg": 15.0,
+                "stage_time_s": 0.75,
+                "capture_entry_reached": False,
+                "capture_entry_time_s": 0.0,
+                "approach_failure_reason": "entered_goal_side_before_capture",
+            }
+        return False, {
+            "failure_reason": "capture_entry_timeout",
+            "failure_stage": "capture_entry",
+            "capture_state": {},
+            "zone_score": {},
+            "approach_side_verdict": {"pass": False, "reason": "capture_entry_timeout"},
+            "staging_pose_reached": True,
+            "entered_goal_side_before_capture": False,
+            "first_contact_push_alignment_deg": 7.5,
+            "push_direction_yaw_deg": 90.0,
+            "stage_time_s": 1.5,
+            "capture_entry_reached": True,
+            "capture_entry_time_s": 4.0,
+            "approach_failure_reason": "capture_entry_timeout",
+        }
+
+    monkeypatch.setattr(runner, "_capture_target", fake_capture_target)
+
+    result = runner._run_target(
+        session_id="session-latest-retry",
+        target=target,
+        route_index=1,
+        gather_sequence_path=tmp_path / "gather_sequence.jsonl",
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert result["pass"] is False
+    assert result["failure_reason"] == "capture_entry_timeout"
+    assert result["failure_stage"] == "capture_entry"
+    assert call_flags == [(False, True), (False, True)]
+    assert pre_stage_calls == [target.id, target.id]
+    assert result["pre_stage_pose_world"] == {"x": 0.25, "y": 0.05}
+    assert result["pre_stage_pose_reached"] is True
+    assert result["pre_stage_time_s"] == 2.5
+    assert result["pre_stage_handoff_pass"] is True
+    assert result["staging_pose_reached"] is True
+    assert result["entered_goal_side_before_capture"] is False
+    assert result["capture_entry_reached"] is True
+    assert result["capture_entry_time_s"] == 4.0
+    assert result["approach_side_verdict"] == {"pass": False, "reason": "capture_entry_timeout"}
+    assert result["approach_failure_reason"] == "capture_entry_timeout"
+    assert result["latest_approach_progress"]["reason"] == "capture_entry_timeout"
+    assert result["latest_approach_progress"]["pre_stage"]["pose_world"] == {"x": 0.25, "y": 0.05}
+    assert result["latest_approach_progress"]["capture_entry"]["entered_goal_side_before_capture"] is False
+    assert result["latest_approach_progress"]["capture_entry"]["failure_reason"] == "capture_entry_timeout"
+    assert result["fresh_attempt_approach"]["reason"] == "entered_goal_side_before_capture"
+    assert result["fresh_attempt_approach"]["pre_stage"]["pose_world"] == {"x": 0.10, "y": 0.0}
+    assert result["fresh_attempt_approach"]["capture_entry"]["entered_goal_side_before_capture"] is True
+
+
+def test_target_failure_result_prefers_latest_approach_progress_over_stale_fresh_attempt(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     target = runner.targets[0]
     fresh_attempt_approach = {
+        "pass": False,
+        "reason": "entered_goal_side_before_capture",
+        "pre_stage": {
+            "pose_world": {},
+            "pose_reached": False,
+            "time_s": 0.0,
+            "handoff_pass": False,
+        },
+        "stage": {
+            "pose_reached": False,
+            "time_s": 0.0,
+        },
+        "capture_entry": {
+            "pass": False,
+            "entered_goal_side_before_capture": True,
+            "first_contact_push_alignment_deg": None,
+            "push_direction_yaw_deg": 0.0,
+            "time_s": 0.0,
+            "failure_reason": "entered_goal_side_before_capture",
+        },
+    }
+    latest_approach_progress = {
         "pass": True,
         "reason": "",
         "pre_stage": {
@@ -663,6 +799,7 @@ def test_target_failure_result_prefers_fresh_attempt_pass_over_stale_alignment_h
         capture_entry_reached=False,
         capture_entry_time_s=0.0,
         approach_failure_reason="missing_first_contact_alignment",
+        latest_approach_progress=latest_approach_progress,
         fresh_attempt_approach=fresh_attempt_approach,
     )
 
@@ -677,13 +814,36 @@ def test_target_failure_result_prefers_fresh_attempt_pass_over_stale_alignment_h
     assert payload["capture_entry_reached"] is True
     assert payload["capture_entry_time_s"] == 3.141
     assert payload["first_contact_push_alignment_deg"] is None
-    assert payload["fresh_attempt_approach"]["pass"] is True
+    assert payload["fresh_attempt_approach"]["pass"] is False
+    assert payload["fresh_attempt_approach"]["reason"] == "entered_goal_side_before_capture"
 
 
 def test_target_failure_result_preserves_close_in_pre_stage_success_before_capture_entry_timeout(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     target = runner.targets[0]
     fresh_attempt_approach = {
+        "pass": False,
+        "reason": "entered_goal_side_before_capture",
+        "pre_stage": {
+            "pose_world": {},
+            "pose_reached": False,
+            "time_s": 0.0,
+            "handoff_pass": False,
+        },
+        "stage": {
+            "pose_reached": False,
+            "time_s": 0.0,
+        },
+        "capture_entry": {
+            "pass": False,
+            "entered_goal_side_before_capture": True,
+            "first_contact_push_alignment_deg": None,
+            "push_direction_yaw_deg": 0.0,
+            "time_s": 0.0,
+            "failure_reason": "entered_goal_side_before_capture",
+        },
+    }
+    latest_approach_progress = {
         "pass": False,
         "reason": "capture_entry_timeout",
         "pre_stage": {
@@ -721,6 +881,7 @@ def test_target_failure_result_preserves_close_in_pre_stage_success_before_captu
         capture_entry_reached=False,
         capture_entry_time_s=0.0,
         approach_failure_reason="entered_goal_side_before_capture",
+        latest_approach_progress=latest_approach_progress,
         fresh_attempt_approach=fresh_attempt_approach,
     )
 
@@ -731,10 +892,11 @@ def test_target_failure_result_preserves_close_in_pre_stage_success_before_captu
     assert payload["pre_stage_handoff_pass"] is True
     assert payload["staging_pose_reached"] is True
     assert payload["entered_goal_side_before_capture"] is False
-    assert payload["capture_entry_reached"] is False
+    assert payload["capture_entry_reached"] is True
     assert payload["approach_side_verdict"] == {"pass": False, "reason": "capture_entry_timeout"}
     assert payload["approach_failure_reason"] == "capture_entry_timeout"
-    assert payload["fresh_attempt_approach"]["pre_stage"]["pose_reached"] is True
+    assert payload["fresh_attempt_approach"]["pre_stage"]["pose_reached"] is False
+    assert payload["fresh_attempt_approach"]["reason"] == "entered_goal_side_before_capture"
 
 
 def test_run_final_corral_audit_requires_stable_window_for_all_three_targets(tmp_path, monkeypatch):
@@ -827,6 +989,59 @@ def test_capture_target_goal_side_stage_timeout_returns_stage_failure(tmp_path, 
     assert timeout_payload["failure_stage"] == "stage"
     assert timeout_payload["failure_reason"] == "goal_side_stage_timeout"
     assert any(call["mode"].startswith("stage_") for call in manual_drive_calls)
+
+
+def test_capture_target_close_in_stage_ready_hands_off_into_capture_entry(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 10.0
+    runner.args.poll_s = 0.5
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    phase_entries: list[str] = []
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: (
+            {},
+            {"x": 4.949843, "y": 2.772459, "yaw": -2.084216},
+            {"x": 4.555261, "y": 2.155261, "z": 0.05},
+        ),
+    )
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-close-in-stage-ready",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "capture_entry"
+    assert payload["staging_pose_reached"] is True
+    assert payload["capture_entry_reached"] is False
+    assert phase_entries.count("stage") > 0
+    assert phase_entries.count("capture_entry") > 0
+    assert phase_entries.index("stage") < phase_entries.index("capture_entry")
 
 
 def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_path, monkeypatch):

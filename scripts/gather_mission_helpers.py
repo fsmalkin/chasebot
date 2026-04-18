@@ -44,10 +44,16 @@ DEFAULT_STAGE_READY_LATERAL_ERROR_M = 0.18
 DEFAULT_STAGE_READY_YAW_ERROR_DEG = 20.0
 DEFAULT_STAGE_READY_DWELL_S = 0.4
 DEFAULT_STAGE_ARRIVAL_RADIUS_M = 0.20
+DEFAULT_STAGE_CLOSE_IN_ALIGN_LONGITUDINAL_PROJECTION_M = -0.65
+DEFAULT_STAGE_CLOSE_IN_ALIGN_LATERAL_ERROR_M = 0.22
+DEFAULT_STAGE_CLOSE_IN_ALIGN_DISTANCE_M = 0.33
 DEFAULT_CAPTURE_ENTRY_READY_BALL_X_M = 0.45
 DEFAULT_CAPTURE_ENTRY_READY_ABS_BALL_Y_M = 0.08
 DEFAULT_CAPTURE_ENTRY_CENTERED_READY_BALL_X_M = 0.55
 DEFAULT_CAPTURE_ENTRY_CENTERED_READY_ABS_BALL_Y_M = 0.05
+DEFAULT_CAPTURE_ENTRY_PLUS45_FINISH_READY_BALL_X_M = 0.625
+DEFAULT_CAPTURE_ENTRY_PLUS45_FINISH_READY_ABS_BALL_Y_M = 0.025
+DEFAULT_CAPTURE_ENTRY_PLUS45_FINISH_READY_MAX_BEARING_RAD = 0.04
 DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MIN_BALL_X_M = 0.50
 DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MAX_ABS_BALL_Y_M = 0.03
 DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MAX_BEARING_RAD = 0.06
@@ -661,6 +667,7 @@ def compute_stage_command(
     staging_pose_distance_m = float(_number(snapshot.get("staging_pose_distance_m")) or 0.0)
     robot_on_goal_side = bool(snapshot.get("robot_on_goal_side", False))
     robot_longitudinal_projection_m = float(_number(snapshot.get("robot_longitudinal_projection_m")) or 0.0)
+    robot_lateral_error_m = float(_number(snapshot.get("robot_lateral_error_m")) or 0.0)
     push_direction_yaw_deg = float(_number(snapshot.get("push_direction_yaw_deg")) or 0.0)
     push_direction_yaw = math.radians(push_direction_yaw_deg)
     robot_xyyaw = world_pose_xyyaw(robot_pose)
@@ -676,7 +683,12 @@ def compute_stage_command(
             target_speed_scale=0.0,
             rationale="Robot is on the goal side of the ball; back away and arc behind it before first contact.",
         )
-    if staging_pose_distance_m > DEFAULT_STAGE_ARRIVAL_RADIUS_M:
+    close_in_align_handoff = (
+        staging_pose_distance_m <= DEFAULT_STAGE_CLOSE_IN_ALIGN_DISTANCE_M
+        and robot_longitudinal_projection_m <= DEFAULT_STAGE_CLOSE_IN_ALIGN_LONGITUDINAL_PROJECTION_M
+        and robot_lateral_error_m <= DEFAULT_STAGE_CLOSE_IN_ALIGN_LATERAL_ERROR_M
+    )
+    if staging_pose_distance_m > DEFAULT_STAGE_ARRIVAL_RADIUS_M and not close_in_align_handoff:
         angular = clamp((stage_y_m * 1.8), -0.7, 0.7)
         linear = 0.0 if stage_x_m < 0.05 else min(0.10, max(0.03, stage_x_m * 0.18))
         return PlaceControlCommand(
@@ -716,6 +728,27 @@ def compute_pre_stage_command(
     *,
     zone: ZoneSpec,
 ) -> PlaceControlCommand | None:
+    snapshot = pre_stage_arrival_snapshot(robot_pose, ball_pose, zone=zone)
+    if not isinstance(snapshot, dict):
+        return None
+    pre_stage_pose = snapshot.get("pre_stage_pose_world", {}) if isinstance(snapshot.get("pre_stage_pose_world"), dict) else {}
+    pre_stage_rel = relative_point_robot_frame(robot_pose, pre_stage_pose)
+    if pre_stage_rel is None:
+        return None
+    pre_stage_x_m, pre_stage_y_m = pre_stage_rel
+    yaw_error_deg = float(_number(snapshot.get("yaw_error_deg")) or 0.0)
+    pre_stage_distance_m = float(_number(snapshot.get("pre_stage_pose_distance_m")) or 0.0)
+    pre_stage_pose_reached = bool(snapshot.get("pre_stage_pose_reached", False))
+    robot_on_goal_side = bool(snapshot.get("robot_on_goal_side", False))
+    robot_longitudinal_projection_m = float(_number(snapshot.get("robot_longitudinal_projection_m")) or 0.0)
+    robot_lateral_signed_m = float(_number(snapshot.get("robot_lateral_signed_m")) or 0.0)
+    push_direction_yaw_deg = float(_number(snapshot.get("push_direction_yaw_deg")) or 0.0)
+    push_direction_yaw = math.radians(push_direction_yaw_deg)
+    robot_xyyaw = world_pose_xyyaw(robot_pose)
+    if robot_xyyaw is None:
+        return None
+    robot_x, robot_y, robot_yaw = robot_xyyaw
+
     def _orbit_candidate(
         *,
         flank_sign: float,
@@ -741,6 +774,14 @@ def compute_pre_stage_command(
             return None
         orbit_x_m, orbit_y_m = orbit_rel
         heading_error = math.atan2(orbit_y_m, orbit_x_m)
+        desired_escape_yaw = normalize_angle(
+            math.atan2(
+                float(orbit_pose.get("y", 0.0)) - robot_y,
+                float(orbit_pose.get("x", 0.0)) - robot_x,
+            )
+            + math.pi
+        )
+        escape_yaw_error = normalize_angle(desired_escape_yaw - robot_yaw)
         ball_xy = point_xy(ball_pose)
         orbit_xy = point_xy(orbit_pose)
         behind_progress_m = 0.0
@@ -755,29 +796,9 @@ def compute_pre_stage_command(
             "orbit_x_m": orbit_x_m,
             "orbit_y_m": orbit_y_m,
             "heading_error": heading_error,
+            "escape_yaw_error": escape_yaw_error,
             "behind_progress_m": behind_progress_m,
         }
-
-    snapshot = pre_stage_arrival_snapshot(robot_pose, ball_pose, zone=zone)
-    if not isinstance(snapshot, dict):
-        return None
-    pre_stage_pose = snapshot.get("pre_stage_pose_world", {}) if isinstance(snapshot.get("pre_stage_pose_world"), dict) else {}
-    pre_stage_rel = relative_point_robot_frame(robot_pose, pre_stage_pose)
-    if pre_stage_rel is None:
-        return None
-    pre_stage_x_m, pre_stage_y_m = pre_stage_rel
-    yaw_error_deg = float(_number(snapshot.get("yaw_error_deg")) or 0.0)
-    pre_stage_distance_m = float(_number(snapshot.get("pre_stage_pose_distance_m")) or 0.0)
-    pre_stage_pose_reached = bool(snapshot.get("pre_stage_pose_reached", False))
-    robot_on_goal_side = bool(snapshot.get("robot_on_goal_side", False))
-    robot_longitudinal_projection_m = float(_number(snapshot.get("robot_longitudinal_projection_m")) or 0.0)
-    robot_lateral_signed_m = float(_number(snapshot.get("robot_lateral_signed_m")) or 0.0)
-    push_direction_yaw_deg = float(_number(snapshot.get("push_direction_yaw_deg")) or 0.0)
-    push_direction_yaw = math.radians(push_direction_yaw_deg)
-    robot_xyyaw = world_pose_xyyaw(robot_pose)
-    if robot_xyyaw is None:
-        return None
-    robot_x, robot_y, robot_yaw = robot_xyyaw
     orbit_offset_m = DEFAULT_PRE_STAGE_ORBIT_OFFSET_M + min(
         0.35,
         max(0.0, robot_longitudinal_projection_m) * 0.06,
@@ -800,6 +821,14 @@ def compute_pre_stage_command(
         orbit_candidates,
         key=lambda candidate: (
             abs(float(candidate["heading_error"])),
+            -float(candidate["behind_progress_m"]),
+            abs(float(candidate["flank_sign"] - (-1.0 if robot_lateral_signed_m < 0.0 else 1.0))),
+        ),
+    )
+    escape_candidate = min(
+        orbit_candidates,
+        key=lambda candidate: (
+            abs(float(candidate["escape_yaw_error"])),
             -float(candidate["behind_progress_m"]),
             abs(float(candidate["flank_sign"] - (-1.0 if robot_lateral_signed_m < 0.0 else 1.0))),
         ),
@@ -829,15 +858,9 @@ def compute_pre_stage_command(
                 ),
             )
         else:
-            desired_escape_yaw = normalize_angle(
-                math.atan2(
-                    float(orbit_pose.get("y", 0.0)) - robot_y,
-                    float(orbit_pose.get("x", 0.0)) - robot_x,
-                )
-                + math.pi
-            )
-            escape_yaw_error = normalize_angle(desired_escape_yaw - robot_yaw)
-            angular = clamp((escape_yaw_error * 1.35) + (orbit_y_m * 0.04), -0.8, 0.8)
+            escape_yaw_error = float(escape_candidate["escape_yaw_error"])
+            escape_orbit_y_m = float(escape_candidate["orbit_y_m"])
+            angular = clamp((escape_yaw_error * 1.35) + (escape_orbit_y_m * 0.04), -0.8, 0.8)
             linear = -0.12 if abs(escape_yaw_error) <= 0.45 else DEFAULT_PRE_STAGE_ESCAPE_LINEAR_X_MPS
         if abs(angular) < 0.20 and abs(escape_yaw_error) > 0.20:
             angular = 0.20 if escape_yaw_error >= 0.0 else -0.20
@@ -1071,6 +1094,11 @@ def capture_entry_snapshot(
                 or (
                     float(capture.ball_x_m) <= DEFAULT_CAPTURE_ENTRY_CENTERED_READY_BALL_X_M
                     and abs(float(capture.ball_y_m)) <= DEFAULT_CAPTURE_ENTRY_CENTERED_READY_ABS_BALL_Y_M
+                )
+                or (
+                    float(capture.ball_x_m) <= DEFAULT_CAPTURE_ENTRY_PLUS45_FINISH_READY_BALL_X_M
+                    and abs(float(capture.ball_y_m)) <= DEFAULT_CAPTURE_ENTRY_PLUS45_FINISH_READY_ABS_BALL_Y_M
+                    and abs(float(capture.bearing_rad)) <= DEFAULT_CAPTURE_ENTRY_PLUS45_FINISH_READY_MAX_BEARING_RAD
                 )
             )
         ),

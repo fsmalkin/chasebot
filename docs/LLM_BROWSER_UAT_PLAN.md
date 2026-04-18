@@ -336,16 +336,25 @@ To keep the demo honest and legible, this phase does not include:
 - autonomous environment lifecycle control by the LLM
 - end-to-end VLA control
 
-## Next Phase: Practical Retrieval Baseline Locked, Multi-Ball Gather Next
+## Next Phase: Practical Retrieval Baseline Locked, Generalizable Gather Redesign Next
 
 The single-target and multi-target visit UAT phase remains the baseline, and
 `corral_single_ball_place` remains the promoted primary dashboard action.
-`visit_route_planning` stays the protected regression floor. Pre-stage and
-stage are partial progress only; the next active blocker-clearing step is
-`capture_entry` for `gather_three_ball_zone`. The offline goal-side matrix
-uses the current 10-foot multi-ball arc layout (`3.048 m` from corral center,
-with `+45`, `0`, `-45` placements and the `180` backside guard case).
-Dashboard UAT stays blocked until that matrix is green.
+`visit_route_planning` stays the protected regression floor. The near-term
+gather problem is no longer described as "clear `capture_entry` and tune the
+matrix cases." Recent April 18, 2026 evidence on the `plus45` goal-side case
+progressed from `pre_stage` failures to `stage`, then to
+`capture_entry_ready`, yet still timed out after the handoff. That now points
+to brittle transitions across `pre_stage`, `stage`, `capture_entry`, and the
+post-`capture_entry_ready` handoff rather than a single remaining threshold
+bug.
+
+The offline goal-side matrix still uses the current 10-foot multi-ball arc
+layout (`3.048 m` from corral center, with `+45`, `0`, `-45` placements and
+the `180` backside guard case), but it should now be treated as a coverage and
+regression harness rather than the design target. Dashboard UAT stays blocked
+until the redesigned deterministic gather path proves generalization across the
+matrix and nearby geometry perturbations.
 
 For this phase, we still assume smooth-surface operation such as soccer fields
 or similar turf-like practice surfaces. The practical product bar remains that
@@ -361,20 +370,22 @@ the outer `0.762 m` radius ring is the operator-visible scoring area.
 2. single-ball corral/place is integrated, promoted, and acceptable enough as the working one-ball baseline
 3. the committed shorter spur geometry is the baseline again; the longer local spur variant is not part of the active plan
 4. the dual-radius corral model is implemented: outer `5 ft` retrieval corral plus inner `0.20 m` control ring
-5. pre-stage and stage are partial progress; `capture_entry` is the active blocker-clearing step
-6. the goal-side matrix is the offline gate for that slice
+5. the near-term gather problem is generalization and transition stability, not a single `capture_entry` blocker
+6. the goal-side matrix is now a coverage and regression harness, not the design target
 7. the surface-calibration harness exists, but its unresolved lane choice is a non-blocking realism follow-up
 8. `short_turf` remains the intended default operator surface unless later evidence promotes `short_grass`
-9. `gather_three_ball_zone` is exposed as a secondary scenario, but dashboard UAT is blocked until the matrix is green
-10. the latest three-ball checkpoint uses the 10-foot multi-ball arc layout (`3.048 m` from corral center, `+45`/`0`/`-45` placements) while keeping the protected route-planning floor green
+9. `gather_three_ball_zone` is exposed as a secondary scenario, but dashboard UAT is blocked until the matrix and nearby geometry sweeps are green
+10. the latest three-ball checkpoint still uses the 10-foot multi-ball arc layout (`3.048 m` from corral center, `+45`/`0`/`-45` placements) while keeping the protected route-planning floor green
+11. the latest `plus45` live evidence now reaches `capture_entry_ready` and still fails after the handoff, which is the clearest sign yet that the shared gather transitions need redesign rather than another case-specific threshold tweak
 
 ```mermaid
 flowchart LR
     A[Route-planning regression floor] --> B[Operator-acceptable one-ball 5-foot retrieval baseline]
-    B --> C[Three-ball gather in 5-foot diameter corral]
-    C --> D[Accel and decel optimization]
-    D --> E[Onboard planner later]
-    B -.-> F[Surface and ball fidelity follow-up if needed]
+    B --> C[Generalizable gather-control redesign]
+    C --> D[Deterministic gather manager plus experiment lanes]
+    D --> E[Accel and decel optimization]
+    E --> F[Onboard planner later]
+    B -.-> G[Surface and ball fidelity follow-up if needed]
 ```
 
 ### Regression Floor
@@ -408,15 +419,16 @@ Rule for this milestone:
 
 1. `visit_route_planning` stays green after every catcher/corral change
 2. browser/dashboard UAT remains serial for operator trust
-3. the parallel soak runner remains regression infrastructure, not the operator proof surface
+3. parallel soak and gather experiment lanes remain regression infrastructure, not the operator proof surface
 
-### Practical Retrieval Baseline
+### Generalizable Gather Control Slice
 
 Active near-term scenario and intent for this phase:
 
-1. active scenario ID: `corral_single_ball_place`
+1. active operator scenario ID: `corral_single_ball_place`
 2. protected regression scenario ID: `visit_route_planning`
-3. no frozen-contract change in this slice
+3. active gather redesign goal: make the shared gather path generalize across the goal-side matrix and nearby geometry perturbations
+4. no frozen-contract change in this slice
 
 Near-term execution order:
 
@@ -424,12 +436,15 @@ Near-term execution order:
 2. keep the headless route-planning regression green
 3. keep the explicit `5 ft` retrieval corral plus `0.20 m` control ring fixed in the scenario, marker, and artifacts
 4. keep the current one-ball flow usable as the practical retrieval baseline instead of reopening dashboard-promotion work
-5. keep `gather_three_ball_zone` on the same practical retrieval area and route-planning floor as a secondary dashboard scenario, but keep dashboard UAT blocked until the goal-side matrix is green
-6. score multi-ball truth from the final corral audit over all three balls, not only the last placed ball
-7. stabilize the shared short-turf settle/release behavior while pre-stage and stage remain partial progress and `capture_entry` is being cleared
-8. optimize acceleration and deceleration only after multi-ball mechanics are stable enough to speed up
-9. keep surface and ball fidelity calibration available as a realism follow-up rather than the blocking gate
-10. evaluate onboard planning after the visit-and-gather mechanics are stable enough to benchmark fairly
+5. redesign the shared gather path around cross-phase stability instead of named-case threshold tuning
+6. add a deterministic gather-manager layer above the local heuristics to manage bounded recovery, phase stabilization, and handoff decisions
+7. keep `gather_three_ball_zone` on the same practical retrieval area and route-planning floor as a secondary dashboard scenario, but keep dashboard UAT blocked until the generalization gate is green
+8. treat the goal-side matrix as the first coverage harness, then extend it with small spawn jitter and geometry perturbation sweeps
+9. score multi-ball truth from the final corral audit over all three balls, not only the last placed ball
+10. run parallel non-operator experiment lanes while keeping the operator/dashboard proof surface serial
+11. optimize acceleration and deceleration only after multi-ball mechanics and handoffs are stable enough to speed up
+12. keep surface and ball fidelity calibration available as a realism follow-up rather than the blocking gate
+13. evaluate onboard planning after the visit-and-gather mechanics are stable enough to benchmark fairly
 
 Latest evidence snapshot:
 
@@ -441,7 +456,7 @@ Latest evidence snapshot:
 3. operator review now considers the committed-baseline one-ball behavior acceptable enough to continue development from here
 4. a fresh one-ball `short_turf` sanity rerun is still red on release roll-away:
    - `artifacts/session/20260416T184447Z/gather_mission_repeatability/campaign_run_summary.json`
-5. `gather_three_ball_zone` is now wired into the live dashboard scenario catalog as a secondary scenario on `short_turf`, but the dashboard gate remains blocked until the goal-side matrix is green
+5. `gather_three_ball_zone` is now wired into the live dashboard scenario catalog as a secondary scenario on `short_turf`, but the dashboard gate remains blocked until the generalization gate is green
 6. the final multi-ball corral audit fields are now implemented and emitted in mission verdicts and repeatability summaries:
    - `final_corral_audit`
    - `final_all_targets_inside_retrieval_corral`
@@ -474,9 +489,44 @@ Latest evidence snapshot:
    - `ball_a` visit attempt started at `04:02:21.599Z`
    - gap: about `1.1 s`
    - trace: `artifacts/session/20260417T040105820076Z/gather_mission/20260417T040116Z/gather_sequence.jsonl`
-15. the current live blocker-clearing step is `capture_entry`; pre-stage and stage are partial progress, and the wider/faster three-ball lane still needs the offline matrix before dashboard UAT can open
-16. fresh failing three-ball checkpoint evidence:
+15. the freshest `plus45` live evidence now reaches `capture_entry_ready` and still times out after the handoff, proving the active problem is transition brittleness across `pre_stage`, `stage`, `capture_entry`, and the post-ready handoff:
+   - `artifacts/session/live_plus45_captureentry_0625_20260418/gather_mission_repeatability/campaign_run_summary.json`
+   - `artifacts/session/20260418T212252235403Z/gather_mission/20260418T212303Z/state_history.jsonl`
+16. the active blocker is therefore no longer a single threshold; it is robust cross-phase behavior across the shared gather path
+17. fresh failing three-ball checkpoint evidence:
     - `artifacts/session/20260417T040027Z/gather_mission_repeatability/campaign_run_summary.json`
+
+### Experiment Program
+
+Planned non-operator fan-out lanes for this slice:
+
+1. Lane A: local-controller smoothing and hysteresis improvements only
+2. Lane B: deterministic gather-manager loop above the existing local controller
+3. Lane C: bounded recovery-policy variants and retry/handoff strategies
+
+Rules for these lanes:
+
+1. fan-out belongs in headless/direct repeatability and matrix-style lanes only
+2. dashboard/operator validation remains serial
+3. named-case threshold wins are insufficient for promotion if neighboring geometry or post-handoff behavior still fails
+
+Shared promotion criteria across all lanes:
+
+1. `visit_route_planning` stays green
+2. `corral_single_ball_place` stays acceptable as the working one-ball baseline
+3. the goal-side matrix passes across `+45`, `0`, `-45`, and `180 backside`
+4. small spawn jitter or geometry perturbation sweeps do not reopen cross-phase failures
+5. the promoted path succeeds after `capture_entry_ready`, not only up to it
+
+Comparison metrics to carry in scorecards and summaries:
+
+1. terminal failure stage
+2. `pre_stage_pose_reached`
+3. `staging_pose_reached`
+4. `capture_entry_reached`
+5. successful handoff after `capture_entry_ready`
+6. mission pass / practical retrieval pass
+7. regressions on route-planning and the one-ball baseline
 
 Operator-facing rule:
 
@@ -492,17 +542,20 @@ Acceptance for keeping this branch green while we move forward:
 3. the one-ball corral flow remains acceptable as the working development baseline under the 5-foot practical retrieval bar
 4. `final_center_inside_zone` and clean spur retention remain visible as diagnostics, but they are not the promotion gate
 5. multi-ball mission truth comes from `final_corral_audit`, `final_all_targets_inside_retrieval_corral`, `final_all_targets_stopped`, `final_three_ball_corral_pass`, and `retrieved_count`
-6. no readiness claim is made yet for `gather_three_ball_zone`; dashboard UAT remains blocked until the goal-side matrix is green
+6. no readiness claim is made yet for `gather_three_ball_zone`; dashboard UAT remains blocked until the goal-side matrix and nearby geometry sweeps are green
 7. no readiness claim is made for exact field-physics match or onboard planning in this phase
-8. the next engineering milestone remains `capture_entry` for `gather_three_ball_zone`, followed by accel/decel optimization once the offline gate turns green
-9. surface and ball fidelity remain an open follow-up, not the blocking path
+8. the next engineering milestone is the deterministic gather-manager slice plus the shared experiment program, followed by accel/decel optimization once the generalization gate turns green
+9. named-case threshold wins are insufficient if the post-`capture_entry_ready` handoff or neighboring geometry still fails
+10. surface and ball fidelity remain an open follow-up, not the blocking path
 
 Immediate next step:
 
 1. keep the outer `5 ft` retrieval corral and inner `0.20 m` control ring fixed
 2. treat the current one-ball behavior as the baseline to preserve
 3. keep `gather_three_ball_zone` on the same practical retrieval model while keeping `visit_route_planning` green
-4. preserve the faster between-ball handoff while clearing the `capture_entry` blockers on the 10-foot multi-ball arc layout
+4. treat the goal-side matrix as a coverage and regression harness, then extend it with small geometry perturbation sweeps
+5. fan out the non-operator experiment lanes while preserving a serial operator proof surface
+6. preserve the faster between-ball handoff while redesigning the shared gather transitions
 
 ### Deferred Follow-Ons
 
