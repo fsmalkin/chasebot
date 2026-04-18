@@ -125,19 +125,20 @@ Status update as of April 4, 2026:
 5. pivoting the roadmap slice to end-to-end VLA control
 6. replacing deterministic perception, planning, or execution loops with model-generated low-level action
 
-## Next Roadmap Slice: Practical Retrieval Baseline Locked, Multi-Ball Gather Next
+## Next Roadmap Slice: Capture Entry Slice, Goal-Side Matrix Offline Gate
 
-The route-planning baseline is still the proved regression floor, and the
+The route-planning baseline remains the protected regression floor, and the
 single-ball corral path now has an explicit dual-radius scoring model on
 realistic soccer-practice surfaces. Using the committed shorter spur geometry,
 the current one-ball flow is acceptable enough as the working development
-baseline. The next slice is no longer calibration-first. It is
-`gather_three_ball_zone` under the same practical retrieval bar.
+baseline. Pre-stage and stage are partial progress only; the active
+blocker-clearing step is `capture_entry` for `gather_three_ball_zone`, and the
+goal-side matrix is the offline gate.
 
 Surface and ball fidelity remain an open realism question, and the calibration
-harness remains useful, but that thread no longer blocks the roadmap. We are
-treating the current one-ball 5-foot diameter retrieval behavior as good
-enough to scale into multi-ball gather, then optimize time later.
+harness remains useful, but that thread no longer blocks the roadmap. The
+dashboard UAT story stays honest: route-planning is protected, and gather UAT
+does not move until the goal-side matrix is green.
 
 The important product outcome stays explicit: we care about the ball ending up
 retrieved and stopped in the corral area, not whether it stayed perfectly
@@ -150,10 +151,12 @@ collisions is a valid assist, not an anti-goal.
 ```mermaid
 flowchart LR
     A[Route-planning baseline] --> B[Operator-acceptable one-ball retrieval baseline]
-    B --> C[Three-ball gather in 5-foot diameter corral]
-    C --> D[Corral accel and decel optimization]
-    D --> E[Onboard planner evaluation]
-    B -.-> F[Surface and ball fidelity follow-up if needed]
+    B --> C[Capture entry on 10-foot multi-ball arc]
+    C --> D[Goal-side matrix offline gate]
+    D --> E[Three-ball gather promotion]
+    E --> F[Corral accel and decel optimization]
+    F --> G[Onboard planner evaluation]
+    B -.-> H[Surface and ball fidelity follow-up if needed]
 ```
 
 ### Step 1: Route-Planning Baseline - Complete
@@ -308,11 +311,11 @@ Acceptance for this checkpoint:
 3. `final_center_inside_zone` and clean spur retention remain visible in artifacts, but they are diagnostic rather than gating
 4. no claim is made yet that the simulation exactly matches real grass or turf behavior
 
-### Step 5: Multi-Ball Gather To 5-Foot Diameter Corral - Current Focus
+### Step 5: Capture Entry Slice - Active Blocker-Clearing Step
 
 Goal: extend the accepted one-ball practical-retrieval baseline into
-`gather_three_ball_zone` using the same 5-foot diameter corral and the same
-operator-facing success bar.
+`gather_three_ball_zone` by clearing the `capture_entry` blocker before any
+dashboard promotion. Pre-stage and stage are partial progress only.
 
 Why this is the next slice:
 
@@ -320,10 +323,12 @@ Why this is the next slice:
 2. multi-ball gather is the next product milestone that actually exercises sequencing and already-placed-ball interactions
 3. acceleration and deceleration tuning should optimize a multi-ball behavior we trust, not a single-ball-only proof
 4. exact surface fidelity is still open, but it no longer blocks this next milestone
+5. the goal-side matrix is the offline gate for the `capture_entry` slice
+6. dashboard UAT stays blocked until that matrix is green
 
 Work:
 
-1. expose `gather_three_ball_zone` in the dashboard as a secondary gather scenario on the same `short_turf` lane
+1. keep `gather_three_ball_zone` in the dashboard as a secondary gather scenario, but only behind the offline matrix gate
 2. add a final mission-stage corral audit so multi-ball pass/fail comes from the final state of all three balls, not only the last placed ball
 3. keep the 5-foot diameter retrieval corral (`0.762 m` radius) and `0.20 m` inner control ring fixed
 4. preserve the current practical-retrieval pass bar:
@@ -331,9 +336,10 @@ Work:
    - ball stops there
    - ball does not meaningfully roll away
 5. keep `visit_route_planning` green while multi-ball gather work lands
-6. use the intentionally wider three-ball spawn layout so the gather milestone exercises real travel and sequencing:
-   - `ball_b`: `1.55 m` forward
-   - `ball_a` and `ball_c`: `2.35 m` forward, `+/- 0.85 m` lateral
+6. use the current 10-foot multi-ball arc layout so the gather milestone exercises the `capture_entry` slice with repeatable positions:
+   - radius: `3.048 m` from corral center
+   - cases: `+45`, `0`, `-45`
+   - `180` backside guard case retained in the matrix
 7. keep non-push travel intentionally fast so the robot moves on quickly once a ball is practically retrieved
 8. stabilize the wider/faster `short_turf` lane until the later target legs stop timing out
 9. keep surface and ball fidelity calibration available as a realism follow-up rather than the blocking lane
@@ -345,7 +351,7 @@ Current truth:
 2. `visit_route_planning` remains green and protected:
    - `artifacts/session/20260416T184326Z/visit_mission_repeatability/campaign_run_summary.json`
 3. the 5-foot diameter corral model is already implemented and operator-visible
-4. `gather_three_ball_zone` is now wired into the dashboard as a secondary gather scenario on `short_turf`
+4. `gather_three_ball_zone` is now wired into the dashboard as a secondary gather scenario on `short_turf`, but dashboard UAT is blocked until the goal-side matrix is green
 5. the final multi-ball corral audit fields are implemented and emitted in live artifacts:
    - `final_corral_audit`
    - `final_all_targets_inside_retrieval_corral`
@@ -358,7 +364,7 @@ Current truth:
    - `artifacts/session/pre_tune_surface_calibration/corral_surface_calibration/campaign_summary.json`
    - `artifacts/session/halfstep_probe_surface_calibration/corral_surface_calibration/campaign_summary.json`
 8. that unresolved fidelity question is now treated as a known follow-up, not the gate in front of multi-ball gather
-9. the active three-ball checkpoint now uses a wider gather layout and faster non-push transit
+9. the active three-ball checkpoint now uses the 10-foot multi-ball arc layout and faster non-push transit
 10. the protected regression floor stayed green after the faster transit tuning:
    - `artifacts/session/20260417T040105820076Z/visit_mission/20260417T040503Z/mission_verdict.json`
 11. the earlier delay before starting the second ball is materially improved in the latest live trace:
@@ -366,8 +372,9 @@ Current truth:
    - `ball_a` visit attempt started at `04:02:21.599Z`
    - gap: about `1.1 s`
    - trace: `artifacts/session/20260417T040105820076Z/gather_mission/20260417T040116Z/gather_sequence.jsonl`
-12. the current blocker is no longer the old first-ball hesitation; the wider/faster live run now fails later on `ball_a` with `visit_target_timeout` / `waypoint_vision_diverged`:
-   - `artifacts/session/20260417T040027Z/gather_mission_repeatability/campaign_run_summary.json`
+12. the current blocker-clearing step is `capture_entry`; pre-stage and stage are partial progress, and the wider/faster three-ball lane still needs the offline matrix before dashboard UAT can open
+13. fresh failing three-ball checkpoint evidence:
+    - `artifacts/session/20260417T040027Z/gather_mission_repeatability/campaign_run_summary.json`
 
 Acceptance:
 

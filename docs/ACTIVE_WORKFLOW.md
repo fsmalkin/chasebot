@@ -370,7 +370,7 @@ Calibration contract:
 
 ## Gather Goal-Side Matrix (Offline Gate)
 
-Use this headless harness as the offline gate for the pre-stage arrival slice on short turf before any dashboard UAT promotion.
+Use this headless harness as the offline gate for the current gather fix-forward slice on short turf before any dashboard UAT promotion.
 
 Command:
 
@@ -379,10 +379,12 @@ Command:
 Matrix contract:
 
 1. runs `corral_single_ball_place` in direct repeatability mode
-2. uses `short_turf` and a 10-foot arc layout (`3.048 m` from corral center) with primary placements at `+45`, `0`, and `-45`; the `180 backside` case stays as a guard case
-3. forwards the override through `gather_mission_repeatability_runner.py` into `gather_mission_runner.py`
-4. emits a matrix campaign summary plus one repeatability campaign per case
-5. is the offline gate for the gather path; dashboard UAT stays blocked until this matrix is green, while `visit_route_planning` remains the protected regression floor
+2. treats pre-stage and stage as partial progress only; they are useful evidence, but not the blocker-clearing milestone
+3. uses `short_turf` and the current 10-foot multi-ball arc layout (`3.048 m` from corral center) with primary placements at `+45`, `0`, and `-45`; the `180 backside` case stays as a guard case
+4. forwards the override through `gather_mission_repeatability_runner.py` into `gather_mission_runner.py`
+5. proves the new `capture_entry` step, which is the active blocker-clearing step for this slice
+6. emits a matrix campaign summary plus one repeatability campaign per case
+7. is the offline gate for the gather path; dashboard UAT stays blocked until this matrix is green, while `visit_route_planning` remains the protected regression floor
 
 ## Headless Milestone Path (Current Preferred)
 

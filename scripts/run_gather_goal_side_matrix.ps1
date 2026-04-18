@@ -103,7 +103,6 @@ foreach ($case in $cases) {
         (Join-Path $repoRoot "scripts\gather_mission_repeatability_runner.py"),
         "--dashboard-url", $DashboardUrl,
         "--scenario-id", "corral_single_ball_place",
-        "--scenario-label", "Corral Single Ball Place",
         "--runs", $RunsPerCase.ToString(),
         "--campaign-id", $caseCampaignId,
         "--provider", $Provider,
@@ -133,24 +132,82 @@ foreach ($case in $cases) {
     if ($repeatabilitySummary.runs) {
         $runs = @($repeatabilitySummary.runs)
     }
+    $runCount = @($runs).Count
+    $freshAttemptApproach = if ($runCount -gt 0) { $runs[0].fresh_attempt_approach } else { $null }
+    $preStagePoseReachedCount = @($runs | Where-Object {
+        $_.fresh_attempt_approach -and
+        $_.fresh_attempt_approach.pre_stage -and
+        $_.fresh_attempt_approach.pre_stage.pose_reached
+    }).Count
+    $preStageHandoffPassCount = @($runs | Where-Object {
+        $_.fresh_attempt_approach -and
+        $_.fresh_attempt_approach.pre_stage -and
+        $_.fresh_attempt_approach.pre_stage.handoff_pass
+    }).Count
+    $stagingPoseReachedCount = @($runs | Where-Object {
+        $_.fresh_attempt_approach -and
+        $_.fresh_attempt_approach.stage -and
+        $_.fresh_attempt_approach.stage.pose_reached
+    }).Count
+    $captureEntryPassCount = @($runs | Where-Object {
+        $_.fresh_attempt_approach -and
+        $_.fresh_attempt_approach.capture_entry -and
+        $_.fresh_attempt_approach.capture_entry.pass
+    }).Count
+    $enteredGoalSideBeforeCaptureCount = @($runs | Where-Object {
+        $_.fresh_attempt_approach -and
+        $_.fresh_attempt_approach.capture_entry -and
+        $_.fresh_attempt_approach.capture_entry.entered_goal_side_before_capture
+    }).Count
+    $freshAttemptApproachPassCount = @($runs | Where-Object {
+        $_.fresh_attempt_approach -and
+        $_.fresh_attempt_approach.pass
+    }).Count
+    $casePass = ($runCount -gt 0) -and
+        ($freshAttemptApproachPassCount -eq $runCount) -and
+        ($preStagePoseReachedCount -eq $runCount) -and
+        ($preStageHandoffPassCount -eq $runCount) -and
+        ($stagingPoseReachedCount -eq $runCount) -and
+        ($captureEntryPassCount -eq $runCount) -and
+        ($enteredGoalSideBeforeCaptureCount -eq 0)
+    $casePreStagePoseWorld = if ($freshAttemptApproach -and $freshAttemptApproach.pre_stage) {
+        $freshAttemptApproach.pre_stage.pose_world
+    } elseif ($runCount -gt 0) {
+        $runs[0].pre_stage_pose_world
+    } else {
+        $null
+    }
     $caseResults += [ordered]@{
         case_id = $case.case_id
         angle_deg = [double]$case.angle_deg
         label = $case.label
+        run_count = $runCount
         target_layout_path = $layoutPath
         repeatability_campaign_id = $caseCampaignId
         repeatability_summary_path = $summaryPath
         repeatability_scorecard_path = if ($summaryPath) { Join-Path (Split-Path -Parent $summaryPath) "scorecard.md" } else { "" }
         repeatability_return_code = $caseExitCode
         pass_count = if ($repeatabilitySummary.pass_count -ne $null) { [int]$repeatabilitySummary.pass_count } else { 0 }
-        promotion_gate_pass = if ($repeatabilitySummary.promotion_gate_pass -ne $null) { [bool]$repeatabilitySummary.promotion_gate_pass } else { $false }
-        approach_side_pass_count = if ($repeatabilitySummary.approach_side_pass_count -ne $null) { [int]$repeatabilitySummary.approach_side_pass_count } else { 0 }
-        approach_side_fail_count = if ($repeatabilitySummary.approach_side_fail_count -ne $null) { [int]$repeatabilitySummary.approach_side_fail_count } else { 0 }
-        staging_pose_reached_count = if ($repeatabilitySummary.staging_pose_reached_count -ne $null) { [int]$repeatabilitySummary.staging_pose_reached_count } else { 0 }
-        entered_goal_side_before_capture_count = if ($repeatabilitySummary.entered_goal_side_before_capture_count -ne $null) { [int]$repeatabilitySummary.entered_goal_side_before_capture_count } else { 0 }
-        first_contact_push_alignment_avg_deg = if ($repeatabilitySummary.first_contact_push_alignment_avg_deg -ne $null) { [double]$repeatabilitySummary.first_contact_push_alignment_avg_deg } else { 0.0 }
-        push_direction_yaw_avg_deg = if ($repeatabilitySummary.push_direction_yaw_avg_deg -ne $null) { [double]$repeatabilitySummary.push_direction_yaw_avg_deg } else { 0.0 }
-        stage_time_avg_s = if ($repeatabilitySummary.stage_time_avg_s -ne $null) { [double]$repeatabilitySummary.stage_time_avg_s } else { 0.0 }
+        promotion_gate_pass = $casePass
+        fresh_attempt_approach = $freshAttemptApproach
+        fresh_attempt_approach_pass_count = $freshAttemptApproachPassCount
+        fresh_attempt_approach_fail_count = $runCount - $freshAttemptApproachPassCount
+        approach_side_pass_count = $freshAttemptApproachPassCount
+        approach_side_fail_count = $runCount - $freshAttemptApproachPassCount
+        pre_stage_pose_world = $casePreStagePoseWorld
+        pre_stage_pose_reached = ($runCount -gt 0) -and ($preStagePoseReachedCount -eq $runCount)
+        pre_stage_pose_reached_count = $preStagePoseReachedCount
+        pre_stage_handoff_pass = ($runCount -gt 0) -and ($preStageHandoffPassCount -eq $runCount)
+        pre_stage_handoff_pass_count = $preStageHandoffPassCount
+        pre_stage_time_avg_s = if ($repeatabilitySummary.fresh_attempt_pre_stage_time_avg_s -ne $null) { [double]$repeatabilitySummary.fresh_attempt_pre_stage_time_avg_s } elseif ($repeatabilitySummary.pre_stage_time_avg_s -ne $null) { [double]$repeatabilitySummary.pre_stage_time_avg_s } else { 0.0 }
+        pre_stage_time_min_s = if ($repeatabilitySummary.fresh_attempt_pre_stage_time_min_s -ne $null) { [double]$repeatabilitySummary.fresh_attempt_pre_stage_time_min_s } elseif ($repeatabilitySummary.pre_stage_time_min_s -ne $null) { [double]$repeatabilitySummary.pre_stage_time_min_s } else { 0.0 }
+        pre_stage_time_max_s = if ($repeatabilitySummary.fresh_attempt_pre_stage_time_max_s -ne $null) { [double]$repeatabilitySummary.fresh_attempt_pre_stage_time_max_s } elseif ($repeatabilitySummary.pre_stage_time_max_s -ne $null) { [double]$repeatabilitySummary.pre_stage_time_max_s } else { 0.0 }
+        staging_pose_reached_count = $stagingPoseReachedCount
+        capture_entry_pass_count = $captureEntryPassCount
+        entered_goal_side_before_capture_count = $enteredGoalSideBeforeCaptureCount
+        first_contact_push_alignment_avg_deg = if ($repeatabilitySummary.fresh_attempt_first_contact_push_alignment_avg_deg -ne $null) { [double]$repeatabilitySummary.fresh_attempt_first_contact_push_alignment_avg_deg } elseif ($repeatabilitySummary.first_contact_push_alignment_avg_deg -ne $null) { [double]$repeatabilitySummary.first_contact_push_alignment_avg_deg } else { 0.0 }
+        push_direction_yaw_avg_deg = if ($repeatabilitySummary.fresh_attempt_push_direction_yaw_avg_deg -ne $null) { [double]$repeatabilitySummary.fresh_attempt_push_direction_yaw_avg_deg } elseif ($repeatabilitySummary.push_direction_yaw_avg_deg -ne $null) { [double]$repeatabilitySummary.push_direction_yaw_avg_deg } else { 0.0 }
+        stage_time_avg_s = if ($repeatabilitySummary.fresh_attempt_stage_time_avg_s -ne $null) { [double]$repeatabilitySummary.fresh_attempt_stage_time_avg_s } elseif ($repeatabilitySummary.stage_time_avg_s -ne $null) { [double]$repeatabilitySummary.stage_time_avg_s } else { 0.0 }
         output_log_path = $caseLogPath
         stdout_log_path = $caseStdoutPath
         stderr_log_path = $caseStderrPath
@@ -198,13 +255,16 @@ $scorecardLines = @(
 
 foreach ($case in $caseResults) {
     $scorecardLines += (
-        '- `{0}` angle={1:0.###}deg pass={2} approach={3}/{4} staging={5} goal_side={6} align_avg={7:0.000}deg yaw_avg={8:0.000}deg stage_avg={9:0.000}s summary={10}' -f
+        '- `{0}` angle={1:0.###}deg pass={2} fresh_attempt={3}/{4} pre_stage={5}/{4} handoff={6}/{4} stage={7}/{4} capture_entry={8}/{4} goal_side={9} align_avg={10:0.000}deg yaw_avg={11:0.000}deg stage_avg={12:0.000}s summary={13}' -f
         $case.case_id,
         [double]$case.angle_deg,
         [bool]$case.promotion_gate_pass,
-        [int]$case.approach_side_pass_count,
-        [int]$case.approach_side_fail_count,
+        [int]$case.fresh_attempt_approach_pass_count,
+        [int]$case.run_count,
+        [int]$case.pre_stage_pose_reached_count,
+        [int]$case.pre_stage_handoff_pass_count,
         [int]$case.staging_pose_reached_count,
+        [int]$case.capture_entry_pass_count,
         [int]$case.entered_goal_side_before_capture_count,
         [double]$case.first_contact_push_alignment_avg_deg,
         [double]$case.push_direction_yaw_avg_deg,

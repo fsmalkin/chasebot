@@ -332,11 +332,9 @@ def test_run_target_uses_goal_side_stage_for_initial_visit_and_skips_it_on_local
     mission_root.mkdir(parents=True, exist_ok=True)
     target = runner.targets[0]
     call_flags: list[tuple[bool, bool]] = []
+    pre_stage_calls: list[str] = []
 
     monkeypatch.setattr(gather_runner, "fetch_dashboard_state", lambda dashboard_url, timeout_s=0: {"brain": {}, "last_feedback": ""})
-    monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s=30.0: {})
-    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: None)
-    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_pass"))
     monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: {})
     monkeypatch.setattr(runner, "_safe_stop", lambda: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
@@ -345,6 +343,21 @@ def test_run_target_uses_goal_side_stage_for_initial_visit_and_skips_it_on_local
     monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
     monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 0.73, "y": 0.0, "z": 0.05})
+    monkeypatch.setattr(
+        runner,
+        "_pre_stage_target",
+        lambda **kwargs: (
+            pre_stage_calls.append(str(kwargs["target"].id)),
+            True,
+            {
+                "pre_stage_pose_world": {"x": 0.10, "y": 0.0},
+                "pre_stage_pose_reached": True,
+                "pre_stage_time_s": 1.2,
+                "pre_stage_handoff_pass": True,
+                "push_direction_yaw_deg": 0.0,
+            },
+        )[1:],
+    )
 
     def fake_capture_target(*, prefer_zone_recovery: bool, enable_goal_side_stage: bool, **kwargs):
         call_flags.append((prefer_zone_recovery, enable_goal_side_stage))
@@ -361,6 +374,8 @@ def test_run_target_uses_goal_side_stage_for_initial_visit_and_skips_it_on_local
                 "first_contact_push_alignment_deg": 5.0,
                 "push_direction_yaw_deg": 0.0,
                 "stage_time_s": 0.5,
+                "capture_entry_reached": True,
+                "capture_entry_time_s": 0.4,
                 "approach_failure_reason": "",
             }
         return True, {
@@ -394,6 +409,8 @@ def test_run_target_uses_goal_side_stage_for_initial_visit_and_skips_it_on_local
             "first_contact_push_alignment_deg": 5.0,
             "push_direction_yaw_deg": 0.0,
             "stage_time_s": 0.5,
+            "capture_entry_reached": False,
+            "capture_entry_time_s": 0.0,
             "approach_failure_reason": "",
         }
 
@@ -409,10 +426,147 @@ def test_run_target_uses_goal_side_stage_for_initial_visit_and_skips_it_on_local
     )
 
     assert call_flags == [(False, True), (True, False)]
+    assert pre_stage_calls == [target.id]
     assert result["pass"] is True
     assert result["attempts"] == 2
     assert result["settled_in_corral_pass"] is True
     assert result["approach_side_verdict"] == {"pass": True, "reason": ""}
+    assert result["pre_stage_pose_reached"] is True
+    assert result["pre_stage_handoff_pass"] is True
+    assert result["fresh_attempt_approach"]["pass"] is True
+    assert result["fresh_attempt_approach"]["capture_entry"]["pass"] is True
+    assert result["fresh_attempt_approach"]["capture_entry"]["entered_goal_side_before_capture"] is False
+
+
+def test_pre_stage_target_returns_handoff_payload_on_success(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    manual_drive_calls: list[dict[str, object]] = []
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: manual_drive_calls.append({"args": args, **kwargs}))
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: (
+            {},
+            {"x": 0.10, "y": 0.0, "yaw": 0.0},
+            {"x": 1.0, "y": 0.0, "z": 0.05},
+        ),
+    )
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert pre_stage_pass is True
+    assert payload["pre_stage_pose_world"]["x"] == 0.1
+    assert payload["pre_stage_pose_reached"] is True
+    assert payload["pre_stage_handoff_pass"] is True
+    assert payload["pre_stage_time_s"] >= 0.25
+    assert any(call["mode"] == "pre_stage_ready" for call in manual_drive_calls)
+
+
+def test_run_target_retries_fresh_approach_after_capture_entry_failure(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.max_retries_per_target = 1
+    runner.visit_runtime_state.update({"remaining_targets": [runner.targets[0].id], "visited_targets": []})
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    call_flags: list[tuple[bool, bool]] = []
+    pre_stage_calls: list[str] = []
+
+    monkeypatch.setattr(gather_runner, "fetch_dashboard_state", lambda dashboard_url, timeout_s=0: {"brain": {}, "last_feedback": ""})
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_append_runtime_event", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 0.73, "y": 0.0, "z": 0.05})
+    monkeypatch.setattr(
+        runner,
+        "_pre_stage_target",
+        lambda **kwargs: (
+            pre_stage_calls.append(str(kwargs["target"].id)),
+            True,
+            {
+                "pre_stage_pose_world": {"x": 0.10, "y": 0.0},
+                "pre_stage_pose_reached": True,
+                "pre_stage_time_s": 1.0,
+                "pre_stage_handoff_pass": True,
+            },
+        )[1:],
+    )
+
+    def fake_capture_target(*, prefer_zone_recovery: bool, enable_goal_side_stage: bool, **kwargs):
+        call_flags.append((prefer_zone_recovery, enable_goal_side_stage))
+        if len(call_flags) == 1:
+            return False, {
+                "failure_reason": "capture_entry_timeout",
+                "failure_stage": "capture_entry",
+                "capture_state": {},
+                "zone_score": {},
+                "staging_pose_reached": True,
+                "entered_goal_side_before_capture": False,
+                "capture_entry_reached": False,
+                "capture_entry_time_s": 4.0,
+                "approach_failure_reason": "capture_entry_timeout",
+            }
+        return True, {
+            "capture_state": {"captured": True, "ball_x_m": 0.18, "ball_y_m": 0.0},
+            "zone_score": {"center_inside_zone": True, "center_inside_retrieval_corral": True},
+            "final_ball_pose": {"x": 2.45, "y": 0.0, "z": 0.05},
+            "handoff_kind": "secure_capture",
+            "settle_metrics": {
+                "final_inside_retrieval_corral": True,
+                "final_center_inside_zone": True,
+                "ball_stopped_in_corral": True,
+                "rolled_away_after_release": False,
+                "settled_in_corral_pass": True,
+            },
+            "staging_pose_reached": True,
+            "entered_goal_side_before_capture": False,
+            "capture_entry_reached": True,
+            "capture_entry_time_s": 0.4,
+        }
+
+    monkeypatch.setattr(runner, "_capture_target", fake_capture_target)
+
+    result = runner._run_target(
+        session_id="session-fresh-retry",
+        target=target,
+        route_index=1,
+        gather_sequence_path=tmp_path / "gather_sequence.jsonl",
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert result["pass"] is True
+    assert call_flags == [(False, True), (False, True)]
+    assert pre_stage_calls == [target.id, target.id]
+    assert result["fresh_attempt_approach"]["pass"] is False
+    assert result["fresh_attempt_approach"]["reason"] == "capture_entry_timeout"
+    assert result["fresh_attempt_approach"]["capture_entry"]["pass"] is False
 
 
 def test_run_final_corral_audit_requires_stable_window_for_all_three_targets(tmp_path, monkeypatch):
@@ -505,6 +659,117 @@ def test_capture_target_goal_side_stage_timeout_returns_stage_failure(tmp_path, 
     assert timeout_payload["failure_stage"] == "stage"
     assert timeout_payload["failure_reason"] == "goal_side_stage_timeout"
     assert any(call["mode"].startswith("stage_") for call in manual_drive_calls)
+
+
+def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 10.0
+    runner.args.poll_s = 0.5
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    phase_entries: list[str] = []
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: (
+            {},
+            {"x": 0.55, "y": -0.10, "yaw": 0.0},
+            {"x": 1.0, "y": 0.0, "z": 0.05},
+        ),
+    )
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-capture-entry-timeout",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    timeout_path = mission_root / f"{target.id}_capture_entry_timeout.json"
+    timeout_payload = read_json(timeout_path)
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "capture_entry"
+    assert payload["failure_reason"] == "capture_entry_timeout"
+    assert payload["staging_pose_reached"] is True
+    assert payload["capture_entry_reached"] is False
+    assert payload["capture_entry_time_s"] >= 4.0
+    assert timeout_payload["failure_stage"] == "capture_entry"
+    assert phase_entries.count("capture_entry") > 0
+    assert "capture" not in phase_entries
+
+
+def test_capture_target_records_capture_entry_before_generic_capture_timeout(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 1.2
+    runner.args.poll_s = 0.1
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    phase_entries: list[str] = []
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: (
+            {},
+            {"x": 0.55, "y": 0.0, "yaw": 0.0},
+            {"x": 1.0, "y": 0.0, "z": 0.05},
+        ),
+    )
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-capture-entry-pass",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "capture"
+    assert payload["capture_entry_reached"] is True
+    assert payload["capture_entry_time_s"] >= 0.3
+    assert "capture_entry" in phase_entries
+    assert "capture" in phase_entries
+    assert phase_entries.index("capture_entry") < phase_entries.index("capture")
 
 
 def test_run_for_three_ball_zone_uses_final_corral_audit_not_last_target_only(tmp_path, monkeypatch):
@@ -744,9 +1009,8 @@ def test_run_target_keeps_place_control_after_near_zone_place_failure(tmp_path, 
     runner.args.max_retries_per_target = 2
     runner.args.max_place_loss_revisits = 1
 
-    visit_dispatches: list[str] = []
+    pre_stage_calls: list[str] = []
     capture_calls: list[bool] = []
-    monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s: None)
     monkeypatch.setattr(
         gather_runner,
         "fetch_dashboard_state",
@@ -755,13 +1019,20 @@ def test_run_target_keeps_place_control_after_near_zone_place_failure(tmp_path, 
             "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
         },
     )
-    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: visit_dispatches.append(target_id))
-    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_target_reached"))
     monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
     monkeypatch.setattr(runner, "_safe_stop", lambda: None)
     monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 1.0, "y": 0.0, "z": 0.05})
     monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
     monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_pre_stage_target",
+        lambda **kwargs: (
+            pre_stage_calls.append(str(kwargs["target"].id)),
+            True,
+            {"pre_stage_pose_world": {"x": 0.1, "y": 0.0}, "pre_stage_pose_reached": True, "pre_stage_time_s": 1.0, "pre_stage_handoff_pass": True},
+        )[1:],
+    )
 
     capture_results = [
         (True, {"capture_state": {"captured": True}, "zone_score": {}, "handoff_kind": "soft_capture"}),
@@ -829,7 +1100,7 @@ def test_run_target_keeps_place_control_after_near_zone_place_failure(tmp_path, 
     assert result["zone_edge_correction_count"] == 2
     assert result["place_controller_reentry_count"] == 1
     assert result["post_visit_revisit_count"] == 0
-    assert visit_dispatches == ["ball_1"]
+    assert pre_stage_calls == ["ball_1"]
     assert capture_calls == [False]
 
 
@@ -1486,8 +1757,7 @@ def test_run_target_three_ball_accepts_practical_retrieval_before_final_audit(tm
     runner = _make_three_ball_runner(tmp_path, monkeypatch)
     runner.args.max_retries_per_target = 1
 
-    visit_dispatches: list[str] = []
-    monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s: None)
+    pre_stage_calls: list[str] = []
     monkeypatch.setattr(
         gather_runner,
         "fetch_dashboard_state",
@@ -1496,13 +1766,20 @@ def test_run_target_three_ball_accepts_practical_retrieval_before_final_audit(tm
             "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
         },
     )
-    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: visit_dispatches.append(target_id))
-    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_target_reached"))
     monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
     monkeypatch.setattr(runner, "_safe_stop", lambda: None)
     monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 2.45, "y": 0.0, "z": 0.05})
     monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
     monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_pre_stage_target",
+        lambda **kwargs: (
+            pre_stage_calls.append(str(kwargs["target"].id)),
+            True,
+            {"pre_stage_pose_world": {"x": 1.55, "y": 0.0}, "pre_stage_pose_reached": True, "pre_stage_time_s": 2.0, "pre_stage_handoff_pass": True},
+        )[1:],
+    )
     monkeypatch.setattr(
         runner,
         "_capture_target",
@@ -1550,16 +1827,15 @@ def test_run_target_three_ball_accepts_practical_retrieval_before_final_audit(tm
     assert result["settled_in_corral_pass"] is False
     assert result["final_inside_retrieval_corral"] is True
     assert result["post_visit_revisit_count"] == 0
-    assert visit_dispatches == ["ball_b"]
+    assert pre_stage_calls == ["ball_b"]
 
 
 def test_run_target_uses_local_gather_recapture_after_post_visit_capture_timeout(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.max_retries_per_target = 2
 
-    visit_dispatches: list[str] = []
+    pre_stage_calls: list[str] = []
     capture_zone_recovery_flags: list[bool] = []
-    monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s: None)
     monkeypatch.setattr(
         gather_runner,
         "fetch_dashboard_state",
@@ -1568,13 +1844,20 @@ def test_run_target_uses_local_gather_recapture_after_post_visit_capture_timeout
             "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
         },
     )
-    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: visit_dispatches.append(target_id))
-    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_target_reached"))
     monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
     monkeypatch.setattr(runner, "_safe_stop", lambda: None)
     monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 1.0, "y": 0.0, "z": 0.05})
     monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
     monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_pre_stage_target",
+        lambda **kwargs: (
+            pre_stage_calls.append(str(kwargs["target"].id)),
+            True,
+            {"pre_stage_pose_world": {"x": 0.1, "y": 0.0}, "pre_stage_pose_reached": True, "pre_stage_time_s": 1.0, "pre_stage_handoff_pass": True},
+        )[1:],
+    )
 
     capture_results = [
         (False, {"failure_reason": "capture_timeout", "failure_stage": "capture", "allow_full_revisit": False}),
@@ -1624,7 +1907,7 @@ def test_run_target_uses_local_gather_recapture_after_post_visit_capture_timeout
     assert result["attempt_kind"] == "place_loss_recapture"
     assert result["post_visit_revisit_count"] == 0
     assert result["settle_exit_reason"] == "corrected"
-    assert visit_dispatches == ["ball_1"]
+    assert pre_stage_calls == ["ball_1"]
     assert capture_zone_recovery_flags == [False, True]
 
 
@@ -1633,9 +1916,8 @@ def test_run_target_uses_place_controller_reentry_after_release_unsettled(tmp_pa
     runner.args.max_retries_per_target = 2
     runner.args.max_place_loss_revisits = 1
 
-    visit_dispatches: list[str] = []
+    pre_stage_calls: list[str] = []
     capture_zone_recovery_flags: list[bool] = []
-    monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s: None)
     monkeypatch.setattr(
         gather_runner,
         "fetch_dashboard_state",
@@ -1644,13 +1926,20 @@ def test_run_target_uses_place_controller_reentry_after_release_unsettled(tmp_pa
             "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
         },
     )
-    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: visit_dispatches.append(target_id))
-    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_target_reached"))
     monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
     monkeypatch.setattr(runner, "_safe_stop", lambda: None)
     monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 2.15, "y": -0.05, "z": 0.05})
     monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
     monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_pre_stage_target",
+        lambda **kwargs: (
+            pre_stage_calls.append(str(kwargs["target"].id)),
+            True,
+            {"pre_stage_pose_world": {"x": 0.1, "y": 0.0}, "pre_stage_pose_reached": True, "pre_stage_time_s": 1.0, "pre_stage_handoff_pass": True},
+        )[1:],
+    )
 
     capture_results = [
         (True, {"capture_state": {"captured": True}, "zone_score": {}, "handoff_kind": "soft_capture"}),
@@ -1720,7 +2009,7 @@ def test_run_target_uses_place_controller_reentry_after_release_unsettled(tmp_pa
     assert result["settled_in_corral_pass"] is True
     assert result["place_controller_reentry_count"] == 1
     assert result["post_visit_revisit_count"] == 0
-    assert visit_dispatches == ["ball_1"]
+    assert pre_stage_calls == ["ball_1"]
     assert capture_zone_recovery_flags == [False]
 
 
@@ -1729,7 +2018,6 @@ def test_run_target_stops_after_visit_before_capture_handoff(tmp_path, monkeypat
     runner.args.max_retries_per_target = 1
 
     safe_stop_calls: list[str] = []
-    monkeypatch.setattr(runner, "_wait_for_nav2_ready", lambda timeout_s: None)
     monkeypatch.setattr(
         gather_runner,
         "fetch_dashboard_state",
@@ -1738,12 +2026,18 @@ def test_run_target_stops_after_visit_before_capture_handoff(tmp_path, monkeypat
             "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
         },
     )
-    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: None)
-    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_target_reached"))
     monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
     monkeypatch.setattr(runner, "_safe_stop", lambda: safe_stop_calls.append("safe_stop"))
     monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 1.0, "y": 0.0, "z": 0.05})
     monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(
+        runner,
+        "_pre_stage_target",
+        lambda **kwargs: (
+            True,
+            {"pre_stage_pose_world": {"x": 0.1, "y": 0.0}, "pre_stage_pose_reached": True, "pre_stage_time_s": 1.0, "pre_stage_handoff_pass": True},
+        ),
+    )
     monkeypatch.setattr(
         runner,
         "_capture_target",

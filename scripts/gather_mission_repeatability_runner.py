@@ -157,73 +157,413 @@ def _float_list_from_runs(runs: list[dict[str, object]], key: str) -> list[float
     return values
 
 
-def _approach_side_rollup(runs: list[dict[str, object]]) -> dict[str, object]:
-    approach_side_pass_flags = [bool(item.get("approach_side_pass", False)) for item in runs]
-    staging_pose_reached_flags = [bool(item.get("staging_pose_reached", False)) for item in runs]
-    entered_goal_side_flags = [bool(item.get("entered_goal_side_before_capture", False)) for item in runs]
-    approach_reasons = sorted(
-        {
-            str(item.get("approach_side_reason", "") or "")
-            for item in runs
-            if str(item.get("approach_side_reason", "") or "").strip()
-        }
+def _clean_text(value: object, default: str = "") -> str:
+    if value is None:
+        return default
+    text = str(value).strip()
+    return text if text else default
+
+
+def _float_value(value: object, *, default: float = 0.0, allow_none: bool = False) -> float | None:
+    if value in {None, ""}:
+        return None if allow_none else default
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None if allow_none else default
+
+
+def _dict_value(value: object) -> dict[str, object]:
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _merged_source_dict(*values: object) -> dict[str, object]:
+    merged: dict[str, object] = {}
+    for value in values:
+        if isinstance(value, dict):
+            merged.update(value)
+    return merged
+
+
+def _first_dict(*values: object) -> dict[str, object]:
+    for value in values:
+        if isinstance(value, dict):
+            return dict(value)
+    return {}
+
+
+def _first_text(*values: object, default: str = "") -> str:
+    for value in values:
+        text = _clean_text(value)
+        if text:
+            return text
+    return default
+
+
+def _first_float(*values: object, default: float = 0.0, allow_none: bool = False) -> float | None:
+    for value in values:
+        numeric = _float_value(value, allow_none=True)
+        if numeric is not None:
+            return numeric
+    return None if allow_none else default
+
+
+def _default_fresh_attempt_approach() -> dict[str, object]:
+    return {
+        "pass": False,
+        "reason": "",
+        "pre_stage": {
+            "pose_world": {},
+            "pose_reached": False,
+            "time_s": 0.0,
+            "handoff_pass": False,
+        },
+        "stage": {
+            "pose_reached": False,
+            "time_s": 0.0,
+        },
+        "capture_entry": {
+            "pass": False,
+            "entered_goal_side_before_capture": False,
+            "first_contact_push_alignment_deg": None,
+            "push_direction_yaw_deg": 0.0,
+            "failure_reason": "",
+        },
+    }
+
+
+def _fresh_attempt_approach_from_sources(
+    merged: dict[str, object] | None,
+    *,
+    fallback: dict[str, object] | None = None,
+) -> dict[str, object]:
+    merged = merged if isinstance(merged, dict) else {}
+    fallback = fallback if isinstance(fallback, dict) else {}
+    fallback_explicit = _dict_value(fallback.get("fresh_attempt_approach"))
+    merged_explicit = _dict_value(merged.get("fresh_attempt_approach"))
+    explicit = _merged_source_dict(fallback_explicit, merged_explicit)
+    explicit_pre_stage = _merged_source_dict(_dict_value(fallback_explicit.get("pre_stage")), _dict_value(explicit.get("pre_stage")))
+    explicit_stage = _merged_source_dict(_dict_value(fallback_explicit.get("stage")), _dict_value(explicit.get("stage")))
+    explicit_capture_entry = _merged_source_dict(
+        _dict_value(fallback_explicit.get("capture_entry")),
+        _dict_value(explicit.get("capture_entry")),
     )
+    merged_pre_stage = _dict_value(merged.get("pre_stage"))
+    fallback_pre_stage = _dict_value(fallback.get("pre_stage"))
+    legacy_verdict = _merged_source_dict(
+        _dict_value(fallback.get("approach_side_verdict")),
+        _dict_value(merged.get("approach_side_verdict")),
+    )
+
+    pre_stage_pose_world = _first_dict(
+        explicit_pre_stage.get("pose_world"),
+        explicit.get("pre_stage_pose_world"),
+        merged.get("pre_stage_pose_world"),
+        merged_pre_stage.get("pose_world"),
+        fallback.get("pre_stage_pose_world"),
+        fallback_pre_stage.get("pose_world"),
+    )
+    pre_stage_pose_reached = bool(
+        explicit_pre_stage.get(
+            "pose_reached",
+            explicit.get(
+                "pre_stage_pose_reached",
+                merged.get(
+                    "pre_stage_pose_reached",
+                    fallback.get("pre_stage_pose_reached", False),
+                ),
+            ),
+        )
+    )
+    pre_stage_time_s = float(
+        _first_float(
+            explicit_pre_stage.get("time_s"),
+            explicit.get("pre_stage_time_s"),
+            merged.get("pre_stage_time_s"),
+            fallback.get("pre_stage_time_s"),
+            default=0.0,
+        )
+        or 0.0
+    )
+    pre_stage_handoff_pass = bool(
+        explicit_pre_stage.get(
+            "handoff_pass",
+            explicit.get(
+                "pre_stage_handoff_pass",
+                merged.get(
+                    "pre_stage_handoff_pass",
+                    fallback.get("pre_stage_handoff_pass", False),
+                ),
+            ),
+        )
+    )
+
+    stage_pose_reached = bool(
+        explicit_stage.get(
+            "pose_reached",
+            explicit.get(
+                "staging_pose_reached",
+                merged.get(
+                    "staging_pose_reached",
+                    fallback.get("staging_pose_reached", False),
+                ),
+            ),
+        )
+    )
+    stage_time_s = float(
+        _first_float(
+            explicit_stage.get("time_s"),
+            explicit.get("stage_time_s"),
+            merged.get("stage_time_s"),
+            fallback.get("stage_time_s"),
+            default=0.0,
+        )
+        or 0.0
+    )
+
+    entered_goal_side_before_capture = bool(
+        explicit_capture_entry.get(
+            "entered_goal_side_before_capture",
+            explicit.get(
+                "entered_goal_side_before_capture",
+                merged.get(
+                    "entered_goal_side_before_capture",
+                    fallback.get("entered_goal_side_before_capture", False),
+                ),
+            ),
+        )
+    )
+    first_contact_push_alignment_deg = _first_float(
+        explicit_capture_entry.get("first_contact_push_alignment_deg"),
+        explicit.get("first_contact_push_alignment_deg"),
+        merged.get("first_contact_push_alignment_deg"),
+        fallback.get("first_contact_push_alignment_deg"),
+        allow_none=True,
+    )
+    push_direction_yaw_deg = float(
+        _first_float(
+            explicit_capture_entry.get("push_direction_yaw_deg"),
+            explicit.get("push_direction_yaw_deg"),
+            merged.get("push_direction_yaw_deg"),
+            fallback.get("push_direction_yaw_deg"),
+            default=0.0,
+        )
+        or 0.0
+    )
+    legacy_reason = _first_text(
+        legacy_verdict.get("reason"),
+        merged.get("approach_failure_reason"),
+        fallback.get("approach_failure_reason"),
+    )
+    capture_entry_failure_reason = _first_text(
+        explicit_capture_entry.get("failure_reason"),
+        explicit_capture_entry.get("reason"),
+        explicit.get("approach_failure_reason"),
+        merged.get("approach_failure_reason"),
+        fallback.get("approach_failure_reason"),
+        default=legacy_reason,
+    )
+    overall_pass = bool(explicit.get("pass", legacy_verdict.get("pass", False)))
+    overall_reason = _first_text(explicit.get("reason"), legacy_reason)
+
+    normalized = dict(explicit)
+    normalized["pass"] = overall_pass
+    normalized["reason"] = overall_reason
+    normalized["pre_stage"] = {
+        **explicit_pre_stage,
+        "pose_world": pre_stage_pose_world,
+        "pose_reached": pre_stage_pose_reached,
+        "time_s": round(pre_stage_time_s, 6),
+        "handoff_pass": pre_stage_handoff_pass,
+    }
+    normalized["stage"] = {
+        **explicit_stage,
+        "pose_reached": stage_pose_reached,
+        "time_s": round(stage_time_s, 6),
+    }
+    normalized["capture_entry"] = {
+        **explicit_capture_entry,
+        "pass": bool(explicit_capture_entry.get("pass", overall_pass)),
+        "entered_goal_side_before_capture": entered_goal_side_before_capture,
+        "first_contact_push_alignment_deg": first_contact_push_alignment_deg,
+        "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
+        "failure_reason": capture_entry_failure_reason,
+    }
+    return normalized
+
+
+def _legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach: dict[str, object]) -> dict[str, object]:
+    fresh_attempt = (
+        fresh_attempt_approach
+        if isinstance(fresh_attempt_approach, dict) and fresh_attempt_approach
+        else _default_fresh_attempt_approach()
+    )
+    pre_stage = _dict_value(fresh_attempt.get("pre_stage"))
+    stage = _dict_value(fresh_attempt.get("stage"))
+    capture_entry = _dict_value(fresh_attempt.get("capture_entry"))
+    return {
+        "approach_side_verdict": {
+            "pass": bool(fresh_attempt.get("pass", False)),
+            "reason": _clean_text(fresh_attempt.get("reason")),
+        },
+        "pre_stage_pose_world": _first_dict(pre_stage.get("pose_world")),
+        "pre_stage_pose_reached": bool(pre_stage.get("pose_reached", False)),
+        "pre_stage_time_s": float(_float_value(pre_stage.get("time_s"), default=0.0) or 0.0),
+        "pre_stage_handoff_pass": bool(pre_stage.get("handoff_pass", False)),
+        "staging_pose_reached": bool(stage.get("pose_reached", False)),
+        "entered_goal_side_before_capture": bool(capture_entry.get("entered_goal_side_before_capture", False)),
+        "first_contact_push_alignment_deg": _float_value(
+            capture_entry.get("first_contact_push_alignment_deg"),
+            allow_none=True,
+        ),
+        "push_direction_yaw_deg": float(_float_value(capture_entry.get("push_direction_yaw_deg"), default=0.0) or 0.0),
+        "stage_time_s": float(_float_value(stage.get("time_s"), default=0.0) or 0.0),
+        "approach_failure_reason": _first_text(
+            capture_entry.get("failure_reason"),
+            fresh_attempt.get("reason"),
+        ),
+    }
+
+
+def _approach_side_rollup(runs: list[dict[str, object]]) -> dict[str, object]:
+    fresh_attempts = [_fresh_attempt_approach_from_sources(item, fallback=item) for item in runs]
+    approach_pass_flags = [bool(item.get("pass", False)) for item in fresh_attempts]
+    pre_stage_pose_reached_flags = [
+        bool((_dict_value(item.get("pre_stage"))).get("pose_reached", False))
+        for item in fresh_attempts
+    ]
+    pre_stage_handoff_pass_flags = [
+        bool((_dict_value(item.get("pre_stage"))).get("handoff_pass", False))
+        for item in fresh_attempts
+    ]
+    stage_pose_reached_flags = [
+        bool((_dict_value(item.get("stage"))).get("pose_reached", False))
+        for item in fresh_attempts
+    ]
+    capture_entry_pass_flags = [
+        bool((_dict_value(item.get("capture_entry"))).get("pass", False))
+        for item in fresh_attempts
+    ]
+    entered_goal_side_flags = [
+        bool((_dict_value(item.get("capture_entry"))).get("entered_goal_side_before_capture", False))
+        for item in fresh_attempts
+    ]
+    approach_reasons = sorted({_clean_text(item.get("reason")) for item in fresh_attempts if _clean_text(item.get("reason"))})
     approach_failure_reasons = sorted(
         {
-            str(item.get("approach_failure_reason", "") or "")
-            for item in runs
-            if str(item.get("approach_failure_reason", "") or "").strip()
+            _clean_text((_dict_value(item.get("capture_entry"))).get("failure_reason"))
+            for item in fresh_attempts
+            if _clean_text((_dict_value(item.get("capture_entry"))).get("failure_reason"))
         }
     )
-    first_contact_alignments = _float_list_from_runs(runs, "first_contact_push_alignment_deg")
-    push_direction_yaws = _float_list_from_runs(runs, "push_direction_yaw_deg")
-    stage_times = _float_list_from_runs(runs, "stage_time_s")
+    pre_stage_times = [
+        float(_float_value((_dict_value(item.get("pre_stage"))).get("time_s"), default=0.0) or 0.0)
+        for item in fresh_attempts
+        if (_dict_value(item.get("pre_stage"))).get("time_s") not in {None, ""}
+    ]
+    stage_times = [
+        float(_float_value((_dict_value(item.get("stage"))).get("time_s"), default=0.0) or 0.0)
+        for item in fresh_attempts
+        if (_dict_value(item.get("stage"))).get("time_s") not in {None, ""}
+    ]
+    first_contact_alignments = [
+        float(_float_value((_dict_value(item.get("capture_entry"))).get("first_contact_push_alignment_deg"), default=0.0) or 0.0)
+        for item in fresh_attempts
+        if (_dict_value(item.get("capture_entry"))).get("first_contact_push_alignment_deg") not in {None, ""}
+    ]
+    push_direction_yaws = [
+        float(_float_value((_dict_value(item.get("capture_entry"))).get("push_direction_yaw_deg"), default=0.0) or 0.0)
+        for item in fresh_attempts
+        if (_dict_value(item.get("capture_entry"))).get("push_direction_yaw_deg") not in {None, ""}
+    ]
+    fresh_rollup = {
+        "fresh_attempt_approach_pass_count": sum(1 for flag in approach_pass_flags if flag),
+        "fresh_attempt_approach_fail_count": sum(1 for flag in approach_pass_flags if not flag),
+        "fresh_attempt_pre_stage_pose_reached_count": sum(1 for flag in pre_stage_pose_reached_flags if flag),
+        "fresh_attempt_pre_stage_handoff_pass_count": sum(1 for flag in pre_stage_handoff_pass_flags if flag),
+        "fresh_attempt_stage_pose_reached_count": sum(1 for flag in stage_pose_reached_flags if flag),
+        "fresh_attempt_capture_entry_pass_count": sum(1 for flag in capture_entry_pass_flags if flag),
+        "fresh_attempt_capture_entry_goal_side_entry_count": sum(1 for flag in entered_goal_side_flags if flag),
+        "fresh_attempt_first_contact_push_alignment_avg_deg": round(sum(first_contact_alignments) / len(first_contact_alignments), 6) if first_contact_alignments else 0.0,
+        "fresh_attempt_first_contact_push_alignment_min_deg": round(min(first_contact_alignments), 6) if first_contact_alignments else 0.0,
+        "fresh_attempt_first_contact_push_alignment_max_deg": round(max(first_contact_alignments), 6) if first_contact_alignments else 0.0,
+        "fresh_attempt_push_direction_yaw_avg_deg": round(sum(push_direction_yaws) / len(push_direction_yaws), 6) if push_direction_yaws else 0.0,
+        "fresh_attempt_push_direction_yaw_min_deg": round(min(push_direction_yaws), 6) if push_direction_yaws else 0.0,
+        "fresh_attempt_push_direction_yaw_max_deg": round(max(push_direction_yaws), 6) if push_direction_yaws else 0.0,
+        "fresh_attempt_stage_time_avg_s": round(sum(stage_times) / len(stage_times), 6) if stage_times else 0.0,
+        "fresh_attempt_stage_time_min_s": round(min(stage_times), 6) if stage_times else 0.0,
+        "fresh_attempt_stage_time_max_s": round(max(stage_times), 6) if stage_times else 0.0,
+        "fresh_attempt_pre_stage_time_avg_s": round(sum(pre_stage_times) / len(pre_stage_times), 6) if pre_stage_times else 0.0,
+        "fresh_attempt_pre_stage_time_min_s": round(min(pre_stage_times), 6) if pre_stage_times else 0.0,
+        "fresh_attempt_pre_stage_time_max_s": round(max(pre_stage_times), 6) if pre_stage_times else 0.0,
+        "fresh_attempt_approach_reasons": approach_reasons,
+        "fresh_attempt_capture_entry_failure_reasons": approach_failure_reasons,
+    }
     return {
-        "approach_side_pass_count": sum(1 for flag in approach_side_pass_flags if flag),
-        "approach_side_fail_count": sum(1 for flag in approach_side_pass_flags if not flag),
-        "staging_pose_reached_count": sum(1 for flag in staging_pose_reached_flags if flag),
-        "entered_goal_side_before_capture_count": sum(1 for flag in entered_goal_side_flags if flag),
-        "first_contact_push_alignment_avg_deg": round(sum(first_contact_alignments) / len(first_contact_alignments), 6) if first_contact_alignments else 0.0,
-        "first_contact_push_alignment_min_deg": round(min(first_contact_alignments), 6) if first_contact_alignments else 0.0,
-        "first_contact_push_alignment_max_deg": round(max(first_contact_alignments), 6) if first_contact_alignments else 0.0,
-        "push_direction_yaw_avg_deg": round(sum(push_direction_yaws) / len(push_direction_yaws), 6) if push_direction_yaws else 0.0,
-        "push_direction_yaw_min_deg": round(min(push_direction_yaws), 6) if push_direction_yaws else 0.0,
-        "push_direction_yaw_max_deg": round(max(push_direction_yaws), 6) if push_direction_yaws else 0.0,
-        "stage_time_avg_s": round(sum(stage_times) / len(stage_times), 6) if stage_times else 0.0,
-        "stage_time_min_s": round(min(stage_times), 6) if stage_times else 0.0,
-        "stage_time_max_s": round(max(stage_times), 6) if stage_times else 0.0,
-        "approach_side_reasons": approach_reasons,
-        "approach_failure_reasons": approach_failure_reasons,
+        **fresh_rollup,
+        "approach_side_pass_count": fresh_rollup["fresh_attempt_approach_pass_count"],
+        "approach_side_fail_count": fresh_rollup["fresh_attempt_approach_fail_count"],
+        "pre_stage_pose_reached_count": fresh_rollup["fresh_attempt_pre_stage_pose_reached_count"],
+        "pre_stage_handoff_pass_count": fresh_rollup["fresh_attempt_pre_stage_handoff_pass_count"],
+        "staging_pose_reached_count": fresh_rollup["fresh_attempt_stage_pose_reached_count"],
+        "entered_goal_side_before_capture_count": fresh_rollup["fresh_attempt_capture_entry_goal_side_entry_count"],
+        "first_contact_push_alignment_avg_deg": fresh_rollup["fresh_attempt_first_contact_push_alignment_avg_deg"],
+        "first_contact_push_alignment_min_deg": fresh_rollup["fresh_attempt_first_contact_push_alignment_min_deg"],
+        "first_contact_push_alignment_max_deg": fresh_rollup["fresh_attempt_first_contact_push_alignment_max_deg"],
+        "push_direction_yaw_avg_deg": fresh_rollup["fresh_attempt_push_direction_yaw_avg_deg"],
+        "push_direction_yaw_min_deg": fresh_rollup["fresh_attempt_push_direction_yaw_min_deg"],
+        "push_direction_yaw_max_deg": fresh_rollup["fresh_attempt_push_direction_yaw_max_deg"],
+        "stage_time_avg_s": fresh_rollup["fresh_attempt_stage_time_avg_s"],
+        "stage_time_min_s": fresh_rollup["fresh_attempt_stage_time_min_s"],
+        "stage_time_max_s": fresh_rollup["fresh_attempt_stage_time_max_s"],
+        "pre_stage_time_avg_s": fresh_rollup["fresh_attempt_pre_stage_time_avg_s"],
+        "pre_stage_time_min_s": fresh_rollup["fresh_attempt_pre_stage_time_min_s"],
+        "pre_stage_time_max_s": fresh_rollup["fresh_attempt_pre_stage_time_max_s"],
+        "approach_side_reasons": fresh_rollup["fresh_attempt_approach_reasons"],
+        "approach_failure_reasons": fresh_rollup["fresh_attempt_capture_entry_failure_reasons"],
     }
 
 
 def _enrich_run_with_approach_side_fields(run_summary: dict[str, object]) -> dict[str, object]:
     mission_verdict_path = str(run_summary.get("mission_verdict_path", "") or "")
     if not mission_verdict_path:
+        fresh_attempt_approach = _default_fresh_attempt_approach()
+        run_summary.update(
+            {
+                "fresh_attempt_approach": fresh_attempt_approach,
+                "approach_side_pass": False,
+                "approach_side_reason": "",
+                **_legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach),
+            }
+        )
         return run_summary
     verdict_path = Path(mission_verdict_path)
     if not verdict_path.exists():
+        fresh_attempt_approach = _default_fresh_attempt_approach()
+        run_summary.update(
+            {
+                "fresh_attempt_approach": fresh_attempt_approach,
+                "approach_side_pass": False,
+                "approach_side_reason": "",
+                **_legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach),
+            }
+        )
         return run_summary
     verdict = read_json(verdict_path)
     summary_path = str(run_summary.get("summary_path", "") or "")
     summary = read_json(Path(summary_path)) if summary_path and Path(summary_path).exists() else {}
-    merged = verdict if isinstance(verdict, dict) and verdict else summary if isinstance(summary, dict) else {}
-    approach_side_verdict = merged.get("approach_side_verdict", {}) if isinstance(merged.get("approach_side_verdict"), dict) else {}
+    merged = _merged_source_dict(summary, verdict)
+    fresh_attempt_approach = _fresh_attempt_approach_from_sources(
+        merged,
+        fallback=_merged_source_dict(run_summary, summary),
+    )
+    legacy_fields = _legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach)
     run_summary.update(
         {
-            "approach_side_verdict": approach_side_verdict,
-            "approach_side_pass": bool(approach_side_verdict.get("pass", False)),
-            "approach_side_reason": str(approach_side_verdict.get("reason", "") or ""),
-            "staging_pose_reached": bool(merged.get("staging_pose_reached", run_summary.get("staging_pose_reached", False))),
-            "entered_goal_side_before_capture": bool(
-                merged.get("entered_goal_side_before_capture", run_summary.get("entered_goal_side_before_capture", False))
-            ),
-            "first_contact_push_alignment_deg": float(
-                merged.get("first_contact_push_alignment_deg", run_summary.get("first_contact_push_alignment_deg", 0.0)) or 0.0
-            ),
-            "push_direction_yaw_deg": float(merged.get("push_direction_yaw_deg", run_summary.get("push_direction_yaw_deg", 0.0)) or 0.0),
-            "stage_time_s": float(merged.get("stage_time_s", run_summary.get("stage_time_s", 0.0)) or 0.0),
-            "approach_failure_reason": str(merged.get("approach_failure_reason", run_summary.get("approach_failure_reason", "")) or ""),
+            "fresh_attempt_approach": fresh_attempt_approach,
+            "approach_side_pass": bool(fresh_attempt_approach.get("pass", False)),
+            "approach_side_reason": _clean_text(fresh_attempt_approach.get("reason")),
+            **legacy_fields,
         }
     )
     return run_summary
@@ -240,8 +580,10 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
     summary = read_json(summary_path) if summary_path and summary_path.exists() else {}
     target_results_payload = read_json(target_results_path) if target_results_path and target_results_path.exists() else {}
     target_results = list(target_results_payload.get("targets", [])) if isinstance(target_results_payload.get("targets"), list) else []
-    merged = verdict if verdict else summary
-    approach_side_verdict = merged.get("approach_side_verdict", {}) if isinstance(merged.get("approach_side_verdict"), dict) else {}
+    merged = _merged_source_dict(summary, verdict)
+    fresh_attempt_approach = _fresh_attempt_approach_from_sources(merged, fallback=summary)
+    legacy_approach_fields = _legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach)
+    approach_side_verdict = legacy_approach_fields["approach_side_verdict"]
 
     return {
         "run_index": run_index,
@@ -304,15 +646,11 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
         "release_recontact_count": int(verdict.get("release_recontact_count", summary.get("release_recontact_count", 0)) or 0),
         "mission_time_s": float(verdict.get("mission_time_s", summary.get("mission_time_s", 0.0)) or 0.0),
         "route_order": list(verdict.get("route_order", summary.get("route_order", [])) or []),
+        "fresh_attempt_approach": fresh_attempt_approach,
         "approach_side_verdict": approach_side_verdict,
         "approach_side_pass": bool(approach_side_verdict.get("pass", False)),
         "approach_side_reason": str(approach_side_verdict.get("reason", "") or ""),
-        "staging_pose_reached": bool(merged.get("staging_pose_reached", False)),
-        "entered_goal_side_before_capture": bool(merged.get("entered_goal_side_before_capture", False)),
-        "first_contact_push_alignment_deg": float(merged.get("first_contact_push_alignment_deg", 0.0) or 0.0),
-        "push_direction_yaw_deg": float(merged.get("push_direction_yaw_deg", 0.0) or 0.0),
-        "stage_time_s": float(merged.get("stage_time_s", 0.0) or 0.0),
-        "approach_failure_reason": str(merged.get("approach_failure_reason", "") or ""),
+        **legacy_approach_fields,
         "target_results": target_results,
         "mission_verdict": verdict,
         "summary": summary,
@@ -473,6 +811,7 @@ def main() -> int:
                 run_summary, output = run_dashboard_scenario_once(args, run_index=run_index)
             except Exception as exc:
                 output = str(exc)
+                fresh_attempt_approach = _default_fresh_attempt_approach()
                 run_summary = {
                     "run_index": run_index,
                     "return_code": 2,
@@ -496,6 +835,10 @@ def main() -> int:
                     "target_results": [],
                     "mission_verdict": {},
                     "summary": {},
+                    "fresh_attempt_approach": fresh_attempt_approach,
+                    **_legacy_approach_fields_from_fresh_attempt(fresh_attempt_approach),
+                    "approach_side_pass": False,
+                    "approach_side_reason": "",
                     "failure_reason": str(exc),
                 }
         else:
@@ -565,20 +908,44 @@ def main() -> int:
         summary=summary,
         runs=runs,
     )
-    approach_side_lines = [
+    fresh_attempt_lines = [
         "",
-        "## Approach Side Rollup",
+        "## Fresh Attempt Approach Rollup",
         "",
-        f"- Approach side pass/fail: `{summary.get('approach_side_pass_count', 0)}/{summary.get('approach_side_fail_count', 0)}`",
-        f"- Staging pose reached: `{summary.get('staging_pose_reached_count', 0)}/{max(len(runs), 1)}`",
-        f"- Entered goal side before capture: `{summary.get('entered_goal_side_before_capture_count', 0)}/{max(len(runs), 1)}`",
-        f"- First contact push alignment avg/min/max: `{summary.get('first_contact_push_alignment_avg_deg', 0.0):.3f}deg / {summary.get('first_contact_push_alignment_min_deg', 0.0):.3f}deg / {summary.get('first_contact_push_alignment_max_deg', 0.0):.3f}deg`",
-        f"- Push direction yaw avg/min/max: `{summary.get('push_direction_yaw_avg_deg', 0.0):.3f}deg / {summary.get('push_direction_yaw_min_deg', 0.0):.3f}deg / {summary.get('push_direction_yaw_max_deg', 0.0):.3f}deg`",
-        f"- Stage time avg/min/max: `{summary.get('stage_time_avg_s', 0.0):.3f}s / {summary.get('stage_time_min_s', 0.0):.3f}s / {summary.get('stage_time_max_s', 0.0):.3f}s`",
-        f"- Approach-side reasons: `{', '.join(summary.get('approach_side_reasons', [])) if summary.get('approach_side_reasons') else 'none'}`",
-        f"- Approach failure reasons: `{', '.join(summary.get('approach_failure_reasons', [])) if summary.get('approach_failure_reasons') else 'none'}`",
+        f"- fresh_attempt_approach pass/fail: `{summary.get('fresh_attempt_approach_pass_count', 0)}/{summary.get('fresh_attempt_approach_fail_count', 0)}`",
+        f"- pre_stage.pose_reached: `{summary.get('fresh_attempt_pre_stage_pose_reached_count', 0)}/{max(len(runs), 1)}`",
+        f"- pre_stage.handoff_pass: `{summary.get('fresh_attempt_pre_stage_handoff_pass_count', 0)}/{max(len(runs), 1)}`",
+        f"- stage.pose_reached: `{summary.get('fresh_attempt_stage_pose_reached_count', 0)}/{max(len(runs), 1)}`",
+        f"- capture_entry.pass: `{summary.get('fresh_attempt_capture_entry_pass_count', 0)}/{max(len(runs), 1)}`",
+        f"- capture_entry.entered_goal_side_before_capture: `{summary.get('fresh_attempt_capture_entry_goal_side_entry_count', 0)}`",
+        f"- pre_stage.time avg/min/max: `{summary.get('fresh_attempt_pre_stage_time_avg_s', 0.0):.3f}s / {summary.get('fresh_attempt_pre_stage_time_min_s', 0.0):.3f}s / {summary.get('fresh_attempt_pre_stage_time_max_s', 0.0):.3f}s`",
+        f"- capture_entry.first_contact_push_alignment avg/min/max: `{summary.get('fresh_attempt_first_contact_push_alignment_avg_deg', 0.0):.3f}deg / {summary.get('fresh_attempt_first_contact_push_alignment_min_deg', 0.0):.3f}deg / {summary.get('fresh_attempt_first_contact_push_alignment_max_deg', 0.0):.3f}deg`",
+        f"- capture_entry.push_direction_yaw avg/min/max: `{summary.get('fresh_attempt_push_direction_yaw_avg_deg', 0.0):.3f}deg / {summary.get('fresh_attempt_push_direction_yaw_min_deg', 0.0):.3f}deg / {summary.get('fresh_attempt_push_direction_yaw_max_deg', 0.0):.3f}deg`",
+        f"- stage.time avg/min/max: `{summary.get('fresh_attempt_stage_time_avg_s', 0.0):.3f}s / {summary.get('fresh_attempt_stage_time_min_s', 0.0):.3f}s / {summary.get('fresh_attempt_stage_time_max_s', 0.0):.3f}s`",
+        f"- fresh_attempt_approach reasons: `{', '.join(summary.get('fresh_attempt_approach_reasons', [])) if summary.get('fresh_attempt_approach_reasons') else 'none'}`",
+        f"- fresh_attempt capture_entry failure reasons: `{', '.join(summary.get('fresh_attempt_capture_entry_failure_reasons', [])) if summary.get('fresh_attempt_capture_entry_failure_reasons') else 'none'}`",
     ]
-    scorecard = scorecard.rstrip() + "\n".join(approach_side_lines) + "\n"
+    if runs:
+        fresh_attempt_lines.extend(["", "## Fresh Attempt Runs", ""])
+    for run in runs:
+        fresh_attempt = _fresh_attempt_approach_from_sources(run, fallback=run)
+        pre_stage = _dict_value(fresh_attempt.get("pre_stage"))
+        stage = _dict_value(fresh_attempt.get("stage"))
+        capture_entry = _dict_value(fresh_attempt.get("capture_entry"))
+        fresh_attempt_lines.append(
+            f"- Run {int(run.get('run_index', 0) or 0):02d}: "
+            f"fresh_attempt.pass=`{bool(fresh_attempt.get('pass', False))}` "
+            f"reason=`{_clean_text(fresh_attempt.get('reason'), 'none')}` "
+            f"pre_stage.pose_reached=`{bool(pre_stage.get('pose_reached', False))}` "
+            f"pre_stage.handoff_pass=`{bool(pre_stage.get('handoff_pass', False))}` "
+            f"stage.pose_reached=`{bool(stage.get('pose_reached', False))}` "
+            f"capture_entry.pass=`{bool(capture_entry.get('pass', False))}` "
+            f"capture_entry.goal_side=`{bool(capture_entry.get('entered_goal_side_before_capture', False))}` "
+            f"capture_entry.align_deg=`{_float_value(capture_entry.get('first_contact_push_alignment_deg'), default=0.0) or 0.0:.2f}` "
+            f"capture_entry.yaw_deg=`{_float_value(capture_entry.get('push_direction_yaw_deg'), default=0.0) or 0.0:.2f}` "
+            f"stage.time_s=`{_float_value(stage.get('time_s'), default=0.0) or 0.0:.3f}`"
+        )
+    scorecard = scorecard.rstrip() + "\n".join(fresh_attempt_lines) + "\n"
     (campaign_root / "scorecard.md").write_text(scorecard, encoding="utf-8")
     print(f"GATHER_MISSION_REPEATABILITY_SUMMARY={campaign_root / 'campaign_run_summary.json'}")
     print(json.dumps(summary, indent=2, sort_keys=True))

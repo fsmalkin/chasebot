@@ -22,10 +22,13 @@ from gather_mission_helpers import build_scorecard_markdown  # noqa: E402
 from gather_mission_helpers import build_zone_spec  # noqa: E402
 from gather_mission_helpers import capture_loss_detected  # noqa: E402
 from gather_mission_helpers import capture_snapshot  # noqa: E402
+from gather_mission_helpers import capture_entry_snapshot  # noqa: E402
 from gather_mission_helpers import clean_retention_pass  # noqa: E402
 from gather_mission_helpers import compute_place_command  # noqa: E402
 from gather_mission_helpers import compute_capture_command  # noqa: E402
+from gather_mission_helpers import compute_capture_entry_command  # noqa: E402
 from gather_mission_helpers import compute_stage_command  # noqa: E402
+from gather_mission_helpers import compute_pre_stage_command  # noqa: E402
 from gather_mission_helpers import first_contact_push_alignment_deg  # noqa: E402
 from gather_mission_helpers import final_three_ball_corral_pass  # noqa: E402
 from gather_mission_helpers import front_escape_risk  # noqa: E402
@@ -33,6 +36,7 @@ from gather_mission_helpers import gather_run_pass  # noqa: E402
 from gather_mission_helpers import goal_side_approach_snapshot  # noqa: E402
 from gather_mission_helpers import marginal_capture  # noqa: E402
 from gather_mission_helpers import pose_delta_m  # noqa: E402
+from gather_mission_helpers import pre_stage_arrival_snapshot  # noqa: E402
 from gather_mission_helpers import release_ready  # noqa: E402
 from gather_mission_helpers import secure_capture  # noqa: E402
 from gather_mission_helpers import settled_in_corral_pass  # noqa: E402
@@ -80,6 +84,50 @@ def test_capture_snapshot_accepts_forward_slip_with_longer_catcher():
     assert snapshot is not None
     assert snapshot.captured is True
     assert snapshot.within_recapture_window is True
+
+
+def test_capture_entry_snapshot_requires_exact_corridor():
+    zone = build_zone_spec("corral_single_ball_place")
+    ready_snapshot = capture_entry_snapshot(
+        {"x": 0.55, "y": 0.0, "yaw": 0.0},
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        zone=zone,
+        envelope=CaptureEnvelope(),
+    )
+    assert ready_snapshot is not None
+    assert ready_snapshot["capture_entry_reached"] is True
+
+    off_axis_snapshot = capture_entry_snapshot(
+        {"x": 0.55, "y": -0.09, "yaw": 0.0},
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        zone=zone,
+        envelope=CaptureEnvelope(),
+    )
+    assert off_axis_snapshot is not None
+    assert off_axis_snapshot["capture_entry_reached"] is False
+
+
+def test_compute_capture_entry_command_is_ready_in_corridor_and_bounded_outside_it():
+    zone = build_zone_spec("corral_single_ball_place")
+    ready_command = compute_capture_entry_command(
+        {"x": 0.55, "y": 0.0, "yaw": 0.0},
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        zone=zone,
+        envelope=CaptureEnvelope(),
+    )
+    assert ready_command is not None
+    assert ready_command.mode == "capture_entry_ready"
+
+    closing_command = compute_capture_entry_command(
+        {"x": 0.55, "y": -0.09, "yaw": 0.0},
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        zone=zone,
+        envelope=CaptureEnvelope(),
+    )
+    assert closing_command is not None
+    assert closing_command.mode == "capture_entry"
+    assert 0.0 < closing_command.linear_x <= 0.055
+    assert closing_command.angular_z > 0.0
 
 
 def test_zone_edge_correction_eligible_accepts_inside_zone_or_near_zone_recapture():
@@ -134,6 +182,65 @@ def test_goal_side_approach_snapshot_enforces_staging_and_goal_side_geometry():
     yaw_miss_command = compute_stage_command({"x": 0.55, "y": 0.0, "yaw": math.radians(30.0)}, ball_pose, zone=zone)
     assert yaw_miss_command is not None
     assert yaw_miss_command.mode == "stage_align"
+
+
+def test_pre_stage_arrival_snapshot_places_pose_farther_behind_ball_on_push_axis():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 1.0, "y": 0.0}
+
+    snapshot = pre_stage_arrival_snapshot({"x": 0.10, "y": 0.0, "yaw": 0.0}, ball_pose, zone=zone)
+
+    assert snapshot is not None
+    assert snapshot["pre_stage_pose_world"]["x"] == pytest.approx(0.1, abs=1e-6)
+    assert snapshot["pre_stage_pose_world"]["y"] == pytest.approx(0.0, abs=1e-6)
+    assert snapshot["pre_stage_pose_reached"] is True
+
+
+def test_pre_stage_and_stage_commands_back_off_from_near_front_pose():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 1.0, "y": 0.0}
+    near_front_pose = {"x": 0.99, "y": 0.0, "yaw": 0.0}
+
+    pre_stage_command = compute_pre_stage_command(near_front_pose, ball_pose, zone=zone)
+    stage_command = compute_stage_command(near_front_pose, ball_pose, zone=zone)
+
+    assert pre_stage_command is not None
+    assert pre_stage_command.mode in {"pre_stage_orbit_turn", "pre_stage_orbit"}
+    assert pre_stage_command.angular_z != 0.0
+    assert stage_command is not None
+    assert stage_command.mode == "stage_escape_goal_side"
+    assert stage_command.linear_x < 0.0
+
+
+def test_pre_stage_and_stage_align_follow_signed_push_yaw_error():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 3.8, "y": 0.0}
+
+    pre_stage_aligned_pose = {"x": 4.70, "y": 0.0, "yaw": 0.0}
+    stage_aligned_pose = {"x": 4.25, "y": 0.0, "yaw": 0.0}
+
+    pre_stage_command = compute_pre_stage_command(pre_stage_aligned_pose, ball_pose, zone=zone)
+    stage_command = compute_stage_command(stage_aligned_pose, ball_pose, zone=zone)
+
+    assert pre_stage_command is not None
+    assert pre_stage_command.mode == "pre_stage_align"
+    assert pre_stage_command.angular_z > 0.0
+
+    assert stage_command is not None
+    assert stage_command.mode == "stage_align"
+    assert stage_command.angular_z > 0.0
+
+
+def test_pre_stage_prefers_align_once_inside_arrival_radius():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 3.8, "y": 0.0}
+    near_pre_stage_pose = {"x": 4.86, "y": 0.18, "yaw": 0.0}
+
+    pre_stage_command = compute_pre_stage_command(near_pre_stage_pose, ball_pose, zone=zone)
+
+    assert pre_stage_command is not None
+    assert pre_stage_command.mode == "pre_stage_align"
+    assert pre_stage_command.angular_z > 0.0
 
 
 def test_first_contact_alignment_verdict_passes_and_fails_on_angle_gate():
@@ -462,6 +569,10 @@ def test_summarize_runs_and_scorecard_markdown():
             "settle_no_chase_activated": True,
             "settle_no_chase_exit_reason": "settled",
             "release_gate_blocked_reason": "none",
+            "pre_stage_pose_world": {"x": 1.90, "y": 0.0},
+            "pre_stage_pose_reached": True,
+            "pre_stage_time_s": 2.4,
+            "pre_stage_handoff_pass": True,
             "placed_count": 1,
             "capture_loss_count": 0,
             "zone_edge_correction_count": 1,
@@ -491,6 +602,10 @@ def test_summarize_runs_and_scorecard_markdown():
             "settle_no_chase_activated": False,
             "settle_no_chase_exit_reason": "none",
             "release_gate_blocked_reason": "no_secure_capture",
+            "pre_stage_pose_world": {"x": 1.90, "y": 0.0},
+            "pre_stage_pose_reached": True,
+            "pre_stage_time_s": 2.0,
+            "pre_stage_handoff_pass": True,
             "placed_count": 1,
             "capture_loss_count": 1,
             "zone_edge_correction_count": 2,
@@ -529,6 +644,8 @@ def test_summarize_runs_and_scorecard_markdown():
     assert summary["settle_no_chase_activated_count"] == 1
     assert summary["settle_no_chase_exit_reasons"] == ["settled"]
     assert summary["release_gate_blocked_reasons"] == ["no_secure_capture"]
+    assert summary["pre_stage_pose_reached_count"] == 2
+    assert summary["pre_stage_handoff_pass_count"] == 2
     assert summary["zone_edge_correction_count_total"] == 3
     assert summary["place_controller_reentry_count_total"] == 2
     assert summary["post_visit_revisit_count_total"] == 0
@@ -537,6 +654,7 @@ def test_summarize_runs_and_scorecard_markdown():
     assert "Run 01" in markdown
     assert "short_turf" in markdown
     assert "handoff=`soft_capture`" in markdown
+    assert "Pre-stage pose reached" in markdown
     assert "settle_exit=`settled`" in markdown
     assert "settle_no_chase=`True`" in markdown
     assert "release_gate=`none`" in markdown

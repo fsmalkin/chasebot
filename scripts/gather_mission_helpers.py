@@ -22,13 +22,24 @@ DEFAULT_RELEASE_SETTLE_MAX_WAIT_S = 6.0
 DEFAULT_RELEASE_ZONE_MARGIN_M = 0.07
 DEFAULT_ZONE_EDGE_CORRECTION_MARGIN_M = 0.12
 DEFAULT_MULTI_BALL_SPAWN_RADIUS_M = 3.048
+DEFAULT_PRE_STAGE_BEHIND_BALL_DISTANCE_M = 0.90
+DEFAULT_PRE_STAGE_READY_LONGITUDINAL_PROJECTION_M = -0.50
+DEFAULT_PRE_STAGE_READY_LATERAL_ERROR_M = 0.30
+DEFAULT_PRE_STAGE_READY_YAW_ERROR_DEG = 35.0
+DEFAULT_PRE_STAGE_READY_DWELL_S = 0.25
+DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M = 0.30
+DEFAULT_PRE_STAGE_ORBIT_OFFSET_M = 1.00
 DEFAULT_STAGE_BEHIND_BALL_DISTANCE_M = 0.45
 DEFAULT_STAGE_READY_LONGITUDINAL_PROJECTION_M = -0.18
 DEFAULT_STAGE_READY_LATERAL_ERROR_M = 0.18
 DEFAULT_STAGE_READY_YAW_ERROR_DEG = 20.0
 DEFAULT_STAGE_READY_DWELL_S = 0.4
 DEFAULT_STAGE_ARRIVAL_RADIUS_M = 0.20
-DEFAULT_GOAL_SIDE_VIOLATION_PROJECTION_M = 0.05
+DEFAULT_CAPTURE_ENTRY_READY_BALL_X_M = 0.45
+DEFAULT_CAPTURE_ENTRY_READY_ABS_BALL_Y_M = 0.08
+DEFAULT_CAPTURE_ENTRY_READY_DWELL_S = 0.30
+DEFAULT_CAPTURE_ENTRY_TIMEOUT_S = 4.0
+DEFAULT_GOAL_SIDE_VIOLATION_PROJECTION_M = 0.0
 DEFAULT_FIRST_CONTACT_ALIGNMENT_PASS_DEG = 25.0
 
 
@@ -531,6 +542,50 @@ def goal_side_approach_snapshot(
     }
 
 
+def pre_stage_arrival_snapshot(
+    robot_pose: dict[str, Any],
+    ball_pose: dict[str, Any],
+    *,
+    zone: ZoneSpec,
+    pre_stage_distance_m: float = DEFAULT_PRE_STAGE_BEHIND_BALL_DISTANCE_M,
+    pre_stage_arrival_radius_m: float = DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M,
+    pre_stage_ready_longitudinal_projection_m: float = DEFAULT_PRE_STAGE_READY_LONGITUDINAL_PROJECTION_M,
+    pre_stage_ready_lateral_error_m: float = DEFAULT_PRE_STAGE_READY_LATERAL_ERROR_M,
+    pre_stage_ready_yaw_error_deg: float = DEFAULT_PRE_STAGE_READY_YAW_ERROR_DEG,
+    goal_side_violation_projection_m: float = DEFAULT_GOAL_SIDE_VIOLATION_PROJECTION_M,
+) -> dict[str, Any] | None:
+    snapshot = goal_side_approach_snapshot(
+        robot_pose,
+        ball_pose,
+        zone=zone,
+        stage_distance_m=pre_stage_distance_m,
+        stage_arrival_radius_m=pre_stage_arrival_radius_m,
+        stage_ready_longitudinal_projection_m=pre_stage_ready_longitudinal_projection_m,
+        stage_ready_lateral_error_m=pre_stage_ready_lateral_error_m,
+        stage_ready_yaw_error_deg=pre_stage_ready_yaw_error_deg,
+        goal_side_violation_projection_m=goal_side_violation_projection_m,
+    )
+    if not isinstance(snapshot, dict):
+        return None
+    return {
+        "push_direction_yaw_deg": float(snapshot.get("push_direction_yaw_deg", 0.0) or 0.0),
+        "pre_stage_pose_world": (
+            dict(snapshot.get("staging_pose_world", {}))
+            if isinstance(snapshot.get("staging_pose_world"), dict)
+            else {}
+        ),
+        "pre_stage_pose_distance_m": float(_number(snapshot.get("staging_pose_distance_m")) or 0.0),
+        "robot_longitudinal_projection_m": float(_number(snapshot.get("robot_longitudinal_projection_m")) or 0.0),
+        "robot_lateral_error_m": float(_number(snapshot.get("robot_lateral_error_m")) or 0.0),
+        "robot_lateral_signed_m": float(_number(snapshot.get("robot_lateral_signed_m")) or 0.0),
+        "yaw_error_deg": float(_number(snapshot.get("yaw_error_deg")) or 0.0),
+        "robot_on_goal_side": bool(snapshot.get("robot_on_goal_side", False)),
+        "entered_goal_side_before_capture": bool(snapshot.get("entered_goal_side_before_capture", False)),
+        "pre_stage_pose_reached": bool(snapshot.get("staging_pose_reached", False)),
+        "approach_failure_reason": str(snapshot.get("approach_failure_reason", "") or ""),
+    }
+
+
 def first_contact_push_alignment_deg(
     robot_pose: dict[str, Any],
     ball_pose: dict[str, Any],
@@ -579,11 +634,12 @@ def compute_stage_command(
     yaw_error_deg = float(_number(snapshot.get("yaw_error_deg")) or 0.0)
     staging_pose_distance_m = float(_number(snapshot.get("staging_pose_distance_m")) or 0.0)
     robot_on_goal_side = bool(snapshot.get("robot_on_goal_side", False))
+    robot_longitudinal_projection_m = float(_number(snapshot.get("robot_longitudinal_projection_m")) or 0.0)
     push_direction_yaw_deg = float(_number(snapshot.get("push_direction_yaw_deg")) or 0.0)
     push_direction_yaw = math.radians(push_direction_yaw_deg)
     robot_xyyaw = world_pose_xyyaw(robot_pose)
     robot_yaw = float(robot_xyyaw[2]) if robot_xyyaw is not None else 0.0
-    if robot_on_goal_side:
+    if robot_on_goal_side or robot_longitudinal_projection_m > -0.02:
         desired_escape_yaw = normalize_angle(push_direction_yaw + math.pi)
         escape_yaw_error = normalize_angle(desired_escape_yaw - robot_yaw)
         angular = clamp((escape_yaw_error * 1.6) + (stage_y_m * 1.2), -0.7, 0.7)
@@ -605,9 +661,13 @@ def compute_stage_command(
             rationale="Drive to the zone-opposite staging pose behind the ball before pushing.",
         )
     if yaw_error_deg > DEFAULT_STAGE_READY_YAW_ERROR_DEG:
-        angular = clamp((stage_y_m * 2.0) + math.radians(yaw_error_deg) * (1.0 if stage_y_m >= 0.0 else -1.0), -0.6, 0.6)
+        desired_push_yaw_error = normalize_angle(push_direction_yaw - robot_yaw)
+        angular = clamp((desired_push_yaw_error * 0.9) + (stage_y_m * 1.2), -0.6, 0.6)
         if abs(angular) < 0.18:
-            angular = 0.18 if stage_y_m >= 0.0 else -0.18
+            if abs(desired_push_yaw_error) > 1.0e-6:
+                angular = 0.18 if desired_push_yaw_error >= 0.0 else -0.18
+            else:
+                angular = 0.18 if stage_y_m >= 0.0 else -0.18
         return PlaceControlCommand(
             mode="stage_align",
             linear_x=0.0,
@@ -621,6 +681,114 @@ def compute_stage_command(
         angular_z=0.0,
         target_speed_scale=0.0,
         rationale="Robot is staged behind the ball and aligned for the push.",
+    )
+
+
+def compute_pre_stage_command(
+    robot_pose: dict[str, Any],
+    ball_pose: dict[str, Any],
+    *,
+    zone: ZoneSpec,
+) -> PlaceControlCommand | None:
+    snapshot = pre_stage_arrival_snapshot(robot_pose, ball_pose, zone=zone)
+    if not isinstance(snapshot, dict):
+        return None
+    pre_stage_pose = snapshot.get("pre_stage_pose_world", {}) if isinstance(snapshot.get("pre_stage_pose_world"), dict) else {}
+    pre_stage_rel = relative_point_robot_frame(robot_pose, pre_stage_pose)
+    if pre_stage_rel is None:
+        return None
+    pre_stage_x_m, pre_stage_y_m = pre_stage_rel
+    yaw_error_deg = float(_number(snapshot.get("yaw_error_deg")) or 0.0)
+    pre_stage_distance_m = float(_number(snapshot.get("pre_stage_pose_distance_m")) or 0.0)
+    robot_on_goal_side = bool(snapshot.get("robot_on_goal_side", False))
+    robot_longitudinal_projection_m = float(_number(snapshot.get("robot_longitudinal_projection_m")) or 0.0)
+    robot_lateral_signed_m = float(_number(snapshot.get("robot_lateral_signed_m")) or 0.0)
+    push_direction_yaw_deg = float(_number(snapshot.get("push_direction_yaw_deg")) or 0.0)
+    push_direction_yaw = math.radians(push_direction_yaw_deg)
+    robot_xyyaw = world_pose_xyyaw(robot_pose)
+    robot_yaw = float(robot_xyyaw[2]) if robot_xyyaw is not None else 0.0
+    if robot_on_goal_side or robot_longitudinal_projection_m > -0.05:
+        flank_sign = 1.0 if robot_lateral_signed_m >= 0.0 else -1.0
+        orbit_pose = {
+            "x": round(
+                float(pre_stage_pose.get("x", 0.0))
+                + (flank_sign * DEFAULT_PRE_STAGE_ORBIT_OFFSET_M * -math.sin(push_direction_yaw)),
+                6,
+            ),
+            "y": round(
+                float(pre_stage_pose.get("y", 0.0))
+                + (flank_sign * DEFAULT_PRE_STAGE_ORBIT_OFFSET_M * math.cos(push_direction_yaw)),
+                6,
+            ),
+        }
+        orbit_rel = relative_point_robot_frame(robot_pose, orbit_pose)
+        if orbit_rel is None:
+            return None
+        orbit_x_m, orbit_y_m = orbit_rel
+        heading_error = math.atan2(orbit_y_m, orbit_x_m)
+        if orbit_x_m < 0.0 or abs(heading_error) > 0.35:
+            angular = clamp((heading_error * 1.6), -0.8, 0.8)
+            if abs(angular) < 0.20:
+                angular = 0.20 if heading_error >= 0.0 else -0.20
+            return PlaceControlCommand(
+                mode="pre_stage_orbit_turn",
+                linear_x=0.0,
+                angular_z=round(angular, 6),
+                target_speed_scale=0.0,
+                rationale="Turn toward the flank waypoint so the coarse arrival comes from behind the ball.",
+            )
+        angular = clamp((orbit_y_m * 1.1), -0.8, 0.8)
+        linear = min(0.30, max(0.08, orbit_x_m * 0.24))
+        return PlaceControlCommand(
+            mode="pre_stage_orbit",
+            linear_x=round(linear, 6),
+            angular_z=round(angular, 6),
+            target_speed_scale=1.0,
+            rationale="Orbit to a flank waypoint so the coarse arrival reaches the behind-ball side first.",
+        )
+    heading_error = math.atan2(pre_stage_y_m, max(pre_stage_x_m, 1.0e-6))
+    if pre_stage_distance_m > DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M and (pre_stage_x_m < 0.0 or abs(heading_error) > 0.45):
+        angular = clamp((heading_error * 1.6), -0.8, 0.8)
+        if abs(angular) < 0.20:
+            angular = 0.20 if heading_error >= 0.0 else -0.20
+        return PlaceControlCommand(
+            mode="pre_stage_turn",
+            linear_x=0.0,
+            angular_z=round(angular, 6),
+            target_speed_scale=0.0,
+            rationale="Rotate first so the coarse arrival stays behind the ball.",
+        )
+    if pre_stage_distance_m > DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M:
+        angular = clamp((pre_stage_y_m * 1.2), -0.8, 0.8)
+        linear = min(0.30, max(0.06, pre_stage_x_m * 0.28))
+        return PlaceControlCommand(
+            mode="pre_stage_traverse",
+            linear_x=round(linear, 6),
+            angular_z=round(angular, 6),
+            target_speed_scale=1.0,
+            rationale="Drive to the coarse behind-ball pre-stage pose before handing off to fine staging.",
+        )
+    if yaw_error_deg > DEFAULT_PRE_STAGE_READY_YAW_ERROR_DEG:
+        desired_push_yaw_error = normalize_angle(push_direction_yaw - robot_yaw)
+        angular = clamp((desired_push_yaw_error * 0.9) + (pre_stage_y_m * 1.0), -0.6, 0.6)
+        if abs(angular) < 0.18:
+            if abs(desired_push_yaw_error) > 1.0e-6:
+                angular = 0.18 if desired_push_yaw_error >= 0.0 else -0.18
+            else:
+                angular = 0.18 if pre_stage_y_m >= 0.0 else -0.18
+        return PlaceControlCommand(
+            mode="pre_stage_align",
+            linear_x=0.0,
+            angular_z=round(angular, 6),
+            target_speed_scale=0.0,
+            rationale="Rotate to face the push line before fine staging begins.",
+        )
+    return PlaceControlCommand(
+        mode="pre_stage_ready",
+        linear_x=0.0,
+        angular_z=0.0,
+        target_speed_scale=0.0,
+        rationale="Robot reached the coarse behind-ball arrival pose.",
     )
 
 
@@ -676,6 +844,90 @@ def compute_capture_command(
         angular_z=round(angular, 6),
         target_speed_scale=1.0,
         rationale="Center the ball between the catcher rails and drive forward.",
+    )
+
+
+def capture_entry_snapshot(
+    robot_pose: dict[str, Any],
+    ball_pose: dict[str, Any],
+    *,
+    zone: ZoneSpec,
+    envelope: CaptureEnvelope | None = None,
+    goal_side_violation_projection_m: float = DEFAULT_GOAL_SIDE_VIOLATION_PROJECTION_M,
+    ready_ball_x_m: float = DEFAULT_CAPTURE_ENTRY_READY_BALL_X_M,
+    ready_abs_ball_y_m: float = DEFAULT_CAPTURE_ENTRY_READY_ABS_BALL_Y_M,
+) -> dict[str, Any] | None:
+    capture = capture_snapshot(robot_pose, ball_pose, envelope)
+    approach = goal_side_approach_snapshot(
+        robot_pose,
+        ball_pose,
+        zone=zone,
+        goal_side_violation_projection_m=goal_side_violation_projection_m,
+    )
+    if capture is None or not isinstance(approach, dict):
+        return None
+    return {
+        "push_direction_yaw_deg": float(approach.get("push_direction_yaw_deg", 0.0) or 0.0),
+        "robot_on_goal_side": bool(approach.get("robot_on_goal_side", False)),
+        "entered_goal_side_before_capture": bool(approach.get("entered_goal_side_before_capture", False)),
+        "robot_longitudinal_projection_m": float(_number(approach.get("robot_longitudinal_projection_m")) or 0.0),
+        "robot_lateral_error_m": float(_number(approach.get("robot_lateral_error_m")) or 0.0),
+        "ball_ahead": bool(capture.ball_ahead),
+        "ball_x_m": float(capture.ball_x_m),
+        "ball_y_m": float(capture.ball_y_m),
+        "distance_m": float(capture.distance_m),
+        "bearing_rad": float(capture.bearing_rad),
+        "capture_entry_reached": bool(
+            capture.ball_ahead
+            and float(capture.ball_x_m) <= float(ready_ball_x_m)
+            and abs(float(capture.ball_y_m)) <= float(ready_abs_ball_y_m)
+        ),
+    }
+
+
+def compute_capture_entry_command(
+    robot_pose: dict[str, Any],
+    ball_pose: dict[str, Any],
+    *,
+    zone: ZoneSpec,
+    envelope: CaptureEnvelope | None = None,
+) -> PlaceControlCommand | None:
+    snapshot = capture_entry_snapshot(robot_pose, ball_pose, zone=zone, envelope=envelope)
+    if not isinstance(snapshot, dict):
+        return None
+    if bool(snapshot.get("capture_entry_reached", False)):
+        return PlaceControlCommand(
+            mode="capture_entry_ready",
+            linear_x=0.0,
+            angular_z=0.0,
+            target_speed_scale=0.0,
+            rationale="Ball is centered in the short capture-entry corridor; hand off to generic capture.",
+        )
+    if not bool(snapshot.get("ball_ahead", False)):
+        angular = clamp(0.45 if float(snapshot.get("ball_y_m", 0.0) or 0.0) >= 0.0 else -0.45, -0.45, 0.45)
+        return PlaceControlCommand(
+            mode="capture_entry_reorient",
+            linear_x=0.0,
+            angular_z=round(angular, 6),
+            target_speed_scale=0.0,
+            rationale="Rotate locally until the ball is back ahead before closing the final capture gap.",
+        )
+
+    ball_y_m = float(snapshot.get("ball_y_m", 0.0) or 0.0)
+    bearing_rad = float(snapshot.get("bearing_rad", 0.0) or 0.0)
+    ball_x_m = float(snapshot.get("ball_x_m", 0.0) or 0.0)
+    angular = clamp((ball_y_m * 9.0) + (bearing_rad * 0.85), -0.45, 0.45)
+    linear = 0.045
+    if abs(ball_y_m) > 0.06:
+        linear = 0.020
+    elif ball_x_m > 0.55:
+        linear = 0.055
+    return PlaceControlCommand(
+        mode="capture_entry",
+        linear_x=round(linear, 6),
+        angular_z=round(angular, 6),
+        target_speed_scale=0.45,
+        rationale="Close the final gap from staged pose into a capture-ready corridor without overdriving through the ball.",
     )
 
 
@@ -992,6 +1244,8 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
     post_visit_revisit_counts = [int(item.get("post_visit_revisit_count", 0) or 0) for item in runs]
     settle_no_chase_flags = [bool(item.get("settle_no_chase_activated", False)) for item in runs]
     entered_goal_side_flags = [bool(item.get("entered_goal_side_before_capture", False)) for item in runs]
+    pre_stage_pose_reached_flags = [bool(item.get("pre_stage_pose_reached", False)) for item in runs]
+    pre_stage_handoff_flags = [bool(item.get("pre_stage_handoff_pass", False)) for item in runs]
     staging_pose_reached_flags = [bool(item.get("staging_pose_reached", False)) for item in runs]
     first_contact_alignment_values = [
         float(item.get("first_contact_push_alignment_deg", 0.0) or 0.0)
@@ -1002,6 +1256,11 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         float(item.get("stage_time_s", 0.0) or 0.0)
         for item in runs
         if item.get("stage_time_s") not in {None, ""}
+    ]
+    pre_stage_times = [
+        float(item.get("pre_stage_time_s", 0.0) or 0.0)
+        for item in runs
+        if item.get("pre_stage_time_s") not in {None, ""}
     ]
     handoff_kinds = sorted({str(item.get("handoff_kind", "") or "") for item in runs if str(item.get("handoff_kind", "") or "").strip()})
     settle_exit_reasons = sorted(
@@ -1056,6 +1315,8 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "approach_side_pass_count": sum(1 for flag in approach_side_flags if flag),
         "approach_side_fail_count": sum(1 for flag in approach_side_flags if not flag),
         "entered_goal_side_before_capture_count": sum(1 for flag in entered_goal_side_flags if flag),
+        "pre_stage_pose_reached_count": sum(1 for flag in pre_stage_pose_reached_flags if flag),
+        "pre_stage_handoff_pass_count": sum(1 for flag in pre_stage_handoff_flags if flag),
         "staging_pose_reached_count": sum(1 for flag in staging_pose_reached_flags if flag),
         "first_contact_push_alignment_avg_deg": round(sum(first_contact_alignment_values) / len(first_contact_alignment_values), 6)
         if first_contact_alignment_values
@@ -1063,6 +1324,8 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "first_contact_push_alignment_max_deg": round(max(first_contact_alignment_values), 6) if first_contact_alignment_values else 0.0,
         "stage_time_avg_s": round(sum(stage_times) / len(stage_times), 6) if stage_times else 0.0,
         "stage_time_max_s": round(max(stage_times), 6) if stage_times else 0.0,
+        "pre_stage_time_avg_s": round(sum(pre_stage_times) / len(pre_stage_times), 6) if pre_stage_times else 0.0,
+        "pre_stage_time_max_s": round(max(pre_stage_times), 6) if pre_stage_times else 0.0,
         "final_settle_distance_avg_m": round(sum(settle_distances) / len(settle_distances), 6) if settle_distances else 0.0,
         "final_settle_distance_max_m": round(max(settle_distances), 6) if settle_distances else 0.0,
         "max_overshoot_distance_max_m": round(max(overshoot_distances), 6) if overshoot_distances else 0.0,
@@ -1106,6 +1369,9 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         f"- Handoff kinds: `{', '.join(summary.get('handoff_kinds', [])) if summary.get('handoff_kinds') else 'unspecified'}`",
         f"- Approach-side pass/fail: `{summary.get('approach_side_pass_count', 0)}/{summary.get('approach_side_fail_count', 0)}`",
         f"- Goal-side entries before capture: `{summary.get('entered_goal_side_before_capture_count', 0)}`",
+        f"- Pre-stage pose reached: `{summary.get('pre_stage_pose_reached_count', 0)}/{max(len(runs), 1)}`",
+        f"- Pre-stage handoff pass: `{summary.get('pre_stage_handoff_pass_count', 0)}/{max(len(runs), 1)}`",
+        f"- Pre-stage time avg/max: `{summary.get('pre_stage_time_avg_s', 0.0):.3f}s / {summary.get('pre_stage_time_max_s', 0.0):.3f}s`",
         f"- Staging pose reached: `{summary.get('staging_pose_reached_count', 0)}/{max(len(runs), 1)}`",
         f"- First-contact push alignment avg/max: `{summary.get('first_contact_push_alignment_avg_deg', 0.0):.2f}deg / {summary.get('first_contact_push_alignment_max_deg', 0.0):.2f}deg`",
         f"- Stage time avg/max: `{summary.get('stage_time_avg_s', 0.0):.3f}s / {summary.get('stage_time_max_s', 0.0):.3f}s`",
@@ -1159,6 +1425,9 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
             f"handoff=`{str(item.get('handoff_kind', '') or 'unspecified')}` "
             f"approach=`{approach_reason}` "
             f"goal_side=`{bool(item.get('entered_goal_side_before_capture', False))}` "
+            f"pre_stage=`{bool(item.get('pre_stage_pose_reached', False))}` "
+            f"pre_stage_ok=`{bool(item.get('pre_stage_handoff_pass', False))}` "
+            f"pre_stage_s=`{float(item.get('pre_stage_time_s', 0.0) or 0.0):.3f}` "
             f"staged=`{bool(item.get('staging_pose_reached', False))}` "
             f"align_deg=`{float(item.get('first_contact_push_alignment_deg', 0.0) or 0.0):.2f}` "
             f"stage_s=`{float(item.get('stage_time_s', 0.0) or 0.0):.3f}` "
