@@ -355,16 +355,22 @@ def _fresh_attempt_approach_from_sources(
         merged.get("approach_failure_reason"),
         fallback.get("approach_failure_reason"),
     )
+    overall_pass = bool(explicit.get("pass", legacy_verdict.get("pass", False)))
+    overall_reason = _clean_text(explicit.get("reason"))
+    if not overall_reason and not overall_pass:
+        overall_reason = legacy_reason
+    capture_entry_pass = bool(explicit_capture_entry.get("pass", overall_pass))
     capture_entry_failure_reason = _first_text(
         explicit_capture_entry.get("failure_reason"),
         explicit_capture_entry.get("reason"),
         explicit.get("approach_failure_reason"),
-        merged.get("approach_failure_reason"),
-        fallback.get("approach_failure_reason"),
-        default=legacy_reason,
     )
-    overall_pass = bool(explicit.get("pass", legacy_verdict.get("pass", False)))
-    overall_reason = _first_text(explicit.get("reason"), legacy_reason)
+    if not capture_entry_failure_reason and not capture_entry_pass:
+        capture_entry_failure_reason = _first_text(
+            merged.get("approach_failure_reason"),
+            fallback.get("approach_failure_reason"),
+            default=legacy_reason,
+        )
 
     normalized = dict(explicit)
     normalized["pass"] = overall_pass
@@ -383,7 +389,7 @@ def _fresh_attempt_approach_from_sources(
     }
     normalized["capture_entry"] = {
         **explicit_capture_entry,
-        "pass": bool(explicit_capture_entry.get("pass", overall_pass)),
+        "pass": capture_entry_pass,
         "entered_goal_side_before_capture": entered_goal_side_before_capture,
         "first_contact_push_alignment_deg": first_contact_push_alignment_deg,
         "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),

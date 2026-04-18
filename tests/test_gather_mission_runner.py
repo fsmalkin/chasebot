@@ -484,6 +484,60 @@ def test_pre_stage_target_returns_handoff_payload_on_success(tmp_path, monkeypat
     assert any(call["mode"] == "pre_stage_ready" for call in manual_drive_calls)
 
 
+def test_pre_stage_target_accepts_close_in_ready_band_beyond_legacy_arrival_radius(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    manual_drive_calls: list[dict[str, object]] = []
+    robot_pose = {"x": 0.41, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+
+    pre_stage_snapshot = gather_runner.pre_stage_arrival_snapshot(robot_pose, ball_pose, zone=runner.zone)
+
+    assert pre_stage_snapshot is not None
+    assert pre_stage_snapshot["pre_stage_pose_distance_m"] > 0.30
+    assert pre_stage_snapshot["pre_stage_pose_reached"] is True
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda *args, **kwargs: manual_drive_calls.append({"args": args, **kwargs}),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: ({}, robot_pose, ball_pose),
+    )
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-close-in",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert pre_stage_pass is True
+    assert payload["pre_stage_pose_world"] == pre_stage_snapshot["pre_stage_pose_world"]
+    assert payload["pre_stage_pose_reached"] is True
+    assert payload["pre_stage_handoff_pass"] is True
+    assert payload["pre_stage_time_s"] >= 0.25
+    assert any(call["mode"] == "pre_stage_ready" for call in manual_drive_calls)
+
+
 def test_run_target_retries_fresh_approach_after_capture_entry_failure(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.max_retries_per_target = 1
@@ -567,6 +621,120 @@ def test_run_target_retries_fresh_approach_after_capture_entry_failure(tmp_path,
     assert result["fresh_attempt_approach"]["pass"] is False
     assert result["fresh_attempt_approach"]["reason"] == "capture_entry_timeout"
     assert result["fresh_attempt_approach"]["capture_entry"]["pass"] is False
+
+
+def test_target_failure_result_prefers_fresh_attempt_pass_over_stale_alignment_headline(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    target = runner.targets[0]
+    fresh_attempt_approach = {
+        "pass": True,
+        "reason": "",
+        "pre_stage": {
+            "pose_world": {"x": -1.548, "y": 0.0},
+            "pose_reached": True,
+            "time_s": 25.813,
+            "handoff_pass": True,
+        },
+        "stage": {
+            "pose_reached": True,
+            "time_s": 5.812,
+        },
+        "capture_entry": {
+            "pass": True,
+            "entered_goal_side_before_capture": False,
+            "first_contact_push_alignment_deg": None,
+            "push_direction_yaw_deg": 0.0,
+            "time_s": 3.141,
+            "failure_reason": "",
+        },
+    }
+
+    payload = runner._target_failure_result(
+        target=target,
+        failure_reason="place_timeout",
+        failure_stage="place",
+        attempts=3,
+        capture_loss_count=0,
+        route_index=1,
+        attempt_kind="place_controller_reentry",
+        approach_side_verdict={"pass": False, "reason": "missing_first_contact_alignment"},
+        staging_pose_reached=False,
+        first_contact_push_alignment_deg=None,
+        capture_entry_reached=False,
+        capture_entry_time_s=0.0,
+        approach_failure_reason="missing_first_contact_alignment",
+        fresh_attempt_approach=fresh_attempt_approach,
+    )
+
+    assert payload["failure_reason"] == "place_timeout"
+    assert payload["failure_stage"] == "place"
+    assert payload["approach_side_verdict"] == {"pass": True, "reason": ""}
+    assert payload["approach_failure_reason"] == ""
+    assert payload["pre_stage_pose_world"] == {"x": -1.548, "y": 0.0}
+    assert payload["pre_stage_pose_reached"] is True
+    assert payload["pre_stage_handoff_pass"] is True
+    assert payload["staging_pose_reached"] is True
+    assert payload["capture_entry_reached"] is True
+    assert payload["capture_entry_time_s"] == 3.141
+    assert payload["first_contact_push_alignment_deg"] is None
+    assert payload["fresh_attempt_approach"]["pass"] is True
+
+
+def test_target_failure_result_preserves_close_in_pre_stage_success_before_capture_entry_timeout(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    target = runner.targets[0]
+    fresh_attempt_approach = {
+        "pass": False,
+        "reason": "capture_entry_timeout",
+        "pre_stage": {
+            "pose_world": {"x": 5.191657, "y": 2.791657},
+            "pose_reached": True,
+            "time_s": 30.359,
+            "handoff_pass": True,
+        },
+        "stage": {
+            "pose_reached": True,
+            "time_s": 5.812,
+        },
+        "capture_entry": {
+            "pass": False,
+            "entered_goal_side_before_capture": False,
+            "first_contact_push_alignment_deg": None,
+            "push_direction_yaw_deg": -135.0,
+            "time_s": 0.0,
+            "failure_reason": "capture_entry_timeout",
+        },
+    }
+
+    payload = runner._target_failure_result(
+        target=target,
+        failure_reason="capture_entry_timeout",
+        failure_stage="capture_entry",
+        attempts=3,
+        capture_loss_count=0,
+        route_index=1,
+        attempt_kind="initial_visit",
+        approach_side_verdict={"pass": False, "reason": "entered_goal_side_before_capture"},
+        staging_pose_reached=False,
+        entered_goal_side_before_capture=False,
+        first_contact_push_alignment_deg=None,
+        capture_entry_reached=False,
+        capture_entry_time_s=0.0,
+        approach_failure_reason="entered_goal_side_before_capture",
+        fresh_attempt_approach=fresh_attempt_approach,
+    )
+
+    assert payload["failure_reason"] == "capture_entry_timeout"
+    assert payload["failure_stage"] == "capture_entry"
+    assert payload["pre_stage_pose_world"] == {"x": 5.191657, "y": 2.791657}
+    assert payload["pre_stage_pose_reached"] is True
+    assert payload["pre_stage_handoff_pass"] is True
+    assert payload["staging_pose_reached"] is True
+    assert payload["entered_goal_side_before_capture"] is False
+    assert payload["capture_entry_reached"] is False
+    assert payload["approach_side_verdict"] == {"pass": False, "reason": "capture_entry_timeout"}
+    assert payload["approach_failure_reason"] == "capture_entry_timeout"
+    assert payload["fresh_attempt_approach"]["pre_stage"]["pose_reached"] is True
 
 
 def test_run_final_corral_audit_requires_stable_window_for_all_three_targets(tmp_path, monkeypatch):
@@ -1276,6 +1444,72 @@ def test_place_target_bounds_local_recovery_and_keeps_zone_heading(tmp_path, mon
     assert command_log[-1]["mode"] == "place_timeout"
     assert runner.gather_runtime_state["latest_control_command"]["mode"] in {"capture_recovery", "capture_recovery_hold"}
     assert abs(float(runner.gather_runtime_state["latest_control_command"]["angular_z"])) <= 0.75
+
+
+def test_place_target_stationary_far_from_zone_local_recovery_nudges_after_delay(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.place_timeout_s = 1.6
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    clock = {"now": 0.0}
+    robot_pose = {"x": -1.161239, "y": 0.079721, "yaw": -0.154098}
+    ball_pose = {"x": -0.648, "y": 0.0, "z": 0.05}
+
+    def _fake_monotonic():
+        return clock["now"]
+
+    def _fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", _fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", _fake_sleep)
+    monkeypatch.setattr(runner, "_control_loop_state", lambda **kwargs: ({}, robot_pose, ball_pose))
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._place_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    hold_indices = [index for index, item in enumerate(command_log) if item["mode"] == "capture_recovery_hold"]
+    nudge_indices = [
+        index
+        for index, item in enumerate(command_log)
+        if item["mode"] == "capture_recovery" and float(item["linear_x"]) > 0.0
+    ]
+
+    assert passed is False
+    assert payload["failure_reason"] == "place_timeout"
+    assert payload["failure_stage"] == "place"
+    assert payload["local_recovery_attempted"] is True
+    assert hold_indices
+    assert nudge_indices
+    assert min(nudge_indices) > min(hold_indices)
+    assert any(
+        "bounded forward recapture nudge" in str(item["rationale"]).lower()
+        for item in command_log
+        if item["mode"] == "capture_recovery"
+    )
+    assert command_log[-1]["mode"] == "place_timeout"
 
 
 def test_place_target_switches_to_recovery_on_first_uncaptured_frame(tmp_path, monkeypatch):

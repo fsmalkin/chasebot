@@ -525,6 +525,61 @@ def test_summarize_gather_artifacts_reads_pre_stage_fields(tmp_path: Path):
     assert summary["fresh_attempt_approach"]["capture_entry"]["entered_goal_side_before_capture"] is False
 
 
+def test_summarize_gather_artifacts_prefers_close_in_pre_stage_without_goal_side_headline(tmp_path: Path):
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    verdict_path = mission_root / "mission_verdict.json"
+    payload = {
+        "pass": False,
+        "mission_completed_pass": False,
+        "scenario_id": "corral_single_ball_place",
+        "failure_reason": "capture_entry_timeout",
+        "failure_stage": "capture_entry",
+        "approach_side_verdict": {"pass": False, "reason": "entered_goal_side_before_capture"},
+        "pre_stage_pose_reached": False,
+        "pre_stage_handoff_pass": False,
+        "staging_pose_reached": False,
+        "entered_goal_side_before_capture": True,
+        "approach_failure_reason": "entered_goal_side_before_capture",
+        "fresh_attempt_approach": {
+            "pass": False,
+            "reason": "capture_entry_timeout",
+            "pre_stage": {
+                "pose_world": {"x": 0.1, "y": 0.0, "yaw_deg": 0.0},
+                "pose_reached": True,
+                "time_s": 0.55,
+                "handoff_pass": True,
+            },
+            "stage": {
+                "pose_reached": True,
+                "time_s": 0.8,
+            },
+            "capture_entry": {
+                "pass": False,
+                "entered_goal_side_before_capture": False,
+                "first_contact_push_alignment_deg": None,
+                "push_direction_yaw_deg": 0.0,
+                "time_s": 4.0,
+                "failure_reason": "capture_entry_timeout",
+            },
+        },
+    }
+    (mission_root / "summary.json").write_text(json.dumps(payload), encoding="utf-8")
+    verdict_path.write_text(json.dumps(payload), encoding="utf-8")
+    (mission_root / "target_results.json").write_text(json.dumps({"targets": []}), encoding="utf-8")
+
+    summary = repeatability_runner.summarize_gather_artifacts(run_index=1, mission_verdict_path=str(verdict_path))
+
+    assert summary["pre_stage_pose_reached"] is True
+    assert summary["pre_stage_handoff_pass"] is True
+    assert summary["entered_goal_side_before_capture"] is False
+    assert summary["approach_side_verdict"] == {"pass": False, "reason": "capture_entry_timeout"}
+    assert summary["approach_side_reason"] == "capture_entry_timeout"
+    assert summary["fresh_attempt_approach"]["pre_stage"]["pose_reached"] is True
+    assert summary["fresh_attempt_approach"]["capture_entry"]["entered_goal_side_before_capture"] is False
+    assert summary["fresh_attempt_approach"]["capture_entry"]["failure_reason"] == "capture_entry_timeout"
+
+
 def test_summarize_gather_artifacts_reads_three_ball_final_audit_fields(tmp_path: Path):
     mission_root = tmp_path / "mission"
     mission_root.mkdir(parents=True, exist_ok=True)
@@ -574,6 +629,124 @@ def test_summarize_gather_artifacts_reads_three_ball_final_audit_fields(tmp_path
     assert summary["mission_verdict"]["first_contact_push_alignment_deg"] == 11.5
     assert summary["summary"]["approach_side_verdict"] == {"pass": True, "reason": ""}
     assert summary["summary"]["staging_pose_reached"] is True
+
+
+def test_summarize_gather_artifacts_recomputes_fresh_approach_for_place_timeout(tmp_path: Path):
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    verdict_path = mission_root / "mission_verdict.json"
+    payload = {
+        "pass": False,
+        "mission_completed_pass": False,
+        "scenario_id": "corral_single_ball_place",
+        "failure_reason": "place_timeout",
+        "failure_stage": "place",
+        "surface_profile": "short_turf",
+        "approach_side_verdict": {"pass": False, "reason": "missing_first_contact_alignment"},
+        "pre_stage_pose_reached": False,
+        "pre_stage_handoff_pass": False,
+        "staging_pose_reached": False,
+        "capture_entry_reached": False,
+        "capture_entry_time_s": 0.0,
+        "first_contact_push_alignment_deg": None,
+        "approach_failure_reason": "missing_first_contact_alignment",
+        "fresh_attempt_approach": {
+            "pass": True,
+            "reason": "",
+            "pre_stage": {
+                "pose_world": {"x": -1.548, "y": 0.0},
+                "pose_reached": True,
+                "time_s": 25.813,
+                "handoff_pass": True,
+            },
+            "stage": {
+                "pose_reached": True,
+                "time_s": 5.812,
+            },
+            "capture_entry": {
+                "pass": True,
+                "entered_goal_side_before_capture": False,
+                "first_contact_push_alignment_deg": None,
+                "push_direction_yaw_deg": 0.0,
+                "time_s": 3.141,
+                "failure_reason": "",
+            },
+        },
+    }
+    (mission_root / "summary.json").write_text(json.dumps(payload), encoding="utf-8")
+    verdict_path.write_text(json.dumps(payload), encoding="utf-8")
+    (mission_root / "target_results.json").write_text(json.dumps({"targets": []}), encoding="utf-8")
+
+    summary = repeatability_runner.summarize_gather_artifacts(run_index=1, mission_verdict_path=str(verdict_path))
+
+    assert summary["mission_verdict"]["failure_reason"] == "place_timeout"
+    assert summary["summary"]["failure_reason"] == "place_timeout"
+    assert summary["approach_side_verdict"] == {"pass": True, "reason": ""}
+    assert summary["approach_side_reason"] == ""
+    assert summary["fresh_attempt_approach"]["pass"] is True
+    assert summary["fresh_attempt_approach"]["capture_entry"]["pass"] is True
+    assert summary["fresh_attempt_approach"]["capture_entry"]["failure_reason"] == ""
+
+
+def test_summarize_gather_artifacts_preserves_close_in_pre_stage_success_before_capture_entry_timeout(tmp_path: Path):
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    verdict_path = mission_root / "mission_verdict.json"
+    payload = {
+        "pass": False,
+        "mission_completed_pass": False,
+        "scenario_id": "corral_single_ball_place",
+        "failure_reason": "capture_entry_timeout",
+        "failure_stage": "capture_entry",
+        "surface_profile": "short_turf",
+        "approach_side_verdict": {"pass": False, "reason": "entered_goal_side_before_capture"},
+        "pre_stage_pose_reached": False,
+        "pre_stage_handoff_pass": False,
+        "staging_pose_reached": False,
+        "capture_entry_reached": False,
+        "capture_entry_time_s": 0.0,
+        "entered_goal_side_before_capture": False,
+        "first_contact_push_alignment_deg": None,
+        "approach_failure_reason": "entered_goal_side_before_capture",
+        "fresh_attempt_approach": {
+            "pass": False,
+            "reason": "capture_entry_timeout",
+            "pre_stage": {
+                "pose_world": {"x": 5.191657, "y": 2.791657},
+                "pose_reached": True,
+                "time_s": 30.359,
+                "handoff_pass": True,
+            },
+            "stage": {
+                "pose_reached": True,
+                "time_s": 5.812,
+            },
+            "capture_entry": {
+                "pass": False,
+                "entered_goal_side_before_capture": False,
+                "first_contact_push_alignment_deg": None,
+                "push_direction_yaw_deg": -135.0,
+                "time_s": 0.0,
+                "failure_reason": "capture_entry_timeout",
+            },
+        },
+    }
+    (mission_root / "summary.json").write_text(json.dumps(payload), encoding="utf-8")
+    verdict_path.write_text(json.dumps(payload), encoding="utf-8")
+    (mission_root / "target_results.json").write_text(json.dumps({"targets": []}), encoding="utf-8")
+
+    summary = repeatability_runner.summarize_gather_artifacts(run_index=1, mission_verdict_path=str(verdict_path))
+
+    assert summary["mission_verdict"]["failure_reason"] == "capture_entry_timeout"
+    assert summary["summary"]["failure_reason"] == "capture_entry_timeout"
+    assert summary["pre_stage_pose_reached"] is True
+    assert summary["pre_stage_handoff_pass"] is True
+    assert summary["staging_pose_reached"] is True
+    assert summary["entered_goal_side_before_capture"] is False
+    assert summary["approach_side_verdict"] == {"pass": False, "reason": "capture_entry_timeout"}
+    assert summary["approach_side_reason"] == "capture_entry_timeout"
+    assert summary["fresh_attempt_approach"]["pre_stage"]["pose_reached"] is True
+    assert summary["fresh_attempt_approach"]["capture_entry"]["failure_reason"] == "capture_entry_timeout"
 
 
 def test_run_dashboard_scenario_once_ignores_stale_error_result(monkeypatch):

@@ -28,6 +28,10 @@ DEFAULT_PRE_STAGE_READY_LATERAL_ERROR_M = 0.30
 DEFAULT_PRE_STAGE_READY_YAW_ERROR_DEG = 35.0
 DEFAULT_PRE_STAGE_READY_DWELL_S = 0.25
 DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M = 0.30
+DEFAULT_PRE_STAGE_CLOSE_IN_READY_LONGITUDINAL_PROJECTION_M = -0.55
+DEFAULT_PRE_STAGE_CLOSE_IN_READY_LATERAL_ERROR_M = 0.22
+DEFAULT_PRE_STAGE_CLOSE_IN_READY_YAW_ERROR_DEG = 37.0
+DEFAULT_PRE_STAGE_CLOSE_IN_READY_DISTANCE_M = 0.35
 DEFAULT_PRE_STAGE_ORBIT_OFFSET_M = 1.00
 DEFAULT_PRE_STAGE_ESCAPE_TRIGGER_PROJECTION_M = 0.15
 DEFAULT_PRE_STAGE_ESCAPE_RELEASE_PROJECTION_M = -0.10
@@ -577,6 +581,18 @@ def pre_stage_arrival_snapshot(
     )
     if not isinstance(snapshot, dict):
         return None
+    pre_stage_pose_distance_m = float(_number(snapshot.get("staging_pose_distance_m")) or 0.0)
+    robot_longitudinal_projection_m = float(_number(snapshot.get("robot_longitudinal_projection_m")) or 0.0)
+    robot_lateral_error_m = float(_number(snapshot.get("robot_lateral_error_m")) or 0.0)
+    yaw_error_deg = float(_number(snapshot.get("yaw_error_deg")) or 0.0)
+    robot_on_goal_side = bool(snapshot.get("robot_on_goal_side", False))
+    close_in_pre_stage_pose_reached = (
+        not robot_on_goal_side
+        and pre_stage_pose_distance_m <= DEFAULT_PRE_STAGE_CLOSE_IN_READY_DISTANCE_M
+        and robot_longitudinal_projection_m <= DEFAULT_PRE_STAGE_CLOSE_IN_READY_LONGITUDINAL_PROJECTION_M
+        and robot_lateral_error_m <= DEFAULT_PRE_STAGE_CLOSE_IN_READY_LATERAL_ERROR_M
+        and yaw_error_deg <= DEFAULT_PRE_STAGE_CLOSE_IN_READY_YAW_ERROR_DEG
+    )
     return {
         "push_direction_yaw_deg": float(snapshot.get("push_direction_yaw_deg", 0.0) or 0.0),
         "pre_stage_pose_world": (
@@ -584,14 +600,14 @@ def pre_stage_arrival_snapshot(
             if isinstance(snapshot.get("staging_pose_world"), dict)
             else {}
         ),
-        "pre_stage_pose_distance_m": float(_number(snapshot.get("staging_pose_distance_m")) or 0.0),
-        "robot_longitudinal_projection_m": float(_number(snapshot.get("robot_longitudinal_projection_m")) or 0.0),
-        "robot_lateral_error_m": float(_number(snapshot.get("robot_lateral_error_m")) or 0.0),
+        "pre_stage_pose_distance_m": pre_stage_pose_distance_m,
+        "robot_longitudinal_projection_m": robot_longitudinal_projection_m,
+        "robot_lateral_error_m": robot_lateral_error_m,
         "robot_lateral_signed_m": float(_number(snapshot.get("robot_lateral_signed_m")) or 0.0),
-        "yaw_error_deg": float(_number(snapshot.get("yaw_error_deg")) or 0.0),
-        "robot_on_goal_side": bool(snapshot.get("robot_on_goal_side", False)),
+        "yaw_error_deg": yaw_error_deg,
+        "robot_on_goal_side": robot_on_goal_side,
         "entered_goal_side_before_capture": bool(snapshot.get("entered_goal_side_before_capture", False)),
-        "pre_stage_pose_reached": bool(snapshot.get("staging_pose_reached", False)),
+        "pre_stage_pose_reached": bool(snapshot.get("staging_pose_reached", False) or close_in_pre_stage_pose_reached),
         "approach_failure_reason": str(snapshot.get("approach_failure_reason", "") or ""),
     }
 
@@ -752,6 +768,7 @@ def compute_pre_stage_command(
     pre_stage_x_m, pre_stage_y_m = pre_stage_rel
     yaw_error_deg = float(_number(snapshot.get("yaw_error_deg")) or 0.0)
     pre_stage_distance_m = float(_number(snapshot.get("pre_stage_pose_distance_m")) or 0.0)
+    pre_stage_pose_reached = bool(snapshot.get("pre_stage_pose_reached", False))
     robot_on_goal_side = bool(snapshot.get("robot_on_goal_side", False))
     robot_longitudinal_projection_m = float(_number(snapshot.get("robot_longitudinal_projection_m")) or 0.0)
     robot_lateral_signed_m = float(_number(snapshot.get("robot_lateral_signed_m")) or 0.0)
@@ -791,19 +808,27 @@ def compute_pre_stage_command(
     orbit_x_m = float(orbit_candidate["orbit_x_m"])
     orbit_y_m = float(orbit_candidate["orbit_y_m"])
     heading_error = float(orbit_candidate["heading_error"])
-    if (
-        robot_on_goal_side
-        or robot_longitudinal_projection_m > DEFAULT_PRE_STAGE_ESCAPE_TRIGGER_PROJECTION_M
-    ):
-        escape_release_ready = (
-            robot_longitudinal_projection_m <= 0.75
-            and abs(robot_lateral_signed_m) <= DEFAULT_PRE_STAGE_ESCAPE_RELEASE_LATERAL_ERROR_M
-            and pre_stage_distance_m <= DEFAULT_PRE_STAGE_ESCAPE_RELEASE_DISTANCE_M
-        )
-        if (
-            robot_longitudinal_projection_m > DEFAULT_PRE_STAGE_ESCAPE_RELEASE_PROJECTION_M
-            and not escape_release_ready
-        ):
+    if robot_on_goal_side or robot_longitudinal_projection_m > DEFAULT_PRE_STAGE_ESCAPE_RELEASE_PROJECTION_M:
+        deepen_escape_projection = not robot_on_goal_side
+        if deepen_escape_projection:
+            desired_escape_yaw = normalize_angle(
+                math.atan2(
+                    float(pre_stage_pose.get("y", 0.0)) - robot_y,
+                    float(pre_stage_pose.get("x", 0.0)) - robot_x,
+                )
+                + math.pi
+            )
+            escape_yaw_error = normalize_angle(desired_escape_yaw - robot_yaw)
+            angular = clamp(escape_yaw_error * 1.1, -0.8, 0.8)
+            linear = -min(
+                0.18,
+                max(
+                    0.12,
+                    abs(pre_stage_x_m) * 0.18,
+                    pre_stage_distance_m * 0.10,
+                ),
+            )
+        else:
             desired_escape_yaw = normalize_angle(
                 math.atan2(
                     float(orbit_pose.get("y", 0.0)) - robot_y,
@@ -813,21 +838,20 @@ def compute_pre_stage_command(
             )
             escape_yaw_error = normalize_angle(desired_escape_yaw - robot_yaw)
             angular = clamp((escape_yaw_error * 1.35) + (orbit_y_m * 0.04), -0.8, 0.8)
-            if abs(angular) < 0.20 and abs(escape_yaw_error) > 0.20:
-                angular = 0.20 if escape_yaw_error >= 0.0 else -0.20
-            if abs(escape_yaw_error) > 1.0:
-                linear = -0.02
-            elif abs(escape_yaw_error) > 0.45:
-                linear = DEFAULT_PRE_STAGE_ESCAPE_LINEAR_X_MPS
-            else:
-                linear = -0.12
-            return PlaceControlCommand(
-                mode="pre_stage_escape_goal_side",
-                linear_x=linear,
-                angular_z=round(angular, 6),
-                target_speed_scale=0.0,
-                rationale="Reverse-arc toward the stronger flank waypoint until the robot is no longer trapped on the goal side.",
-            )
+            linear = -0.12 if abs(escape_yaw_error) <= 0.45 else DEFAULT_PRE_STAGE_ESCAPE_LINEAR_X_MPS
+        if abs(angular) < 0.20 and abs(escape_yaw_error) > 0.20:
+            angular = 0.20 if escape_yaw_error >= 0.0 else -0.20
+        return PlaceControlCommand(
+            mode="pre_stage_escape_goal_side",
+            linear_x=linear,
+            angular_z=round(angular, 6),
+            target_speed_scale=0.0,
+            rationale=(
+                "Keep backing into the behind-ball corridor until the release projection is satisfied."
+                if deepen_escape_projection
+                else "Reverse-arc toward the stronger flank waypoint until the robot is no longer trapped on the goal side."
+            ),
+        )
     if robot_longitudinal_projection_m > -0.05:
         if orbit_x_m < 0.0 or abs(heading_error) > 0.35:
             angular = clamp((heading_error * 1.6), -0.8, 0.8)
@@ -854,7 +878,45 @@ def compute_pre_stage_command(
         )
     heading_error = math.atan2(pre_stage_y_m, max(pre_stage_x_m, 1.0e-6))
     recover_push_yaw = robot_longitudinal_projection_m <= -0.10 and yaw_error_deg > 90.0
-    if pre_stage_distance_m > DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M and (
+    reverse_traverse_ready = (
+        not pre_stage_pose_reached
+        and
+        pre_stage_distance_m > DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M
+        and robot_longitudinal_projection_m <= DEFAULT_PRE_STAGE_ESCAPE_RELEASE_PROJECTION_M
+        and not recover_push_yaw
+        and pre_stage_x_m < 0.0
+    )
+    if reverse_traverse_ready:
+        desired_reverse_yaw = normalize_angle(
+            math.atan2(
+                float(pre_stage_pose.get("y", 0.0)) - robot_y,
+                float(pre_stage_pose.get("x", 0.0)) - robot_x,
+            )
+            + math.pi
+        )
+        reverse_yaw_error = normalize_angle(desired_reverse_yaw - robot_yaw)
+        angular = clamp(reverse_yaw_error * 1.1, -0.8, 0.8)
+        if abs(angular) < 0.20 and abs(reverse_yaw_error) > 0.20:
+            angular = 0.20 if reverse_yaw_error >= 0.0 else -0.20
+        if abs(reverse_yaw_error) > 0.65:
+            linear = -0.12
+        else:
+            linear = -min(
+                0.24,
+                max(
+                    0.18,
+                    abs(pre_stage_x_m) * 0.30,
+                    pre_stage_distance_m * 0.18,
+                ),
+            )
+        return PlaceControlCommand(
+            mode="pre_stage_traverse",
+            linear_x=round(linear, 6),
+            angular_z=round(angular, 6),
+            target_speed_scale=1.0,
+            rationale="Back into the coarse behind-ball pre-stage pose while holding the push line.",
+        )
+    if not pre_stage_pose_reached and pre_stage_distance_m > DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M and (
         pre_stage_x_m < 0.0
         or abs(heading_error) > 0.45
         or recover_push_yaw
@@ -880,7 +942,7 @@ def compute_pre_stage_command(
                 else "Rotate first so the coarse arrival stays behind the ball."
             ),
         )
-    if pre_stage_distance_m > DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M:
+    if not pre_stage_pose_reached and pre_stage_distance_m > DEFAULT_PRE_STAGE_ARRIVAL_RADIUS_M:
         angular = clamp((pre_stage_y_m * 1.2), -0.8, 0.8)
         linear = min(0.30, max(0.06, pre_stage_x_m * 0.28))
         return PlaceControlCommand(
