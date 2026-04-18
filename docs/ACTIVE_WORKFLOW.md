@@ -23,7 +23,7 @@ Legacy compatibility:
 3. UAT orchestrator:
    - `docker compose --profile uat run uat-orchestrator`
 4. Telegram wait bridge:
-   - `docker compose --profile telegram up -d telegram-daemon`
+   - `docker compose --profile telegram up -d telegram-daemon telegram-mcp-stdio`
    - repo wrapper uses dedicated compose project `chasecar_telegram` so the containers are clearly Telegram-specific
 
 Windows wrappers:
@@ -60,10 +60,14 @@ This is an operator-adjacent service and does not participate in sim/UAT pass-fa
    - `powershell -ExecutionPolicy Bypass -File scripts/run_telegram_wait_daemon.ps1 -Action up -Build`
 4. Register the repo-local MCP entry:
    - `powershell -ExecutionPolicy Bypass -File scripts/register_telegram_mcp.ps1`
-5. Container naming note:
+5. Clean up legacy `telegram-mcp-stdio-run-*` leftovers if needed:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_telegram_wait_daemon.ps1 -Action cleanup`
+6. Container naming note:
    - Telegram bridge containers intentionally use compose project `chasecar_telegram` instead of inheriting the repo's generic local project prefix
-6. Operational note:
+7. Operational note:
    - `telegram_send` expects the human to reply directly to the Telegram prompt message so the daemon can match the response.
+8. MCP runtime note:
+   - Repo registration reuses the long-lived `telegram-mcp-stdio` helper container through `docker compose exec`, so MCP sessions no longer accumulate per-session `*-run-*` containers.
 
 ## First Operator Path
 
@@ -364,9 +368,9 @@ Calibration contract:
 3. emits a lane comparison summary plus a human-readable scorecard
 4. does not promote the operator lane by itself; dashboard promotion still requires a separate one-ball sanity run on the chosen lane
 
-## Gather Goal-Side Matrix
+## Gather Goal-Side Matrix (Offline Gate)
 
-Use this headless harness to exercise the approach-side contract on short turf without the operator dashboard.
+Use this headless harness as the offline gate for the pre-stage arrival slice on short turf before any dashboard UAT promotion.
 
 Command:
 
@@ -375,10 +379,10 @@ Command:
 Matrix contract:
 
 1. runs `corral_single_ball_place` in direct repeatability mode
-2. uses `short_turf` and a test-only `--target-layout-json` override to place the ball at `+45`, `0`, `-45`, and `180 backside`
+2. uses `short_turf` and a 10-foot arc layout (`3.048 m` from corral center) with primary placements at `+45`, `0`, and `-45`; the `180 backside` case stays as a guard case
 3. forwards the override through `gather_mission_repeatability_runner.py` into `gather_mission_runner.py`
 4. emits a matrix campaign summary plus one repeatability campaign per case
-5. is intended for non-operator headless triage and campaign rollups, not dashboard promotion
+5. is the offline gate for the gather path; dashboard UAT stays blocked until this matrix is green, while `visit_route_planning` remains the protected regression floor
 
 ## Headless Milestone Path (Current Preferred)
 

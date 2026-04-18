@@ -310,9 +310,8 @@ services:
     volumes:
       - telegram_wait_state:/app/data
     working_dir: /app
-    command: ["python", "-m", "telegram_wait_bridge.mcp_server"]
-    stdin_open: true
-    restart: "no"
+    command: ["python", "-c", "import time; time.sleep(10**9)"]
+    restart: unless-stopped
 
 volumes:
   chasecar_ws:

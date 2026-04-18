@@ -5,7 +5,7 @@ This repo includes a repo-local Telegram wait bridge for Codex MCP.
 The runtime has two parts:
 
 1. `telegram-daemon`: long-lived Docker service that sends prompts and long-polls Telegram for direct replies.
-2. `telegram-mcp-stdio`: on-demand stdio MCP server that exposes `telegram_send`, `telegram_wait`, and `telegram_cancel`.
+2. `telegram-mcp-stdio`: long-lived helper container that hosts on-demand stdio MCP sessions via `docker compose exec`.
 
 ## Required Env Vars
 
@@ -46,7 +46,7 @@ Send a manual ping:
 powershell -ExecutionPolicy Bypass -File scripts/telegram_preflight.ps1 -SendChatId <chat_id> -Text "UAT ping"
 ```
 
-## Start The Daemon
+## Start The Bridge Services
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/run_telegram_wait_daemon.ps1 -Action up -Build
@@ -56,11 +56,16 @@ By default the wrapper uses compose project `chasecar_telegram`, so the runtime
 shows up as `chasecar_telegram-*` containers instead of inheriting a more
 generic repo-local compose prefix.
 
+The wrapper starts both `telegram-daemon` and the reusable `telegram-mcp-stdio`
+helper container. It also prunes legacy `telegram-mcp-stdio-run-*` leftovers
+from the older `docker compose run` launch path before the services come up.
+
 Other daemon actions:
 
 - `-Action status`
 - `-Action logs`
 - `-Action down`
+- `-Action cleanup`
 
 ## Register The MCP Server
 
@@ -71,6 +76,10 @@ powershell -ExecutionPolicy Bypass -File scripts/register_telegram_mcp.ps1
 ```
 
 Default MCP server name: `chasecar-telegram-wait`
+
+Registration now points Codex at a repo-local PowerShell wrapper that reuses
+the `telegram-mcp-stdio` helper container with `docker compose exec` instead of
+creating a fresh `telegram-mcp-stdio-run-*` container per MCP session.
 
 ## Behavioral Contract
 

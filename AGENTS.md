@@ -52,6 +52,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Dashboard validation | `scripts/run_dashboard_validation.ps1` |
 | Telegram preflight | `scripts/telegram_preflight.ps1 -CheckBot` |
 | Telegram daemon | `scripts/run_telegram_wait_daemon.ps1 -Action up -Build` |
+| Telegram cleanup | `scripts/run_telegram_wait_daemon.ps1 -Action cleanup` |
 | Telegram MCP register | `scripts/register_telegram_mcp.ps1` |
 
 ## Compose Profiles
