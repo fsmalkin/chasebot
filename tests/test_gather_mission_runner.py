@@ -538,6 +538,123 @@ def test_pre_stage_target_accepts_close_in_ready_band_beyond_legacy_arrival_radi
     assert any(call["mode"] == "pre_stage_ready" for call in manual_drive_calls)
 
 
+def test_pre_stage_target_accepts_deep_close_handoff_band_with_moderate_yaw_error(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    manual_drive_calls: list[dict[str, object]] = []
+    robot_pose = {"x": 6.226953, "y": -0.165494, "yaw": -2.351599}
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+
+    pre_stage_snapshot = gather_runner.pre_stage_arrival_snapshot(robot_pose, ball_pose, zone=runner.zone)
+
+    assert pre_stage_snapshot is not None
+    assert pre_stage_snapshot["deep_close_pre_stage_handoff"] is True
+    assert pre_stage_snapshot["pre_stage_pose_reached"] is True
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda *args, **kwargs: manual_drive_calls.append({"args": args, **kwargs}),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: ({}, robot_pose, ball_pose),
+    )
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-deep-close",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert pre_stage_pass is True
+    assert payload["pre_stage_pose_world"] == pre_stage_snapshot["pre_stage_pose_world"]
+    assert payload["pre_stage_pose_reached"] is True
+    assert payload["pre_stage_handoff_pass"] is True
+    assert payload["pre_stage_time_s"] >= 0.25
+    assert any(call["mode"] == "pre_stage_ready" for call in manual_drive_calls)
+    assert not any(call["mode"] == "pre_stage_align" for call in manual_drive_calls)
+
+
+def test_pre_stage_target_leaves_repeated_plus45_escape_stall_and_hands_off(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    manual_drive_calls: list[dict[str, object]] = []
+    ball_pose = {"x": 4.555261, "y": 2.155261, "z": 0.05}
+    stalled_escape_pose = {"x": 2.687926, "y": 2.345621, "yaw": -2.520141}
+    reverse_release_pose = {"x": 4.306274, "y": 2.596228, "yaw": -2.374841}
+    close_ready_pose = {"x": 4.852057, "y": 2.736506, "yaw": -2.97762}
+    sequence = [
+        stalled_escape_pose,
+        reverse_release_pose,
+        close_ready_pose,
+        close_ready_pose,
+        close_ready_pose,
+        close_ready_pose,
+    ]
+    index = {"value": 0}
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        current = sequence[min(index["value"], len(sequence) - 1)]
+        index["value"] += 1
+        return {}, current, ball_pose
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda *args, **kwargs: manual_drive_calls.append({"args": args, **kwargs}),
+    )
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-plus45-stall",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    modes = [str(call["mode"]) for call in manual_drive_calls]
+
+    assert pre_stage_pass is True
+    assert payload["pre_stage_pose_reached"] is True
+    assert payload["pre_stage_handoff_pass"] is True
+    assert "pre_stage_escape_goal_side" in modes
+    assert "pre_stage_traverse" in modes
+    assert modes.index("pre_stage_escape_goal_side") < modes.index("pre_stage_traverse")
+
+
 def test_run_target_retries_fresh_approach_after_capture_entry_failure(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.max_retries_per_target = 1
@@ -861,7 +978,7 @@ def test_target_failure_result_preserves_close_in_pre_stage_success_before_captu
             "entered_goal_side_before_capture": False,
             "first_contact_push_alignment_deg": None,
             "push_direction_yaw_deg": -135.0,
-            "time_s": 0.0,
+            "time_s": 4.281,
             "failure_reason": "capture_entry_timeout",
         },
     }
@@ -892,9 +1009,12 @@ def test_target_failure_result_preserves_close_in_pre_stage_success_before_captu
     assert payload["pre_stage_handoff_pass"] is True
     assert payload["staging_pose_reached"] is True
     assert payload["entered_goal_side_before_capture"] is False
-    assert payload["capture_entry_reached"] is True
+    assert payload["capture_entry_reached"] is False
+    assert payload["capture_entry_time_s"] == 4.281
     assert payload["approach_side_verdict"] == {"pass": False, "reason": "capture_entry_timeout"}
     assert payload["approach_failure_reason"] == "capture_entry_timeout"
+    assert "reached" not in payload["latest_approach_progress"]["capture_entry"]
+    assert payload["latest_approach_progress"]["capture_entry"]["time_s"] == 4.281
     assert payload["fresh_attempt_approach"]["pre_stage"]["pose_reached"] is False
     assert payload["fresh_attempt_approach"]["reason"] == "entered_goal_side_before_capture"
 
@@ -1044,6 +1164,117 @@ def test_capture_target_close_in_stage_ready_hands_off_into_capture_entry(tmp_pa
     assert phase_entries.index("stage") < phase_entries.index("capture_entry")
 
 
+def test_capture_target_latched_stage_ready_hands_off_after_one_off_band_sample(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 10.0
+    runner.args.poll_s = 0.5
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    approach_calls = {"count": 0}
+
+    class _FakeCommand:
+        def __init__(self, mode: str):
+            self.mode = mode
+            self.linear_x = 0.0
+            self.angular_z = 0.0
+            self.rationale = mode
+
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "mode": self.mode,
+                "linear_x": self.linear_x,
+                "angular_z": self.angular_z,
+                "rationale": self.rationale,
+            }
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_approach_snapshot(*args, **kwargs):
+        approach_calls["count"] += 1
+        return {
+            "robot_on_goal_side": False,
+            "staging_pose_reached": approach_calls["count"] == 3,
+            "push_direction_yaw_deg": 0.0,
+        }
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: (
+            {},
+            {"x": 0.0, "y": 0.0, "yaw": 0.0},
+            {"x": 1.0, "y": 0.0, "z": 0.05},
+        ),
+    )
+    monkeypatch.setattr(gather_runner, "goal_side_approach_snapshot", fake_approach_snapshot)
+    monkeypatch.setattr(
+        gather_runner,
+        "compute_stage_command",
+        lambda *args, **kwargs: _FakeCommand("stage_ready" if approach_calls["count"] == 3 else "stage_align"),
+    )
+    monkeypatch.setattr(
+        gather_runner,
+        "capture_entry_snapshot",
+        lambda *args, **kwargs: {
+            "ball_x_m": 0.54,
+            "ball_y_m": 0.09,
+            "bearing_rad": 0.16,
+            "robot_on_goal_side": False,
+            "capture_entry_reached": False,
+        },
+    )
+    monkeypatch.setattr(gather_runner, "compute_capture_entry_command", lambda *args, **kwargs: _FakeCommand("capture_entry"))
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-latched-stage-ready",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "capture_entry"
+    assert payload["staging_pose_reached"] is True
+    assert payload["capture_entry_reached"] is False
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
+    assert phase_entries.count("stage") > 0
+    assert phase_entries.count("capture_entry") > 0
+    assert phase_entries.index("stage") < phase_entries.index("capture_entry")
+    stage_rows = [row for row in state_rows if row.get("phase") == "stage"]
+    first_ready_index = next(
+        index
+        for index, row in enumerate(stage_rows)
+        if isinstance(row.get("selected_command"), dict)
+        and row["selected_command"].get("mode") == "stage_ready"
+    )
+    assert all(
+        not (
+            isinstance(row.get("selected_command"), dict)
+            and row["selected_command"].get("mode") in {"stage_align", "stage_traverse"}
+        )
+        for row in stage_rows[first_ready_index + 1 :]
+    )
+    assert not (mission_root / f"{target.id}_stage_timeout.json").exists()
+
+
 def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.capture_timeout_s = 10.0
@@ -1100,6 +1331,118 @@ def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_
     assert timeout_payload["failure_stage"] == "capture_entry"
     assert phase_entries.count("capture_entry") > 0
     assert "capture" not in phase_entries
+
+
+def test_capture_target_late_ready_sample_skips_same_loop_capture_entry_timeout(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 6.0
+    runner.args.poll_s = 0.5
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    phase_entries: list[str] = []
+    capture_entry_calls = {"count": 0}
+
+    class _FakeCommand:
+        def __init__(self, mode: str):
+            self.mode = mode
+            self.linear_x = 0.0
+            self.angular_z = 0.0
+            self.rationale = mode
+
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "mode": self.mode,
+                "linear_x": self.linear_x,
+                "angular_z": self.angular_z,
+                "rationale": self.rationale,
+            }
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_capture_entry_snapshot(*args, **kwargs):
+        capture_entry_calls["count"] += 1
+        ready = capture_entry_calls["count"] == 8
+        if ready:
+            ball_x_m = 0.599572
+            ball_y_m = 0.001913
+            bearing_rad = 0.003191
+        elif capture_entry_calls["count"] > 8:
+            ball_x_m = 0.602147
+            ball_y_m = -0.04357
+            bearing_rad = -0.072232
+        else:
+            ball_x_m = 0.649495
+            ball_y_m = -0.018137
+            bearing_rad = -0.027918
+        return {
+            "ball_x_m": ball_x_m,
+            "ball_y_m": ball_y_m,
+            "bearing_rad": bearing_rad,
+            "robot_on_goal_side": False,
+            "capture_entry_reached": ready,
+        }
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: (
+            {},
+            {"x": 0.0, "y": 0.0, "yaw": 0.0},
+            {"x": 1.0, "y": 0.0, "z": 0.05},
+        ),
+    )
+    monkeypatch.setattr(
+        gather_runner,
+        "goal_side_approach_snapshot",
+        lambda *args, **kwargs: {
+            "robot_on_goal_side": False,
+            "staging_pose_reached": True,
+            "push_direction_yaw_deg": 0.0,
+        },
+    )
+    monkeypatch.setattr(gather_runner, "compute_stage_command", lambda *args, **kwargs: _FakeCommand("stage_ready"))
+    monkeypatch.setattr(gather_runner, "capture_entry_snapshot", fake_capture_entry_snapshot)
+    monkeypatch.setattr(
+        gather_runner,
+        "compute_capture_entry_command",
+        lambda *args, **kwargs: _FakeCommand("capture_entry_centered_close"),
+    )
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-capture-entry-late-ready",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    timeout_path = mission_root / f"{target.id}_capture_entry_timeout.json"
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "capture"
+    assert payload["capture_entry_reached"] is True
+    assert payload["capture_entry_time_s"] >= 4.0
+    assert capture_entry_calls["count"] >= 9
+    assert phase_entries.count("capture_entry") > 0
+    assert "capture" in phase_entries
+    assert phase_entries.index("capture_entry") < phase_entries.index("capture")
+    assert not timeout_path.exists()
 
 
 def test_capture_target_centered_extended_corridor_hands_off_before_capture_timeout(tmp_path, monkeypatch):

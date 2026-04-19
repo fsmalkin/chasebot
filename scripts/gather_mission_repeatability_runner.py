@@ -48,6 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-layout-json", default="", help="Test-only target layout override for direct-mode gather runs.")
     parser.add_argument("--execution-mode", choices=("dashboard_scenario", "direct"), default="dashboard_scenario")
     parser.add_argument("--promotion-gate-mode", choices=("strict", "pass_only"), default="pass_only")
+    parser.add_argument("--max-retries-per-target", type=int, default=2)
     return parser.parse_args()
 
 
@@ -960,6 +961,7 @@ def main() -> int:
                 command.extend(["--gather-runtime-json", args.gather_runtime_json.strip()])
             if args.target_layout_json.strip():
                 command.extend(["--target-layout-json", args.target_layout_json.strip()])
+            command.extend(["--max-retries-per-target", str(args.max_retries_per_target)])
             proc = subprocess.run(
                 command,
                 cwd=str(REPO_ROOT),

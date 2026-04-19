@@ -29,12 +29,15 @@ from llm_supervisor_core import http_json
 from llm_supervisor_core import read_json
 from llm_supervisor_core import utc_now
 from llm_supervisor_core import write_json
+from gather_manager_helpers import GatherManagerState
+from gather_manager_helpers import decide_gather_manager_directive
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_MAX_WAIT_S
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
 from gather_mission_helpers import DEFAULT_STAGE_READY_DWELL_S
 from gather_mission_helpers import CaptureEnvelope
 from gather_mission_helpers import GatherTargetSpec
+from gather_mission_helpers import PlaceControlCommand
 from gather_mission_helpers import approach_side_verdict
 from gather_mission_helpers import build_gather_targets
 from gather_mission_helpers import build_scorecard_markdown
@@ -246,10 +249,6 @@ def resolve_approach_result_fields(
                 capture_entry.get("pass", resolved["capture_entry_reached"]),
             )
         )
-        if capture_entry_time_value is not None and capture_entry_time_value > 0.0:
-            capture_entry_reached_progress = True
-        if capture_entry_failure_reason.startswith("capture_entry"):
-            capture_entry_reached_progress = True
         resolved["capture_entry_reached"] = capture_entry_reached_progress
         if capture_entry_time_value is not None:
             resolved["capture_entry_time_s"] = float(capture_entry_time_value)
@@ -1520,6 +1519,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         target: GatherTargetSpec,
         state_history_path: Path,
         mission_root: Path,
+        attempt_index: int = 0,
+        attempt_kind: str = "",
     ) -> tuple[bool, dict[str, Any]]:
         deadline = time.monotonic() + max(DEFAULT_PRE_STAGE_TIMEOUT_S, 0.1)
         pre_stage_started_monotonic = time.monotonic()
@@ -1528,6 +1529,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         pre_stage_pose_world: dict[str, Any] = {}
         push_direction_yaw_deg = 0.0
         last_failure_reason = ""
+        latest_pre_capture_command_mode = ""
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -1544,6 +1546,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 if robot_pose and ball_pose
                 else None
             )
+            pre_stage_ready_signal = False
             if isinstance(pre_stage_snapshot, dict):
                 pre_stage_pose_world = (
                     dict(pre_stage_snapshot.get("pre_stage_pose_world", {}))
@@ -1551,7 +1554,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     else {}
                 )
                 push_direction_yaw_deg = float(clean_number(pre_stage_snapshot.get("push_direction_yaw_deg")) or 0.0)
-                if bool(pre_stage_snapshot.get("pre_stage_pose_reached", False)):
+                pre_stage_ready_signal = bool(pre_stage_snapshot.get("pre_stage_pose_reached", False))
+                if pre_stage_ready_signal:
                     pre_stage_pose_reached_once = True
                     pre_stage_ready_started_monotonic = (
                         now_monotonic
@@ -1562,6 +1566,20 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     pre_stage_ready_started_monotonic = None
                 if bool(pre_stage_snapshot.get("entered_goal_side_before_capture", False)):
                     last_failure_reason = "entered_goal_side_before_capture"
+            if pre_stage_command is not None:
+                latest_pre_capture_command_mode = str(pre_stage_command.mode)
+            pre_stage_manager_decision = decide_gather_manager_directive(
+                GatherManagerState(
+                    phase="pre_stage",
+                    phase_elapsed_s=now_monotonic - pre_stage_started_monotonic,
+                    pre_stage_snapshot=pre_stage_snapshot or {},
+                    approach_snapshot=pre_stage_snapshot or {},
+                    capture_snapshot=capture.to_dict() if capture else {},
+                    phase_ready_observed=pre_stage_ready_signal,
+                    attempt_kind=attempt_kind,
+                    latest_command_mode=latest_pre_capture_command_mode,
+                )
+            )
             self._update_gather_runtime_state(
                 mission_phase="pre_stage",
                 gather_phase="pre_stage",
@@ -1581,16 +1599,21 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 {
                     "generated_utc": utc_now(),
                     "phase": "pre_stage",
+                    "attempt": int(attempt_index),
+                    "attempt_kind": str(attempt_kind),
                     "target_id": target.id,
                     "robot_pose": robot_pose,
                     "ball_pose": ball_pose,
                     "capture": capture.to_dict() if capture else {},
                     "zone_score": zone_score.to_dict() if zone_score else {},
                     "pre_stage": pre_stage_snapshot or {},
+                    "manager_directive": pre_stage_manager_decision.directive,
                     "selected_command": pre_stage_command.to_dict() if pre_stage_command else {},
                 },
             )
             if (
+                pre_stage_manager_decision.directive == "stabilize_stage"
+                and
                 pre_stage_ready_started_monotonic is not None
                 and (now_monotonic - pre_stage_ready_started_monotonic) >= DEFAULT_PRE_STAGE_READY_DWELL_S
             ):
@@ -1646,6 +1669,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         mission_root: Path,
         prefer_zone_recovery: bool = False,
         enable_goal_side_stage: bool = False,
+        attempt_index: int = 0,
+        attempt_kind: str = "",
     ) -> tuple[bool, dict[str, Any]]:
         deadline = time.monotonic() + max(self.args.capture_timeout_s, 0.1)
         captured_started_monotonic: float | None = None
@@ -1655,9 +1680,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         last_zone_score = None
         stage_started_monotonic = time.monotonic() if enable_goal_side_stage else None
         stage_ready_started_monotonic: float | None = None
+        stage_ready_latched = False
         stage_completed = not enable_goal_side_stage
         capture_entry_started_monotonic: float | None = None
         capture_entry_ready_started_monotonic: float | None = None
+        capture_entry_ready_latched = False
         capture_entry_completed = not enable_goal_side_stage
         staging_pose_reached_once = False
         capture_entry_reached_once = False
@@ -1668,6 +1695,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         push_direction_yaw_deg = 0.0
         approach_failure_reason = ""
         last_approach_snapshot: dict[str, Any] = {}
+        latest_pre_capture_command_mode = ""
 
         def _approach_result_payload(*, failure_reason: str = "") -> dict[str, Any]:
             if failure_reason:
@@ -1743,6 +1771,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if robot_pose and ball_pose
                     else None
                 )
+                if stage_command is not None:
+                    latest_pre_capture_command_mode = str(stage_command.mode)
                 stage_ready_signal = bool(
                     isinstance(approach_snapshot, dict) and approach_snapshot.get("staging_pose_reached", False)
                 ) or bool(stage_command and stage_command.mode == "stage_ready")
@@ -1750,13 +1780,40 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     staging_pose_reached_once = True
                 if stage_ready_signal:
                     staging_pose_reached_once = True
+                    stage_ready_latched = True
                     stage_ready_started_monotonic = (
                         now_monotonic
                         if stage_ready_started_monotonic is None
                         else stage_ready_started_monotonic
                     )
-                else:
+                elif not stage_ready_latched:
                     stage_ready_started_monotonic = None
+                stage_manager_decision = decide_gather_manager_directive(
+                    GatherManagerState(
+                        phase="stage",
+                        phase_elapsed_s=now_monotonic - float(stage_started_monotonic or now_monotonic),
+                        approach_snapshot=approach_snapshot or {},
+                        capture_snapshot=capture.to_dict() if capture else {},
+                        phase_ready_observed=stage_ready_signal,
+                        phase_ready_latched=stage_ready_latched,
+                        attempt_kind=attempt_kind,
+                        latest_command_mode=latest_pre_capture_command_mode,
+                    )
+                )
+                if stage_manager_decision.directive == "recover_goal_side":
+                    stage_ready_latched = False
+                    stage_ready_started_monotonic = None
+                elif stage_ready_latched:
+                    # Hold the first valid stage-ready pose steady so the capture-entry
+                    # handoff starts from the same geometry that satisfied staging.
+                    stage_command = PlaceControlCommand(
+                        mode="stage_ready",
+                        linear_x=0.0,
+                        angular_z=0.0,
+                        target_speed_scale=0.0,
+                        rationale="Hold the first valid staging pose steady until capture entry begins.",
+                    )
+                    latest_pre_capture_command_mode = str(stage_command.mode)
                 self._update_gather_runtime_state(
                     mission_phase="stage",
                     gather_phase="stage",
@@ -1774,24 +1831,32 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     {
                         "generated_utc": utc_now(),
                         "phase": "stage",
+                        "attempt": int(attempt_index),
+                        "attempt_kind": str(attempt_kind),
                         "target_id": target.id,
                         "robot_pose": robot_pose,
                         "ball_pose": ball_pose,
                         "capture": capture.to_dict() if capture else {},
                         "zone_score": zone_score.to_dict() if zone_score else {},
                         "approach_side": approach_snapshot or {},
+                        "manager_directive": stage_manager_decision.directive,
                         "selected_command": stage_command.to_dict() if stage_command else {},
                         "ball_motion_m": ball_motion_m,
                     },
                 )
                 if (
+                    stage_ready_latched
+                    and stage_manager_decision.directive == "close_capture_gap"
+                    and
                     stage_ready_started_monotonic is not None
                     and (now_monotonic - stage_ready_started_monotonic) >= DEFAULT_STAGE_READY_DWELL_S
                 ):
                     stage_completed = True
+                    stage_ready_latched = False
                     stage_time_s = now_monotonic - float(stage_started_monotonic or now_monotonic)
                     capture_entry_started_monotonic = now_monotonic
                     capture_entry_ready_started_monotonic = None
+                    capture_entry_ready_latched = False
                     self._set_manual_drive(
                         enabled=False,
                         mode="stage_ready",
@@ -1806,6 +1871,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 if (
                     stage_started_monotonic is not None
                     and (now_monotonic - stage_started_monotonic) >= DEFAULT_STAGE_TIMEOUT_S
+                    and not stage_ready_latched
                 ):
                     stage_time_s = now_monotonic - float(stage_started_monotonic)
                     if not approach_failure_reason:
@@ -1851,11 +1917,48 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if robot_pose and ball_pose
                     else None
                 )
-                if (
+                capture_entry_ready_signal = bool(
                     isinstance(capture_entry_snapshot_payload, dict)
-                    and bool(capture_entry_snapshot_payload.get("robot_on_goal_side", False))
-                    and not bool(capture_entry_snapshot_payload.get("capture_entry_reached", False))
-                ):
+                    and capture_entry_snapshot_payload.get("capture_entry_reached", False)
+                )
+                if capture_entry_ready_signal:
+                    capture_entry_reached_once = True
+                    capture_entry_ready_latched = True
+                    capture_entry_ready_started_monotonic = (
+                        now_monotonic
+                        if capture_entry_ready_started_monotonic is None
+                        else capture_entry_ready_started_monotonic
+                    )
+                elif not capture_entry_ready_latched:
+                    capture_entry_ready_started_monotonic = None
+                capture_entry_command = (
+                    compute_capture_entry_command(
+                        robot_pose,
+                        ball_pose or {},
+                        zone=self.zone,
+                        envelope=self.capture_envelope,
+                    )
+                    if robot_pose and ball_pose
+                    else None
+                )
+                if capture_entry_command is not None:
+                    latest_pre_capture_command_mode = str(capture_entry_command.mode)
+                capture_entry_manager_decision = decide_gather_manager_directive(
+                    GatherManagerState(
+                        phase="capture_entry",
+                        phase_elapsed_s=now_monotonic - float(capture_entry_started_monotonic or now_monotonic),
+                        approach_snapshot=approach_snapshot or {},
+                        capture_snapshot=capture.to_dict() if capture else {},
+                        capture_entry_snapshot=capture_entry_snapshot_payload or {},
+                        phase_ready_observed=capture_entry_ready_signal,
+                        phase_ready_latched=capture_entry_ready_latched,
+                        attempt_kind=attempt_kind,
+                        latest_command_mode=latest_pre_capture_command_mode,
+                    )
+                )
+                if capture_entry_manager_decision.directive == "recover_goal_side":
+                    capture_entry_ready_latched = False
+                    capture_entry_ready_started_monotonic = None
                     entered_goal_side_before_capture = True
                     approach_failure_reason = "capture_entry_goal_side_loss"
                     self._set_manual_drive(
@@ -1872,27 +1975,6 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     }
                     write_json(mission_root / f"{target.id}_capture_entry_goal_side_loss.json", failure_payload)
                     return False, failure_payload
-                if isinstance(capture_entry_snapshot_payload, dict) and bool(
-                    capture_entry_snapshot_payload.get("capture_entry_reached", False)
-                ):
-                    capture_entry_reached_once = True
-                    capture_entry_ready_started_monotonic = (
-                        now_monotonic
-                        if capture_entry_ready_started_monotonic is None
-                        else capture_entry_ready_started_monotonic
-                    )
-                else:
-                    capture_entry_ready_started_monotonic = None
-                capture_entry_command = (
-                    compute_capture_entry_command(
-                        robot_pose,
-                        ball_pose or {},
-                        zone=self.zone,
-                        envelope=self.capture_envelope,
-                    )
-                    if robot_pose and ball_pose
-                    else None
-                )
                 self._update_gather_runtime_state(
                     mission_phase="capture_entry",
                     gather_phase="capture_entry",
@@ -1910,6 +1992,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     {
                         "generated_utc": utc_now(),
                         "phase": "capture_entry",
+                        "attempt": int(attempt_index),
+                        "attempt_kind": str(attempt_kind),
                         "target_id": target.id,
                         "robot_pose": robot_pose,
                         "ball_pose": ball_pose,
@@ -1917,15 +2001,20 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "zone_score": zone_score.to_dict() if zone_score else {},
                         "approach_side": approach_snapshot or {},
                         "capture_entry": capture_entry_snapshot_payload or {},
+                        "manager_directive": capture_entry_manager_decision.directive,
                         "selected_command": capture_entry_command.to_dict() if capture_entry_command else {},
                         "ball_motion_m": ball_motion_m,
                     },
                 )
                 if (
+                    capture_entry_ready_latched
+                    and capture_entry_manager_decision.directive == "handoff_to_capture"
+                    and
                     capture_entry_ready_started_monotonic is not None
                     and (now_monotonic - capture_entry_ready_started_monotonic) >= DEFAULT_CAPTURE_ENTRY_READY_DWELL_S
                 ):
                     capture_entry_completed = True
+                    capture_entry_ready_latched = False
                     capture_entry_time_s = now_monotonic - float(capture_entry_started_monotonic or now_monotonic)
                     self._set_manual_drive(
                         enabled=False,
@@ -1941,6 +2030,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 if (
                     capture_entry_started_monotonic is not None
                     and (now_monotonic - capture_entry_started_monotonic) >= DEFAULT_CAPTURE_ENTRY_TIMEOUT_S
+                    and not capture_entry_ready_latched
                 ):
                     capture_entry_time_s = now_monotonic - float(capture_entry_started_monotonic)
                     if not approach_failure_reason:
@@ -1990,6 +2080,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 {
                     "generated_utc": utc_now(),
                     "phase": "capture",
+                    "attempt": int(attempt_index),
+                    "attempt_kind": str(attempt_kind),
                     "target_id": target.id,
                     "robot_pose": robot_pose,
                     "ball_pose": ball_pose,
@@ -2175,6 +2267,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         session_id: str,
         target: GatherTargetSpec,
         state_history_path: Path,
+        attempt_index: int = 0,
+        attempt_kind: str = "",
     ) -> tuple[bool, dict[str, Any]]:
         deadline = time.monotonic() + max(self.args.place_timeout_s, 0.1)
         last_captured_monotonic: float | None = None
@@ -2518,6 +2612,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 {
                     "generated_utc": utc_now(),
                     "phase": "place",
+                    "attempt": int(attempt_index),
+                    "attempt_kind": str(attempt_kind),
                     "target_id": target.id,
                     "robot_pose": robot_pose,
                     "ball_pose": ball_pose,
@@ -3664,6 +3760,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     target=target,
                     state_history_path=state_history_path,
                     mission_root=mission_root,
+                    attempt_index=attempt,
+                    attempt_kind=attempt_kind,
                 )
                 _approach_kwargs(pre_stage_payload)
                 _record_fresh_attempt_approach(pre_stage_payload, attempt_index=attempt, attempt_kind=attempt_kind)
@@ -3719,6 +3817,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     mission_root=mission_root,
                     prefer_zone_recovery=direct_recapture_attempt or force_local_capture_attempt,
                     enable_goal_side_stage=enable_goal_side_stage,
+                    attempt_index=attempt,
+                    attempt_kind=attempt_kind,
                 )
                 _approach_kwargs(capture_payload)
                 _record_fresh_attempt_approach(capture_payload, attempt_index=attempt, attempt_kind=attempt_kind)
@@ -3905,6 +4005,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 session_id=session_id,
                 target=target,
                 state_history_path=state_history_path,
+                attempt_index=attempt,
+                attempt_kind=attempt_kind,
             )
             zone_edge_correction_count += int(place_payload.get("zone_edge_correction_count", 0) or 0)
             if place_pass:

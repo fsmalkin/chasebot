@@ -125,7 +125,7 @@ Status update as of April 4, 2026:
 5. pivoting the roadmap slice to end-to-end VLA control
 6. replacing deterministic perception, planning, or execution loops with model-generated low-level action
 
-## Next Roadmap Slice: Capture Entry Slice, Goal-Side Matrix Offline Gate
+## Next Roadmap Slice: Gather Generalization Slice, Goal-Side Matrix And Geometry Sweeps
 
 The route-planning baseline remains the protected regression floor, and the
 single-ball corral path now has an explicit dual-radius scoring model on
@@ -136,8 +136,12 @@ baseline. The next gather milestone is no longer framed as "clear
 `plus45` evidence progressed from `pre_stage` failures to `stage`, then to
 `capture_entry_ready`, yet still failed after the handoff, which now points to
 brittle cross-phase transitions rather than a single remaining threshold bug.
-The goal-side matrix remains the first offline coverage harness, and the next
-gate extends beyond those named cases into nearby geometry sweeps.
+Fresh-only April 19, 2026 `plus45` evidence then stayed red `5/5` in
+`pre_stage_timeout` even after retry-oriented escape fixes, which shows the
+current controller can satisfy local branch objectives while still failing the
+global behind-ball objective. The goal-side matrix remains the first offline
+coverage harness, and the next gate extends beyond those named cases into
+nearby geometry sweeps and controller-family comparisons.
 
 Surface and ball fidelity remain an open realism question, and the calibration
 harness remains useful, but that thread no longer blocks the roadmap. The
@@ -156,8 +160,8 @@ collisions is a valid assist, not an anti-goal.
 ```mermaid
 flowchart LR
     A[Route-planning baseline] --> B[Operator-acceptable one-ball retrieval baseline]
-    B --> C[Capture entry on 10-foot multi-ball arc]
-    C --> D[Goal-side matrix offline gate]
+    B --> C[Deterministic gather-control family comparison]
+    C --> D[Goal-side matrix plus geometry sweeps]
     D --> E[Three-ball gather promotion]
     E --> F[Corral accel and decel optimization]
     F --> G[Onboard planner evaluation]
@@ -405,41 +409,43 @@ Acceptance:
 8. already retrieved balls remain in the world and behave as normal obstacles or passive stopping aids
 9. one-ball baseline behavior is not regressed while multi-ball gather lands
 
-### Step 6: Deterministic Gather Manager And Parallel Experiment Lanes
+### Step 6: Deterministic Gather Control Families And Parallel Experiment Lanes
 
-Goal: add a bounded deterministic gather-manager loop above the local gather
-heuristics and use formal non-operator experiment lanes to converge on a more
-general design before dashboard promotion.
+Goal: compare bounded deterministic gather-control families above the local
+gather heuristics and converge on a more general design before dashboard
+promotion.
 
 Why this comes next:
 
-1. the current evidence says the problem is at phase boundaries, not inside one local threshold alone
-2. a bounded higher-level deterministic loop can absorb retry, recovery, and handoff decisions without moving fast control upward
-3. serial dashboard proof should remain the trust surface while experiments fan out elsewhere
-4. LLM gather control should stay deferred until deterministic gather mechanics are stable enough to benchmark fairly
+1. the current evidence says the problem is not just at one threshold seam; the controller is optimizing local branch goals instead of the global gather objective
+2. a bounded higher-level deterministic layer can absorb retry, recovery, and handoff decisions without moving fast control upward
+3. different deterministic controller families should be compared directly instead of assuming the current threshold path is the only viable shape
+4. serial dashboard proof should remain the trust surface while experiments fan out elsewhere
+5. LLM gather control should stay deferred until deterministic gather mechanics are stable enough to benchmark fairly
 
 Work:
 
-1. add a deterministic gather-manager concept at the executor/orchestration layer
-2. have it consume bounded gather state such as behind-ball progress, goal-side status, capture-entry readiness, retry history, and loss/recovery signals
-3. have it emit bounded phase directives such as `recover_goal_side`, `stabilize_pre_stage`, `stabilize_stage`, `close_capture_gap`, `handoff_to_capture`, and `recover_after_handoff`
-4. run three formal non-operator experiment lanes:
-   - Lane A: local-controller smoothing and hysteresis only
-   - Lane B: deterministic gather-manager loop above the existing local controller
-   - Lane C: bounded recovery-policy and retry/handoff variants
-5. keep operator/dashboard validation serial; fan-out belongs in headless/direct repeatability and matrix-style lanes only
-6. permit gather-brain exploration only in shadow mode until the deterministic gather-manager path is stable
-7. compare all lanes with shared scorecards and promotion criteria
+1. keep the current helper-plus-manager path as the control baseline rather than the assumed promotion target
+2. add a bounded progress-based deterministic gather-manager concept at the executor/orchestration layer
+3. evaluate a short-horizon deterministic action scorer or rollout planner for goal-side escape and behind-ball recovery
+4. evaluate region or funnel targets instead of exact `pre_stage` point targets
+5. evaluate reset-style recovery and contact-centric objective variants, ideally in a symmetry-normalized ball-to-zone frame
+6. use lightweight forward-model prediction or automatic gain search only as sidecar tooling, not as the primary promoted controller family
+7. run formal non-operator experiment lanes around those controller families
+8. keep operator/dashboard validation serial; fan-out belongs in headless/direct repeatability and matrix-style lanes only
+9. permit gather-brain exploration only in shadow mode until one deterministic family is clearly stable
+10. compare all lanes with shared scorecards and promotion criteria
 
 Acceptance:
 
-1. a shared comparison bundle exists across the experiment lanes
+1. a shared comparison bundle exists across the controller families and experiment lanes
 2. the promoted lane improves cross-phase stability without regressing the protected route-planning floor or the one-ball baseline
-3. no lane is promoted unless the matrix and nearby geometry sweeps are green
+3. fresh-only `plus45` no longer dies in `pre_stage_timeout`
+4. no lane is promoted unless the matrix and nearby geometry sweeps are green
 
 ### Step 7: Corral Time Optimization
 
-Goal: reduce time-to-place only after the deterministic gather-manager slice
+Goal: reduce time-to-place only after the promoted deterministic gather-control family
 and multi-ball practical retrieval behavior are stable enough to trust.
 
 Why it comes later:
@@ -491,14 +497,14 @@ Acceptance:
 ### Step 9: Onboard Model for Visit + Gather Planning
 
 Goal: determine whether a local model on the Orin can take over high-level visit
-and gather planning after the deterministic gather-manager path and the task
+and gather planning after the promoted deterministic gather-control family and the task
 surface are stable enough to benchmark fairly.
 
 Why this comes after multi-ball gather:
 
 1. route planning alone is now too small a target; the more useful benchmark is the full visit-and-gather loop
 2. gather introduces richer tradeoffs: which ball next, when to place, when to recover a lost ball, and how to sequence the corral zone efficiently
-3. evaluating local models after the deterministic gather manager and generalization evidence stabilize gives a more meaningful promotion decision
+3. evaluating local models after the deterministic gather-control family and generalization evidence stabilize gives a more meaningful promotion decision
 
 Work:
 

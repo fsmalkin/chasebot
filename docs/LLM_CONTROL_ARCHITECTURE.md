@@ -158,9 +158,20 @@ This layer is where high-level intent becomes concrete robot behavior.
 Planned near-term extension for gather:
 
 - a deterministic gather-manager sublayer may sit inside Layer 3 above the local gather heuristics
-- it may consume bounded gather state such as behind-ball progress, goal-side status, capture-entry readiness, retry history, and loss/recovery signals
-- it may emit bounded phase directives such as `recover_goal_side`, `stabilize_pre_stage`, `stabilize_stage`, `close_capture_gap`, `handoff_to_capture`, and `recover_after_handoff`
+- it may consume bounded gather state such as behind-ball progress, goal-side status, capture-entry readiness, retry history, loss or recovery signals, and explicit stall metrics
+- it may emit bounded phase or strategy directives such as `recover_goal_side`, `stabilize_pre_stage`, `stabilize_stage`, `close_capture_gap`, `handoff_to_capture`, `recover_after_handoff`, `reset_reacquire`, or other fixed strategy labels
+- phase names should remain useful reporting surfaces, but they do not need to stay the primary control primitives
+- it may normalize gather geometry in a ball-to-zone local frame so mirrored cases reduce to the same bounded control problem
+- it may own region or funnel targets instead of exact point targets when that better preserves generalization
+- it may host a deterministic short-horizon action scorer or rollout planner for escape and behind-ball recovery as long as the candidate set, scoring terms, and horizon remain bounded and auditable
+- it may use reset-style recovery to retreat to a known-safe reacquire shape when measured progress stalls
 - it must not publish real-time steering directly and must not replace low-level control loops
+
+Not planned for the active gather path:
+
+- full RL or end-to-end learned low-level gather control
+- active LLM-owned gather strategy or steering in the real-time loop
+- promoting lightweight forward-model prediction or automatic gain search as the primary controller family rather than shadow or sidecar tools
 
 ### Layer 4: Lower-Level Subsystems And Control Loops
 

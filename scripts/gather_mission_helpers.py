@@ -32,12 +32,23 @@ DEFAULT_PRE_STAGE_CLOSE_IN_READY_LONGITUDINAL_PROJECTION_M = -0.55
 DEFAULT_PRE_STAGE_CLOSE_IN_READY_LATERAL_ERROR_M = 0.22
 DEFAULT_PRE_STAGE_CLOSE_IN_READY_YAW_ERROR_DEG = 37.0
 DEFAULT_PRE_STAGE_CLOSE_IN_READY_DISTANCE_M = 0.35
+DEFAULT_PRE_STAGE_DEEP_CLOSE_HANDOFF_LONGITUDINAL_PROJECTION_M = -0.75
+DEFAULT_PRE_STAGE_DEEP_CLOSE_HANDOFF_LATERAL_ERROR_M = 0.18
+DEFAULT_PRE_STAGE_DEEP_CLOSE_HANDOFF_YAW_ERROR_DEG = 47.0
+DEFAULT_PRE_STAGE_DEEP_CLOSE_HANDOFF_DISTANCE_M = 0.22
 DEFAULT_PRE_STAGE_ORBIT_OFFSET_M = 1.00
 DEFAULT_PRE_STAGE_ESCAPE_TRIGGER_PROJECTION_M = 0.15
 DEFAULT_PRE_STAGE_ESCAPE_RELEASE_PROJECTION_M = -0.10
 DEFAULT_PRE_STAGE_ESCAPE_RELEASE_LATERAL_ERROR_M = 0.75
 DEFAULT_PRE_STAGE_ESCAPE_RELEASE_DISTANCE_M = 2.0
 DEFAULT_PRE_STAGE_ESCAPE_LINEAR_X_MPS = -0.08
+DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MIN_PROJECTION_M = 2.50
+DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MIN_LATERAL_ERROR_M = 1.60
+DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MAX_YAW_ERROR_DEG = 10.0
+DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MAX_REVERSE_YAW_ERROR_DEG = 15.0
+DEFAULT_PRE_STAGE_ESCAPE_DIRECT_COMMIT_PROJECTION_M = 1.30
+DEFAULT_PRE_STAGE_ESCAPE_DIRECT_COMMIT_MAX_ORBIT_YAW_ERROR_DEG = 10.0
+DEFAULT_PRE_STAGE_ESCAPE_DIRECT_REVERSE_MIN_FLOOR_ERROR_RAD = 0.08
 DEFAULT_STAGE_BEHIND_BALL_DISTANCE_M = 0.45
 DEFAULT_STAGE_READY_LONGITUDINAL_PROJECTION_M = -0.18
 DEFAULT_STAGE_READY_LATERAL_ERROR_M = 0.18
@@ -599,6 +610,13 @@ def pre_stage_arrival_snapshot(
         and robot_lateral_error_m <= DEFAULT_PRE_STAGE_CLOSE_IN_READY_LATERAL_ERROR_M
         and yaw_error_deg <= DEFAULT_PRE_STAGE_CLOSE_IN_READY_YAW_ERROR_DEG
     )
+    deep_close_pre_stage_handoff = (
+        not robot_on_goal_side
+        and pre_stage_pose_distance_m <= DEFAULT_PRE_STAGE_DEEP_CLOSE_HANDOFF_DISTANCE_M
+        and robot_longitudinal_projection_m <= DEFAULT_PRE_STAGE_DEEP_CLOSE_HANDOFF_LONGITUDINAL_PROJECTION_M
+        and robot_lateral_error_m <= DEFAULT_PRE_STAGE_DEEP_CLOSE_HANDOFF_LATERAL_ERROR_M
+        and yaw_error_deg <= DEFAULT_PRE_STAGE_DEEP_CLOSE_HANDOFF_YAW_ERROR_DEG
+    )
     return {
         "push_direction_yaw_deg": float(snapshot.get("push_direction_yaw_deg", 0.0) or 0.0),
         "pre_stage_pose_world": (
@@ -613,7 +631,12 @@ def pre_stage_arrival_snapshot(
         "yaw_error_deg": yaw_error_deg,
         "robot_on_goal_side": robot_on_goal_side,
         "entered_goal_side_before_capture": bool(snapshot.get("entered_goal_side_before_capture", False)),
-        "pre_stage_pose_reached": bool(snapshot.get("staging_pose_reached", False) or close_in_pre_stage_pose_reached),
+        "deep_close_pre_stage_handoff": bool(deep_close_pre_stage_handoff),
+        "pre_stage_pose_reached": bool(
+            snapshot.get("staging_pose_reached", False)
+            or close_in_pre_stage_pose_reached
+            or deep_close_pre_stage_handoff
+        ),
         "approach_failure_reason": str(snapshot.get("approach_failure_reason", "") or ""),
     }
 
@@ -739,8 +762,10 @@ def compute_pre_stage_command(
     yaw_error_deg = float(_number(snapshot.get("yaw_error_deg")) or 0.0)
     pre_stage_distance_m = float(_number(snapshot.get("pre_stage_pose_distance_m")) or 0.0)
     pre_stage_pose_reached = bool(snapshot.get("pre_stage_pose_reached", False))
+    deep_close_pre_stage_handoff = bool(snapshot.get("deep_close_pre_stage_handoff", False))
     robot_on_goal_side = bool(snapshot.get("robot_on_goal_side", False))
     robot_longitudinal_projection_m = float(_number(snapshot.get("robot_longitudinal_projection_m")) or 0.0)
+    robot_lateral_error_m = float(_number(snapshot.get("robot_lateral_error_m")) or 0.0)
     robot_lateral_signed_m = float(_number(snapshot.get("robot_lateral_signed_m")) or 0.0)
     push_direction_yaw_deg = float(_number(snapshot.get("push_direction_yaw_deg")) or 0.0)
     push_direction_yaw = math.radians(push_direction_yaw_deg)
@@ -838,16 +863,34 @@ def compute_pre_stage_command(
     orbit_y_m = float(orbit_candidate["orbit_y_m"])
     heading_error = float(orbit_candidate["heading_error"])
     if robot_on_goal_side or robot_longitudinal_projection_m > DEFAULT_PRE_STAGE_ESCAPE_RELEASE_PROJECTION_M:
-        deepen_escape_projection = not robot_on_goal_side
-        if deepen_escape_projection:
-            desired_escape_yaw = normalize_angle(
-                math.atan2(
-                    float(pre_stage_pose.get("y", 0.0)) - robot_y,
-                    float(pre_stage_pose.get("x", 0.0)) - robot_x,
-                )
-                + math.pi
+        direct_reverse_escape_yaw = normalize_angle(
+            math.atan2(
+                float(pre_stage_pose.get("y", 0.0)) - robot_y,
+                float(pre_stage_pose.get("x", 0.0)) - robot_x,
             )
-            escape_yaw_error = normalize_angle(desired_escape_yaw - robot_yaw)
+            + math.pi
+        )
+        direct_reverse_escape_yaw_error = normalize_angle(direct_reverse_escape_yaw - robot_yaw)
+        early_direct_reverse_escape_commit = bool(
+            robot_on_goal_side
+            and robot_longitudinal_projection_m >= DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MIN_PROJECTION_M
+            and robot_lateral_error_m >= DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MIN_LATERAL_ERROR_M
+            and (
+                yaw_error_deg <= DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MAX_YAW_ERROR_DEG
+                or abs(direct_reverse_escape_yaw_error)
+                <= math.radians(DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MAX_REVERSE_YAW_ERROR_DEG)
+            )
+        )
+        late_direct_reverse_escape_commit = bool(
+            robot_on_goal_side
+            and robot_longitudinal_projection_m <= DEFAULT_PRE_STAGE_ESCAPE_DIRECT_COMMIT_PROJECTION_M
+            and abs(float(escape_candidate["escape_yaw_error"]))
+            <= math.radians(DEFAULT_PRE_STAGE_ESCAPE_DIRECT_COMMIT_MAX_ORBIT_YAW_ERROR_DEG)
+        )
+        direct_reverse_escape_commit = early_direct_reverse_escape_commit or late_direct_reverse_escape_commit
+        deepen_escape_projection = (not robot_on_goal_side) or direct_reverse_escape_commit
+        if deepen_escape_projection:
+            escape_yaw_error = direct_reverse_escape_yaw_error
             angular = clamp(escape_yaw_error * 1.1, -0.8, 0.8)
             linear = -min(
                 0.18,
@@ -862,7 +905,12 @@ def compute_pre_stage_command(
             escape_orbit_y_m = float(escape_candidate["orbit_y_m"])
             angular = clamp((escape_yaw_error * 1.35) + (escape_orbit_y_m * 0.04), -0.8, 0.8)
             linear = -0.12 if abs(escape_yaw_error) <= 0.45 else DEFAULT_PRE_STAGE_ESCAPE_LINEAR_X_MPS
-        if abs(angular) < 0.20 and abs(escape_yaw_error) > 0.20:
+        floor_error_threshold_rad = (
+            DEFAULT_PRE_STAGE_ESCAPE_DIRECT_REVERSE_MIN_FLOOR_ERROR_RAD
+            if direct_reverse_escape_commit
+            else 0.20
+        )
+        if abs(angular) < 0.20 and abs(escape_yaw_error) > floor_error_threshold_rad:
             angular = 0.20 if escape_yaw_error >= 0.0 else -0.20
         return PlaceControlCommand(
             mode="pre_stage_escape_goal_side",
@@ -974,6 +1022,14 @@ def compute_pre_stage_command(
             angular_z=round(angular, 6),
             target_speed_scale=1.0,
             rationale="Drive to the coarse behind-ball pre-stage pose before handing off to fine staging.",
+        )
+    if deep_close_pre_stage_handoff:
+        return PlaceControlCommand(
+            mode="pre_stage_ready",
+            linear_x=0.0,
+            angular_z=0.0,
+            target_speed_scale=0.0,
+            rationale="Robot is deep behind the ball and close enough to hand off into fine staging.",
         )
     if yaw_error_deg > DEFAULT_PRE_STAGE_READY_YAW_ERROR_DEG:
         desired_push_yaw_error = normalize_angle(push_direction_yaw - robot_yaw)

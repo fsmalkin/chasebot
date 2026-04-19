@@ -15,6 +15,8 @@ from gather_mission_helpers import CaptureEnvelope  # noqa: E402
 from gather_mission_helpers import DEFAULT_MULTI_BALL_SPAWN_RADIUS_M  # noqa: E402
 from gather_mission_helpers import DEFAULT_PRE_STAGE_CLOSE_IN_READY_DISTANCE_M  # noqa: E402
 from gather_mission_helpers import DEFAULT_PRE_STAGE_CLOSE_IN_READY_LONGITUDINAL_PROJECTION_M  # noqa: E402
+from gather_mission_helpers import DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MIN_LATERAL_ERROR_M  # noqa: E402
+from gather_mission_helpers import DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MIN_PROJECTION_M  # noqa: E402
 from gather_mission_helpers import DEFAULT_PRE_STAGE_ESCAPE_LINEAR_X_MPS  # noqa: E402
 from gather_mission_helpers import DEFAULT_PRE_STAGE_ESCAPE_RELEASE_PROJECTION_M  # noqa: E402
 from gather_mission_helpers import DEFAULT_FIRST_CONTACT_ALIGNMENT_PASS_DEG  # noqa: E402
@@ -315,6 +317,60 @@ def test_pre_stage_arrival_snapshot_places_pose_farther_behind_ball_on_push_axis
     assert snapshot["pre_stage_pose_reached"] is True
 
 
+def test_pre_stage_deep_close_handoff_accepts_zero_fixture_and_rejects_adjacent_counterexamples():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    positive_robot_pose = {"x": 6.226953, "y": -0.165494, "yaw": -2.351599}
+
+    snapshot = pre_stage_arrival_snapshot(positive_robot_pose, ball_pose, zone=zone)
+    command = compute_pre_stage_command(positive_robot_pose, ball_pose, zone=zone)
+
+    assert snapshot is not None
+    assert snapshot["pre_stage_pose_distance_m"] == pytest.approx(0.205038, abs=1e-6)
+    assert snapshot["robot_longitudinal_projection_m"] == pytest.approx(-0.778953, abs=1e-6)
+    assert snapshot["robot_lateral_error_m"] == pytest.approx(0.165494, abs=1e-6)
+    assert snapshot["yaw_error_deg"] == pytest.approx(45.263302, abs=1e-6)
+    assert snapshot["deep_close_pre_stage_handoff"] is True
+    assert snapshot["pre_stage_pose_reached"] is True
+    assert command is not None
+    assert command.mode == "pre_stage_ready"
+
+    yaw_counterexample_pose = {"x": 6.226953, "y": -0.165494, "yaw": math.radians(-132.0)}
+    yaw_counterexample_snapshot = pre_stage_arrival_snapshot(yaw_counterexample_pose, ball_pose, zone=zone)
+    yaw_counterexample_command = compute_pre_stage_command(yaw_counterexample_pose, ball_pose, zone=zone)
+    assert yaw_counterexample_snapshot is not None
+    assert yaw_counterexample_snapshot["yaw_error_deg"] == pytest.approx(48.0, abs=1e-6)
+    assert yaw_counterexample_snapshot["deep_close_pre_stage_handoff"] is False
+    assert yaw_counterexample_snapshot["pre_stage_pose_reached"] is False
+    assert yaw_counterexample_command is not None
+    assert yaw_counterexample_command.mode == "pre_stage_align"
+
+    lateral_counterexample_pose = {"x": 6.24, "y": -0.19, "yaw": -2.351599}
+    lateral_counterexample_snapshot = pre_stage_arrival_snapshot(lateral_counterexample_pose, ball_pose, zone=zone)
+    lateral_counterexample_command = compute_pre_stage_command(lateral_counterexample_pose, ball_pose, zone=zone)
+    assert lateral_counterexample_snapshot is not None
+    assert lateral_counterexample_snapshot["pre_stage_pose_distance_m"] <= 0.22
+    assert lateral_counterexample_snapshot["robot_longitudinal_projection_m"] <= -0.75
+    assert lateral_counterexample_snapshot["robot_lateral_error_m"] == pytest.approx(0.19, abs=1e-6)
+    assert lateral_counterexample_snapshot["deep_close_pre_stage_handoff"] is False
+    assert lateral_counterexample_snapshot["pre_stage_pose_reached"] is False
+    assert lateral_counterexample_command is not None
+    assert lateral_counterexample_command.mode == "pre_stage_align"
+
+    projection_counterexample_pose = {"x": 6.188, "y": -0.12, "yaw": -2.351599}
+    projection_counterexample_snapshot = pre_stage_arrival_snapshot(projection_counterexample_pose, ball_pose, zone=zone)
+    projection_counterexample_command = compute_pre_stage_command(projection_counterexample_pose, ball_pose, zone=zone)
+    assert projection_counterexample_snapshot is not None
+    assert projection_counterexample_snapshot["pre_stage_pose_distance_m"] <= 0.22
+    assert projection_counterexample_snapshot["robot_longitudinal_projection_m"] == pytest.approx(-0.74, abs=1e-6)
+    assert projection_counterexample_snapshot["robot_lateral_error_m"] <= 0.18
+    assert projection_counterexample_snapshot["yaw_error_deg"] < 47.0
+    assert projection_counterexample_snapshot["deep_close_pre_stage_handoff"] is False
+    assert projection_counterexample_snapshot["pre_stage_pose_reached"] is False
+    assert projection_counterexample_command is not None
+    assert projection_counterexample_command.mode == "pre_stage_align"
+
+
 def test_pre_stage_and_stage_commands_back_off_from_near_front_pose():
     zone = build_zone_spec("corral_single_ball_place")
     ball_pose = {"x": 1.0, "y": 0.0}
@@ -469,8 +525,71 @@ def test_pre_stage_escape_goal_side_scores_reverse_friendly_flank_on_plus45_live
     assert snapshot["yaw_error_deg"] == pytest.approx(2.60435, abs=1e-6)
     assert pre_stage_command is not None
     assert pre_stage_command.mode == "pre_stage_escape_goal_side"
-    assert pre_stage_command.linear_x == pytest.approx(-0.12, abs=1e-6)
-    assert pre_stage_command.angular_z == pytest.approx(-0.153417, abs=1e-6)
+    assert pre_stage_command.linear_x == pytest.approx(-0.18, abs=1e-6)
+    assert pre_stage_command.angular_z == pytest.approx(-0.406477, abs=1e-6)
+    assert "behind-ball corridor" in pre_stage_command.rationale
+
+
+@pytest.mark.parametrize(
+    ("robot_pose", "expected_projection_m", "expected_lateral_m", "expected_yaw_deg"),
+    [
+        (
+            {"x": -0.086689, "y": 0.168418, "yaw": -2.268614},
+            4.687264,
+            1.877444,
+            5.017992,
+        ),
+        (
+            {"x": 0.219282, "y": 0.422286, "yaw": -2.454174},
+            4.291399,
+            1.840602,
+            5.613812,
+        ),
+        (
+            {"x": 1.135264, "y": 1.161706, "yaw": -2.471441},
+            3.120853,
+            1.715754,
+            6.603139,
+        ),
+        (
+            {"x": 0.599158, "y": 0.651349, "yaw": -2.570035},
+            3.860814,
+            1.733961,
+            12.252159,
+        ),
+        (
+            {"x": 0.750224, "y": 0.751473, "yaw": -2.626576},
+            3.683195,
+            1.697939,
+            15.491719,
+        ),
+    ],
+)
+def test_pre_stage_escape_goal_side_keeps_direct_reverse_committed_on_first_attempt_plus45_stall_samples(
+    robot_pose,
+    expected_projection_m,
+    expected_lateral_m,
+    expected_yaw_deg,
+):
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 4.555261, "y": 2.155261, "z": 0.05}
+
+    snapshot = pre_stage_arrival_snapshot(robot_pose, ball_pose, zone=zone)
+    pre_stage_command = compute_pre_stage_command(robot_pose, ball_pose, zone=zone)
+
+    assert snapshot is not None
+    assert snapshot["robot_on_goal_side"] is True
+    assert snapshot["robot_longitudinal_projection_m"] == pytest.approx(expected_projection_m, abs=1e-6)
+    assert snapshot["robot_lateral_error_m"] == pytest.approx(expected_lateral_m, abs=1e-6)
+    assert snapshot["yaw_error_deg"] == pytest.approx(expected_yaw_deg, abs=1e-6)
+    assert snapshot["robot_longitudinal_projection_m"] >= DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MIN_PROJECTION_M
+    assert snapshot["robot_lateral_error_m"] >= DEFAULT_PRE_STAGE_ESCAPE_EARLY_DIRECT_COMMIT_MIN_LATERAL_ERROR_M
+    assert pre_stage_command is not None
+    assert pre_stage_command.mode == "pre_stage_escape_goal_side"
+    assert pre_stage_command.linear_x == pytest.approx(-0.18, abs=1e-6)
+    assert pre_stage_command.angular_z < 0.0
+    assert abs(pre_stage_command.angular_z) >= 0.13
+    assert "behind-ball corridor" in pre_stage_command.rationale
 
 
 def test_pre_stage_escape_goal_side_replaces_stalled_goal_side_orbit():
@@ -483,6 +602,51 @@ def test_pre_stage_escape_goal_side_replaces_stalled_goal_side_orbit():
     assert pre_stage_command is not None
     assert pre_stage_command.mode == "pre_stage_escape_goal_side"
     assert pre_stage_command.linear_x < 0.0
+
+
+@pytest.mark.parametrize(
+    ("robot_pose", "expected_projection_m", "expected_lateral_m", "expected_distance_m", "expected_yaw_deg"),
+    [
+        (
+            {"x": 2.687926, "y": 2.345621, "yaw": -2.520141},
+            1.1858,
+            1.45501,
+            2.543151,
+            9.393443,
+        ),
+        (
+            {"x": 2.671368, "y": 2.336296, "yaw": -2.520368},
+            1.204102,
+            1.460125,
+            2.561096,
+            9.406449,
+        ),
+    ],
+)
+def test_pre_stage_escape_goal_side_commits_to_direct_reverse_on_repeated_plus45_stall_fixtures(
+    robot_pose,
+    expected_projection_m,
+    expected_lateral_m,
+    expected_distance_m,
+    expected_yaw_deg,
+):
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 4.555261, "y": 2.155261, "z": 0.05}
+
+    snapshot = pre_stage_arrival_snapshot(robot_pose, ball_pose, zone=zone)
+    pre_stage_command = compute_pre_stage_command(robot_pose, ball_pose, zone=zone)
+
+    assert snapshot is not None
+    assert snapshot["robot_on_goal_side"] is True
+    assert snapshot["robot_longitudinal_projection_m"] == pytest.approx(expected_projection_m, abs=1e-6)
+    assert snapshot["robot_lateral_error_m"] == pytest.approx(expected_lateral_m, abs=1e-6)
+    assert snapshot["pre_stage_pose_distance_m"] == pytest.approx(expected_distance_m, abs=1e-6)
+    assert snapshot["yaw_error_deg"] == pytest.approx(expected_yaw_deg, abs=1e-6)
+    assert pre_stage_command is not None
+    assert pre_stage_command.mode == "pre_stage_escape_goal_side"
+    assert pre_stage_command.linear_x == pytest.approx(-0.18, abs=1e-6)
+    assert abs(pre_stage_command.angular_z) > 0.20
+    assert "behind-ball corridor" in pre_stage_command.rationale
 
 
 def test_pre_stage_escape_goal_side_releases_into_reverse_traverse_once_robot_is_behind_ball_boundary():

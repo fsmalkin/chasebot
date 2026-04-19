@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
@@ -964,3 +965,74 @@ def test_run_dashboard_scenario_once_ignores_stale_error_result(monkeypatch):
 
     assert captured_paths == ["new-path"]
     assert summary["mission_verdict_path"] == "new-path"
+
+
+def test_main_passes_max_retries_per_target_to_direct_gather_runner(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(repeatability_runner, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(repeatability_runner, "wait_for_dashboard", lambda *args, **kwargs: None)
+    monkeypatch.setattr(repeatability_runner, "prepare_direct_environment", lambda args: {"session_id": "session-direct"})
+    monkeypatch.setattr(
+        repeatability_runner,
+        "summarize_gather_run",
+        lambda **kwargs: {
+            "run_index": kwargs["run_index"],
+            "return_code": kwargs["return_code"],
+            "pass": False,
+            "session_id": "",
+            "scenario_id": "corral_single_ball_place",
+            "mission_root": "",
+            "summary_path": "",
+            "mission_verdict_path": "",
+            "target_results_path": "",
+            "scorecard_path": "",
+            "placed_count": 0,
+            "capture_loss_count": 0,
+            "surface_profile": "short_turf",
+            "final_settle_distance_m": 0.0,
+            "max_overshoot_distance_m": 0.0,
+            "settle_time_s": 0.0,
+            "release_recontact_count": 0,
+            "mission_time_s": 0.0,
+            "route_order": [],
+            "target_results": [],
+            "mission_verdict": {},
+            "summary": {},
+        },
+    )
+    monkeypatch.setattr(repeatability_runner, "_enrich_run_with_approach_side_fields", lambda run_summary: run_summary)
+    monkeypatch.setattr(repeatability_runner, "append_jsonl", lambda *args, **kwargs: None)
+    monkeypatch.setattr(repeatability_runner, "write_json", lambda *args, **kwargs: None)
+    monkeypatch.setattr(repeatability_runner, "summarize_runs", lambda runs: {})
+    monkeypatch.setattr(repeatability_runner, "_approach_side_rollup", lambda runs: {})
+    monkeypatch.setattr(repeatability_runner, "promotion_gate_pass_for_runs", lambda runs, mode: False)
+
+    subprocess_calls: list[list[str]] = []
+
+    def fake_subprocess_run(command, cwd, capture_output, text, check):
+        subprocess_calls.append(list(command))
+        return SimpleNamespace(stdout="", stderr="", returncode=0)
+
+    monkeypatch.setattr(repeatability_runner.subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        [
+            "repeatability",
+            "--execution-mode",
+            "direct",
+            "--runs",
+            "1",
+            "--provider",
+            "local_stub",
+            "--max-retries-per-target",
+            "0",
+        ],
+    )
+
+    exit_code = repeatability_runner.main()
+
+    assert exit_code == 2
+    assert len(subprocess_calls) == 1
+    assert "--max-retries-per-target" in subprocess_calls[0]
+    retry_index = subprocess_calls[0].index("--max-retries-per-target")
+    assert subprocess_calls[0][retry_index + 1] == "0"
