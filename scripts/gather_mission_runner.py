@@ -347,7 +347,7 @@ class GatherMissionRunner:
         self.world_file = clean_text(args.world_file)
         self.surface_profile = clean_text(args.surface_profile, "baseline")
         self.gather_control_family = clean_text(getattr(args, "gather_control_family", "baseline"), "baseline").lower()
-        if self.gather_control_family not in {"baseline", "short_horizon_v1"}:
+        if self.gather_control_family not in {"baseline", "short_horizon_v1", "short_horizon_v2"}:
             self.gather_control_family = "baseline"
         self.visit_runtime_state_path = resolve_visit_runtime_state_path(args.visit_runtime_json)
         self.gather_runtime_state_path = resolve_gather_runtime_state_path(args.gather_runtime_json)
@@ -366,14 +366,34 @@ class GatherMissionRunner:
         self,
         *,
         strategy_name: str = "",
+        objective_name: str = "",
         progress_score: float | None = None,
         stall_s: float | None = None,
+        projected_projection_gain: float | None = None,
+        projected_lateral_gain: float | None = None,
+        projected_distance_gain: float | None = None,
     ) -> dict[str, Any]:
         return {
             "controller_family": self.gather_control_family,
             "strategy_name": clean_text(strategy_name),
+            "objective_name": clean_text(objective_name),
             "progress_score": round(float(progress_score), 6) if progress_score is not None else None,
             "stall_s": round(float(stall_s), 6) if stall_s is not None else None,
+            "projected_projection_gain": (
+                round(float(projected_projection_gain), 6)
+                if projected_projection_gain is not None
+                else None
+            ),
+            "projected_lateral_gain": (
+                round(float(projected_lateral_gain), 6)
+                if projected_lateral_gain is not None
+                else None
+            ),
+            "projected_distance_gain": (
+                round(float(projected_distance_gain), 6)
+                if projected_distance_gain is not None
+                else None
+            ),
         }
 
     def _persist_visit_runtime_state(self) -> None:
@@ -1550,8 +1570,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         last_failure_reason = ""
         latest_pre_capture_command_mode = ""
         short_horizon_strategy_name = ""
+        short_horizon_objective_name = ""
         short_horizon_best_progress_score: float | None = None
         short_horizon_last_progress_monotonic = pre_stage_started_monotonic
+        short_horizon_strategy_started_monotonic = pre_stage_started_monotonic
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -1569,8 +1591,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 else None
             )
             pre_stage_strategy_name = ""
+            pre_stage_objective_name = ""
             pre_stage_progress_score: float | None = None
             pre_stage_stall_s: float | None = None
+            pre_stage_projected_projection_gain: float | None = None
+            pre_stage_projected_lateral_gain: float | None = None
+            pre_stage_projected_distance_gain: float | None = None
             pre_stage_ready_signal = False
             if isinstance(pre_stage_snapshot, dict):
                 pre_stage_pose_world = (
@@ -1592,7 +1618,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 if bool(pre_stage_snapshot.get("entered_goal_side_before_capture", False)):
                     last_failure_reason = "entered_goal_side_before_capture"
             if (
-                self.gather_control_family == "short_horizon_v1"
+                self.gather_control_family in {"short_horizon_v1", "short_horizon_v2"}
                 and robot_pose
                 and ball_pose
                 and isinstance(pre_stage_snapshot, dict)
@@ -1602,17 +1628,24 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     ball_pose or {},
                     zone=self.zone,
                     snapshot=pre_stage_snapshot,
+                    control_family=self.gather_control_family,
                     previous_strategy_name=short_horizon_strategy_name,
                     stall_s=max(0.0, now_monotonic - short_horizon_last_progress_monotonic),
+                    strategy_elapsed_s=max(0.0, now_monotonic - short_horizon_strategy_started_monotonic),
                 )
                 if decision.active and decision.command is not None:
                     pre_stage_command = decision.command
                     pre_stage_strategy_name = str(decision.strategy_name or "")
+                    pre_stage_objective_name = str(decision.objective_name or "")
                     pre_stage_progress_score = (
                         float(decision.progress_score)
                         if decision.progress_score is not None
                         else None
                     )
+                    if decision.projection is not None:
+                        pre_stage_projected_projection_gain = float(decision.projection.projected_projection_gain)
+                        pre_stage_projected_lateral_gain = float(decision.projection.projected_lateral_gain)
+                        pre_stage_projected_distance_gain = float(decision.projection.projected_distance_gain)
                     if (
                         pre_stage_progress_score is not None
                         and (
@@ -1623,9 +1656,14 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         short_horizon_best_progress_score = pre_stage_progress_score
                         short_horizon_last_progress_monotonic = now_monotonic
                     pre_stage_stall_s = max(0.0, now_monotonic - short_horizon_last_progress_monotonic)
+                    if pre_stage_strategy_name != short_horizon_strategy_name:
+                        short_horizon_strategy_started_monotonic = now_monotonic
                     short_horizon_strategy_name = pre_stage_strategy_name
+                    short_horizon_objective_name = pre_stage_objective_name
                 else:
                     short_horizon_strategy_name = ""
+                    short_horizon_objective_name = ""
+                    short_horizon_strategy_started_monotonic = now_monotonic
             if pre_stage_command is not None:
                 latest_pre_capture_command_mode = str(pre_stage_command.mode)
             pre_stage_manager_decision = decide_gather_manager_directive(
@@ -1671,8 +1709,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "selected_command": pre_stage_command.to_dict() if pre_stage_command else {},
                     **self._control_debug_fields(
                         strategy_name=pre_stage_strategy_name,
+                        objective_name=pre_stage_objective_name,
                         progress_score=pre_stage_progress_score,
                         stall_s=pre_stage_stall_s,
+                        projected_projection_gain=pre_stage_projected_projection_gain,
+                        projected_lateral_gain=pre_stage_projected_lateral_gain,
+                        projected_distance_gain=pre_stage_projected_distance_gain,
                     ),
                 },
             )
@@ -4736,7 +4778,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--place-timeout-s", type=float, default=35.0)
     parser.add_argument("--pursuit-settle-timeout-s", type=float, default=8.0)
     parser.add_argument("--max-retries-per-target", type=int, default=2)
-    parser.add_argument("--gather-control-family", choices=("baseline", "short_horizon_v1"), default="baseline")
+    parser.add_argument("--gather-control-family", choices=("baseline", "short_horizon_v1", "short_horizon_v2"), default="baseline")
     parser.add_argument("--max-place-loss-revisits", type=int, default=1)
     parser.add_argument("--target-model-name", default=DEFAULT_TARGET_MODEL_NAME)
     parser.add_argument("--target-model-sdf", default=str(DEFAULT_TARGET_MODEL_SDF))

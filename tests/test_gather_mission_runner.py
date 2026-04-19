@@ -656,10 +656,10 @@ def test_pre_stage_target_leaves_repeated_plus45_escape_stall_and_hands_off(tmp_
     assert modes.index("pre_stage_escape_goal_side") < modes.index("pre_stage_traverse")
 
 
-def test_pre_stage_target_records_short_horizon_debug_fields(tmp_path, monkeypatch):
+def test_pre_stage_target_records_short_horizon_v2_debug_fields(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.poll_s = 0.1
-    runner.gather_control_family = "short_horizon_v1"
+    runner.gather_control_family = "short_horizon_v2"
     mission_root = tmp_path / "artifacts" / "mission"
     mission_root.mkdir(parents=True, exist_ok=True)
     target = runner.targets[0]
@@ -707,10 +707,14 @@ def test_pre_stage_target_records_short_horizon_debug_fields(tmp_path, monkeypat
     assert payload["pre_stage_pose_reached"] is True
     assert state_rows
     first_row = state_rows[0]
-    assert first_row["controller_family"] == "short_horizon_v1"
+    assert first_row["controller_family"] == "short_horizon_v2"
     assert str(first_row["strategy_name"])
+    assert str(first_row["objective_name"])
     assert isinstance(first_row["progress_score"], float)
     assert isinstance(first_row["stall_s"], float)
+    assert isinstance(first_row["projected_projection_gain"], float)
+    assert isinstance(first_row["projected_lateral_gain"], float)
+    assert isinstance(first_row["projected_distance_gain"], float)
 
 
 def test_run_target_retries_fresh_approach_after_capture_entry_failure(tmp_path, monkeypatch):

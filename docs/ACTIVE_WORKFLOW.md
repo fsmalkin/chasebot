@@ -381,9 +381,9 @@ Matrix contract:
 1. runs `corral_single_ball_place` in direct repeatability mode
 2. treats the named cases as a coverage and regression harness, not the design target for gather tuning
 3. uses `short_turf` and the current 10-foot multi-ball arc layout (`3.048 m` from corral center) with primary placements at `+45`, `0`, and `-45`; the `180 backside` case stays as a guard case
-4. forwards direct-mode overrides through `gather_mission_repeatability_runner.py` into `gather_mission_runner.py`, including `--max-retries-per-target` and `--gather-control-family baseline|short_horizon_v1`
+4. forwards direct-mode overrides through `gather_mission_repeatability_runner.py` into `gather_mission_runner.py`, including `--max-retries-per-target` and `--gather-control-family baseline|short_horizon_v1|short_horizon_v2`
 5. keeps `gather_manager_helpers.py` as the bounded phase owner for `pre_stage -> stage -> capture_entry -> capture`, while `gather_mission_helpers.py` retains the baseline local steering controllers
-6. uses `gather_short_horizon_helpers.py` only for the experimental `short_horizon_v1` family, and only for early `pre_stage` goal-side escape / behind-ball repositioning before the baseline late handoff logic resumes
+6. uses `gather_short_horizon_helpers.py` only for the experimental `short_horizon_v1` and `short_horizon_v2` families, and only for early `pre_stage` goal-side escape / behind-ball repositioning before the baseline late handoff logic resumes
 7. proves robust cross-phase behavior through the `capture_entry_ready` handoff, not just one threshold band
 8. emits a matrix campaign summary plus one repeatability campaign per case
 9. is the offline gate for the gather path; dashboard UAT stays blocked until this matrix and nearby geometry sweeps are green, while `visit_route_planning` remains the protected regression floor
