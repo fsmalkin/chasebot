@@ -49,6 +49,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--execution-mode", choices=("dashboard_scenario", "direct"), default="dashboard_scenario")
     parser.add_argument("--promotion-gate-mode", choices=("strict", "pass_only"), default="pass_only")
     parser.add_argument("--max-retries-per-target", type=int, default=2)
+    parser.add_argument("--gather-control-family", choices=("baseline", "short_horizon_v1"), default="baseline")
     return parser.parse_args()
 
 
@@ -962,6 +963,7 @@ def main() -> int:
             if args.target_layout_json.strip():
                 command.extend(["--target-layout-json", args.target_layout_json.strip()])
             command.extend(["--max-retries-per-target", str(args.max_retries_per_target)])
+            command.extend(["--gather-control-family", str(args.gather_control_family)])
             proc = subprocess.run(
                 command,
                 cwd=str(REPO_ROOT),

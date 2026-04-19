@@ -1026,6 +1026,8 @@ def test_main_passes_max_retries_per_target_to_direct_gather_runner(tmp_path: Pa
             "local_stub",
             "--max-retries-per-target",
             "0",
+            "--gather-control-family",
+            "short_horizon_v1",
         ],
     )
 
@@ -1036,3 +1038,6 @@ def test_main_passes_max_retries_per_target_to_direct_gather_runner(tmp_path: Pa
     assert "--max-retries-per-target" in subprocess_calls[0]
     retry_index = subprocess_calls[0].index("--max-retries-per-target")
     assert subprocess_calls[0][retry_index + 1] == "0"
+    assert "--gather-control-family" in subprocess_calls[0]
+    family_index = subprocess_calls[0].index("--gather-control-family")
+    assert subprocess_calls[0][family_index + 1] == "short_horizon_v1"

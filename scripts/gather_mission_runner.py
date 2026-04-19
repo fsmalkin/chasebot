@@ -31,6 +31,7 @@ from llm_supervisor_core import utc_now
 from llm_supervisor_core import write_json
 from gather_manager_helpers import GatherManagerState
 from gather_manager_helpers import decide_gather_manager_directive
+from gather_short_horizon_helpers import decide_short_horizon_pre_stage_command
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_MAX_WAIT_S
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
@@ -345,6 +346,9 @@ class GatherMissionRunner:
         self.docker = choose_docker_cli()
         self.world_file = clean_text(args.world_file)
         self.surface_profile = clean_text(args.surface_profile, "baseline")
+        self.gather_control_family = clean_text(getattr(args, "gather_control_family", "baseline"), "baseline").lower()
+        if self.gather_control_family not in {"baseline", "short_horizon_v1"}:
+            self.gather_control_family = "baseline"
         self.visit_runtime_state_path = resolve_visit_runtime_state_path(args.visit_runtime_json)
         self.gather_runtime_state_path = resolve_gather_runtime_state_path(args.gather_runtime_json)
         self.visit_runtime_state: dict[str, Any] = {}
@@ -357,6 +361,20 @@ class GatherMissionRunner:
         )
         self._event_keys: set[str] = set()
         self._started_here = False
+
+    def _control_debug_fields(
+        self,
+        *,
+        strategy_name: str = "",
+        progress_score: float | None = None,
+        stall_s: float | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "controller_family": self.gather_control_family,
+            "strategy_name": clean_text(strategy_name),
+            "progress_score": round(float(progress_score), 6) if progress_score is not None else None,
+            "stall_s": round(float(stall_s), 6) if stall_s is not None else None,
+        }
 
     def _persist_visit_runtime_state(self) -> None:
         write_json(self.visit_runtime_state_path, self.visit_runtime_state)
@@ -1132,6 +1150,7 @@ fi
                     "final_all_targets_inside_retrieval_corral": bool(snapshot.get("final_all_targets_inside_retrieval_corral", False)),
                     "latest_all_targets_stopped": latest_all_targets_stopped,
                     "stable_window_complete": stable_window_complete,
+                    **self._control_debug_fields(),
                 },
             )
             self._update_gather_runtime_state(
@@ -1530,6 +1549,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         push_direction_yaw_deg = 0.0
         last_failure_reason = ""
         latest_pre_capture_command_mode = ""
+        short_horizon_strategy_name = ""
+        short_horizon_best_progress_score: float | None = None
+        short_horizon_last_progress_monotonic = pre_stage_started_monotonic
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -1546,6 +1568,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 if robot_pose and ball_pose
                 else None
             )
+            pre_stage_strategy_name = ""
+            pre_stage_progress_score: float | None = None
+            pre_stage_stall_s: float | None = None
             pre_stage_ready_signal = False
             if isinstance(pre_stage_snapshot, dict):
                 pre_stage_pose_world = (
@@ -1566,6 +1591,41 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     pre_stage_ready_started_monotonic = None
                 if bool(pre_stage_snapshot.get("entered_goal_side_before_capture", False)):
                     last_failure_reason = "entered_goal_side_before_capture"
+            if (
+                self.gather_control_family == "short_horizon_v1"
+                and robot_pose
+                and ball_pose
+                and isinstance(pre_stage_snapshot, dict)
+            ):
+                decision = decide_short_horizon_pre_stage_command(
+                    robot_pose,
+                    ball_pose or {},
+                    zone=self.zone,
+                    snapshot=pre_stage_snapshot,
+                    previous_strategy_name=short_horizon_strategy_name,
+                    stall_s=max(0.0, now_monotonic - short_horizon_last_progress_monotonic),
+                )
+                if decision.active and decision.command is not None:
+                    pre_stage_command = decision.command
+                    pre_stage_strategy_name = str(decision.strategy_name or "")
+                    pre_stage_progress_score = (
+                        float(decision.progress_score)
+                        if decision.progress_score is not None
+                        else None
+                    )
+                    if (
+                        pre_stage_progress_score is not None
+                        and (
+                            short_horizon_best_progress_score is None
+                            or pre_stage_progress_score > short_horizon_best_progress_score + 1.0e-6
+                        )
+                    ):
+                        short_horizon_best_progress_score = pre_stage_progress_score
+                        short_horizon_last_progress_monotonic = now_monotonic
+                    pre_stage_stall_s = max(0.0, now_monotonic - short_horizon_last_progress_monotonic)
+                    short_horizon_strategy_name = pre_stage_strategy_name
+                else:
+                    short_horizon_strategy_name = ""
             if pre_stage_command is not None:
                 latest_pre_capture_command_mode = str(pre_stage_command.mode)
             pre_stage_manager_decision = decide_gather_manager_directive(
@@ -1609,6 +1669,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "pre_stage": pre_stage_snapshot or {},
                     "manager_directive": pre_stage_manager_decision.directive,
                     "selected_command": pre_stage_command.to_dict() if pre_stage_command else {},
+                    **self._control_debug_fields(
+                        strategy_name=pre_stage_strategy_name,
+                        progress_score=pre_stage_progress_score,
+                        stall_s=pre_stage_stall_s,
+                    ),
                 },
             )
             if (
@@ -1842,6 +1907,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "manager_directive": stage_manager_decision.directive,
                         "selected_command": stage_command.to_dict() if stage_command else {},
                         "ball_motion_m": ball_motion_m,
+                        **self._control_debug_fields(),
                     },
                 )
                 if (
@@ -2004,6 +2070,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "manager_directive": capture_entry_manager_decision.directive,
                         "selected_command": capture_entry_command.to_dict() if capture_entry_command else {},
                         "ball_motion_m": ball_motion_m,
+                        **self._control_debug_fields(),
                     },
                 )
                 if (
@@ -2088,6 +2155,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "capture": capture.to_dict() if capture else {},
                     "zone_score": zone_score.to_dict() if zone_score else {},
                     "ball_motion_m": ball_motion_m,
+                    **self._control_debug_fields(),
                 },
             )
             zone_entry_handoff_ready = bool(
@@ -2629,6 +2697,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "release_gate_blocked_reason": clean_text(release_gate_blocked_reason, "none"),
                     "release_recontact_count": int(release_recontact_count),
                     "ball_motion_m": ball_motion_m,
+                    **self._control_debug_fields(),
                 },
             )
             if release_monitoring_active and release_origin_monotonic is not None:
@@ -4667,6 +4736,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--place-timeout-s", type=float, default=35.0)
     parser.add_argument("--pursuit-settle-timeout-s", type=float, default=8.0)
     parser.add_argument("--max-retries-per-target", type=int, default=2)
+    parser.add_argument("--gather-control-family", choices=("baseline", "short_horizon_v1"), default="baseline")
     parser.add_argument("--max-place-loss-revisits", type=int, default=1)
     parser.add_argument("--target-model-name", default=DEFAULT_TARGET_MODEL_NAME)
     parser.add_argument("--target-model-sdf", default=str(DEFAULT_TARGET_MODEL_SDF))

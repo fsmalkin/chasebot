@@ -32,6 +32,7 @@ def _make_args(tmp_path: Path) -> SimpleNamespace:
         place_timeout_s=1.0,
         pursuit_settle_timeout_s=0.01,
         max_retries_per_target=0,
+        gather_control_family="baseline",
         max_place_loss_revisits=1,
         target_model_name="visit_mission_target",
         target_model_sdf=str(tmp_path / "ball.sdf"),
@@ -653,6 +654,63 @@ def test_pre_stage_target_leaves_repeated_plus45_escape_stall_and_hands_off(tmp_
     assert "pre_stage_escape_goal_side" in modes
     assert "pre_stage_traverse" in modes
     assert modes.index("pre_stage_escape_goal_side") < modes.index("pre_stage_traverse")
+
+
+def test_pre_stage_target_records_short_horizon_debug_fields(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    runner.gather_control_family = "short_horizon_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    ball_pose = {"x": 4.555261, "y": 2.155261, "z": 0.05}
+    early_escape_pose = {"x": -0.056707, "y": 0.197428, "yaw": -2.426363}
+    close_ready_pose = {"x": 4.852057, "y": 2.736506, "yaw": -2.97762}
+    sequence = [
+        early_escape_pose,
+        close_ready_pose,
+        close_ready_pose,
+        close_ready_pose,
+        close_ready_pose,
+    ]
+    index = {"value": 0}
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        current = sequence[min(index["value"], len(sequence) - 1)]
+        index["value"] += 1
+        return {}, current, ball_pose
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: state_rows.append(dict(payload)))
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-short-horizon",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert pre_stage_pass is True
+    assert payload["pre_stage_pose_reached"] is True
+    assert state_rows
+    first_row = state_rows[0]
+    assert first_row["controller_family"] == "short_horizon_v1"
+    assert str(first_row["strategy_name"])
+    assert isinstance(first_row["progress_score"], float)
+    assert isinstance(first_row["stall_s"], float)
 
 
 def test_run_target_retries_fresh_approach_after_capture_entry_failure(tmp_path, monkeypatch):
