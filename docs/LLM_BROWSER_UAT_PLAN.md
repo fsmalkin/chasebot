@@ -502,25 +502,30 @@ Latest evidence snapshot:
 16. a fresh-only `plus45` classification still fails `5/5` in `pre_stage_timeout` even after retry-oriented escape fixes, which shows the current controller can satisfy local escape objectives while still failing the global behind-ball objective:
    - `artifacts/session/live_plus45_fresh_only_hysteresis_20260419/gather_mission_repeatability/campaign_run_summary.json`
    - `artifacts/session/20260419T034555177813Z/gather_mission/20260419T034606Z/state_history.jsonl`
-17. the active blocker is therefore no longer a single threshold; it is a mismatch between local controller objectives and the global gather objective across the shared path
-18. fresh failing three-ball checkpoint evidence:
+17. the deeper truth-state escape oracle still does not produce a stable goal-side exit on the real fresh-only `plus45` fixtures, even with an `8.0 s`, depth-3, wider-macro search:
+   - `artifacts/session/live_plus45_escape_oracle_deep_20260419/gather_escape_oracle/oracle_summary.json`
+   - `artifacts/session/live_plus45_escape_oracle_deep_20260419/gather_escape_oracle/scorecard.md`
+18. the active blocker is therefore no longer a single threshold; it is a mismatch between the current simplified escape formulation and the real geometric escape maneuver needed by the shared path
+19. fresh failing three-ball checkpoint evidence:
     - `artifacts/session/20260417T040027Z/gather_mission_repeatability/campaign_run_summary.json`
 
 ### Preferred Controller Families
 
 Priority order for the next deterministic gather experiments:
 
-1. short-horizon deterministic action scoring or rollout over a bounded `1-2 s` window
-2. progress-based strategy management that switches on measured stall or improvement instead of phase labels alone
-3. region or funnel targets that tighten with distance instead of exact `pre_stage` point targets
-4. reset-style recovery that deliberately retreats to a known-safe reacquire shape when progress stalls
-5. contact-centric pushing objectives that optimize desired ball contact and ball motion toward the corral
-6. ball-to-zone local-frame normalization so `+45`, `0`, and `-45` reduce to the same mirrored problem where possible
+1. a dedicated truth-state escape sandbox that solves only the early “wrong side of ball -> safe behind-ball region” problem before touching the live controller again
+2. region or funnel targets that tighten with distance instead of exact `pre_stage` point targets
+3. reset-style recovery that deliberately retreats to a known-safe reacquire shape when progress stalls
+4. short-horizon deterministic action scoring or rollout over a bounded `1-2 s` window, but only after the sandbox proves a stable escape family exists
+5. progress-based strategy management that switches on measured stall or improvement instead of phase labels alone
+6. contact-centric pushing objectives that optimize desired ball contact and ball motion toward the corral
+7. ball-to-zone local-frame normalization so `+45`, `0`, and `-45` reduce to the same mirrored problem where possible
 
 Sidecar experiment tools that may help but should not become the primary controller shape:
 
 1. lightweight forward-model prediction in shadow mode
 2. automatic gain or threshold search after a better controller family exists
+3. the current helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2`, which should stay frozen as control lanes until the sandbox proves a new family is worth distilling
 
 Deprioritized options for this phase:
 
@@ -532,10 +537,11 @@ Deprioritized options for this phase:
 
 Planned non-operator fan-out lanes for this slice:
 
-1. Lane A: current helper-plus-manager path as the control baseline, with only minimal safety fixes
-2. Lane B: progress-based deterministic strategy manager above the existing local controller
-3. Lane C: short-horizon deterministic action scoring or rollout for escape and behind-ball recovery
-4. Lane D: region or funnel targets plus reset-style recovery and contact-centric variants
+1. Lane A: current helper-plus-manager path as the frozen control baseline, with only minimal safety fixes
+2. Lane B: frozen `short_horizon_v1` and `short_horizon_v2` as experimental controls, not promotion candidates
+3. Lane C: dedicated truth-state escape sandbox plus oracle work over fresh-only `plus45`
+4. Lane D: controller distillation only after Lane C proves stable goal-side exit is feasible
+5. Lane E: region or funnel targets plus reset-style recovery and contact-centric variants after the sandbox result is understood
 
 Rules for these lanes:
 
@@ -543,6 +549,8 @@ Rules for these lanes:
 2. dashboard/operator validation remains serial
 3. named-case threshold wins are insufficient for promotion if neighboring geometry or post-handoff behavior still fails
 4. automatic gain search and lightweight forward-model experiments are sidecar tools, not promotion-worthy controller families on their own
+5. no new live matrix, `zero`, `minus45`, or `backside180` runs should consume time while fresh-only `plus45` is still red in `pre_stage`
+6. no new controller family should be promoted from oracle or sandbox evidence unless it achieves stable goal-side exit, not just projection improvement
 
 Shared promotion criteria across all lanes:
 
@@ -590,10 +598,11 @@ Immediate next step:
 1. keep the outer `5 ft` retrieval corral and inner `0.20 m` control ring fixed
 2. treat the current one-ball behavior as the baseline to preserve
 3. keep `gather_three_ball_zone` on the same practical retrieval model while keeping `visit_route_planning` green
-4. keep the current helper-plus-manager path as the control lane rather than the default promotion candidate
-5. treat the goal-side matrix as a coverage and regression harness, then extend it with small geometry perturbation sweeps
-6. fan out the non-operator experiment lanes while preserving a serial operator proof surface
-7. preserve the faster between-ball handoff while redesigning the shared gather transitions
+4. keep the current helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2` frozen as comparison lanes rather than default promotion candidates
+5. build a dedicated truth-state escape sandbox that targets only the fresh-only `plus45` goal-side exit problem
+6. treat the next deliverable as a sandbox/oracle feasibility result, not another live controller lane
+7. only if that sandbox proves stable goal-side exit is feasible should a new live controller family be distilled
+8. preserve the faster between-ball handoff while the shared gather transitions stay frozen
 
 ### Deferred Follow-Ons
 

@@ -165,6 +165,8 @@ Planned near-term extension for gather:
 - it may own region or funnel targets instead of exact point targets when that better preserves generalization
 - it may host a deterministic short-horizon action scorer or rollout planner for escape and behind-ball recovery as long as the candidate set, scoring terms, and horizon remain bounded and auditable
 - it may use reset-style recovery to retreat to a known-safe reacquire shape when measured progress stalls
+- before promoting a new live gather strategy family, it should be informed by an offline truth-state escape sandbox or oracle that proves stable goal-side exit is actually feasible from the failing geometries
+- the current helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2` should be treated as frozen comparison lanes until that offline proof exists
 - it must not publish real-time steering directly and must not replace low-level control loops
 
 Not planned for the active gather path:

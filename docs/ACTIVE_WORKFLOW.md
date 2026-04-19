@@ -405,11 +405,16 @@ Oracle contract:
    - `mid_stall`
    - `late_stall`
    - `terminal_stall`
-3. performs a static-ball, static-zone, truth-state rollout with a deterministic macro library over the early pre-contact escape problem only
-4. ranks sequences lexicographically by goal-side clearance first, then lateral gain, projection gain, and pre-stage distance gain
-5. treats any sequence that still ends goal-side as non-promoting even if projection improves
-6. emits one oracle summary bundle plus a human-readable scorecard under the session artifact root
-7. gates any new escape-family distillation work; if the representative fixtures do not show feasible goal-side-clearing sequences, the blocker should be treated as geometry or horizon limited rather than another threshold seam
+3. defaults to the deeper `deep_escape_v1` search profile through the wrapper:
+   - horizon `8.0 s`
+   - step `0.5 s`
+   - depth `3`
+4. performs a static-ball, static-zone, truth-state rollout with a deterministic macro library over the early pre-contact escape problem only
+5. ranks sequences lexicographically by stable goal-side clearance first, then lateral gain, projection gain, and pre-stage distance gain
+6. treats any sequence that does not maintain goal-side exit through the final stability window as non-promoting even if projection improves
+7. classifies representative fixtures as `clearable`, `near_clear`, or `not_clearable`
+8. emits one oracle summary bundle plus a human-readable scorecard under the session artifact root
+9. gates any new escape-family distillation work; if the representative fixtures do not show feasible stable goal-side-clearing sequences, the blocker should be treated as geometry or horizon limited rather than another threshold seam
 
 ## Headless Milestone Path (Current Preferred)
 

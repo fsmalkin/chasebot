@@ -141,7 +141,11 @@ Fresh-only April 19, 2026 `plus45` evidence then stayed red `5/5` in
 current controller can satisfy local branch objectives while still failing the
 global behind-ball objective. The goal-side matrix remains the first offline
 coverage harness, and the next gate extends beyond those named cases into
-nearby geometry sweeps and controller-family comparisons.
+nearby geometry sweeps and controller-family comparisons. The deeper April 19,
+2026 truth-state escape oracle then still produced `0/5` stable goal-side
+clears on the representative fresh-only `plus45` fixtures, which means the
+next move should be a richer offline escape sandbox rather than another live
+controller-family promotion attempt.
 
 Surface and ball fidelity remain an open realism question, and the calibration
 harness remains useful, but that thread no longer blocks the roadmap. The
@@ -396,6 +400,9 @@ Current truth:
    - `artifacts/session/20260418T212252235403Z/gather_mission/20260418T212303Z/state_history.jsonl`
 13. fresh failing three-ball checkpoint evidence still exists:
    - `artifacts/session/20260417T040027Z/gather_mission_repeatability/campaign_run_summary.json`
+14. the deeper truth-state escape oracle still reports `0/5` stable clears and only `near_clear` evidence on the primary fresh-only `plus45` fixtures:
+   - `artifacts/session/live_plus45_escape_oracle_deep_20260419/gather_escape_oracle/oracle_summary.json`
+   - `artifacts/session/live_plus45_escape_oracle_deep_20260419/gather_escape_oracle/scorecard.md`
 
 Acceptance:
 
@@ -409,39 +416,40 @@ Acceptance:
 8. already retrieved balls remain in the world and behave as normal obstacles or passive stopping aids
 9. one-ball baseline behavior is not regressed while multi-ball gather lands
 
-### Step 6: Deterministic Gather Control Families And Parallel Experiment Lanes
+### Step 6: Truth-State Escape Sandbox And Controller Distillation Gate
 
-Goal: compare bounded deterministic gather-control families above the local
-gather heuristics and converge on a more general design before dashboard
-promotion.
+Goal: prove the early gather escape maneuver offline in a richer truth-state
+sandbox before promoting any new live gather controller family.
 
 Why this comes next:
 
-1. the current evidence says the problem is not just at one threshold seam; the controller is optimizing local branch goals instead of the global gather objective
-2. a bounded higher-level deterministic layer can absorb retry, recovery, and handoff decisions without moving fast control upward
-3. different deterministic controller families should be compared directly instead of assuming the current threshold path is the only viable shape
-4. serial dashboard proof should remain the trust surface while experiments fan out elsewhere
+1. the deeper oracle already showed that a stronger but still simplified escape search can improve projection without producing a stable goal-side exit
+2. another live controller-family tweak would still be under-informed unless the real escape maneuver is first shown feasible in truth state
+3. the escape problem should be solved first as “wrong side of ball -> safe behind-ball region,” not as another pre-stage point-target patch
+4. serial dashboard proof should remain the trust surface while the richer offline sandbox does the discovery work
 5. LLM gather control should stay deferred until deterministic gather mechanics are stable enough to benchmark fairly
 
 Work:
 
-1. keep the current helper-plus-manager path as the control baseline rather than the assumed promotion target
-2. add a bounded progress-based deterministic gather-manager concept at the executor/orchestration layer
-3. evaluate a short-horizon deterministic action scorer or rollout planner for goal-side escape and behind-ball recovery
-4. evaluate region or funnel targets instead of exact `pre_stage` point targets
-5. evaluate reset-style recovery and contact-centric objective variants, ideally in a symmetry-normalized ball-to-zone frame
-6. use lightweight forward-model prediction or automatic gain search only as sidecar tooling, not as the primary promoted controller family
-7. run formal non-operator experiment lanes around those controller families
-8. keep operator/dashboard validation serial; fan-out belongs in headless/direct repeatability and matrix-style lanes only
-9. permit gather-brain exploration only in shadow mode until one deterministic family is clearly stable
-10. compare all lanes with shared scorecards and promotion criteria
+1. keep the current helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2` frozen as control lanes rather than promotion targets
+2. build a dedicated truth-state escape sandbox that covers only the early pre-contact gather problem
+3. make that sandbox richer than the current oracle:
+   - longer horizon
+   - broader macro families including reset and loop-around behavior
+   - behind-ball region targets instead of exact pre-stage points
+   - explicit stable goal-side exit criteria
+4. use the sandbox to answer whether fresh-only `plus45` starts are actually clearable under the current geometry and simplified dynamics assumptions
+5. only if the sandbox proves stable goal-side exit is feasible should a new deterministic live controller family be distilled
+6. if the sandbox still fails, classify the blocker as a geometry, horizon, or modeling problem rather than another controller-family miss
+7. keep operator/dashboard validation serial; no new matrix or neighboring-case live runs should spend time while fresh-only `plus45` remains red in `pre_stage`
+8. permit gather-brain exploration only in shadow mode until one deterministic family is clearly stable
 
 Acceptance:
 
-1. a shared comparison bundle exists across the controller families and experiment lanes
-2. the promoted lane improves cross-phase stability without regressing the protected route-planning floor or the one-ball baseline
-3. fresh-only `plus45` no longer dies in `pre_stage_timeout`
-4. no lane is promoted unless the matrix and nearby geometry sweeps are green
+1. a sandbox or oracle bundle exists that explicitly classifies the representative fresh-only `plus45` fixtures as `clearable`, `near_clear`, or `not_clearable`
+2. either the sandbox proves stable goal-side exit on at least `4/5` representative fixtures and unlocks controller distillation, or it fails again with enough evidence to justify a geometry/modeling pivot
+3. no new live controller lane is promoted unless the sandbox first proves stable goal-side exit is feasible
+4. the protected route-planning floor and one-ball baseline remain untouched while this proof work lands
 
 ### Step 7: Corral Time Optimization
 
