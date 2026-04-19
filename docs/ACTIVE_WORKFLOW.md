@@ -388,6 +388,29 @@ Matrix contract:
 8. emits a matrix campaign summary plus one repeatability campaign per case
 9. is the offline gate for the gather path; dashboard UAT stays blocked until this matrix and nearby geometry sweeps are green, while `visit_route_planning` remains the protected regression floor
 
+## Gather Escape Oracle (Offline Truth-State Probe)
+
+Use this before adding another gather escape family when fresh-only `plus45` is still blocked in `pre_stage`.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_gather_escape_oracle.ps1 -CampaignId <id>`
+
+Oracle contract:
+
+1. reads attempt `0`, `phase=pre_stage` rows from the fresh-only gather repeatability traces listed in `scripts/gather_escape_oracle.py`
+2. selects exactly five representative fixtures per run family:
+   - `first_post_yaw_gate`
+   - `early_stall`
+   - `mid_stall`
+   - `late_stall`
+   - `terminal_stall`
+3. performs a static-ball, static-zone, truth-state rollout with a deterministic macro library over the early pre-contact escape problem only
+4. ranks sequences lexicographically by goal-side clearance first, then lateral gain, projection gain, and pre-stage distance gain
+5. treats any sequence that still ends goal-side as non-promoting even if projection improves
+6. emits one oracle summary bundle plus a human-readable scorecard under the session artifact root
+7. gates any new escape-family distillation work; if the representative fixtures do not show feasible goal-side-clearing sequences, the blocker should be treated as geometry or horizon limited rather than another threshold seam
+
 ## Headless Milestone Path (Current Preferred)
 
 Use this while iterating before operator-facing GUI rehearsal:
@@ -478,6 +501,9 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<timestamp>/visual/keyframes/*.png`
    - `artifacts/session/<timestamp>/visual/timeline.json`
    - `artifacts/session/<timestamp>/visual/state.json`
+13. Gather escape oracle bundle:
+   - `artifacts/session/<timestamp>/gather_escape_oracle/oracle_summary.json`
+   - `artifacts/session/<timestamp>/gather_escape_oracle/scorecard.md`
    - `artifacts/session/<timestamp>/visual/visual_demo_summary.json`
 13. Route-planning parallel soak:
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/campaign_summary.json`

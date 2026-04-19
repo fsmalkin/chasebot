@@ -252,7 +252,7 @@ def evaluate_escape_sequence(
 
 
 def load_pre_stage_attempt_rows(state_history_path: Path, *, attempt: int = 0) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
+    attempt_rows: dict[int, list[dict[str, Any]]] = {}
     for raw_line in state_history_path.read_text(encoding="utf-8").splitlines():
         raw_line = raw_line.strip()
         if not raw_line:
@@ -260,10 +260,18 @@ def load_pre_stage_attempt_rows(state_history_path: Path, *, attempt: int = 0) -
         payload = json.loads(raw_line)
         if str(payload.get("phase")) != "pre_stage":
             continue
-        if int(payload.get("attempt", -1) or -1) != int(attempt):
+        raw_attempt = payload.get("attempt", -1)
+        parsed_attempt = -1 if raw_attempt is None else int(raw_attempt)
+        if parsed_attempt < 0:
             continue
-        rows.append(payload)
-    return rows
+        attempt_rows.setdefault(parsed_attempt, []).append(payload)
+    requested_attempt = int(attempt)
+    if requested_attempt in attempt_rows:
+        return attempt_rows[requested_attempt]
+    if requested_attempt == 0 and attempt_rows:
+        earliest_attempt = min(attempt_rows.keys())
+        return attempt_rows[earliest_attempt]
+    return []
 
 
 def _pick_unique_index(anchor_index: int, *, used: set[int], row_count: int) -> int:
@@ -554,7 +562,10 @@ def build_oracle_summary(
 
 def _default_trace_specs() -> list[tuple[str, Path]]:
     return [
-        (family_name, (REPO_ROOT / relative_path).resolve())
+        (
+            family_name,
+            _state_history_path_from_campaign_summary((REPO_ROOT / relative_path).resolve()),
+        )
         for family_name, relative_path in DEFAULT_ESCAPE_ORACLE_CAMPAIGNS
     ]
 

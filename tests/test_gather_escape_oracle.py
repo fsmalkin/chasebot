@@ -95,6 +95,34 @@ def test_select_representative_fixture_rows_returns_five_labeled_rows():
     assert fixtures[-1]["fixture_index"] == len(rows) - 1
 
 
+def test_load_pre_stage_attempt_rows_falls_back_to_earliest_attempt_for_fresh_traces(tmp_path: Path):
+    state_history_path = tmp_path / "state_history.jsonl"
+    rows = [
+        {
+            "generated_utc": "2026-04-19T22:00:01Z",
+            "phase": "pre_stage",
+            "attempt": 1,
+            "robot_pose": dict(LIVE_POST_YAW_GATE_POSE),
+            "ball_pose": dict(PLUS45_BALL_POSE),
+            "pre_stage": pre_stage_arrival_snapshot(LIVE_POST_YAW_GATE_POSE, PLUS45_BALL_POSE, zone=ZONE),
+        },
+        {
+            "generated_utc": "2026-04-19T22:00:02Z",
+            "phase": "pre_stage",
+            "attempt": 1,
+            "robot_pose": dict(LIVE_MID_STALLED_POSE),
+            "ball_pose": dict(PLUS45_BALL_POSE),
+            "pre_stage": pre_stage_arrival_snapshot(LIVE_MID_STALLED_POSE, PLUS45_BALL_POSE, zone=ZONE),
+        },
+    ]
+    state_history_path.write_text("\n".join(json.dumps(item) for item in rows), encoding="utf-8")
+
+    loaded = oracle.load_pre_stage_attempt_rows(state_history_path, attempt=0)
+
+    assert len(loaded) == 2
+    assert all(int(item["attempt"]) == 1 for item in loaded)
+
+
 def test_build_oracle_summary_uses_campaign_summary_trace_and_reports_gate(tmp_path: Path):
     mission_root = tmp_path / "mission"
     mission_root.mkdir(parents=True, exist_ok=True)
