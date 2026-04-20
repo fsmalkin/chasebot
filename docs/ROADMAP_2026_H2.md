@@ -451,6 +451,21 @@ Acceptance:
 3. no new live controller lane is promoted unless the sandbox first proves stable goal-side exit is feasible
 4. the protected route-planning floor and one-ball baseline remain untouched while this proof work lands
 
+Post-sandbox direction update:
+
+1. the first sandbox result is now the new reference stop signal:
+   - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
+   - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
+2. the next milestone is no longer “build `short_horizon_v3`”; it is “prove the maneuver offline with richer sandboxing or reference maneuvers first”
+3. the next offline slice should broaden the sandbox with:
+   - forward motion as well as reverse-biased escape behavior
+   - wider loop-around and reset families
+   - safer-behind-ball region objectives
+   - finer or longer rollout profiles when needed
+4. add a feasibility reference lane, such as teleop-recorded or hand-scripted truth-state maneuvers, to answer whether the escape is actually achievable under the current sim geometry
+5. if both richer sandboxing and the reference lane still fail, treat the blocker as geometry, footprint, turn-radius, or dynamics-model limited rather than another controller-family miss
+6. keep `baseline`, `short_horizon_v1`, and `short_horizon_v2` frozen as controls until that broader feasibility work changes the result
+
 ### Step 7: Corral Time Optimization
 
 Goal: reduce time-to-place only after the promoted deterministic gather-control family

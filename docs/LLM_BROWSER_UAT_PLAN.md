@@ -506,7 +506,11 @@ Latest evidence snapshot:
    - `artifacts/session/live_plus45_escape_oracle_deep_20260419/gather_escape_oracle/oracle_summary.json`
    - `artifacts/session/live_plus45_escape_oracle_deep_20260419/gather_escape_oracle/scorecard.md`
 18. the active blocker is therefore no longer a single threshold; it is a mismatch between the current simplified escape formulation and the real geometric escape maneuver needed by the shared path
-19. fresh failing three-ball checkpoint evidence:
+19. the richer truth-state escape sandbox also fails to produce either a stable goal-side exit or a safe behind-ball corridor on the representative fresh-only `plus45` fixtures:
+   - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
+   - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
+20. the current blocker should now be treated as a geometry, horizon, or modeling limitation in the offline escape formulation, not as evidence that one more live controller-family tweak is ready
+21. fresh failing three-ball checkpoint evidence:
     - `artifacts/session/20260417T040027Z/gather_mission_repeatability/campaign_run_summary.json`
 
 ### Preferred Controller Families
@@ -603,6 +607,15 @@ Immediate next step:
 6. treat the next deliverable as a sandbox/oracle feasibility result, not another live controller lane
 7. only if that sandbox proves stable goal-side exit is feasible should a new live controller family be distilled
 8. preserve the faster between-ball handoff while the shared gather transitions stay frozen
+
+Post-sandbox direction update:
+
+1. treat the current sandbox result as a stop signal for new live controller lanes, not as a near-pass
+2. build a richer truth-state escape sandbox v2 with broader maneuver families and a safer-behind-ball region objective before revisiting live controller distillation
+3. add a feasibility reference lane, such as teleop-recorded or hand-scripted truth-state escapes, so the team can answer whether the maneuver is actually achievable under the current sim geometry
+4. if the richer sandbox and reference lane still fail, pivot next to geometry, footprint, and dynamics-model audits rather than another live controller-family tweak
+5. keep `baseline`, `short_horizon_v1`, and `short_horizon_v2` frozen as comparison lanes while this broader feasibility work runs
+6. no new live matrix, `zero`, `minus45`, or `backside180` runs should consume time until the richer offline feasibility work changes the result
 
 ### Deferred Follow-Ons
 

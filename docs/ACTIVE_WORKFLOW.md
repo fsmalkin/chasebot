@@ -460,6 +460,41 @@ Sandbox contract:
    - `>= 4/5 goal_side_clearable` justifies a narrower escape-only live lane
    - otherwise the blocker should be treated as geometry / horizon / modeling limited rather than another live controller-family tweak
 
+## Gather Escape Reference (Hand-Scripted Feasibility Lane)
+
+Use this after the sandbox if the next question is whether an explicit, fully scripted wrong-side-to-safe-side maneuver is achievable in the current sim geometry before designing another live controller family.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_gather_escape_reference.ps1 -CampaignId <id>`
+
+Reference-lane contract:
+
+1. reuses the same fresh-only gather repeatability traces and representative fixture labels as the oracle and sandbox:
+   - `first_post_yaw_gate`
+   - `early_stall`
+   - `mid_stall`
+   - `late_stall`
+   - `terminal_stall`
+2. keeps the problem scoped to the early pre-contact escape only: `wrong side of ball -> safe behind-ball region`
+3. stays entirely in the ball-to-zone local frame with a static ball and static zone
+4. uses explicit hand-scripted mirrored maneuver families instead of beam search:
+   - `wide_loop`
+   - `retreat_loop`
+   - `three_point_commit`
+   - `sweep_then_align`
+   - `forward_clear`
+5. evaluates those scripted families with the same success language as the sandbox:
+   - `corridor_clearable`
+   - `goal_side_clearable`
+   - `near_clear`
+   - `not_clearable`
+6. emits one reference summary bundle, one scorecard, and one trajectory file per representative fixture for the primary trace family
+7. is the feasibility gate in front of any future sandbox-v2 distillation:
+   - `>= 4/5 corridor_clearable` unlocks a richer sandbox-v2 distillation slice
+   - `>= 4/5 goal_side_clearable` justifies a sandbox-v2 slice focused on corridor completion
+   - otherwise the blocker should be treated as geometry / footprint / turn-radius / modeling limited rather than another controller-family tweak
+
 ## Headless Milestone Path (Current Preferred)
 
 Use this while iterating before operator-facing GUI rehearsal:
@@ -557,15 +592,19 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<timestamp>/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/<timestamp>/gather_escape_sandbox/scorecard.md`
    - `artifacts/session/<timestamp>/gather_escape_sandbox/trajectories/<fixture_label>.json`
-15. Route-planning parallel soak:
+15. Gather escape reference bundle:
+   - `artifacts/session/<timestamp>/gather_escape_reference/reference_summary.json`
+   - `artifacts/session/<timestamp>/gather_escape_reference/scorecard.md`
+   - `artifacts/session/<timestamp>/gather_escape_reference/trajectories/<fixture_label>.json`
+16. Route-planning parallel soak:
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/campaign_summary.json`
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/dashboard_service.log`
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/repeatability.log`
-16. Corral surface calibration:
+17. Corral surface calibration:
    - `artifacts/session/<campaign_id>/corral_surface_calibration/campaign_summary.json`
    - `artifacts/session/<campaign_id>/corral_surface_calibration/scorecard.md`
    - `artifacts/session/<campaign_id>/corral_surface_calibration/logs/<surface_profile>.log`
-17. Gather goal-side matrix:
+18. Gather goal-side matrix:
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/campaign_summary.json`
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/scorecard.md`
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/logs/*.log`
