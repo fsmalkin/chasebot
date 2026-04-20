@@ -617,6 +617,23 @@ Post-sandbox direction update:
 5. keep `baseline`, `short_horizon_v1`, and `short_horizon_v2` frozen as comparison lanes while this broader feasibility work runs
 6. no new live matrix, `zero`, `minus45`, or `backside180` runs should consume time until the richer offline feasibility work changes the result
 
+Offline audit status update:
+
+1. the capability-first feasibility audit stayed red on the frozen `plus45` corpus and confirmed that no audited profile currently clears the corridor or stable goal-side gate:
+   - `artifacts/session/live_plus45_escape_feasibility_audit_20260420/gather_escape_feasibility_audit/feasibility_summary.json`
+   - `artifacts/session/live_plus45_escape_feasibility_audit_20260420/gather_escape_feasibility_audit/scorecard.md`
+2. the artifact-first divergence audit resolved the current live blocker without needing a new probe run:
+   - dominant blocker: `turn_realization_limited`
+   - coverage: `5/5`
+   - `artifacts/session/live_plus45_escape_divergence_audit_20260420/gather_escape_divergence_audit/divergence_summary.json`
+   - `artifacts/session/live_plus45_escape_divergence_audit_20260420/gather_escape_divergence_audit/scorecard.md`
+3. the follow-on turn-realization contract audit narrowed that blocker one step further:
+   - dominant gap: `strategy_authority_limited`
+   - next action: `helper_turn_authority_contract_audit`
+   - `artifacts/session/live_plus45_turn_realization_audit_20260420/gather_turn_realization_audit/turn_realization_summary.json`
+   - `artifacts/session/live_plus45_turn_realization_audit_20260420/gather_turn_realization_audit/scorecard.md`
+4. the next implementation slice should therefore stay analysis-first and helper-contract focused, not another live controller-family or matrix run
+
 ### Deferred Follow-Ons
 
 These are intentionally deferred until the multi-ball gather milestone is in

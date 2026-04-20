@@ -50,11 +50,17 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather escape oracle | `scripts/run_gather_escape_oracle.ps1 -CampaignId <id>` |
 | Gather escape sandbox | `scripts/run_gather_escape_sandbox.ps1 -CampaignId <id>` |
 | Gather escape reference | `scripts/run_gather_escape_reference.ps1 -CampaignId <id>` |
+| Gather escape feasibility audit | `scripts/run_gather_escape_feasibility_audit.ps1 -CampaignId <id>` |
+| Gather escape divergence audit | `scripts/run_gather_escape_divergence_audit.ps1 -CampaignId <id>` |
+| Gather turn realization audit | `scripts/run_gather_turn_realization_audit.ps1 -CampaignId <id>` |
 | Gather manager helper (internal) | `scripts/gather_manager_helpers.py` |
 | Gather short-horizon helper (internal) | `scripts/gather_short_horizon_helpers.py` |
 | Gather escape oracle helper (internal) | `scripts/gather_escape_oracle.py` |
 | Gather escape sandbox helper (internal) | `scripts/gather_escape_sandbox.py` |
 | Gather escape reference helper (internal) | `scripts/gather_escape_reference.py` |
+| Gather escape feasibility audit helper (internal) | `scripts/gather_escape_feasibility_audit.py` |
+| Gather escape divergence audit helper (internal) | `scripts/gather_escape_divergence_audit.py` |
+| Gather turn realization audit helper (internal) | `scripts/gather_turn_realization_audit.py` |
 | Route-planning parallel soak | `scripts/run_route_planning_parallel_soak.ps1 -Workers 2 -RunsPerWorker 1` |
 | Dashboard service | `scripts/run_dashboard_service.ps1` |
 | Dashboard validation | `scripts/run_dashboard_validation.ps1` |
@@ -131,6 +137,11 @@ Route-planning self-contained rerun validation:
 
 Route-planning parallel soak validation:
 - Isolated 2-worker soak pass: `artifacts/session/20260412T054630Z/route_planning_parallel_soak/campaign_summary.json`
+
+Gather escape offline audit baseline:
+- Feasibility audit: `artifacts/session/live_plus45_escape_feasibility_audit_20260420/gather_escape_feasibility_audit/feasibility_summary.json`
+- Divergence audit: `artifacts/session/live_plus45_escape_divergence_audit_20260420/gather_escape_divergence_audit/divergence_summary.json`
+- Turn realization audit: `artifacts/session/live_plus45_turn_realization_audit_20260420/gather_turn_realization_audit/turn_realization_summary.json`
 
 ## Testing
 

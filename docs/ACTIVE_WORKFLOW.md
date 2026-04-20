@@ -495,6 +495,162 @@ Reference-lane contract:
    - `>= 4/5 goal_side_clearable` justifies a sandbox-v2 slice focused on corridor completion
    - otherwise the blocker should be treated as geometry / footprint / turn-radius / modeling limited rather than another controller-family tweak
 
+## Gather Escape Feasibility Audit (Capability-First Stop/Go Gate)
+
+Use this after freezing `baseline`, `short_horizon_v1`, `short_horizon_v2`, the oracle, the sandbox, and the hand-scripted reference as control evidence, when the next question is whether the current sim can support a general wrong-side-to-safe-behind-ball escape capability before any new live lane.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_gather_escape_feasibility_audit.ps1 -CampaignId <id>`
+
+Feasibility-audit contract:
+
+1. reuses the same fresh-only gather repeatability traces, attempt `0`, `phase=pre_stage` filter, and representative fixture labels as the oracle / sandbox / reference lanes:
+   - `first_post_yaw_gate`
+   - `early_stall`
+   - `mid_stall`
+   - `late_stall`
+   - `terminal_stall`
+2. keeps `plus45` as the primary diagnostic corpus but evaluates the problem in the ball-to-zone local frame so the next decision is about reusable capability rather than a one-case patch
+3. reuses the current hand-scripted maneuver families from `scripts/gather_escape_reference.py` and does not add a new live controller family in this slice
+4. reads nominal geometry and motion bounds from the repo’s current config / SDF sources:
+   - `ros2_config/frisbee_target_ball.sdf`
+   - `ros2_config/config/robot_hardware_constraints.yaml`
+   - `ros2_config/config/jetbot_controllers.yaml`
+   - `ros2_config/params/nav2_params_simple.yaml`
+5. evaluates the same maneuver set under five fixed offline audit profiles with a deterministic local-frame unicycle rollout:
+   - `nominal_current`
+   - `tight_turn_relaxed`
+   - `footprint_relaxed`
+   - `corridor_relaxed`
+   - `combined_relaxed`
+6. keeps the rollout auditable and fixed:
+   - static ball
+   - static zone
+   - horizon `12.0 s`
+   - step `0.25 s`
+7. uses the same success language as the sandbox / reference lanes for every profile:
+   - `corridor_clearable`
+   - `goal_side_clearable`
+   - `near_clear`
+   - `not_clearable`
+8. emits one fixture-level limiter class based on the first profile that unlocks progress:
+   - `controller_shape_limited`
+   - `turn_radius_limited`
+   - `footprint_margin_limited`
+   - `corridor_margin_limited`
+   - `mixed_margin_limited`
+   - `corridor_completion_limited`
+   - `modeling_or_world_limited`
+9. evaluates a mirrored local-frame copy of every real representative fixture as a symmetry guardrail and records that result in the per-fixture profile bundle
+10. is the stop/go gate before any new live escape lane:
+   - `nominal_current >= 4/5 corridor_clearable` -> offline distillation from the winning maneuver family
+   - relaxed profile only `>= 4/5 corridor_clearable` -> geometry / footprint / turn-radius contract audit and possible sim-parameter correction
+   - any profile `>= 4/5 goal_side_clearable` without corridor gate pass -> corridor-completion sandbox
+   - otherwise stop controller-family work and pivot to richer world / dynamics validation
+
+## Gather Escape Divergence Audit (Artifact-First Live-vs-Offline Blocker Gate)
+
+Use this after the feasibility audit has already said "stop" and the next question is why the live fresh-only `plus45` `short_horizon_v2` run still remains wrong-side through `pre_stage`.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_gather_escape_divergence_audit.ps1 -CampaignId <id>`
+2. Optional hard-gated follow-up probe:
+   - `powershell -ExecutionPolicy Bypass -File scripts/run_gather_escape_divergence_audit.ps1 -CampaignId <id> -RunLiveProbeIfRequired`
+
+Divergence-audit contract:
+
+1. defaults to the first run of `artifacts/session/live_plus45_short_horizon_v2_20260419/gather_mission_repeatability/campaign_run_summary.json`, with optional overrides for campaign summary path and run index
+2. reuses the same representative-fixture extraction path as the oracle lane, so it audits:
+   - `first_post_yaw_gate`
+   - `early_stall`
+   - `mid_stall`
+   - `late_stall`
+   - `terminal_stall`
+3. joins the existing artifact surfaces from that run instead of adding another live controller family:
+   - `state_history.jsonl`
+   - `visual/truth_timeline.json`
+   - `visual/timeline.json`
+   - `visual/timeline_events.jsonl`
+   - `mission_verdict.json`
+   - `gather_sequence.jsonl`
+4. uses `scripts/gather_escape_feasibility_audit.py` as the offline baseline generator on the same fixture local pose, comparing live truth against the best `nominal_current` and best `combined_relaxed` maneuver
+5. computes a fixed per-fixture metric set:
+   - commanded angular integral
+   - commanded reverse displacement
+   - command sign-flip count
+   - mode-flip count
+   - realized yaw change
+   - realized reverse displacement
+   - local-frame projection gain
+   - local-frame lateral gain
+   - minimum robot-ball separation proxy
+   - ball motion magnitude
+   - time spent on goal side
+   - offline-vs-live delta for projection gain, lateral gain, and yaw progress
+6. classifies the dominant blocker with explicit precedence:
+   - `turn_realization_limited`
+   - `contact_geometry_limited`
+   - `control_timing_limited`
+   - `world_model_mismatch_unresolved`
+7. marks `live_probe_required=true` only when the existing artifacts do not yield a dominant blocker that covers at least `3/5` fixtures, or when alignment quality is poor on more than two fixtures
+8. keeps the live follow-up path narrowly scoped when it is explicitly enabled:
+   - one canonical fresh `plus45` `short_horizon_v2` run
+   - same world / surface / layout contract as the source evidence
+   - `motion_probe.py` reused only to confirm commanded-vs-realized yaw and displacement during `pre_stage`
+   - divergence audit rerun against that new probe summary afterward
+
+## Gather Turn Realization Audit (Artifact-First Manual-Drive Turn Contract Gate)
+
+Use this after the divergence audit has already said `turn_realization_limited` and the next question is whether the frozen live `short_horizon_v2` pre-stage path is under-requesting turn authority, inverting turn sign, or under-realizing an adequate request.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_gather_turn_realization_audit.ps1 -CampaignId <id>`
+
+Turn-realization audit contract:
+
+1. defaults to the same `artifacts/session/live_plus45_short_horizon_v2_20260419/gather_mission_repeatability/campaign_run_summary.json` source run as the divergence audit, with the same optional campaign summary and run index overrides
+2. reuses the divergence audit fixture extraction and alignment path, so it audits:
+   - `first_post_yaw_gate`
+   - `early_stall`
+   - `mid_stall`
+   - `late_stall`
+   - `terminal_stall`
+3. stays scoped to the manual gather pre-stage path and does not treat Nav2 velocity limits as the primary turn contract
+4. reads the manual-drive turn-limit surfaces from the current repo sources:
+   - `scripts/gather_mission_helpers.py` `compute_pre_stage_command(...)`
+   - `scripts/gather_short_horizon_helpers.py`
+   - `scripts/gather_motion_bridge.py`
+   - `ros2_config/config/jetbot_controllers.yaml`
+   - `ros2_config/config/robot_hardware_constraints.yaml`
+5. computes one fixed per-fixture metric set:
+   - peak requested `angular_z`
+   - commanded angular integral
+   - percent of samples pinned at the helper cap
+   - headroom to helper, bridge, controller, and hardware caps
+   - wrong-sign command episodes
+   - wrong-sign realized-yaw episodes
+   - realized yaw change per commanded angular radian
+   - realized reverse displacement
+   - comparison against the best offline maneuver family selected from the same `nominal_current` / `combined_relaxed` feasibility baselines
+6. classifies the dominant turn contract gap with explicit precedence:
+   - `strategy_authority_limited`
+   - `sign_parity_limited`
+   - `plant_realization_limited`
+   - `mixed_turn_contract_limited`
+7. applies the gate as follows:
+   - `strategy_authority_limited` -> the live request stays materially below the downstream manual-drive cap and below the selected offline maneuver demand on at least `3/5` fixtures
+   - `sign_parity_limited` -> realized yaw repeatedly opposes the requested turn sign on at least `3/5` fixtures
+   - `plant_realization_limited` -> requested authority is adequate for the selected offline maneuver but realized yaw-per-command stays below the realization floor on at least `3/5` fixtures
+   - otherwise -> `mixed_turn_contract_limited`
+8. remains diagnostic only and ends with a next-action recommendation rather than a live behavior change:
+   - `strategy_authority_limited` -> helper turn-authority contract audit
+   - `sign_parity_limited` -> manual-drive sign-parity audit
+   - `plant_realization_limited` -> plant/world turn-realization audit
+   - `mixed_turn_contract_limited` -> mixed contract review before any live changes
+
 ## Headless Milestone Path (Current Preferred)
 
 Use this while iterating before operator-facing GUI rehearsal:
@@ -596,15 +752,27 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<timestamp>/gather_escape_reference/reference_summary.json`
    - `artifacts/session/<timestamp>/gather_escape_reference/scorecard.md`
    - `artifacts/session/<timestamp>/gather_escape_reference/trajectories/<fixture_label>.json`
-16. Route-planning parallel soak:
+16. Gather escape feasibility audit bundle:
+   - `artifacts/session/<campaign_id>/gather_escape_feasibility_audit/feasibility_summary.json`
+   - `artifacts/session/<campaign_id>/gather_escape_feasibility_audit/scorecard.md`
+   - `artifacts/session/<campaign_id>/gather_escape_feasibility_audit/profiles/<fixture_label>.json`
+17. Gather escape divergence audit bundle:
+   - `artifacts/session/<campaign_id>/gather_escape_divergence_audit/divergence_summary.json`
+   - `artifacts/session/<campaign_id>/gather_escape_divergence_audit/scorecard.md`
+   - `artifacts/session/<campaign_id>/gather_escape_divergence_audit/fixtures/<fixture_label>.json`
+18. Gather turn realization audit bundle:
+   - `artifacts/session/<campaign_id>/gather_turn_realization_audit/turn_realization_summary.json`
+   - `artifacts/session/<campaign_id>/gather_turn_realization_audit/scorecard.md`
+   - `artifacts/session/<campaign_id>/gather_turn_realization_audit/fixtures/<fixture_label>.json`
+19. Route-planning parallel soak:
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/campaign_summary.json`
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/dashboard_service.log`
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/repeatability.log`
-17. Corral surface calibration:
+20. Corral surface calibration:
    - `artifacts/session/<campaign_id>/corral_surface_calibration/campaign_summary.json`
    - `artifacts/session/<campaign_id>/corral_surface_calibration/scorecard.md`
    - `artifacts/session/<campaign_id>/corral_surface_calibration/logs/<surface_profile>.log`
-18. Gather goal-side matrix:
+21. Gather goal-side matrix:
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/campaign_summary.json`
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/scorecard.md`
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/logs/*.log`
