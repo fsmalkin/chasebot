@@ -513,23 +513,65 @@ Latest evidence snapshot:
 21. fresh failing three-ball checkpoint evidence:
     - `artifacts/session/20260417T040027Z/gather_mission_repeatability/campaign_run_summary.json`
 
-### Preferred Controller Families
+### Pre-Stage Backend Portfolio
 
-Priority order for the next deterministic gather experiments:
+This branch should no longer be framed as one helper-contract mainline plus
+deferred sidecars. The near-term goal is to compare multiple bounded manual
+`pre_stage` recovery backends on the same Layer 3 seam and shared harness.
+The latest sign-parity follow-on keeps the helper lane preserved and moves the
+immediate runtime-check branch onto the concrete
+`scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>` surface plus
+its `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/` bundle
+rather than leaving that branch as an abstract manual sign-parity decision.
 
-1. a dedicated truth-state escape sandbox that solves only the early “wrong side of ball -> safe behind-ball region” problem before touching the live controller again
+Keep one safe control:
+
+1. preserve the helper turn-authority / turn-profile / manual-drive contract lane as the deterministic control branch informed by the April 20, 2026 audit stack
+2. treat that branch as the safest preserved baseline, not as the only serious route to green
+
+Open multiple deeper alternative paths:
+
+1. ROS-native bounded backend branch:
+   - docking-style local staging / recovery
+   - MPPI-style local recovery
+2. learned maneuver selector branch:
+   - rule-labeled maneuver-family choice in shadow mode
+3. learned bounded-action backend branch:
+   - small bounded local action proposals in shadow mode
+4. learned switch / abstain backend branch:
+   - stall detection, backend selection, or fallback gating in shadow mode
+
+Shared seam and downstream contract:
+
+1. the relevant Layer 3 seam is the point where `gather_mission_runner.py` currently resolves `compute_pre_stage_command(...)` or `decide_short_horizon_pre_stage_command(...)` before `_set_manual_drive(...)`
+2. every backend at that seam should consume the same bounded local `pre_stage` state:
+   - normalized ball-to-zone / robot-to-ball geometry
+   - phase and manager-directive context
+   - progress, stall, and goal-side recovery signals
+3. every backend should emit only bounded outputs:
+   - maneuver-family choice
+   - bounded short command chunk
+   - switch / abstain / fallback signal
+4. deterministic translation remains authoritative above backend choice, and the downstream manual-drive contract remains authoritative below it:
+   - `gather_motion_bridge.py` remains the runtime clamp surface
+   - controller and hardware caps remain authoritative
+
+The legacy deterministic candidate list below remains useful as one subset of
+the portfolio, but it no longer defines the whole branch by itself.
+
+1. a dedicated truth-state escape sandbox that solves only the early "wrong side of ball -> safe behind-ball region" problem before touching the live controller again
 2. region or funnel targets that tighten with distance instead of exact `pre_stage` point targets
 3. reset-style recovery that deliberately retreats to a known-safe reacquire shape when progress stalls
-4. short-horizon deterministic action scoring or rollout over a bounded `1-2 s` window, but only after the sandbox proves a stable escape family exists
+4. short-horizon deterministic action scoring or rollout over a bounded `1-2 s` window, but only after shared offline evidence identifies a stable escape family
 5. progress-based strategy management that switches on measured stall or improvement instead of phase labels alone
 6. contact-centric pushing objectives that optimize desired ball contact and ball motion toward the corral
 7. ball-to-zone local-frame normalization so `+45`, `0`, and `-45` reduce to the same mirrored problem where possible
 
-Sidecar experiment tools that may help but should not become the primary controller shape:
+Supporting tools that may help individual branches but should not become portfolio branches on their own:
 
 1. lightweight forward-model prediction in shadow mode
 2. automatic gain or threshold search after a better controller family exists
-3. the current helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2`, which should stay frozen as control lanes until the sandbox proves a new family is worth distilling
+3. the preserved helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2`, which stay valuable as frozen comparison lanes while the portfolio competes underneath them
 
 Deprioritized options for this phase:
 
@@ -537,33 +579,51 @@ Deprioritized options for this phase:
 2. full RL or end-to-end learned low-level gather control
 3. active LLM-owned gather decisions inside the real-time control path
 
-### Experiment Program
+### Shared Portfolio Harness
 
-Planned non-operator fan-out lanes for this slice:
+Shared non-operator comparison branches for this slice:
 
-1. Lane A: current helper-plus-manager path as the frozen control baseline, with only minimal safety fixes
-2. Lane B: frozen `short_horizon_v1` and `short_horizon_v2` as experimental controls, not promotion candidates
-3. Lane C: dedicated truth-state escape sandbox plus oracle work over fresh-only `plus45`
-4. Lane D: controller distillation only after Lane C proves stable goal-side exit is feasible
-5. Lane E: region or funnel targets plus reset-style recovery and contact-centric variants after the sandbox result is understood
+1. Branch A: preserved helper turn-authority / turn-profile / manual-drive contract lane as the safe deterministic control
+2. Branch B: ROS-native bounded backends, starting with docking-style and MPPI-style local recovery
+3. Branch C: learned maneuver selector in shadow mode
+4. Branch D: learned bounded-action backend in shadow mode
+5. Branch E: learned switch / abstain backend in shadow mode
 
-Rules for these lanes:
+Shared portfolio rules:
 
 1. fan-out belongs in headless/direct repeatability and matrix-style lanes only
 2. dashboard/operator validation remains serial
-3. named-case threshold wins are insufficient for promotion if neighboring geometry or post-handoff behavior still fails
-4. automatic gain search and lightweight forward-model experiments are sidecar tools, not promotion-worthy controller families on their own
-5. no new live matrix, `zero`, `minus45`, or `backside180` runs should consume time while fresh-only `plus45` is still red in `pre_stage`
-6. no new controller family should be promoted from oracle or sandbox evidence unless it achieves stable goal-side exit, not just projection improvement
+3. every branch is judged on the same shared harness:
+   - April 19, 2026 canonical `live_plus45_short_horizon_v2_20260419` corpus
+   - five representative fixtures
+   - nearby geometry jitter
+   - neighboring-case expansion only after a branch earns it
+   - fresh shadow-sim comparison before any live consideration
+4. named-case wins are insufficient if neighboring geometry or post-handoff behavior still fails
+5. one weak formulation is branch-specific signal, not proof that the whole deterministic, ROS-native, or learned category is dead
+6. no live promotion is unlocked by this planning update alone
 
-Shared promotion criteria across all lanes:
+Shared evidence contract:
+
+1. portfolio bundle:
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/portfolio_summary.json`
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/scorecard.md`
+2. per-branch comparison bundle:
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/counterfactual_replay_summary.json`
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/shadow_summary.json`
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/fixtures/<fixture_label>.json`
+3. learned-branch extras:
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/teacher_dataset_summary.json`
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/holdout_eval_summary.json`
+
+Shared guardrails across all branches:
 
 1. `visit_route_planning` stays green
 2. `corral_single_ball_place` stays acceptable as the working one-ball baseline
-3. the goal-side matrix passes across `+45`, `0`, `-45`, and `180 backside`
-4. small spawn jitter or geometry perturbation sweeps do not reopen cross-phase failures
-5. the promoted path succeeds after `capture_entry_ready`, not only up to it
-6. fresh-only `plus45` no longer dies in `pre_stage_timeout`
+3. the goal-side matrix and nearby jitter sweeps do not reopen cross-phase failures once a branch earns that expansion
+4. the promoted path eventually succeeds after `capture_entry_ready`, not only up to it
+5. fresh-only `plus45` no longer dies in `pre_stage_timeout`
+6. no readiness claim is made yet for `gather_three_ball_zone`, exact field-physics match, or onboard planning in this phase
 
 Comparison metrics to carry in scorecards and summaries:
 
@@ -593,46 +653,43 @@ Acceptance for keeping this branch green while we move forward:
 5. multi-ball mission truth comes from `final_corral_audit`, `final_all_targets_inside_retrieval_corral`, `final_all_targets_stopped`, `final_three_ball_corral_pass`, and `retrieved_count`
 6. no readiness claim is made yet for `gather_three_ball_zone`; dashboard UAT remains blocked until the goal-side matrix and nearby geometry sweeps are green
 7. no readiness claim is made for exact field-physics match or onboard planning in this phase
-8. the next engineering milestone is the deterministic gather-control family comparison plus the shared experiment program, followed by accel/decel optimization once the generalization gate turns green
+8. the next engineering milestone is the co-equal `pre_stage` backend portfolio on the shared harness, followed by accel/decel optimization once the generalization gate turns green
 9. named-case threshold wins are insufficient if the post-`capture_entry_ready` handoff or neighboring geometry still fails
 10. surface and ball fidelity remain an open follow-up, not the blocking path
 
-Immediate next step:
+Current direction update:
 
 1. keep the outer `5 ft` retrieval corral and inner `0.20 m` control ring fixed
-2. treat the current one-ball behavior as the baseline to preserve
+2. treat the current one-ball behavior as the baseline to preserve while the backend portfolio competes underneath it
 3. keep `gather_three_ball_zone` on the same practical retrieval model while keeping `visit_route_planning` green
-4. keep the current helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2` frozen as comparison lanes rather than default promotion candidates
-5. build a dedicated truth-state escape sandbox that targets only the fresh-only `plus45` goal-side exit problem
-6. treat the next deliverable as a sandbox/oracle feasibility result, not another live controller lane
-7. only if that sandbox proves stable goal-side exit is feasible should a new live controller family be distilled
-8. preserve the faster between-ball handoff while the shared gather transitions stay frozen
-
-Post-sandbox direction update:
-
-1. treat the current sandbox result as a stop signal for new live controller lanes, not as a near-pass
-2. build a richer truth-state escape sandbox v2 with broader maneuver families and a safer-behind-ball region objective before revisiting live controller distillation
-3. add a feasibility reference lane, such as teleop-recorded or hand-scripted truth-state escapes, so the team can answer whether the maneuver is actually achievable under the current sim geometry
-4. if the richer sandbox and reference lane still fail, pivot next to geometry, footprint, and dynamics-model audits rather than another live controller-family tweak
-5. keep `baseline`, `short_horizon_v1`, and `short_horizon_v2` frozen as comparison lanes while this broader feasibility work runs
-6. no new live matrix, `zero`, `minus45`, or `backside180` runs should consume time until the richer offline feasibility work changes the result
-
-Offline audit status update:
-
-1. the capability-first feasibility audit stayed red on the frozen `plus45` corpus and confirmed that no audited profile currently clears the corridor or stable goal-side gate:
-   - `artifacts/session/live_plus45_escape_feasibility_audit_20260420/gather_escape_feasibility_audit/feasibility_summary.json`
-   - `artifacts/session/live_plus45_escape_feasibility_audit_20260420/gather_escape_feasibility_audit/scorecard.md`
-2. the artifact-first divergence audit resolved the current live blocker without needing a new probe run:
+4. keep the current helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2` frozen as preserved comparison lanes rather than default promotion candidates
+5. treat the current sandbox result as a valid stop signal against another blind live controller-family tweak:
+   - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
+   - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
+6. keep the April 20 audit stack visible as the strongest preserved safe-control signal, not as proof that helper-only work is the only serious route to green:
    - dominant blocker: `turn_realization_limited`
-   - coverage: `5/5`
-   - `artifacts/session/live_plus45_escape_divergence_audit_20260420/gather_escape_divergence_audit/divergence_summary.json`
-   - `artifacts/session/live_plus45_escape_divergence_audit_20260420/gather_escape_divergence_audit/scorecard.md`
-3. the follow-on turn-realization contract audit narrowed that blocker one step further:
    - dominant gap: `strategy_authority_limited`
-   - next action: `helper_turn_authority_contract_audit`
+   - preserved helper comparison lane: `helper_turn_authority_contract_audit`
+   - helper command: `powershell -ExecutionPolicy Bypass -File scripts/run_gather_helper_turn_authority_contract_audit.ps1 -CampaignId <id>`
+   - helper result: `stop_and_branch`, so preserve this lane as a safe comparison baseline rather than the next promotion path
+   - helper blocking reason: `sign_parity`
+   - next safe-control focus: `manual_drive_sign_parity_audit`
+   - sign-parity command: `powershell -ExecutionPolicy Bypass -File scripts/run_gather_manual_drive_sign_parity_audit.ps1 -CampaignId <id>`
+   - current sign-parity decision opens the concrete runtime probe wrapper: `powershell -ExecutionPolicy Bypass -File scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>`
+   - runtime probe helpers: `scripts/probe_odom_world_sign_chain.py`, `scripts/odom_world_sign_chain_runtime_probe.py`
+   - runtime probe bundle: `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/`
+   - runtime probe outputs: `odom_world_sign_chain_summary.json`, `scorecard.md`, `fixtures/<fixture_label>.json`, `runtime_probe.json`, `logs/`
+   - April 20, 2026 live rerun status:
+     - `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
+     - the wrapper now completes the live rerun and captures controller-facing signs on `/jetbot_base_controller/cmd_vel` and `/jetbot_base_controller/odom`
+     - the current result is still `runtime_sign_chain_inconclusive`, but the blocker has narrowed to missing truth/world-sign evidence rather than startup failure or missing controller-side sign data
+     - the next narrow branch is to surface truth/world yaw sign in the runtime probe path before reopening helper turn-authority promotion work
+   - `artifacts/session/live_plus45_escape_feasibility_audit_20260420/gather_escape_feasibility_audit/feasibility_summary.json`
+   - `artifacts/session/live_plus45_escape_divergence_audit_20260420/gather_escape_divergence_audit/divergence_summary.json`
    - `artifacts/session/live_plus45_turn_realization_audit_20260420/gather_turn_realization_audit/turn_realization_summary.json`
-   - `artifacts/session/live_plus45_turn_realization_audit_20260420/gather_turn_realization_audit/scorecard.md`
-4. the next implementation slice should therefore stay analysis-first and helper-contract focused, not another live controller-family or matrix run
+   - `artifacts/session/live_plus45_helper_turn_authority_contract_audit_20260420/gather_helper_turn_authority_contract_audit/helper_turn_authority_contract_summary.json`
+   - `artifacts/session/live_plus45_manual_drive_sign_parity_audit_20260420/gather_manual_drive_sign_parity_audit/manual_drive_sign_parity_summary.json`
+7. search more aggressively for a better bounded backend rather than assuming the next result must come from one helper-only branch
 
 ### Deferred Follow-Ons
 

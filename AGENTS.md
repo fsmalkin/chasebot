@@ -53,6 +53,9 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather escape feasibility audit | `scripts/run_gather_escape_feasibility_audit.ps1 -CampaignId <id>` |
 | Gather escape divergence audit | `scripts/run_gather_escape_divergence_audit.ps1 -CampaignId <id>` |
 | Gather turn realization audit | `scripts/run_gather_turn_realization_audit.ps1 -CampaignId <id>` |
+| Gather helper turn-authority contract audit | `scripts/run_gather_helper_turn_authority_contract_audit.ps1 -CampaignId <id>` |
+| Gather manual-drive sign parity audit | `scripts/run_gather_manual_drive_sign_parity_audit.ps1 -CampaignId <id>` |
+| Probe odom/world sign chain | `scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>` |
 | Gather manager helper (internal) | `scripts/gather_manager_helpers.py` |
 | Gather short-horizon helper (internal) | `scripts/gather_short_horizon_helpers.py` |
 | Gather escape oracle helper (internal) | `scripts/gather_escape_oracle.py` |
@@ -61,6 +64,10 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather escape feasibility audit helper (internal) | `scripts/gather_escape_feasibility_audit.py` |
 | Gather escape divergence audit helper (internal) | `scripts/gather_escape_divergence_audit.py` |
 | Gather turn realization audit helper (internal) | `scripts/gather_turn_realization_audit.py` |
+| Gather helper turn-authority contract audit helper (internal) | `scripts/gather_helper_turn_authority_contract_audit.py` |
+| Gather manual-drive sign parity audit helper (internal) | `scripts/gather_manual_drive_sign_parity_audit.py` |
+| Probe odom/world sign-chain helper (internal) | `scripts/probe_odom_world_sign_chain.py` |
+| Odom/world sign-chain runtime probe helper (internal) | `scripts/odom_world_sign_chain_runtime_probe.py` |
 | Route-planning parallel soak | `scripts/run_route_planning_parallel_soak.ps1 -Workers 2 -RunsPerWorker 1` |
 | Dashboard service | `scripts/run_dashboard_service.ps1` |
 | Dashboard validation | `scripts/run_dashboard_validation.ps1` |
@@ -142,6 +149,12 @@ Gather escape offline audit baseline:
 - Feasibility audit: `artifacts/session/live_plus45_escape_feasibility_audit_20260420/gather_escape_feasibility_audit/feasibility_summary.json`
 - Divergence audit: `artifacts/session/live_plus45_escape_divergence_audit_20260420/gather_escape_divergence_audit/divergence_summary.json`
 - Turn realization audit: `artifacts/session/live_plus45_turn_realization_audit_20260420/gather_turn_realization_audit/turn_realization_summary.json`
+- Helper turn-authority contract audit: `artifacts/session/live_plus45_helper_turn_authority_contract_audit_20260420/gather_helper_turn_authority_contract_audit/helper_turn_authority_contract_summary.json`
+- Manual-drive sign parity audit: `artifacts/session/live_plus45_manual_drive_sign_parity_audit_20260420/gather_manual_drive_sign_parity_audit/manual_drive_sign_parity_summary.json`
+
+Gather sign-chain runtime probe reference:
+- Probe summary: `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
+- Runtime probe payload: `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/runtime_probe.json`
 
 ## Testing
 

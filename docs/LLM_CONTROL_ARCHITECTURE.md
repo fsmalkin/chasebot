@@ -160,20 +160,28 @@ Planned near-term extension for gather:
 - a deterministic gather-manager sublayer may sit inside Layer 3 above the local gather heuristics
 - it may consume bounded gather state such as behind-ball progress, goal-side status, capture-entry readiness, retry history, loss or recovery signals, and explicit stall metrics
 - it may emit bounded phase or strategy directives such as `recover_goal_side`, `stabilize_pre_stage`, `stabilize_stage`, `close_capture_gap`, `handoff_to_capture`, `recover_after_handoff`, `reset_reacquire`, or other fixed strategy labels
+- a manual `pre_stage` recovery backend seam may sit inside that gather-manager sublayer at the point where [gather_mission_runner.py](../scripts/gather_mission_runner.py) currently resolves `compute_pre_stage_command(...)` and `decide_short_horizon_pre_stage_command(...)` before `_set_manual_drive(...)`
+- that seam should consume bounded local gather state: normalized ball-to-zone / robot-to-ball `pre_stage` geometry, phase context, manager directive, progress, stall, and goal-side recovery signals
+- that seam should allow only bounded backend outputs: a maneuver-family choice, a bounded short command chunk, or a switch / abstain / fallback signal
 - phase names should remain useful reporting surfaces, but they do not need to stay the primary control primitives
 - it may normalize gather geometry in a ball-to-zone local frame so mirrored cases reduce to the same bounded control problem
 - it may own region or funnel targets instead of exact point targets when that better preserves generalization
 - it may host a deterministic short-horizon action scorer or rollout planner for escape and behind-ball recovery as long as the candidate set, scoring terms, and horizon remain bounded and auditable
 - it may use reset-style recovery to retreat to a known-safe reacquire shape when measured progress stalls
+- candidate backends at that seam may include the preserved helper turn-authority / turn-profile baseline, ROS-native bounded backends such as docking-style or MPPI-style local recovery, learned maneuver selectors, learned bounded-action proposals, and learned switch / abstain sidecars, but they should be compared on the same shared harness rather than promoted as isolated lanes; the current helper lane remains a safe comparison baseline after `helper_turn_authority_contract_audit` returned `stop_and_branch` with blocking reason `sign_parity`, and the next narrow runtime-check branch is now `manual_drive_sign_parity_audit` with the concrete `scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>` / `probe_odom_world_sign_chain` follow-on; the April 20, 2026 live rerun already captured controller-side command/odom sign agreement, so the remaining runtime-check gap is truth/world yaw visibility rather than helper-authority evidence
 - before promoting a new live gather strategy family, it should be informed by an offline truth-state escape sandbox or oracle that proves stable goal-side exit is actually feasible from the failing geometries
-- if the current sandbox still fails to prove stable goal-side exit, the next work should expand offline feasibility tools first: richer sandboxing, reference maneuvers, or geometry/model audits, not another live controller-family tweak
+- if the current sandbox still fails to prove stable goal-side exit, the portfolio should keep richer sandboxing, reference maneuvers, and geometry/model audits available as comparison tools rather than defaulting to another blind live controller-family tweak
 - the current helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2` should be treated as frozen comparison lanes until that offline proof exists
+- deterministic translation remains authoritative above any backend-specific choice, and the downstream manual-drive contract remains authoritative below it:
+  - [gather_motion_bridge.py](../scripts/gather_motion_bridge.py) remains the runtime clamp surface
+  - controller and hardware caps remain the low-level safety envelope
 - it must not publish real-time steering directly and must not replace low-level control loops
 
 Not planned for the active gather path:
 
 - full RL or end-to-end learned low-level gather control
 - active LLM-owned gather strategy or steering in the real-time loop
+- direct live promotion of a learned `pre_stage` backend without deterministic translation, bridge clamping, and shared-harness evidence
 - promoting lightweight forward-model prediction or automatic gain search as the primary controller family rather than shadow or sidecar tools
 
 ### Layer 4: Lower-Level Subsystems And Control Loops

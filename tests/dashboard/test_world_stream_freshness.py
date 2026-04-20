@@ -1145,7 +1145,7 @@ def test_start_environment_worker_records_gate_service_failure_class_and_states(
         "gate-stack": {"service": "gate-stack", "status": "exited", "container_id": "gate-stack-1"},
         "operator-view": {"service": "operator-view", "status": "running", "container_id": "operator-view-1"},
     }
-    monkeypatch.setattr(dashboard_service, "find_free_port", lambda start, end: start)
+    monkeypatch.setattr(dashboard_service, "find_free_port", lambda start, end, *, exclude_ports=None: start)
     monkeypatch.setattr(dashboard_service, "make_session_id", lambda: "20260320T200000Z")
 
     controller._start_environment_worker()
@@ -1394,6 +1394,14 @@ def test_find_free_port_skips_bound_port():
         occupied = sock.getsockname()[1]
         chosen = dashboard_service.find_free_port(occupied, occupied + 32)
         assert chosen != occupied
+
+
+def test_find_free_port_skips_excluded_ports(monkeypatch):
+    monkeypatch.setattr(dashboard_service, "can_bind_localhost_port", lambda _port: True)
+
+    chosen = dashboard_service.find_free_port(14500, 14502, exclude_ports={14500, 14501})
+
+    assert chosen == 14502
 
 
 def test_list_dashboard_projects_filters_to_session_prefix(tmp_path, monkeypatch):
@@ -2105,8 +2113,17 @@ def test_start_environment_worker_retries_once_after_host_port_bind_failure(tmp_
     removed_projects: list[str] = []
     controller._force_remove_project_resources = lambda project_name: removed_projects.append(project_name)
 
-    ports = iter([8891, 14500, 8892, 14501])
-    monkeypatch.setattr(dashboard_service, "find_free_port", lambda start, end: next(ports))
+    allocation_requests: list[tuple[int, int, tuple[int, ...]]] = []
+
+    def fake_find_free_port(start, end, *, exclude_ports=None):
+        excluded = tuple(sorted(exclude_ports or set()))
+        allocation_requests.append((start, end, excluded))
+        for port in range(start, end + 1):
+            if port not in set(excluded):
+                return port
+        raise RuntimeError("no free port")
+
+    monkeypatch.setattr(dashboard_service, "find_free_port", fake_find_free_port)
     monkeypatch.setattr(dashboard_service, "make_session_id", lambda: "20260320T200000Z")
 
     events: list[tuple[str, str]] = []
@@ -2125,10 +2142,16 @@ def test_start_environment_worker_retries_once_after_host_port_bind_failure(tmp_
     controller._start_environment_worker()
 
     assert compose_calls == [8891, 8892]
+    assert allocation_requests == [
+        (8891, 8921, ()),
+        (dashboard_service.OPERATOR_VIEW_PORT_START, dashboard_service.OPERATOR_VIEW_PORT_END, ()),
+        (8891, 8921, (8891,)),
+        (dashboard_service.OPERATOR_VIEW_PORT_START, dashboard_service.OPERATOR_VIEW_PORT_END, ()),
+    ]
     assert removed_projects == ["chasecar_dashboard_20260320t200000z"]
     assert controller.state["environment_state"] == "environment_ready"
     assert controller.state["world_stream_port"] == 8892
-    assert controller.state["operator_view_port"] == 14501
+    assert controller.state["operator_view_port"] == dashboard_service.OPERATOR_VIEW_PORT_START
     assert controller.state["operator_view_ready"] is True
     assert controller.state["startup_retry_count"] == 1
     assert controller.state["startup_cleanup_count"] == 2

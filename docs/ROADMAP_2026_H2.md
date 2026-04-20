@@ -416,55 +416,86 @@ Acceptance:
 8. already retrieved balls remain in the world and behave as normal obstacles or passive stopping aids
 9. one-ball baseline behavior is not regressed while multi-ball gather lands
 
-### Step 6: Truth-State Escape Sandbox And Controller Distillation Gate
+### Step 6: Pre-Stage Backend Exploration Portfolio
 
-Goal: prove the early gather escape maneuver offline in a richer truth-state
-sandbox before promoting any new live gather controller family.
+Goal: find the best bounded manual `pre_stage` recovery backend for the
+wrong-side-to-behind-ball problem without betting the milestone on a single
+formulation.
 
 Why this comes next:
 
-1. the deeper oracle already showed that a stronger but still simplified escape search can improve projection without producing a stable goal-side exit
-2. another live controller-family tweak would still be under-informed unless the real escape maneuver is first shown feasible in truth state
-3. the escape problem should be solved first as “wrong side of ball -> safe behind-ball region,” not as another pre-stage point-target patch
-4. serial dashboard proof should remain the trust surface while the richer offline sandbox does the discovery work
-5. LLM gather control should stay deferred until deterministic gather mechanics are stable enough to benchmark fairly
+1. the deeper oracle and sandbox already showed that the current simplified escape formulation is still not enough to prove stable goal-side exit
+2. the April 20, 2026 audit stack says the strongest current preserved safe-control signal is still `strategy_authority_limited`, but the helper turn-authority / turn-profile lane is now preserved as a comparison baseline after `helper_turn_authority_contract_audit` returned `stop_and_branch` with blocking_reason=`sign_parity`, and the follow-on `manual_drive_sign_parity_audit` now points the runtime-check branch at the concrete `scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>` follow-on
+3. the escape problem should be solved first as "wrong side of ball -> safe behind-ball region," not as another pre-stage point-target patch
+4. serial dashboard proof should remain the trust surface while this broader backend portfolio competes offline and in shadow first
+5. this portfolio is local to manual gather `pre_stage`; it does not replace the later onboard high-level visit-and-gather planner evaluation
 
 Work:
 
-1. keep the current helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2` frozen as control lanes rather than promotion targets
-2. build a dedicated truth-state escape sandbox that covers only the early pre-contact gather problem
-3. make that sandbox richer than the current oracle:
-   - longer horizon
-   - broader macro families including reset and loop-around behavior
-   - behind-ball region targets instead of exact pre-stage points
-   - explicit stable goal-side exit criteria
-4. use the sandbox to answer whether fresh-only `plus45` starts are actually clearable under the current geometry and simplified dynamics assumptions
-5. only if the sandbox proves stable goal-side exit is feasible should a new deterministic live controller family be distilled
-6. if the sandbox still fails, classify the blocker as a geometry, horizon, or modeling problem rather than another controller-family miss
-7. keep operator/dashboard validation serial; no new matrix or neighboring-case live runs should spend time while fresh-only `plus45` remains red in `pre_stage`
-8. permit gather-brain exploration only in shadow mode until one deterministic family is clearly stable
+1. keep one safe control:
+   - preserve the helper turn-authority / turn-profile / manual-drive contract lane as the deterministic comparison baseline informed by the April 20 audit stack, not as the next direct promotion path while `sign_parity` remains the blocking reason
+2. open four deeper alternative paths as co-equal exploration branches on the same Layer 3 seam:
+   - ROS-native bounded backend branch:
+     - docking-style local staging / recovery
+     - MPPI-style local recovery
+   - learned maneuver selector branch:
+     - rule-labeled maneuver-family choice in shadow mode
+   - learned bounded-action backend branch:
+     - small bounded local action proposals in shadow mode
+   - learned switch / abstain backend branch:
+     - stall detection, backend selection, or fallback gating in shadow mode
+3. install one shared manual `pre_stage` backend seam around the point where `gather_mission_runner.py` currently resolves `compute_pre_stage_command(...)` or `decide_short_horizon_pre_stage_command(...)` before `_set_manual_drive(...)`
+4. keep every branch bounded by the same downstream contract:
+   - deterministic translation remains authoritative
+   - `gather_motion_bridge.py` remains the runtime clamp surface
+   - controller and hardware caps remain authoritative
+5. judge every branch on the same harness:
+   - April 19, 2026 canonical `live_plus45_short_horizon_v2_20260419` corpus
+   - five representative fixtures
+   - nearby geometry jitter
+   - neighboring-case expansion only after a branch earns it
+   - fresh shadow-sim comparison before any live consideration
+6. keep the protected floors unchanged:
+   - `visit_route_planning` remains the regression floor
+   - the accepted one-ball baseline remains protected
+   - no live promotion is unlocked by this roadmap update alone
+7. avoid declaring whole categories dead from one early weak result:
+   - one weak formulation is branch-specific signal
+   - it is not by itself proof that the whole deterministic, ROS-native, or learned category should be retired
+8. keep LLM-owned real-time gather steering out of scope while allowing shadow learned backends inside the bounded Layer 3 evaluation surface
+
+Shared evidence contract:
+
+1. portfolio bundle:
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/portfolio_summary.json`
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/scorecard.md`
+2. per-branch comparison bundle:
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/counterfactual_replay_summary.json`
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/shadow_summary.json`
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/fixtures/<fixture_label>.json`
+3. learned-branch extras:
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/teacher_dataset_summary.json`
+   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/holdout_eval_summary.json`
 
 Acceptance:
 
-1. a sandbox or oracle bundle exists that explicitly classifies the representative fresh-only `plus45` fixtures as `clearable`, `near_clear`, or `not_clearable`
-2. either the sandbox proves stable goal-side exit on at least `4/5` representative fixtures and unlocks controller distillation, or it fails again with enough evidence to justify a geometry/modeling pivot
-3. no new live controller lane is promoted unless the sandbox first proves stable goal-side exit is feasible
-4. the protected route-planning floor and one-ball baseline remain untouched while this proof work lands
+1. the portfolio is evaluated as a shared comparison program rather than a single mainline plus token sidecars
+2. the protected route-planning floor and one-ball baseline remain untouched while the portfolio work lands
+3. no branch is considered live-promotion ready until it survives the shared harness and fresh shadow-sim comparison
+4. the later onboard model step remains a distinct high-level planning milestone rather than being merged into this local `pre_stage` backend work
 
-Post-sandbox direction update:
+Current direction update:
 
-1. the first sandbox result is now the new reference stop signal:
+1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
-2. the next milestone is no longer “build `short_horizon_v3`”; it is “prove the maneuver offline with richer sandboxing or reference maneuvers first”
-3. the next offline slice should broaden the sandbox with:
-   - forward motion as well as reverse-biased escape behavior
-   - wider loop-around and reset families
-   - safer-behind-ball region objectives
-   - finer or longer rollout profiles when needed
-4. add a feasibility reference lane, such as teleop-recorded or hand-scripted truth-state maneuvers, to answer whether the escape is actually achievable under the current sim geometry
-5. if both richer sandboxing and the reference lane still fail, treat the blocker as geometry, footprint, turn-radius, or dynamics-model limited rather than another controller-family miss
-6. keep `baseline`, `short_horizon_v1`, and `short_horizon_v2` frozen as controls until that broader feasibility work changes the result
+2. the next milestone is no longer "build `short_horizon_v3`"; it is "compare multiple bounded `pre_stage` backends on the shared harness"
+3. the project should now search more aggressively for a better bounded backend rather than assuming the next result must come from one helper-only branch
+4. the preserved helper contract lane is still not the next promotion path:
+   - `helper_turn_authority_contract_audit` returned `stop_and_branch` with blocking_reason=`sign_parity`
+   - `manual_drive_sign_parity_audit` now points to the `probe_odom_world_sign_chain` runtime probe wrapper (`scripts/run_probe_odom_world_sign_chain.ps1`)
+   - the April 20, 2026 live rerun now completes through the wrapper and captures controller command/odom sign agreement in `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
+   - that rerun is still `runtime_sign_chain_inconclusive`, so the next narrow branch is to expose truth/world yaw sign in the runtime probe path rather than reopening helper turn-authority promotion work
 
 ### Step 7: Corral Time Optimization
 

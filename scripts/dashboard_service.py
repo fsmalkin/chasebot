@@ -358,8 +358,11 @@ def can_bind_localhost_port(port: int) -> bool:
     return True
 
 
-def find_free_port(start: int, end: int) -> int:
+def find_free_port(start: int, end: int, *, exclude_ports: Optional[set[int]] = None) -> int:
+    excluded = exclude_ports or set()
     for port in range(start, end + 1):
+        if port in excluded:
+            continue
         if can_bind_localhost_port(port):
             return port
     raise RuntimeError(f"No free localhost port in range {start}-{end}.")
@@ -2730,9 +2733,23 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
             world_stream_port = 0
             operator_view_port = 0
             gate_service_states: Dict[str, Dict[str, Any]] = {}
+            failed_world_stream_ports: set[int] = set()
+            failed_operator_view_ports: set[int] = set()
             for attempt in range(2):
-                world_stream_port = 0 if self.headless_worker_mode else find_free_port(8891, 8921)
-                operator_view_port = 0 if self.headless_worker_mode else find_free_port(OPERATOR_VIEW_PORT_START, OPERATOR_VIEW_PORT_END)
+                world_stream_port = (
+                    0
+                    if self.headless_worker_mode
+                    else find_free_port(8891, 8921, exclude_ports=failed_world_stream_ports)
+                )
+                operator_view_port = (
+                    0
+                    if self.headless_worker_mode
+                    else find_free_port(
+                        OPERATOR_VIEW_PORT_START,
+                        OPERATOR_VIEW_PORT_END,
+                        exclude_ports=failed_operator_view_ports,
+                    )
+                )
                 env = self._base_env(
                     session_id=session_id,
                     world_stream_port=world_stream_port,
@@ -2777,6 +2794,10 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                 bind_port = self._extract_host_port_bind_failure_port(output)
                 if bind_port is None or attempt >= 1:
                     raise RuntimeError(output.strip() or "gate bring-up failed")
+                if 8891 <= bind_port <= 8921:
+                    failed_world_stream_ports.add(bind_port)
+                elif OPERATOR_VIEW_PORT_START <= bind_port <= OPERATOR_VIEW_PORT_END:
+                    failed_operator_view_ports.add(bind_port)
                 retry_cleanup_projects = self._cleanup_stale_dashboard_projects(current_project=project_name)
                 if retry_cleanup_projects:
                     for retry_project in retry_cleanup_projects:

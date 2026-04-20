@@ -651,6 +651,137 @@ Turn-realization audit contract:
    - `plant_realization_limited` -> plant/world turn-realization audit
    - `mixed_turn_contract_limited` -> mixed contract review before any live changes
 
+## Helper Turn-Authority Contract Audit (Artifact-First Helper Authority Gate)
+
+Use this after the turn-realization audit has already surfaced `strategy_authority_limited` and the next question is whether the frozen live helper family is capped below the best offline maneuver demand enough to justify a new bounded control-family lane.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_gather_helper_turn_authority_contract_audit.ps1 -CampaignId <id>`
+
+Helper turn-authority contract audit:
+
+1. defaults to the same `artifacts/session/live_plus45_short_horizon_v2_20260419/gather_mission_repeatability/campaign_run_summary.json` source run as the divergence and turn-realization audits, with the same optional campaign summary, run index, and scenario overrides
+2. reuses the same representative-fixture extraction and truth-alignment path, so it stays scoped to:
+   - `first_post_yaw_gate`
+   - `early_stall`
+   - `mid_stall`
+   - `late_stall`
+   - `terminal_stall`
+3. remains analysis-only and does not change live gather behavior
+4. reads the current authority surfaces from repo code and config only:
+   - `scripts/gather_mission_helpers.py` `compute_pre_stage_command(...)`
+   - `scripts/gather_short_horizon_helpers.py`
+   - `scripts/gather_motion_bridge.py`
+   - `ros2_config/config/jetbot_controllers.yaml`
+   - `ros2_config/config/robot_hardware_constraints.yaml`
+5. computes one fixed per-fixture authority contract:
+   - current helper-family cap seen in the live control family
+   - live peak requested `angular_z`
+   - live commanded angular integral
+   - percent of samples pinned at the current family cap
+   - downstream bridge, controller, and hardware caps
+   - offline peak `angular_z` and angular integral from the selected best maneuver family
+   - `minimum_viable_cap_radps = max(live_peak_requested, offline_peak_angular_z * 1.05)`
+   - `max_safe_cap_radps = min(bridge_cap * 0.85, controller_cap, hardware_cap)`
+6. marks `authority_gap_confirmed=true` only when:
+   - the current live family cap is at least `15%` below the selected offline peak demand
+   - the current family cap is still below the downstream safe envelope
+   - the turn-realization audit already marked the fixture `strategy_authority_limited`
+7. emits one binary next action for the slice:
+   - `new_helper_authority_lane` -> open the bounded follow-on lane `short_horizon_authority_v1`
+   - `stop_and_branch` -> record `blocking_reason` as `sign_parity`, `plant_realization`, or `cap_exceeds_safe_followup`
+8. opens the follow-on patch path only when:
+   - `authority_gap_confirmed` covers at least `3/5` representative fixtures
+   - the maximum confirmed `minimum_viable_cap_radps` stays `<= 1.0`
+   - no dominant sign-parity or plant-realization blocker supersedes the authority gap
+9. keeps the follow-on patch definition explicit even when the gate stays closed:
+   - proposed lane name: `short_horizon_authority_v1`
+   - authority ceiling: `1.0 rad/s`
+   - preserve `baseline`, `short_horizon_v1`, and `short_horizon_v2` as frozen comparison lanes
+   - do not change stage logic, capture-entry logic, bridge caps above `1.2`, controller config, or hardware config in the first behavior slice
+
+## Manual-Drive Sign Parity Audit (Artifact-First Command/Odom/World Sign Chain Gate)
+
+Use this after the helper turn-authority audit branches on `sign_parity`, or whenever the next question is whether the frozen artifacts implicate a static sign surface, the odom-facing belief pose, or the truth/world sign chain.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_gather_manual_drive_sign_parity_audit.ps1 -CampaignId <id>`
+
+Manual-drive sign-parity audit:
+
+1. defaults to the same `artifacts/session/live_plus45_short_horizon_v2_20260419/gather_mission_repeatability/campaign_run_summary.json` source run as the divergence, turn-realization, and helper-authority audits, with the same optional campaign summary, run index, and scenario overrides
+2. reuses the same representative-fixture extraction and truth-alignment path, so it stays scoped to:
+   - `first_post_yaw_gate`
+   - `early_stall`
+   - `mid_stall`
+   - `late_stall`
+   - `terminal_stall`
+3. remains analysis-only and does not change live gather behavior
+4. reads the static sign surfaces from repo code and config only:
+   - `scripts/gather_motion_bridge.py`
+   - `scripts/visual_demo_observer.py`
+   - `scripts/dashboard_service.py`
+   - `scripts/gather_mission_runner.py`
+   - `ros2_config/config/jetbot_diff_drive_v1.0.0.yaml`
+   - `ros2_config/config/jetbot_controllers.yaml`
+5. computes one fixed per-fixture sign-chain comparison:
+   - dominant requested command sign
+   - odom-facing belief-pose net yaw sign and wrong-sign step count from `state_history.jsonl`
+   - truth/world net yaw sign and wrong-sign step count from `truth_timeline.json`
+   - command-to-odom, command-to-world, and odom-to-world sign matches
+   - static sign-surface snapshot for the bridge, controller configs, and belief-pose path
+6. classifies one dominant fixture diagnosis from:
+   - `static_sign_surface_mismatch`
+   - `odom_world_sign_divergent`
+   - `command_to_odom_sign_divergent`
+   - `mixed_sign_chain_unresolved`
+7. emits one next action for the slice:
+   - `fix_static_sign_surface`
+   - `probe_odom_world_sign_chain`
+   - `probe_bridge_controller_sign_chain`
+   - `manual_drive_sign_chain_review`
+8. treats the static config surface as preserved only when:
+   - the bridge preserves the commanded angular sign
+   - both controller configs match
+   - both controller configs use the same negative symmetric wheel-radius multipliers that restore Gazebo/world parity for the JetBot SDF
+9. uses the frozen artifact chain itself to decide the next runtime branch:
+   - static sign mismatch first
+   - then odom-vs-world divergence if it covers at least `3/5` fixtures
+   - then command-to-odom divergence if it covers at least `3/5`
+   - otherwise a mixed sign-chain review before changing live behavior
+10. when the emitted next action is `probe_odom_world_sign_chain`, use the dedicated live wrapper in the next section instead of inventing an ad hoc runtime probe
+
+## Probe Odom/World Sign Chain (Live Runtime Follow-On)
+
+Use this after the manual-drive sign-parity audit emits `next_action.decision=probe_odom_world_sign_chain` with `live_probe_required=true`, or when we need the concrete runtime command/artifact surface for the odom-vs-world sign branch.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>`
+
+Probe odom/world sign chain:
+
+1. reruns `scripts/gather_manual_drive_sign_parity_audit.py` through the wrapper first and exits early unless the frozen source audit still points to `probe_odom_world_sign_chain`
+2. waits for the fresh direct-mode probe run to reach `environment_ready`, reads the active dashboard `compose_project`, and scopes the live collector to that concrete runtime instead of guessing against whichever `gate-stack` container happens to exist first
+3. launches `scripts/odom_world_sign_chain_runtime_probe.py` as a behavior-neutral live collector while it runs one fresh `short_horizon_v2` gather repeatability probe on the same world, surface, layout, and execution mode requested by the source campaign summary
+4. analyzes the fresh run with `scripts/probe_odom_world_sign_chain.py`, so the next runtime decision is tied to one concrete artifact bundle rather than only the prior abstract sign-parity diagnosis
+5. keeps the live follow-on narrowly scoped to the command -> cmd_vel -> odom -> world sign chain and does not change gather behavior by itself
+6. emits one artifact-backed runtime diagnosis such as:
+   - `command_surface_sign_divergent`
+   - `odom_publication_chain_divergent`
+   - `model_odom_vs_world_divergent`
+   - `world_truth_divergent_from_odom_chain`
+   - `sign_chain_aligned`
+   - `runtime_sign_chain_inconclusive`
+7. writes the analyzer bundle under `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/` and preserves the live collector payload plus probe logs in the same root
+8. current live reference rerun:
+   - `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
+   - `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/runtime_probe.json`
+   - this rerun already captures controller-side sign agreement on `/jetbot_base_controller/cmd_vel` and `/jetbot_base_controller/odom`
+   - if the summary is still `runtime_sign_chain_inconclusive` because truth/world sign remains missing or zero, branch next to surface truth/world yaw sign in the runtime probe path before revisiting helper authority promotion
+
 ## Headless Milestone Path (Current Preferred)
 
 Use this while iterating before operator-facing GUI rehearsal:
@@ -764,15 +895,31 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<campaign_id>/gather_turn_realization_audit/turn_realization_summary.json`
    - `artifacts/session/<campaign_id>/gather_turn_realization_audit/scorecard.md`
    - `artifacts/session/<campaign_id>/gather_turn_realization_audit/fixtures/<fixture_label>.json`
-19. Route-planning parallel soak:
+19. Helper turn-authority contract audit bundle:
+   - `artifacts/session/<campaign_id>/gather_helper_turn_authority_contract_audit/helper_turn_authority_contract_summary.json`
+   - `artifacts/session/<campaign_id>/gather_helper_turn_authority_contract_audit/scorecard.md`
+   - `artifacts/session/<campaign_id>/gather_helper_turn_authority_contract_audit/fixtures/<fixture_label>.json`
+20. Manual-drive sign parity audit bundle:
+   - `artifacts/session/<campaign_id>/gather_manual_drive_sign_parity_audit/manual_drive_sign_parity_summary.json`
+   - `artifacts/session/<campaign_id>/gather_manual_drive_sign_parity_audit/scorecard.md`
+   - `artifacts/session/<campaign_id>/gather_manual_drive_sign_parity_audit/fixtures/<fixture_label>.json`
+21. Probe odom/world sign chain bundle:
+   - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
+   - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/scorecard.md`
+   - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/fixtures/<fixture_label>.json`
+   - live wrapper extras:
+     - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/runtime_probe.json`
+     - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/logs/runtime_probe.stdout.log`
+     - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/logs/runtime_probe.stderr.log`
+22. Route-planning parallel soak:
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/campaign_summary.json`
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/dashboard_service.log`
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/repeatability.log`
-20. Corral surface calibration:
+23. Corral surface calibration:
    - `artifacts/session/<campaign_id>/corral_surface_calibration/campaign_summary.json`
    - `artifacts/session/<campaign_id>/corral_surface_calibration/scorecard.md`
    - `artifacts/session/<campaign_id>/corral_surface_calibration/logs/<surface_profile>.log`
-21. Gather goal-side matrix:
+24. Gather goal-side matrix:
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/campaign_summary.json`
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/scorecard.md`
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/logs/*.log`
