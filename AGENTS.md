@@ -48,9 +48,11 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Corral surface calibration | `scripts/run_corral_surface_calibration.ps1 -RunsPerLane 3` |
 | Goal-side matrix | `scripts/run_gather_goal_side_matrix.ps1` |
 | Gather escape oracle | `scripts/run_gather_escape_oracle.ps1 -CampaignId <id>` |
+| Gather escape sandbox | `scripts/run_gather_escape_sandbox.ps1 -CampaignId <id>` |
 | Gather manager helper (internal) | `scripts/gather_manager_helpers.py` |
 | Gather short-horizon helper (internal) | `scripts/gather_short_horizon_helpers.py` |
 | Gather escape oracle helper (internal) | `scripts/gather_escape_oracle.py` |
+| Gather escape sandbox helper (internal) | `scripts/gather_escape_sandbox.py` |
 | Route-planning parallel soak | `scripts/run_route_planning_parallel_soak.ps1 -Workers 2 -RunsPerWorker 1` |
 | Dashboard service | `scripts/run_dashboard_service.ps1` |
 | Dashboard validation | `scripts/run_dashboard_validation.ps1` |

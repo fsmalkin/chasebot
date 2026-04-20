@@ -416,6 +416,50 @@ Oracle contract:
 8. emits one oracle summary bundle plus a human-readable scorecard under the session artifact root
 9. gates any new escape-family distillation work; if the representative fixtures do not show feasible stable goal-side-clearing sequences, the blocker should be treated as geometry or horizon limited rather than another threshold seam
 
+## Gather Escape Sandbox (Richer Truth-State Feasibility Probe)
+
+Use this after the oracle if fresh-only `plus45` is still blocked in `pre_stage` and the next question is whether a richer loop-around or reset maneuver can actually reach a safe behind-ball corridor from the real failing starts.
+
+Command:
+
+1. `powershell -ExecutionPolicy Bypass -File scripts/run_gather_escape_sandbox.ps1 -CampaignId <id>`
+
+Sandbox contract:
+
+1. reuses the same fresh-only gather repeatability traces and representative fixture labels as the oracle:
+   - `first_post_yaw_gate`
+   - `early_stall`
+   - `mid_stall`
+   - `late_stall`
+   - `terminal_stall`
+2. keeps the problem scoped to the early pre-contact escape only: `wrong side of ball -> safe behind-ball region`
+3. uses a separate richer truth-state search in a ball-to-zone local frame:
+   - horizon `12.0 s`
+   - step `0.25 s`
+   - depth `4`
+4. keeps the ball and zone static for sandbox v1 and rolls out only robot unicycle motion
+5. compares the current reverse arc / reflank / pivot families against wider deliberate escape families such as:
+   - `forward_loop`
+   - `retreat_then_loop`
+   - `three_point`
+   - `sweep_clear`
+6. ranks sequences lexicographically by:
+   - `corridor_clearable`
+   - `goal_side_clearable`
+   - lateral gain
+   - projection gain
+   - pre-stage distance gain
+   - switching / stationary penalty
+7. treats `corridor_clearable` as the strongest success class:
+   - stable goal-side exit through the final `1.5 s` of rollout
+   - end projection `<= 1.0 m`
+   - end lateral error `<= 0.60 m`
+8. emits one sandbox summary bundle, one scorecard, and one trajectory file per representative fixture for the primary trace family
+9. is the next-stage gate above the oracle:
+   - `>= 4/5 corridor_clearable` unlocks controller distillation
+   - `>= 4/5 goal_side_clearable` justifies a narrower escape-only live lane
+   - otherwise the blocker should be treated as geometry / horizon / modeling limited rather than another live controller-family tweak
+
 ## Headless Milestone Path (Current Preferred)
 
 Use this while iterating before operator-facing GUI rehearsal:
@@ -509,16 +553,19 @@ Milestone 3 pass criteria include:
 13. Gather escape oracle bundle:
    - `artifacts/session/<timestamp>/gather_escape_oracle/oracle_summary.json`
    - `artifacts/session/<timestamp>/gather_escape_oracle/scorecard.md`
-   - `artifacts/session/<timestamp>/visual/visual_demo_summary.json`
-13. Route-planning parallel soak:
+14. Gather escape sandbox bundle:
+   - `artifacts/session/<timestamp>/gather_escape_sandbox/sandbox_summary.json`
+   - `artifacts/session/<timestamp>/gather_escape_sandbox/scorecard.md`
+   - `artifacts/session/<timestamp>/gather_escape_sandbox/trajectories/<fixture_label>.json`
+15. Route-planning parallel soak:
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/campaign_summary.json`
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/dashboard_service.log`
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/repeatability.log`
-14. Corral surface calibration:
+16. Corral surface calibration:
    - `artifacts/session/<campaign_id>/corral_surface_calibration/campaign_summary.json`
    - `artifacts/session/<campaign_id>/corral_surface_calibration/scorecard.md`
    - `artifacts/session/<campaign_id>/corral_surface_calibration/logs/<surface_profile>.log`
-15. Gather goal-side matrix:
+17. Gather goal-side matrix:
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/campaign_summary.json`
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/scorecard.md`
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/logs/*.log`
