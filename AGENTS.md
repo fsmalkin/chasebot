@@ -157,6 +157,7 @@ Gather sign-chain runtime probe reference:
 - Runtime probe payload: `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/runtime_probe.json`
 - Working odom witness for the next probe slice: `/jetbot_base_controller/odom` only, without redefining the public `/odom` contract
 - Planned next slice: sample live world-yaw sign from `artifacts/session/<session_id>/visual/truth_state.json` during the probe window and keep `truth_timeline.json` as a secondary cross-check
+- Preferred implementation seam for that slice: wire `truth_state.json` into `scripts/odom_world_sign_chain_runtime_probe.py` and `scripts/probe_odom_world_sign_chain.py`, while leaving `scripts/sim_truth_probe.py` unchanged unless the consumer-side path proves insufficient
 
 ## Testing
 

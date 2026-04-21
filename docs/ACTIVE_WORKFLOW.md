@@ -785,6 +785,11 @@ Probe odom/world sign chain:
      - sample live world-yaw sign from `artifacts/session/<session_id>/visual/truth_state.json` during the same probe window
      - keep `truth_timeline.json` as a secondary post-run cross-check rather than the primary live truth source
      - only revisit helper authority promotion after the truth/world branch turns conclusive
+     - preferred implementation seam for this slice:
+       - pass the probe session's `visual/truth_state.json` path through `scripts/run_probe_odom_world_sign_chain.ps1`
+       - have `scripts/odom_world_sign_chain_runtime_probe.py` poll that file during the probe window and emit additive `world_truth` metrics in `runtime_probe.json`
+       - have `scripts/probe_odom_world_sign_chain.py` prefer those runtime-probe truth metrics while retaining `truth_timeline.json` as fallback and cross-check evidence
+       - leave `scripts/sim_truth_probe.py` unchanged unless the consumer-side path proves insufficient
 
 ## Headless Milestone Path (Current Preferred)
 
