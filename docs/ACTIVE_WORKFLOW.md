@@ -780,7 +780,11 @@ Probe odom/world sign chain:
    - `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
    - `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/runtime_probe.json`
    - this rerun already captures controller-side sign agreement on `/jetbot_base_controller/cmd_vel` and `/jetbot_base_controller/odom`
-   - if the summary is still `runtime_sign_chain_inconclusive` because truth/world sign remains missing or zero, branch next to surface truth/world yaw sign in the runtime probe path before revisiting helper authority promotion
+   - treat `/jetbot_base_controller/odom` as the working odom witness for this probe branch only; do not redefine the public `/odom` contract based on this rerun
+   - if the summary is still `runtime_sign_chain_inconclusive` because truth/world sign remains missing or zero, the planned next slice is:
+     - sample live world-yaw sign from `artifacts/session/<session_id>/visual/truth_state.json` during the same probe window
+     - keep `truth_timeline.json` as a secondary post-run cross-check rather than the primary live truth source
+     - only revisit helper authority promotion after the truth/world branch turns conclusive
 
 ## Headless Milestone Path (Current Preferred)
 

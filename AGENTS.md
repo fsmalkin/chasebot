@@ -155,6 +155,8 @@ Gather escape offline audit baseline:
 Gather sign-chain runtime probe reference:
 - Probe summary: `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
 - Runtime probe payload: `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/runtime_probe.json`
+- Working odom witness for the next probe slice: `/jetbot_base_controller/odom` only, without redefining the public `/odom` contract
+- Planned next slice: sample live world-yaw sign from `artifacts/session/<session_id>/visual/truth_state.json` during the probe window and keep `truth_timeline.json` as a secondary cross-check
 
 ## Testing
 

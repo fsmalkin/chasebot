@@ -495,7 +495,8 @@ Current direction update:
    - `helper_turn_authority_contract_audit` returned `stop_and_branch` with blocking_reason=`sign_parity`
    - `manual_drive_sign_parity_audit` now points to the `probe_odom_world_sign_chain` runtime probe wrapper (`scripts/run_probe_odom_world_sign_chain.ps1`)
    - the April 20, 2026 live rerun now completes through the wrapper and captures controller command/odom sign agreement in `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
-   - that rerun is still `runtime_sign_chain_inconclusive`, so the next narrow branch is to expose truth/world yaw sign in the runtime probe path rather than reopening helper turn-authority promotion work
+   - treat `/jetbot_base_controller/odom` as the working odom witness for this probe branch only; do not redefine the public `/odom` contract based on this rerun
+   - that rerun is still `runtime_sign_chain_inconclusive`, so the next narrow branch is to sample live truth/world yaw from `artifacts/session/<session_id>/visual/truth_state.json` during the probe window, keep `truth_timeline.json` as a secondary cross-check, and only then decide whether helper turn-authority promotion can reopen
 
 ### Step 7: Corral Time Optimization
 

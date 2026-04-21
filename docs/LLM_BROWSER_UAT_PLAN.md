@@ -682,8 +682,9 @@ Current direction update:
    - April 20, 2026 live rerun status:
      - `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
      - the wrapper now completes the live rerun and captures controller-facing signs on `/jetbot_base_controller/cmd_vel` and `/jetbot_base_controller/odom`
+     - treat `/jetbot_base_controller/odom` as the working odom witness for this probe branch only; do not redefine the public `/odom` contract based on this rerun
      - the current result is still `runtime_sign_chain_inconclusive`, but the blocker has narrowed to missing truth/world-sign evidence rather than startup failure or missing controller-side sign data
-     - the next narrow branch is to surface truth/world yaw sign in the runtime probe path before reopening helper turn-authority promotion work
+     - the next narrow branch is to sample live world-yaw sign from `artifacts/session/<session_id>/visual/truth_state.json` during the same probe window, keep `truth_timeline.json` as a secondary post-run cross-check, and only then decide whether helper turn-authority promotion can reopen
    - `artifacts/session/live_plus45_escape_feasibility_audit_20260420/gather_escape_feasibility_audit/feasibility_summary.json`
    - `artifacts/session/live_plus45_escape_divergence_audit_20260420/gather_escape_divergence_audit/divergence_summary.json`
    - `artifacts/session/live_plus45_turn_realization_audit_20260420/gather_turn_realization_audit/turn_realization_summary.json`
