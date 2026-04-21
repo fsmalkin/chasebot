@@ -37,6 +37,24 @@ def yaw_from_quaternion(quaternion: Any) -> float:
     return math.atan2(siny_cosp, cosy_cosp)
 
 
+def yaw_from_truth_pose(pose: Any) -> float | None:
+    if not isinstance(pose, dict):
+        return None
+    orientation = pose.get("orientation")
+    if not isinstance(orientation, dict):
+        return None
+    try:
+        x = float(orientation.get("x", 0.0) or 0.0)
+        y = float(orientation.get("y", 0.0) or 0.0)
+        z = float(orientation.get("z", 0.0) or 0.0)
+        w = float(orientation.get("w", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return None
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
 def normalize_angle(value: float) -> float:
     while value > math.pi:
         value -= 2.0 * math.pi
@@ -59,6 +77,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--duration-s", type=float, default=45.0)
     parser.add_argument("--json-out", required=True)
+    parser.add_argument("--truth-state-path", default="")
     parser.add_argument("--use-sim-time", action="store_true")
     return parser.parse_args()
 
@@ -163,6 +182,113 @@ class OdomTopicStats:
         }
 
 
+@dataclass
+class WorldTruthStats:
+    truth_state_path: str = ""
+    poll_count: int = 0
+    file_missing_poll_count: int = 0
+    parse_failure_count: int = 0
+    invalid_payload_count: int = 0
+    duplicate_sample_counter_poll_count: int = 0
+    sample_count: int = 0
+    robot_truth_sample_count: int = 0
+    nonzero_step_count: int = 0
+    peak_abs_yaw_step_rad: float = 0.0
+    net_yaw_change_rad: float = 0.0
+    cumulative_abs_yaw_change_rad: float = 0.0
+    first_nonzero_sign: int = 0
+    last_nonzero_sign: int = 0
+    start_yaw_rad: float | None = None
+    end_yaw_rad: float | None = None
+    window_start_t_s: float | None = None
+    window_end_t_s: float | None = None
+    source_session_id: str = ""
+    latest_sample_counter: int | None = None
+    _last_yaw_rad: float | None = None
+
+    def poll(self, truth_state_path: Path, *, probe_elapsed_s: float) -> None:
+        self.poll_count += 1
+        if not truth_state_path.exists():
+            self.file_missing_poll_count += 1
+            return
+        try:
+            payload = json.loads(truth_state_path.read_text(encoding="utf-8"))
+        except Exception:
+            self.parse_failure_count += 1
+            return
+        if not isinstance(payload, dict):
+            self.invalid_payload_count += 1
+            return
+        sample_counter_raw = payload.get("samples")
+        try:
+            sample_counter = int(sample_counter_raw)
+        except (TypeError, ValueError):
+            self.invalid_payload_count += 1
+            return
+        if self.latest_sample_counter is not None and sample_counter <= self.latest_sample_counter:
+            self.duplicate_sample_counter_poll_count += 1
+            return
+        self.latest_sample_counter = sample_counter
+        self.sample_count += 1
+        self.window_start_t_s = probe_elapsed_s if self.window_start_t_s is None else self.window_start_t_s
+        self.window_end_t_s = probe_elapsed_s
+        source_session_id = str(payload.get("session_id", "") or "").strip()
+        if source_session_id:
+            self.source_session_id = source_session_id
+        yaw_rad = yaw_from_truth_pose(payload.get("robot_truth_pose"))
+        if yaw_rad is None:
+            return
+        self.robot_truth_sample_count += 1
+        current_yaw = float(yaw_rad)
+        if self.start_yaw_rad is None:
+            self.start_yaw_rad = current_yaw
+        if self._last_yaw_rad is not None:
+            yaw_delta = normalize_angle(current_yaw - self._last_yaw_rad)
+            self.peak_abs_yaw_step_rad = max(self.peak_abs_yaw_step_rad, abs(yaw_delta))
+            self.net_yaw_change_rad += yaw_delta
+            self.cumulative_abs_yaw_change_rad += abs(yaw_delta)
+            current_sign = sign(yaw_delta, eps=MIN_YAW_RAD)
+            if current_sign != 0:
+                self.nonzero_step_count += 1
+                if self.first_nonzero_sign == 0:
+                    self.first_nonzero_sign = current_sign
+                self.last_nonzero_sign = current_sign
+        self._last_yaw_rad = current_yaw
+        self.end_yaw_rad = current_yaw
+
+    def dominant_sign(self) -> int:
+        resolved_sign = sign(self.net_yaw_change_rad, eps=MIN_YAW_RAD)
+        if resolved_sign == 0 and self.first_nonzero_sign != 0 and self.first_nonzero_sign == self.last_nonzero_sign:
+            return self.first_nonzero_sign
+        return resolved_sign
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": bool(self.truth_state_path),
+            "truth_state_path": self.truth_state_path,
+            "poll_count": int(self.poll_count),
+            "file_missing_poll_count": int(self.file_missing_poll_count),
+            "parse_failure_count": int(self.parse_failure_count),
+            "invalid_payload_count": int(self.invalid_payload_count),
+            "duplicate_sample_counter_poll_count": int(self.duplicate_sample_counter_poll_count),
+            "sample_count": int(self.sample_count),
+            "robot_truth_sample_count": int(self.robot_truth_sample_count),
+            "nonzero_step_count": int(self.nonzero_step_count),
+            "peak_abs_yaw_step_rad": round(self.peak_abs_yaw_step_rad, 6),
+            "net_yaw_change_rad": round(self.net_yaw_change_rad, 6),
+            "cumulative_abs_yaw_change_rad": round(self.cumulative_abs_yaw_change_rad, 6),
+            "first_nonzero_sign": int(self.first_nonzero_sign),
+            "last_nonzero_sign": int(self.last_nonzero_sign),
+            "dominant_yaw_sign": int(self.dominant_sign()),
+            "start_yaw_rad": round(self.start_yaw_rad, 6) if self.start_yaw_rad is not None else None,
+            "end_yaw_rad": round(self.end_yaw_rad, 6) if self.end_yaw_rad is not None else None,
+            "window_start_t_s": round(self.window_start_t_s, 6) if self.window_start_t_s is not None else None,
+            "window_end_t_s": round(self.window_end_t_s, 6) if self.window_end_t_s is not None else None,
+            "source_session_id": self.source_session_id,
+            "latest_sample_counter": int(self.latest_sample_counter) if self.latest_sample_counter is not None else None,
+        }
+
+
 class OdomWorldSignChainRuntimeProbe(Node):
     def __init__(self, args: argparse.Namespace) -> None:
         super().__init__("odom_world_sign_chain_runtime_probe")
@@ -178,6 +304,10 @@ class OdomWorldSignChainRuntimeProbe(Node):
             topic: OdomTopicStats(topic=topic)
             for topic in (ODOM_TOPIC_MODEL, ODOM_TOPIC_PRIMARY, ODOM_TOPIC_CONTROLLER)
         }
+        self.truth_state_path = Path(args.truth_state_path).resolve() if args.truth_state_path else None
+        self.world_truth = WorldTruthStats(
+            truth_state_path=str(self.truth_state_path) if self.truth_state_path else ""
+        )
         self._probe_subs = []
         qos = QoSPresetProfiles.SENSOR_DATA.value
         for topic in self.command_stats:
@@ -251,6 +381,11 @@ class OdomWorldSignChainRuntimeProbe(Node):
 
         return _callback
 
+    def poll_truth_state(self, *, probe_elapsed_s: float) -> None:
+        if self.truth_state_path is None:
+            return
+        self.world_truth.poll(self.truth_state_path, probe_elapsed_s=probe_elapsed_s)
+
     def to_dict(self, *, duration_s: float) -> dict[str, Any]:
         return {
             "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -264,6 +399,7 @@ class OdomWorldSignChainRuntimeProbe(Node):
                 topic: stats.to_dict()
                 for topic, stats in self.odom_stats.items()
             },
+            "world_truth": self.world_truth.to_dict(),
         }
 
 
@@ -275,9 +411,11 @@ def main() -> int:
 
     rclpy.init()
     node = OdomWorldSignChainRuntimeProbe(args)
-    deadline = time.monotonic() + duration_s
+    started = time.monotonic()
+    deadline = started + duration_s
     while time.monotonic() < deadline and rclpy.ok():
         rclpy.spin_once(node, timeout_sec=0.1)
+        node.poll_truth_state(probe_elapsed_s=max(time.monotonic() - started, 0.0))
 
     result = node.to_dict(duration_s=duration_s)
     output_path.write_text(json.dumps(result, indent=2), encoding="utf-8")

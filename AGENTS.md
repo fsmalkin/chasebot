@@ -156,8 +156,9 @@ Gather sign-chain runtime probe reference:
 - Probe summary: `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
 - Runtime probe payload: `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/runtime_probe.json`
 - Working odom witness for the next probe slice: `/jetbot_base_controller/odom` only, without redefining the public `/odom` contract
-- Planned next slice: sample live world-yaw sign from `artifacts/session/<session_id>/visual/truth_state.json` during the probe window and keep `truth_timeline.json` as a secondary cross-check
-- Preferred implementation seam for that slice: wire `truth_state.json` into `scripts/odom_world_sign_chain_runtime_probe.py` and `scripts/probe_odom_world_sign_chain.py`, while leaving `scripts/sim_truth_probe.py` unchanged unless the consumer-side path proves insufficient
+- Current branch implementation: `scripts/run_probe_odom_world_sign_chain.ps1` now passes the fresh probe session's `visual/truth_state.json` path into `scripts/odom_world_sign_chain_runtime_probe.py`, which emits additive `world_truth` metrics in `runtime_probe.json`; `scripts/probe_odom_world_sign_chain.py` now prefers those metrics before falling back to `truth_timeline.json`
+- Current branch offline verification: `pytest tests/test_probe_odom_world_sign_chain.py -q` and `pytest tests/dashboard/test_world_stream_freshness.py -k "truth_ready or make_session_id" -q`
+- Remaining gate before closing this branch: run a fresh live rerun via `scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>`; optional extra fail-closed `session_id` hardening is still available if we want to tighten the `truth_state.json` binding before rerun
 
 ## Testing
 

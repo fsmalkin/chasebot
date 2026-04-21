@@ -686,6 +686,9 @@ Current direction update:
      - the current result is still `runtime_sign_chain_inconclusive`, but the blocker has narrowed to missing truth/world-sign evidence rather than startup failure or missing controller-side sign data
      - the next narrow branch is to sample live world-yaw sign from `artifacts/session/<session_id>/visual/truth_state.json` during the same probe window, keep `truth_timeline.json` as a secondary post-run cross-check, and only then decide whether helper turn-authority promotion can reopen
      - the preferred implementation is consumer-side only: pass the probe session's `truth_state.json` into `scripts/odom_world_sign_chain_runtime_probe.py`, emit additive `world_truth` metrics in `runtime_probe.json`, and let `scripts/probe_odom_world_sign_chain.py` prefer those metrics before falling back to `truth_timeline.json`
+     - the current branch now lands that consumer-side implementation while keeping `scripts/sim_truth_probe.py` unchanged
+     - focused offline verification on the current branch passed: `pytest tests/test_probe_odom_world_sign_chain.py -q` and `pytest tests/dashboard/test_world_stream_freshness.py -k "truth_ready or make_session_id" -q`
+     - the remaining proof gate is a fresh live rerun of `scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>`; optional extra fail-closed `session_id` hardening remains available if we want to tighten the `truth_state.json` binding before rerun
    - `artifacts/session/live_plus45_escape_feasibility_audit_20260420/gather_escape_feasibility_audit/feasibility_summary.json`
    - `artifacts/session/live_plus45_escape_divergence_audit_20260420/gather_escape_divergence_audit/divergence_summary.json`
    - `artifacts/session/live_plus45_turn_realization_audit_20260420/gather_turn_realization_audit/turn_realization_summary.json`

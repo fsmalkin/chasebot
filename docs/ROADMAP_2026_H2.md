@@ -498,6 +498,8 @@ Current direction update:
    - treat `/jetbot_base_controller/odom` as the working odom witness for this probe branch only; do not redefine the public `/odom` contract based on this rerun
    - that rerun is still `runtime_sign_chain_inconclusive`, so the next narrow branch is to sample live truth/world yaw from `artifacts/session/<session_id>/visual/truth_state.json` during the probe window, keep `truth_timeline.json` as a secondary cross-check, and only then decide whether helper turn-authority promotion can reopen
    - the preferred implementation for that branch is consumer-side only: pass the probe session's `truth_state.json` through the existing runtime-probe wrapper, emit additive `world_truth` metrics from `scripts/odom_world_sign_chain_runtime_probe.py`, let `scripts/probe_odom_world_sign_chain.py` prefer those metrics, and leave `scripts/sim_truth_probe.py` unchanged unless that path proves insufficient
+   - that consumer-side implementation is now landed on the current branch, with focused offline verification already green on `tests/test_probe_odom_world_sign_chain.py` and the targeted `tests/dashboard/test_world_stream_freshness.py` truth-state slice
+   - the remaining proof gate is a fresh live rerun of `scripts/run_probe_odom_world_sign_chain.ps1`; optional extra fail-closed `session_id` hardening remains available if we want to tighten the `truth_state.json` binding before that rerun
 
 ### Step 7: Corral Time Optimization
 

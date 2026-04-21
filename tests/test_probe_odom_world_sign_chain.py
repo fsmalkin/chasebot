@@ -180,7 +180,14 @@ def _probe_campaign_summary(root: Path) -> Path:
     return campaign_summary_path
 
 
-def _runtime_probe_payload(*, model_sign: int, odom_sign: int, controller_odom_sign: int, world_like_sign: int = 1) -> dict[str, object]:
+def _runtime_probe_payload(
+    *,
+    model_sign: int,
+    odom_sign: int,
+    controller_odom_sign: int,
+    world_like_sign: int = 1,
+    runtime_world_sign: int | None = None,
+) -> dict[str, object]:
     def cmd_payload(topic: str, dominant_sign: int) -> dict[str, object]:
         return {
             "topic": topic,
@@ -208,7 +215,7 @@ def _runtime_probe_payload(*, model_sign: int, odom_sign: int, controller_odom_s
             "end_yaw_rad": 0.6 * world_like_sign,
         }
 
-    return {
+    payload: dict[str, object] = {
         "probe_type": "odom_world_sign_chain_runtime_probe",
         "cmd_vel_topics": {
             "/jetbot_base_controller/cmd_vel": cmd_payload("/jetbot_base_controller/cmd_vel", 1),
@@ -221,6 +228,19 @@ def _runtime_probe_payload(*, model_sign: int, odom_sign: int, controller_odom_s
             "/jetbot_base_controller/odom": odom_payload("/jetbot_base_controller/odom", controller_odom_sign),
         },
     }
+    if runtime_world_sign is not None:
+        payload["world_truth"] = {
+            "sample_count": 18,
+            "nonzero_step_count": 12 if runtime_world_sign != 0 else 0,
+            "net_yaw_change_rad": 1.0 * runtime_world_sign,
+            "absolute_yaw_change_rad": abs(1.4 * runtime_world_sign),
+            "first_nonzero_sign": runtime_world_sign,
+            "last_nonzero_sign": runtime_world_sign,
+            "dominant_yaw_sign": runtime_world_sign,
+            "window_start_t_s": 0.0,
+            "window_end_t_s": 4.0,
+        }
+    return payload
 
 
 def test_classify_runtime_sign_chain_marks_odom_publication_chain_divergent():
@@ -280,8 +300,80 @@ def test_build_and_write_probe_odom_world_sign_chain_bundle(tmp_path: Path):
     assert output_paths["summary_path"].exists()
     assert output_paths["scorecard_path"].exists()
     assert output_paths["runtime_probe_json_path"].exists()
+    scorecard_text = output_paths["scorecard_path"].read_text(encoding="utf-8")
+    assert "- World truth source: `truth_timeline`" in scorecard_text
+    assert "- Timeline cross-check sign: `1`" in scorecard_text
+    assert "- Runtime probe world truth sign: `0`" in scorecard_text
     for fixture_label in REPRESENTATIVE_FIXTURE_LABELS:
         assert (output_paths["fixtures_root"] / f"{fixture_label}.json").exists()
+
+
+def test_build_bundle_prefers_runtime_probe_world_truth_when_nonzero(tmp_path: Path):
+    source_summary_path, _ = _source_audit_bundle(tmp_path)
+    probe_campaign_summary_path = _probe_campaign_summary(tmp_path)
+    runtime_probe_json_path = tmp_path / "runtime_probe.json"
+    runtime_probe_json_path.write_text(
+        json.dumps(
+            _runtime_probe_payload(
+                model_sign=1,
+                odom_sign=-1,
+                controller_odom_sign=-1,
+                runtime_world_sign=-1,
+            ),
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    summary, _ = audit.build_odom_world_sign_chain_bundle(
+        campaign_id="temp_probe_odom_world_sign_chain_runtime_truth",
+        campaign_summary_path=probe_campaign_summary_path,
+        runtime_probe_json_path=runtime_probe_json_path,
+        source_audit_summary_path=source_summary_path,
+        source_campaign_summary_path=probe_campaign_summary_path,
+    )
+
+    assert summary["world_truth_source"] == "runtime_probe.world_truth"
+    assert summary["world_truth_source_reason"] == "runtime_probe_world_truth_usable"
+    assert summary["world_truth_metrics"]["dominant_yaw_sign"] == -1
+    assert summary["timeline_world_truth_metrics"]["dominant_yaw_sign"] == 1
+    assert summary["runtime_probe_world_truth_metrics"]["dominant_yaw_sign"] == -1
+    assert summary["world_truth_cross_check"]["timeline_matches_selected"] is False
+    assert summary["runtime_classification"]["diagnosis"] == "model_odom_vs_world_divergent"
+
+
+def test_build_bundle_falls_back_to_truth_timeline_when_runtime_probe_world_truth_zero_sign(tmp_path: Path):
+    source_summary_path, _ = _source_audit_bundle(tmp_path)
+    probe_campaign_summary_path = _probe_campaign_summary(tmp_path)
+    runtime_probe_json_path = tmp_path / "runtime_probe.json"
+    runtime_probe_json_path.write_text(
+        json.dumps(
+            _runtime_probe_payload(
+                model_sign=1,
+                odom_sign=-1,
+                controller_odom_sign=-1,
+                runtime_world_sign=0,
+            ),
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    summary, _ = audit.build_odom_world_sign_chain_bundle(
+        campaign_id="temp_probe_odom_world_sign_chain_timeline_fallback",
+        campaign_summary_path=probe_campaign_summary_path,
+        runtime_probe_json_path=runtime_probe_json_path,
+        source_audit_summary_path=source_summary_path,
+        source_campaign_summary_path=probe_campaign_summary_path,
+    )
+
+    assert summary["world_truth_source"] == "truth_timeline"
+    assert summary["world_truth_source_reason"] == "runtime_probe_world_truth_zero_sign"
+    assert summary["world_truth_metrics"]["dominant_yaw_sign"] == 1
+    assert summary["timeline_world_truth_metrics"]["dominant_yaw_sign"] == 1
+    assert summary["runtime_probe_world_truth_metrics"]["dominant_yaw_sign"] == 0
+    assert summary["world_truth_cross_check"]["runtime_probe_matches_selected"] is None
+    assert summary["runtime_classification"]["diagnosis"] == "odom_publication_chain_divergent"
 
 
 def test_build_bundle_tracks_non_reproduction_when_runtime_chain_is_aligned(tmp_path: Path):
@@ -304,3 +396,6 @@ def test_build_bundle_tracks_non_reproduction_when_runtime_chain_is_aligned(tmp_
     assert summary["runtime_classification"]["diagnosis"] == "sign_chain_aligned"
     assert summary["next_action"]["decision"] == "revisit_source_alignment"
     assert summary["runtime_supported_source_fixture_count"] == 0
+    assert summary["world_truth_source"] == "truth_timeline"
+    assert summary["world_truth_source_reason"] == "runtime_probe_world_truth_missing"
+    assert summary["runtime_probe_world_truth_metrics"] == {}

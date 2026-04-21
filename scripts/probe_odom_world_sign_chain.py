@@ -311,6 +311,95 @@ def extract_world_truth_metrics(
     }
 
 
+def extract_runtime_probe_world_truth_metrics(runtime_probe_payload: dict[str, Any]) -> dict[str, Any]:
+    if "world_truth" not in runtime_probe_payload:
+        return {}
+    world_truth_payload = runtime_probe_payload.get("world_truth")
+    if not isinstance(world_truth_payload, dict):
+        return {}
+    net_yaw_change = _number(world_truth_payload.get("net_yaw_change_rad"))
+    if net_yaw_change is None:
+        start_yaw = _number(world_truth_payload.get("start_yaw_rad"))
+        end_yaw = _number(world_truth_payload.get("end_yaw_rad"))
+        if start_yaw is not None and end_yaw is not None:
+            net_yaw_change = divergence.normalize_angle(float(end_yaw) - float(start_yaw))
+    absolute_yaw_change = _number(world_truth_payload.get("absolute_yaw_change_rad"))
+    if absolute_yaw_change is None:
+        absolute_yaw_change = _number(world_truth_payload.get("cumulative_abs_yaw_change_rad"))
+
+    dominant_sign = int(_number(world_truth_payload.get("dominant_yaw_sign"), default=0.0) or 0)
+    if dominant_sign == 0 and net_yaw_change is not None:
+        dominant_sign = _sign(net_yaw_change, eps=DEFAULT_PROBE_ODOM_WORLD_SIGN_CHAIN_MIN_YAW_RAD)
+    if dominant_sign == 0:
+        first_sign = int(_number(world_truth_payload.get("first_nonzero_sign"), default=0.0) or 0)
+        last_sign = int(_number(world_truth_payload.get("last_nonzero_sign"), default=0.0) or 0)
+        if first_sign != 0 and first_sign == last_sign:
+            dominant_sign = first_sign
+
+    return {
+        "sample_count": int(
+            _number(
+                world_truth_payload.get("sample_count", world_truth_payload.get("message_count", 0)),
+                default=0.0,
+            )
+            or 0
+        ),
+        "nonzero_step_count": int(_number(world_truth_payload.get("nonzero_step_count"), default=0.0) or 0),
+        "net_yaw_change_rad": round(float(net_yaw_change), 6) if net_yaw_change is not None else 0.0,
+        "absolute_yaw_change_rad": round(float(absolute_yaw_change), 6) if absolute_yaw_change is not None else 0.0,
+        "dominant_yaw_sign": int(dominant_sign),
+        "window_start_t_s": _round_or_none(
+            _number(world_truth_payload.get("window_start_t_s", world_truth_payload.get("start_t_s")))
+        ),
+        "window_end_t_s": _round_or_none(
+            _number(world_truth_payload.get("window_end_t_s", world_truth_payload.get("end_t_s")))
+        ),
+    }
+
+
+def select_world_truth_metrics(
+    *,
+    truth_samples: list[dict[str, Any]],
+    runtime_probe_payload: dict[str, Any],
+    start_t_s: float | None,
+    end_t_s: float | None,
+) -> dict[str, Any]:
+    timeline_metrics = extract_world_truth_metrics(
+        truth_samples,
+        start_t_s=start_t_s,
+        end_t_s=end_t_s,
+    )
+    runtime_probe_metrics = extract_runtime_probe_world_truth_metrics(runtime_probe_payload)
+    runtime_probe_sign = int(runtime_probe_metrics.get("dominant_yaw_sign", 0) or 0)
+    if runtime_probe_sign != 0:
+        selected_source = "runtime_probe.world_truth"
+        selection_reason = "runtime_probe_world_truth_usable"
+        selected_metrics = runtime_probe_metrics
+    else:
+        selected_source = "truth_timeline"
+        selection_reason = (
+            "runtime_probe_world_truth_zero_sign" if runtime_probe_metrics else "runtime_probe_world_truth_missing"
+        )
+        selected_metrics = timeline_metrics
+
+    selected_sign = int(selected_metrics.get("dominant_yaw_sign", 0) or 0)
+    timeline_sign = int(timeline_metrics.get("dominant_yaw_sign", 0) or 0)
+    return {
+        "selected_source": selected_source,
+        "selection_reason": selection_reason,
+        "selected_metrics": selected_metrics,
+        "timeline_metrics": timeline_metrics,
+        "runtime_probe_metrics": runtime_probe_metrics,
+        "cross_check": {
+            "selected_world_truth_sign": int(selected_sign),
+            "timeline_truth_sign": int(timeline_sign),
+            "runtime_probe_world_truth_sign": int(runtime_probe_sign),
+            "timeline_matches_selected": _match_state(selected_sign, timeline_sign),
+            "runtime_probe_matches_selected": _match_state(selected_sign, runtime_probe_sign),
+        },
+    }
+
+
 def _topic_metrics(topic_payload: Any) -> dict[str, Any]:
     return dict(topic_payload) if isinstance(topic_payload, dict) else {}
 
@@ -574,12 +663,14 @@ def build_odom_world_sign_chain_bundle(
         state_rows,
         timeline_anchor=timeline_anchor,
     )
-    world_truth_metrics = extract_world_truth_metrics(
-        truth_samples,
+    runtime_probe_payload = _json_from_path(runtime_probe_json_path)
+    world_truth_selection = select_world_truth_metrics(
+        truth_samples=truth_samples,
+        runtime_probe_payload=runtime_probe_payload,
         start_t_s=_number(requested_command_metrics.get("window_start_t_s")),
         end_t_s=_number(requested_command_metrics.get("window_end_t_s")),
     )
-    runtime_probe_payload = _json_from_path(runtime_probe_json_path)
+    world_truth_metrics = world_truth_selection["selected_metrics"]
     runtime_classification = classify_runtime_sign_chain(
         requested_command_metrics=requested_command_metrics,
         world_truth_metrics=world_truth_metrics,
@@ -639,7 +730,12 @@ def build_odom_world_sign_chain_bundle(
         "runtime_probe_stderr_path": str(runtime_probe_stderr_path.resolve()) if runtime_probe_stderr_path else "",
         "timeline_alignment_anchor": timeline_anchor or {},
         "requested_command_metrics": requested_command_metrics,
+        "world_truth_source": str(world_truth_selection.get("selected_source", "") or ""),
+        "world_truth_source_reason": str(world_truth_selection.get("selection_reason", "") or ""),
         "world_truth_metrics": world_truth_metrics,
+        "timeline_world_truth_metrics": world_truth_selection.get("timeline_metrics", {}),
+        "runtime_probe_world_truth_metrics": world_truth_selection.get("runtime_probe_metrics", {}),
+        "world_truth_cross_check": world_truth_selection.get("cross_check", {}),
         "runtime_probe": runtime_probe_payload,
         "runtime_classification": runtime_classification,
         "next_action": {
@@ -689,6 +785,21 @@ def build_scorecard_markdown(summary: dict[str, Any], fixture_payloads: dict[str
         if isinstance(summary.get("world_truth_metrics"), dict)
         else {}
     )
+    timeline_world_metrics = (
+        summary.get("timeline_world_truth_metrics", {})
+        if isinstance(summary.get("timeline_world_truth_metrics"), dict)
+        else {}
+    )
+    runtime_probe_world_metrics = (
+        summary.get("runtime_probe_world_truth_metrics", {})
+        if isinstance(summary.get("runtime_probe_world_truth_metrics"), dict)
+        else {}
+    )
+    world_truth_cross_check = (
+        summary.get("world_truth_cross_check", {})
+        if isinstance(summary.get("world_truth_cross_check"), dict)
+        else {}
+    )
     lines = [
         "# Probe Odom World Sign Chain Scorecard",
         "",
@@ -705,7 +816,12 @@ def build_scorecard_markdown(summary: dict[str, Any], fixture_payloads: dict[str
         "",
         f"- Requested command sign: `{requested_metrics.get('dominant_command_sign', 0)}`",
         f"- Requested peak angular z rad/s: `{requested_metrics.get('peak_requested_angular_z_radps', 0.0)}`",
-        f"- World truth sign: `{world_metrics.get('dominant_yaw_sign', 0)}`",
+        f"- World truth source: `{summary.get('world_truth_source', '')}`",
+        f"- World truth source reason: `{summary.get('world_truth_source_reason', '')}`",
+        f"- Selected world truth sign: `{world_metrics.get('dominant_yaw_sign', 0)}`",
+        f"- Runtime probe world truth sign: `{runtime_probe_world_metrics.get('dominant_yaw_sign', 0)}`",
+        f"- Timeline cross-check sign: `{timeline_world_metrics.get('dominant_yaw_sign', 0)}`",
+        f"- Timeline matches selected: `{world_truth_cross_check.get('timeline_matches_selected')}`",
         f"- Robot cmd sign: `{topic_signs.get('robot_cmd', 0)}`",
         f"- Cmd vel sign: `{topic_signs.get('cmd_vel', 0)}`",
         f"- Cmd vel nav sign: `{topic_signs.get('cmd_vel_nav', 0)}`",

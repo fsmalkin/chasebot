@@ -189,12 +189,7 @@ $runtimeProbeContainerScriptPath = Join-Path $probeLogsRoot "runtime_probe_conta
 $probeRunnerStdoutPath = Join-Path $probeLogsRoot "gather_repeatability.stdout.log"
 $probeRunnerStderrPath = Join-Path $probeLogsRoot "gather_repeatability.stderr.log"
 
-$runtimeProbeArgs = @(
-    (Join-Path $repoRoot "scripts\odom_world_sign_chain_runtime_probe.py"),
-    "--duration-s", ([string]([Math]::Max($MotionProbeDurationS, 10.0))),
-    "--json-out", $runtimeProbeJsonPath,
-    "--use-sim-time"
-)
+$runtimeProbeArgs = @()
 $runtimeProbeProcess = $null
 
 $sourceCampaignSummary = Get-Content -LiteralPath $resolvedSourceCampaignSummaryPath -Raw | ConvertFrom-Json
@@ -246,18 +241,49 @@ $readyProbeState = Wait-For-FreshReadyComposeProject `
     -TimeoutSec ([int]([Math]::Max($MotionProbeDurationS + 60.0, 90.0))) `
     -ObservedProcess $probeProcess
 
+$probeSessionId = if ($readyProbeState -and $readyProbeState.session_id) {
+    [string]$readyProbeState.session_id
+} else {
+    ""
+}
+$runtimeProbeTruthStatePath = if ($probeSessionId.Trim()) {
+    Join-Path $repoRoot "artifacts\session\$probeSessionId\visual\truth_state.json"
+} else {
+    ""
+}
+$runtimeProbeArgs = @(
+    (Join-Path $repoRoot "scripts\odom_world_sign_chain_runtime_probe.py"),
+    "--duration-s", ([string]([Math]::Max($MotionProbeDurationS, 10.0))),
+    "--json-out", $runtimeProbeJsonPath,
+    "--use-sim-time"
+)
+if ($runtimeProbeTruthStatePath.Trim()) {
+    $runtimeProbeArgs += @("--truth-state-path", $runtimeProbeTruthStatePath)
+} elseif ($readyProbeState) {
+    Write-Warning "Ready probe state did not include session_id; runtime sign probe will omit truth_state polling."
+}
+
 if ($readyProbeState) {
     $probeComposeProject = [string]$readyProbeState.compose_project
     $gateStackContainerName = Get-GateStackContainerName -ComposeProject $probeComposeProject
     if ($gateStackContainerName) {
         $containerRuntimeProbeJsonPath = Resolve-ContainerRepoPath -RepoRoot $repoRoot -HostPath $runtimeProbeJsonPath
         $containerRuntimeProbeLauncherPath = Resolve-ContainerRepoPath -RepoRoot $repoRoot -HostPath $runtimeProbeContainerScriptPath
+        $containerRuntimeProbeTruthStatePath = if ($runtimeProbeTruthStatePath.Trim()) {
+            Resolve-ContainerRepoPath -RepoRoot $repoRoot -HostPath $runtimeProbeTruthStatePath
+        } else {
+            ""
+        }
+        $runtimeProbeContainerCommand = "python3 /workspaces/chasecar/scripts/odom_world_sign_chain_runtime_probe.py --duration-s $([Math]::Max($MotionProbeDurationS, 10.0)) --json-out '$containerRuntimeProbeJsonPath' --use-sim-time"
+        if ($containerRuntimeProbeTruthStatePath.Trim()) {
+            $runtimeProbeContainerCommand += " --truth-state-path '$containerRuntimeProbeTruthStatePath'"
+        }
         $runtimeProbeContainerScriptLines = @(
             "#!/usr/bin/env bash",
             "set -eo pipefail",
             "source /opt/ros/kilted/setup.bash",
             "if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi",
-            "python3 /workspaces/chasecar/scripts/odom_world_sign_chain_runtime_probe.py --duration-s $([Math]::Max($MotionProbeDurationS, 10.0)) --json-out $containerRuntimeProbeJsonPath --use-sim-time"
+            $runtimeProbeContainerCommand
         )
         [System.IO.File]::WriteAllText(
             $runtimeProbeContainerScriptPath,

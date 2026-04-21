@@ -781,15 +781,17 @@ Probe odom/world sign chain:
    - `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/runtime_probe.json`
    - this rerun already captures controller-side sign agreement on `/jetbot_base_controller/cmd_vel` and `/jetbot_base_controller/odom`
    - treat `/jetbot_base_controller/odom` as the working odom witness for this probe branch only; do not redefine the public `/odom` contract based on this rerun
-   - if the summary is still `runtime_sign_chain_inconclusive` because truth/world sign remains missing or zero, the planned next slice is:
-     - sample live world-yaw sign from `artifacts/session/<session_id>/visual/truth_state.json` during the same probe window
-     - keep `truth_timeline.json` as a secondary post-run cross-check rather than the primary live truth source
-     - only revisit helper authority promotion after the truth/world branch turns conclusive
-     - preferred implementation seam for this slice:
-       - pass the probe session's `visual/truth_state.json` path through `scripts/run_probe_odom_world_sign_chain.ps1`
-       - have `scripts/odom_world_sign_chain_runtime_probe.py` poll that file during the probe window and emit additive `world_truth` metrics in `runtime_probe.json`
-       - have `scripts/probe_odom_world_sign_chain.py` prefer those runtime-probe truth metrics while retaining `truth_timeline.json` as fallback and cross-check evidence
-       - leave `scripts/sim_truth_probe.py` unchanged unless the consumer-side path proves insufficient
+   - current branch implementation after that rerun:
+     - `scripts/run_probe_odom_world_sign_chain.ps1` now binds `artifacts/session/<session_id>/visual/truth_state.json` from the fresh ready dashboard session rather than from campaign ids
+     - `scripts/odom_world_sign_chain_runtime_probe.py` now polls that file during the probe window and emits additive `world_truth` metrics in `runtime_probe.json`
+     - `scripts/probe_odom_world_sign_chain.py` now prefers runtime-probe `world_truth` metrics while retaining `truth_timeline.json` as fallback and post-run cross-check evidence
+     - `scripts/sim_truth_probe.py` remains unchanged on this branch
+   - focused offline verification on the current branch:
+     - `pytest tests/test_probe_odom_world_sign_chain.py -q`
+     - `pytest tests/dashboard/test_world_stream_freshness.py -k "truth_ready or make_session_id" -q`
+   - remaining proof gate for this branch:
+     - run a fresh live rerun via `powershell -ExecutionPolicy Bypass -File scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>`
+     - optional extra fail-closed `session_id` hardening remains available if we want to reject mismatched `truth_state.json` content before that rerun
 
 ## Headless Milestone Path (Current Preferred)
 
@@ -920,6 +922,10 @@ Milestone 3 pass criteria include:
      - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/runtime_probe.json`
      - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/logs/runtime_probe.stdout.log`
      - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/logs/runtime_probe.stderr.log`
+   - current branch additive truth-state fields:
+     - `runtime_probe.json` may now include a top-level `world_truth` block when `--truth-state-path` is supplied, including sign/integral fields plus `truth_state_path` and `source_session_id`
+     - `odom_world_sign_chain_summary.json` and `scorecard.md` now record the chosen world-truth source and cross-check fields: `world_truth_source`, `world_truth_source_reason`, `timeline_world_truth_metrics`, `runtime_probe_world_truth_metrics`, and `world_truth_cross_check`
+     - older bundles without `runtime_probe.world_truth` remain valid because the analyzer falls back to `truth_timeline.json`
 22. Route-planning parallel soak:
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/campaign_summary.json`
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/workers/worker_##/dashboard_service.log`
