@@ -609,13 +609,70 @@ def compute_fixture_probe_payload(
         if isinstance(source_fixture_payload.get("sign_matches"), dict)
         else {}
     )
+    source_odom_metrics = (
+        source_fixture_payload.get("odom_metrics", {})
+        if isinstance(source_fixture_payload.get("odom_metrics"), dict)
+        else {}
+    )
+    source_world_metrics = (
+        source_fixture_payload.get("world_metrics", {})
+        if isinstance(source_fixture_payload.get("world_metrics"), dict)
+        else {}
+    )
+    source_command_sign = int(source_fixture_payload.get("command_sign", 0) or 0)
+    source_odom_sign = int(source_odom_metrics.get("dominant_yaw_sign", 0) or 0)
+    source_world_sign = int(source_world_metrics.get("dominant_yaw_sign", 0) or 0)
+    fresh_requested_sign = int(requested_command_metrics.get("dominant_command_sign", 0) or 0)
+    fresh_world_sign = int(world_truth_metrics.get("dominant_yaw_sign", 0) or 0)
+    requested_window_start_t_s = _number(requested_command_metrics.get("window_start_t_s"))
+    requested_window_end_t_s = _number(requested_command_metrics.get("window_end_t_s"))
+    probe_window_reconstructed = requested_window_start_t_s is not None and requested_window_end_t_s is not None
+    requested_vs_world_truth_match = _match_state(fresh_requested_sign, fresh_world_sign)
+    source_command_to_fresh_requested = _match_state(source_command_sign, fresh_requested_sign)
+    if not probe_window_reconstructed:
+        source_probe_command_sign_relation = "noncomparable_unbounded_probe_window"
+        source_probe_command_sign_reason = "source_fixture_windowed_sign_vs_probe_unbounded_attempt_sign"
+    elif source_command_to_fresh_requested is None:
+        source_probe_command_sign_relation = "sign_unavailable"
+        source_probe_command_sign_reason = "source_or_probe_command_sign_zero"
+    elif source_command_to_fresh_requested:
+        source_probe_command_sign_relation = "match"
+        source_probe_command_sign_reason = "source_and_probe_command_sign_match"
+    else:
+        source_probe_command_sign_relation = "mismatch"
+        source_probe_command_sign_reason = "source_and_probe_command_sign_mismatch"
     return {
         "generated_utc": _utc_now_iso(),
         "fixture_label": str(source_fixture_payload.get("fixture_label", "") or ""),
         "fixture_index": int(source_fixture_payload.get("fixture_index", 0) or 0),
         "source_fixture_diagnosis": source_diagnosis,
-        "source_command_sign": int(source_fixture_payload.get("command_sign", 0) or 0),
+        "source_command_sign": source_command_sign,
+        "source_surface_signs": {
+            "command": int(source_command_sign),
+            "odom": int(source_odom_sign),
+            "world": int(source_world_sign),
+        },
         "source_sign_matches": sign_matches,
+        "source_alignment_matches": {
+            "source_command_to_fresh_requested": source_command_to_fresh_requested,
+            "source_odom_to_fresh_world": _match_state(source_odom_sign, fresh_world_sign),
+            "source_world_to_fresh_world": _match_state(source_world_sign, fresh_world_sign),
+            "requested_to_world_truth": requested_vs_world_truth_match,
+        },
+        "source_probe_command_sign_comparison": {
+            "source_command_sign": int(source_command_sign),
+            "probe_requested_command_sign": int(fresh_requested_sign),
+            "sign_match": source_command_to_fresh_requested,
+            "comparable": bool(probe_window_reconstructed and source_command_to_fresh_requested is not None),
+            "probe_window_reconstructed": bool(probe_window_reconstructed),
+            "requested_vs_world_truth_sign_match": requested_vs_world_truth_match,
+            "relation": source_probe_command_sign_relation,
+            "reason": source_probe_command_sign_reason,
+        },
+        "fresh_probe_signs": {
+            "requested_command": int(fresh_requested_sign),
+            "world_truth": int(fresh_world_sign),
+        },
         "probe_hypothesis_relevant": relevant_to_probe,
         "runtime_probe_supports_source_fixture": supports_source_fixture,
         "runtime_diagnosis": str(runtime_classification.get("diagnosis", "") or ""),
@@ -624,6 +681,130 @@ def compute_fixture_probe_payload(
         "runtime_surface_signs": dict(runtime_classification.get("topic_signs", {}) or {}),
         "requested_command_metrics": requested_command_metrics,
         "world_truth_metrics": world_truth_metrics,
+    }
+
+
+def assess_source_alignment(
+    ordered_fixture_payloads: list[dict[str, Any]],
+    *,
+    runtime_classification: dict[str, Any],
+) -> dict[str, Any]:
+    relevant_payloads = [
+        payload for payload in ordered_fixture_payloads if bool(payload.get("probe_hypothesis_relevant", False))
+    ]
+    command_match_labels: list[str] = []
+    command_mismatch_labels: list[str] = []
+    command_noncomparable_labels: list[str] = []
+    command_unknown_labels: list[str] = []
+    world_match_labels: list[str] = []
+    world_mismatch_labels: list[str] = []
+    world_unknown_labels: list[str] = []
+    requested_world_aligned = False
+
+    for payload in relevant_payloads:
+        fixture_label = str(payload.get("fixture_label", "") or "")
+        source_probe_command_sign_comparison = (
+            payload.get("source_probe_command_sign_comparison", {})
+            if isinstance(payload.get("source_probe_command_sign_comparison"), dict)
+            else {}
+        )
+        source_alignment_matches = (
+            payload.get("source_alignment_matches", {})
+            if isinstance(payload.get("source_alignment_matches"), dict)
+            else {}
+        )
+        command_relation = str(source_probe_command_sign_comparison.get("relation", "") or "")
+        if command_relation == "match":
+            command_match_labels.append(fixture_label)
+        elif command_relation == "mismatch":
+            command_mismatch_labels.append(fixture_label)
+        elif command_relation == "noncomparable_unbounded_probe_window":
+            command_noncomparable_labels.append(fixture_label)
+        else:
+            command_unknown_labels.append(fixture_label)
+
+        world_match = source_alignment_matches.get("source_world_to_fresh_world")
+        if world_match is True:
+            world_match_labels.append(fixture_label)
+        elif world_match is False:
+            world_mismatch_labels.append(fixture_label)
+        else:
+            world_unknown_labels.append(fixture_label)
+        requested_world_aligned = requested_world_aligned or bool(
+            source_alignment_matches.get("requested_to_world_truth") is True
+        )
+
+    runtime_diagnosis = str(runtime_classification.get("diagnosis", "") or "")
+    diagnosis = "source_alignment_inconclusive"
+    decision = "revisit_source_alignment"
+    confidence = "low"
+    rationale = "The fresh probe did not isolate a stronger source-alignment explanation yet."
+
+    if runtime_diagnosis != "sign_chain_aligned":
+        diagnosis = "runtime_branch_dominant"
+        decision = str(runtime_classification.get("decision", "") or "")
+        confidence = str(runtime_classification.get("confidence", "") or "medium")
+        rationale = (
+            "The runtime probe still isolates a live sign-chain surface, so source alignment remains secondary "
+            "until that runtime branch is resolved."
+        )
+    elif command_noncomparable_labels:
+        diagnosis = "source_probe_command_sign_noncomparable"
+        decision = "reconstruct_probe_command_window"
+        confidence = "medium"
+        rationale = (
+            f"The fresh runtime probe is internally aligned, but {len(command_noncomparable_labels)} of "
+            f"{len(relevant_payloads)} relevant frozen source fixtures cannot be compared against the fresh "
+            "requested command sign because the probe did not reconstruct a bounded command window."
+        )
+        if requested_world_aligned:
+            rationale += (
+                " The fresh requested sign still agrees with fresh world truth, so the immediate next step is "
+                "window reconstruction rather than a runtime behavior patch."
+            )
+    elif command_mismatch_labels:
+        diagnosis = "source_fixture_command_sign_mismatch"
+        decision = "inspect_source_fixture_alignment"
+        confidence = "medium"
+        rationale = (
+            f"The fresh runtime probe is internally aligned, but {len(command_mismatch_labels)} of "
+            f"{len(relevant_payloads)} relevant frozen source fixtures carry a command sign that disagrees with "
+            "the fresh requested command sign."
+        )
+        if world_match_labels:
+            rationale += (
+                f" {len(world_match_labels)} relevant fixture world signs still match the fresh world sign, which "
+                "points toward source fixture/window alignment rather than a new runtime odom/world break."
+            )
+        else:
+            rationale += " Compare fixture/window alignment before changing runtime behavior."
+    elif relevant_payloads:
+        diagnosis = "source_alignment_recheck_needed"
+        decision = "revisit_source_alignment"
+        confidence = "medium"
+        rationale = (
+            "The runtime probe is aligned and the relevant frozen source fixture command signs do not contradict "
+            "the fresh requested sign, so the remaining gap is how the source fixtures map onto the fresh run."
+        )
+
+    return {
+        "diagnosis": diagnosis,
+        "decision": decision,
+        "confidence": confidence,
+        "rationale": rationale,
+        "relevant_fixture_count": len(relevant_payloads),
+        "source_command_to_fresh_requested_match_count": len(command_match_labels),
+        "source_command_to_fresh_requested_mismatch_count": len(command_mismatch_labels),
+        "source_probe_command_sign_noncomparable_count": len(command_noncomparable_labels),
+        "source_command_to_fresh_requested_unknown_count": len(command_unknown_labels),
+        "source_world_to_fresh_world_match_count": len(world_match_labels),
+        "source_world_to_fresh_world_mismatch_count": len(world_mismatch_labels),
+        "source_world_to_fresh_world_unknown_count": len(world_unknown_labels),
+        "source_command_match_fixture_labels": command_match_labels,
+        "source_command_mismatch_fixture_labels": command_mismatch_labels,
+        "source_command_noncomparable_fixture_labels": command_noncomparable_labels,
+        "source_world_match_fixture_labels": world_match_labels,
+        "source_world_mismatch_fixture_labels": world_mismatch_labels,
     }
 
 
@@ -701,6 +882,25 @@ def build_odom_world_sign_chain_bundle(
             if bool(payload.get("runtime_probe_supports_source_fixture", False))
         )
     )
+    source_alignment_assessment = assess_source_alignment(
+        ordered_fixture_payloads,
+        runtime_classification=runtime_classification,
+    )
+    next_action = {
+        "decision": str(runtime_classification.get("decision", "") or ""),
+        "confidence": str(runtime_classification.get("confidence", "") or ""),
+        "rationale": str(runtime_classification.get("rationale", "") or ""),
+    }
+    if (
+        str(runtime_classification.get("diagnosis", "") or "") == "sign_chain_aligned"
+        and str(source_alignment_assessment.get("diagnosis", "") or "")
+        in {"source_probe_command_sign_noncomparable", "source_fixture_command_sign_mismatch"}
+    ):
+        next_action = {
+            "decision": str(source_alignment_assessment.get("decision", "") or ""),
+            "confidence": str(source_alignment_assessment.get("confidence", "") or ""),
+            "rationale": str(source_alignment_assessment.get("rationale", "") or ""),
+        }
     summary = {
         "generated_utc": _utc_now_iso(),
         "type": "probe_odom_world_sign_chain",
@@ -738,11 +938,8 @@ def build_odom_world_sign_chain_bundle(
         "world_truth_cross_check": world_truth_selection.get("cross_check", {}),
         "runtime_probe": runtime_probe_payload,
         "runtime_classification": runtime_classification,
-        "next_action": {
-            "decision": str(runtime_classification.get("decision", "") or ""),
-            "confidence": str(runtime_classification.get("confidence", "") or ""),
-            "rationale": str(runtime_classification.get("rationale", "") or ""),
-        },
+        "source_alignment_assessment": source_alignment_assessment,
+        "next_action": next_action,
         "relevant_source_fixture_count": relevant_source_fixture_count,
         "runtime_supported_source_fixture_count": supported_source_fixture_count,
         "run_context": {
@@ -759,6 +956,22 @@ def build_odom_world_sign_chain_bundle(
                 "probe_hypothesis_relevant": bool(payload.get("probe_hypothesis_relevant", False)),
                 "runtime_probe_supports_source_fixture": bool(
                     payload.get("runtime_probe_supports_source_fixture", False)
+                ),
+                "source_command_sign": payload.get("source_command_sign", 0),
+                "source_world_sign": ((payload.get("source_surface_signs", {}) or {}).get("world", 0)),
+                "source_command_relation": (
+                    ((payload.get("source_probe_command_sign_comparison", {}) or {}).get("relation", ""))
+                ),
+                "source_command_comparable": bool(
+                    ((payload.get("source_probe_command_sign_comparison", {}) or {}).get("comparable", False))
+                ),
+                "fresh_requested_command_sign": ((payload.get("fresh_probe_signs", {}) or {}).get("requested_command", 0)),
+                "fresh_world_truth_sign": ((payload.get("fresh_probe_signs", {}) or {}).get("world_truth", 0)),
+                "source_command_to_fresh_requested_match": (
+                    (payload.get("source_alignment_matches", {}) or {}).get("source_command_to_fresh_requested")
+                ),
+                "source_world_to_fresh_world_match": (
+                    (payload.get("source_alignment_matches", {}) or {}).get("source_world_to_fresh_world")
                 ),
                 "runtime_diagnosis": payload.get("runtime_diagnosis", ""),
             }
@@ -800,6 +1013,11 @@ def build_scorecard_markdown(summary: dict[str, Any], fixture_payloads: dict[str
         if isinstance(summary.get("world_truth_cross_check"), dict)
         else {}
     )
+    source_alignment_assessment = (
+        summary.get("source_alignment_assessment", {})
+        if isinstance(summary.get("source_alignment_assessment"), dict)
+        else {}
+    )
     lines = [
         "# Probe Odom World Sign Chain Scorecard",
         "",
@@ -807,10 +1025,22 @@ def build_scorecard_markdown(summary: dict[str, Any], fixture_payloads: dict[str
         f"- Source audit: `{summary.get('source_campaign_id', '')}`",
         f"- Probe campaign: `{summary.get('probe_campaign_id', '')}`",
         f"- Runtime diagnosis: `{runtime_classification.get('diagnosis', '')}`",
+        f"- Source alignment diagnosis: `{source_alignment_assessment.get('diagnosis', '')}`",
         f"- Confidence: `{runtime_classification.get('confidence', '')}`",
         f"- Next action: `{((summary.get('next_action', {}) or {}).get('decision', ''))}`",
         f"- Relevant source fixtures: `{summary.get('relevant_source_fixture_count', 0)}`",
         f"- Runtime-supported source fixtures: `{summary.get('runtime_supported_source_fixture_count', 0)}`",
+        "",
+        "## Source Alignment",
+        "",
+        f"- Relevant source command matches fresh requested sign: `{source_alignment_assessment.get('source_command_to_fresh_requested_match_count', 0)}`",
+        f"- Relevant source command mismatches fresh requested sign: `{source_alignment_assessment.get('source_command_to_fresh_requested_mismatch_count', 0)}`",
+        f"- Relevant source command comparisons blocked by unbounded probe window: `{source_alignment_assessment.get('source_probe_command_sign_noncomparable_count', 0)}`",
+        f"- Relevant source world matches fresh world sign: `{source_alignment_assessment.get('source_world_to_fresh_world_match_count', 0)}`",
+        f"- Relevant source world mismatches fresh world sign: `{source_alignment_assessment.get('source_world_to_fresh_world_mismatch_count', 0)}`",
+        f"- Noncomparable source command fixtures: `{', '.join(source_alignment_assessment.get('source_command_noncomparable_fixture_labels', [])) or 'none'}`",
+        f"- Mismatched source command fixtures: `{', '.join(source_alignment_assessment.get('source_command_mismatch_fixture_labels', [])) or 'none'}`",
+        f"- Matching source world fixtures: `{', '.join(source_alignment_assessment.get('source_world_match_fixture_labels', [])) or 'none'}`",
         "",
         "## Runtime Signs",
         "",
@@ -833,11 +1063,33 @@ def build_scorecard_markdown(summary: dict[str, Any], fixture_payloads: dict[str
         "",
     ]
     for payload in _ordered_fixture_payloads(fixture_payloads):
+        source_surface_signs = (
+            payload.get("source_surface_signs", {})
+            if isinstance(payload.get("source_surface_signs"), dict)
+            else {}
+        )
+        fresh_probe_signs = (
+            payload.get("fresh_probe_signs", {})
+            if isinstance(payload.get("fresh_probe_signs"), dict)
+            else {}
+        )
+        source_alignment_matches = (
+            payload.get("source_alignment_matches", {})
+            if isinstance(payload.get("source_alignment_matches"), dict)
+            else {}
+        )
         lines.append(
             f"- `{payload.get('fixture_label', '')}` source=`{payload.get('source_fixture_diagnosis', '')}` "
             f"relevant=`{bool(payload.get('probe_hypothesis_relevant', False))}` "
             f"runtime_support=`{bool(payload.get('runtime_probe_supports_source_fixture', False))}` "
-            f"runtime=`{payload.get('runtime_diagnosis', '')}`"
+            f"runtime=`{payload.get('runtime_diagnosis', '')}` "
+            f"source_cmd=`{int(payload.get('source_command_sign', 0) or 0)}` "
+            f"fresh_cmd=`{int(fresh_probe_signs.get('requested_command', 0) or 0)}` "
+            f"source_cmd_relation=`{((payload.get('source_probe_command_sign_comparison', {}) or {}).get('relation', ''))}` "
+            f"source_cmd->fresh=`{source_alignment_matches.get('source_command_to_fresh_requested')}` "
+            f"source_world=`{int(source_surface_signs.get('world', 0) or 0)}` "
+            f"fresh_world=`{int(fresh_probe_signs.get('world_truth', 0) or 0)}` "
+            f"source_world->fresh=`{source_alignment_matches.get('source_world_to_fresh_world')}`"
         )
     return "\n".join(lines).rstrip() + "\n"
 

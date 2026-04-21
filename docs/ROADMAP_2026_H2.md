@@ -494,12 +494,13 @@ Current direction update:
 4. the preserved helper contract lane is still not the next promotion path:
    - `helper_turn_authority_contract_audit` returned `stop_and_branch` with blocking_reason=`sign_parity`
    - `manual_drive_sign_parity_audit` now points to the `probe_odom_world_sign_chain` runtime probe wrapper (`scripts/run_probe_odom_world_sign_chain.ps1`)
-   - the April 20, 2026 live rerun now completes through the wrapper and captures controller command/odom sign agreement in `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
+   - the April 21, 2026 recovery rerun now completes through the wrapper and lands in `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_post_recovery_rerun_retry1/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
    - treat `/jetbot_base_controller/odom` as the working odom witness for this probe branch only; do not redefine the public `/odom` contract based on this rerun
-   - that rerun is still `runtime_sign_chain_inconclusive`, so the next narrow branch is to sample live truth/world yaw from `artifacts/session/<session_id>/visual/truth_state.json` during the probe window, keep `truth_timeline.json` as a secondary cross-check, and only then decide whether helper turn-authority promotion can reopen
-   - the preferred implementation for that branch is consumer-side only: pass the probe session's `truth_state.json` through the existing runtime-probe wrapper, emit additive `world_truth` metrics from `scripts/odom_world_sign_chain_runtime_probe.py`, let `scripts/probe_odom_world_sign_chain.py` prefer those metrics, and leave `scripts/sim_truth_probe.py` unchanged unless that path proves insufficient
-   - that consumer-side implementation is now landed on the current branch, with focused offline verification already green on `tests/test_probe_odom_world_sign_chain.py` and the targeted `tests/dashboard/test_world_stream_freshness.py` truth-state slice
-   - the remaining proof gate is a fresh live rerun of `scripts/run_probe_odom_world_sign_chain.ps1`; optional extra fail-closed `session_id` hardening remains available if we want to tighten the `truth_state.json` binding before that rerun
+   - that rerun now reports `runtime_classification.diagnosis=sign_chain_aligned`, with controller-side and runtime `world_truth` signs agreeing on the fresh run
+   - the current blocker is no longer missing truth/world evidence; it is that the frozen source fixture command signs are still non-comparable to the fresh requested command sign because the fresh probe command window was not reconstructed
+   - the preferred implementation for that follow-up stays consumer-side only: keep `scripts/odom_world_sign_chain_runtime_probe.py` additive, let `scripts/probe_odom_world_sign_chain.py` surface `source_alignment_assessment` / `source_probe_command_sign_comparison`, and reconstruct a bounded probe command window before deciding whether helper turn-authority promotion can reopen
+   - focused offline verification on the current branch remains green on `tests/test_probe_odom_world_sign_chain.py` and the targeted `tests/dashboard/test_world_stream_freshness.py` truth-state slice
+   - the remaining proof gate is a bounded-window follow-up for the source-vs-probe comparison; optional extra fail-closed `session_id` hardening remains available if we want to tighten the `truth_state.json` binding before that follow-up
 
 ### Step 7: Corral Time Optimization
 

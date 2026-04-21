@@ -153,12 +153,12 @@ Gather escape offline audit baseline:
 - Manual-drive sign parity audit: `artifacts/session/live_plus45_manual_drive_sign_parity_audit_20260420/gather_manual_drive_sign_parity_audit/manual_drive_sign_parity_summary.json`
 
 Gather sign-chain runtime probe reference:
-- Probe summary: `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
-- Runtime probe payload: `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_rerun/probe_odom_world_sign_chain/runtime_probe.json`
+- Probe summary: `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_post_recovery_rerun_retry1/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
+- Runtime probe payload: `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_post_recovery_rerun_retry1/probe_odom_world_sign_chain/runtime_probe.json`
 - Working odom witness for the next probe slice: `/jetbot_base_controller/odom` only, without redefining the public `/odom` contract
-- Current branch implementation: `scripts/run_probe_odom_world_sign_chain.ps1` now passes the fresh probe session's `visual/truth_state.json` path into `scripts/odom_world_sign_chain_runtime_probe.py`, which emits additive `world_truth` metrics in `runtime_probe.json`; `scripts/probe_odom_world_sign_chain.py` now prefers those metrics before falling back to `truth_timeline.json`
+- Current branch implementation: `scripts/run_probe_odom_world_sign_chain.ps1` now passes the fresh probe session's `visual/truth_state.json` path into `scripts/odom_world_sign_chain_runtime_probe.py`, which emits additive `world_truth` metrics in `runtime_probe.json`; `scripts/probe_odom_world_sign_chain.py` now prefers those metrics before falling back to `truth_timeline.json`, and now emits additive `source_alignment_assessment` / per-fixture `source_probe_command_sign_comparison` surfaces so the next-action contract can distinguish a real source-sign mismatch from a non-comparable fresh probe window
 - Current branch offline verification: `pytest tests/test_probe_odom_world_sign_chain.py -q` and `pytest tests/dashboard/test_world_stream_freshness.py -k "truth_ready or make_session_id" -q`
-- Remaining gate before closing this branch: run a fresh live rerun via `scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>`; optional extra fail-closed `session_id` hardening is still available if we want to tighten the `truth_state.json` binding before rerun
+- Remaining gate before closing this branch: reconstruct a bounded fresh probe command window for the source-vs-probe sign comparison, then rerun the analyzer/probe follow-up to confirm whether the frozen source fixtures still disagree once the comparison is time-bounded; optional extra fail-closed `session_id` hardening is still available if we want to tighten the `truth_state.json` binding before that follow-up
 
 ## Testing
 

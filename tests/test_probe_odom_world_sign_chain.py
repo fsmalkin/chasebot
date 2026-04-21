@@ -81,10 +81,19 @@ def _write_state_history(path: Path, rows: list[dict[str, object]]) -> None:
     path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
 
 
-def _source_audit_bundle(root: Path) -> tuple[Path, Path]:
+def _source_audit_bundle(
+    root: Path,
+    *,
+    command_sign_by_label: dict[str, int] | None = None,
+    odom_sign_by_label: dict[str, int] | None = None,
+    world_sign_by_label: dict[str, int] | None = None,
+) -> tuple[Path, Path]:
     audit_root = root / "artifacts" / "session" / "source_audit" / "gather_manual_drive_sign_parity_audit"
     fixtures_root = audit_root / "fixtures"
     fixtures_root.mkdir(parents=True, exist_ok=True)
+    command_sign_by_label = command_sign_by_label or {}
+    odom_sign_by_label = odom_sign_by_label or {}
+    world_sign_by_label = world_sign_by_label or {}
     summary = {
         "campaign_id": "source_audit",
         "source_campaign_id": "live_plus45_short_horizon_v2_20260419",
@@ -102,11 +111,16 @@ def _source_audit_bundle(root: Path) -> tuple[Path, Path]:
     summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     for index, fixture_label in enumerate(REPRESENTATIVE_FIXTURE_LABELS):
         fixture_diagnosis = "odom_world_sign_divergent" if fixture_label != "first_post_yaw_gate" else "command_to_odom_sign_divergent"
+        command_sign = int(command_sign_by_label.get(fixture_label, 1))
+        odom_sign = int(odom_sign_by_label.get(fixture_label, command_sign))
+        world_sign = int(world_sign_by_label.get(fixture_label, -1 if fixture_diagnosis == "odom_world_sign_divergent" else -1))
         payload = {
             "fixture_label": fixture_label,
             "fixture_index": index,
             "fixture_diagnosis": fixture_diagnosis,
-            "command_sign": 1,
+            "command_sign": command_sign,
+            "odom_metrics": {"dominant_yaw_sign": odom_sign},
+            "world_metrics": {"dominant_yaw_sign": world_sign},
             "sign_matches": {
                 "command_to_odom_sign_match": fixture_diagnosis != "command_to_odom_sign_divergent",
                 "command_to_world_sign_match": False,
@@ -117,39 +131,63 @@ def _source_audit_bundle(root: Path) -> tuple[Path, Path]:
     return summary_path, audit_root
 
 
-def _probe_campaign_summary(root: Path) -> Path:
+def _probe_campaign_summary(
+    root: Path,
+    *,
+    angular_z: float = 0.45,
+    yaw_step: float = 0.15,
+    include_timeline_anchor: bool = True,
+) -> Path:
     session_id = "probe_session"
     mission_root = root / "artifacts" / "session" / session_id / "gather_mission" / "20260420T120010Z"
     visual_root = root / "artifacts" / "session" / session_id / "visual"
     mission_root.mkdir(parents=True, exist_ok=True)
     visual_root.mkdir(parents=True, exist_ok=True)
+    local_poses = [
+        GOAL_SIDE_ONLY_LOCAL,
+        {
+            "x": GOAL_SIDE_ONLY_LOCAL["x"],
+            "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.01,
+            "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + yaw_step,
+        },
+        {
+            "x": GOAL_SIDE_ONLY_LOCAL["x"],
+            "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.02,
+            "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + (2.0 * yaw_step),
+        },
+        {
+            "x": GOAL_SIDE_ONLY_LOCAL["x"],
+            "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.03,
+            "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + (3.0 * yaw_step),
+        },
+        {
+            "x": GOAL_SIDE_ONLY_LOCAL["x"],
+            "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.04,
+            "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + (4.0 * yaw_step),
+        },
+    ]
     state_rows = [
-        _state_row(0, GOAL_SIDE_ONLY_LOCAL, angular_z=0.45),
-        _state_row(1, {"x": GOAL_SIDE_ONLY_LOCAL["x"], "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.01, "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + 0.15}, angular_z=0.45),
-        _state_row(2, {"x": GOAL_SIDE_ONLY_LOCAL["x"], "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.02, "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + 0.30}, angular_z=0.45),
-        _state_row(3, {"x": GOAL_SIDE_ONLY_LOCAL["x"], "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.03, "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + 0.45}, angular_z=0.45),
-        _state_row(4, {"x": GOAL_SIDE_ONLY_LOCAL["x"], "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.04, "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + 0.60}, angular_z=0.45),
+        _state_row(index, local_pose, angular_z=angular_z) for index, local_pose in enumerate(local_poses)
     ]
     _write_state_history(mission_root / "state_history.jsonl", state_rows)
     truth_samples = [
-        _truth_sample(0.0, GOAL_SIDE_ONLY_LOCAL),
-        _truth_sample(1.0, {"x": GOAL_SIDE_ONLY_LOCAL["x"], "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.01, "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + 0.15}),
-        _truth_sample(2.0, {"x": GOAL_SIDE_ONLY_LOCAL["x"], "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.02, "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + 0.30}),
-        _truth_sample(3.0, {"x": GOAL_SIDE_ONLY_LOCAL["x"], "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.03, "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + 0.45}),
-        _truth_sample(4.0, {"x": GOAL_SIDE_ONLY_LOCAL["x"], "y": GOAL_SIDE_ONLY_LOCAL["y"] - 0.04, "yaw": GOAL_SIDE_ONLY_LOCAL["yaw"] + 0.60}),
+        _truth_sample(float(index), local_pose) for index, local_pose in enumerate(local_poses)
     ]
     (visual_root / "truth_timeline.json").write_text(json.dumps(truth_samples, indent=2), encoding="utf-8")
+    timeline_events = []
+    if include_timeline_anchor:
+        timeline_events.append(
+            {
+                "event_type": "feedback_observed",
+                "timestamp_utc": "2026-04-20T12:00:00+00:00",
+                "t_s": 0.0,
+            }
+        )
     (visual_root / "timeline.json").write_text(
         json.dumps(
             {
                 "samples": [{"t_s": item["t_s"]} for item in truth_samples],
-                "events": [
-                    {
-                        "event_type": "feedback_observed",
-                        "timestamp_utc": "2026-04-20T12:00:00+00:00",
-                        "t_s": 0.0,
-                    }
-                ],
+                "events": timeline_events,
             },
             indent=2,
         ),
@@ -182,6 +220,7 @@ def _probe_campaign_summary(root: Path) -> Path:
 
 def _runtime_probe_payload(
     *,
+    cmd_sign: int = 1,
     model_sign: int,
     odom_sign: int,
     controller_odom_sign: int,
@@ -218,9 +257,9 @@ def _runtime_probe_payload(
     payload: dict[str, object] = {
         "probe_type": "odom_world_sign_chain_runtime_probe",
         "cmd_vel_topics": {
-            "/jetbot_base_controller/cmd_vel": cmd_payload("/jetbot_base_controller/cmd_vel", 1),
-            "/cmd_vel": cmd_payload("/cmd_vel", 1),
-            "/cmd_vel_nav": cmd_payload("/cmd_vel_nav", 1),
+            "/jetbot_base_controller/cmd_vel": cmd_payload("/jetbot_base_controller/cmd_vel", cmd_sign),
+            "/cmd_vel": cmd_payload("/cmd_vel", cmd_sign),
+            "/cmd_vel_nav": cmd_payload("/cmd_vel_nav", cmd_sign),
         },
         "odom_topics": {
             "/model/jetbot/odometry": odom_payload("/model/jetbot/odometry", model_sign),
@@ -297,10 +336,12 @@ def test_build_and_write_probe_odom_world_sign_chain_bundle(tmp_path: Path):
     assert summary["relevant_source_fixture_count"] == 4
     assert summary["runtime_supported_source_fixture_count"] == 4
     assert summary["runtime_classification"]["diagnosis"] == "odom_publication_chain_divergent"
+    assert summary["source_alignment_assessment"]["diagnosis"] == "runtime_branch_dominant"
     assert output_paths["summary_path"].exists()
     assert output_paths["scorecard_path"].exists()
     assert output_paths["runtime_probe_json_path"].exists()
     scorecard_text = output_paths["scorecard_path"].read_text(encoding="utf-8")
+    assert "- Source alignment diagnosis: `runtime_branch_dominant`" in scorecard_text
     assert "- World truth source: `truth_timeline`" in scorecard_text
     assert "- Timeline cross-check sign: `1`" in scorecard_text
     assert "- Runtime probe world truth sign: `0`" in scorecard_text
@@ -399,3 +440,90 @@ def test_build_bundle_tracks_non_reproduction_when_runtime_chain_is_aligned(tmp_
     assert summary["world_truth_source"] == "truth_timeline"
     assert summary["world_truth_source_reason"] == "runtime_probe_world_truth_missing"
     assert summary["runtime_probe_world_truth_metrics"] == {}
+    assert summary["source_alignment_assessment"]["diagnosis"] == "source_alignment_recheck_needed"
+
+
+def test_build_bundle_marks_source_probe_command_sign_noncomparable_when_window_missing(tmp_path: Path):
+    source_summary_path, _ = _source_audit_bundle(tmp_path)
+    probe_campaign_summary_path = _probe_campaign_summary(
+        tmp_path,
+        angular_z=-0.45,
+        yaw_step=-0.15,
+        include_timeline_anchor=False,
+    )
+    runtime_probe_json_path = tmp_path / "runtime_probe.json"
+    runtime_probe_json_path.write_text(
+        json.dumps(
+            _runtime_probe_payload(
+                cmd_sign=-1,
+                model_sign=-1,
+                odom_sign=-1,
+                controller_odom_sign=-1,
+                runtime_world_sign=-1,
+            ),
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    summary, fixture_payloads = audit.build_odom_world_sign_chain_bundle(
+        campaign_id="temp_probe_odom_world_sign_chain_noncomparable",
+        campaign_summary_path=probe_campaign_summary_path,
+        runtime_probe_json_path=runtime_probe_json_path,
+        source_audit_summary_path=source_summary_path,
+        source_campaign_summary_path=probe_campaign_summary_path,
+    )
+
+    assert summary["runtime_classification"]["diagnosis"] == "sign_chain_aligned"
+    assert summary["requested_command_metrics"]["window_start_t_s"] is None
+    assert summary["requested_command_metrics"]["window_end_t_s"] is None
+    assert summary["source_alignment_assessment"]["diagnosis"] == "source_probe_command_sign_noncomparable"
+    assert summary["source_alignment_assessment"]["source_probe_command_sign_noncomparable_count"] == 4
+    assert summary["next_action"]["decision"] == "reconstruct_probe_command_window"
+    early_stall = fixture_payloads["early_stall"]["source_probe_command_sign_comparison"]
+    assert early_stall["relation"] == "noncomparable_unbounded_probe_window"
+    assert early_stall["comparable"] is False
+    assert early_stall["requested_vs_world_truth_sign_match"] is True
+
+
+def test_build_bundle_marks_source_fixture_command_sign_mismatch_when_window_reconstructed(tmp_path: Path):
+    source_summary_path, _ = _source_audit_bundle(tmp_path)
+    probe_campaign_summary_path = _probe_campaign_summary(
+        tmp_path,
+        angular_z=-0.45,
+        yaw_step=-0.15,
+        include_timeline_anchor=True,
+    )
+    runtime_probe_json_path = tmp_path / "runtime_probe.json"
+    runtime_probe_json_path.write_text(
+        json.dumps(
+            _runtime_probe_payload(
+                cmd_sign=-1,
+                model_sign=-1,
+                odom_sign=-1,
+                controller_odom_sign=-1,
+                runtime_world_sign=-1,
+            ),
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    summary, fixture_payloads = audit.build_odom_world_sign_chain_bundle(
+        campaign_id="temp_probe_odom_world_sign_chain_source_mismatch",
+        campaign_summary_path=probe_campaign_summary_path,
+        runtime_probe_json_path=runtime_probe_json_path,
+        source_audit_summary_path=source_summary_path,
+        source_campaign_summary_path=probe_campaign_summary_path,
+    )
+
+    assert summary["runtime_classification"]["diagnosis"] == "sign_chain_aligned"
+    assert summary["requested_command_metrics"]["window_start_t_s"] is not None
+    assert summary["requested_command_metrics"]["window_end_t_s"] is not None
+    assert summary["source_alignment_assessment"]["diagnosis"] == "source_fixture_command_sign_mismatch"
+    assert summary["source_alignment_assessment"]["source_command_to_fresh_requested_mismatch_count"] == 4
+    assert summary["next_action"]["decision"] == "inspect_source_fixture_alignment"
+    early_stall = fixture_payloads["early_stall"]["source_probe_command_sign_comparison"]
+    assert early_stall["relation"] == "mismatch"
+    assert early_stall["comparable"] is True
+    assert early_stall["requested_vs_world_truth_sign_match"] is True
