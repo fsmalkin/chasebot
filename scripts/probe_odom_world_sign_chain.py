@@ -15,6 +15,7 @@ from typing import Any
 import gather_escape_divergence_audit as divergence
 import gather_escape_oracle as oracle
 import gather_manual_drive_sign_parity_audit as sign_audit
+import gather_turn_realization_audit as turn_audit
 from llm_supervisor_core import REPO_ROOT
 from llm_supervisor_core import ensure_dir
 from llm_supervisor_core import read_json
@@ -161,6 +162,40 @@ def _normalize_probe_artifact_paths(paths: dict[str, Any]) -> dict[str, Any]:
     return updated
 
 
+def _load_run_alignment_context(
+    campaign_summary_path: Path,
+    *,
+    run_index: int,
+) -> dict[str, Any]:
+    paths = _normalize_probe_artifact_paths(
+        divergence.resolve_run_artifact_paths(campaign_summary_path, run_index=run_index)
+    )
+    state_history_path = Path(paths["state_history_path"])
+    truth_timeline_path = Path(paths["truth_timeline_path"])
+    timeline_path = Path(paths["timeline_path"])
+    timeline_events_path = Path(paths["timeline_events_path"])
+    state_rows = oracle.load_pre_stage_attempt_rows(state_history_path, attempt=0)
+    truth_samples = divergence._sorted_truth_samples(read_json(truth_timeline_path))
+    timeline_payload = read_json(timeline_path) if timeline_path.exists() else {}
+    timeline_event_rows = divergence._read_jsonl(timeline_events_path)
+    timeline_anchor = divergence.extract_timeline_utc_anchor(
+        timeline_payload if isinstance(timeline_payload, dict) else {},
+        timeline_event_rows,
+    )
+    return {
+        "paths": paths,
+        "state_history_path": state_history_path,
+        "truth_timeline_path": truth_timeline_path,
+        "timeline_path": timeline_path,
+        "timeline_events_path": timeline_events_path,
+        "state_rows": state_rows,
+        "truth_samples": truth_samples,
+        "timeline_payload": timeline_payload,
+        "timeline_event_rows": timeline_event_rows,
+        "timeline_anchor": timeline_anchor,
+    }
+
+
 def _predicted_t_s_from_generated_utc(
     generated_utc: Any,
     *,
@@ -251,6 +286,189 @@ def extract_requested_command_metrics(
         "last_nonzero_command_sign": int(last_nonzero_sign),
         "window_start_t_s": _round_or_none(min(time_values) if time_values else None),
         "window_end_t_s": _round_or_none(max(time_values) if time_values else None),
+        "window_scope": "attempt_window",
+    }
+
+
+def build_fixture_local_command_payloads(
+    fixtures: list[dict[str, Any]],
+    *,
+    state_rows: list[dict[str, Any]],
+    truth_samples: list[dict[str, Any]],
+    timeline_anchor: dict[str, Any] | None,
+    scenario_id: str,
+) -> dict[str, dict[str, Any]]:
+    fixture_payloads: dict[str, dict[str, Any]] = {}
+    for fixture in fixtures:
+        fixture_label = str(fixture.get("fixture_label", "") or "")
+        if not fixture_label:
+            continue
+        alignment, enriched_truth, state_window = turn_audit._state_window_for_fixture(
+            fixture,
+            state_rows=state_rows,
+            truth_samples=truth_samples,
+            timeline_anchor=timeline_anchor,
+            scenario_id=scenario_id,
+        )
+        matched_truth_t_s = _number(alignment.get("matched_truth_t_s"))
+        command_rows = list(state_window)
+        if (
+            not command_rows
+            and isinstance(fixture.get("selected_command"), dict)
+            and matched_truth_t_s is not None
+        ):
+            command_rows = [
+                {
+                    **fixture,
+                    "_estimated_t_s": round(float(matched_truth_t_s), 6),
+                }
+            ]
+
+        command_times = [
+            float(_number(row.get("_estimated_t_s"), default=float(index)) or float(index))
+            for index, row in enumerate(command_rows)
+        ]
+        peak_abs = 0.0
+        net_integral = 0.0
+        first_nonzero_sign = 0
+        last_nonzero_sign = 0
+        nonzero_command_sample_count = 0
+        for index, row in enumerate(command_rows):
+            command = row.get("selected_command", {}) if isinstance(row.get("selected_command"), dict) else {}
+            angular_z = float(_number(command.get("angular_z"), default=0.0) or 0.0)
+            current_sign = _sign(angular_z, eps=DEFAULT_PROBE_ODOM_WORLD_SIGN_CHAIN_MIN_COMMAND_RADPS)
+            if current_sign != 0:
+                nonzero_command_sample_count += 1
+                if first_nonzero_sign == 0:
+                    first_nonzero_sign = current_sign
+                last_nonzero_sign = current_sign
+            current_t_s = command_times[index]
+            if index + 1 < len(command_times):
+                next_t_s = command_times[index + 1]
+            else:
+                next_t_s = current_t_s + 1.0 if len(command_rows) == 1 else current_t_s
+            dt_s = max(next_t_s - current_t_s, 0.0)
+            peak_abs = max(peak_abs, abs(angular_z))
+            net_integral += angular_z * dt_s
+        dominant_sign = _sign(net_integral, eps=DEFAULT_PROBE_ODOM_WORLD_SIGN_CHAIN_MIN_COMMAND_RADPS)
+        if dominant_sign == 0 and first_nonzero_sign != 0 and first_nonzero_sign == last_nonzero_sign:
+            dominant_sign = first_nonzero_sign
+        time_values = [
+            float(_number(row.get("_estimated_t_s"), default=math.nan) or math.nan)
+            for row in command_rows
+            if _number(row.get("_estimated_t_s")) is not None
+        ]
+        fixture_payloads[fixture_label] = {
+            "fixture_label": fixture_label,
+            "fixture_index": int(fixture.get("fixture_index", 0) or 0),
+            "fixture_generated_utc": str(fixture.get("generated_utc", "") or ""),
+            "alignment": alignment,
+            "window": {
+                "truth_sample_count": len(enriched_truth),
+                "state_row_count": len(state_window),
+                "start_truth_t_s": _round_or_none(_number(enriched_truth[0].get("t_s")) if enriched_truth else None),
+                "end_truth_t_s": _round_or_none(_number(enriched_truth[-1].get("t_s")) if enriched_truth else None),
+                "window_scope": "fixture_window",
+            },
+            "command_metrics": {
+                "sample_count": len(command_rows),
+                "nonzero_command_sample_count": int(nonzero_command_sample_count),
+                "peak_requested_angular_z_radps": round(peak_abs, 6),
+                "net_requested_angular_integral_rad": round(net_integral, 6),
+                "dominant_command_sign": int(dominant_sign),
+                "first_nonzero_command_sign": int(first_nonzero_sign),
+                "last_nonzero_command_sign": int(last_nonzero_sign),
+                "window_start_t_s": _round_or_none(min(time_values) if time_values else None),
+                "window_end_t_s": _round_or_none(max(time_values) if time_values else None),
+                "window_scope": "fixture_window",
+            },
+        }
+    return fixture_payloads
+
+
+def build_fresh_fixture_local_command_payloads(
+    state_rows: list[dict[str, Any]],
+    *,
+    truth_samples: list[dict[str, Any]],
+    timeline_anchor: dict[str, Any] | None,
+    scenario_id: str,
+) -> dict[str, dict[str, Any]]:
+    return build_fixture_local_command_payloads(
+        oracle.select_representative_fixture_rows(state_rows),
+        state_rows=state_rows,
+        truth_samples=truth_samples,
+        timeline_anchor=timeline_anchor,
+        scenario_id=scenario_id,
+    )
+
+
+def build_source_fresh_fixture_window_comparison(
+    source_fixture_local_command: dict[str, Any],
+    fresh_fixture_local_command: dict[str, Any],
+) -> dict[str, Any]:
+    source_window = (
+        source_fixture_local_command.get("window", {})
+        if isinstance(source_fixture_local_command.get("window"), dict)
+        else {}
+    )
+    source_metrics = (
+        source_fixture_local_command.get("command_metrics", {})
+        if isinstance(source_fixture_local_command.get("command_metrics"), dict)
+        else {}
+    )
+    fresh_window = (
+        fresh_fixture_local_command.get("window", {})
+        if isinstance(fresh_fixture_local_command.get("window"), dict)
+        else {}
+    )
+    fresh_metrics = (
+        fresh_fixture_local_command.get("command_metrics", {})
+        if isinstance(fresh_fixture_local_command.get("command_metrics"), dict)
+        else {}
+    )
+    source_start_t_s = _number(source_metrics.get("window_start_t_s"))
+    source_end_t_s = _number(source_metrics.get("window_end_t_s"))
+    fresh_start_t_s = _number(fresh_metrics.get("window_start_t_s"))
+    fresh_end_t_s = _number(fresh_metrics.get("window_end_t_s"))
+    source_state_row_count = _number(source_window.get("state_row_count"))
+    fresh_state_row_count = _number(fresh_window.get("state_row_count"))
+    source_net_integral = _number(source_metrics.get("net_requested_angular_integral_rad"))
+    fresh_net_integral = _number(fresh_metrics.get("net_requested_angular_integral_rad"))
+    source_dominant_sign = int(source_metrics.get("dominant_command_sign", 0) or 0)
+    fresh_dominant_sign = int(fresh_metrics.get("dominant_command_sign", 0) or 0)
+    source_first_nonzero_sign = int(source_metrics.get("first_nonzero_command_sign", 0) or 0)
+    fresh_first_nonzero_sign = int(fresh_metrics.get("first_nonzero_command_sign", 0) or 0)
+    source_last_nonzero_sign = int(source_metrics.get("last_nonzero_command_sign", 0) or 0)
+    fresh_last_nonzero_sign = int(fresh_metrics.get("last_nonzero_command_sign", 0) or 0)
+    return {
+        "delta_direction": "fresh_minus_source",
+        "source_window_scope": str(source_window.get("window_scope", "") or ""),
+        "fresh_window_scope": str(fresh_window.get("window_scope", "") or ""),
+        "source_dominant_command_sign": source_dominant_sign,
+        "fresh_dominant_command_sign": fresh_dominant_sign,
+        "dominant_command_sign_match": _match_state(source_dominant_sign, fresh_dominant_sign),
+        "first_nonzero_sign_match": _match_state(source_first_nonzero_sign, fresh_first_nonzero_sign),
+        "last_nonzero_sign_match": _match_state(source_last_nonzero_sign, fresh_last_nonzero_sign),
+        "window_start_delta_t_s": _round_or_none(
+            float(fresh_start_t_s) - float(source_start_t_s)
+            if source_start_t_s is not None and fresh_start_t_s is not None
+            else None
+        ),
+        "window_end_delta_t_s": _round_or_none(
+            float(fresh_end_t_s) - float(source_end_t_s)
+            if source_end_t_s is not None and fresh_end_t_s is not None
+            else None
+        ),
+        "state_row_count_delta": (
+            int(fresh_state_row_count) - int(source_state_row_count)
+            if source_state_row_count is not None and fresh_state_row_count is not None
+            else None
+        ),
+        "net_requested_angular_integral_delta_rad": _round_or_none(
+            float(fresh_net_integral) - float(source_net_integral)
+            if source_net_integral is not None and fresh_net_integral is not None
+            else None
+        ),
     }
 
 
@@ -363,6 +581,7 @@ def select_world_truth_metrics(
     runtime_probe_payload: dict[str, Any],
     start_t_s: float | None,
     end_t_s: float | None,
+    expected_probe_session_id: str = "",
 ) -> dict[str, Any]:
     timeline_metrics = extract_world_truth_metrics(
         truth_samples,
@@ -370,8 +589,24 @@ def select_world_truth_metrics(
         end_t_s=end_t_s,
     )
     runtime_probe_metrics = extract_runtime_probe_world_truth_metrics(runtime_probe_payload)
+    runtime_probe_world_truth = (
+        runtime_probe_payload.get("world_truth", {})
+        if isinstance(runtime_probe_payload.get("world_truth"), dict)
+        else {}
+    )
+    runtime_probe_source_session_id = str(runtime_probe_world_truth.get("source_session_id", "") or "")
+    expected_probe_session_id = str(expected_probe_session_id or "")
+    runtime_probe_session_matches_expected = (
+        None
+        if not runtime_probe_source_session_id or not expected_probe_session_id
+        else bool(runtime_probe_source_session_id == expected_probe_session_id)
+    )
     runtime_probe_sign = int(runtime_probe_metrics.get("dominant_yaw_sign", 0) or 0)
-    if runtime_probe_sign != 0:
+    if runtime_probe_session_matches_expected is False:
+        selected_source = "truth_timeline"
+        selection_reason = "runtime_probe_world_truth_session_mismatch"
+        selected_metrics = timeline_metrics
+    elif runtime_probe_sign != 0:
         selected_source = "runtime_probe.world_truth"
         selection_reason = "runtime_probe_world_truth_usable"
         selected_metrics = runtime_probe_metrics
@@ -391,6 +626,9 @@ def select_world_truth_metrics(
         "timeline_metrics": timeline_metrics,
         "runtime_probe_metrics": runtime_probe_metrics,
         "cross_check": {
+            "expected_probe_session_id": expected_probe_session_id,
+            "runtime_probe_world_truth_source_session_id": runtime_probe_source_session_id,
+            "runtime_probe_world_truth_session_matches_expected": runtime_probe_session_matches_expected,
             "selected_world_truth_sign": int(selected_sign),
             "timeline_truth_sign": int(timeline_sign),
             "runtime_probe_world_truth_sign": int(runtime_probe_sign),
@@ -598,6 +836,8 @@ def compute_fixture_probe_payload(
     runtime_classification: dict[str, Any],
     requested_command_metrics: dict[str, Any],
     world_truth_metrics: dict[str, Any],
+    source_fixture_local_command_payload: dict[str, Any] | None = None,
+    fresh_fixture_command_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     source_diagnosis = str(source_fixture_payload.get("fixture_diagnosis", "") or "")
     relevant_to_probe = source_diagnosis == "odom_world_sign_divergent"
@@ -622,25 +862,68 @@ def compute_fixture_probe_payload(
     source_command_sign = int(source_fixture_payload.get("command_sign", 0) or 0)
     source_odom_sign = int(source_odom_metrics.get("dominant_yaw_sign", 0) or 0)
     source_world_sign = int(source_world_metrics.get("dominant_yaw_sign", 0) or 0)
+    source_fixture_local_command_payload = (
+        source_fixture_local_command_payload if isinstance(source_fixture_local_command_payload, dict) else {}
+    )
     fresh_requested_sign = int(requested_command_metrics.get("dominant_command_sign", 0) or 0)
+    fresh_fixture_command_payload = (
+        fresh_fixture_command_payload if isinstance(fresh_fixture_command_payload, dict) else {}
+    )
+    fresh_fixture_command_metrics = (
+        fresh_fixture_command_payload.get("command_metrics", {})
+        if isinstance(fresh_fixture_command_payload.get("command_metrics"), dict)
+        else {}
+    )
+    fresh_fixture_command_sign = int(fresh_fixture_command_metrics.get("dominant_command_sign", 0) or 0)
+    comparison_command_metrics = (
+        fresh_fixture_command_metrics if fresh_fixture_command_metrics else requested_command_metrics
+    )
+    comparison_requested_sign = (
+        fresh_fixture_command_sign if fresh_fixture_command_metrics else fresh_requested_sign
+    )
+    comparison_sign_source = (
+        "fresh_fixture_local_command" if fresh_fixture_command_metrics else "attempt_requested_command"
+    )
     fresh_world_sign = int(world_truth_metrics.get("dominant_yaw_sign", 0) or 0)
-    requested_window_start_t_s = _number(requested_command_metrics.get("window_start_t_s"))
-    requested_window_end_t_s = _number(requested_command_metrics.get("window_end_t_s"))
+    requested_window_start_t_s = _number(comparison_command_metrics.get("window_start_t_s"))
+    requested_window_end_t_s = _number(comparison_command_metrics.get("window_end_t_s"))
     probe_window_reconstructed = requested_window_start_t_s is not None and requested_window_end_t_s is not None
+    source_command_window_scope = "fixture_window"
+    probe_command_window_scope = str(
+        comparison_command_metrics.get("window_scope", "attempt_window") or "attempt_window"
+    )
     requested_vs_world_truth_match = _match_state(fresh_requested_sign, fresh_world_sign)
-    source_command_to_fresh_requested = _match_state(source_command_sign, fresh_requested_sign)
+    source_command_to_fresh_requested = _match_state(source_command_sign, comparison_requested_sign)
+    source_command_to_attempt_requested = _match_state(source_command_sign, fresh_requested_sign)
+    source_command_to_fixture_requested = _match_state(source_command_sign, fresh_fixture_command_sign)
     if not probe_window_reconstructed:
-        source_probe_command_sign_relation = "noncomparable_unbounded_probe_window"
-        source_probe_command_sign_reason = "source_fixture_windowed_sign_vs_probe_unbounded_attempt_sign"
+        if comparison_sign_source == "fresh_fixture_local_command":
+            source_probe_command_sign_relation = "noncomparable_fresh_fixture_window_unavailable"
+            source_probe_command_sign_reason = "fresh_fixture_local_window_unavailable"
+        else:
+            source_probe_command_sign_relation = "noncomparable_unbounded_probe_window"
+            source_probe_command_sign_reason = "source_fixture_windowed_sign_vs_probe_unbounded_attempt_sign"
+        source_probe_command_sign_comparable = False
+    elif probe_command_window_scope != "fixture_window":
+        source_probe_command_sign_relation = "noncomparable_source_fixture_window_vs_probe_attempt_window"
+        source_probe_command_sign_reason = "source_fixture_window_vs_probe_attempt_window"
+        source_probe_command_sign_comparable = False
     elif source_command_to_fresh_requested is None:
         source_probe_command_sign_relation = "sign_unavailable"
         source_probe_command_sign_reason = "source_or_probe_command_sign_zero"
+        source_probe_command_sign_comparable = False
     elif source_command_to_fresh_requested:
         source_probe_command_sign_relation = "match"
         source_probe_command_sign_reason = "source_and_probe_command_sign_match"
+        source_probe_command_sign_comparable = True
     else:
         source_probe_command_sign_relation = "mismatch"
         source_probe_command_sign_reason = "source_and_probe_command_sign_mismatch"
+        source_probe_command_sign_comparable = True
+    source_fresh_fixture_window_comparison = build_source_fresh_fixture_window_comparison(
+        source_fixture_local_command_payload,
+        fresh_fixture_command_payload,
+    )
     return {
         "generated_utc": _utc_now_iso(),
         "fixture_label": str(source_fixture_payload.get("fixture_label", "") or ""),
@@ -655,24 +938,36 @@ def compute_fixture_probe_payload(
         "source_sign_matches": sign_matches,
         "source_alignment_matches": {
             "source_command_to_fresh_requested": source_command_to_fresh_requested,
+            "source_command_to_fresh_requested_attempt_window": source_command_to_attempt_requested,
+            "source_command_to_fresh_requested_fixture_window": source_command_to_fixture_requested,
             "source_odom_to_fresh_world": _match_state(source_odom_sign, fresh_world_sign),
             "source_world_to_fresh_world": _match_state(source_world_sign, fresh_world_sign),
             "requested_to_world_truth": requested_vs_world_truth_match,
         },
         "source_probe_command_sign_comparison": {
             "source_command_sign": int(source_command_sign),
-            "probe_requested_command_sign": int(fresh_requested_sign),
+            "probe_requested_command_sign": int(comparison_requested_sign),
+            "probe_requested_command_sign_source": comparison_sign_source,
+            "probe_attempt_requested_command_sign": int(fresh_requested_sign),
+            "probe_fixture_requested_command_sign": int(fresh_fixture_command_sign),
             "sign_match": source_command_to_fresh_requested,
-            "comparable": bool(probe_window_reconstructed and source_command_to_fresh_requested is not None),
+            "comparable": bool(source_probe_command_sign_comparable),
             "probe_window_reconstructed": bool(probe_window_reconstructed),
+            "source_window_scope": source_command_window_scope,
+            "probe_window_scope": probe_command_window_scope,
+            "surface_homologous": bool(source_command_window_scope == probe_command_window_scope == "fixture_window"),
             "requested_vs_world_truth_sign_match": requested_vs_world_truth_match,
             "relation": source_probe_command_sign_relation,
             "reason": source_probe_command_sign_reason,
         },
         "fresh_probe_signs": {
             "requested_command": int(fresh_requested_sign),
+            "fixture_local_requested_command": int(fresh_fixture_command_sign),
             "world_truth": int(fresh_world_sign),
         },
+        "source_fixture_local_command": source_fixture_local_command_payload,
+        "source_fresh_fixture_window_comparison": source_fresh_fixture_window_comparison,
+        "fresh_fixture_local_command": fresh_fixture_command_payload,
         "probe_hypothesis_relevant": relevant_to_probe,
         "runtime_probe_supports_source_fixture": supports_source_fixture,
         "runtime_diagnosis": str(runtime_classification.get("diagnosis", "") or ""),
@@ -695,6 +990,7 @@ def assess_source_alignment(
     command_match_labels: list[str] = []
     command_mismatch_labels: list[str] = []
     command_noncomparable_labels: list[str] = []
+    command_scope_mismatch_labels: list[str] = []
     command_unknown_labels: list[str] = []
     world_match_labels: list[str] = []
     world_mismatch_labels: list[str] = []
@@ -718,7 +1014,12 @@ def assess_source_alignment(
             command_match_labels.append(fixture_label)
         elif command_relation == "mismatch":
             command_mismatch_labels.append(fixture_label)
-        elif command_relation == "noncomparable_unbounded_probe_window":
+        elif command_relation == "noncomparable_source_fixture_window_vs_probe_attempt_window":
+            command_scope_mismatch_labels.append(fixture_label)
+        elif command_relation in {
+            "noncomparable_unbounded_probe_window",
+            "noncomparable_fresh_fixture_window_unavailable",
+        }:
             command_noncomparable_labels.append(fixture_label)
         else:
             command_unknown_labels.append(fixture_label)
@@ -762,6 +1063,16 @@ def assess_source_alignment(
                 " The fresh requested sign still agrees with fresh world truth, so the immediate next step is "
                 "window reconstruction rather than a runtime behavior patch."
             )
+    elif command_scope_mismatch_labels:
+        diagnosis = "source_probe_command_sign_semantically_noncomparable"
+        decision = "build_fresh_fixture_local_comparison"
+        confidence = "medium"
+        rationale = (
+            f"The fresh runtime probe is internally aligned, but {len(command_scope_mismatch_labels)} of "
+            f"{len(relevant_payloads)} relevant source command comparisons still mix source fixture-local windows "
+            "with one fresh attempt-level command window. Treat that relation as additive only until the fresh side "
+            "is reconstructed on a homologous fixture-local surface."
+        )
     elif command_mismatch_labels:
         diagnosis = "source_fixture_command_sign_mismatch"
         decision = "inspect_source_fixture_alignment"
@@ -796,6 +1107,7 @@ def assess_source_alignment(
         "source_command_to_fresh_requested_match_count": len(command_match_labels),
         "source_command_to_fresh_requested_mismatch_count": len(command_mismatch_labels),
         "source_probe_command_sign_noncomparable_count": len(command_noncomparable_labels),
+        "source_probe_command_sign_scope_mismatch_count": len(command_scope_mismatch_labels),
         "source_command_to_fresh_requested_unknown_count": len(command_unknown_labels),
         "source_world_to_fresh_world_match_count": len(world_match_labels),
         "source_world_to_fresh_world_mismatch_count": len(world_mismatch_labels),
@@ -803,6 +1115,7 @@ def assess_source_alignment(
         "source_command_match_fixture_labels": command_match_labels,
         "source_command_mismatch_fixture_labels": command_mismatch_labels,
         "source_command_noncomparable_fixture_labels": command_noncomparable_labels,
+        "source_command_scope_mismatch_fixture_labels": command_scope_mismatch_labels,
         "source_world_match_fixture_labels": world_match_labels,
         "source_world_mismatch_fixture_labels": world_mismatch_labels,
     }
@@ -825,24 +1138,46 @@ def build_odom_world_sign_chain_bundle(
         source_campaign_summary_path=source_campaign_summary_path,
         scenario_id=scenario_id,
     )
-    probe_paths = _normalize_probe_artifact_paths(
-        divergence.resolve_run_artifact_paths(campaign_summary_path, run_index=run_index)
+    source_run_context = _load_run_alignment_context(
+        source_campaign_summary_path,
+        run_index=DEFAULT_PROBE_ODOM_WORLD_SIGN_CHAIN_RUN_INDEX,
     )
-    state_history_path = Path(probe_paths["state_history_path"])
-    truth_timeline_path = Path(probe_paths["truth_timeline_path"])
-    timeline_path = Path(probe_paths["timeline_path"])
-    timeline_events_path = Path(probe_paths["timeline_events_path"])
-    state_rows = oracle.load_pre_stage_attempt_rows(state_history_path, attempt=0)
-    truth_samples = divergence._sorted_truth_samples(read_json(truth_timeline_path))
-    timeline_payload = read_json(timeline_path) if timeline_path.exists() else {}
-    timeline_event_rows = divergence._read_jsonl(timeline_events_path)
-    timeline_anchor = divergence.extract_timeline_utc_anchor(
-        timeline_payload if isinstance(timeline_payload, dict) else {},
-        timeline_event_rows,
+    probe_run_context = _load_run_alignment_context(
+        campaign_summary_path,
+        run_index=run_index,
     )
+    source_paths = source_run_context["paths"]
+    probe_paths = probe_run_context["paths"]
+    source_state_history_path = Path(source_run_context["state_history_path"])
+    source_truth_timeline_path = Path(source_run_context["truth_timeline_path"])
+    source_timeline_path = Path(source_run_context["timeline_path"])
+    source_timeline_events_path = Path(source_run_context["timeline_events_path"])
+    source_state_rows = list(source_run_context["state_rows"])
+    source_truth_samples = list(source_run_context["truth_samples"])
+    source_timeline_anchor = source_run_context["timeline_anchor"]
+    state_history_path = Path(probe_run_context["state_history_path"])
+    truth_timeline_path = Path(probe_run_context["truth_timeline_path"])
+    timeline_path = Path(probe_run_context["timeline_path"])
+    timeline_events_path = Path(probe_run_context["timeline_events_path"])
+    state_rows = list(probe_run_context["state_rows"])
+    truth_samples = list(probe_run_context["truth_samples"])
+    timeline_anchor = probe_run_context["timeline_anchor"]
     requested_command_metrics = extract_requested_command_metrics(
         state_rows,
         timeline_anchor=timeline_anchor,
+    )
+    source_fixture_local_command_payloads = build_fixture_local_command_payloads(
+        oracle.select_representative_fixture_rows(source_state_rows),
+        state_rows=source_state_rows,
+        truth_samples=source_truth_samples,
+        timeline_anchor=source_timeline_anchor,
+        scenario_id=scenario_id,
+    )
+    fresh_fixture_command_payloads = build_fresh_fixture_local_command_payloads(
+        state_rows,
+        truth_samples=truth_samples,
+        timeline_anchor=timeline_anchor,
+        scenario_id=scenario_id,
     )
     runtime_probe_payload = _json_from_path(runtime_probe_json_path)
     world_truth_selection = select_world_truth_metrics(
@@ -850,6 +1185,7 @@ def build_odom_world_sign_chain_bundle(
         runtime_probe_payload=runtime_probe_payload,
         start_t_s=_number(requested_command_metrics.get("window_start_t_s")),
         end_t_s=_number(requested_command_metrics.get("window_end_t_s")),
+        expected_probe_session_id=str(probe_paths.get("session_id", "") or ""),
     )
     world_truth_metrics = world_truth_selection["selected_metrics"]
     runtime_classification = classify_runtime_sign_chain(
@@ -868,6 +1204,8 @@ def build_odom_world_sign_chain_bundle(
             runtime_classification=runtime_classification,
             requested_command_metrics=requested_command_metrics,
             world_truth_metrics=world_truth_metrics,
+            source_fixture_local_command_payload=source_fixture_local_command_payloads.get(fixture_label),
+            fresh_fixture_command_payload=fresh_fixture_command_payloads.get(fixture_label),
         )
         for fixture_label, payload in source_fixture_payloads.items()
     }
@@ -894,7 +1232,11 @@ def build_odom_world_sign_chain_bundle(
     if (
         str(runtime_classification.get("diagnosis", "") or "") == "sign_chain_aligned"
         and str(source_alignment_assessment.get("diagnosis", "") or "")
-        in {"source_probe_command_sign_noncomparable", "source_fixture_command_sign_mismatch"}
+        in {
+            "source_probe_command_sign_noncomparable",
+            "source_probe_command_sign_semantically_noncomparable",
+            "source_fixture_command_sign_mismatch",
+        }
     ):
         next_action = {
             "decision": str(source_alignment_assessment.get("decision", "") or ""),
@@ -909,6 +1251,16 @@ def build_odom_world_sign_chain_bundle(
         "source_campaign_summary_path": str(source_campaign_summary_path.resolve()),
         "source_audit_summary_path": str(source_audit_summary_path.resolve()),
         "source_campaign_id": str(source_summary.get("source_campaign_id", "") or source_summary.get("campaign_id", "")),
+        "source_run_index": int(source_paths.get("selected_run_index", 0) or 0),
+        "source_session_id": str(source_paths.get("session_id", "") or ""),
+        "source_mission_root": str(source_paths.get("mission_root", "") or ""),
+        "source_visual_root": str(source_paths.get("visual_root", "") or ""),
+        "source_state_history_path": str(source_state_history_path),
+        "source_truth_timeline_path": str(source_truth_timeline_path),
+        "source_timeline_path": str(source_timeline_path),
+        "source_timeline_events_path": str(source_timeline_events_path),
+        "source_timeline_alignment_anchor": source_timeline_anchor or {},
+        "source_fixture_local_command_payload_count": len(source_fixture_local_command_payloads),
         "source_root_cause_gate": source_summary.get("root_cause_gate", {}),
         "source_next_action": source_summary.get("next_action", {}),
         "source_representative_fixture_count": int(source_summary.get("representative_fixture_count", 0) or 0),
@@ -930,6 +1282,7 @@ def build_odom_world_sign_chain_bundle(
         "runtime_probe_stderr_path": str(runtime_probe_stderr_path.resolve()) if runtime_probe_stderr_path else "",
         "timeline_alignment_anchor": timeline_anchor or {},
         "requested_command_metrics": requested_command_metrics,
+        "fresh_fixture_local_command_payload_count": len(fresh_fixture_command_payloads),
         "world_truth_source": str(world_truth_selection.get("selected_source", "") or ""),
         "world_truth_source_reason": str(world_truth_selection.get("selection_reason", "") or ""),
         "world_truth_metrics": world_truth_metrics,
@@ -965,7 +1318,19 @@ def build_odom_world_sign_chain_bundle(
                 "source_command_comparable": bool(
                     ((payload.get("source_probe_command_sign_comparison", {}) or {}).get("comparable", False))
                 ),
+                "source_fixture_command_sign": (
+                    (((payload.get("source_fixture_local_command", {}) or {}).get("command_metrics", {}) or {}).get(
+                        "dominant_command_sign",
+                        0,
+                    ))
+                ),
                 "fresh_requested_command_sign": ((payload.get("fresh_probe_signs", {}) or {}).get("requested_command", 0)),
+                "fresh_fixture_command_sign": (
+                    ((payload.get("fresh_probe_signs", {}) or {}).get("fixture_local_requested_command", 0))
+                ),
+                "source_fresh_fixture_window_sign_match": (
+                    ((payload.get("source_fresh_fixture_window_comparison", {}) or {}).get("dominant_command_sign_match"))
+                ),
                 "fresh_world_truth_sign": ((payload.get("fresh_probe_signs", {}) or {}).get("world_truth", 0)),
                 "source_command_to_fresh_requested_match": (
                     (payload.get("source_alignment_matches", {}) or {}).get("source_command_to_fresh_requested")
@@ -1036,12 +1401,60 @@ def build_scorecard_markdown(summary: dict[str, Any], fixture_payloads: dict[str
         f"- Relevant source command matches fresh requested sign: `{source_alignment_assessment.get('source_command_to_fresh_requested_match_count', 0)}`",
         f"- Relevant source command mismatches fresh requested sign: `{source_alignment_assessment.get('source_command_to_fresh_requested_mismatch_count', 0)}`",
         f"- Relevant source command comparisons blocked by unbounded probe window: `{source_alignment_assessment.get('source_probe_command_sign_noncomparable_count', 0)}`",
+        f"- Relevant source command comparisons blocked by fixture-vs-attempt scope mismatch: `{source_alignment_assessment.get('source_probe_command_sign_scope_mismatch_count', 0)}`",
         f"- Relevant source world matches fresh world sign: `{source_alignment_assessment.get('source_world_to_fresh_world_match_count', 0)}`",
         f"- Relevant source world mismatches fresh world sign: `{source_alignment_assessment.get('source_world_to_fresh_world_mismatch_count', 0)}`",
         f"- Noncomparable source command fixtures: `{', '.join(source_alignment_assessment.get('source_command_noncomparable_fixture_labels', [])) or 'none'}`",
+        f"- Scope-mismatched source command fixtures: `{', '.join(source_alignment_assessment.get('source_command_scope_mismatch_fixture_labels', [])) or 'none'}`",
         f"- Mismatched source command fixtures: `{', '.join(source_alignment_assessment.get('source_command_mismatch_fixture_labels', [])) or 'none'}`",
         f"- Matching source world fixtures: `{', '.join(source_alignment_assessment.get('source_world_match_fixture_labels', [])) or 'none'}`",
         "",
+        "## Fixture Window Diffs",
+        "",
+    ]
+    for payload in _ordered_fixture_payloads(fixture_payloads):
+        if not bool(payload.get("probe_hypothesis_relevant", False)):
+            continue
+        source_fixture_local_command = (
+            payload.get("source_fixture_local_command", {})
+            if isinstance(payload.get("source_fixture_local_command"), dict)
+            else {}
+        )
+        fresh_fixture_local_command = (
+            payload.get("fresh_fixture_local_command", {})
+            if isinstance(payload.get("fresh_fixture_local_command"), dict)
+            else {}
+        )
+        source_metrics = (
+            source_fixture_local_command.get("command_metrics", {})
+            if isinstance(source_fixture_local_command.get("command_metrics"), dict)
+            else {}
+        )
+        fresh_metrics = (
+            fresh_fixture_local_command.get("command_metrics", {})
+            if isinstance(fresh_fixture_local_command.get("command_metrics"), dict)
+            else {}
+        )
+        source_fresh_fixture_window_comparison = (
+            payload.get("source_fresh_fixture_window_comparison", {})
+            if isinstance(payload.get("source_fresh_fixture_window_comparison"), dict)
+            else {}
+        )
+        lines.append(
+            f"- `{payload.get('fixture_label', '')}` "
+            f"src_window=`{source_metrics.get('window_start_t_s')}..{source_metrics.get('window_end_t_s')}` "
+            f"fresh_window=`{fresh_metrics.get('window_start_t_s')}..{fresh_metrics.get('window_end_t_s')}` "
+            f"src_sign=`{source_metrics.get('dominant_command_sign', 0)}` "
+            f"fresh_sign=`{fresh_metrics.get('dominant_command_sign', 0)}` "
+            f"sign_match=`{source_fresh_fixture_window_comparison.get('dominant_command_sign_match')}` "
+            f"net_delta_rad=`{source_fresh_fixture_window_comparison.get('net_requested_angular_integral_delta_rad')}` "
+            f"start_delta_s=`{source_fresh_fixture_window_comparison.get('window_start_delta_t_s')}` "
+            f"end_delta_s=`{source_fresh_fixture_window_comparison.get('window_end_delta_t_s')}`"
+        )
+
+    lines.extend(
+        [
+            "",
         "## Runtime Signs",
         "",
         f"- Requested command sign: `{requested_metrics.get('dominant_command_sign', 0)}`",
@@ -1061,7 +1474,8 @@ def build_scorecard_markdown(summary: dict[str, Any], fixture_payloads: dict[str
         "",
         "## Fixtures",
         "",
-    ]
+        ]
+    )
     for payload in _ordered_fixture_payloads(fixture_payloads):
         source_surface_signs = (
             payload.get("source_surface_signs", {})

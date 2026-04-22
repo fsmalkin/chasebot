@@ -135,6 +135,7 @@ def _probe_campaign_summary(
     root: Path,
     *,
     angular_z: float = 0.45,
+    angular_z_by_index: list[float] | None = None,
     yaw_step: float = 0.15,
     include_timeline_anchor: bool = True,
 ) -> Path:
@@ -167,7 +168,16 @@ def _probe_campaign_summary(
         },
     ]
     state_rows = [
-        _state_row(index, local_pose, angular_z=angular_z) for index, local_pose in enumerate(local_poses)
+        _state_row(
+            index,
+            local_pose,
+            angular_z=(
+                float(angular_z_by_index[index])
+                if angular_z_by_index is not None and index < len(angular_z_by_index)
+                else angular_z
+            ),
+        )
+        for index, local_pose in enumerate(local_poses)
     ]
     _write_state_history(mission_root / "state_history.jsonl", state_rows)
     truth_samples = [
@@ -437,13 +447,14 @@ def test_build_bundle_tracks_non_reproduction_when_runtime_chain_is_aligned(tmp_
     assert summary["runtime_classification"]["diagnosis"] == "sign_chain_aligned"
     assert summary["next_action"]["decision"] == "revisit_source_alignment"
     assert summary["runtime_supported_source_fixture_count"] == 0
+    assert summary["fresh_fixture_local_command_payload_count"] == 5
     assert summary["world_truth_source"] == "truth_timeline"
     assert summary["world_truth_source_reason"] == "runtime_probe_world_truth_missing"
     assert summary["runtime_probe_world_truth_metrics"] == {}
     assert summary["source_alignment_assessment"]["diagnosis"] == "source_alignment_recheck_needed"
 
 
-def test_build_bundle_marks_source_probe_command_sign_noncomparable_when_window_missing(tmp_path: Path):
+def test_build_bundle_uses_fixture_local_windows_when_attempt_window_is_unbounded(tmp_path: Path):
     source_summary_path, _ = _source_audit_bundle(tmp_path)
     probe_campaign_summary_path = _probe_campaign_summary(
         tmp_path,
@@ -477,32 +488,36 @@ def test_build_bundle_marks_source_probe_command_sign_noncomparable_when_window_
     assert summary["runtime_classification"]["diagnosis"] == "sign_chain_aligned"
     assert summary["requested_command_metrics"]["window_start_t_s"] is None
     assert summary["requested_command_metrics"]["window_end_t_s"] is None
-    assert summary["source_alignment_assessment"]["diagnosis"] == "source_probe_command_sign_noncomparable"
-    assert summary["source_alignment_assessment"]["source_probe_command_sign_noncomparable_count"] == 4
-    assert summary["next_action"]["decision"] == "reconstruct_probe_command_window"
+    assert summary["source_alignment_assessment"]["diagnosis"] == "source_fixture_command_sign_mismatch"
+    assert summary["source_alignment_assessment"]["source_command_to_fresh_requested_mismatch_count"] == 4
+    assert summary["source_alignment_assessment"]["source_probe_command_sign_noncomparable_count"] == 0
+    assert summary["source_alignment_assessment"]["source_probe_command_sign_scope_mismatch_count"] == 0
+    assert summary["next_action"]["decision"] == "inspect_source_fixture_alignment"
     early_stall = fixture_payloads["early_stall"]["source_probe_command_sign_comparison"]
-    assert early_stall["relation"] == "noncomparable_unbounded_probe_window"
-    assert early_stall["comparable"] is False
+    assert early_stall["relation"] == "mismatch"
+    assert early_stall["comparable"] is True
+    assert early_stall["probe_window_scope"] == "fixture_window"
+    assert early_stall["probe_requested_command_sign_source"] == "fresh_fixture_local_command"
     assert early_stall["requested_vs_world_truth_sign_match"] is True
 
 
-def test_build_bundle_marks_source_fixture_command_sign_mismatch_when_window_reconstructed(tmp_path: Path):
+def test_build_bundle_prefers_fixture_local_command_surface_over_attempt_window(tmp_path: Path):
     source_summary_path, _ = _source_audit_bundle(tmp_path)
     probe_campaign_summary_path = _probe_campaign_summary(
         tmp_path,
-        angular_z=-0.45,
-        yaw_step=-0.15,
+        angular_z_by_index=[0.0, -0.2, -0.2, -0.2, 1.0],
+        yaw_step=0.15,
         include_timeline_anchor=True,
     )
     runtime_probe_json_path = tmp_path / "runtime_probe.json"
     runtime_probe_json_path.write_text(
         json.dumps(
             _runtime_probe_payload(
-                cmd_sign=-1,
-                model_sign=-1,
-                odom_sign=-1,
-                controller_odom_sign=-1,
-                runtime_world_sign=-1,
+                cmd_sign=1,
+                model_sign=1,
+                odom_sign=1,
+                controller_odom_sign=1,
+                runtime_world_sign=1,
             ),
             indent=2,
         ),
@@ -520,10 +535,79 @@ def test_build_bundle_marks_source_fixture_command_sign_mismatch_when_window_rec
     assert summary["runtime_classification"]["diagnosis"] == "sign_chain_aligned"
     assert summary["requested_command_metrics"]["window_start_t_s"] is not None
     assert summary["requested_command_metrics"]["window_end_t_s"] is not None
+    assert summary["requested_command_metrics"]["window_scope"] == "attempt_window"
+    assert summary["requested_command_metrics"]["dominant_command_sign"] == 1
     assert summary["source_alignment_assessment"]["diagnosis"] == "source_fixture_command_sign_mismatch"
-    assert summary["source_alignment_assessment"]["source_command_to_fresh_requested_mismatch_count"] == 4
+    assert summary["source_alignment_assessment"]["source_probe_command_sign_scope_mismatch_count"] == 0
+    assert summary["source_alignment_assessment"]["source_command_to_fresh_requested_mismatch_count"] == 3
     assert summary["next_action"]["decision"] == "inspect_source_fixture_alignment"
     early_stall = fixture_payloads["early_stall"]["source_probe_command_sign_comparison"]
+    assert early_stall["probe_requested_command_sign_source"] == "fresh_fixture_local_command"
+    assert early_stall["probe_attempt_requested_command_sign"] == 1
+    assert early_stall["probe_fixture_requested_command_sign"] == -1
     assert early_stall["relation"] == "mismatch"
     assert early_stall["comparable"] is True
+    assert early_stall["probe_window_scope"] == "fixture_window"
+    assert early_stall["source_window_scope"] == "fixture_window"
     assert early_stall["requested_vs_world_truth_sign_match"] is True
+    assert fixture_payloads["early_stall"]["fresh_probe_signs"]["fixture_local_requested_command"] == -1
+
+
+def test_compute_fixture_probe_payload_marks_attempt_window_as_semantically_noncomparable():
+    payload = audit.compute_fixture_probe_payload(
+        {
+            "fixture_label": "early_stall",
+            "fixture_index": 1,
+            "fixture_diagnosis": "odom_world_sign_divergent",
+            "command_sign": 1,
+            "odom_metrics": {"dominant_yaw_sign": 1},
+            "world_metrics": {"dominant_yaw_sign": -1},
+        },
+        runtime_classification={
+            "diagnosis": "sign_chain_aligned",
+            "decision": "revisit_source_alignment",
+            "confidence": "medium",
+            "supports_source_odom_world_hypothesis": False,
+            "topic_signs": {},
+        },
+        requested_command_metrics={
+            "dominant_command_sign": -1,
+            "window_start_t_s": 1.0,
+            "window_end_t_s": 2.0,
+            "window_scope": "attempt_window",
+        },
+        world_truth_metrics={"dominant_yaw_sign": -1},
+    )
+
+    comparison = payload["source_probe_command_sign_comparison"]
+    assert comparison["relation"] == "noncomparable_source_fixture_window_vs_probe_attempt_window"
+    assert comparison["comparable"] is False
+    assert comparison["probe_requested_command_sign_source"] == "attempt_requested_command"
+
+
+def test_assess_source_alignment_marks_true_mismatch_only_for_homologous_fixture_local_windows():
+    assessment = audit.assess_source_alignment(
+        [
+            {
+                "fixture_label": "early_stall",
+                "probe_hypothesis_relevant": True,
+                "source_probe_command_sign_comparison": {
+                    "relation": "mismatch",
+                    "comparable": True,
+                    "source_window_scope": "fixture_window",
+                    "probe_window_scope": "fixture_window",
+                    "surface_homologous": True,
+                },
+                "source_alignment_matches": {
+                    "requested_to_world_truth": True,
+                    "source_world_to_fresh_world": True,
+                },
+            }
+        ],
+        runtime_classification={"diagnosis": "sign_chain_aligned"},
+    )
+
+    assert assessment["diagnosis"] == "source_fixture_command_sign_mismatch"
+    assert assessment["decision"] == "inspect_source_fixture_alignment"
+    assert assessment["source_command_to_fresh_requested_mismatch_count"] == 1
+    assert assessment["source_probe_command_sign_scope_mismatch_count"] == 0
