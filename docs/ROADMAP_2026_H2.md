@@ -494,13 +494,13 @@ Current direction update:
 4. the preserved helper contract lane is still not the next promotion path:
    - `helper_turn_authority_contract_audit` returned `stop_and_branch` with blocking_reason=`sign_parity`
    - `manual_drive_sign_parity_audit` now points to the `probe_odom_world_sign_chain` runtime probe wrapper (`scripts/run_probe_odom_world_sign_chain.ps1`)
-   - the April 21, 2026 recovery rerun now completes through the wrapper and lands in `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_post_recovery_rerun_retry1/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
+   - the refreshed April 21, 2026 provenance rerun now lands in `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260421_provenance_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
    - treat `/jetbot_base_controller/odom` as the working odom witness for this probe branch only; do not redefine the public `/odom` contract based on this rerun
-   - that rerun now reports `runtime_classification.diagnosis=sign_chain_aligned`, with controller-side and runtime `world_truth` signs agreeing on the fresh run
-   - the current blocker is no longer missing truth/world evidence; it is that the frozen source fixture command signs are still non-comparable to the fresh requested command sign because the fresh probe command window was not reconstructed
-   - the preferred implementation for that follow-up stays consumer-side only: keep `scripts/odom_world_sign_chain_runtime_probe.py` additive, let `scripts/probe_odom_world_sign_chain.py` surface `source_alignment_assessment` / `source_probe_command_sign_comparison`, and reconstruct a bounded probe command window before deciding whether helper turn-authority promotion can reopen
-   - focused offline verification on the current branch remains green on `tests/test_probe_odom_world_sign_chain.py` and the targeted `tests/dashboard/test_world_stream_freshness.py` truth-state slice
-   - the remaining proof gate is a bounded-window follow-up for the source-vs-probe comparison; optional extra fail-closed `session_id` hardening remains available if we want to tighten the `truth_state.json` binding before that follow-up
+   - that refreshed bundle preserves `runtime_classification.diagnosis=sign_chain_aligned` plus `source_alignment_assessment.diagnosis=source_fixture_command_sign_mismatch`
+   - the bounded source-vs-fresh fixture windows still mismatch on `early_stall`, `mid_stall`, and `late_stall`, while `terminal_stall` remains the control match; see [PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md](PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md)
+   - the next work is no longer another runtime sign-chain patch; it is source-artifact interpretation/documentation plus bounded-backend comparison
+   - the helper turn-authority lane stays a comparison baseline rather than the next promotion path
+   - focused offline verification on the current branch remains green on `tests/test_probe_odom_world_sign_chain.py -q`, `tests/test_probe_odom_world_sign_chain_source_provenance.py -q`, `tests/test_probe_odom_world_sign_chain_session_binding.py -q`, and `tests/dashboard/test_world_stream_freshness.py -k "truth_ready or make_session_id" -q`
 
 ### Step 7: Corral Time Optimization
 

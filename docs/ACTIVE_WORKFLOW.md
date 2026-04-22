@@ -776,23 +776,26 @@ Probe odom/world sign chain:
    - `sign_chain_aligned`
    - `runtime_sign_chain_inconclusive`
 7. writes the analyzer bundle under `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/` and preserves the live collector payload plus probe logs in the same root
-8. current live reference rerun:
-   - `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_post_recovery_rerun_retry1/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
-   - `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260420_post_recovery_rerun_retry1/probe_odom_world_sign_chain/runtime_probe.json`
-   - this April 21, 2026 recovery rerun captures controller-side sign agreement on `/jetbot_base_controller/cmd_vel` and `/jetbot_base_controller/odom`, and the additive `runtime_probe.world_truth` sign agrees with the fresh requested command sign
+8. current live reference closeout:
+   - `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260421_provenance_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
+   - `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260421_provenance_rerun/probe_odom_world_sign_chain/runtime_probe.json`
+   - the refreshed April 21, 2026 provenance rerun preserves `runtime_classification.diagnosis=sign_chain_aligned` and `source_alignment_assessment.diagnosis=source_fixture_command_sign_mismatch`
+   - bounded source-vs-fresh fixture windows still mismatch on `early_stall`, `mid_stall`, and `late_stall`, while `terminal_stall` remains the control match; see [PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md](PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md) for the per-label interpretation
    - treat `/jetbot_base_controller/odom` as the working odom witness for this probe branch only; do not redefine the public `/odom` contract based on this rerun
    - current branch implementation after that rerun:
-     - `scripts/run_probe_odom_world_sign_chain.ps1` now binds `artifacts/session/<session_id>/visual/truth_state.json` from the fresh ready dashboard session rather than from campaign ids
-     - `scripts/odom_world_sign_chain_runtime_probe.py` now polls that file during the probe window and emits additive `world_truth` metrics in `runtime_probe.json`
-     - `scripts/probe_odom_world_sign_chain.py` now prefers runtime-probe `world_truth` metrics while retaining `truth_timeline.json` as fallback and post-run cross-check evidence
-     - `scripts/probe_odom_world_sign_chain.py` now also emits additive `source_alignment_assessment` and per-fixture `source_probe_command_sign_comparison` fields so the next-action contract can separate a real source-sign mismatch from a non-comparable fresh probe window
+     - `scripts/run_probe_odom_world_sign_chain.ps1` binds `artifacts/session/<session_id>/visual/truth_state.json` from the fresh ready dashboard session rather than from campaign ids
+     - `scripts/odom_world_sign_chain_runtime_probe.py` polls that file during the probe window and emits additive `world_truth` metrics in `runtime_probe.json`
+     - `scripts/probe_odom_world_sign_chain.py` prefers runtime-probe `world_truth` metrics while retaining `truth_timeline.json` as fallback and post-run cross-check evidence
+     - `scripts/probe_odom_world_sign_chain.py` reconstructs source and fresh fixture-local command provenance inside the bundle and emits additive `source_alignment_assessment`, `source_fixture_local_command`, `source_fresh_fixture_window_comparison`, and `source_probe_command_sign_comparison` surfaces
      - `scripts/sim_truth_probe.py` remains unchanged on this branch
    - focused offline verification on the current branch:
      - `pytest tests/test_probe_odom_world_sign_chain.py -q`
+     - `pytest tests/test_probe_odom_world_sign_chain_source_provenance.py -q`
+     - `pytest tests/test_probe_odom_world_sign_chain_session_binding.py -q`
      - `pytest tests/dashboard/test_world_stream_freshness.py -k "truth_ready or make_session_id" -q`
-   - remaining proof gate for this branch:
-     - reconstruct a bounded fresh probe command window for the source-vs-probe sign comparison, then rerun the analyzer/probe follow-up to confirm whether the frozen source fixtures still disagree once the comparison is time-bounded
-     - optional extra fail-closed `session_id` hardening remains available if we want to reject mismatched `truth_state.json` content before that follow-up
+   - next work after closeout:
+     - inspect source fixture/window alignment and preserve the interpretation in [PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md](PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md)
+     - keep the helper turn-authority lane as a comparison baseline while bounded backend comparisons continue
 
 ## Headless Milestone Path (Current Preferred)
 
@@ -923,10 +926,11 @@ Milestone 3 pass criteria include:
      - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/runtime_probe.json`
      - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/logs/runtime_probe.stdout.log`
      - `artifacts/session/<campaign_id>/probe_odom_world_sign_chain/logs/runtime_probe.stderr.log`
-   - current branch additive truth-state fields:
+   - current branch additive truth-state and provenance fields:
      - `runtime_probe.json` may now include a top-level `world_truth` block when `--truth-state-path` is supplied, including sign/integral fields plus `truth_state_path` and `source_session_id`
-     - `odom_world_sign_chain_summary.json` and `scorecard.md` now record the chosen world-truth source and cross-check fields: `world_truth_source`, `world_truth_source_reason`, `timeline_world_truth_metrics`, `runtime_probe_world_truth_metrics`, and `world_truth_cross_check`
-     - `odom_world_sign_chain_summary.json`, `scorecard.md`, and per-fixture payloads now also record additive source-alignment comparison fields: `source_alignment_assessment`, `source_probe_command_sign_comparison`, and the summary-level upgraded `next_action` when the fresh runtime chain is aligned but the source-vs-probe command comparison is still non-comparable
+     - `odom_world_sign_chain_summary.json` and `scorecard.md` record the chosen world-truth source and cross-check fields: `world_truth_source`, `world_truth_source_reason`, `timeline_world_truth_metrics`, `runtime_probe_world_truth_metrics`, and `world_truth_cross_check`
+     - `odom_world_sign_chain_summary.json`, `scorecard.md`, and per-fixture payloads also record additive source-alignment fields: `source_alignment_assessment`, `source_fixture_local_command`, `source_fresh_fixture_window_comparison`, `source_probe_command_sign_comparison`, and the summary-level `next_action` including `inspect_source_fixture_alignment`
+     - when `runtime_probe.world_truth.source_session_id` does not match the expected probe session, the analyzer ignores that block and fail-closes back to `truth_timeline.json` with `world_truth_source_reason=runtime_probe_world_truth_session_mismatch`
      - older bundles without `runtime_probe.world_truth` remain valid because the analyzer falls back to `truth_timeline.json`
 22. Route-planning parallel soak:
    - `artifacts/session/<campaign_id>/route_planning_parallel_soak/campaign_summary.json`

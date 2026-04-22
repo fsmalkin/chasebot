@@ -22,6 +22,8 @@
 - [LLM_RESEARCH_NOTES.md](LLM_RESEARCH_NOTES.md) — Research notes on LLM integration
 - [CURRENT_EXPERIMENTS_REFERENCE.md](CURRENT_EXPERIMENTS_REFERENCE.md) — Active experiments reference
 
+- [PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md](PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md) - Runtime probe closeout and source-vs-fresh fixture interpretation
+
 ### Runtime Contracts
 - [../runtime/contracts/llm_control_contract.yaml](../runtime/contracts/llm_control_contract.yaml) — Pre-LLM control contract (frozen)
 - [../runtime/contracts/isaac_bridge_allowlist.yaml](../runtime/contracts/isaac_bridge_allowlist.yaml) — Isaac bridge topic/action/service boundaries
