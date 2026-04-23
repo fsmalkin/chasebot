@@ -394,11 +394,14 @@ Use this before changing gather-control behavior so candidate branches are compa
 
 Command:
 
-1. `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary> --baseline-branch helper`
+1. `python scripts/gather_control_stress_analyzer.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary>`
+2. `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary> --baseline-branch helper`
+3. after Branch 1 hard-case stress analysis is collected for a candidate branch, pass each branch summary into the portfolio analyzer:
+   - `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --stress helper=artifacts/session/<id>/gather_control_portfolio/helper/stress_summary.json --baseline-branch helper`
 
 Portfolio contract:
 
-1. reads existing `gather_mission_repeatability/campaign_run_summary.json` files only
+1. reads existing `gather_mission_repeatability/campaign_run_summary.json` files plus branch-local hard-case stress analyzer outputs only
 2. writes `artifacts/session/<campaign_id>/gather_control_portfolio/portfolio_summary.json`, `scorecard.md`, and one `<branch_name>/branch_summary.json` per branch
 3. scores each branch on observed end-to-end gather evidence:
    - mission pass
@@ -408,9 +411,12 @@ Portfolio contract:
 4. records baseline deltas when `--baseline-branch` is supplied
 5. records missing source metrics as missing rather than inventing pass/fail values
 6. keeps the hard-case stress labels fixed at `early_stall`, `mid_stall`, `late_stall`, and `terminal_stall`
-7. marks hard-case stress status as `not_evaluated` in the v1 harness unless fixture-level branch evidence is added later
-8. may identify the best observed end-to-end branch, but must keep `recommended_next_action=collect_hard_case_stress_evidence` and `live_promotion_ready=false` while stress evidence is `not_evaluated`
-9. is analyzer-only: it does not change runtime control, dashboard behavior, live runners, or the public `/odom` contract
+7. ingests Branch 1 stress evidence only from explicit `--stress <branch>=<stress_summary.json>` analyzer outputs:
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/stress_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/fixtures/<fixture_label>.json`
+8. requires stress evidence to be complete and passing for every required fixture label before any branch can be considered live-promotion ready
+9. may identify the best observed end-to-end branch, but must keep `recommended_next_action=collect_hard_case_stress_evidence` and `live_promotion_ready=false` while stress evidence is missing, incomplete, not evaluated, or failing
+10. is analyzer-only: stress evidence and portfolio ingestion do not change runtime control, dashboard behavior, live runners, or the public `/odom` contract
 
 ## Gather Escape Oracle (Offline Truth-State Probe)
 
@@ -974,7 +980,11 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<campaign_id>/gather_control_portfolio/portfolio_summary.json`
    - `artifacts/session/<campaign_id>/gather_control_portfolio/scorecard.md`
    - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/branch_summary.json`
-   - v1 is analyzer-only and records hard-case stress as `not_evaluated` until fixture-level branch evidence is supplied
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/stress_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/stress_scorecard.md`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/stress_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/fixtures/<fixture_label>.json`
+   - stress outputs are analyzer-only evidence; missing, incomplete, not-evaluated, or failing stress evidence blocks live promotion even when end-to-end portfolio scoring picks a best observed branch
 
 ## Failure Triage Path
 

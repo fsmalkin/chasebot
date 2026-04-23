@@ -66,6 +66,34 @@ def _write_summary(tmp_path: Path, name: str, runs: list[dict[str, object]]) -> 
     return path
 
 
+def _write_stress(
+    tmp_path: Path,
+    name: str,
+    *,
+    branch_name: str,
+    status: str,
+    fixture_results: dict[str, bool] | None = None,
+) -> Path:
+    path = tmp_path / f"{name}_stress.json"
+    payload: dict[str, object] = {
+        "type": "gather_control_hard_case_stress",
+        "branch_name": branch_name,
+        "hard_case_stress": {
+            "status": status,
+            "fixture_results": {
+                label: {"pass": passed}
+                for label, passed in (fixture_results or {}).items()
+            },
+        },
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def _passing_stress_results() -> dict[str, bool]:
+    return {label: True for label in portfolio.STRESS_FIXTURE_LABELS}
+
+
 def test_single_branch_summary_scores_mixed_repeatability_runs(tmp_path: Path):
     summary_path = _write_summary(
         tmp_path,
@@ -167,6 +195,227 @@ def test_missing_hard_case_evidence_blocks_readiness_even_when_e2e_is_green(tmp_
     assert branch["hard_case_stress"]["missing_fixture_labels"] == list(portfolio.STRESS_FIXTURE_LABELS)
     assert branch["live_promotion_ready"] is False
     assert "hard_case_stress_not_evaluated" in branch["blocking_reasons"]
+
+
+def test_passing_stress_evidence_replaces_default_block_and_allows_ready_branch(tmp_path: Path):
+    summary_path = _write_summary(
+        tmp_path,
+        "green_end_to_end",
+        [_run(passed=True, practical=True, mission_time_s=11.0)],
+    )
+    stress_path = _write_stress(
+        tmp_path,
+        "green_end_to_end",
+        branch_name="green_end_to_end",
+        status="passing",
+        fixture_results=_passing_stress_results(),
+    )
+
+    summary = portfolio.build_portfolio_summary(
+        campaign_id="portfolio_test",
+        branch_specs=[("green_end_to_end", summary_path)],
+        stress_specs=[("green_end_to_end", stress_path)],
+    )
+
+    branch = summary["branches"][0]
+    assert branch["hard_case_stress_status"] == "passing"
+    assert branch["hard_case_stress"]["evaluated_fixture_labels"] == list(portfolio.STRESS_FIXTURE_LABELS)
+    assert branch["hard_case_stress"]["missing_fixture_labels"] == []
+    assert "hard_case_stress_not_evaluated" not in branch["blocking_reasons"]
+    assert branch["live_promotion_ready"] is True
+    assert summary["recommended_next_action"] == "promote_best_ready_branch"
+
+
+def test_failing_stress_evidence_blocks_ready_branch(tmp_path: Path):
+    summary_path = _write_summary(
+        tmp_path,
+        "candidate",
+        [_run(passed=True, practical=True, mission_time_s=11.0)],
+    )
+    fixture_results = _passing_stress_results()
+    fixture_results["mid_stall"] = False
+    stress_path = _write_stress(
+        tmp_path,
+        "candidate",
+        branch_name="candidate",
+        status="failing",
+        fixture_results=fixture_results,
+    )
+
+    summary = portfolio.build_portfolio_summary(
+        campaign_id="portfolio_test",
+        branch_specs=[("candidate", summary_path)],
+        stress_specs=[("candidate", stress_path)],
+    )
+
+    branch = summary["branches"][0]
+    assert branch["hard_case_stress_status"] == "failing"
+    assert branch["hard_case_stress"]["failed_fixture_labels"] == ["mid_stall"]
+    assert branch["live_promotion_ready"] is False
+    assert "hard_case_stress_failing" in branch["blocking_reasons"]
+    assert summary["recommended_next_action"] == "inspect_branch_blocking_reasons"
+
+
+def test_failing_stress_with_missing_labels_is_ingested_as_blocking_evidence(tmp_path: Path):
+    summary_path = _write_summary(
+        tmp_path,
+        "candidate",
+        [_run(passed=True, practical=True, mission_time_s=11.0)],
+    )
+    stress_path = tmp_path / "candidate_stress.json"
+    stress_path.write_text(
+        json.dumps(
+            {
+                "type": "gather_control_stress_branch",
+                "branch_name": "candidate",
+                "status": "failing",
+                "evaluated_fixture_labels": ["early_stall", "mid_stall", "terminal_stall"],
+                "missing_fixture_labels": ["late_stall"],
+                "failing_fixture_labels": ["mid_stall"],
+                "passing_fixture_labels": ["early_stall", "terminal_stall"],
+                "fixtures": {
+                    "early_stall": {"fixture_label": "early_stall", "status": "passing", "pass": True},
+                    "mid_stall": {"fixture_label": "mid_stall", "status": "failing", "pass": False},
+                    "late_stall": {"fixture_label": "late_stall", "status": "missing", "pass": None},
+                    "terminal_stall": {"fixture_label": "terminal_stall", "status": "passing", "pass": True},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    summary = portfolio.build_portfolio_summary(
+        campaign_id="portfolio_test",
+        branch_specs=[("candidate", summary_path)],
+        stress_specs=[("candidate", stress_path)],
+    )
+
+    branch = summary["branches"][0]
+    assert branch["hard_case_stress_status"] == "failing"
+    assert branch["hard_case_stress"]["missing_fixture_labels"] == ["late_stall"]
+    assert branch["hard_case_stress"]["failed_fixture_labels"] == ["mid_stall"]
+    assert branch["live_promotion_ready"] is False
+    assert "hard_case_stress_failing" in branch["blocking_reasons"]
+
+
+def test_not_evaluated_stress_evidence_keeps_default_readiness_block(tmp_path: Path):
+    summary_path = _write_summary(
+        tmp_path,
+        "candidate",
+        [_run(passed=True, practical=True, mission_time_s=11.0)],
+    )
+    stress_path = _write_stress(
+        tmp_path,
+        "candidate",
+        branch_name="candidate",
+        status="not_evaluated",
+    )
+
+    summary = portfolio.build_portfolio_summary(
+        campaign_id="portfolio_test",
+        branch_specs=[("candidate", summary_path)],
+        stress_specs=[("candidate", stress_path)],
+    )
+
+    branch = summary["branches"][0]
+    assert branch["hard_case_stress_status"] == "not_evaluated"
+    assert branch["hard_case_stress"]["missing_fixture_labels"] == list(portfolio.STRESS_FIXTURE_LABELS)
+    assert branch["live_promotion_ready"] is False
+    assert "hard_case_stress_not_evaluated" in branch["blocking_reasons"]
+
+
+def test_stress_branch_mismatch_is_rejected(tmp_path: Path):
+    summary_path = _write_summary(
+        tmp_path,
+        "candidate",
+        [_run(passed=True, practical=True, mission_time_s=11.0)],
+    )
+    stress_path = _write_stress(
+        tmp_path,
+        "other",
+        branch_name="other",
+        status="passing",
+        fixture_results=_passing_stress_results(),
+    )
+
+    with pytest.raises(ValueError, match="does not match --stress branch"):
+        portfolio.build_portfolio_summary(
+            campaign_id="portfolio_test",
+            branch_specs=[("candidate", summary_path)],
+            stress_specs=[("candidate", stress_path)],
+        )
+
+
+def test_unknown_stress_branch_is_rejected(tmp_path: Path):
+    summary_path = _write_summary(
+        tmp_path,
+        "candidate",
+        [_run(passed=True, practical=True, mission_time_s=11.0)],
+    )
+    stress_path = _write_stress(
+        tmp_path,
+        "other",
+        branch_name="other",
+        status="passing",
+        fixture_results=_passing_stress_results(),
+    )
+
+    with pytest.raises(ValueError, match="was not provided in --branch specs"):
+        portfolio.build_portfolio_summary(
+            campaign_id="portfolio_test",
+            branch_specs=[("candidate", summary_path)],
+            stress_specs=[("other", stress_path)],
+        )
+
+
+def test_invalid_stress_payload_is_rejected(tmp_path: Path):
+    summary_path = _write_summary(
+        tmp_path,
+        "candidate",
+        [_run(passed=True, practical=True, mission_time_s=11.0)],
+    )
+    fixture_results = _passing_stress_results()
+    fixture_results["late_stall"] = False
+    stress_path = _write_stress(
+        tmp_path,
+        "candidate",
+        branch_name="candidate",
+        status="passing",
+        fixture_results=fixture_results,
+    )
+
+    with pytest.raises(ValueError, match="conflicts with fixture results"):
+        portfolio.build_portfolio_summary(
+            campaign_id="portfolio_test",
+            branch_specs=[("candidate", summary_path)],
+            stress_specs=[("candidate", stress_path)],
+        )
+
+
+def test_passing_stress_still_requires_end_to_end_evidence(tmp_path: Path):
+    summary_path = _write_summary(
+        tmp_path,
+        "candidate",
+        [_run(passed=False, practical=False, mission_time_s=11.0)],
+    )
+    stress_path = _write_stress(
+        tmp_path,
+        "candidate",
+        branch_name="candidate",
+        status="passing",
+        fixture_results=_passing_stress_results(),
+    )
+
+    summary = portfolio.build_portfolio_summary(
+        campaign_id="portfolio_test",
+        branch_specs=[("candidate", summary_path)],
+        stress_specs=[("candidate", stress_path)],
+    )
+
+    branch = summary["branches"][0]
+    assert branch["hard_case_stress_status"] == "passing"
+    assert branch["live_promotion_ready"] is False
+    assert "no_practical_retrieval_pass" in branch["blocking_reasons"]
 
 
 def test_branch_name_sanitization_for_artifact_paths(tmp_path: Path):

@@ -477,15 +477,20 @@ Shared evidence contract:
    - `artifacts/session/<campaign_id>/gather_control_portfolio/portfolio_summary.json`
    - `artifacts/session/<campaign_id>/gather_control_portfolio/scorecard.md`
    - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/branch_summary.json`
-2. future per-branch stress/shadow bundle:
+2. Branch 1 hard-case stress analyzer bundle:
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/stress_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/stress_scorecard.md`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/stress_summary.json`
    - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/fixtures/<fixture_label>.json`
+   - fixture evidence remains analyzer-only and feeds portfolio readiness through explicit `--stress <branch>=<stress_summary.json>` inputs; it does not change runtime control or unlock live promotion by itself
+3. future per-branch shadow bundle:
    - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/counterfactual_replay_summary.json`
    - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/shadow_summary.json`
-3. learned-branch extras:
+4. learned-branch extras:
    - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/teacher_dataset_summary.json`
    - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/holdout_eval_summary.json`
-4. v1 readiness rule:
-   - `hard_case_stress_status=not_evaluated` blocks live promotion even when a branch is the best observed end-to-end performer
+5. readiness rule:
+   - hard-case stress evidence blocks live promotion unless every required fixture is present, complete, and passing, even when a branch is the best observed end-to-end performer
 
 Acceptance:
 

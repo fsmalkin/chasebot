@@ -132,6 +132,173 @@ def _first_present_bool(*values: Any) -> bool | None:
     return None
 
 
+def _default_hard_case_stress() -> dict[str, Any]:
+    return {
+        "status": "not_evaluated",
+        "required_fixture_labels": list(STRESS_FIXTURE_LABELS),
+        "evaluated_fixture_labels": [],
+        "missing_fixture_labels": list(STRESS_FIXTURE_LABELS),
+        "reason": "fixture_level_branch_evidence_not_supplied",
+    }
+
+
+def _stress_payload_root(payload: dict[str, Any]) -> dict[str, Any]:
+    nested = payload.get("hard_case_stress")
+    return nested if isinstance(nested, dict) else payload
+
+
+def _stress_status(payload: dict[str, Any], root: dict[str, Any]) -> str:
+    value = root.get("status", payload.get("hard_case_stress_status", payload.get("status")))
+    status = str(value or "").strip().lower()
+    if status not in {"passing", "failing", "not_evaluated"}:
+        raise ValueError(f"Stress summary has invalid status: {value!r}")
+    return status
+
+
+def _stress_branch_name(payload: dict[str, Any], root: dict[str, Any]) -> str:
+    return str(root.get("branch_name", payload.get("branch_name", "")) or "").strip()
+
+
+def _fixture_label(value: Any) -> str:
+    label = str(value or "").strip()
+    if label not in STRESS_FIXTURE_LABELS:
+        raise ValueError(f"Stress summary contains unknown fixture label: {value!r}")
+    return label
+
+
+def _ordered_labels(labels: set[str]) -> list[str]:
+    return [label for label in STRESS_FIXTURE_LABELS if label in labels]
+
+
+def _label_set(values: Any) -> set[str]:
+    if values in (None, ""):
+        return set()
+    if not isinstance(values, list):
+        raise ValueError("Stress fixture label fields must be lists")
+    return {_fixture_label(value) for value in values}
+
+
+def _fixture_pass_value(fixture: Any) -> bool | None:
+    if isinstance(fixture, bool):
+        return fixture
+    if not isinstance(fixture, dict):
+        raise ValueError(f"Stress fixture result must be an object or bool, got {type(fixture).__name__}")
+    parsed = _first_present_bool(
+        fixture.get("pass"),
+        fixture.get("passed"),
+        fixture.get("stress_pass"),
+        fixture.get("result"),
+        fixture.get("status"),
+    )
+    if parsed is None:
+        status = str(fixture.get("status", fixture.get("result", "")) or "").strip().lower()
+        if status in {"missing", "not_evaluated", "not evaluated", "no_evidence", "unknown"}:
+            return None
+        raise ValueError("Stress fixture result is missing a pass/fail value")
+    return parsed
+
+
+def _stress_fixture_results(root: dict[str, Any]) -> dict[str, bool | None]:
+    raw_results = root.get("fixture_results", root.get("fixtures", {}))
+    if raw_results in (None, ""):
+        raw_results = {}
+    results: dict[str, bool | None] = {}
+    if isinstance(raw_results, dict):
+        for raw_label, fixture in raw_results.items():
+            label = _fixture_label(raw_label)
+            if label in results:
+                raise ValueError(f"Stress summary contains duplicate fixture label: {label}")
+            results[label] = _fixture_pass_value(fixture)
+        return results
+    if isinstance(raw_results, list):
+        for fixture in raw_results:
+            if not isinstance(fixture, dict):
+                raise ValueError("Stress fixture list entries must be objects")
+            label = _fixture_label(fixture.get("fixture_label", fixture.get("label")))
+            if label in results:
+                raise ValueError(f"Stress summary contains duplicate fixture label: {label}")
+            results[label] = _fixture_pass_value(fixture)
+        return results
+    raise ValueError("Stress summary fixture_results must be an object or list")
+
+
+def _load_stress_evidence(
+    *,
+    branch_name: str,
+    stress_summary_path: Path,
+) -> dict[str, Any]:
+    payload = _load_json_object(stress_summary_path)
+    root = _stress_payload_root(payload)
+    status = _stress_status(payload, root)
+    payload_branch_name = _stress_branch_name(payload, root)
+    if payload_branch_name and payload_branch_name != branch_name:
+        raise ValueError(
+            f"Stress summary branch {payload_branch_name!r} does not match --stress branch {branch_name!r}"
+        )
+    fixture_results = _stress_fixture_results(root)
+    explicit_evaluated = _label_set(root.get("evaluated_fixture_labels"))
+    explicit_missing = _label_set(root.get("missing_fixture_labels"))
+    explicit_not_evaluated = _label_set(root.get("not_evaluated_fixture_labels"))
+    explicit_failed = _label_set(root.get("failed_fixture_labels", root.get("failing_fixture_labels")))
+    explicit_passing = _label_set(root.get("passing_fixture_labels"))
+
+    passed_labels = {label for label, passed in fixture_results.items() if passed is True} | explicit_passing
+    failed_labels_set = {label for label, passed in fixture_results.items() if passed is False} | explicit_failed
+    not_evaluated_labels_set = {label for label, passed in fixture_results.items() if passed is None} | explicit_not_evaluated
+    evaluated_labels_set = (
+        {label for label, passed in fixture_results.items() if passed is not None}
+        | explicit_evaluated
+        | passed_labels
+        | failed_labels_set
+    )
+    missing_labels_set = (
+        explicit_missing
+        | {label for label in STRESS_FIXTURE_LABELS if label not in fixture_results and label not in evaluated_labels_set}
+    )
+    missing_or_not_evaluated = missing_labels_set | not_evaluated_labels_set
+    if status == "not_evaluated":
+        if passed_labels or failed_labels_set:
+            raise ValueError("Stress summary status not_evaluated must not include fixture_results")
+        return {
+            **_default_hard_case_stress(),
+            "evidence_path": str(stress_summary_path),
+            "source_summary_type": str(payload.get("type", "") or ""),
+            "missing_fixture_labels": _ordered_labels(missing_or_not_evaluated or set(STRESS_FIXTURE_LABELS)),
+            "not_evaluated_fixture_labels": _ordered_labels(not_evaluated_labels_set),
+        }
+    if status == "passing" and (failed_labels_set or missing_or_not_evaluated):
+        raise ValueError("Stress summary status passing conflicts with fixture results: missing or failing fixture evidence")
+    if status == "passing" and len(passed_labels) != len(STRESS_FIXTURE_LABELS):
+        raise ValueError("Stress summary status passing requires every required fixture label to pass")
+    if status == "failing" and not (failed_labels_set or missing_or_not_evaluated):
+        raise ValueError("Stress summary status failing requires at least one missing or failing fixture")
+    derived_status = "passing" if not (failed_labels_set or missing_or_not_evaluated) else "failing"
+    if status != derived_status:
+        raise ValueError(f"Stress summary status {status!r} conflicts with fixture results {derived_status!r}")
+    fixture_payloads = {}
+    for label in STRESS_FIXTURE_LABELS:
+        if label in passed_labels:
+            fixture_payloads[label] = {"pass": True, "status": "passing"}
+        elif label in failed_labels_set:
+            fixture_payloads[label] = {"pass": False, "status": "failing"}
+        elif label in missing_labels_set:
+            fixture_payloads[label] = {"pass": None, "status": "missing"}
+        elif label in not_evaluated_labels_set:
+            fixture_payloads[label] = {"pass": None, "status": "not_evaluated"}
+    return {
+        "status": status,
+        "required_fixture_labels": list(STRESS_FIXTURE_LABELS),
+        "evaluated_fixture_labels": _ordered_labels(evaluated_labels_set),
+        "missing_fixture_labels": _ordered_labels(missing_labels_set),
+        "not_evaluated_fixture_labels": _ordered_labels(not_evaluated_labels_set),
+        "failed_fixture_labels": _ordered_labels(failed_labels_set),
+        "fixture_results": fixture_payloads,
+        "evidence_path": str(stress_summary_path),
+        "source_summary_type": str(payload.get("type", "") or ""),
+        "reason": "all_required_fixtures_passing" if status == "passing" else "one_or_more_required_fixtures_missing_or_failed",
+    }
+
+
 def _nested_approach(run: dict[str, Any]) -> dict[str, Any]:
     latest = _dict_value(run.get("latest_approach_progress"))
     if latest:
@@ -264,6 +431,7 @@ def build_branch_summary(
     branch_name: str,
     source_summary_path: Path,
     source_summary: dict[str, Any],
+    hard_case_stress: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     runs = source_summary.get("runs", [])
     if not isinstance(runs, list):
@@ -286,13 +454,8 @@ def build_branch_summary(
         sum(score_components[key] * weight for key, weight in SCORE_WEIGHTS.items()),
         6,
     )
-    hard_case_stress = {
-        "status": "not_evaluated",
-        "required_fixture_labels": list(STRESS_FIXTURE_LABELS),
-        "evaluated_fixture_labels": [],
-        "missing_fixture_labels": list(STRESS_FIXTURE_LABELS),
-        "reason": "fixture_level_branch_evidence_not_supplied",
-    }
+    if hard_case_stress is None:
+        hard_case_stress = _default_hard_case_stress()
     blocking_reasons = _blocking_reasons(
         run_count=len(normalized_runs),
         rate_metrics=rate_metrics,
@@ -391,9 +554,22 @@ def build_portfolio_summary(
     campaign_id: str,
     branch_specs: list[tuple[str, Path]],
     baseline_branch: str | None = None,
+    stress_specs: list[tuple[str, Path]] | None = None,
 ) -> dict[str, Any]:
     seen_slugs: set[str] = set()
     branches: list[dict[str, Any]] = []
+    branch_names_from_specs = {branch_name for branch_name, _ in branch_specs}
+    stress_specs = stress_specs or []
+    stress_by_branch: dict[str, dict[str, Any]] = {}
+    for stress_branch_name, stress_path in stress_specs:
+        if stress_branch_name not in branch_names_from_specs:
+            raise ValueError(f"Stress branch {stress_branch_name!r} was not provided in --branch specs")
+        if stress_branch_name in stress_by_branch:
+            raise ValueError(f"Duplicate stress branch: {stress_branch_name!r}")
+        stress_by_branch[stress_branch_name] = _load_stress_evidence(
+            branch_name=stress_branch_name,
+            stress_summary_path=stress_path,
+        )
     for branch_name, source_path in branch_specs:
         branch_slug = sanitize_branch_name(branch_name)
         if branch_slug in seen_slugs:
@@ -405,6 +581,7 @@ def build_portfolio_summary(
                 branch_name=branch_name,
                 source_summary_path=source_path,
                 source_summary=source_summary,
+                hard_case_stress=stress_by_branch.get(branch_name),
             )
         )
     branch_names = {str(branch.get("branch_name", "")) for branch in branches}
@@ -522,6 +699,18 @@ def parse_branch_spec(spec: str) -> tuple[str, Path]:
     return name, Path(path_text)
 
 
+def parse_stress_spec(spec: str) -> tuple[str, Path]:
+    if "=" not in spec:
+        raise argparse.ArgumentTypeError(f"--stress must be branch=path, got {spec!r}")
+    name, path_text = spec.split("=", 1)
+    name = name.strip()
+    path_text = path_text.strip()
+    if not name or not path_text:
+        raise argparse.ArgumentTypeError(f"--stress must be branch=path, got {spec!r}")
+    sanitize_branch_name(name)
+    return name, Path(path_text)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--campaign-id", required=True, help="Portfolio artifact campaign id.")
@@ -533,6 +722,13 @@ def parse_args() -> argparse.Namespace:
         help="Branch spec as name=path/to/gather_mission_repeatability/campaign_run_summary.json. Repeatable.",
     )
     parser.add_argument("--baseline-branch", default="", help="Optional branch name to treat as the comparison baseline.")
+    parser.add_argument(
+        "--stress",
+        action="append",
+        default=[],
+        type=parse_stress_spec,
+        help="Optional hard-case stress evidence as branch=path/to/stress_summary.json. Repeatable.",
+    )
     return parser.parse_args()
 
 
@@ -545,10 +741,15 @@ def main() -> int:
     for name, path in args.branch:
         source_path = path if path.is_absolute() else (REPO_ROOT / path)
         branch_specs.append((name, source_path))
+    stress_specs: list[tuple[str, Path]] = []
+    for name, path in args.stress:
+        stress_path = path if path.is_absolute() else (REPO_ROOT / path)
+        stress_specs.append((name, stress_path))
     summary = build_portfolio_summary(
         campaign_id=campaign_id,
         branch_specs=branch_specs,
         baseline_branch=str(args.baseline_branch or "").strip() or None,
+        stress_specs=stress_specs,
     )
     paths = write_portfolio_bundle(repo_root=REPO_ROOT, campaign_id=campaign_id, summary=summary)
     print(f"GATHER_CONTROL_PORTFOLIO_SUMMARY={paths['summary_path']}")
