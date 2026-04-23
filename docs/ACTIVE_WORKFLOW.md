@@ -795,7 +795,7 @@ Probe odom/world sign chain:
      - `pytest tests/dashboard/test_world_stream_freshness.py -k "truth_ready or make_session_id" -q`
    - next work after closeout:
      - inspect source fixture/window alignment and preserve the interpretation in [PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md](PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md)
-     - keep the helper turn-authority lane as a comparison baseline while bounded backend comparisons continue
+     - compare broader bounded gather-control alternatives on end-to-end task performance, with the `early_stall`, `mid_stall`, and `late_stall` cases as required stress tests rather than as proof that the final architecture needs a named recovery strategy
 
 ## Headless Milestone Path (Current Preferred)
 

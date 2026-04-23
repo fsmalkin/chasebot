@@ -416,26 +416,31 @@ Acceptance:
 8. already retrieved balls remain in the world and behave as normal obstacles or passive stopping aids
 9. one-ball baseline behavior is not regressed while multi-ball gather lands
 
-### Step 6: Pre-Stage Backend Exploration Portfolio
+### Step 6: Gather-Control Alternatives Portfolio
 
-Goal: find the best bounded manual `pre_stage` recovery backend for the
-wrong-side-to-behind-ball problem without betting the milestone on a single
-formulation.
+Goal: find the best bounded gather-control approach for the single-ball corral
+task without assuming the final design must contain a separate "recovery
+strategy." The known wrong-side and stall fixtures are required stress tests,
+but the primary comparison is end-to-end task performance.
 
 Why this comes next:
 
 1. the deeper oracle and sandbox already showed that the current simplified escape formulation is still not enough to prove stable goal-side exit
 2. the April 20, 2026 audit stack says the strongest current preserved safe-control signal is still `strategy_authority_limited`, but the helper turn-authority / turn-profile lane is now preserved as a comparison baseline after `helper_turn_authority_contract_audit` returned `stop_and_branch` with blocking_reason=`sign_parity`, and the follow-on `manual_drive_sign_parity_audit` now points the runtime-check branch at the concrete `scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>` follow-on
-3. the escape problem should be solved first as "wrong side of ball -> safe behind-ball region," not as another pre-stage point-target patch
-4. serial dashboard proof should remain the trust surface while this broader backend portfolio competes offline and in shadow first
-5. this portfolio is local to manual gather `pre_stage`; it does not replace the later onboard high-level visit-and-gather planner evaluation
+3. the escape fixtures should be treated as hard-case evidence, not as proof that the winning architecture must expose a named recovery mode
+4. a candidate can win by avoiding the bad geometry earlier, by handling it when it happens, or by safely switching away before it becomes a stall
+5. serial dashboard proof should remain the trust surface while this broader alternatives portfolio competes offline and in shadow first
+6. this portfolio is local to the gather-control layer; it does not replace the later onboard high-level visit-and-gather planner evaluation
 
 Work:
 
 1. keep one safe control:
    - preserve the helper turn-authority / turn-profile / manual-drive contract lane as the deterministic comparison baseline informed by the April 20 audit stack, not as the next direct promotion path while `sign_parity` remains the blocking reason
-2. open four deeper alternative paths as co-equal exploration branches on the same Layer 3 seam:
-   - ROS-native bounded backend branch:
+2. open broader alternative paths as co-equal exploration branches:
+   - deterministic gather-controller branch:
+     - region or funnel targets that avoid brittle exact `pre_stage` points
+     - explicit scripted maneuvers such as back up, arc around, and re-approach when needed
+   - ROS-native local-planner branch:
      - docking-style local staging / recovery
      - MPPI-style local recovery
    - learned maneuver selector branch:
@@ -444,12 +449,14 @@ Work:
      - small bounded local action proposals in shadow mode
    - learned switch / abstain backend branch:
      - stall detection, backend selection, or fallback gating in shadow mode
-3. install one shared manual `pre_stage` backend seam around the point where `gather_mission_runner.py` currently resolves `compute_pre_stage_command(...)` or `decide_short_horizon_pre_stage_command(...)` before `_set_manual_drive(...)`
-4. keep every branch bounded by the same downstream contract:
+3. compare candidates through a shared gather-control adapter that can start at the current manual `pre_stage` seam, but does not require every candidate to model itself as "recovery"
+4. keep every branch bounded by the same downstream safety contract:
    - deterministic translation remains authoritative
    - `gather_motion_bridge.py` remains the runtime clamp surface
    - controller and hardware caps remain authoritative
-5. judge every branch on the same harness:
+5. judge every branch on the same two-layer harness:
+   - end-to-end gather score: mission pass, practical retrieval placement, phase reached, post-handoff success, time-to-place, and protected-baseline regressions
+   - hard-case stress score: April 19, 2026 fixtures, nearby geometry jitter, behind-ball progress, stall duration, and whether the candidate avoids or survives the known bad geometries
    - April 19, 2026 canonical `live_plus45_short_horizon_v2_20260419` corpus
    - five representative fixtures
    - nearby geometry jitter
@@ -467,30 +474,30 @@ Work:
 Shared evidence contract:
 
 1. portfolio bundle:
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/portfolio_summary.json`
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/scorecard.md`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/portfolio_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/scorecard.md`
 2. per-branch comparison bundle:
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/counterfactual_replay_summary.json`
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/shadow_summary.json`
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/fixtures/<fixture_label>.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/counterfactual_replay_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/shadow_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/fixtures/<fixture_label>.json`
 3. learned-branch extras:
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/teacher_dataset_summary.json`
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/holdout_eval_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/teacher_dataset_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/holdout_eval_summary.json`
 
 Acceptance:
 
 1. the portfolio is evaluated as a shared comparison program rather than a single mainline plus token sidecars
 2. the protected route-planning floor and one-ball baseline remain untouched while the portfolio work lands
-3. no branch is considered live-promotion ready until it survives the shared harness and fresh shadow-sim comparison
-4. the later onboard model step remains a distinct high-level planning milestone rather than being merged into this local `pre_stage` backend work
+3. no branch is considered live-promotion ready until it improves end-to-end gather behavior and survives the hard-case stress slice plus fresh shadow-sim comparison
+4. the later onboard model step remains a distinct high-level planning milestone rather than being merged into this local gather-control comparison work
 
 Current direction update:
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
-2. the next milestone is no longer "build `short_horizon_v3`"; it is "compare multiple bounded `pre_stage` backends on the shared harness"
-3. the project should now search more aggressively for a better bounded backend rather than assuming the next result must come from one helper-only branch
+2. the next milestone is no longer "build `short_horizon_v3`"; it is "compare multiple bounded gather-control alternatives on end-to-end task performance plus the known hard-case stress slice"
+3. the project should now search more aggressively for a better bounded gather-control approach rather than assuming the next result must come from one helper-only branch or one named recovery strategy
 4. the preserved helper contract lane is still not the next promotion path:
    - `helper_turn_authority_contract_audit` returned `stop_and_branch` with blocking_reason=`sign_parity`
    - `manual_drive_sign_parity_audit` now points to the `probe_odom_world_sign_chain` runtime probe wrapper (`scripts/run_probe_odom_world_sign_chain.ps1`)
@@ -498,7 +505,7 @@ Current direction update:
    - treat `/jetbot_base_controller/odom` as the working odom witness for this probe branch only; do not redefine the public `/odom` contract based on this rerun
    - that refreshed bundle preserves `runtime_classification.diagnosis=sign_chain_aligned` plus `source_alignment_assessment.diagnosis=source_fixture_command_sign_mismatch`
    - the bounded source-vs-fresh fixture windows still mismatch on `early_stall`, `mid_stall`, and `late_stall`, while `terminal_stall` remains the control match; see [PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md](PROBE_ODOM_WORLD_SIGN_CHAIN_CLOSEOUT_2026-04-21.md)
-   - the next work is no longer another runtime sign-chain patch; it is source-artifact interpretation/documentation plus bounded-backend comparison
+   - the next work is no longer another runtime sign-chain patch; it is source-artifact interpretation plus end-to-end gather-control comparison with hard-case stress tests
    - the helper turn-authority lane stays a comparison baseline rather than the next promotion path
    - focused offline verification on the current branch remains green on `tests/test_probe_odom_world_sign_chain.py -q`, `tests/test_probe_odom_world_sign_chain_source_provenance.py -q`, `tests/test_probe_odom_world_sign_chain_session_binding.py -q`, and `tests/dashboard/test_world_stream_freshness.py -k "truth_ready or make_session_id" -q`
 

@@ -37,5 +37,5 @@ The rows below come from the refreshed fixture-local comparison surfaces in `sco
 
 - Treat `/jetbot_base_controller/odom` as a probe-only witness for this branch.
 - Keep the helper turn-authority lane as a comparison baseline, not the next promotion path.
-- Move the next work to source-artifact interpretation/documentation and bounded-backend comparison.
+- Move the next work to source-artifact interpretation plus end-to-end gather-control comparison, using the known mismatch fixtures as stress tests rather than as proof that the final architecture needs a named recovery strategy.
 - Reopen runtime-focused work only if a future fresh rerun materially changes the mismatch set above.

@@ -513,11 +513,13 @@ Latest evidence snapshot:
 21. fresh failing three-ball checkpoint evidence:
     - `artifacts/session/20260417T040027Z/gather_mission_repeatability/campaign_run_summary.json`
 
-### Pre-Stage Backend Portfolio
+### Gather-Control Alternatives Portfolio
 
 This branch should no longer be framed as one helper-contract mainline plus
-deferred sidecars. The near-term goal is to compare multiple bounded manual
-`pre_stage` recovery backends on the same Layer 3 seam and shared harness.
+deferred sidecars. The near-term goal is to compare multiple bounded
+gather-control alternatives on end-to-end task performance, while using the
+known wrong-side and stall geometries as required stress tests rather than as a
+mandated recovery-mode architecture.
 The latest sign-parity follow-on keeps the helper lane preserved and moves the
 immediate runtime-check branch onto the concrete
 `scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>` surface plus
@@ -531,24 +533,28 @@ Keep one safe control:
 
 Open multiple deeper alternative paths:
 
-1. ROS-native bounded backend branch:
+1. deterministic gather-controller branch:
+   - region or funnel targets that avoid brittle exact `pre_stage` points
+   - explicit scripted maneuvers such as back up, arc around, and re-approach when needed
+2. ROS-native local-planner branch:
    - docking-style local staging / recovery
    - MPPI-style local recovery
-2. learned maneuver selector branch:
+3. learned maneuver selector branch:
    - rule-labeled maneuver-family choice in shadow mode
-3. learned bounded-action backend branch:
+4. learned bounded-action backend branch:
    - small bounded local action proposals in shadow mode
-4. learned switch / abstain backend branch:
+5. learned switch / abstain backend branch:
    - stall detection, backend selection, or fallback gating in shadow mode
 
 Shared seam and downstream contract:
 
-1. the relevant Layer 3 seam is the point where `gather_mission_runner.py` currently resolves `compute_pre_stage_command(...)` or `decide_short_horizon_pre_stage_command(...)` before `_set_manual_drive(...)`
-2. every backend at that seam should consume the same bounded local `pre_stage` state:
+1. the first practical Layer 3 adapter can start where `gather_mission_runner.py` currently resolves `compute_pre_stage_command(...)` or `decide_short_horizon_pre_stage_command(...)` before `_set_manual_drive(...)`, but a candidate can also avoid the bad state earlier or span more of the gather phase sequence
+2. every candidate should consume bounded local gather state:
    - normalized ball-to-zone / robot-to-ball geometry
    - phase and manager-directive context
    - progress, stall, and goal-side recovery signals
-3. every backend should emit only bounded outputs:
+3. every candidate should emit only bounded outputs:
+   - target region
    - maneuver-family choice
    - bounded short command chunk
    - switch / abstain / fallback signal
@@ -576,7 +582,7 @@ Supporting tools that may help individual branches but should not become portfol
 Deprioritized options for this phase:
 
 1. additional named-case threshold patches as the primary design path
-2. full RL or end-to-end learned low-level gather control
+2. unbounded full RL or direct end-to-end learned low-level gather control
 3. active LLM-owned gather decisions inside the real-time control path
 
 ### Shared Portfolio Harness
@@ -584,16 +590,19 @@ Deprioritized options for this phase:
 Shared non-operator comparison branches for this slice:
 
 1. Branch A: preserved helper turn-authority / turn-profile / manual-drive contract lane as the safe deterministic control
-2. Branch B: ROS-native bounded backends, starting with docking-style and MPPI-style local recovery
-3. Branch C: learned maneuver selector in shadow mode
-4. Branch D: learned bounded-action backend in shadow mode
-5. Branch E: learned switch / abstain backend in shadow mode
+2. Branch B: deterministic region/funnel or scripted maneuver controller
+3. Branch C: ROS-native local planners, starting with docking-style and MPPI-style local recovery
+4. Branch D: learned maneuver selector in shadow mode
+5. Branch E: learned bounded-action backend in shadow mode
+6. Branch F: learned switch / abstain backend in shadow mode
 
 Shared portfolio rules:
 
 1. fan-out belongs in headless/direct repeatability and matrix-style lanes only
 2. dashboard/operator validation remains serial
-3. every branch is judged on the same shared harness:
+3. every branch is judged on the same two-layer shared harness:
+   - end-to-end gather score: mission pass, practical retrieval placement, phase reached, post-handoff success, time-to-place, and protected-baseline regressions
+   - hard-case stress score: April 19, 2026 fixtures, nearby geometry jitter, behind-ball progress, stall duration, and whether the candidate avoids or survives the known bad geometries
    - April 19, 2026 canonical `live_plus45_short_horizon_v2_20260419` corpus
    - five representative fixtures
    - nearby geometry jitter
@@ -606,15 +615,15 @@ Shared portfolio rules:
 Shared evidence contract:
 
 1. portfolio bundle:
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/portfolio_summary.json`
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/scorecard.md`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/portfolio_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/scorecard.md`
 2. per-branch comparison bundle:
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/counterfactual_replay_summary.json`
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/shadow_summary.json`
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/fixtures/<fixture_label>.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/counterfactual_replay_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/shadow_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/fixtures/<fixture_label>.json`
 3. learned-branch extras:
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/teacher_dataset_summary.json`
-   - `artifacts/session/<campaign_id>/pre_stage_backend_portfolio/<branch_name>/holdout_eval_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/teacher_dataset_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/holdout_eval_summary.json`
 
 Shared guardrails across all branches:
 
@@ -653,14 +662,14 @@ Acceptance for keeping this branch green while we move forward:
 5. multi-ball mission truth comes from `final_corral_audit`, `final_all_targets_inside_retrieval_corral`, `final_all_targets_stopped`, `final_three_ball_corral_pass`, and `retrieved_count`
 6. no readiness claim is made yet for `gather_three_ball_zone`; dashboard UAT remains blocked until the goal-side matrix and nearby geometry sweeps are green
 7. no readiness claim is made for exact field-physics match or onboard planning in this phase
-8. the next engineering milestone is the co-equal `pre_stage` backend portfolio on the shared harness, followed by accel/decel optimization once the generalization gate turns green
+8. the next engineering milestone is the co-equal gather-control alternatives portfolio on the two-layer shared harness, followed by accel/decel optimization once the generalization gate turns green
 9. named-case threshold wins are insufficient if the post-`capture_entry_ready` handoff or neighboring geometry still fails
 10. surface and ball fidelity remain an open follow-up, not the blocking path
 
 Current direction update:
 
 1. keep the outer `5 ft` retrieval corral and inner `0.20 m` control ring fixed
-2. treat the current one-ball behavior as the baseline to preserve while the backend portfolio competes underneath it
+2. treat the current one-ball behavior as the baseline to preserve while the gather-control alternatives portfolio competes underneath it
 3. keep `gather_three_ball_zone` on the same practical retrieval model while keeping `visit_route_planning` green
 4. keep the current helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2` frozen as preserved comparison lanes rather than default promotion candidates
 5. treat the current sandbox result as a valid stop signal against another blind live controller-family tweak:
@@ -687,13 +696,13 @@ Current direction update:
      - the preferred implementation remains consumer-side only: pass the probe session's `truth_state.json` into `scripts/odom_world_sign_chain_runtime_probe.py`, emit additive `world_truth` metrics in `runtime_probe.json`, let `scripts/probe_odom_world_sign_chain.py` prefer those metrics before falling back to `truth_timeline.json`, and use its additive `source_alignment_assessment`, `source_fixture_local_command`, and `source_fresh_fixture_window_comparison` fields to distinguish a real runtime break from a source fixture/window mismatch
      - the current branch lands that consumer-side implementation while keeping `scripts/sim_truth_probe.py` unchanged
      - focused offline verification on the current branch passed: `pytest tests/test_probe_odom_world_sign_chain.py -q`, `pytest tests/test_probe_odom_world_sign_chain_source_provenance.py -q`, `pytest tests/test_probe_odom_world_sign_chain_session_binding.py -q`, and `pytest tests/dashboard/test_world_stream_freshness.py -k "truth_ready or make_session_id" -q`
-     - next work shifts to source-artifact interpretation/documentation and bounded-backend comparison, not another runtime sign-chain patch
+     - next work shifts to source-artifact interpretation plus end-to-end gather-control comparison with hard-case stress tests, not another runtime sign-chain patch
    - `artifacts/session/live_plus45_escape_feasibility_audit_20260420/gather_escape_feasibility_audit/feasibility_summary.json`
    - `artifacts/session/live_plus45_escape_divergence_audit_20260420/gather_escape_divergence_audit/divergence_summary.json`
    - `artifacts/session/live_plus45_turn_realization_audit_20260420/gather_turn_realization_audit/turn_realization_summary.json`
    - `artifacts/session/live_plus45_helper_turn_authority_contract_audit_20260420/gather_helper_turn_authority_contract_audit/helper_turn_authority_contract_summary.json`
    - `artifacts/session/live_plus45_manual_drive_sign_parity_audit_20260420/gather_manual_drive_sign_parity_audit/manual_drive_sign_parity_summary.json`
-7. search more aggressively for a better bounded backend rather than assuming the next result must come from one helper-only branch
+7. search more aggressively for a better bounded gather-control approach rather than assuming the next result must come from one helper-only branch or one named recovery strategy
 
 ### Deferred Follow-Ons
 
