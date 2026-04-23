@@ -375,18 +375,20 @@ Use this headless harness as the first regression gate for the deterministic gat
 Command:
 
 1. `powershell -ExecutionPolicy Bypass -File scripts/run_gather_goal_side_matrix.ps1`
+2. candidate-family comparison: `powershell -ExecutionPolicy Bypass -File scripts/run_gather_goal_side_matrix.ps1 -GatherControlFamily region_funnel_v1`
 
 Matrix contract:
 
 1. runs `corral_single_ball_place` in direct repeatability mode
 2. treats the named cases as a coverage and regression harness, not the design target for gather tuning
 3. uses `short_turf` and the current 10-foot multi-ball arc layout (`3.048 m` from corral center) with primary placements at `+45`, `0`, and `-45`; the `180 backside` case stays as a guard case
-4. forwards direct-mode overrides through `gather_mission_repeatability_runner.py` into `gather_mission_runner.py`, including `--max-retries-per-target` and `--gather-control-family baseline|short_horizon_v1|short_horizon_v2`
+4. forwards direct-mode overrides through `gather_mission_repeatability_runner.py` into `gather_mission_runner.py`, including `--max-retries-per-target` and `--gather-control-family <family>`; the wrapper defaults `-GatherControlFamily baseline` to preserve existing behavior
 5. keeps `gather_manager_helpers.py` as the bounded phase owner for `pre_stage -> stage -> capture_entry -> capture`, while `gather_mission_helpers.py` retains the baseline local steering controllers
 6. uses `gather_short_horizon_helpers.py` only for the experimental `short_horizon_v1` and `short_horizon_v2` families, and only for early `pre_stage` goal-side escape / behind-ball repositioning before the baseline late handoff logic resumes
-7. proves robust cross-phase behavior through the `capture_entry_ready` handoff, not just one threshold band
-8. emits a matrix campaign summary plus one repeatability campaign per case
-9. is the offline gate for the gather path; dashboard UAT stays blocked until this matrix and nearby geometry sweeps are green, while `visit_route_planning` remains the protected regression floor
+7. treats `region_funnel_v1` as a new deterministic gather-control candidate for region/funnel targets instead of brittle exact `pre_stage` point targets; it is not promoted until portfolio stress evidence and end-to-end matrix/repeatability evidence are both green
+8. proves robust cross-phase behavior through the `capture_entry_ready` handoff, not just one threshold band
+9. emits a matrix campaign summary plus one repeatability campaign per case
+10. is the offline gate for the gather path; dashboard UAT stays blocked until this matrix and nearby geometry sweeps are green, while `visit_route_planning` remains the protected regression floor
 
 ## Gather Control Portfolio (Offline Analyzer)
 
@@ -394,8 +396,8 @@ Use this before changing gather-control behavior so candidate branches are compa
 
 Command:
 
-1. `python scripts/gather_control_stress_analyzer.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary>`
-2. `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary> --baseline-branch helper`
+1. `python scripts/gather_control_stress_analyzer.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary> --branch region_funnel_v1=<summary>`
+2. `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary> --branch region_funnel_v1=<summary> --baseline-branch helper`
 3. after Branch 1 hard-case stress analysis is collected for a candidate branch, pass each branch summary into the portfolio analyzer:
    - `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --stress helper=artifacts/session/<id>/gather_control_portfolio/helper/stress_summary.json --baseline-branch helper`
 

@@ -31,6 +31,7 @@ from llm_supervisor_core import utc_now
 from llm_supervisor_core import write_json
 from gather_manager_helpers import GatherManagerState
 from gather_manager_helpers import decide_gather_manager_directive
+from gather_region_funnel_helpers import decide_region_funnel_pre_stage_command
 from gather_short_horizon_helpers import decide_short_horizon_pre_stage_command
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_MAX_WAIT_S
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
@@ -91,6 +92,7 @@ DEFAULT_MULTI_BALL_ADVANCE_DWELL_S = 0.5
 DEFAULT_MULTI_BALL_ADVANCE_MOTION_TOLERANCE_M = 0.04
 DEFAULT_PRE_STAGE_TIMEOUT_S = 30.0
 DEFAULT_STAGE_TIMEOUT_S = 6.0
+ALLOWED_GATHER_CONTROL_FAMILIES = ("baseline", "short_horizon_v1", "short_horizon_v2", "region_funnel_v1")
 
 _dotenv_path = REPO_ROOT / ".env"
 if _dotenv_path.is_file():
@@ -347,7 +349,7 @@ class GatherMissionRunner:
         self.world_file = clean_text(args.world_file)
         self.surface_profile = clean_text(args.surface_profile, "baseline")
         self.gather_control_family = clean_text(getattr(args, "gather_control_family", "baseline"), "baseline").lower()
-        if self.gather_control_family not in {"baseline", "short_horizon_v1", "short_horizon_v2"}:
+        if self.gather_control_family not in ALLOWED_GATHER_CONTROL_FAMILIES:
             self.gather_control_family = "baseline"
         self.visit_runtime_state_path = resolve_visit_runtime_state_path(args.visit_runtime_json)
         self.gather_runtime_state_path = resolve_gather_runtime_state_path(args.gather_runtime_json)
@@ -1664,6 +1666,53 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     short_horizon_strategy_name = ""
                     short_horizon_objective_name = ""
                     short_horizon_strategy_started_monotonic = now_monotonic
+            if (
+                self.gather_control_family == "region_funnel_v1"
+                and robot_pose
+                and ball_pose
+                and isinstance(pre_stage_snapshot, dict)
+            ):
+                decision = decide_region_funnel_pre_stage_command(
+                    robot_pose,
+                    ball_pose or {},
+                    zone=self.zone,
+                    snapshot=pre_stage_snapshot,
+                    previous_strategy_name=short_horizon_strategy_name,
+                    stall_s=max(0.0, now_monotonic - short_horizon_last_progress_monotonic),
+                    strategy_elapsed_s=max(0.0, now_monotonic - short_horizon_strategy_started_monotonic),
+                )
+                if (
+                    decision is not None
+                    and bool(getattr(decision, "active", False))
+                    and getattr(decision, "command", None) is not None
+                ):
+                    pre_stage_command = decision.command
+                    pre_stage_strategy_name = str(getattr(decision, "strategy_name", "") or "")
+                    pre_stage_objective_name = str(getattr(decision, "objective_name", "") or "")
+                    pre_stage_progress_score = clean_number(getattr(decision, "progress_score", None))
+                    pre_stage_projected_projection_gain = clean_number(
+                        getattr(decision, "projected_projection_gain", None)
+                    )
+                    pre_stage_projected_lateral_gain = clean_number(
+                        getattr(decision, "projected_lateral_gain", None)
+                    )
+                    pre_stage_projected_distance_gain = clean_number(
+                        getattr(decision, "projected_distance_gain", None)
+                    )
+                    if (
+                        pre_stage_progress_score is not None
+                        and (
+                            short_horizon_best_progress_score is None
+                            or pre_stage_progress_score > short_horizon_best_progress_score + 1.0e-6
+                        )
+                    ):
+                        short_horizon_best_progress_score = pre_stage_progress_score
+                        short_horizon_last_progress_monotonic = now_monotonic
+                    pre_stage_stall_s = max(0.0, now_monotonic - short_horizon_last_progress_monotonic)
+                    if pre_stage_strategy_name != short_horizon_strategy_name:
+                        short_horizon_strategy_started_monotonic = now_monotonic
+                    short_horizon_strategy_name = pre_stage_strategy_name
+                    short_horizon_objective_name = pre_stage_objective_name
             if pre_stage_command is not None:
                 latest_pre_capture_command_mode = str(pre_stage_command.mode)
             pre_stage_manager_decision = decide_gather_manager_directive(
@@ -4778,7 +4827,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--place-timeout-s", type=float, default=35.0)
     parser.add_argument("--pursuit-settle-timeout-s", type=float, default=8.0)
     parser.add_argument("--max-retries-per-target", type=int, default=2)
-    parser.add_argument("--gather-control-family", choices=("baseline", "short_horizon_v1", "short_horizon_v2"), default="baseline")
+    parser.add_argument("--gather-control-family", choices=ALLOWED_GATHER_CONTROL_FAMILIES, default="baseline")
     parser.add_argument("--max-place-loss-revisits", type=int, default=1)
     parser.add_argument("--target-model-name", default=DEFAULT_TARGET_MODEL_NAME)
     parser.add_argument("--target-model-sdf", default=str(DEFAULT_TARGET_MODEL_SDF))

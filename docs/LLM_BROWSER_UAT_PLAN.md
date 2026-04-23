@@ -566,7 +566,7 @@ The legacy deterministic candidate list below remains useful as one subset of
 the portfolio, but it no longer defines the whole branch by itself.
 
 1. a dedicated truth-state escape sandbox that solves only the early "wrong side of ball -> safe behind-ball region" problem before touching the live controller again
-2. region or funnel targets that tighten with distance instead of exact `pre_stage` point targets
+2. `region_funnel_v1`: region or funnel targets that tighten with distance instead of exact `pre_stage` point targets
 3. reset-style recovery that deliberately retreats to a known-safe reacquire shape when progress stalls
 4. short-horizon deterministic action scoring or rollout over a bounded `1-2 s` window, but only after shared offline evidence identifies a stable escape family
 5. progress-based strategy management that switches on measured stall or improvement instead of phase labels alone
@@ -577,7 +577,7 @@ Supporting tools that may help individual branches but should not become portfol
 
 1. lightweight forward-model prediction in shadow mode
 2. automatic gain or threshold search after a better controller family exists
-3. the preserved helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2`, which stay valuable as frozen comparison lanes while the portfolio competes underneath them
+3. the preserved helper-plus-manager path plus `short_horizon_v1`, `short_horizon_v2`, and `region_funnel_v1`, which stay valuable as comparison lanes while the portfolio competes underneath them; `region_funnel_v1` is a candidate only until portfolio stress plus end-to-end evidence pass
 
 Deprioritized options for this phase:
 
@@ -610,7 +610,8 @@ Shared portfolio rules:
    - fresh shadow-sim comparison before any live consideration
 4. named-case wins are insufficient if neighboring geometry or post-handoff behavior still fails
 5. one weak formulation is branch-specific signal, not proof that the whole deterministic, ROS-native, or learned category is dead
-6. no live promotion is unlocked by this planning update alone
+6. `region_funnel_v1` may be run through the same goal-side matrix and portfolio surfaces as a deterministic candidate, but it is not promoted until hard-case stress evidence and end-to-end matrix/repeatability evidence are both green
+7. no live promotion is unlocked by this planning update alone
 
 Shared evidence contract:
 
@@ -679,7 +680,7 @@ Current direction update:
 1. keep the outer `5 ft` retrieval corral and inner `0.20 m` control ring fixed
 2. treat the current one-ball behavior as the baseline to preserve while the gather-control alternatives portfolio competes underneath it
 3. keep `gather_three_ball_zone` on the same practical retrieval model while keeping `visit_route_planning` green
-4. keep the current helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2` frozen as preserved comparison lanes rather than default promotion candidates
+4. keep the current helper-plus-manager path plus `short_horizon_v1`, `short_horizon_v2`, and candidate `region_funnel_v1` as comparison lanes rather than default promotion candidates
 5. treat the current sandbox result as a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

@@ -27,6 +27,9 @@ from llm_supervisor_core import utc_now
 from llm_supervisor_core import write_json
 
 
+ALLOWED_GATHER_CONTROL_FAMILIES = ("baseline", "short_horizon_v1", "short_horizon_v2", "region_funnel_v1")
+
+
 def current_utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
@@ -49,7 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--execution-mode", choices=("dashboard_scenario", "direct"), default="dashboard_scenario")
     parser.add_argument("--promotion-gate-mode", choices=("strict", "pass_only"), default="pass_only")
     parser.add_argument("--max-retries-per-target", type=int, default=2)
-    parser.add_argument("--gather-control-family", choices=("baseline", "short_horizon_v1", "short_horizon_v2"), default="baseline")
+    parser.add_argument("--gather-control-family", choices=ALLOWED_GATHER_CONTROL_FAMILIES, default="baseline")
     return parser.parse_args()
 
 

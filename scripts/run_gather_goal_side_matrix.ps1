@@ -6,6 +6,7 @@ param(
     [string]$PromotionGateMode = "pass_only",
     [string]$WorldFile = "yolo_test_world_v6_clean_uat_short_turf.world",
     [string]$SurfaceProfile = "short_turf",
+    [string]$GatherControlFamily = "baseline",
     [int]$RunsPerCase = 1
 )
 
@@ -110,6 +111,7 @@ foreach ($case in $cases) {
         "--promotion-gate-mode", $PromotionGateMode,
         "--world-file", $WorldFile,
         "--surface-profile", $SurfaceProfile,
+        "--gather-control-family", $GatherControlFamily,
         "--target-layout-json", $layoutPath
     )
 
@@ -224,6 +226,7 @@ $summary = [ordered]@{
     scenario_label = "Corral Single Ball Place"
     world_file = $WorldFile
     surface_profile = $SurfaceProfile
+    gather_control_family = $GatherControlFamily
     execution_mode = $ExecutionMode
     promotion_gate_mode = $PromotionGateMode
     required_green_cases = @($cases).Count
@@ -232,6 +235,7 @@ $summary = [ordered]@{
     requested_runs_per_case = $RunsPerCase
     requested_world_file = $WorldFile
     requested_surface_profile = $SurfaceProfile
+    requested_gather_control_family = $GatherControlFamily
     requested_target_layout_strategy = "short_turf goal-side matrix (+45, 0, -45, 180 backside)"
     campaign_root = $campaignRoot
     cases = $caseResults
@@ -245,6 +249,7 @@ $scorecardLines = @(
     ('- Campaign: `{0}`' -f $campaignIdValue),
     ('- Scenario: `{0}`' -f 'corral_single_ball_place'),
     ('- Surface profile: `{0}`' -f $SurfaceProfile),
+    ('- Gather-control family: `{0}`' -f $GatherControlFamily),
     ('- World file: `{0}`' -f $WorldFile),
     ('- Promotion gate: `{0}`' -f $(if ($summary.promotion_gate_pass) { 'PASS' } else { 'FAIL' })),
     ('- Case pass count: `{0}/{1}`' -f $casePassCount, @($cases).Count),

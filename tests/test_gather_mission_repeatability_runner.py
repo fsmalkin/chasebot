@@ -13,6 +13,18 @@ if str(SCRIPTS_DIR) not in sys.path:
 import gather_mission_repeatability_runner as repeatability_runner  # noqa: E402
 
 
+def test_parse_args_allows_region_funnel_v1(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        ["repeatability", "--gather-control-family", "region_funnel_v1"],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.gather_control_family == "region_funnel_v1"
+
+
 def test_ensure_environment_ready_noops_when_dashboard_already_ready(monkeypatch):
     calls: list[tuple[str, str]] = []
 
@@ -1027,7 +1039,7 @@ def test_main_passes_max_retries_per_target_to_direct_gather_runner(tmp_path: Pa
             "--max-retries-per-target",
             "0",
             "--gather-control-family",
-            "short_horizon_v2",
+            "region_funnel_v1",
         ],
     )
 
@@ -1040,4 +1052,4 @@ def test_main_passes_max_retries_per_target_to_direct_gather_runner(tmp_path: Pa
     assert subprocess_calls[0][retry_index + 1] == "0"
     assert "--gather-control-family" in subprocess_calls[0]
     family_index = subprocess_calls[0].index("--gather-control-family")
-    assert subprocess_calls[0][family_index + 1] == "short_horizon_v2"
+    assert subprocess_calls[0][family_index + 1] == "region_funnel_v1"

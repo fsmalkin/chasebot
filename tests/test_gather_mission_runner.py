@@ -59,6 +59,28 @@ def _make_three_ball_runner(tmp_path: Path, monkeypatch) -> gather_runner.Gather
     return gather_runner.GatherMissionRunner(args)
 
 
+def test_gather_control_family_allows_region_funnel_v1(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "region_funnel_v1"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.gather_control_family == "region_funnel_v1"
+
+
+def test_parse_args_allows_region_funnel_v1(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        ["gather_mission_runner.py", "--gather-control-family", "region_funnel_v1"],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.gather_control_family == "region_funnel_v1"
+
+
 def test_resolve_gather_runtime_state_path_prefers_explicit_arg(tmp_path, monkeypatch):
     env_path = tmp_path / "env_runtime.json"
     monkeypatch.setenv("CHASECAR_GATHER_RUNTIME_PATH", str(env_path))
@@ -715,6 +737,79 @@ def test_pre_stage_target_records_short_horizon_v2_debug_fields(tmp_path, monkey
     assert isinstance(first_row["projected_projection_gain"], float)
     assert isinstance(first_row["projected_lateral_gain"], float)
     assert isinstance(first_row["projected_distance_gain"], float)
+
+
+def test_pre_stage_target_records_region_funnel_v1_debug_fields(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    runner.gather_control_family = "region_funnel_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    ball_pose = {"x": 4.555261, "y": 2.155261, "z": 0.05}
+    ready_pose = {"x": 4.852057, "y": 2.736506, "yaw": -2.97762}
+    sequence = [ready_pose, ready_pose, ready_pose]
+    index = {"value": 0}
+
+    command = gather_runner.PlaceControlCommand(
+        mode="region_funnel_pre_stage",
+        linear_x=-0.12,
+        angular_z=0.34,
+        target_speed_scale=1.0,
+        rationale="Region funnel override.",
+    )
+    decision = SimpleNamespace(
+        active=True,
+        strategy_name="region_funnel_align",
+        objective_name="region_funnel_entry",
+        progress_score=0.42,
+        command=command,
+        projected_projection_gain=0.11,
+        projected_lateral_gain=0.22,
+        projected_distance_gain=0.33,
+    )
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        current = sequence[min(index["value"], len(sequence) - 1)]
+        index["value"] += 1
+        return {}, current, ball_pose
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: state_rows.append(dict(payload)))
+    monkeypatch.setattr(gather_runner, "decide_region_funnel_pre_stage_command", lambda *args, **kwargs: decision)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-region-funnel",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert pre_stage_pass is True
+    assert payload["pre_stage_pose_reached"] is True
+    assert state_rows
+    first_row = state_rows[0]
+    assert first_row["controller_family"] == "region_funnel_v1"
+    assert first_row["strategy_name"] == "region_funnel_align"
+    assert first_row["objective_name"] == "region_funnel_entry"
+    assert first_row["progress_score"] == 0.42
+    assert first_row["projected_projection_gain"] == 0.11
+    assert first_row["projected_lateral_gain"] == 0.22
+    assert first_row["projected_distance_gain"] == 0.33
+    assert first_row["selected_command"] == command.to_dict()
 
 
 def test_run_target_retries_fresh_approach_after_capture_entry_failure(tmp_path, monkeypatch):

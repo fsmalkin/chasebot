@@ -46,7 +46,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Visible ball campaign | `scripts/run_llm_visible_ball_campaign.ps1` |
 | Visit mission repeat | `scripts/run_visit_mission_repeatability.ps1` |
 | Corral surface calibration | `scripts/run_corral_surface_calibration.ps1 -RunsPerLane 3` |
-| Goal-side matrix | `scripts/run_gather_goal_side_matrix.ps1` |
+| Goal-side matrix | `scripts/run_gather_goal_side_matrix.ps1 -GatherControlFamily baseline` |
 | Gather control portfolio | `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary> --baseline-branch helper` |
 | Gather hard-case stress analyzer | `python scripts/gather_control_stress_analyzer.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary>` |
 | Gather portfolio stress ingestion | `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --stress helper=artifacts/session/<id>/gather_control_portfolio/helper/stress_summary.json --baseline-branch helper` |
