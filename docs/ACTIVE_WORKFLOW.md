@@ -388,6 +388,30 @@ Matrix contract:
 8. emits a matrix campaign summary plus one repeatability campaign per case
 9. is the offline gate for the gather path; dashboard UAT stays blocked until this matrix and nearby geometry sweeps are green, while `visit_route_planning` remains the protected regression floor
 
+## Gather Control Portfolio (Offline Analyzer)
+
+Use this before changing gather-control behavior so candidate branches are compared on the same end-to-end evidence rather than on isolated recovery anecdotes.
+
+Command:
+
+1. `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary> --baseline-branch helper`
+
+Portfolio contract:
+
+1. reads existing `gather_mission_repeatability/campaign_run_summary.json` files only
+2. writes `artifacts/session/<campaign_id>/gather_control_portfolio/portfolio_summary.json`, `scorecard.md`, and one `<branch_name>/branch_summary.json` per branch
+3. scores each branch on observed end-to-end gather evidence:
+   - mission pass
+   - practical retrieval placement, meaning the ball is inside the retrieval corral, stopped, and not rolled away after release
+   - phase reach rates through `pre_stage`, handoff, staging, and capture entry
+   - average mission time and corral placement metrics
+4. records baseline deltas when `--baseline-branch` is supplied
+5. records missing source metrics as missing rather than inventing pass/fail values
+6. keeps the hard-case stress labels fixed at `early_stall`, `mid_stall`, `late_stall`, and `terminal_stall`
+7. marks hard-case stress status as `not_evaluated` in the v1 harness unless fixture-level branch evidence is added later
+8. may identify the best observed end-to-end branch, but must keep `recommended_next_action=collect_hard_case_stress_evidence` and `live_promotion_ready=false` while stress evidence is `not_evaluated`
+9. is analyzer-only: it does not change runtime control, dashboard behavior, live runners, or the public `/odom` contract
+
 ## Gather Escape Oracle (Offline Truth-State Probe)
 
 Use this before adding another gather escape family when fresh-only `plus45` is still blocked in `pre_stage`.
@@ -946,6 +970,11 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/logs/*.log`
    - `artifacts/session/<campaign_id>/gather_goal_side_matrix/target_layouts/*.json`
    - `artifacts/session/<campaign_id>_<case>/gather_mission_repeatability/campaign_run_summary.json`
+25. Gather control portfolio:
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/portfolio_summary.json`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/scorecard.md`
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/branch_summary.json`
+   - v1 is analyzer-only and records hard-case stress as `not_evaluated` until fixture-level branch evidence is supplied
 
 ## Failure Triage Path
 

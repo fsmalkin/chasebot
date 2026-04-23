@@ -47,6 +47,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Visit mission repeat | `scripts/run_visit_mission_repeatability.ps1` |
 | Corral surface calibration | `scripts/run_corral_surface_calibration.ps1 -RunsPerLane 3` |
 | Goal-side matrix | `scripts/run_gather_goal_side_matrix.ps1` |
+| Gather control portfolio | `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary> --baseline-branch helper` |
 | Gather escape oracle | `scripts/run_gather_escape_oracle.ps1 -CampaignId <id>` |
 | Gather escape sandbox | `scripts/run_gather_escape_sandbox.ps1 -CampaignId <id>` |
 | Gather escape reference | `scripts/run_gather_escape_reference.ps1 -CampaignId <id>` |
@@ -58,6 +59,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Probe odom/world sign chain | `scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>` |
 | Gather manager helper (internal) | `scripts/gather_manager_helpers.py` |
 | Gather short-horizon helper (internal) | `scripts/gather_short_horizon_helpers.py` |
+| Gather control portfolio analyzer (internal) | `scripts/gather_control_portfolio.py` |
 | Gather escape oracle helper (internal) | `scripts/gather_escape_oracle.py` |
 | Gather escape sandbox helper (internal) | `scripts/gather_escape_sandbox.py` |
 | Gather escape reference helper (internal) | `scripts/gather_escape_reference.py` |

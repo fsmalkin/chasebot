@@ -473,16 +473,19 @@ Work:
 
 Shared evidence contract:
 
-1. portfolio bundle:
+1. v1 portfolio analyzer bundle:
    - `artifacts/session/<campaign_id>/gather_control_portfolio/portfolio_summary.json`
    - `artifacts/session/<campaign_id>/gather_control_portfolio/scorecard.md`
-2. per-branch comparison bundle:
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/branch_summary.json`
+2. future per-branch stress/shadow bundle:
+   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/fixtures/<fixture_label>.json`
    - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/counterfactual_replay_summary.json`
    - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/shadow_summary.json`
-   - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/fixtures/<fixture_label>.json`
 3. learned-branch extras:
    - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/teacher_dataset_summary.json`
    - `artifacts/session/<campaign_id>/gather_control_portfolio/<branch_name>/holdout_eval_summary.json`
+4. v1 readiness rule:
+   - `hard_case_stress_status=not_evaluated` blocks live promotion even when a branch is the best observed end-to-end performer
 
 Acceptance:
 
