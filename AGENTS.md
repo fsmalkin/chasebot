@@ -62,6 +62,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Probe odom/world sign chain | `scripts/run_probe_odom_world_sign_chain.ps1 -CampaignId <id>` |
 | Gather manager helper (internal) | `scripts/gather_manager_helpers.py` |
 | Gather short-horizon helper (internal) | `scripts/gather_short_horizon_helpers.py` |
+| Gather docking reacquire helper (internal) | `scripts/gather_docking_reacquire_helpers.py` |
 | Gather control portfolio analyzer (internal) | `scripts/gather_control_portfolio.py` |
 | Gather hard-case stress analyzer (internal) | `scripts/gather_control_stress_analyzer.py` |
 | Gather control failure audit analyzer (internal) | `scripts/gather_control_failure_audit.py` |
@@ -125,6 +126,7 @@ Lane-specific configs:
 17. `region_funnel_v1` is a failed experimental gather-control branch after the April 24, 2026 one-run goal-side smoke; do not add it to portfolio/stress comparison or promotion discussion until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes.
 18. `nav2_reacquire_v1` is a blocked experimental ROS-native pre-stage reacquire branch after the April 24, 2026 one-run goal-side smoke; do not add it to portfolio/stress comparison or promotion discussion until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes.
 19. `constrained_local_planner_v1` is a blocked experimental local-planner gather-control branch after the April 25, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
+20. `docking_reacquire_v1` is a blocked experimental deterministic docking-style pre-stage reacquire branch after the April 25, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 
 ## Latest Validated Artifacts
 
@@ -186,6 +188,12 @@ Gather constrained-local planner experimental branch status:
 - Scope: one-ball `pre_stage` / behind-ball reacquisition only; bounded local rollout candidates reject predicted ball contact and release back to baseline pre-stage/stage control.
 - Smoke: `artifacts/session/live_constrained_local_planner_v1_matrix_smoke_20260425/gather_goal_side_matrix/campaign_summary.json`
 - Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff, so no portfolio/stress refresh was produced for this branch.
+
+Gather docking-style reacquire experimental branch status:
+- Candidate: `docking_reacquire_v1`
+- Scope: one-ball `pre_stage` / behind-ball reacquisition only; deterministic local docking pocket selection and bounded pose-servo commands release back to baseline only after measured handoff geometry is safe.
+- Smoke: `artifacts/session/live_docking_reacquire_v1_release_fix_matrix_smoke_20260425/gather_goal_side_matrix/campaign_summary.json`
+- Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff; the branch can reach near behind-ball geometry without observed pre-stage ball motion, but it still times out on yaw/handoff alignment, so no portfolio/stress refresh was produced for this branch.
 
 ## Testing
 

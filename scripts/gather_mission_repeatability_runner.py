@@ -34,6 +34,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "region_funnel_v1",
     "nav2_reacquire_v1",
     "constrained_local_planner_v1",
+    "docking_reacquire_v1",
 )
 
 
