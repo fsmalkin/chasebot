@@ -120,6 +120,8 @@ Lane-specific configs:
 14. Dashboard status chips surface `phase`, `target_id`, `target_transition_active`.
 15. `visit_route_planning` dashboard runs are intentionally self-contained: each click queues a sim reset and starts a fresh session before the mission launches. For repeatability triage, compare the pre-click and post-click session IDs.
 16. Route-planning campaign parallelism belongs in isolated non-interactive soak runners, not in the operator dashboard. Keep browser UAT serial; use unique dashboard ports / compose projects / sessions for parallel background workers.
+17. `region_funnel_v1` is a failed experimental gather-control branch after the April 24, 2026 one-run goal-side smoke; do not add it to portfolio/stress comparison or promotion discussion until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes.
+18. `nav2_reacquire_v1` is a blocked experimental ROS-native pre-stage reacquire branch after the April 24, 2026 one-run goal-side smoke; do not add it to portfolio/stress comparison or promotion discussion until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes.
 
 ## Latest Validated Artifacts
 
@@ -165,6 +167,16 @@ Gather sign-chain runtime probe reference:
 - Current branch offline verification: `pytest tests/test_probe_odom_world_sign_chain.py -q`, `pytest tests/test_probe_odom_world_sign_chain_source_provenance.py -q`, `pytest tests/test_probe_odom_world_sign_chain_session_binding.py -q`, and `pytest tests/dashboard/test_world_stream_freshness.py -k "truth_ready or make_session_id" -q`
 - Current closeout status after refreshing the saved April 21, 2026 provenance rerun bundle: `runtime_classification.diagnosis=sign_chain_aligned` and `source_alignment_assessment.diagnosis=source_fixture_command_sign_mismatch`; bounded source-vs-fresh windows still mismatch on `early_stall`, `mid_stall`, and `late_stall`, while `terminal_stall` remains the control match
 - Next work: shift to source-artifact interpretation/documentation; reopen runtime-focused work only if a future fresh rerun materially changes that mismatch set
+
+Gather region-funnel experimental branch status:
+- Repair smoke: `artifacts/session/live_region_funnel_v1_zero_repair_20260424/gather_goal_side_matrix/campaign_summary.json`
+- Result: `region_funnel_v1` remains blocked. The evidence hygiene fix now surfaces fresh-attempt goal-side pre-stage failures consistently, but fresh `zero` and `plus45` still fail pre-stage handoff in the matrix, so no portfolio/stress refresh was produced for this branch.
+
+Gather ROS-native reacquire experimental branch status:
+- Candidate: `nav2_reacquire_v1`
+- Scope: one-ball `pre_stage` / behind-ball reacquisition only; bounded Nav2 waypoint first, then baseline `stage -> capture_entry -> capture` resumes.
+- Smoke: `artifacts/session/live_nav2_reacquire_v1_matrix_smoke_20260424/gather_goal_side_matrix/campaign_summary.json`
+- Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff, Nav2 accepted the reacquire goals but timed out, and no portfolio/stress refresh was produced for this branch.
 
 ## Testing
 

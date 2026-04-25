@@ -566,18 +566,19 @@ The legacy deterministic candidate list below remains useful as one subset of
 the portfolio, but it no longer defines the whole branch by itself.
 
 1. a dedicated truth-state escape sandbox that solves only the early "wrong side of ball -> safe behind-ball region" problem before touching the live controller again
-2. `region_funnel_v1`: region or funnel targets that tighten with distance instead of exact `pre_stage` point targets
-3. reset-style recovery that deliberately retreats to a known-safe reacquire shape when progress stalls
-4. short-horizon deterministic action scoring or rollout over a bounded `1-2 s` window, but only after shared offline evidence identifies a stable escape family
-5. progress-based strategy management that switches on measured stall or improvement instead of phase labels alone
-6. contact-centric pushing objectives that optimize desired ball contact and ball motion toward the corral
-7. ball-to-zone local-frame normalization so `+45`, `0`, and `-45` reduce to the same mirrored problem where possible
+2. `region_funnel_v1`: failed experimental region/funnel formulation after `artifacts/session/live_region_funnel_v1_zero_repair_20260424/gather_goal_side_matrix/campaign_summary.json`; keep it out of portfolio ingestion until a repaired branch clears fresh-attempt `zero` and `plus45` pre-stage handoff
+3. `nav2_reacquire_v1`: blocked experimental ROS-native direct `NavigateToPose` pre-stage reacquisition after `artifacts/session/live_nav2_reacquire_v1_matrix_smoke_20260424/gather_goal_side_matrix/campaign_summary.json`; keep it out of portfolio ingestion until a repaired branch clears fresh-attempt `zero` and `plus45` pre-stage handoff
+4. reset-style recovery that deliberately retreats to a known-safe reacquire shape when progress stalls
+5. short-horizon deterministic action scoring or rollout over a bounded `1-2 s` window, but only after shared offline evidence identifies a stable escape family
+6. progress-based strategy management that switches on measured stall or improvement instead of phase labels alone
+7. contact-centric pushing objectives that optimize desired ball contact and ball motion toward the corral
+8. ball-to-zone local-frame normalization so `+45`, `0`, and `-45` reduce to the same mirrored problem where possible
 
 Supporting tools that may help individual branches but should not become portfolio branches on their own:
 
 1. lightweight forward-model prediction in shadow mode
 2. automatic gain or threshold search after a better controller family exists
-3. the preserved helper-plus-manager path plus `short_horizon_v1`, `short_horizon_v2`, and `region_funnel_v1`, which stay valuable as comparison lanes while the portfolio competes underneath them; `region_funnel_v1` is a candidate only until portfolio stress plus end-to-end evidence pass
+3. the preserved helper-plus-manager path plus `short_horizon_v1` and `short_horizon_v2`, which stay valuable as comparison lanes while the portfolio competes underneath them; `region_funnel_v1` and `nav2_reacquire_v1` are retained only as failed experimental evidence unless repaired and requalified by fresh `zero` plus `plus45` pre-stage handoff passes
 
 Deprioritized options for this phase:
 
@@ -591,7 +592,7 @@ Shared non-operator comparison branches for this slice:
 
 1. Branch A: preserved helper turn-authority / turn-profile / manual-drive contract lane as the safe deterministic control
 2. Branch B: deterministic region/funnel or scripted maneuver controller
-3. Branch C: ROS-native local planners, starting with docking-style and MPPI-style local recovery
+3. Branch C: ROS-native local planners, starting with direct `nav2_reacquire_v1` pre-stage reacquisition, then docking-style and MPPI-style local recovery if direct Nav2 is too coarse
 4. Branch D: learned maneuver selector in shadow mode
 5. Branch E: learned bounded-action backend in shadow mode
 6. Branch F: learned switch / abstain backend in shadow mode
@@ -610,8 +611,9 @@ Shared portfolio rules:
    - fresh shadow-sim comparison before any live consideration
 4. named-case wins are insufficient if neighboring geometry or post-handoff behavior still fails
 5. one weak formulation is branch-specific signal, not proof that the whole deterministic, ROS-native, or learned category is dead
-6. `region_funnel_v1` may be run through the same goal-side matrix and portfolio surfaces as a deterministic candidate, but it is not promoted until hard-case stress evidence and end-to-end matrix/repeatability evidence are both green
-7. no live promotion is unlocked by this planning update alone
+6. `region_funnel_v1` may be rerun through the goal-side matrix as a repaired deterministic candidate, but the April 24 smoke blocks portfolio/stress ingestion until fresh-attempt `zero` and `plus45` pre-stage handoff are green
+7. `nav2_reacquire_v1` is blocked by the April 24 one-run matrix and must first clear fresh one-run `zero` and `plus45` pre-stage handoff before portfolio/stress ingestion
+8. no live promotion is unlocked by this planning update alone
 
 Shared evidence contract:
 

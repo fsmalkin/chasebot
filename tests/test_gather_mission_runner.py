@@ -69,6 +69,16 @@ def test_gather_control_family_allows_region_funnel_v1(tmp_path, monkeypatch):
     assert runner.gather_control_family == "region_funnel_v1"
 
 
+def test_gather_control_family_allows_nav2_reacquire_v1(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "nav2_reacquire_v1"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.gather_control_family == "nav2_reacquire_v1"
+
+
 def test_parse_args_allows_region_funnel_v1(monkeypatch):
     monkeypatch.setattr(
         gather_runner.sys,
@@ -79,6 +89,60 @@ def test_parse_args_allows_region_funnel_v1(monkeypatch):
     args = gather_runner.parse_args()
 
     assert args.gather_control_family == "region_funnel_v1"
+
+
+def test_parse_args_allows_nav2_reacquire_v1(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        ["gather_mission_runner.py", "--gather-control-family", "nav2_reacquire_v1"],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.gather_control_family == "nav2_reacquire_v1"
+
+
+def test_nav2_reacquire_goal_generation_covers_zero_plus_minus_and_ready_states():
+    zone = gather_runner.build_zone_spec("corral_single_ball_place")
+    zero_ball = {"x": 5.448, "y": 0.0, "z": 0.05}
+    zero_robot = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    zero_snapshot = gather_runner.pre_stage_arrival_snapshot(zero_robot, zero_ball, zone=zone)
+
+    zero_goal = gather_runner.compute_nav2_reacquire_pre_stage_goal(zero_robot, zero_ball, zero_snapshot)
+
+    assert zero_snapshot is not None
+    assert zero_goal["active"] is True
+    assert zero_goal["reason"] == "goal_side_reacquire"
+    assert zero_goal["goal_pose"]["kind"] == "fallback_flank"
+    assert abs(float(zero_goal["goal_pose"]["y"])) >= 0.50
+    assert zero_goal["trigger"]["fallback_selected"] is True
+
+    plus_ball = {"x": 4.555261, "y": 2.155261, "z": 0.05}
+    minus_ball = {"x": 4.555261, "y": -2.155261, "z": 0.05}
+    plus_snapshot = gather_runner.pre_stage_arrival_snapshot(zero_robot, plus_ball, zone=zone)
+    minus_snapshot = gather_runner.pre_stage_arrival_snapshot(zero_robot, minus_ball, zone=zone)
+    plus_goal = gather_runner.compute_nav2_reacquire_pre_stage_goal(zero_robot, plus_ball, plus_snapshot)
+    minus_goal = gather_runner.compute_nav2_reacquire_pre_stage_goal(zero_robot, minus_ball, minus_snapshot)
+
+    assert plus_snapshot is not None
+    assert minus_snapshot is not None
+    assert plus_goal["active"] is True
+    assert minus_goal["active"] is True
+    assert float(plus_goal["goal_pose"]["yaw_deg"]) < -90.0
+    assert float(minus_goal["goal_pose"]["yaw_deg"]) > 90.0
+    assert abs(float(plus_goal["goal_pose"]["x"]) - float(minus_goal["goal_pose"]["x"])) < 1.0e-6
+    assert abs(float(plus_goal["goal_pose"]["y"]) + float(minus_goal["goal_pose"]["y"])) < 1.0e-6
+
+    ready_ball = {"x": 1.0, "y": 0.0, "z": 0.05}
+    ready_robot = {"x": 0.1, "y": 0.0, "yaw": 0.0}
+    ready_snapshot = gather_runner.pre_stage_arrival_snapshot(ready_robot, ready_ball, zone=zone)
+    ready_goal = gather_runner.compute_nav2_reacquire_pre_stage_goal(ready_robot, ready_ball, ready_snapshot)
+
+    assert ready_snapshot is not None
+    assert ready_snapshot["pre_stage_pose_reached"] is True
+    assert ready_goal["active"] is False
+    assert ready_goal["reason"] == "pre_stage_handoff_already_ready"
 
 
 def test_resolve_gather_runtime_state_path_prefers_explicit_arg(tmp_path, monkeypatch):
@@ -810,6 +874,276 @@ def test_pre_stage_target_records_region_funnel_v1_debug_fields(tmp_path, monkey
     assert first_row["projected_lateral_gain"] == 0.22
     assert first_row["projected_distance_gain"] == 0.33
     assert first_row["selected_command"] == command.to_dict()
+
+
+def test_nav2_reacquire_does_not_activate_when_pre_stage_handoff_ready(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    runner.gather_control_family = "nav2_reacquire_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    command_log: list[dict[str, object]] = []
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+    ready_robot_pose = {"x": 0.1, "y": 0.0, "yaw": 0.0}
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def forbidden_dispatch(**kwargs):
+        raise AssertionError(f"nav2 reacquire should not dispatch when handoff is ready: {kwargs}")
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_dispatch_nav2_reacquire_goal", forbidden_dispatch)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: ({"compose_project": "gate"}, ready_robot_pose, ball_pose),
+    )
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-nav2-ready",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert pre_stage_pass is True
+    assert payload["pre_stage_handoff_pass"] is True
+    assert all(str(item["mode"]) != "nav2_reacquire_goal" for item in command_log)
+
+
+def test_nav2_reacquire_failed_dispatch_returns_pre_stage_failure_with_goal_side_evidence(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    runner.gather_control_family = "nav2_reacquire_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    dispatch_calls: list[dict[str, object]] = []
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(dict(kwargs))
+        return {
+            "dispatch_status": "server_unavailable",
+            "accepted": False,
+            "success": False,
+            "status_code": 0,
+            "elapsed_s": 0.25,
+            "error": "nav2_action_server_unavailable",
+        }
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: state_rows.append(dict(payload)))
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_dispatch_nav2_reacquire_goal", fake_dispatch)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: ({"compose_project": "gate"}, robot_pose, ball_pose),
+    )
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-nav2-fail",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert pre_stage_pass is False
+    assert payload["failure_reason"] == "nav2_reacquire_failed"
+    assert payload["failure_stage"] == "pre_stage"
+    assert payload["approach_failure_reason"] == "entered_goal_side_before_capture"
+    assert payload["entered_goal_side_before_capture"] is True
+    assert payload["nav2_reacquire_result"]["dispatch_status"] == "server_unavailable"
+    assert dispatch_calls
+    assert dispatch_calls[0]["compose_project"] == "gate"
+    assert dispatch_calls[0]["goal_pose"]["kind"] == "fallback_flank"
+    assert any(item["event_type"] == "nav2_reacquire_dispatch" for item in state_rows)
+    complete_rows = [item for item in state_rows if item["event_type"] == "nav2_reacquire_complete"]
+    assert complete_rows
+    assert complete_rows[0]["controller_family"] == "nav2_reacquire_v1"
+    assert complete_rows[0]["nav2_dispatch_status"] == "server_unavailable"
+    assert complete_rows[0]["pre_stage_at_dispatch"]["entered_goal_side_before_capture"] is True
+    assert complete_rows[0]["pre_stage_at_completion"]["entered_goal_side_before_capture"] is True
+    assert command_log[0]["mode"] == "nav2_reacquire_goal"
+    assert command_log[-1]["mode"] == "nav2_reacquire_failed"
+    assert all(not bool(item["enabled"]) for item in command_log)
+
+
+def test_nav2_reacquire_success_returns_to_baseline_pre_stage_handoff(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    runner.gather_control_family = "nav2_reacquire_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    initial_robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ready_robot_pose = {"x": 6.348, "y": 0.0, "yaw": gather_runner.math.pi}
+    states = [
+        ({"compose_project": "gate"}, initial_robot_pose, ball_pose),
+        ({"compose_project": "gate"}, ready_robot_pose, ball_pose),
+        ({"compose_project": "gate"}, ready_robot_pose, ball_pose),
+        ({"compose_project": "gate"}, ready_robot_pose, ball_pose),
+        ({"compose_project": "gate"}, ready_robot_pose, ball_pose),
+    ]
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        if states:
+            return states.pop(0)
+        return {"compose_project": "gate"}, ready_robot_pose, ball_pose
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: state_rows.append(dict(payload)))
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_dispatch_nav2_reacquire_goal",
+        lambda **kwargs: {
+            "dispatch_status": "goal_succeeded",
+            "accepted": True,
+            "success": True,
+            "status_code": 4,
+            "elapsed_s": 2.0,
+            "error": "",
+        },
+    )
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-nav2-success",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    modes = [str(item["mode"]) for item in command_log]
+    complete_rows = [item for item in state_rows if item.get("event_type") == "nav2_reacquire_complete"]
+
+    assert pre_stage_pass is True
+    assert payload["pre_stage_pose_reached"] is True
+    assert payload["pre_stage_handoff_pass"] is True
+    assert "nav2_reacquire_goal" in modes
+    assert "nav2_reacquire_complete" in modes
+    assert modes[-1] == "pre_stage_ready"
+    assert command_log[-1]["enabled"] is False
+    assert complete_rows
+    assert complete_rows[0]["nav2_dispatch_status"] == "goal_succeeded"
+    assert complete_rows[0]["pre_stage_at_completion"]["pre_stage_pose_reached"] is True
+
+
+def test_pre_stage_target_timeout_marks_goal_side_entry_when_observed(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.5
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        return {}, robot_pose, ball_pose
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-timeout-goal-side",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    timeout_payload = read_json(mission_root / f"{target.id}_pre_stage_timeout.json")
+    assert pre_stage_pass is False
+    assert payload["failure_reason"] == "pre_stage_timeout"
+    assert payload["approach_failure_reason"] == "entered_goal_side_before_capture"
+    assert payload["entered_goal_side_before_capture"] is True
+    assert timeout_payload["entered_goal_side_before_capture"] is True
 
 
 def test_run_target_retries_fresh_approach_after_capture_entry_failure(tmp_path, monkeypatch):

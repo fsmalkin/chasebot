@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -92,7 +93,22 @@ DEFAULT_MULTI_BALL_ADVANCE_DWELL_S = 0.5
 DEFAULT_MULTI_BALL_ADVANCE_MOTION_TOLERANCE_M = 0.04
 DEFAULT_PRE_STAGE_TIMEOUT_S = 30.0
 DEFAULT_STAGE_TIMEOUT_S = 6.0
-ALLOWED_GATHER_CONTROL_FAMILIES = ("baseline", "short_horizon_v1", "short_horizon_v2", "region_funnel_v1")
+ALLOWED_GATHER_CONTROL_FAMILIES = (
+    "baseline",
+    "short_horizon_v1",
+    "short_horizon_v2",
+    "region_funnel_v1",
+    "nav2_reacquire_v1",
+)
+NAV2_REACQUIRE_CONTROL_FAMILY = "nav2_reacquire_v1"
+DEFAULT_NAV2_REACQUIRE_TRIGGER_DISTANCE_M = 1.20
+DEFAULT_NAV2_REACQUIRE_MIN_SEGMENT_BALL_CLEARANCE_M = 0.35
+DEFAULT_NAV2_REACQUIRE_MIN_GOAL_BALL_DISTANCE_M = 0.60
+DEFAULT_NAV2_REACQUIRE_FALLBACK_FLANK_OFFSET_M = 0.75
+DEFAULT_NAV2_REACQUIRE_FALLBACK_BEHIND_BIAS_M = 0.20
+DEFAULT_NAV2_REACQUIRE_SERVER_WAIT_S = 5.0
+DEFAULT_NAV2_REACQUIRE_GOAL_TIMEOUT_S = 18.0
+NAV2_REACQUIRE_RESULT_MARKER = "NAV2_REACQUIRE_RESULT="
 
 _dotenv_path = REPO_ROOT / ".env"
 if _dotenv_path.is_file():
@@ -130,6 +146,121 @@ def to_container_repo_path(path: Path) -> str:
     resolved = path.resolve()
     relative = resolved.relative_to(REPO_ROOT.resolve())
     return "/workspaces/chasecar/" + str(relative).replace("\\", "/")
+
+
+def _segment_distance_m(
+    point: tuple[float, float],
+    start: tuple[float, float],
+    end: tuple[float, float],
+) -> float:
+    px, py = point
+    sx, sy = start
+    ex, ey = end
+    dx = ex - sx
+    dy = ey - sy
+    denom = (dx * dx) + (dy * dy)
+    if denom <= 1.0e-12:
+        return math.hypot(px - sx, py - sy)
+    t = max(0.0, min(1.0, (((px - sx) * dx) + ((py - sy) * dy)) / denom))
+    closest_x = sx + (t * dx)
+    closest_y = sy + (t * dy)
+    return math.hypot(px - closest_x, py - closest_y)
+
+
+def compute_nav2_reacquire_pre_stage_goal(
+    robot_pose: dict[str, Any],
+    ball_pose: dict[str, Any],
+    pre_stage_snapshot: dict[str, Any],
+    *,
+    trigger_distance_m: float = DEFAULT_NAV2_REACQUIRE_TRIGGER_DISTANCE_M,
+    min_segment_ball_clearance_m: float = DEFAULT_NAV2_REACQUIRE_MIN_SEGMENT_BALL_CLEARANCE_M,
+    min_goal_ball_distance_m: float = DEFAULT_NAV2_REACQUIRE_MIN_GOAL_BALL_DISTANCE_M,
+    fallback_flank_offset_m: float = DEFAULT_NAV2_REACQUIRE_FALLBACK_FLANK_OFFSET_M,
+    fallback_behind_bias_m: float = DEFAULT_NAV2_REACQUIRE_FALLBACK_BEHIND_BIAS_M,
+) -> dict[str, Any]:
+    """Build the bounded Nav2 waypoint for the experimental pre-stage reacquire slice."""
+
+    robot_xyyaw = world_pose_xyyaw(robot_pose)
+    ball_xy = world_pose_xyyaw(ball_pose)
+    pre_stage_pose = (
+        pre_stage_snapshot.get("pre_stage_pose_world", {})
+        if isinstance(pre_stage_snapshot.get("pre_stage_pose_world"), dict)
+        else {}
+    )
+    pre_stage_xy = world_pose_xyyaw(pre_stage_pose)
+    if robot_xyyaw is None or ball_xy is None or pre_stage_xy is None:
+        return {"active": False, "reason": "missing_reacquire_geometry", "goal_pose": {}}
+
+    pre_stage_pose_reached = bool(pre_stage_snapshot.get("pre_stage_pose_reached", False))
+    if pre_stage_pose_reached:
+        return {"active": False, "reason": "pre_stage_handoff_already_ready", "goal_pose": {}}
+
+    robot_on_goal_side = bool(pre_stage_snapshot.get("robot_on_goal_side", False))
+    pre_stage_distance_m = float(clean_number(pre_stage_snapshot.get("pre_stage_pose_distance_m")) or 0.0)
+    if not robot_on_goal_side and pre_stage_distance_m < float(trigger_distance_m):
+        return {
+            "active": False,
+            "reason": "baseline_pre_stage_close_enough",
+            "goal_pose": {},
+            "trigger": {
+                "robot_on_goal_side": False,
+                "pre_stage_pose_distance_m": round(pre_stage_distance_m, 6),
+            },
+        }
+
+    robot_x, robot_y, _robot_yaw = robot_xyyaw
+    ball_x, ball_y, _ball_yaw = ball_xy
+    goal_x, goal_y, _goal_yaw = pre_stage_xy
+    push_direction_yaw_deg = float(clean_number(pre_stage_snapshot.get("push_direction_yaw_deg")) or 0.0)
+    push_direction_yaw = math.radians(push_direction_yaw_deg)
+    line_ball_clearance_m = _segment_distance_m(
+        (ball_x, ball_y),
+        (robot_x, robot_y),
+        (goal_x, goal_y),
+    )
+    direct_goal_ball_distance_m = math.hypot(goal_x - ball_x, goal_y - ball_y)
+    needs_fallback = bool(
+        line_ball_clearance_m < float(min_segment_ball_clearance_m)
+        or direct_goal_ball_distance_m < float(min_goal_ball_distance_m)
+    )
+    goal_kind = "direct_pre_stage"
+    if needs_fallback:
+        lateral_signed_m = float(clean_number(pre_stage_snapshot.get("robot_lateral_signed_m")) or 0.0)
+        flank_sign = -1.0 if lateral_signed_m > 0.0 else 1.0
+        if abs(lateral_signed_m) < 1.0e-6 and robot_y < ball_y:
+            flank_sign = -1.0
+        goal_x = (
+            float(pre_stage_xy[0])
+            + (flank_sign * float(fallback_flank_offset_m) * -math.sin(push_direction_yaw))
+            - (float(fallback_behind_bias_m) * math.cos(push_direction_yaw))
+        )
+        goal_y = (
+            float(pre_stage_xy[1])
+            + (flank_sign * float(fallback_flank_offset_m) * math.cos(push_direction_yaw))
+            - (float(fallback_behind_bias_m) * math.sin(push_direction_yaw))
+        )
+        goal_kind = "fallback_flank"
+
+    goal_pose = {
+        "frame_id": "odom",
+        "x": round(float(goal_x), 6),
+        "y": round(float(goal_y), 6),
+        "yaw": round(float(push_direction_yaw), 6),
+        "yaw_deg": round(float(push_direction_yaw_deg), 6),
+        "kind": goal_kind,
+    }
+    return {
+        "active": True,
+        "reason": "goal_side_reacquire" if robot_on_goal_side else "far_pre_stage_reacquire",
+        "goal_pose": goal_pose,
+        "trigger": {
+            "robot_on_goal_side": bool(robot_on_goal_side),
+            "pre_stage_pose_distance_m": round(pre_stage_distance_m, 6),
+            "line_ball_clearance_m": round(float(line_ball_clearance_m), 6),
+            "direct_goal_ball_distance_m": round(float(direct_goal_ball_distance_m), 6),
+            "fallback_selected": bool(needs_fallback),
+        },
+    }
 
 
 def resolve_visit_runtime_state_path(raw_path: str = "") -> Path:
@@ -895,6 +1026,191 @@ class GatherMissionRunner:
         except Exception:
             pass
 
+    def _parse_nav2_reacquire_result(self, output: str, *, rc: int) -> dict[str, Any]:
+        for line in reversed(str(output or "").splitlines()):
+            line = line.strip()
+            if not line.startswith(NAV2_REACQUIRE_RESULT_MARKER):
+                continue
+            raw = line[len(NAV2_REACQUIRE_RESULT_MARKER):].strip()
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                break
+            if isinstance(payload, dict):
+                payload.setdefault("process_returncode", int(rc))
+                return payload
+        return {
+            "dispatch_status": "client_error",
+            "accepted": False,
+            "success": False,
+            "status_code": None,
+            "elapsed_s": 0.0,
+            "error": clean_text(output, "missing_nav2_reacquire_result"),
+            "process_returncode": int(rc),
+        }
+
+    def _dispatch_nav2_reacquire_goal(
+        self,
+        *,
+        compose_project: str,
+        goal_pose: dict[str, Any],
+        timeout_s: float,
+    ) -> dict[str, Any]:
+        gate_stack_container = self._container_id(compose_project, "gate-stack")
+        payload = {
+            "goal_pose": {
+                "frame_id": clean_text(goal_pose.get("frame_id"), "odom"),
+                "x": float(clean_number(goal_pose.get("x")) or 0.0),
+                "y": float(clean_number(goal_pose.get("y")) or 0.0),
+                "yaw": float(clean_number(goal_pose.get("yaw")) or 0.0),
+            },
+            "server_wait_s": float(DEFAULT_NAV2_REACQUIRE_SERVER_WAIT_S),
+            "timeout_s": float(max(timeout_s, 0.1)),
+        }
+        script = (
+            "set -eo pipefail\n"
+            "set +u\n"
+            "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash\n"
+            "if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi\n"
+            "set -u\n"
+            f"export NAV2_REACQUIRE_PAYLOAD={shlex.quote(json.dumps(payload, separators=(',', ':')))}\n"
+            r"""python3 - <<'PY'
+import json
+import math
+import os
+import time
+
+import rclpy
+from action_msgs.msg import GoalStatus
+from geometry_msgs.msg import PoseStamped
+from nav2_msgs.action import NavigateToPose
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from rclpy.parameter import Parameter
+
+MARKER = "NAV2_REACQUIRE_RESULT="
+
+
+def yaw_to_quaternion(yaw):
+    half = 0.5 * float(yaw)
+    return 0.0, 0.0, math.sin(half), math.cos(half)
+
+
+def wait_future(node, future, timeout_s):
+    deadline = time.monotonic() + max(float(timeout_s), 0.1)
+    while time.monotonic() < deadline and rclpy.ok():
+        if future.done():
+            return True
+        rclpy.spin_once(node, timeout_sec=0.1)
+    return bool(future.done())
+
+
+def emit(payload):
+    print(MARKER + json.dumps(payload, sort_keys=True), flush=True)
+
+
+payload = json.loads(os.environ["NAV2_REACQUIRE_PAYLOAD"])
+goal_pose = payload["goal_pose"]
+started = time.monotonic()
+rclpy.init()
+node = Node("gather_nav2_reacquire_goal_client")
+node.set_parameters([Parameter("use_sim_time", Parameter.Type.BOOL, True)])
+client = ActionClient(node, NavigateToPose, "/navigate_to_pose")
+try:
+    server_ready = bool(client.wait_for_server(timeout_sec=max(float(payload["server_wait_s"]), 0.1)))
+    if not server_ready:
+        emit({
+            "dispatch_status": "server_unavailable",
+            "accepted": False,
+            "success": False,
+            "status_code": int(GoalStatus.STATUS_UNKNOWN),
+            "elapsed_s": round(time.monotonic() - started, 6),
+            "error": "nav2_action_server_unavailable",
+        })
+    else:
+        goal = NavigateToPose.Goal()
+        pose = PoseStamped()
+        pose.header.frame_id = str(goal_pose.get("frame_id") or "odom")
+        pose.header.stamp = node.get_clock().now().to_msg()
+        pose.pose.position.x = float(goal_pose["x"])
+        pose.pose.position.y = float(goal_pose["y"])
+        pose.pose.position.z = 0.0
+        qx, qy, qz, qw = yaw_to_quaternion(float(goal_pose["yaw"]))
+        pose.pose.orientation.x = qx
+        pose.pose.orientation.y = qy
+        pose.pose.orientation.z = qz
+        pose.pose.orientation.w = qw
+        goal.pose = pose
+        goal.behavior_tree = ""
+        send_future = client.send_goal_async(goal)
+        if not wait_future(node, send_future, timeout_s=5.0):
+            emit({
+                "dispatch_status": "send_goal_timeout",
+                "accepted": False,
+                "success": False,
+                "status_code": int(GoalStatus.STATUS_UNKNOWN),
+                "elapsed_s": round(time.monotonic() - started, 6),
+                "error": "send_goal_timeout",
+            })
+        else:
+            goal_handle = send_future.result()
+            if goal_handle is None:
+                emit({
+                    "dispatch_status": "send_goal_result_none",
+                    "accepted": False,
+                    "success": False,
+                    "status_code": int(GoalStatus.STATUS_UNKNOWN),
+                    "elapsed_s": round(time.monotonic() - started, 6),
+                    "error": "send_goal_result_none",
+                })
+            elif not goal_handle.accepted:
+                emit({
+                    "dispatch_status": "goal_rejected",
+                    "accepted": False,
+                    "success": False,
+                    "status_code": int(GoalStatus.STATUS_REJECTED),
+                    "elapsed_s": round(time.monotonic() - started, 6),
+                    "error": "goal_rejected",
+                })
+            else:
+                result_future = goal_handle.get_result_async()
+                if not wait_future(node, result_future, timeout_s=float(payload["timeout_s"])):
+                    try:
+                        goal_handle.cancel_goal_async()
+                    except Exception:
+                        pass
+                    emit({
+                        "dispatch_status": "goal_result_timeout",
+                        "accepted": True,
+                        "success": False,
+                        "status_code": int(GoalStatus.STATUS_ABORTED),
+                        "elapsed_s": round(time.monotonic() - started, 6),
+                        "error": "goal_result_timeout",
+                    })
+                else:
+                    result = result_future.result()
+                    status_code = int(result.status) if result is not None else int(GoalStatus.STATUS_UNKNOWN)
+                    success = status_code == int(GoalStatus.STATUS_SUCCEEDED)
+                    emit({
+                        "dispatch_status": "goal_succeeded" if success else "goal_finished",
+                        "accepted": True,
+                        "success": bool(success),
+                        "status_code": status_code,
+                        "elapsed_s": round(time.monotonic() - started, 6),
+                        "error": "" if success else f"goal_status_{status_code}",
+                    })
+finally:
+    node.destroy_node()
+    if rclpy.ok():
+        rclpy.shutdown()
+PY
+"""
+        )
+        rc, output = self._docker_exec(gate_stack_container, script)
+        result = self._parse_nav2_reacquire_result(output, rc=rc)
+        result.setdefault("goal_pose", dict(goal_pose))
+        return result
+
     def _robot_pose_components(self, state: dict[str, Any]) -> tuple[float, float, float]:
         belief = state.get("belief", {}) if isinstance(state.get("belief"), dict) else {}
         robot_pose = belief.get("latest_robot_pose", {}) if isinstance(belief.get("latest_robot_pose"), dict) else {}
@@ -1576,6 +1892,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         short_horizon_best_progress_score: float | None = None
         short_horizon_last_progress_monotonic = pre_stage_started_monotonic
         short_horizon_strategy_started_monotonic = pre_stage_started_monotonic
+        nav2_reacquire_attempted = False
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -1619,6 +1936,165 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     pre_stage_ready_started_monotonic = None
                 if bool(pre_stage_snapshot.get("entered_goal_side_before_capture", False)):
                     last_failure_reason = "entered_goal_side_before_capture"
+            if (
+                self.gather_control_family == NAV2_REACQUIRE_CONTROL_FAMILY
+                and not nav2_reacquire_attempted
+                and robot_pose
+                and ball_pose
+                and isinstance(pre_stage_snapshot, dict)
+            ):
+                nav2_plan = compute_nav2_reacquire_pre_stage_goal(
+                    robot_pose,
+                    ball_pose or {},
+                    pre_stage_snapshot,
+                )
+                if bool(nav2_plan.get("active", False)):
+                    nav2_reacquire_attempted = True
+                    goal_pose = (
+                        dict(nav2_plan.get("goal_pose", {}))
+                        if isinstance(nav2_plan.get("goal_pose"), dict)
+                        else {}
+                    )
+                    trigger = (
+                        dict(nav2_plan.get("trigger", {}))
+                        if isinstance(nav2_plan.get("trigger"), dict)
+                        else {}
+                    )
+                    compose_project = clean_text(_dashboard_state.get("compose_project"))
+                    self._set_manual_drive(
+                        enabled=False,
+                        mode="nav2_reacquire_goal",
+                        rationale="Nav2 owns the coarse behind-ball reacquire waypoint for this pre-stage slice.",
+                    )
+                    self._update_gather_runtime_state(
+                        latest_feedback=f"Nav2 reacquiring the behind-ball pre-stage pose for {target.label}.",
+                        latest_control_command={
+                            "mode": "nav2_reacquire_goal",
+                            "linear_x": 0.0,
+                            "angular_z": 0.0,
+                            "target_speed_scale": 0.0,
+                            "rationale": "Manual gather drive disabled while Nav2 owns the pre-stage reacquire waypoint.",
+                        },
+                    )
+                    append_jsonl(
+                        state_history_path,
+                        {
+                            "generated_utc": utc_now(),
+                            "phase": "pre_stage",
+                            "event_type": "nav2_reacquire_dispatch",
+                            "attempt": int(attempt_index),
+                            "attempt_kind": str(attempt_kind),
+                            "target_id": target.id,
+                            "robot_pose": robot_pose,
+                            "ball_pose": ball_pose,
+                            "pre_stage": pre_stage_snapshot or {},
+                            "pre_stage_at_dispatch": pre_stage_snapshot or {},
+                            "nav2_goal_pose": goal_pose,
+                            "nav2_reacquire_trigger": trigger,
+                            "nav2_dispatch_status": "planned",
+                            "selected_command": {},
+                            **self._control_debug_fields(
+                                strategy_name="nav2_reacquire",
+                                objective_name=clean_text(goal_pose.get("kind"), "pre_stage_waypoint"),
+                            ),
+                        },
+                    )
+                    remaining_timeout_s = max(0.1, deadline - time.monotonic())
+                    nav2_timeout_s = min(DEFAULT_NAV2_REACQUIRE_GOAL_TIMEOUT_S, remaining_timeout_s)
+                    if compose_project:
+                        try:
+                            nav2_result = self._dispatch_nav2_reacquire_goal(
+                                compose_project=compose_project,
+                                goal_pose=goal_pose,
+                                timeout_s=nav2_timeout_s,
+                            )
+                        except Exception as exc:
+                            nav2_result = {
+                                "dispatch_status": "client_error",
+                                "accepted": False,
+                                "success": False,
+                                "status_code": None,
+                                "elapsed_s": 0.0,
+                                "error": str(exc),
+                            }
+                    else:
+                        nav2_result = {
+                            "dispatch_status": "missing_compose_project",
+                            "accepted": False,
+                            "success": False,
+                            "status_code": None,
+                            "elapsed_s": 0.0,
+                            "error": "dashboard_state_missing_compose_project",
+                        }
+                    completion_dashboard_state, completion_robot_pose, completion_ball_pose = self._control_loop_state(
+                        session_id=session_id,
+                        target=target,
+                    )
+                    _ = completion_dashboard_state
+                    completion_snapshot = (
+                        pre_stage_arrival_snapshot(completion_robot_pose, completion_ball_pose or {}, zone=self.zone)
+                        if completion_robot_pose and completion_ball_pose
+                        else None
+                    )
+                    append_jsonl(
+                        state_history_path,
+                        {
+                            "generated_utc": utc_now(),
+                            "phase": "pre_stage",
+                            "event_type": "nav2_reacquire_complete",
+                            "attempt": int(attempt_index),
+                            "attempt_kind": str(attempt_kind),
+                            "target_id": target.id,
+                            "robot_pose": completion_robot_pose,
+                            "ball_pose": completion_ball_pose,
+                            "pre_stage": completion_snapshot or {},
+                            "pre_stage_at_dispatch": pre_stage_snapshot or {},
+                            "pre_stage_at_completion": completion_snapshot or {},
+                            "nav2_goal_pose": goal_pose,
+                            "nav2_reacquire_trigger": trigger,
+                            "nav2_dispatch_status": clean_text(nav2_result.get("dispatch_status"), "unknown"),
+                            "nav2_result": nav2_result,
+                            "selected_command": {},
+                            **self._control_debug_fields(
+                                strategy_name="nav2_reacquire",
+                                objective_name=clean_text(goal_pose.get("kind"), "pre_stage_waypoint"),
+                            ),
+                        },
+                    )
+                    if not bool(nav2_result.get("success", False)):
+                        pre_stage_time_s = time.monotonic() - pre_stage_started_monotonic
+                        failure_reason = (
+                            "nav2_reacquire_timeout"
+                            if clean_text(nav2_result.get("dispatch_status")) == "goal_result_timeout"
+                            else "nav2_reacquire_failed"
+                        )
+                        self._set_manual_drive(
+                            enabled=False,
+                            mode=failure_reason,
+                            rationale="Nav2 pre-stage reacquire did not complete; stopping before baseline gather resumes.",
+                        )
+                        failure_payload = {
+                            "failure_reason": failure_reason,
+                            "failure_stage": "pre_stage",
+                            "pre_stage_pose_world": pre_stage_pose_world,
+                            "pre_stage_pose_reached": bool(pre_stage_pose_reached_once),
+                            "pre_stage_time_s": round(pre_stage_time_s, 6),
+                            "pre_stage_handoff_pass": False,
+                            "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
+                            "approach_failure_reason": last_failure_reason,
+                            "entered_goal_side_before_capture": last_failure_reason == "entered_goal_side_before_capture",
+                            "nav2_reacquire_goal_pose": goal_pose,
+                            "nav2_reacquire_result": nav2_result,
+                        }
+                        write_json(mission_root / f"{target.id}_{failure_reason}.json", failure_payload)
+                        return False, failure_payload
+                    self._set_manual_drive(
+                        enabled=False,
+                        mode="nav2_reacquire_complete",
+                        rationale="Nav2 pre-stage reacquire completed; returning control to baseline gather staging.",
+                    )
+                    time.sleep(self.args.poll_s)
+                    continue
             if (
                 self.gather_control_family in {"short_horizon_v1", "short_horizon_v2"}
                 and robot_pose
@@ -1812,6 +2288,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "pre_stage_handoff_pass": False,
             "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
             "approach_failure_reason": last_failure_reason,
+            "entered_goal_side_before_capture": last_failure_reason == "entered_goal_side_before_capture",
         }
         write_json(mission_root / f"{target.id}_pre_stage_timeout.json", timeout_payload)
         return False, timeout_payload

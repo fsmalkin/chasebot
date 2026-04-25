@@ -25,6 +25,18 @@ def test_parse_args_allows_region_funnel_v1(monkeypatch):
     assert args.gather_control_family == "region_funnel_v1"
 
 
+def test_parse_args_allows_nav2_reacquire_v1(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        ["repeatability", "--gather-control-family", "nav2_reacquire_v1"],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.gather_control_family == "nav2_reacquire_v1"
+
+
 def test_ensure_environment_ready_noops_when_dashboard_already_ready(monkeypatch):
     calls: list[tuple[str, str]] = []
 
@@ -384,6 +396,26 @@ def test_approach_side_rollup_uses_latest_retry_progress_for_top_level_counts():
     assert rollup["stage_time_avg_s"] == 1.5
     assert rollup["latest_approach_progress_pass_count"] == 0
     assert rollup["latest_approach_capture_entry_goal_side_entry_count"] == 0
+
+
+def test_approach_side_rollup_infers_goal_side_entry_from_approach_reason():
+    runs = [
+        {
+            "pass": False,
+            "approach_failure_reason": "entered_goal_side_before_capture",
+            "pre_stage_pose_reached": False,
+            "pre_stage_handoff_pass": False,
+            "pre_stage_time_s": 30.0,
+        }
+    ]
+
+    rollup = repeatability_runner._approach_side_rollup(runs)
+
+    assert rollup["fresh_attempt_capture_entry_goal_side_entry_count"] == 1
+    assert rollup["latest_approach_capture_entry_goal_side_entry_count"] == 1
+    assert rollup["entered_goal_side_before_capture_count"] == 1
+    assert rollup["fresh_attempt_approach_reasons"] == ["entered_goal_side_before_capture"]
+    assert rollup["approach_side_reasons"] == ["entered_goal_side_before_capture"]
 
 
 def test_enrich_run_with_approach_side_fields_preserves_summary_fresh_attempt(tmp_path: Path):

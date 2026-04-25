@@ -19,6 +19,10 @@ PLUS45_BALL_POSE = {"x": 4.555261, "y": 2.155261, "z": 0.05}
 POST_YAW_GATE_POSE = {"x": -0.097434, "y": 0.157671, "yaw": -2.01106}
 MID_STALLED_POSE = {"x": 0.308136, "y": 0.436242, "yaw": -2.688203}
 LATE_STALLED_POSE = {"x": 1.132622, "y": 0.786392, "yaw": -2.867772}
+ZERO_PRECONTACT_BALL_POSE = {"x": 5.481533, "y": 0.021912, "z": 0.05}
+ZERO_PRECONTACT_ROBOT_POSE = {"x": 5.402071, "y": 0.010781, "yaw": -2.910805}
+ZERO_RELEASED_BALL_POSE = {"x": 5.668962, "y": 0.142502, "z": 0.05}
+ZERO_RELEASED_ROBOT_POSE = {"x": 5.682967, "y": 0.054478, "yaw": 2.88708}
 
 
 def _decision(
@@ -86,6 +90,43 @@ def test_region_funnel_uses_region_objective_before_scripted_stall_threshold():
     assert decision.strategy_name in {"funnel_reacquire", "funnel_reverse_clear"}
     assert decision.command is not None
     _assert_bounded_command(decision.command)
+
+
+def test_region_funnel_releases_zero_lane_before_pre_stage_contact():
+    snapshot = pre_stage_arrival_snapshot(ZERO_PRECONTACT_ROBOT_POSE, ZERO_PRECONTACT_BALL_POSE, zone=ZONE)
+    decision = region_funnel.decide_region_funnel_pre_stage_command(
+        ZERO_PRECONTACT_ROBOT_POSE,
+        ZERO_PRECONTACT_BALL_POSE,
+        zone=ZONE,
+        snapshot=snapshot,
+        previous_strategy_name="funnel_reverse_clear",
+        stall_s=1.5,
+    )
+
+    assert snapshot is not None
+    assert snapshot["entered_goal_side_before_capture"] is True
+    assert snapshot["robot_longitudinal_projection_m"] < 0.15
+    assert snapshot["pre_stage_pose_reached"] is False
+    assert decision.active is False
+    assert decision.command is None
+
+
+def test_region_funnel_releases_back_to_baseline_once_no_longer_goal_side():
+    snapshot = pre_stage_arrival_snapshot(ZERO_RELEASED_ROBOT_POSE, ZERO_RELEASED_BALL_POSE, zone=ZONE)
+    decision = region_funnel.decide_region_funnel_pre_stage_command(
+        ZERO_RELEASED_ROBOT_POSE,
+        ZERO_RELEASED_BALL_POSE,
+        zone=ZONE,
+        snapshot=snapshot,
+        previous_strategy_name="scripted_reflank_left",
+        stall_s=2.0,
+    )
+
+    assert snapshot is not None
+    assert snapshot["robot_on_goal_side"] is False
+    assert snapshot["pre_stage_pose_reached"] is False
+    assert decision.active is False
+    assert decision.command is None
 
 
 def test_region_funnel_scripted_fallback_is_symmetric_for_plus45_and_minus45():

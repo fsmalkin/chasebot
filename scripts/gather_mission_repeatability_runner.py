@@ -27,7 +27,13 @@ from llm_supervisor_core import utc_now
 from llm_supervisor_core import write_json
 
 
-ALLOWED_GATHER_CONTROL_FAMILIES = ("baseline", "short_horizon_v1", "short_horizon_v2", "region_funnel_v1")
+ALLOWED_GATHER_CONTROL_FAMILIES = (
+    "baseline",
+    "short_horizon_v1",
+    "short_horizon_v2",
+    "region_funnel_v1",
+    "nav2_reacquire_v1",
+)
 
 
 def current_utc_stamp() -> str:
@@ -167,6 +173,10 @@ def _clean_text(value: object, default: str = "") -> str:
         return default
     text = str(value).strip()
     return text if text else default
+
+
+def _is_goal_side_reason(value: object) -> bool:
+    return _clean_text(value) == "entered_goal_side_before_capture"
 
 
 def _float_value(value: object, *, default: float = 0.0, allow_none: bool = False) -> float | None:
@@ -393,6 +403,24 @@ def _approach_progress_from_sources(
             fallback.get("approach_failure_reason"),
             default=legacy_reason,
         )
+    if not entered_goal_side_before_capture:
+        reason_candidates = [
+            explicit_capture_entry.get("failure_reason"),
+            explicit_capture_entry.get("reason"),
+            explicit.get("reason"),
+            explicit.get("approach_failure_reason"),
+            capture_entry_failure_reason,
+            overall_reason,
+        ]
+        if not explicit:
+            reason_candidates.extend(
+                [
+                    merged.get("approach_failure_reason"),
+                    fallback.get("approach_failure_reason"),
+                    legacy_reason,
+                ]
+            )
+        entered_goal_side_before_capture = any(_is_goal_side_reason(value) for value in reason_candidates)
 
     normalized = dict(explicit)
     normalized["pass"] = overall_pass

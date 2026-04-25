@@ -441,6 +441,7 @@ Work:
      - `region_funnel_v1`: region or funnel targets that avoid brittle exact `pre_stage` points
      - explicit scripted maneuvers such as back up, arc around, and re-approach when needed
    - ROS-native local-planner branch:
+     - `nav2_reacquire_v1`: direct bounded `NavigateToPose` pre-stage reacquisition before handing back to baseline staging
      - docking-style local staging / recovery
      - MPPI-style local recovery
    - learned maneuver selector branch:
@@ -506,8 +507,14 @@ Current direction update:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
 2. the next milestone is no longer "build `short_horizon_v3`"; it is "compare multiple bounded gather-control alternatives on end-to-end task performance plus the known hard-case stress slice"
 3. the project should now search more aggressively for a better bounded gather-control approach rather than assuming the next result must come from one helper-only branch or one named recovery strategy
-4. `region_funnel_v1` is the first named region/funnel candidate lane for that comparison; it should be run through the goal-side matrix with `-GatherControlFamily region_funnel_v1` and then through portfolio stress ingestion before any promotion discussion
-5. the preserved helper contract lane is still not the next promotion path:
+4. `region_funnel_v1` is now a failed experimental formulation, not a portfolio candidate:
+   - repair smoke `artifacts/session/live_region_funnel_v1_zero_repair_20260424/gather_goal_side_matrix/campaign_summary.json` kept fresh `zero` and `plus45` blocked at pre-stage handoff
+   - do not feed `region_funnel_v1` into portfolio stress ingestion until a repaired branch first clears fresh-attempt `zero` and `plus45` pre-stage handoff
+5. `nav2_reacquire_v1` is implemented but blocked as the first narrow ROS-native candidate:
+   - smoke `artifacts/session/live_nav2_reacquire_v1_matrix_smoke_20260424/gather_goal_side_matrix/campaign_summary.json` kept fresh `zero` and `plus45` blocked at pre-stage handoff
+   - accepted Nav2 goals timed out instead of reaching the handoff pose, so no portfolio/stress ingestion was produced
+   - keep the branch available as evidence, but repair/requalify it before any promotion discussion
+6. the preserved helper contract lane is still not the next promotion path:
    - `helper_turn_authority_contract_audit` returned `stop_and_branch` with blocking_reason=`sign_parity`
    - `manual_drive_sign_parity_audit` now points to the `probe_odom_world_sign_chain` runtime probe wrapper (`scripts/run_probe_odom_world_sign_chain.ps1`)
    - the refreshed April 21, 2026 provenance rerun now lands in `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260421_provenance_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`

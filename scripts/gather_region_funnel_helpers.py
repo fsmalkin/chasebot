@@ -33,6 +33,9 @@ DEFAULT_REGION_FUNNEL_FAR_PROJECTION_M = 1.75
 DEFAULT_REGION_FUNNEL_WIDE_LATERAL_M = 0.75
 DEFAULT_REGION_FUNNEL_COMMIT_S = 0.8
 DEFAULT_REGION_FUNNEL_MAX_ACTIVE_YAW_ERROR_DEG = 45.0
+DEFAULT_REGION_FUNNEL_MIN_ACTIVE_PROJECTION_M = 0.15
+DEFAULT_REGION_FUNNEL_BASELINE_RELEASE_DISTANCE_M = 1.25
+DEFAULT_REGION_FUNNEL_BASELINE_RELEASE_LATERAL_M = 0.35
 
 REGION_FUNNEL_STRATEGIES = {"funnel_reacquire", "funnel_reverse_clear"}
 SCRIPTED_REGION_FUNNEL_FALLBACK_STRATEGIES = {"scripted_reflank_left", "scripted_reflank_right"}
@@ -106,7 +109,19 @@ def _active_snapshot(
         return None
     if bool(current_snapshot.get("pre_stage_pose_reached", False)):
         return None
-    if float(current_snapshot.get("yaw_error_deg", 0.0) or 0.0) > DEFAULT_REGION_FUNNEL_MAX_ACTIVE_YAW_ERROR_DEG:
+    yaw_error_deg = float(current_snapshot.get("yaw_error_deg", 0.0) or 0.0)
+    if yaw_error_deg > DEFAULT_REGION_FUNNEL_MAX_ACTIVE_YAW_ERROR_DEG:
+        return None
+    projection_m = float(current_snapshot.get("robot_longitudinal_projection_m", 0.0) or 0.0)
+    lateral_error_m = float(current_snapshot.get("robot_lateral_error_m", 0.0) or 0.0)
+    distance_m = float(current_snapshot.get("pre_stage_pose_distance_m", 0.0) or 0.0)
+    if projection_m <= 0.0:
+        return None
+    if (
+        projection_m <= DEFAULT_REGION_FUNNEL_MIN_ACTIVE_PROJECTION_M
+        and distance_m <= DEFAULT_REGION_FUNNEL_BASELINE_RELEASE_DISTANCE_M
+        and lateral_error_m <= DEFAULT_REGION_FUNNEL_BASELINE_RELEASE_LATERAL_M
+    ):
         return None
     return current_snapshot
 
@@ -204,11 +219,7 @@ def _candidate_commands(
         ("funnel_reverse_clear", REGION_FUNNEL_OBJECTIVE, reverse_clear, None),
     ]
 
-    fallback_needed = (
-        float(stall_s) >= DEFAULT_REGION_FUNNEL_STALL_FALLBACK_S
-        or projection_m >= DEFAULT_REGION_FUNNEL_FAR_PROJECTION_M
-        or abs(lateral_signed_m) >= DEFAULT_REGION_FUNNEL_WIDE_LATERAL_M
-    )
+    fallback_needed = float(stall_s) >= DEFAULT_REGION_FUNNEL_STALL_FALLBACK_S
     if fallback_needed:
         left_hard = _bounded_command(
             strategy_name="scripted_reflank_left",
