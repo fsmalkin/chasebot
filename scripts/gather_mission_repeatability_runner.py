@@ -33,6 +33,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "short_horizon_v2",
     "region_funnel_v1",
     "nav2_reacquire_v1",
+    "constrained_local_planner_v1",
 )
 
 

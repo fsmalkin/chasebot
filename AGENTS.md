@@ -180,6 +180,12 @@ Gather ROS-native reacquire experimental branch status:
 - Smoke: `artifacts/session/live_nav2_reacquire_v1_matrix_smoke_20260424/gather_goal_side_matrix/campaign_summary.json`
 - Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff, Nav2 accepted the reacquire goals but timed out, and no portfolio/stress refresh was produced for this branch.
 
+Gather constrained-local planner experimental branch status:
+- Candidate: `constrained_local_planner_v1`
+- Scope: one-ball `pre_stage` / behind-ball reacquisition only; bounded local rollout candidates reject predicted ball contact and release back to baseline pre-stage/stage control.
+- Smoke: `artifacts/session/live_constrained_local_planner_v1_matrix_smoke_20260425/gather_goal_side_matrix/campaign_summary.json`
+- Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff, so no portfolio/stress refresh was produced for this branch.
+
 ## Testing
 
 ### Verification levels

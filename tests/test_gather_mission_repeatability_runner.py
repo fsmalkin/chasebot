@@ -37,6 +37,18 @@ def test_parse_args_allows_nav2_reacquire_v1(monkeypatch):
     assert args.gather_control_family == "nav2_reacquire_v1"
 
 
+def test_parse_args_allows_constrained_local_planner_v1(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        ["repeatability", "--gather-control-family", "constrained_local_planner_v1"],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.gather_control_family == "constrained_local_planner_v1"
+
+
 def test_ensure_environment_ready_noops_when_dashboard_already_ready(monkeypatch):
     calls: list[tuple[str, str]] = []
 

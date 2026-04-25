@@ -30,6 +30,8 @@ from llm_supervisor_core import http_json
 from llm_supervisor_core import read_json
 from llm_supervisor_core import utc_now
 from llm_supervisor_core import write_json
+from gather_constrained_local_planner_helpers import CONSTRAINED_LOCAL_PLANNER_CONTROL_FAMILY
+from gather_constrained_local_planner_helpers import decide_constrained_local_pre_stage_command
 from gather_manager_helpers import GatherManagerState
 from gather_manager_helpers import decide_gather_manager_directive
 from gather_region_funnel_helpers import decide_region_funnel_pre_stage_command
@@ -99,6 +101,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "short_horizon_v2",
     "region_funnel_v1",
     "nav2_reacquire_v1",
+    "constrained_local_planner_v1",
 )
 NAV2_REACQUIRE_CONTROL_FAMILY = "nav2_reacquire_v1"
 DEFAULT_NAV2_REACQUIRE_TRIGGER_DISTANCE_M = 1.20
@@ -1893,6 +1896,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         short_horizon_last_progress_monotonic = pre_stage_started_monotonic
         short_horizon_strategy_started_monotonic = pre_stage_started_monotonic
         nav2_reacquire_attempted = False
+        constrained_local_previous_ball_pose: dict[str, Any] | None = None
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -1916,7 +1920,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             pre_stage_projected_projection_gain: float | None = None
             pre_stage_projected_lateral_gain: float | None = None
             pre_stage_projected_distance_gain: float | None = None
+            constrained_local_debug_fields: dict[str, Any] = {}
             pre_stage_ready_signal = False
+            constrained_local_ball_motion_m = (
+                pose_delta_m(constrained_local_previous_ball_pose, ball_pose)
+                if constrained_local_previous_ball_pose is not None and ball_pose
+                else None
+            )
             if isinstance(pre_stage_snapshot, dict):
                 pre_stage_pose_world = (
                     dict(pre_stage_snapshot.get("pre_stage_pose_world", {}))
@@ -2189,6 +2199,74 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         short_horizon_strategy_started_monotonic = now_monotonic
                     short_horizon_strategy_name = pre_stage_strategy_name
                     short_horizon_objective_name = pre_stage_objective_name
+            if (
+                self.gather_control_family == CONSTRAINED_LOCAL_PLANNER_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+                and isinstance(pre_stage_snapshot, dict)
+            ):
+                decision = decide_constrained_local_pre_stage_command(
+                    robot_pose,
+                    ball_pose or {},
+                    zone=self.zone,
+                    snapshot=pre_stage_snapshot,
+                    previous_strategy_name=short_horizon_strategy_name,
+                    stall_s=max(0.0, now_monotonic - short_horizon_last_progress_monotonic),
+                    strategy_elapsed_s=max(0.0, now_monotonic - short_horizon_strategy_started_monotonic),
+                    ball_motion_m=constrained_local_ball_motion_m,
+                )
+                constrained_local_debug_fields = {
+                    "local_planner_candidate_count": int(getattr(decision, "candidate_count", 0) or 0),
+                    "local_planner_accepted_count": int(getattr(decision, "accepted_count", 0) or 0),
+                    "local_planner_rejected_count": int(getattr(decision, "rejected_count", 0) or 0),
+                    "local_planner_rejection_reasons": list(getattr(decision, "rejection_reasons", ()) or ()),
+                    "local_planner_projected_pre_stage": (
+                        dict(getattr(decision, "projected_snapshot", {}) or {})
+                        if isinstance(getattr(decision, "projected_snapshot", None), dict)
+                        else {}
+                    ),
+                    "local_planner_release_reason": str(getattr(decision, "release_reason", "") or ""),
+                    "local_planner_min_ball_clearance_m": clean_number(
+                        getattr(decision, "min_ball_clearance_m", None)
+                    ),
+                    "local_planner_ball_motion_m": clean_number(getattr(decision, "ball_motion_m", None)),
+                }
+                if (
+                    decision is not None
+                    and bool(getattr(decision, "active", False))
+                    and getattr(decision, "command", None) is not None
+                ):
+                    pre_stage_command = decision.command
+                    pre_stage_strategy_name = str(getattr(decision, "strategy_name", "") or "")
+                    pre_stage_objective_name = str(getattr(decision, "objective_name", "") or "")
+                    pre_stage_progress_score = clean_number(getattr(decision, "progress_score", None))
+                    pre_stage_projected_projection_gain = clean_number(
+                        getattr(decision, "projected_projection_gain", None)
+                    )
+                    pre_stage_projected_lateral_gain = clean_number(
+                        getattr(decision, "projected_lateral_gain", None)
+                    )
+                    pre_stage_projected_distance_gain = clean_number(
+                        getattr(decision, "projected_distance_gain", None)
+                    )
+                    if (
+                        pre_stage_progress_score is not None
+                        and (
+                            short_horizon_best_progress_score is None
+                            or pre_stage_progress_score > short_horizon_best_progress_score + 1.0e-6
+                        )
+                    ):
+                        short_horizon_best_progress_score = pre_stage_progress_score
+                        short_horizon_last_progress_monotonic = now_monotonic
+                    pre_stage_stall_s = max(0.0, now_monotonic - short_horizon_last_progress_monotonic)
+                    if pre_stage_strategy_name != short_horizon_strategy_name:
+                        short_horizon_strategy_started_monotonic = now_monotonic
+                    short_horizon_strategy_name = pre_stage_strategy_name
+                    short_horizon_objective_name = pre_stage_objective_name
+                elif str(getattr(decision, "release_reason", "") or ""):
+                    short_horizon_strategy_name = ""
+                    short_horizon_objective_name = ""
+                    short_horizon_strategy_started_monotonic = now_monotonic
             if pre_stage_command is not None:
                 latest_pre_capture_command_mode = str(pre_stage_command.mode)
             pre_stage_manager_decision = decide_gather_manager_directive(
@@ -2241,8 +2319,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         projected_lateral_gain=pre_stage_projected_lateral_gain,
                         projected_distance_gain=pre_stage_projected_distance_gain,
                     ),
+                    **constrained_local_debug_fields,
                 },
             )
+            constrained_local_previous_ball_pose = dict(ball_pose or {}) if ball_pose else constrained_local_previous_ball_pose
             if (
                 pre_stage_manager_decision.directive == "stabilize_stage"
                 and
