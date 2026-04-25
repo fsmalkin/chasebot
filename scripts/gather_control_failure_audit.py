@@ -26,9 +26,17 @@ FAILURE_LABELS = (
     "ball_contact_during_reacquire",
     "post_reacquire_not_handoff_ready",
     "stage_timeout_after_prestage",
+    "local_planner_progress_insufficient",
+    "local_planner_release_not_reached",
+    "local_planner_goal_side_persistent",
 )
 BLOCKED_CANDIDATE_BRANCHES = {"region_funnel_v1", "nav2_reacquire_v1"}
+CONSTRAINED_LOCAL_PLANNER_BRANCH = "constrained_local_planner_v1"
+BLOCKED_CURRENT_CANDIDATE_BRANCHES = BLOCKED_CANDIDATE_BRANCHES | {CONSTRAINED_LOCAL_PLANNER_BRANCH}
 RECOMMENDED_RETIRE_AND_DESIGN = "retire_current_candidates_and_design_constrained_local_planner_branch"
+RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS = (
+    "retire_blocked_candidates_and_define_next_reacquire_architecture_requirements"
+)
 BALL_DRIFT_CONTACT_THRESHOLD_M = 0.05
 
 
@@ -136,6 +144,14 @@ def _ordered_case_ids(cases: list[dict[str, Any]]) -> list[str]:
     by_id = {str(case.get("case_id", "") or ""): case for case in cases}
     ordered = [case_id for case_id in (*PRIMARY_CASE_IDS, *SECONDARY_CASE_IDS) if case_id in by_id]
     ordered.extend(case_id for case_id in by_id if case_id and case_id not in ordered)
+    return ordered
+
+
+def _ordered_unique(values: list[str]) -> list[str]:
+    ordered: list[str] = []
+    for value in values:
+        if value and value not in ordered:
+            ordered.append(value)
     return ordered
 
 
@@ -303,13 +319,144 @@ def _nav2_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _snapshot_number(snapshot: dict[str, Any], key: str) -> float | None:
+    return _finite_float(_dict_value(snapshot).get(key))
+
+
+def _first_number(values: list[float | None]) -> float | None:
+    for value in values:
+        if value is not None:
+            return float(value)
+    return None
+
+
+def _last_number(values: list[float | None]) -> float | None:
+    for value in reversed(values):
+        if value is not None:
+            return float(value)
+    return None
+
+
+def _observed_reduction(values: list[float | None]) -> float | None:
+    first = _first_number(values)
+    last = _last_number(values)
+    if first is None or last is None:
+        return None
+    return round(first - last, 6)
+
+
+def _max_number(values: list[float | None]) -> float | None:
+    finite_values = [float(value) for value in values if value is not None]
+    if not finite_values:
+        return None
+    return round(max(finite_values), 6)
+
+
+def _min_number(values: list[float | None]) -> float | None:
+    finite_values = [float(value) for value in values if value is not None]
+    if not finite_values:
+        return None
+    return round(min(finite_values), 6)
+
+
+def _local_planner_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    local_rows = [
+        row
+        for row in rows
+        if row.get("controller_family") == CONSTRAINED_LOCAL_PLANNER_BRANCH
+        or any(str(key).startswith("local_planner_") for key in row)
+    ]
+    active_rows = [
+        row
+        for row in local_rows
+        if str(row.get("objective_name", "") or "") == "constrained_local_planner"
+        or str(_dict_value(row.get("selected_command")).get("mode", "") or "") == "constrained_local_pre_stage"
+        or bool(str(row.get("strategy_name", "") or ""))
+    ]
+    release_reasons = _ordered_unique(
+        [
+            str(row.get("local_planner_release_reason", "") or "")
+            for row in local_rows
+            if str(row.get("local_planner_release_reason", "") or "")
+        ]
+    )
+    rejection_reasons = _ordered_unique(
+        [
+            str(reason)
+            for row in local_rows
+            for reason in _list_value(row.get("local_planner_rejection_reasons"))
+            if str(reason)
+        ]
+    )
+    strategy_counts: dict[str, int] = {}
+    for row in active_rows:
+        strategy_name = str(row.get("strategy_name", "") or "")
+        if strategy_name:
+            strategy_counts[strategy_name] = strategy_counts.get(strategy_name, 0) + 1
+
+    current_snapshots = [_dict_value(row.get("pre_stage")) for row in local_rows]
+    projected_snapshots = [_dict_value(row.get("local_planner_projected_pre_stage")) for row in local_rows]
+    current_goal_side_values = [_boolish(snapshot.get("robot_on_goal_side")) for snapshot in current_snapshots]
+    projected_goal_side_values = [_boolish(snapshot.get("robot_on_goal_side")) for snapshot in projected_snapshots]
+    current_projection_values = [
+        _snapshot_number(snapshot, "robot_longitudinal_projection_m") for snapshot in current_snapshots
+    ]
+    projected_projection_values = [
+        _snapshot_number(snapshot, "robot_longitudinal_projection_m") for snapshot in projected_snapshots
+    ]
+    current_distance_values = [
+        _snapshot_number(snapshot, "pre_stage_pose_distance_m") for snapshot in current_snapshots
+    ]
+    current_lateral_values = [
+        _snapshot_number(snapshot, "robot_lateral_error_m") for snapshot in current_snapshots
+    ]
+    ball_motion_values = [_finite_float(row.get("local_planner_ball_motion_m")) for row in local_rows]
+    clearance_values = [_finite_float(row.get("local_planner_min_ball_clearance_m")) for row in local_rows]
+    return {
+        "local_planner_row_count": len(local_rows),
+        "local_planner_active_row_count": len(active_rows),
+        "local_planner_release_reason_count": len(release_reasons),
+        "local_planner_release_reasons": release_reasons,
+        "local_planner_rejection_reasons": rejection_reasons,
+        "local_planner_strategy_counts": strategy_counts,
+        "local_planner_current_goal_side_row_count": sum(value is True for value in current_goal_side_values),
+        "local_planner_projected_goal_side_row_count": sum(value is True for value in projected_goal_side_values),
+        "local_planner_current_goal_side_last": next(
+            (value for value in reversed(current_goal_side_values) if value is not None),
+            None,
+        ),
+        "local_planner_projected_goal_side_last": next(
+            (value for value in reversed(projected_goal_side_values) if value is not None),
+            None,
+        ),
+        "local_planner_observed_projection_reduction_m": _observed_reduction(current_projection_values),
+        "local_planner_observed_distance_reduction_m": _observed_reduction(current_distance_values),
+        "local_planner_observed_lateral_reduction_m": _observed_reduction(current_lateral_values),
+        "local_planner_projected_projection_min_m": _min_number(projected_projection_values),
+        "local_planner_projected_projection_last_m": _last_number(projected_projection_values),
+        "local_planner_max_projected_projection_gain_m": _max_number(
+            [_finite_float(row.get("projected_projection_gain")) for row in local_rows]
+        ),
+        "local_planner_max_projected_distance_gain_m": _max_number(
+            [_finite_float(row.get("projected_distance_gain")) for row in local_rows]
+        ),
+        "local_planner_max_projected_lateral_gain_m": _max_number(
+            [_finite_float(row.get("projected_lateral_gain")) for row in local_rows]
+        ),
+        "local_planner_max_ball_motion_m": _max_number(ball_motion_values),
+        "local_planner_min_ball_clearance_m": _min_number(clearance_values),
+    }
+
+
 def _case_labels(
     *,
+    branch_name: str,
     case: dict[str, Any],
     fresh: dict[str, Any],
     capture_entry: dict[str, Any],
     mission_verdict: dict[str, Any],
     nav2_debug: dict[str, Any],
+    local_planner_debug: dict[str, Any],
 ) -> list[str]:
     labels: list[str] = []
     handoff_pass = _pre_stage_handoff_pass(case)
@@ -321,8 +468,23 @@ def _case_labels(
         labels.append("nav2_goal_timeout")
     if float(nav2_debug.get("ball_drift_max_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
         labels.append("ball_contact_during_reacquire")
+    if float(local_planner_debug.get("local_planner_max_ball_motion_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
+        labels.append("ball_contact_during_reacquire")
     if int(nav2_debug.get("post_reacquire_not_handoff_ready_count", 0) or 0) > 0:
         labels.append("post_reacquire_not_handoff_ready")
+    if str(branch_name or "") == CONSTRAINED_LOCAL_PLANNER_BRANCH:
+        local_active_count = int(local_planner_debug.get("local_planner_active_row_count", 0) or 0)
+        local_release_count = int(local_planner_debug.get("local_planner_release_reason_count", 0) or 0)
+        if local_active_count > 0 and local_release_count == 0:
+            labels.append("local_planner_release_not_reached")
+        if local_active_count > 0 and _pre_stage_handoff_pass(case) is False:
+            labels.append("local_planner_progress_insufficient")
+        if (
+            local_active_count > 0
+            and _goal_side_count(case, fresh, capture_entry) > 0
+            and int(local_planner_debug.get("local_planner_current_goal_side_row_count", 0) or 0) > 0
+        ):
+            labels.append("local_planner_goal_side_persistent")
 
     latest = _dict_value(_first_run(case).get("latest_approach_progress"))
     latest_pre_stage = _dict_value(latest.get("pre_stage"))
@@ -358,6 +520,7 @@ def build_case_failure_summary(
     if state_history_path is not None:
         state_history_status, state_rows = _load_jsonl(state_history_path)
     nav2_debug = _nav2_debug_summary(state_rows)
+    local_planner_debug = _local_planner_debug_summary(state_rows)
 
     missing_evidence: list[str] = []
     if mission_verdict_status in {"not_referenced", "missing", "unreadable"}:
@@ -366,11 +529,13 @@ def build_case_failure_summary(
         missing_evidence.append(f"state_history_{state_history_status}")
 
     labels = _case_labels(
+        branch_name=branch_name,
         case=case,
         fresh=fresh,
         capture_entry=capture_entry,
         mission_verdict=mission_verdict,
         nav2_debug=nav2_debug,
+        local_planner_debug=local_planner_debug,
     )
     handoff_pass = _pre_stage_handoff_pass(case)
     pose_reached = _pre_stage_pose_reached(case)
@@ -397,6 +562,7 @@ def build_case_failure_summary(
         "state_history_status": state_history_status,
         "missing_evidence": missing_evidence,
         "nav2_debug": nav2_debug,
+        "local_planner_debug": local_planner_debug,
     }
 
 
@@ -461,6 +627,18 @@ def _recommend_next_action(branches: list[dict[str, Any]]) -> tuple[str, list[st
         for branch in branches
         if bool(branch.get("primary_cases_pre_stage_handoff_blocked", False))
     }
+    if (
+        BLOCKED_CURRENT_CANDIDATE_BRANCHES.issubset(branch_names)
+        and BLOCKED_CURRENT_CANDIDATE_BRANCHES.issubset(blocked_branches)
+    ):
+        return (
+            RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS,
+            [
+                "region_funnel_v1_zero_plus45_pre_stage_handoff_blocked",
+                "nav2_reacquire_v1_zero_plus45_pre_stage_handoff_blocked",
+                "constrained_local_planner_v1_zero_plus45_pre_stage_handoff_blocked",
+            ],
+        )
     if BLOCKED_CANDIDATE_BRANCHES.issubset(branch_names) and BLOCKED_CANDIDATE_BRANCHES.issubset(blocked_branches):
         return (
             RECOMMENDED_RETIRE_AND_DESIGN,
@@ -496,7 +674,12 @@ def build_failure_audit_summary(
         )
     labels = [label for label in FAILURE_LABELS if any(label in branch.get("labels", []) for branch in branches)]
     recommended_next_action, blocking_reasons = _recommend_next_action(branches)
-    status = "blocked" if recommended_next_action == RECOMMENDED_RETIRE_AND_DESIGN else "needs_review"
+    status = (
+        "blocked"
+        if recommended_next_action
+        in {RECOMMENDED_RETIRE_AND_DESIGN, RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS}
+        else "needs_review"
+    )
     return {
         "type": "gather_control_failure_audit",
         "generated_utc": utc_now(),

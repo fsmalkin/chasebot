@@ -155,6 +155,48 @@ def test_failure_audit_summarizes_primary_cases_and_fixed_recommendation(tmp_pat
     assert "goal_side_persistent" in region["failure_labels"]
 
 
+def test_failure_audit_recommends_next_architecture_when_all_current_candidates_blocked(tmp_path: Path):
+    region_path = _matrix_summary(
+        tmp_path,
+        "region",
+        family="region_funnel_v1",
+        cases=[
+            _case("zero", mission_root=tmp_path / "region_zero"),
+            _case("plus45", mission_root=tmp_path / "region_plus45"),
+        ],
+    )
+    nav2_path = _matrix_summary(
+        tmp_path,
+        "nav2",
+        family="nav2_reacquire_v1",
+        cases=[
+            _case("zero", mission_root=tmp_path / "nav2_zero"),
+            _case("plus45", mission_root=tmp_path / "nav2_plus45"),
+        ],
+    )
+    constrained_path = _matrix_summary(
+        tmp_path,
+        "constrained",
+        family="constrained_local_planner_v1",
+        cases=[
+            _case("zero", mission_root=tmp_path / "constrained_zero"),
+            _case("plus45", mission_root=tmp_path / "constrained_plus45"),
+        ],
+    )
+
+    summary = audit.build_failure_audit_summary(
+        campaign_id="failure_audit_test",
+        branch_specs=[
+            ("region_funnel_v1", region_path),
+            ("nav2_reacquire_v1", nav2_path),
+            ("constrained_local_planner_v1", constrained_path),
+        ],
+    )
+
+    assert summary["recommended_next_action"] == audit.RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS
+    assert "constrained_local_planner_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
+
+
 def test_nav2_timeout_and_ball_contact_are_extracted_from_state_history(tmp_path: Path):
     mission_root = tmp_path / "nav2_zero"
     _write_jsonl(
@@ -244,6 +286,113 @@ def test_missing_state_history_is_recorded_as_missing_evidence(tmp_path: Path):
     assert case["state_history_status"] == "missing"
     assert "state_history_missing" in case["missing_evidence"]
     assert "nav2_goal_timeout" not in case["failure_labels"]
+
+
+def test_constrained_local_planner_debug_rows_emit_local_failure_labels(tmp_path: Path):
+    mission_root = tmp_path / "constrained_plus45"
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "controller_family": "constrained_local_planner_v1",
+                "objective_name": "constrained_local_planner",
+                "strategy_name": "advance_left",
+                "selected_command": {"mode": "constrained_local_pre_stage"},
+                "local_planner_release_reason": "",
+                "local_planner_ball_motion_m": 0.061,
+                "local_planner_min_ball_clearance_m": 0.72,
+                "local_planner_rejection_reasons": ["deeper_goal_side"],
+                "projected_projection_gain": 0.12,
+                "projected_distance_gain": 0.18,
+                "projected_lateral_gain": 0.03,
+                "pre_stage": {
+                    "robot_on_goal_side": True,
+                    "robot_longitudinal_projection_m": 4.7,
+                    "pre_stage_pose_distance_m": 5.8,
+                    "robot_lateral_error_m": 1.6,
+                },
+                "local_planner_projected_pre_stage": {
+                    "robot_on_goal_side": True,
+                    "robot_longitudinal_projection_m": 4.5,
+                },
+            },
+            {
+                "controller_family": "constrained_local_planner_v1",
+                "objective_name": "constrained_local_planner",
+                "strategy_name": "advance_left",
+                "selected_command": {"mode": "constrained_local_pre_stage"},
+                "local_planner_release_reason": "",
+                "local_planner_ball_motion_m": 0.0,
+                "local_planner_min_ball_clearance_m": 0.71,
+                "pre_stage": {
+                    "robot_on_goal_side": True,
+                    "robot_longitudinal_projection_m": 4.5,
+                    "pre_stage_pose_distance_m": 5.6,
+                    "robot_lateral_error_m": 1.5,
+                },
+                "local_planner_projected_pre_stage": {
+                    "robot_on_goal_side": True,
+                    "robot_longitudinal_projection_m": 4.3,
+                },
+            },
+        ],
+    )
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "constrained",
+        family="constrained_local_planner_v1",
+        cases=[_case("plus45", mission_root=mission_root)],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="constrained_local_planner_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    case = branch["cases"][0]
+
+    assert "local_planner_progress_insufficient" in case["failure_labels"]
+    assert "local_planner_release_not_reached" in case["failure_labels"]
+    assert "local_planner_goal_side_persistent" in case["failure_labels"]
+    assert "ball_contact_during_reacquire" in case["failure_labels"]
+    assert case["local_planner_debug"]["local_planner_active_row_count"] == 2
+    assert case["local_planner_debug"]["local_planner_release_reason_count"] == 0
+    assert case["local_planner_debug"]["local_planner_current_goal_side_row_count"] == 2
+    assert case["local_planner_debug"]["local_planner_observed_projection_reduction_m"] == 0.2
+    assert case["local_planner_debug"]["local_planner_rejection_reasons"] == ["deeper_goal_side"]
+
+
+def test_constrained_local_labels_are_branch_scoped(tmp_path: Path):
+    mission_root = tmp_path / "region_plus45"
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "controller_family": "constrained_local_planner_v1",
+                "objective_name": "constrained_local_planner",
+                "strategy_name": "advance_left",
+                "selected_command": {"mode": "constrained_local_pre_stage"},
+                "pre_stage": {"robot_on_goal_side": True},
+                "local_planner_projected_pre_stage": {"robot_on_goal_side": True},
+            }
+        ],
+    )
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "region",
+        family="region_funnel_v1",
+        cases=[_case("plus45", mission_root=mission_root)],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="region_funnel_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+
+    assert "local_planner_progress_insufficient" not in branch["cases"][0]["failure_labels"]
+    assert "local_planner_release_not_reached" not in branch["cases"][0]["failure_labels"]
+    assert "local_planner_goal_side_persistent" not in branch["cases"][0]["failure_labels"]
 
 
 def test_write_failure_audit_bundle_writes_summary_and_scorecard(tmp_path: Path):
