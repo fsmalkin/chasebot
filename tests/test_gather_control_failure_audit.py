@@ -1,0 +1,271 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = REPO_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+import gather_control_failure_audit as audit  # noqa: E402
+
+
+def _write_json(path: Path, payload: dict[str, object]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return path
+
+
+def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    return path
+
+
+def _fresh_attempt(*, handoff: bool, reason: str) -> dict[str, object]:
+    return {
+        "pass": handoff,
+        "reason": reason,
+        "pre_stage": {
+            "pose_reached": handoff,
+            "handoff_pass": handoff,
+            "pose_world": {"x": 6.348, "y": 0.0},
+            "time_s": 19.0,
+        },
+        "stage": {"pose_reached": False, "time_s": 0.0},
+        "capture_entry": {
+            "entered_goal_side_before_capture": reason == "entered_goal_side_before_capture",
+            "failure_reason": reason,
+            "pass": False,
+            "reached": False,
+            "time_s": 0.0,
+        },
+    }
+
+
+def _case(
+    case_id: str,
+    *,
+    mission_root: Path | None = None,
+    fresh_handoff: bool = False,
+    fresh_reason: str = "entered_goal_side_before_capture",
+    latest_reason: str = "pre_stage_pose_not_reached",
+    goal_side_count: int = 1,
+    mission_verdict: dict[str, object] | None = None,
+) -> dict[str, object]:
+    run: dict[str, object] = {
+        "pass": False,
+        "pre_stage_handoff_pass": fresh_handoff,
+        "pre_stage_pose_reached": fresh_handoff,
+        "latest_approach_progress": {
+            "reason": latest_reason,
+            "pre_stage": {"handoff_pass": fresh_handoff, "pose_reached": fresh_handoff},
+            "stage": {"pose_reached": False, "time_s": 0.0},
+        },
+        "mission_verdict": mission_verdict or {
+            "failure_stage": "pre_stage",
+            "failure_reason": "pre_stage_timeout",
+            "approach_failure_reason": fresh_reason,
+        },
+    }
+    if mission_root is not None:
+        run["mission_root"] = str(mission_root)
+    fresh = _fresh_attempt(handoff=fresh_handoff, reason=fresh_reason)
+    return {
+        "case_id": case_id,
+        "run_count": 1,
+        "pass_count": 0,
+        "promotion_gate_pass": False,
+        "fresh_attempt_approach": fresh,
+        "pre_stage_handoff_pass": fresh_handoff,
+        "pre_stage_pose_reached": fresh_handoff,
+        "entered_goal_side_before_capture_count": goal_side_count,
+        "runs": [run],
+    }
+
+
+def _matrix_summary(
+    tmp_path: Path,
+    name: str,
+    *,
+    family: str,
+    cases: list[dict[str, object]],
+) -> Path:
+    return _write_json(
+        tmp_path / f"{name}.json",
+        {
+            "type": "gather_goal_side_matrix",
+            "campaign_id": name,
+            "gather_control_family": family,
+            "case_pass_count": 0,
+            "promotion_gate_pass": False,
+            "cases": cases,
+        },
+    )
+
+
+def test_parse_branch_spec_accepts_name_path_and_rejects_malformed():
+    assert audit.parse_branch_spec("nav2_reacquire_v1=summary.json") == (
+        "nav2_reacquire_v1",
+        Path("summary.json"),
+    )
+
+    for spec in ("nav2_reacquire_v1", "=summary.json", "nav2_reacquire_v1="):
+        with pytest.raises(argparse.ArgumentTypeError):
+            audit.parse_branch_spec(spec)
+
+
+def test_failure_audit_summarizes_primary_cases_and_fixed_recommendation(tmp_path: Path):
+    region_path = _matrix_summary(
+        tmp_path,
+        "region",
+        family="region_funnel_v1",
+        cases=[
+            _case("plus45", mission_root=tmp_path / "region_plus45"),
+            _case("zero", mission_root=tmp_path / "region_zero"),
+            _case("minus45", mission_root=tmp_path / "region_minus45"),
+        ],
+    )
+    nav2_path = _matrix_summary(
+        tmp_path,
+        "nav2",
+        family="nav2_reacquire_v1",
+        cases=[
+            _case("zero", mission_root=tmp_path / "nav2_zero"),
+            _case("plus45", mission_root=tmp_path / "nav2_plus45"),
+        ],
+    )
+
+    summary = audit.build_failure_audit_summary(
+        campaign_id="failure_audit_test",
+        branch_specs=[("region_funnel_v1", region_path), ("nav2_reacquire_v1", nav2_path)],
+    )
+
+    assert summary["recommended_next_action"] == audit.RECOMMENDED_RETIRE_AND_DESIGN
+    region = summary["branches"][0]
+    assert region["case_order"][:3] == ["zero", "plus45", "minus45"]
+    assert [case["case_id"] for case in region["cases"][:2]] == ["zero", "plus45"]
+    assert region["primary_pre_stage_handoff_pass"] == {"zero": False, "plus45": False}
+    assert "pre_stage_handoff_blocked" in region["failure_labels"]
+    assert "goal_side_persistent" in region["failure_labels"]
+
+
+def test_nav2_timeout_and_ball_contact_are_extracted_from_state_history(tmp_path: Path):
+    mission_root = tmp_path / "nav2_zero"
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "event_type": "nav2_reacquire_dispatch",
+                "attempt": 1,
+                "ball_pose": {"x": 5.448, "y": 0.0},
+            },
+            {
+                "event_type": "nav2_reacquire_complete",
+                "attempt": 1,
+                "ball_pose": {"x": 5.51, "y": 0.0},
+                "nav2_dispatch_status": "goal_result_timeout",
+                "nav2_result": {"dispatch_status": "goal_result_timeout"},
+                "pre_stage_at_completion": {"pre_stage_pose_reached": False},
+            },
+        ],
+    )
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "nav2",
+        family="nav2_reacquire_v1",
+        cases=[_case("zero", mission_root=mission_root)],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="nav2_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    case = branch["cases"][0]
+
+    assert "nav2_goal_timeout" in case["failure_labels"]
+    assert "ball_contact_during_reacquire" in case["failure_labels"]
+    assert "post_reacquire_not_handoff_ready" in case["failure_labels"]
+    assert case["nav2_debug"]["nav2_dispatch_count"] == 1
+    assert case["nav2_debug"]["nav2_goal_timeout_count"] == 1
+    assert case["nav2_debug"]["ball_drift_max_m"] >= audit.BALL_DRIFT_CONTACT_THRESHOLD_M
+
+
+def test_stage_timeout_after_prestage_is_classified_from_verdict(tmp_path: Path):
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "nav2",
+        family="nav2_reacquire_v1",
+        cases=[
+            _case(
+                "backside180",
+                mission_root=tmp_path / "backside180",
+                fresh_handoff=True,
+                fresh_reason="staging_pose_not_reached",
+                latest_reason="staging_pose_not_reached",
+                goal_side_count=0,
+                mission_verdict={"failure_stage": "stage", "failure_reason": "goal_side_stage_timeout"},
+            )
+        ],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="nav2_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+
+    assert branch["cases"][0]["failure_labels"] == ["stage_timeout_after_prestage"]
+
+
+def test_missing_state_history_is_recorded_as_missing_evidence(tmp_path: Path):
+    mission_root = tmp_path / "nav2_zero_missing"
+    mission_root.mkdir(parents=True)
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "nav2",
+        family="nav2_reacquire_v1",
+        cases=[_case("zero", mission_root=mission_root)],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="nav2_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    case = branch["cases"][0]
+
+    assert case["state_history_status"] == "missing"
+    assert "state_history_missing" in case["missing_evidence"]
+    assert "nav2_goal_timeout" not in case["failure_labels"]
+
+
+def test_write_failure_audit_bundle_writes_summary_and_scorecard(tmp_path: Path):
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "region",
+        family="region_funnel_v1",
+        cases=[_case("zero", mission_root=tmp_path / "region_zero")],
+    )
+    summary = audit.build_failure_audit_summary(
+        campaign_id="failure_audit_test",
+        branch_specs=[("region_funnel_v1", matrix_path)],
+    )
+
+    paths = audit.write_failure_audit_bundle(
+        repo_root=tmp_path,
+        campaign_id="failure_audit_test",
+        summary=summary,
+    )
+
+    assert paths["summary_path"].exists()
+    assert paths["scorecard_path"].exists()
+    scorecard = paths["scorecard_path"].read_text(encoding="utf-8")
+    assert "# Gather Control Failure Audit" in scorecard
+    assert "recommended_next_action" in scorecard
