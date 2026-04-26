@@ -32,13 +32,18 @@ FAILURE_LABELS = (
     "docking_release_not_reached",
     "docking_handoff_yaw_not_aligned",
     "docking_progress_insufficient",
+    "handoff_yaw_servo_zero_plus45_pre_stage_handoff_blocked",
+    "fresh_latest_handoff_divergence",
+    "late_retry_handoff_not_promotion_ready",
 )
 BLOCKED_CANDIDATE_BRANCHES = {"region_funnel_v1", "nav2_reacquire_v1"}
 CONSTRAINED_LOCAL_PLANNER_BRANCH = "constrained_local_planner_v1"
 DOCKING_REACQUIRE_BRANCH = "docking_reacquire_v1"
+HANDOFF_YAW_SERVO_BRANCH = "handoff_yaw_servo_v1"
 BLOCKED_CURRENT_CANDIDATE_BRANCHES = BLOCKED_CANDIDATE_BRANCHES | {
     CONSTRAINED_LOCAL_PLANNER_BRANCH,
     DOCKING_REACQUIRE_BRANCH,
+    HANDOFF_YAW_SERVO_BRANCH,
 }
 RECOMMENDED_RETIRE_AND_DESIGN = "retire_current_candidates_and_design_constrained_local_planner_branch"
 RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS = (
@@ -637,6 +642,85 @@ def _docking_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _handoff_yaw_servo_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    servo_rows = [
+        row
+        for row in rows
+        if row.get("controller_family") == HANDOFF_YAW_SERVO_BRANCH
+        or str(row.get("objective_name", "") or "") == "handoff_yaw_servo"
+        or any(str(key).startswith("handoff_yaw_servo_") for key in row)
+    ]
+    active_rows = [
+        row
+        for row in servo_rows
+        if bool(row.get("handoff_yaw_servo_active", False))
+        or str(_dict_value(row.get("selected_command")).get("mode", "") or "") == "handoff_yaw_servo_pre_stage"
+        or str(row.get("objective_name", "") or "") == "handoff_yaw_servo"
+    ]
+    release_reasons = _ordered_unique(
+        [
+            str(row.get("handoff_yaw_servo_release_reason", "") or "")
+            for row in servo_rows
+            if str(row.get("handoff_yaw_servo_release_reason", "") or "")
+        ]
+    )
+    release_blockers = _ordered_unique(
+        [
+            str(blocker)
+            for row in servo_rows
+            for blocker in _list_value(row.get("handoff_yaw_servo_release_blockers"))
+            if str(blocker)
+        ]
+    )
+    strategy_counts: dict[str, int] = {}
+    for row in active_rows:
+        strategy_name = str(row.get("handoff_yaw_servo_strategy_name", "") or row.get("strategy_name", "") or "")
+        if strategy_name:
+            strategy_counts[strategy_name] = strategy_counts.get(strategy_name, 0) + 1
+
+    measured_ready_values = _handoff_ready_values(
+        servo_rows,
+        (
+            "handoff_yaw_servo_handoff_ready_measured",
+            "handoff_ready",
+            "handoff_pass",
+            "pre_stage_pose_reached",
+        ),
+        ("pre_stage",),
+    )
+    projected_ready_values = _handoff_ready_values(
+        servo_rows,
+        (
+            "handoff_yaw_servo_handoff_ready_projected",
+            "handoff_ready",
+            "handoff_pass",
+            "pre_stage_pose_reached",
+        ),
+        ("handoff_yaw_servo_projected_pre_stage",),
+    )
+    yaw_error_values = [_finite_float(row.get("handoff_yaw_servo_yaw_error_deg")) for row in servo_rows]
+    angular_values = [_finite_float(row.get("handoff_yaw_servo_angular_z")) for row in servo_rows]
+    ball_motion_values = [_finite_float(row.get("handoff_yaw_servo_ball_motion_m")) for row in servo_rows]
+    return {
+        "handoff_yaw_servo_row_count": len(servo_rows),
+        "handoff_yaw_servo_active_row_count": len(active_rows),
+        "handoff_yaw_servo_release_reason_count": len(release_reasons),
+        "handoff_yaw_servo_release_reasons": release_reasons,
+        "handoff_yaw_servo_release_blockers": release_blockers,
+        "handoff_yaw_servo_strategy_counts": strategy_counts,
+        "handoff_yaw_servo_measured_handoff_ready_count": sum(value is True for value in measured_ready_values),
+        "handoff_yaw_servo_measured_handoff_not_ready_count": sum(value is False for value in measured_ready_values),
+        "handoff_yaw_servo_projected_handoff_ready_count": sum(value is True for value in projected_ready_values),
+        "handoff_yaw_servo_projected_handoff_not_ready_count": sum(value is False for value in projected_ready_values),
+        "handoff_yaw_servo_yaw_error_max_deg": _max_number(yaw_error_values),
+        "handoff_yaw_servo_yaw_error_min_deg": _min_number(yaw_error_values),
+        "handoff_yaw_servo_max_abs_angular_z": _max_number(
+            [abs(float(value)) if value is not None else None for value in angular_values]
+        ),
+        "handoff_yaw_servo_max_ball_motion_m": _max_number(ball_motion_values),
+    }
+
+
 def _case_labels(
     *,
     branch_name: str,
@@ -647,6 +731,7 @@ def _case_labels(
     nav2_debug: dict[str, Any],
     local_planner_debug: dict[str, Any],
     docking_debug: dict[str, Any],
+    handoff_yaw_servo_debug: dict[str, Any],
 ) -> list[str]:
     labels: list[str] = []
     handoff_pass = _pre_stage_handoff_pass(case)
@@ -661,6 +746,11 @@ def _case_labels(
     if float(local_planner_debug.get("local_planner_max_ball_motion_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
         labels.append("ball_contact_during_reacquire")
     if float(docking_debug.get("docking_max_ball_motion_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
+        labels.append("ball_contact_during_reacquire")
+    if (
+        float(handoff_yaw_servo_debug.get("handoff_yaw_servo_max_ball_motion_m", 0.0) or 0.0)
+        >= BALL_DRIFT_CONTACT_THRESHOLD_M
+    ):
         labels.append("ball_contact_during_reacquire")
     if int(nav2_debug.get("post_reacquire_not_handoff_ready_count", 0) or 0) > 0:
         labels.append("post_reacquire_not_handoff_ready")
@@ -690,6 +780,13 @@ def _case_labels(
     latest = _dict_value(_first_run(case).get("latest_approach_progress"))
     latest_pre_stage = _dict_value(latest.get("pre_stage"))
     latest_reason = str(latest.get("reason", "") or "")
+    if (
+        str(branch_name or "") == HANDOFF_YAW_SERVO_BRANCH
+        and handoff_pass is False
+        and _boolish(latest_pre_stage.get("handoff_pass")) is True
+    ):
+        labels.append("fresh_latest_handoff_divergence")
+        labels.append("late_retry_handoff_not_promotion_ready")
     mission_failure_stage = str(mission_verdict.get("failure_stage", "") or "")
     mission_failure_reason = str(mission_verdict.get("failure_reason", "") or "")
     if (
@@ -723,6 +820,7 @@ def build_case_failure_summary(
     nav2_debug = _nav2_debug_summary(state_rows)
     local_planner_debug = _local_planner_debug_summary(state_rows)
     docking_debug = _docking_debug_summary(state_rows)
+    handoff_yaw_servo_debug = _handoff_yaw_servo_debug_summary(state_rows)
 
     missing_evidence: list[str] = []
     if mission_verdict_status in {"not_referenced", "missing", "unreadable"}:
@@ -739,6 +837,7 @@ def build_case_failure_summary(
         nav2_debug=nav2_debug,
         local_planner_debug=local_planner_debug,
         docking_debug=docking_debug,
+        handoff_yaw_servo_debug=handoff_yaw_servo_debug,
     )
     handoff_pass = _pre_stage_handoff_pass(case)
     pose_reached = _pre_stage_pose_reached(case)
@@ -767,6 +866,7 @@ def build_case_failure_summary(
         "nav2_debug": nav2_debug,
         "local_planner_debug": local_planner_debug,
         "docking_debug": docking_debug,
+        "handoff_yaw_servo_debug": handoff_yaw_servo_debug,
     }
 
 
@@ -795,6 +895,9 @@ def build_branch_failure_summary(
         if case.get("case_id") in PRIMARY_CASE_IDS
     ) and {case.get("case_id") for case in primary} == set(PRIMARY_CASE_IDS)
     labels = [label for label in FAILURE_LABELS if any(label in case.get("labels", []) for case in case_summaries)]
+    if str(branch_name or "") == HANDOFF_YAW_SERVO_BRANCH and primary_handoff_blocked:
+        labels.append("handoff_yaw_servo_zero_plus45_pre_stage_handoff_blocked")
+        labels = [label for label in FAILURE_LABELS if label in set(labels)]
     return {
         "type": "gather_control_failure_audit_branch",
         "generated_utc": utc_now(),
@@ -842,6 +945,7 @@ def _recommend_next_action(branches: list[dict[str, Any]]) -> tuple[str, list[st
                 "nav2_reacquire_v1_zero_plus45_pre_stage_handoff_blocked",
                 "constrained_local_planner_v1_zero_plus45_pre_stage_handoff_blocked",
                 "docking_reacquire_v1_zero_plus45_pre_stage_handoff_blocked",
+                "handoff_yaw_servo_v1_zero_plus45_pre_stage_handoff_blocked",
             ],
         )
     if BLOCKED_CANDIDATE_BRANCHES.issubset(branch_names) and BLOCKED_CANDIDATE_BRANCHES.issubset(blocked_branches):

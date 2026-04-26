@@ -55,16 +55,18 @@ def _case(
     fresh_handoff: bool = False,
     fresh_reason: str = "entered_goal_side_before_capture",
     latest_reason: str = "pre_stage_pose_not_reached",
+    latest_handoff: bool | None = None,
     goal_side_count: int = 1,
     mission_verdict: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    latest_handoff_value = fresh_handoff if latest_handoff is None else latest_handoff
     run: dict[str, object] = {
         "pass": False,
         "pre_stage_handoff_pass": fresh_handoff,
         "pre_stage_pose_reached": fresh_handoff,
         "latest_approach_progress": {
             "reason": latest_reason,
-            "pre_stage": {"handoff_pass": fresh_handoff, "pose_reached": fresh_handoff},
+            "pre_stage": {"handoff_pass": latest_handoff_value, "pose_reached": latest_handoff_value},
             "stage": {"pose_reached": False, "time_s": 0.0},
         },
         "mission_verdict": mission_verdict or {
@@ -192,6 +194,15 @@ def test_failure_audit_recommends_next_architecture_when_all_current_candidates_
             _case("plus45", mission_root=tmp_path / "docking_plus45"),
         ],
     )
+    handoff_yaw_path = _matrix_summary(
+        tmp_path,
+        "handoff_yaw",
+        family="handoff_yaw_servo_v1",
+        cases=[
+            _case("zero", mission_root=tmp_path / "handoff_yaw_zero"),
+            _case("plus45", mission_root=tmp_path / "handoff_yaw_plus45"),
+        ],
+    )
 
     summary = audit.build_failure_audit_summary(
         campaign_id="failure_audit_test",
@@ -200,17 +211,21 @@ def test_failure_audit_recommends_next_architecture_when_all_current_candidates_
             ("nav2_reacquire_v1", nav2_path),
             ("constrained_local_planner_v1", constrained_path),
             ("docking_reacquire_v1", docking_path),
+            ("handoff_yaw_servo_v1", handoff_yaw_path),
         ],
     )
 
     assert summary["recommended_next_action"] == audit.RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS
     assert "constrained_local_planner_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
     assert "docking_reacquire_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
+    assert "handoff_yaw_servo_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
+    handoff_branch = next(branch for branch in summary["branches"] if branch["branch_name"] == "handoff_yaw_servo_v1")
+    assert "handoff_yaw_servo_zero_plus45_pre_stage_handoff_blocked" in handoff_branch["failure_labels"]
 
 
-def test_failure_audit_does_not_final_closeout_without_docking_candidate(tmp_path: Path):
+def test_failure_audit_does_not_final_closeout_without_handoff_yaw_candidate(tmp_path: Path):
     branch_specs = []
-    for name in ("region_funnel_v1", "nav2_reacquire_v1", "constrained_local_planner_v1"):
+    for name in ("region_funnel_v1", "nav2_reacquire_v1", "constrained_local_planner_v1", "docking_reacquire_v1"):
         path = _matrix_summary(
             tmp_path,
             name,
@@ -495,6 +510,82 @@ def test_docking_debug_rows_emit_docking_failure_labels(tmp_path: Path):
     assert case["docking_debug"]["docking_observed_distance_reduction_m"] == 0.2
     assert case["docking_debug"]["docking_projected_distance_min_m"] == 1.0
     assert case["docking_debug"]["docking_max_ball_motion_m"] == 0.012
+
+
+def test_handoff_yaw_servo_rows_emit_divergence_labels(tmp_path: Path):
+    mission_root = tmp_path / "handoff_yaw_plus45"
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "controller_family": "handoff_yaw_servo_v1",
+                "objective_name": "handoff_yaw_servo",
+                "strategy_name": "handoff_yaw_servo",
+                "selected_command": {"mode": "handoff_yaw_servo_pre_stage"},
+                "handoff_yaw_servo_active": True,
+                "handoff_yaw_servo_release_reason": "",
+                "handoff_yaw_servo_release_blockers": [],
+                "handoff_yaw_servo_yaw_error_deg": 64.0,
+                "handoff_yaw_servo_angular_z": 0.45,
+                "handoff_yaw_servo_ball_motion_m": 0.0,
+                "handoff_yaw_servo_handoff_ready_measured": False,
+                "handoff_yaw_servo_handoff_ready_projected": False,
+                "handoff_yaw_servo_projected_pre_stage": {"pre_stage_pose_reached": False},
+                "pre_stage": {"pre_stage_pose_reached": False, "handoff_pass": False},
+            },
+            {
+                "controller_family": "handoff_yaw_servo_v1",
+                "objective_name": "handoff_yaw_servo",
+                "strategy_name": "handoff_yaw_servo",
+                "selected_command": {"mode": "handoff_yaw_servo_pre_stage"},
+                "handoff_yaw_servo_active": True,
+                "handoff_yaw_servo_release_reason": "",
+                "handoff_yaw_servo_release_blockers": [],
+                "handoff_yaw_servo_yaw_error_deg": 38.0,
+                "handoff_yaw_servo_angular_z": 0.32,
+                "handoff_yaw_servo_ball_motion_m": 0.01,
+                "handoff_yaw_servo_handoff_ready_measured": False,
+                "handoff_yaw_servo_handoff_ready_projected": False,
+                "handoff_yaw_servo_projected_pre_stage": {"pre_stage_pose_reached": False},
+                "pre_stage": {"pre_stage_pose_reached": False, "handoff_pass": False},
+            },
+        ],
+    )
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "handoff_yaw",
+        family="handoff_yaw_servo_v1",
+        cases=[
+            _case(
+                "plus45",
+                mission_root=mission_root,
+                latest_reason="capture_entry_timeout",
+                latest_handoff=True,
+            )
+        ],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="handoff_yaw_servo_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    case = branch["cases"][0]
+
+    assert "fresh_latest_handoff_divergence" in case["failure_labels"]
+    assert "late_retry_handoff_not_promotion_ready" in case["failure_labels"]
+    assert "ball_contact_during_reacquire" not in case["failure_labels"]
+    assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_active_row_count"] == 2
+    assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_release_reason_count"] == 0
+    assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_strategy_counts"] == {
+        "handoff_yaw_servo": 2
+    }
+    assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_measured_handoff_not_ready_count"] == 2
+    assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_projected_handoff_not_ready_count"] == 2
+    assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_yaw_error_max_deg"] == 64.0
+    assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_yaw_error_min_deg"] == 38.0
+    assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_max_abs_angular_z"] == 0.45
+    assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_max_ball_motion_m"] == 0.01
 
 
 def test_write_failure_audit_bundle_writes_summary_and_scorecard(tmp_path: Path):
