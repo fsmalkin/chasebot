@@ -203,6 +203,15 @@ def test_failure_audit_recommends_next_architecture_when_all_current_candidates_
             _case("plus45", mission_root=tmp_path / "handoff_yaw_plus45"),
         ],
     )
+    fsm_path = _matrix_summary(
+        tmp_path,
+        "pre_stage_fsm",
+        family="pre_stage_reacquire_fsm_v1",
+        cases=[
+            _case("zero", mission_root=tmp_path / "pre_stage_fsm_zero"),
+            _case("plus45", mission_root=tmp_path / "pre_stage_fsm_plus45"),
+        ],
+    )
 
     summary = audit.build_failure_audit_summary(
         campaign_id="failure_audit_test",
@@ -212,6 +221,7 @@ def test_failure_audit_recommends_next_architecture_when_all_current_candidates_
             ("constrained_local_planner_v1", constrained_path),
             ("docking_reacquire_v1", docking_path),
             ("handoff_yaw_servo_v1", handoff_yaw_path),
+            ("pre_stage_reacquire_fsm_v1", fsm_path),
         ],
     )
 
@@ -219,13 +229,22 @@ def test_failure_audit_recommends_next_architecture_when_all_current_candidates_
     assert "constrained_local_planner_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
     assert "docking_reacquire_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
     assert "handoff_yaw_servo_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
+    assert "pre_stage_reacquire_fsm_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
     handoff_branch = next(branch for branch in summary["branches"] if branch["branch_name"] == "handoff_yaw_servo_v1")
     assert "handoff_yaw_servo_zero_plus45_pre_stage_handoff_blocked" in handoff_branch["failure_labels"]
+    fsm_branch = next(branch for branch in summary["branches"] if branch["branch_name"] == "pre_stage_reacquire_fsm_v1")
+    assert "pre_stage_fsm_zero_plus45_pre_stage_handoff_blocked" in fsm_branch["failure_labels"]
 
 
-def test_failure_audit_does_not_final_closeout_without_handoff_yaw_candidate(tmp_path: Path):
+def test_failure_audit_does_not_final_closeout_without_pre_stage_fsm_candidate(tmp_path: Path):
     branch_specs = []
-    for name in ("region_funnel_v1", "nav2_reacquire_v1", "constrained_local_planner_v1", "docking_reacquire_v1"):
+    for name in (
+        "region_funnel_v1",
+        "nav2_reacquire_v1",
+        "constrained_local_planner_v1",
+        "docking_reacquire_v1",
+        "handoff_yaw_servo_v1",
+    ):
         path = _matrix_summary(
             tmp_path,
             name,
@@ -586,6 +605,100 @@ def test_handoff_yaw_servo_rows_emit_divergence_labels(tmp_path: Path):
     assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_yaw_error_min_deg"] == 38.0
     assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_max_abs_angular_z"] == 0.45
     assert case["handoff_yaw_servo_debug"]["handoff_yaw_servo_max_ball_motion_m"] == 0.01
+
+
+def test_pre_stage_reacquire_fsm_rows_emit_fsm_failure_labels(tmp_path: Path):
+    mission_root = tmp_path / "pre_stage_fsm_plus45"
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "controller_family": "pre_stage_reacquire_fsm_v1",
+                "objective_name": "pre_stage_reacquire_fsm",
+                "selected_command": {"mode": "pre_stage_reacquire_fsm"},
+                "pre_stage_reacquire_fsm_active": True,
+                "pre_stage_reacquire_fsm_phase": "goal_side_escape",
+                "pre_stage_reacquire_fsm_release_reason": "",
+                "pre_stage_reacquire_fsm_release_blockers": ["robot_on_goal_side"],
+                "pre_stage_reacquire_fsm_measured_handoff_ready": False,
+                "pre_stage_reacquire_fsm_projected_handoff_ready": False,
+                "pre_stage_reacquire_fsm_measured_pre_stage": {
+                    "robot_on_goal_side": True,
+                    "pre_stage_pose_reached": False,
+                },
+                "pre_stage_reacquire_fsm_projected_pre_stage": {"pre_stage_pose_reached": False},
+                "pre_stage_reacquire_fsm_projection_m": 5.4,
+                "pre_stage_reacquire_fsm_lateral_error_m": 1.1,
+                "pre_stage_reacquire_fsm_distance_m": 6.3,
+                "pre_stage_reacquire_fsm_yaw_error_deg": 180.0,
+                "pre_stage_reacquire_fsm_ball_motion_m": 0.0,
+                "pre_stage_reacquire_fsm_min_ball_clearance_m": 5.3,
+                "pre_stage_reacquire_fsm_accepted_count": 1,
+                "pre_stage_reacquire_fsm_rejected_count": 0,
+                "pre_stage_reacquire_fsm_rejection_reasons": [],
+            },
+            {
+                "controller_family": "pre_stage_reacquire_fsm_v1",
+                "objective_name": "pre_stage_reacquire_fsm",
+                "selected_command": {"mode": "pre_stage_reacquire_fsm"},
+                "pre_stage_reacquire_fsm_active": True,
+                "pre_stage_reacquire_fsm_phase": "dock_entry",
+                "pre_stage_reacquire_fsm_release_reason": "",
+                "pre_stage_reacquire_fsm_release_blockers": ["lateral_not_converged"],
+                "pre_stage_reacquire_fsm_measured_handoff_ready": False,
+                "pre_stage_reacquire_fsm_projected_handoff_ready": False,
+                "pre_stage_reacquire_fsm_measured_pre_stage": {"pre_stage_pose_reached": False},
+                "pre_stage_reacquire_fsm_projected_pre_stage": {"pre_stage_pose_reached": False},
+                "pre_stage_reacquire_fsm_projection_m": -0.9,
+                "pre_stage_reacquire_fsm_lateral_error_m": 0.85,
+                "pre_stage_reacquire_fsm_distance_m": 0.85,
+                "pre_stage_reacquire_fsm_yaw_error_deg": 160.0,
+                "pre_stage_reacquire_fsm_ball_motion_m": 0.01,
+                "pre_stage_reacquire_fsm_min_ball_clearance_m": 1.2,
+                "pre_stage_reacquire_fsm_accepted_count": 1,
+                "pre_stage_reacquire_fsm_rejected_count": 0,
+                "pre_stage_reacquire_fsm_rejection_reasons": [],
+            },
+        ],
+    )
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "pre_stage_fsm",
+        family="pre_stage_reacquire_fsm_v1",
+        cases=[_case("plus45", mission_root=mission_root)],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="pre_stage_reacquire_fsm_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    case = branch["cases"][0]
+
+    assert "pre_stage_fsm_escape_not_converged" in case["failure_labels"]
+    assert "pre_stage_fsm_dock_entry_not_converged" in case["failure_labels"]
+    assert "pre_stage_fsm_timeout_without_ball_contact" in case["failure_labels"]
+    assert "ball_contact_during_reacquire" not in case["failure_labels"]
+    debug = case["pre_stage_fsm_debug"]
+    assert debug["pre_stage_fsm_active_row_count"] == 2
+    assert debug["pre_stage_fsm_phase_counts"] == {"goal_side_escape": 1, "dock_entry": 1}
+    assert debug["pre_stage_fsm_final_phase"] == "dock_entry"
+    assert debug["pre_stage_fsm_release_reason_count"] == 0
+    assert debug["pre_stage_fsm_release_blockers"] == ["robot_on_goal_side", "lateral_not_converged"]
+    assert debug["pre_stage_fsm_measured_handoff_not_ready_count"] == 2
+    assert debug["pre_stage_fsm_projected_handoff_not_ready_count"] == 2
+    assert debug["pre_stage_fsm_projection_min_m"] == -0.9
+    assert debug["pre_stage_fsm_projection_max_m"] == 5.4
+    assert debug["pre_stage_fsm_lateral_error_min_m"] == 0.85
+    assert debug["pre_stage_fsm_lateral_error_max_m"] == 1.1
+    assert debug["pre_stage_fsm_distance_min_m"] == 0.85
+    assert debug["pre_stage_fsm_distance_max_m"] == 6.3
+    assert debug["pre_stage_fsm_yaw_error_min_deg"] == 160.0
+    assert debug["pre_stage_fsm_yaw_error_max_deg"] == 180.0
+    assert debug["pre_stage_fsm_accepted_count"] == 2
+    assert debug["pre_stage_fsm_rejected_count"] == 0
+    assert debug["pre_stage_fsm_max_ball_motion_m"] == 0.01
+    assert debug["pre_stage_fsm_min_ball_clearance_m"] == 1.2
 
 
 def test_write_failure_audit_bundle_writes_summary_and_scorecard(tmp_path: Path):

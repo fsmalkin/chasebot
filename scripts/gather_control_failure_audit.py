@@ -35,15 +35,21 @@ FAILURE_LABELS = (
     "handoff_yaw_servo_zero_plus45_pre_stage_handoff_blocked",
     "fresh_latest_handoff_divergence",
     "late_retry_handoff_not_promotion_ready",
+    "pre_stage_fsm_zero_plus45_pre_stage_handoff_blocked",
+    "pre_stage_fsm_escape_not_converged",
+    "pre_stage_fsm_dock_entry_not_converged",
+    "pre_stage_fsm_timeout_without_ball_contact",
 )
 BLOCKED_CANDIDATE_BRANCHES = {"region_funnel_v1", "nav2_reacquire_v1"}
 CONSTRAINED_LOCAL_PLANNER_BRANCH = "constrained_local_planner_v1"
 DOCKING_REACQUIRE_BRANCH = "docking_reacquire_v1"
 HANDOFF_YAW_SERVO_BRANCH = "handoff_yaw_servo_v1"
+PRE_STAGE_REACQUIRE_FSM_BRANCH = "pre_stage_reacquire_fsm_v1"
 BLOCKED_CURRENT_CANDIDATE_BRANCHES = BLOCKED_CANDIDATE_BRANCHES | {
     CONSTRAINED_LOCAL_PLANNER_BRANCH,
     DOCKING_REACQUIRE_BRANCH,
     HANDOFF_YAW_SERVO_BRANCH,
+    PRE_STAGE_REACQUIRE_FSM_BRANCH,
 }
 RECOMMENDED_RETIRE_AND_DESIGN = "retire_current_candidates_and_design_constrained_local_planner_branch"
 RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS = (
@@ -721,6 +727,109 @@ def _handoff_yaw_servo_debug_summary(rows: list[dict[str, Any]]) -> dict[str, An
     }
 
 
+def _pre_stage_fsm_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    fsm_rows = [
+        row
+        for row in rows
+        if row.get("controller_family") == PRE_STAGE_REACQUIRE_FSM_BRANCH
+        or str(row.get("objective_name", "") or "") == "pre_stage_reacquire_fsm"
+        or any(str(key).startswith("pre_stage_reacquire_fsm_") for key in row)
+    ]
+    active_rows = [
+        row
+        for row in fsm_rows
+        if bool(row.get("pre_stage_reacquire_fsm_active", False))
+        or str(_dict_value(row.get("selected_command")).get("mode", "") or "").startswith(
+            "pre_stage_reacquire_fsm"
+        )
+        or str(row.get("objective_name", "") or "") == "pre_stage_reacquire_fsm"
+    ]
+    release_reasons = _ordered_unique(
+        [
+            str(row.get("pre_stage_reacquire_fsm_release_reason", "") or "")
+            for row in fsm_rows
+            if str(row.get("pre_stage_reacquire_fsm_release_reason", "") or "")
+        ]
+    )
+    release_blockers = _ordered_unique(
+        [
+            str(blocker)
+            for row in fsm_rows
+            for blocker in _list_value(row.get("pre_stage_reacquire_fsm_release_blockers"))
+            if str(blocker)
+        ]
+    )
+    rejection_reasons = _ordered_unique(
+        [
+            str(reason)
+            for row in fsm_rows
+            for reason in _list_value(row.get("pre_stage_reacquire_fsm_rejection_reasons"))
+            if str(reason)
+        ]
+    )
+    phase_counts: dict[str, int] = {}
+    phases: list[str] = []
+    for row in active_rows:
+        phase = str(row.get("pre_stage_reacquire_fsm_phase", "") or "")
+        if not phase:
+            continue
+        phases.append(phase)
+        phase_counts[phase] = phase_counts.get(phase, 0) + 1
+
+    measured_ready_values = _handoff_ready_values(
+        fsm_rows,
+        (
+            "pre_stage_reacquire_fsm_measured_handoff_ready",
+            "handoff_ready",
+            "handoff_pass",
+            "pre_stage_pose_reached",
+        ),
+        ("pre_stage_reacquire_fsm_measured_pre_stage", "pre_stage"),
+    )
+    projected_ready_values = _handoff_ready_values(
+        fsm_rows,
+        (
+            "pre_stage_reacquire_fsm_projected_handoff_ready",
+            "handoff_ready",
+            "handoff_pass",
+            "pre_stage_pose_reached",
+        ),
+        ("pre_stage_reacquire_fsm_projected_pre_stage",),
+    )
+    projection_values = [_finite_float(row.get("pre_stage_reacquire_fsm_projection_m")) for row in fsm_rows]
+    lateral_values = [_finite_float(row.get("pre_stage_reacquire_fsm_lateral_error_m")) for row in fsm_rows]
+    distance_values = [_finite_float(row.get("pre_stage_reacquire_fsm_distance_m")) for row in fsm_rows]
+    yaw_values = [_finite_float(row.get("pre_stage_reacquire_fsm_yaw_error_deg")) for row in fsm_rows]
+    ball_motion_values = [_finite_float(row.get("pre_stage_reacquire_fsm_ball_motion_m")) for row in fsm_rows]
+    clearance_values = [_finite_float(row.get("pre_stage_reacquire_fsm_min_ball_clearance_m")) for row in fsm_rows]
+    return {
+        "pre_stage_fsm_row_count": len(fsm_rows),
+        "pre_stage_fsm_active_row_count": len(active_rows),
+        "pre_stage_fsm_phase_counts": phase_counts,
+        "pre_stage_fsm_final_phase": phases[-1] if phases else "",
+        "pre_stage_fsm_release_reason_count": len(release_reasons),
+        "pre_stage_fsm_release_reasons": release_reasons,
+        "pre_stage_fsm_release_blockers": release_blockers,
+        "pre_stage_fsm_rejection_reasons": rejection_reasons,
+        "pre_stage_fsm_measured_handoff_ready_count": sum(value is True for value in measured_ready_values),
+        "pre_stage_fsm_measured_handoff_not_ready_count": sum(value is False for value in measured_ready_values),
+        "pre_stage_fsm_projected_handoff_ready_count": sum(value is True for value in projected_ready_values),
+        "pre_stage_fsm_projected_handoff_not_ready_count": sum(value is False for value in projected_ready_values),
+        "pre_stage_fsm_projection_min_m": _min_number(projection_values),
+        "pre_stage_fsm_projection_max_m": _max_number(projection_values),
+        "pre_stage_fsm_lateral_error_min_m": _min_number(lateral_values),
+        "pre_stage_fsm_lateral_error_max_m": _max_number(lateral_values),
+        "pre_stage_fsm_distance_min_m": _min_number(distance_values),
+        "pre_stage_fsm_distance_max_m": _max_number(distance_values),
+        "pre_stage_fsm_yaw_error_min_deg": _min_number(yaw_values),
+        "pre_stage_fsm_yaw_error_max_deg": _max_number(yaw_values),
+        "pre_stage_fsm_accepted_count": sum(_int_value(row.get("pre_stage_reacquire_fsm_accepted_count")) for row in fsm_rows),
+        "pre_stage_fsm_rejected_count": sum(_int_value(row.get("pre_stage_reacquire_fsm_rejected_count")) for row in fsm_rows),
+        "pre_stage_fsm_max_ball_motion_m": _max_number(ball_motion_values),
+        "pre_stage_fsm_min_ball_clearance_m": _min_number(clearance_values),
+    }
+
+
 def _case_labels(
     *,
     branch_name: str,
@@ -732,6 +841,7 @@ def _case_labels(
     local_planner_debug: dict[str, Any],
     docking_debug: dict[str, Any],
     handoff_yaw_servo_debug: dict[str, Any],
+    pre_stage_fsm_debug: dict[str, Any],
 ) -> list[str]:
     labels: list[str] = []
     handoff_pass = _pre_stage_handoff_pass(case)
@@ -751,6 +861,8 @@ def _case_labels(
         float(handoff_yaw_servo_debug.get("handoff_yaw_servo_max_ball_motion_m", 0.0) or 0.0)
         >= BALL_DRIFT_CONTACT_THRESHOLD_M
     ):
+        labels.append("ball_contact_during_reacquire")
+    if float(pre_stage_fsm_debug.get("pre_stage_fsm_max_ball_motion_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
         labels.append("ball_contact_during_reacquire")
     if int(nav2_debug.get("post_reacquire_not_handoff_ready_count", 0) or 0) > 0:
         labels.append("post_reacquire_not_handoff_ready")
@@ -776,6 +888,19 @@ def _case_labels(
             labels.append("docking_handoff_yaw_not_aligned")
         if docking_active_count > 0 and _pre_stage_handoff_pass(case) is False:
             labels.append("docking_progress_insufficient")
+    if str(branch_name or "") == PRE_STAGE_REACQUIRE_FSM_BRANCH:
+        fsm_active_count = int(pre_stage_fsm_debug.get("pre_stage_fsm_active_row_count", 0) or 0)
+        fsm_release_count = int(pre_stage_fsm_debug.get("pre_stage_fsm_release_reason_count", 0) or 0)
+        fsm_final_phase = str(pre_stage_fsm_debug.get("pre_stage_fsm_final_phase", "") or "")
+        fsm_phase_counts = _dict_value(pre_stage_fsm_debug.get("pre_stage_fsm_phase_counts"))
+        if handoff_pass is False and fsm_active_count > 0:
+            if fsm_final_phase == "goal_side_escape" or int(fsm_phase_counts.get("goal_side_escape", 0) or 0) > 0:
+                labels.append("pre_stage_fsm_escape_not_converged")
+            if fsm_final_phase == "dock_entry" or int(fsm_phase_counts.get("dock_entry", 0) or 0) > 0:
+                labels.append("pre_stage_fsm_dock_entry_not_converged")
+            max_ball_motion = float(pre_stage_fsm_debug.get("pre_stage_fsm_max_ball_motion_m", 0.0) or 0.0)
+            if max_ball_motion < BALL_DRIFT_CONTACT_THRESHOLD_M and fsm_release_count == 0:
+                labels.append("pre_stage_fsm_timeout_without_ball_contact")
 
     latest = _dict_value(_first_run(case).get("latest_approach_progress"))
     latest_pre_stage = _dict_value(latest.get("pre_stage"))
@@ -821,6 +946,7 @@ def build_case_failure_summary(
     local_planner_debug = _local_planner_debug_summary(state_rows)
     docking_debug = _docking_debug_summary(state_rows)
     handoff_yaw_servo_debug = _handoff_yaw_servo_debug_summary(state_rows)
+    pre_stage_fsm_debug = _pre_stage_fsm_debug_summary(state_rows)
 
     missing_evidence: list[str] = []
     if mission_verdict_status in {"not_referenced", "missing", "unreadable"}:
@@ -838,6 +964,7 @@ def build_case_failure_summary(
         local_planner_debug=local_planner_debug,
         docking_debug=docking_debug,
         handoff_yaw_servo_debug=handoff_yaw_servo_debug,
+        pre_stage_fsm_debug=pre_stage_fsm_debug,
     )
     handoff_pass = _pre_stage_handoff_pass(case)
     pose_reached = _pre_stage_pose_reached(case)
@@ -867,6 +994,7 @@ def build_case_failure_summary(
         "local_planner_debug": local_planner_debug,
         "docking_debug": docking_debug,
         "handoff_yaw_servo_debug": handoff_yaw_servo_debug,
+        "pre_stage_fsm_debug": pre_stage_fsm_debug,
     }
 
 
@@ -897,6 +1025,9 @@ def build_branch_failure_summary(
     labels = [label for label in FAILURE_LABELS if any(label in case.get("labels", []) for case in case_summaries)]
     if str(branch_name or "") == HANDOFF_YAW_SERVO_BRANCH and primary_handoff_blocked:
         labels.append("handoff_yaw_servo_zero_plus45_pre_stage_handoff_blocked")
+        labels = [label for label in FAILURE_LABELS if label in set(labels)]
+    if str(branch_name or "") == PRE_STAGE_REACQUIRE_FSM_BRANCH and primary_handoff_blocked:
+        labels.append("pre_stage_fsm_zero_plus45_pre_stage_handoff_blocked")
         labels = [label for label in FAILURE_LABELS if label in set(labels)]
     return {
         "type": "gather_control_failure_audit_branch",
@@ -946,6 +1077,7 @@ def _recommend_next_action(branches: list[dict[str, Any]]) -> tuple[str, list[st
                 "constrained_local_planner_v1_zero_plus45_pre_stage_handoff_blocked",
                 "docking_reacquire_v1_zero_plus45_pre_stage_handoff_blocked",
                 "handoff_yaw_servo_v1_zero_plus45_pre_stage_handoff_blocked",
+                "pre_stage_reacquire_fsm_v1_zero_plus45_pre_stage_handoff_blocked",
             ],
         )
     if BLOCKED_CANDIDATE_BRANCHES.issubset(branch_names) and BLOCKED_CANDIDATE_BRANCHES.issubset(blocked_branches):
