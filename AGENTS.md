@@ -129,7 +129,7 @@ Lane-specific configs:
 19. `constrained_local_planner_v1` is a blocked experimental local-planner gather-control branch after the April 25, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 20. `docking_reacquire_v1` is a blocked experimental deterministic docking-style pre-stage reacquire branch after the April 25, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 21. Gather control failure audit is analyzer-only closeout evidence; it does not promote or refresh portfolio/stress evidence for any blocked branch, including `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, or `docking_reacquire_v1`.
-22. `handoff_yaw_servo_v1` is the current experimental last-mile pre-stage yaw-alignment branch; do not add it to portfolio/stress comparison until fresh one-run `zero` and `plus45` matrix attempts both clear pre-stage handoff without pre-stage ball drift/contact.
+22. `handoff_yaw_servo_v1` is a blocked experimental last-mile pre-stage yaw-alignment branch after the April 25/26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 
 ## Latest Validated Artifacts
 
@@ -201,7 +201,8 @@ Gather docking-style reacquire experimental branch status:
 Gather handoff-yaw-servo experimental branch status:
 - Candidate: `handoff_yaw_servo_v1`
 - Scope: one-ball `pre_stage` / behind-ball last-mile handoff only; yaw-only local servo activates only after measured geometry is safe except yaw.
-- Status: implemented for offline/unit validation only until a fresh one-run goal-side matrix shows `zero` and `plus45` pre-stage handoff passes with no pre-stage ball drift/contact.
+- Smoke: `artifacts/session/live_handoff_yaw_servo_v1_matrix_smoke_20260426/gather_goal_side_matrix/campaign_summary.json`
+- Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff, so no portfolio/stress refresh was produced for this branch.
 
 ## Testing
 
