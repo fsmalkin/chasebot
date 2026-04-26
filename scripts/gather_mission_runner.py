@@ -40,6 +40,8 @@ from gather_manager_helpers import GatherManagerState
 from gather_manager_helpers import decide_gather_manager_directive
 from gather_pre_stage_reacquire_fsm_helpers import PRE_STAGE_REACQUIRE_FSM_CONTROL_FAMILY
 from gather_pre_stage_reacquire_fsm_helpers import decide_pre_stage_reacquire_fsm_command
+from gather_pre_stage_path_tracker_helpers import PRE_STAGE_PATH_TRACKER_CONTROL_FAMILY
+from gather_pre_stage_path_tracker_helpers import decide_pre_stage_path_tracker_command
 from gather_region_funnel_helpers import decide_region_funnel_pre_stage_command
 from gather_short_horizon_helpers import decide_short_horizon_pre_stage_command
 from gather_mission_helpers import DEFAULT_RELEASE_SETTLE_MAX_WAIT_S
@@ -111,6 +113,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "docking_reacquire_v1",
     "handoff_yaw_servo_v1",
     "pre_stage_reacquire_fsm_v1",
+    "pre_stage_path_tracker_v1",
 )
 NAV2_REACQUIRE_CONTROL_FAMILY = "nav2_reacquire_v1"
 DEFAULT_NAV2_REACQUIRE_TRIGGER_DISTANCE_M = 1.20
@@ -1909,6 +1912,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         docking_reacquire_previous_ball_pose: dict[str, Any] | None = None
         handoff_yaw_servo_previous_ball_pose: dict[str, Any] | None = None
         pre_stage_reacquire_fsm_previous_ball_pose: dict[str, Any] | None = None
+        pre_stage_path_tracker_previous_ball_pose: dict[str, Any] | None = None
+        pre_stage_path_tracker_waypoint_index = 0
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -1936,7 +1941,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             docking_reacquire_debug_fields: dict[str, Any] = {}
             handoff_yaw_servo_debug_fields: dict[str, Any] = {}
             pre_stage_reacquire_fsm_debug_fields: dict[str, Any] = {}
+            pre_stage_path_tracker_debug_fields: dict[str, Any] = {}
             pre_stage_reacquire_fsm_abort_reason = ""
+            pre_stage_path_tracker_abort_reason = ""
             pre_stage_ready_signal = False
             constrained_local_ball_motion_m = (
                 pose_delta_m(constrained_local_previous_ball_pose, ball_pose)
@@ -1956,6 +1963,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             pre_stage_reacquire_fsm_ball_motion_m = (
                 pose_delta_m(pre_stage_reacquire_fsm_previous_ball_pose, ball_pose)
                 if pre_stage_reacquire_fsm_previous_ball_pose is not None and ball_pose
+                else None
+            )
+            pre_stage_path_tracker_ball_motion_m = (
+                pose_delta_m(pre_stage_path_tracker_previous_ball_pose, ball_pose)
+                if pre_stage_path_tracker_previous_ball_pose is not None and ball_pose
                 else None
             )
             if isinstance(pre_stage_snapshot, dict):
@@ -2600,6 +2612,159 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     short_horizon_strategy_name = ""
                     short_horizon_objective_name = ""
                     short_horizon_strategy_started_monotonic = now_monotonic
+            if (
+                self.gather_control_family == PRE_STAGE_PATH_TRACKER_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+                and isinstance(pre_stage_snapshot, dict)
+            ):
+                decision = decide_pre_stage_path_tracker_command(
+                    robot_pose,
+                    ball_pose or {},
+                    zone=self.zone,
+                    snapshot=pre_stage_snapshot,
+                    previous_waypoint_index=pre_stage_path_tracker_waypoint_index,
+                    stall_s=max(0.0, now_monotonic - short_horizon_last_progress_monotonic),
+                    ball_motion_m=pre_stage_path_tracker_ball_motion_m,
+                )
+                projected_snapshot = getattr(decision, "projected_snapshot", None)
+                measured_snapshot = getattr(decision, "measured_snapshot", None)
+                measured_handoff_ready = getattr(decision, "measured_handoff_ready", None)
+                projected_handoff_ready = getattr(decision, "projected_handoff_ready", None)
+                pre_stage_path_tracker_waypoint_index = int(
+                    getattr(decision, "waypoint_index", pre_stage_path_tracker_waypoint_index) or 0
+                )
+                pre_stage_path_tracker_debug_fields = {
+                    "pre_stage_path_tracker_active": bool(getattr(decision, "active", False)),
+                    "pre_stage_path_tracker_waypoint_index": int(
+                        getattr(decision, "waypoint_index", 0) or 0
+                    ),
+                    "pre_stage_path_tracker_waypoint_kind": str(
+                        getattr(decision, "waypoint_kind", "") or ""
+                    ),
+                    "pre_stage_path_tracker_waypoint_count": int(
+                        getattr(decision, "waypoint_count", 0) or 0
+                    ),
+                    "pre_stage_path_tracker_release_reason": str(
+                        getattr(decision, "release_reason", "") or ""
+                    ),
+                    "pre_stage_path_tracker_release_blockers": list(
+                        getattr(decision, "release_blockers", ()) or ()
+                    ),
+                    "pre_stage_path_tracker_measured_handoff_ready": (
+                        bool(measured_handoff_ready) if measured_handoff_ready is not None else None
+                    ),
+                    "pre_stage_path_tracker_projected_handoff_ready": (
+                        bool(projected_handoff_ready) if projected_handoff_ready is not None else None
+                    ),
+                    "pre_stage_path_tracker_measured_pre_stage": (
+                        dict(measured_snapshot)
+                        if isinstance(measured_snapshot, dict)
+                        else {}
+                    ),
+                    "pre_stage_path_tracker_projected_pre_stage": (
+                        dict(projected_snapshot)
+                        if isinstance(projected_snapshot, dict)
+                        else {}
+                    ),
+                    "pre_stage_path_tracker_waypoint_pose": (
+                        dict(getattr(decision, "waypoint_pose", {}) or {})
+                        if isinstance(getattr(decision, "waypoint_pose", None), dict)
+                        else {}
+                    ),
+                    "pre_stage_path_tracker_waypoint_distance_m": clean_number(
+                        getattr(decision, "waypoint_distance_m", None)
+                    ),
+                    "pre_stage_path_tracker_waypoint_heading_error_rad": clean_number(
+                        getattr(decision, "waypoint_heading_error_rad", None)
+                    ),
+                    "pre_stage_path_tracker_waypoint_reached": bool(
+                        getattr(decision, "waypoint_reached", False)
+                    ),
+                    "pre_stage_path_tracker_projection_m": clean_number(
+                        getattr(decision, "projection_m", None)
+                    ),
+                    "pre_stage_path_tracker_lateral_error_m": clean_number(
+                        getattr(decision, "lateral_error_m", None)
+                    ),
+                    "pre_stage_path_tracker_distance_m": clean_number(
+                        getattr(decision, "distance_m", None)
+                    ),
+                    "pre_stage_path_tracker_yaw_error_deg": clean_number(
+                        getattr(decision, "yaw_error_deg", None)
+                    ),
+                    "pre_stage_path_tracker_projected_yaw_gain_deg": clean_number(
+                        getattr(decision, "projected_yaw_gain_deg", None)
+                    ),
+                    "pre_stage_path_tracker_ball_motion_m": clean_number(
+                        getattr(decision, "ball_motion_m", None)
+                    ),
+                    "pre_stage_path_tracker_min_ball_clearance_m": clean_number(
+                        getattr(decision, "min_ball_clearance_m", None)
+                    ),
+                    "pre_stage_path_tracker_segment_ball_clearance_m": clean_number(
+                        getattr(decision, "segment_ball_clearance_m", None)
+                    ),
+                    "pre_stage_path_tracker_candidate_count": int(
+                        getattr(decision, "candidate_count", 0) or 0
+                    ),
+                    "pre_stage_path_tracker_accepted_count": int(
+                        getattr(decision, "accepted_count", 0) or 0
+                    ),
+                    "pre_stage_path_tracker_rejected_count": int(
+                        getattr(decision, "rejected_count", 0) or 0
+                    ),
+                    "pre_stage_path_tracker_rejection_reasons": list(
+                        getattr(decision, "rejection_reasons", ()) or ()
+                    ),
+                    "pre_stage_path_tracker_progress_timeout": "waypoint_progress_stall"
+                    in list(getattr(decision, "rejection_reasons", ()) or ()),
+                }
+                if (
+                    decision is not None
+                    and bool(getattr(decision, "active", False))
+                    and getattr(decision, "command", None) is not None
+                ):
+                    pre_stage_command = decision.command
+                    pre_stage_strategy_name = str(getattr(decision, "strategy_name", "") or "")
+                    pre_stage_objective_name = str(getattr(decision, "objective_name", "") or "")
+                    pre_stage_progress_score = clean_number(getattr(decision, "progress_score", None))
+                    pre_stage_projected_projection_gain = clean_number(
+                        getattr(decision, "projected_projection_gain", None)
+                    )
+                    pre_stage_projected_lateral_gain = clean_number(
+                        getattr(decision, "projected_lateral_gain", None)
+                    )
+                    pre_stage_projected_distance_gain = clean_number(
+                        getattr(decision, "projected_distance_gain", None)
+                    )
+                    if (
+                        pre_stage_progress_score is not None
+                        and (
+                            short_horizon_best_progress_score is None
+                            or pre_stage_progress_score > short_horizon_best_progress_score + 1.0e-6
+                        )
+                    ):
+                        short_horizon_best_progress_score = pre_stage_progress_score
+                        short_horizon_last_progress_monotonic = now_monotonic
+                    pre_stage_stall_s = max(0.0, now_monotonic - short_horizon_last_progress_monotonic)
+                    if pre_stage_strategy_name != short_horizon_strategy_name:
+                        short_horizon_strategy_started_monotonic = now_monotonic
+                    short_horizon_strategy_name = pre_stage_strategy_name
+                    short_horizon_objective_name = pre_stage_objective_name
+                elif str(getattr(decision, "release_reason", "") or ""):
+                    if str(getattr(decision, "release_reason", "") or "") == "ball_motion_guard":
+                        pre_stage_path_tracker_abort_reason = "pre_stage_path_tracker_ball_motion_guard"
+                        pre_stage_command = PlaceControlCommand(
+                            mode="pre_stage_path_tracker_abort",
+                            linear_x=0.0,
+                            angular_z=0.0,
+                            target_speed_scale=0.0,
+                            rationale="Pre-stage path tracker stopped because ball motion was detected before handoff.",
+                        )
+                    short_horizon_strategy_name = ""
+                    short_horizon_objective_name = ""
+                    short_horizon_strategy_started_monotonic = now_monotonic
             if pre_stage_command is not None:
                 latest_pre_capture_command_mode = str(pre_stage_command.mode)
             pre_stage_manager_decision = decide_gather_manager_directive(
@@ -2656,6 +2821,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **docking_reacquire_debug_fields,
                     **handoff_yaw_servo_debug_fields,
                     **pre_stage_reacquire_fsm_debug_fields,
+                    **pre_stage_path_tracker_debug_fields,
                 },
             )
             constrained_local_previous_ball_pose = dict(ball_pose or {}) if ball_pose else constrained_local_previous_ball_pose
@@ -2667,6 +2833,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             )
             pre_stage_reacquire_fsm_previous_ball_pose = (
                 dict(ball_pose or {}) if ball_pose else pre_stage_reacquire_fsm_previous_ball_pose
+            )
+            pre_stage_path_tracker_previous_ball_pose = (
+                dict(ball_pose or {}) if ball_pose else pre_stage_path_tracker_previous_ball_pose
             )
             if pre_stage_reacquire_fsm_abort_reason:
                 pre_stage_time_s = now_monotonic - pre_stage_started_monotonic
@@ -2687,6 +2856,26 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "entered_goal_side_before_capture": False,
                 }
                 write_json(mission_root / f"{target.id}_{pre_stage_reacquire_fsm_abort_reason}.json", failure_payload)
+                return False, failure_payload
+            if pre_stage_path_tracker_abort_reason:
+                pre_stage_time_s = now_monotonic - pre_stage_started_monotonic
+                self._set_manual_drive(
+                    enabled=False,
+                    mode=pre_stage_path_tracker_abort_reason,
+                    rationale="Pre-stage path tracker stopped before handoff because its safety guard tripped.",
+                )
+                failure_payload = {
+                    "failure_reason": pre_stage_path_tracker_abort_reason,
+                    "failure_stage": "pre_stage",
+                    "pre_stage_pose_world": pre_stage_pose_world,
+                    "pre_stage_pose_reached": bool(pre_stage_pose_reached_once),
+                    "pre_stage_time_s": round(pre_stage_time_s, 6),
+                    "pre_stage_handoff_pass": False,
+                    "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
+                    "approach_failure_reason": "ball_motion_guard",
+                    "entered_goal_side_before_capture": False,
+                }
+                write_json(mission_root / f"{target.id}_{pre_stage_path_tracker_abort_reason}.json", failure_payload)
                 return False, failure_payload
             if (
                 pre_stage_manager_decision.directive == "stabilize_stage"

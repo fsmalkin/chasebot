@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
@@ -83,6 +85,18 @@ def test_parse_args_allows_pre_stage_reacquire_fsm_v1(monkeypatch):
     args = repeatability_runner.parse_args()
 
     assert args.gather_control_family == "pre_stage_reacquire_fsm_v1"
+
+
+def test_parse_args_allows_pre_stage_path_tracker_v1(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        ["repeatability", "--gather-control-family", "pre_stage_path_tracker_v1"],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.gather_control_family == "pre_stage_path_tracker_v1"
 
 
 def test_ensure_environment_ready_noops_when_dashboard_already_ready(monkeypatch):
@@ -1059,7 +1073,12 @@ def test_run_dashboard_scenario_once_ignores_stale_error_result(monkeypatch):
     assert summary["mission_verdict_path"] == "new-path"
 
 
-def test_main_passes_retries_and_fsm_family_to_direct_gather_runner(tmp_path: Path, monkeypatch):
+@pytest.mark.parametrize("family", ["pre_stage_reacquire_fsm_v1", "pre_stage_path_tracker_v1"])
+def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
+    tmp_path: Path,
+    monkeypatch,
+    family: str,
+):
     monkeypatch.setattr(repeatability_runner, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(repeatability_runner, "wait_for_dashboard", lambda *args, **kwargs: None)
     monkeypatch.setattr(repeatability_runner, "prepare_direct_environment", lambda args: {"session_id": "session-direct"})
@@ -1119,7 +1138,7 @@ def test_main_passes_retries_and_fsm_family_to_direct_gather_runner(tmp_path: Pa
             "--max-retries-per-target",
             "0",
             "--gather-control-family",
-            "pre_stage_reacquire_fsm_v1",
+            family,
         ],
     )
 
@@ -1132,4 +1151,4 @@ def test_main_passes_retries_and_fsm_family_to_direct_gather_runner(tmp_path: Pa
     assert subprocess_calls[0][retry_index + 1] == "0"
     assert "--gather-control-family" in subprocess_calls[0]
     family_index = subprocess_calls[0].index("--gather-control-family")
-    assert subprocess_calls[0][family_index + 1] == "pre_stage_reacquire_fsm_v1"
+    assert subprocess_calls[0][family_index + 1] == family

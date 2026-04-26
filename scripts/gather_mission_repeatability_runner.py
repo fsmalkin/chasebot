@@ -37,6 +37,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "docking_reacquire_v1",
     "handoff_yaw_servo_v1",
     "pre_stage_reacquire_fsm_v1",
+    "pre_stage_path_tracker_v1",
 )
 
 

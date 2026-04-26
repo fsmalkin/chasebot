@@ -65,6 +65,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather docking reacquire helper (internal) | `scripts/gather_docking_reacquire_helpers.py` |
 | Gather handoff yaw servo helper (internal) | `scripts/gather_handoff_yaw_servo_helpers.py` |
 | Gather pre-stage reacquire FSM helper (internal) | `scripts/gather_pre_stage_reacquire_fsm_helpers.py` |
+| Gather pre-stage path tracker helper (internal) | `scripts/gather_pre_stage_path_tracker_helpers.py` |
 | Gather control portfolio analyzer (internal) | `scripts/gather_control_portfolio.py` |
 | Gather hard-case stress analyzer (internal) | `scripts/gather_control_stress_analyzer.py` |
 | Gather control failure audit analyzer (internal) | `scripts/gather_control_failure_audit.py` |
@@ -132,6 +133,7 @@ Lane-specific configs:
 21. Gather control failure audit is analyzer-only closeout evidence; it does not promote or refresh portfolio/stress evidence for any blocked branch, including `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, or `pre_stage_reacquire_fsm_v1`.
 22. `handoff_yaw_servo_v1` is a blocked experimental last-mile pre-stage yaw-alignment branch after the April 25/26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 23. `pre_stage_reacquire_fsm_v1` is a blocked experimental first-attempt pre-stage reacquire branch after the April 26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
+24. `pre_stage_path_tracker_v1` is the current experimental first-attempt pre-stage branch. It owns `pre_stage` as a measured SE(2) waypoint path tracker and must stay out of portfolio/stress comparison until fresh one-run `zero` and `plus45` matrix attempts both clear pre-stage handoff without pre-stage ball drift/contact.
 
 ## Latest Validated Artifacts
 
@@ -211,6 +213,11 @@ Gather pre-stage reacquire FSM experimental branch status:
 - Scope: one-ball first-attempt `pre_stage` reacquisition only; explicit measured-state phases cover goal-side escape, safe docking entry, dock-port convergence, yaw-only final alignment, and baseline release.
 - Smoke: `artifacts/session/live_pre_stage_reacquire_fsm_v1_matrix_smoke_20260426/gather_goal_side_matrix/campaign_summary.json`
 - Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff without clearing the matrix gate, so no portfolio/stress refresh was produced for this branch.
+
+Gather pre-stage path tracker experimental branch status:
+- Candidate: `pre_stage_path_tracker_v1`
+- Scope: one-ball first-attempt `pre_stage` reacquisition only; explicit waypoint path tracker covers escape, off-axis approach, port, and final yaw-align waypoints before baseline handoff.
+- Smoke: not yet run. The first live gate is `scripts/run_gather_goal_side_matrix.ps1 -GatherControlFamily pre_stage_path_tracker_v1 -RunsPerCase 1 -MaxRetriesPerTarget 2`; inspect fresh `zero` and `plus45` before any broader evidence.
 
 ## Testing
 

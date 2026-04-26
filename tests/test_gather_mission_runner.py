@@ -119,6 +119,16 @@ def test_gather_control_family_allows_pre_stage_reacquire_fsm_v1(tmp_path, monke
     assert runner.gather_control_family == "pre_stage_reacquire_fsm_v1"
 
 
+def test_gather_control_family_allows_pre_stage_path_tracker_v1(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "pre_stage_path_tracker_v1"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.gather_control_family == "pre_stage_path_tracker_v1"
+
+
 def test_parse_args_allows_region_funnel_v1(monkeypatch):
     monkeypatch.setattr(
         gather_runner.sys,
@@ -189,6 +199,18 @@ def test_parse_args_allows_pre_stage_reacquire_fsm_v1(monkeypatch):
     args = gather_runner.parse_args()
 
     assert args.gather_control_family == "pre_stage_reacquire_fsm_v1"
+
+
+def test_parse_args_allows_pre_stage_path_tracker_v1(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        ["gather_mission_runner.py", "--gather-control-family", "pre_stage_path_tracker_v1"],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.gather_control_family == "pre_stage_path_tracker_v1"
 
 
 def test_nav2_reacquire_goal_generation_covers_zero_plus_minus_and_ready_states():
@@ -1470,6 +1492,270 @@ def test_pre_stage_target_aborts_fsm_on_ball_motion_guard(tmp_path, monkeypatch)
     assert state_rows[-1]["selected_command"]["mode"] == "pre_stage_reacquire_fsm_abort"
     assert command_log[-1]["enabled"] is False
     assert command_log[-1]["mode"] == "pre_stage_ball_motion_guard"
+
+
+def test_pre_stage_target_records_pre_stage_path_tracker_debug_fields(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    runner.gather_control_family = "pre_stage_path_tracker_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    ready_pose = {"x": 6.348, "y": 0.0, "yaw": gather_runner.math.pi}
+    sequence = [ready_pose, ready_pose, ready_pose]
+    index = {"value": 0}
+
+    command = gather_runner.PlaceControlCommand(
+        mode="pre_stage_path_tracker",
+        linear_x=0.12,
+        angular_z=-0.22,
+        target_speed_scale=0.70,
+        rationale="Pre-stage path tracker override.",
+    )
+    decision = SimpleNamespace(
+        active=True,
+        waypoint_index=1,
+        waypoint_kind="approach",
+        waypoint_count=4,
+        strategy_name="path_approach",
+        objective_name="pre_stage_path_tracker",
+        progress_score=112.5,
+        command=command,
+        release_reason="",
+        release_blockers=("distance_not_converged",),
+        measured_snapshot={"pre_stage_pose_reached": False, "robot_on_goal_side": False},
+        projected_snapshot={"pre_stage_pose_reached": False, "pre_stage_pose_distance_m": 0.72},
+        measured_handoff_ready=False,
+        projected_handoff_ready=False,
+        waypoint_pose={"x": 6.568, "y": -0.82, "yaw": 3.141593},
+        waypoint_distance_m=0.91,
+        waypoint_heading_error_rad=-0.18,
+        waypoint_reached=True,
+        projection_m=-0.48,
+        lateral_error_m=0.36,
+        distance_m=0.94,
+        yaw_error_deg=35.0,
+        projected_projection_gain=0.04,
+        projected_lateral_gain=0.03,
+        projected_distance_gain=0.08,
+        projected_yaw_gain_deg=4.0,
+        ball_motion_m=0.0,
+        min_ball_clearance_m=0.71,
+        segment_ball_clearance_m=0.88,
+        candidate_count=1,
+        accepted_count=1,
+        rejected_count=0,
+        rejection_reasons=(),
+    )
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        current = sequence[min(index["value"], len(sequence) - 1)]
+        index["value"] += 1
+        return {}, current, ball_pose
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: state_rows.append(dict(payload)))
+    monkeypatch.setattr(gather_runner, "decide_pre_stage_path_tracker_command", lambda *args, **kwargs: decision)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-path-tracker",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert pre_stage_pass is True
+    assert payload["pre_stage_pose_reached"] is True
+    assert state_rows
+    first_row = state_rows[0]
+    assert first_row["controller_family"] == "pre_stage_path_tracker_v1"
+    assert first_row["strategy_name"] == "path_approach"
+    assert first_row["objective_name"] == "pre_stage_path_tracker"
+    assert first_row["selected_command"] == command.to_dict()
+    assert first_row["pre_stage_path_tracker_active"] is True
+    assert first_row["pre_stage_path_tracker_waypoint_index"] == 1
+    assert first_row["pre_stage_path_tracker_waypoint_kind"] == "approach"
+    assert first_row["pre_stage_path_tracker_waypoint_count"] == 4
+    assert first_row["pre_stage_path_tracker_release_reason"] == ""
+    assert first_row["pre_stage_path_tracker_release_blockers"] == ["distance_not_converged"]
+    assert first_row["pre_stage_path_tracker_measured_handoff_ready"] is False
+    assert first_row["pre_stage_path_tracker_projected_handoff_ready"] is False
+    assert first_row["pre_stage_path_tracker_measured_pre_stage"]["robot_on_goal_side"] is False
+    assert first_row["pre_stage_path_tracker_projected_pre_stage"]["pre_stage_pose_distance_m"] == 0.72
+    assert first_row["pre_stage_path_tracker_waypoint_pose"] == {"x": 6.568, "y": -0.82, "yaw": 3.141593}
+    assert first_row["pre_stage_path_tracker_waypoint_distance_m"] == 0.91
+    assert first_row["pre_stage_path_tracker_waypoint_heading_error_rad"] == -0.18
+    assert first_row["pre_stage_path_tracker_waypoint_reached"] is True
+    assert first_row["pre_stage_path_tracker_projection_m"] == -0.48
+    assert first_row["pre_stage_path_tracker_lateral_error_m"] == 0.36
+    assert first_row["pre_stage_path_tracker_distance_m"] == 0.94
+    assert first_row["pre_stage_path_tracker_yaw_error_deg"] == 35.0
+    assert first_row["pre_stage_path_tracker_projected_yaw_gain_deg"] == 4.0
+    assert first_row["pre_stage_path_tracker_ball_motion_m"] == 0.0
+    assert first_row["pre_stage_path_tracker_min_ball_clearance_m"] == 0.71
+    assert first_row["pre_stage_path_tracker_segment_ball_clearance_m"] == 0.88
+    assert first_row["pre_stage_path_tracker_candidate_count"] == 1
+    assert first_row["pre_stage_path_tracker_accepted_count"] == 1
+    assert first_row["pre_stage_path_tracker_rejected_count"] == 0
+    assert first_row["pre_stage_path_tracker_rejection_reasons"] == []
+    assert first_row["pre_stage_path_tracker_progress_timeout"] is False
+
+
+def test_pre_stage_target_aborts_path_tracker_on_ball_motion_guard(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    runner.gather_control_family = "pre_stage_path_tracker_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ball_poses = [
+        {"x": 5.448, "y": 0.0, "z": 0.05},
+        {"x": 5.501, "y": 0.0, "z": 0.05},
+    ]
+    index = {"value": 0}
+    active_command = gather_runner.PlaceControlCommand(
+        mode="pre_stage_path_tracker",
+        linear_x=0.10,
+        angular_z=0.20,
+        target_speed_scale=0.70,
+        rationale="Pre-stage path tracker override.",
+    )
+
+    def fake_decision(*args, **kwargs):
+        ball_motion_m = kwargs.get("ball_motion_m")
+        if ball_motion_m is not None and ball_motion_m > 0.035:
+            return SimpleNamespace(
+                active=False,
+                waypoint_index=0,
+                waypoint_kind="",
+                waypoint_count=0,
+                strategy_name="",
+                objective_name="",
+                progress_score=None,
+                command=None,
+                release_reason="ball_motion_guard",
+                release_blockers=("ball_motion_guard",),
+                measured_snapshot={"pre_stage_pose_reached": False},
+                projected_snapshot={},
+                measured_handoff_ready=False,
+                projected_handoff_ready=None,
+                waypoint_pose={},
+                waypoint_distance_m=None,
+                waypoint_heading_error_rad=None,
+                waypoint_reached=False,
+                projection_m=5.44,
+                lateral_error_m=0.0,
+                distance_m=6.34,
+                yaw_error_deg=180.0,
+                projected_yaw_gain_deg=None,
+                ball_motion_m=ball_motion_m,
+                min_ball_clearance_m=None,
+                segment_ball_clearance_m=None,
+                candidate_count=0,
+                accepted_count=0,
+                rejected_count=0,
+                rejection_reasons=(),
+            )
+        return SimpleNamespace(
+            active=True,
+            waypoint_index=0,
+            waypoint_kind="escape",
+            waypoint_count=4,
+            strategy_name="path_escape",
+            objective_name="pre_stage_path_tracker",
+            progress_score=0.2,
+            command=active_command,
+            release_reason="",
+            release_blockers=("robot_on_goal_side",),
+            measured_snapshot={"pre_stage_pose_reached": False},
+            projected_snapshot={"pre_stage_pose_reached": False},
+            measured_handoff_ready=False,
+            projected_handoff_ready=False,
+            waypoint_pose={},
+            waypoint_distance_m=6.0,
+            waypoint_heading_error_rad=0.0,
+            waypoint_reached=False,
+            projection_m=5.44,
+            lateral_error_m=0.0,
+            distance_m=6.34,
+            yaw_error_deg=180.0,
+            projected_projection_gain=0.1,
+            projected_lateral_gain=0.0,
+            projected_distance_gain=0.1,
+            projected_yaw_gain_deg=0.0,
+            ball_motion_m=ball_motion_m,
+            min_ball_clearance_m=0.7,
+            segment_ball_clearance_m=0.8,
+            candidate_count=1,
+            accepted_count=1,
+            rejected_count=0,
+            rejection_reasons=(),
+        )
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        ball_pose = ball_poses[min(index["value"], len(ball_poses) - 1)]
+        index["value"] += 1
+        return {}, robot_pose, ball_pose
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: state_rows.append(dict(payload)))
+    monkeypatch.setattr(gather_runner, "decide_pre_stage_path_tracker_command", fake_decision)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-path-tracker-ball-motion",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert pre_stage_pass is False
+    assert payload["failure_reason"] == "pre_stage_path_tracker_ball_motion_guard"
+    assert payload["pre_stage_handoff_pass"] is False
+    assert state_rows[-1]["pre_stage_path_tracker_release_reason"] == "ball_motion_guard"
+    assert state_rows[-1]["selected_command"]["mode"] == "pre_stage_path_tracker_abort"
+    assert command_log[-1]["enabled"] is False
+    assert command_log[-1]["mode"] == "pre_stage_path_tracker_ball_motion_guard"
 
 
 def test_nav2_reacquire_does_not_activate_when_pre_stage_handoff_ready(tmp_path, monkeypatch):
