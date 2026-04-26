@@ -29,10 +29,17 @@ FAILURE_LABELS = (
     "local_planner_progress_insufficient",
     "local_planner_release_not_reached",
     "local_planner_goal_side_persistent",
+    "docking_release_not_reached",
+    "docking_handoff_yaw_not_aligned",
+    "docking_progress_insufficient",
 )
 BLOCKED_CANDIDATE_BRANCHES = {"region_funnel_v1", "nav2_reacquire_v1"}
 CONSTRAINED_LOCAL_PLANNER_BRANCH = "constrained_local_planner_v1"
-BLOCKED_CURRENT_CANDIDATE_BRANCHES = BLOCKED_CANDIDATE_BRANCHES | {CONSTRAINED_LOCAL_PLANNER_BRANCH}
+DOCKING_REACQUIRE_BRANCH = "docking_reacquire_v1"
+BLOCKED_CURRENT_CANDIDATE_BRANCHES = BLOCKED_CANDIDATE_BRANCHES | {
+    CONSTRAINED_LOCAL_PLANNER_BRANCH,
+    DOCKING_REACQUIRE_BRANCH,
+}
 RECOMMENDED_RETIRE_AND_DESIGN = "retire_current_candidates_and_design_constrained_local_planner_branch"
 RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS = (
     "retire_blocked_candidates_and_define_next_reacquire_architecture_requirements"
@@ -448,6 +455,188 @@ def _local_planner_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _truthy_blocker_count(value: Any) -> int:
+    if isinstance(value, bool):
+        return 1 if value else 0
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return int(value) if math.isfinite(float(value)) and value > 0 else 0
+    if isinstance(value, str):
+        return 1 if value.strip() else 0
+    if isinstance(value, list):
+        return len([item for item in value if str(item or "").strip()])
+    if isinstance(value, dict):
+        return len([key for key, item in value.items() if _boolish(item) is not False and str(key or "").strip()])
+    return 0
+
+
+def _handoff_ready_values(
+    rows: list[dict[str, Any]],
+    keys: tuple[str, ...],
+    snapshot_keys: tuple[str, ...],
+) -> list[bool | None]:
+    values: list[bool | None] = []
+    for row in rows:
+        row_value: bool | None = None
+        for key in keys:
+            if key not in row:
+                continue
+            parsed = _boolish(row.get(key))
+            if parsed is not None:
+                row_value = parsed
+                break
+        if row_value is not None:
+            values.append(row_value)
+            continue
+        for snapshot_key in snapshot_keys:
+            snapshot = _dict_value(row.get(snapshot_key))
+            for key in keys:
+                if key not in snapshot:
+                    continue
+                parsed = _boolish(snapshot.get(key))
+                if parsed is not None:
+                    row_value = parsed
+                    break
+            if row_value is not None:
+                break
+        if row_value is not None:
+            values.append(row_value)
+    return values
+
+
+def _docking_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    docking_rows = [
+        row
+        for row in rows
+        if row.get("controller_family") == DOCKING_REACQUIRE_BRANCH
+        or str(row.get("objective_name", "") or "") == "docking_reacquire"
+        or any(str(key).startswith("docking_") for key in row)
+    ]
+    active_rows = [
+        row
+        for row in docking_rows
+        if str(row.get("objective_name", "") or "") == "docking_reacquire"
+        or str(_dict_value(row.get("selected_command")).get("mode", "") or "").startswith("docking")
+        or bool(
+            str(
+                row.get("strategy_name", "")
+                or row.get("docking_reacquire_strategy_name", "")
+                or row.get("docking_strategy_name", "")
+                or ""
+            )
+        )
+    ]
+    release_reasons = _ordered_unique(
+        [
+            str(row.get("docking_reacquire_release_reason", "") or row.get("docking_release_reason", "") or "")
+            for row in docking_rows
+            if str(row.get("docking_reacquire_release_reason", "") or row.get("docking_release_reason", "") or "")
+        ]
+    )
+    release_blockers = _ordered_unique(
+        [
+            str(blocker)
+            for row in docking_rows
+            for blocker in (
+                _list_value(row.get("docking_reacquire_release_blockers"))
+                or _list_value(row.get("docking_release_blockers"))
+                or _list_value(row.get("release_blockers"))
+                or _list_value(row.get("docking_blockers"))
+            )
+            if str(blocker)
+        ]
+    )
+    strategy_counts: dict[str, int] = {}
+    for row in active_rows:
+        strategy_name = str(
+            row.get("docking_reacquire_strategy_name", "")
+            or row.get("docking_strategy_name", "")
+            or row.get("strategy_name", "")
+            or ""
+        )
+        if strategy_name:
+            strategy_counts[strategy_name] = strategy_counts.get(strategy_name, 0) + 1
+
+    measured_ready_values = _handoff_ready_values(
+        docking_rows,
+        (
+            "docking_reacquire_handoff_ready_measured",
+            "docking_measured_handoff_ready",
+            "measured_handoff_ready",
+            "handoff_ready",
+            "handoff_pass",
+            "pre_stage_pose_reached",
+        ),
+        ("pre_stage", "docking_measured_handoff"),
+    )
+    projected_ready_values = _handoff_ready_values(
+        docking_rows,
+        (
+            "docking_reacquire_handoff_ready_projected",
+            "docking_projected_handoff_ready",
+            "projected_handoff_ready",
+            "handoff_ready",
+            "handoff_pass",
+            "pre_stage_pose_reached",
+        ),
+        ("docking_reacquire_projected_pre_stage", "docking_projected_handoff"),
+    )
+    ball_motion_values = [
+        _finite_float(
+            row.get("docking_reacquire_ball_motion_m", row.get("docking_ball_motion_m", row.get("ball_motion_m")))
+        )
+        for row in docking_rows
+    ]
+    yaw_blocker_count = sum(
+        _truthy_blocker_count(row.get(key))
+        for row in docking_rows
+        for key in (
+            "docking_handoff_yaw_blocker",
+            "docking_handoff_yaw_blocked",
+            "docking_yaw_blocker",
+            "handoff_yaw_blocker",
+            "yaw_blocker",
+            "yaw_not_aligned",
+        )
+    )
+    yaw_blocker_count += sum(
+        1
+        for row in docking_rows
+        for blocker in (
+            _list_value(row.get("docking_reacquire_release_blockers"))
+            or _list_value(row.get("docking_release_blockers"))
+            or _list_value(row.get("release_blockers"))
+            or _list_value(row.get("docking_blockers"))
+        )
+        if "yaw" in str(blocker).lower()
+    )
+    current_distance_values = [
+        _snapshot_number(_dict_value(row.get("pre_stage")), "pre_stage_pose_distance_m") for row in docking_rows
+    ]
+    projected_distance_values = [
+        _snapshot_number(
+            _dict_value(row.get("docking_reacquire_projected_pre_stage") or row.get("docking_projected_handoff")),
+            "pre_stage_pose_distance_m",
+        )
+        for row in docking_rows
+    ]
+    return {
+        "docking_row_count": len(docking_rows),
+        "docking_active_row_count": len(active_rows),
+        "docking_release_reason_count": len(release_reasons),
+        "docking_release_reasons": release_reasons,
+        "docking_release_blockers": release_blockers,
+        "docking_strategy_counts": strategy_counts,
+        "docking_measured_handoff_ready_count": sum(value is True for value in measured_ready_values),
+        "docking_measured_handoff_not_ready_count": sum(value is False for value in measured_ready_values),
+        "docking_projected_handoff_ready_count": sum(value is True for value in projected_ready_values),
+        "docking_projected_handoff_not_ready_count": sum(value is False for value in projected_ready_values),
+        "docking_handoff_yaw_blocker_count": yaw_blocker_count,
+        "docking_observed_distance_reduction_m": _observed_reduction(current_distance_values),
+        "docking_projected_distance_min_m": _min_number(projected_distance_values),
+        "docking_max_ball_motion_m": _max_number(ball_motion_values),
+    }
+
+
 def _case_labels(
     *,
     branch_name: str,
@@ -457,6 +646,7 @@ def _case_labels(
     mission_verdict: dict[str, Any],
     nav2_debug: dict[str, Any],
     local_planner_debug: dict[str, Any],
+    docking_debug: dict[str, Any],
 ) -> list[str]:
     labels: list[str] = []
     handoff_pass = _pre_stage_handoff_pass(case)
@@ -469,6 +659,8 @@ def _case_labels(
     if float(nav2_debug.get("ball_drift_max_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
         labels.append("ball_contact_during_reacquire")
     if float(local_planner_debug.get("local_planner_max_ball_motion_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
+        labels.append("ball_contact_during_reacquire")
+    if float(docking_debug.get("docking_max_ball_motion_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
         labels.append("ball_contact_during_reacquire")
     if int(nav2_debug.get("post_reacquire_not_handoff_ready_count", 0) or 0) > 0:
         labels.append("post_reacquire_not_handoff_ready")
@@ -485,6 +677,15 @@ def _case_labels(
             and int(local_planner_debug.get("local_planner_current_goal_side_row_count", 0) or 0) > 0
         ):
             labels.append("local_planner_goal_side_persistent")
+    if str(branch_name or "") == DOCKING_REACQUIRE_BRANCH:
+        docking_active_count = int(docking_debug.get("docking_active_row_count", 0) or 0)
+        docking_release_count = int(docking_debug.get("docking_release_reason_count", 0) or 0)
+        if docking_active_count > 0 and docking_release_count == 0:
+            labels.append("docking_release_not_reached")
+        if int(docking_debug.get("docking_handoff_yaw_blocker_count", 0) or 0) > 0:
+            labels.append("docking_handoff_yaw_not_aligned")
+        if docking_active_count > 0 and _pre_stage_handoff_pass(case) is False:
+            labels.append("docking_progress_insufficient")
 
     latest = _dict_value(_first_run(case).get("latest_approach_progress"))
     latest_pre_stage = _dict_value(latest.get("pre_stage"))
@@ -521,6 +722,7 @@ def build_case_failure_summary(
         state_history_status, state_rows = _load_jsonl(state_history_path)
     nav2_debug = _nav2_debug_summary(state_rows)
     local_planner_debug = _local_planner_debug_summary(state_rows)
+    docking_debug = _docking_debug_summary(state_rows)
 
     missing_evidence: list[str] = []
     if mission_verdict_status in {"not_referenced", "missing", "unreadable"}:
@@ -536,6 +738,7 @@ def build_case_failure_summary(
         mission_verdict=mission_verdict,
         nav2_debug=nav2_debug,
         local_planner_debug=local_planner_debug,
+        docking_debug=docking_debug,
     )
     handoff_pass = _pre_stage_handoff_pass(case)
     pose_reached = _pre_stage_pose_reached(case)
@@ -563,6 +766,7 @@ def build_case_failure_summary(
         "missing_evidence": missing_evidence,
         "nav2_debug": nav2_debug,
         "local_planner_debug": local_planner_debug,
+        "docking_debug": docking_debug,
     }
 
 
@@ -637,6 +841,7 @@ def _recommend_next_action(branches: list[dict[str, Any]]) -> tuple[str, list[st
                 "region_funnel_v1_zero_plus45_pre_stage_handoff_blocked",
                 "nav2_reacquire_v1_zero_plus45_pre_stage_handoff_blocked",
                 "constrained_local_planner_v1_zero_plus45_pre_stage_handoff_blocked",
+                "docking_reacquire_v1_zero_plus45_pre_stage_handoff_blocked",
             ],
         )
     if BLOCKED_CANDIDATE_BRANCHES.issubset(branch_names) and BLOCKED_CANDIDATE_BRANCHES.issubset(blocked_branches):

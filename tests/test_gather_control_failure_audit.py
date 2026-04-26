@@ -183,6 +183,15 @@ def test_failure_audit_recommends_next_architecture_when_all_current_candidates_
             _case("plus45", mission_root=tmp_path / "constrained_plus45"),
         ],
     )
+    docking_path = _matrix_summary(
+        tmp_path,
+        "docking",
+        family="docking_reacquire_v1",
+        cases=[
+            _case("zero", mission_root=tmp_path / "docking_zero"),
+            _case("plus45", mission_root=tmp_path / "docking_plus45"),
+        ],
+    )
 
     summary = audit.build_failure_audit_summary(
         campaign_id="failure_audit_test",
@@ -190,11 +199,35 @@ def test_failure_audit_recommends_next_architecture_when_all_current_candidates_
             ("region_funnel_v1", region_path),
             ("nav2_reacquire_v1", nav2_path),
             ("constrained_local_planner_v1", constrained_path),
+            ("docking_reacquire_v1", docking_path),
         ],
     )
 
     assert summary["recommended_next_action"] == audit.RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS
     assert "constrained_local_planner_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
+    assert "docking_reacquire_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
+
+
+def test_failure_audit_does_not_final_closeout_without_docking_candidate(tmp_path: Path):
+    branch_specs = []
+    for name in ("region_funnel_v1", "nav2_reacquire_v1", "constrained_local_planner_v1"):
+        path = _matrix_summary(
+            tmp_path,
+            name,
+            family=name,
+            cases=[
+                _case("zero", mission_root=tmp_path / f"{name}_zero"),
+                _case("plus45", mission_root=tmp_path / f"{name}_plus45"),
+            ],
+        )
+        branch_specs.append((name, path))
+
+    summary = audit.build_failure_audit_summary(
+        campaign_id="failure_audit_test",
+        branch_specs=branch_specs,
+    )
+
+    assert summary["recommended_next_action"] != audit.RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS
 
 
 def test_nav2_timeout_and_ball_contact_are_extracted_from_state_history(tmp_path: Path):
@@ -393,6 +426,75 @@ def test_constrained_local_labels_are_branch_scoped(tmp_path: Path):
     assert "local_planner_progress_insufficient" not in branch["cases"][0]["failure_labels"]
     assert "local_planner_release_not_reached" not in branch["cases"][0]["failure_labels"]
     assert "local_planner_goal_side_persistent" not in branch["cases"][0]["failure_labels"]
+
+
+def test_docking_debug_rows_emit_docking_failure_labels(tmp_path: Path):
+    mission_root = tmp_path / "docking_plus45"
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "controller_family": "docking_reacquire_v1",
+                "objective_name": "docking_reacquire",
+                "docking_reacquire_strategy_name": "yaw_then_pocket",
+                "selected_command": {"mode": "docking_reacquire_pre_stage"},
+                "docking_reacquire_release_reason": "",
+                "docking_reacquire_release_blockers": ["yaw_not_aligned"],
+                "docking_reacquire_ball_motion_m": 0.0,
+                "docking_reacquire_handoff_ready_measured": False,
+                "docking_reacquire_handoff_ready_projected": False,
+                "docking_reacquire_projected_pre_stage": {
+                    "pre_stage_pose_reached": False,
+                    "pre_stage_pose_distance_m": 1.2,
+                },
+                "pre_stage": {
+                    "handoff_pass": False,
+                    "pre_stage_pose_distance_m": 1.8,
+                },
+            },
+            {
+                "controller_family": "docking_reacquire_v1",
+                "objective_name": "docking_reacquire",
+                "docking_reacquire_strategy_name": "yaw_then_pocket",
+                "selected_command": {"mode": "docking_reacquire_pre_stage"},
+                "docking_reacquire_release_reason": "",
+                "docking_reacquire_release_blockers": ["yaw_not_aligned"],
+                "docking_reacquire_ball_motion_m": 0.012,
+                "docking_reacquire_handoff_ready_measured": False,
+                "docking_reacquire_handoff_ready_projected": False,
+                "docking_reacquire_projected_pre_stage": {"pre_stage_pose_distance_m": 1.0},
+                "pre_stage": {"pre_stage_pose_distance_m": 1.6},
+            },
+        ],
+    )
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "docking",
+        family="docking_reacquire_v1",
+        cases=[_case("plus45", mission_root=mission_root)],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="docking_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    case = branch["cases"][0]
+
+    assert "docking_release_not_reached" in case["failure_labels"]
+    assert "docking_handoff_yaw_not_aligned" in case["failure_labels"]
+    assert "docking_progress_insufficient" in case["failure_labels"]
+    assert "ball_contact_during_reacquire" not in case["failure_labels"]
+    assert case["docking_debug"]["docking_active_row_count"] == 2
+    assert case["docking_debug"]["docking_release_reason_count"] == 0
+    assert case["docking_debug"]["docking_release_blockers"] == ["yaw_not_aligned"]
+    assert case["docking_debug"]["docking_strategy_counts"] == {"yaw_then_pocket": 2}
+    assert case["docking_debug"]["docking_measured_handoff_not_ready_count"] >= 2
+    assert case["docking_debug"]["docking_projected_handoff_not_ready_count"] >= 2
+    assert case["docking_debug"]["docking_handoff_yaw_blocker_count"] >= 2
+    assert case["docking_debug"]["docking_observed_distance_reduction_m"] == 0.2
+    assert case["docking_debug"]["docking_projected_distance_min_m"] == 1.0
+    assert case["docking_debug"]["docking_max_ball_motion_m"] == 0.012
 
 
 def test_write_failure_audit_bundle_writes_summary_and_scorecard(tmp_path: Path):

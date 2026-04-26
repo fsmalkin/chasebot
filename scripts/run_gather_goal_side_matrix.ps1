@@ -7,7 +7,8 @@ param(
     [string]$WorldFile = "yolo_test_world_v6_clean_uat_short_turf.world",
     [string]$SurfaceProfile = "short_turf",
     [string]$GatherControlFamily = "baseline",
-    [int]$RunsPerCase = 1
+    [int]$RunsPerCase = 1,
+    [int]$MaxRetriesPerTarget = 2
 )
 
 $ErrorActionPreference = "Stop"
@@ -105,6 +106,7 @@ foreach ($case in $cases) {
         "--dashboard-url", $DashboardUrl,
         "--scenario-id", "corral_single_ball_place",
         "--runs", $RunsPerCase.ToString(),
+        "--max-retries-per-target", $MaxRetriesPerTarget.ToString(),
         "--campaign-id", $caseCampaignId,
         "--provider", $Provider,
         "--execution-mode", $ExecutionMode,
