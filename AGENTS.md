@@ -63,6 +63,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather manager helper (internal) | `scripts/gather_manager_helpers.py` |
 | Gather short-horizon helper (internal) | `scripts/gather_short_horizon_helpers.py` |
 | Gather docking reacquire helper (internal) | `scripts/gather_docking_reacquire_helpers.py` |
+| Gather handoff yaw servo helper (internal) | `scripts/gather_handoff_yaw_servo_helpers.py` |
 | Gather control portfolio analyzer (internal) | `scripts/gather_control_portfolio.py` |
 | Gather hard-case stress analyzer (internal) | `scripts/gather_control_stress_analyzer.py` |
 | Gather control failure audit analyzer (internal) | `scripts/gather_control_failure_audit.py` |
@@ -128,6 +129,7 @@ Lane-specific configs:
 19. `constrained_local_planner_v1` is a blocked experimental local-planner gather-control branch after the April 25, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 20. `docking_reacquire_v1` is a blocked experimental deterministic docking-style pre-stage reacquire branch after the April 25, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 21. Gather control failure audit is analyzer-only closeout evidence; it does not promote or refresh portfolio/stress evidence for any blocked branch, including `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, or `docking_reacquire_v1`.
+22. `handoff_yaw_servo_v1` is the current experimental last-mile pre-stage yaw-alignment branch; do not add it to portfolio/stress comparison until fresh one-run `zero` and `plus45` matrix attempts both clear pre-stage handoff without pre-stage ball drift/contact.
 
 ## Latest Validated Artifacts
 
@@ -195,6 +197,11 @@ Gather docking-style reacquire experimental branch status:
 - Scope: one-ball `pre_stage` / behind-ball reacquisition only; deterministic local docking pocket selection and bounded pose-servo commands release back to baseline only after measured handoff geometry is safe.
 - Smoke: `artifacts/session/live_docking_reacquire_v1_release_fix_matrix_smoke_20260425/gather_goal_side_matrix/campaign_summary.json`
 - Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff; the branch can reach near behind-ball geometry without observed pre-stage ball motion, but it still times out on yaw/handoff alignment, so no portfolio/stress refresh was produced for this branch.
+
+Gather handoff-yaw-servo experimental branch status:
+- Candidate: `handoff_yaw_servo_v1`
+- Scope: one-ball `pre_stage` / behind-ball last-mile handoff only; yaw-only local servo activates only after measured geometry is safe except yaw.
+- Status: implemented for offline/unit validation only until a fresh one-run goal-side matrix shows `zero` and `plus45` pre-stage handoff passes with no pre-stage ball drift/contact.
 
 ## Testing
 

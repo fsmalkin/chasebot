@@ -34,6 +34,8 @@ from gather_constrained_local_planner_helpers import CONSTRAINED_LOCAL_PLANNER_C
 from gather_constrained_local_planner_helpers import decide_constrained_local_pre_stage_command
 from gather_docking_reacquire_helpers import DOCKING_REACQUIRE_CONTROL_FAMILY
 from gather_docking_reacquire_helpers import decide_docking_reacquire_pre_stage_command
+from gather_handoff_yaw_servo_helpers import HANDOFF_YAW_SERVO_CONTROL_FAMILY
+from gather_handoff_yaw_servo_helpers import decide_handoff_yaw_servo_pre_stage_command
 from gather_manager_helpers import GatherManagerState
 from gather_manager_helpers import decide_gather_manager_directive
 from gather_region_funnel_helpers import decide_region_funnel_pre_stage_command
@@ -105,6 +107,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "nav2_reacquire_v1",
     "constrained_local_planner_v1",
     "docking_reacquire_v1",
+    "handoff_yaw_servo_v1",
 )
 NAV2_REACQUIRE_CONTROL_FAMILY = "nav2_reacquire_v1"
 DEFAULT_NAV2_REACQUIRE_TRIGGER_DISTANCE_M = 1.20
@@ -1901,6 +1904,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         nav2_reacquire_attempted = False
         constrained_local_previous_ball_pose: dict[str, Any] | None = None
         docking_reacquire_previous_ball_pose: dict[str, Any] | None = None
+        handoff_yaw_servo_previous_ball_pose: dict[str, Any] | None = None
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -1926,6 +1930,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             pre_stage_projected_distance_gain: float | None = None
             constrained_local_debug_fields: dict[str, Any] = {}
             docking_reacquire_debug_fields: dict[str, Any] = {}
+            handoff_yaw_servo_debug_fields: dict[str, Any] = {}
             pre_stage_ready_signal = False
             constrained_local_ball_motion_m = (
                 pose_delta_m(constrained_local_previous_ball_pose, ball_pose)
@@ -1935,6 +1940,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             docking_reacquire_ball_motion_m = (
                 pose_delta_m(docking_reacquire_previous_ball_pose, ball_pose)
                 if docking_reacquire_previous_ball_pose is not None and ball_pose
+                else None
+            )
+            handoff_yaw_servo_ball_motion_m = (
+                pose_delta_m(handoff_yaw_servo_previous_ball_pose, ball_pose)
+                if handoff_yaw_servo_previous_ball_pose is not None and ball_pose
                 else None
             )
             if isinstance(pre_stage_snapshot, dict):
@@ -2374,6 +2384,78 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     short_horizon_strategy_name = ""
                     short_horizon_objective_name = ""
                     short_horizon_strategy_started_monotonic = now_monotonic
+            if (
+                self.gather_control_family == HANDOFF_YAW_SERVO_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+                and isinstance(pre_stage_snapshot, dict)
+            ):
+                decision = decide_handoff_yaw_servo_pre_stage_command(
+                    robot_pose,
+                    ball_pose or {},
+                    zone=self.zone,
+                    snapshot=pre_stage_snapshot,
+                    ball_motion_m=handoff_yaw_servo_ball_motion_m,
+                )
+                projected_snapshot = getattr(decision, "projected_snapshot", None)
+                handoff_yaw_servo_debug_fields = {
+                    "handoff_yaw_servo_active": bool(getattr(decision, "active", False)),
+                    "handoff_yaw_servo_release_reason": str(getattr(decision, "release_reason", "") or ""),
+                    "handoff_yaw_servo_release_blockers": list(
+                        getattr(decision, "release_blockers", ()) or ()
+                    ),
+                    "handoff_yaw_servo_strategy_name": str(getattr(decision, "strategy_name", "") or ""),
+                    "handoff_yaw_servo_yaw_error_deg": clean_number(getattr(decision, "yaw_error_deg", None)),
+                    "handoff_yaw_servo_yaw_error_rad": clean_number(getattr(decision, "yaw_error_rad", None)),
+                    "handoff_yaw_servo_current_yaw_rad": clean_number(
+                        getattr(decision, "current_yaw_rad", None)
+                    ),
+                    "handoff_yaw_servo_target_yaw_rad": clean_number(
+                        getattr(decision, "target_yaw_rad", None)
+                    ),
+                    "handoff_yaw_servo_angular_z": clean_number(getattr(decision, "angular_z", None)),
+                    "handoff_yaw_servo_ball_motion_m": clean_number(
+                        getattr(decision, "ball_motion_m", None)
+                    ),
+                    "handoff_yaw_servo_projected_pre_stage": (
+                        dict(projected_snapshot)
+                        if isinstance(projected_snapshot, dict)
+                        else {}
+                    ),
+                    "handoff_yaw_servo_handoff_ready_measured": bool(
+                        pre_stage_snapshot.get("pre_stage_pose_reached", False)
+                    ),
+                    "handoff_yaw_servo_handoff_ready_projected": bool(
+                        getattr(decision, "handoff_ready_projected", False)
+                    ),
+                }
+                if (
+                    decision is not None
+                    and bool(getattr(decision, "active", False))
+                    and getattr(decision, "command", None) is not None
+                ):
+                    pre_stage_command = decision.command
+                    pre_stage_strategy_name = str(getattr(decision, "strategy_name", "") or "")
+                    pre_stage_objective_name = str(getattr(decision, "objective_name", "") or "")
+                    pre_stage_progress_score = clean_number(getattr(decision, "progress_score", None))
+                    if (
+                        pre_stage_progress_score is not None
+                        and (
+                            short_horizon_best_progress_score is None
+                            or pre_stage_progress_score > short_horizon_best_progress_score + 1.0e-6
+                        )
+                    ):
+                        short_horizon_best_progress_score = pre_stage_progress_score
+                        short_horizon_last_progress_monotonic = now_monotonic
+                    pre_stage_stall_s = max(0.0, now_monotonic - short_horizon_last_progress_monotonic)
+                    if pre_stage_strategy_name != short_horizon_strategy_name:
+                        short_horizon_strategy_started_monotonic = now_monotonic
+                    short_horizon_strategy_name = pre_stage_strategy_name
+                    short_horizon_objective_name = pre_stage_objective_name
+                elif str(getattr(decision, "release_reason", "") or ""):
+                    short_horizon_strategy_name = ""
+                    short_horizon_objective_name = ""
+                    short_horizon_strategy_started_monotonic = now_monotonic
             if pre_stage_command is not None:
                 latest_pre_capture_command_mode = str(pre_stage_command.mode)
             pre_stage_manager_decision = decide_gather_manager_directive(
@@ -2428,11 +2510,15 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     ),
                     **constrained_local_debug_fields,
                     **docking_reacquire_debug_fields,
+                    **handoff_yaw_servo_debug_fields,
                 },
             )
             constrained_local_previous_ball_pose = dict(ball_pose or {}) if ball_pose else constrained_local_previous_ball_pose
             docking_reacquire_previous_ball_pose = (
                 dict(ball_pose or {}) if ball_pose else docking_reacquire_previous_ball_pose
+            )
+            handoff_yaw_servo_previous_ball_pose = (
+                dict(ball_pose or {}) if ball_pose else handoff_yaw_servo_previous_ball_pose
             )
             if (
                 pre_stage_manager_decision.directive == "stabilize_stage"

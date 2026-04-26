@@ -35,6 +35,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "nav2_reacquire_v1",
     "constrained_local_planner_v1",
     "docking_reacquire_v1",
+    "handoff_yaw_servo_v1",
 )
 
 

@@ -61,6 +61,18 @@ def test_parse_args_allows_docking_reacquire_v1(monkeypatch):
     assert args.gather_control_family == "docking_reacquire_v1"
 
 
+def test_parse_args_allows_handoff_yaw_servo_v1(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        ["repeatability", "--gather-control-family", "handoff_yaw_servo_v1"],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.gather_control_family == "handoff_yaw_servo_v1"
+
+
 def test_ensure_environment_ready_noops_when_dashboard_already_ready(monkeypatch):
     calls: list[tuple[str, str]] = []
 
