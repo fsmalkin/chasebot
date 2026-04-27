@@ -39,17 +39,23 @@ FAILURE_LABELS = (
     "pre_stage_fsm_escape_not_converged",
     "pre_stage_fsm_dock_entry_not_converged",
     "pre_stage_fsm_timeout_without_ball_contact",
+    "pre_stage_path_tracker_zero_plus45_pre_stage_handoff_blocked",
+    "pre_stage_path_tracker_escape_not_converged",
+    "pre_stage_path_tracker_progress_stalled",
+    "pre_stage_path_tracker_timeout_without_ball_contact",
 )
 BLOCKED_CANDIDATE_BRANCHES = {"region_funnel_v1", "nav2_reacquire_v1"}
 CONSTRAINED_LOCAL_PLANNER_BRANCH = "constrained_local_planner_v1"
 DOCKING_REACQUIRE_BRANCH = "docking_reacquire_v1"
 HANDOFF_YAW_SERVO_BRANCH = "handoff_yaw_servo_v1"
 PRE_STAGE_REACQUIRE_FSM_BRANCH = "pre_stage_reacquire_fsm_v1"
+PRE_STAGE_PATH_TRACKER_BRANCH = "pre_stage_path_tracker_v1"
 BLOCKED_CURRENT_CANDIDATE_BRANCHES = BLOCKED_CANDIDATE_BRANCHES | {
     CONSTRAINED_LOCAL_PLANNER_BRANCH,
     DOCKING_REACQUIRE_BRANCH,
     HANDOFF_YAW_SERVO_BRANCH,
     PRE_STAGE_REACQUIRE_FSM_BRANCH,
+    PRE_STAGE_PATH_TRACKER_BRANCH,
 }
 RECOMMENDED_RETIRE_AND_DESIGN = "retire_current_candidates_and_design_constrained_local_planner_branch"
 RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS = (
@@ -830,6 +836,125 @@ def _pre_stage_fsm_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _pre_stage_path_tracker_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    path_rows = [
+        row
+        for row in rows
+        if row.get("controller_family") == PRE_STAGE_PATH_TRACKER_BRANCH
+        or str(row.get("objective_name", "") or "") == "pre_stage_path_tracker"
+        or any(str(key).startswith("pre_stage_path_tracker_") for key in row)
+    ]
+    active_rows = [
+        row
+        for row in path_rows
+        if bool(row.get("pre_stage_path_tracker_active", False))
+        or str(_dict_value(row.get("selected_command")).get("mode", "") or "").startswith(
+            "pre_stage_path_tracker"
+        )
+        or str(row.get("objective_name", "") or "") == "pre_stage_path_tracker"
+    ]
+    release_reasons = _ordered_unique(
+        [
+            str(row.get("pre_stage_path_tracker_release_reason", "") or "")
+            for row in path_rows
+            if str(row.get("pre_stage_path_tracker_release_reason", "") or "")
+        ]
+    )
+    release_blockers = _ordered_unique(
+        [
+            str(blocker)
+            for row in path_rows
+            for blocker in _list_value(row.get("pre_stage_path_tracker_release_blockers"))
+            if str(blocker)
+        ]
+    )
+    rejection_reasons = _ordered_unique(
+        [
+            str(reason)
+            for row in path_rows
+            for reason in _list_value(row.get("pre_stage_path_tracker_rejection_reasons"))
+            if str(reason)
+        ]
+    )
+    waypoint_counts: dict[str, int] = {}
+    waypoint_kinds: list[str] = []
+    command_counts: dict[str, int] = {}
+    for row in active_rows:
+        waypoint_kind = str(row.get("pre_stage_path_tracker_waypoint_kind", "") or "")
+        if waypoint_kind:
+            waypoint_kinds.append(waypoint_kind)
+            waypoint_counts[waypoint_kind] = waypoint_counts.get(waypoint_kind, 0) + 1
+        command_mode = str(_dict_value(row.get("selected_command")).get("mode", "") or "")
+        if command_mode:
+            command_counts[command_mode] = command_counts.get(command_mode, 0) + 1
+
+    measured_ready_values = _handoff_ready_values(
+        path_rows,
+        (
+            "pre_stage_path_tracker_measured_handoff_ready",
+            "handoff_ready",
+            "handoff_pass",
+            "pre_stage_pose_reached",
+        ),
+        ("pre_stage_path_tracker_measured_pre_stage", "pre_stage"),
+    )
+    projected_ready_values = _handoff_ready_values(
+        path_rows,
+        (
+            "pre_stage_path_tracker_projected_handoff_ready",
+            "handoff_ready",
+            "handoff_pass",
+            "pre_stage_pose_reached",
+        ),
+        ("pre_stage_path_tracker_projected_pre_stage",),
+    )
+    projection_values = [_finite_float(row.get("pre_stage_path_tracker_projection_m")) for row in path_rows]
+    lateral_values = [_finite_float(row.get("pre_stage_path_tracker_lateral_error_m")) for row in path_rows]
+    distance_values = [_finite_float(row.get("pre_stage_path_tracker_distance_m")) for row in path_rows]
+    yaw_values = [_finite_float(row.get("pre_stage_path_tracker_yaw_error_deg")) for row in path_rows]
+    ball_motion_values = [_finite_float(row.get("pre_stage_path_tracker_ball_motion_m")) for row in path_rows]
+    clearance_values = [_finite_float(row.get("pre_stage_path_tracker_min_ball_clearance_m")) for row in path_rows]
+    return {
+        "pre_stage_path_tracker_row_count": len(path_rows),
+        "pre_stage_path_tracker_active_row_count": len(active_rows),
+        "pre_stage_path_tracker_waypoint_counts": waypoint_counts,
+        "pre_stage_path_tracker_final_waypoint": waypoint_kinds[-1] if waypoint_kinds else "",
+        "pre_stage_path_tracker_command_counts": command_counts,
+        "pre_stage_path_tracker_release_reason_count": len(release_reasons),
+        "pre_stage_path_tracker_release_reasons": release_reasons,
+        "pre_stage_path_tracker_release_blockers": release_blockers,
+        "pre_stage_path_tracker_rejection_reasons": rejection_reasons,
+        "pre_stage_path_tracker_measured_handoff_ready_count": sum(value is True for value in measured_ready_values),
+        "pre_stage_path_tracker_measured_handoff_not_ready_count": sum(value is False for value in measured_ready_values),
+        "pre_stage_path_tracker_projected_handoff_ready_count": sum(value is True for value in projected_ready_values),
+        "pre_stage_path_tracker_projected_handoff_not_ready_count": sum(value is False for value in projected_ready_values),
+        "pre_stage_path_tracker_projection_start_m": _first_number(projection_values),
+        "pre_stage_path_tracker_projection_end_m": _last_number(projection_values),
+        "pre_stage_path_tracker_projection_min_m": _min_number(projection_values),
+        "pre_stage_path_tracker_projection_max_m": _max_number(projection_values),
+        "pre_stage_path_tracker_lateral_error_start_m": _first_number(lateral_values),
+        "pre_stage_path_tracker_lateral_error_end_m": _last_number(lateral_values),
+        "pre_stage_path_tracker_lateral_error_min_m": _min_number(lateral_values),
+        "pre_stage_path_tracker_lateral_error_max_m": _max_number(lateral_values),
+        "pre_stage_path_tracker_distance_start_m": _first_number(distance_values),
+        "pre_stage_path_tracker_distance_end_m": _last_number(distance_values),
+        "pre_stage_path_tracker_distance_min_m": _min_number(distance_values),
+        "pre_stage_path_tracker_distance_max_m": _max_number(distance_values),
+        "pre_stage_path_tracker_yaw_error_start_deg": _first_number(yaw_values),
+        "pre_stage_path_tracker_yaw_error_end_deg": _last_number(yaw_values),
+        "pre_stage_path_tracker_yaw_error_min_deg": _min_number(yaw_values),
+        "pre_stage_path_tracker_yaw_error_max_deg": _max_number(yaw_values),
+        "pre_stage_path_tracker_accepted_count": sum(
+            _int_value(row.get("pre_stage_path_tracker_accepted_count")) for row in path_rows
+        ),
+        "pre_stage_path_tracker_rejected_count": sum(
+            _int_value(row.get("pre_stage_path_tracker_rejected_count")) for row in path_rows
+        ),
+        "pre_stage_path_tracker_max_ball_motion_m": _max_number(ball_motion_values),
+        "pre_stage_path_tracker_min_ball_clearance_m": _min_number(clearance_values),
+    }
+
+
 def _case_labels(
     *,
     branch_name: str,
@@ -842,6 +967,7 @@ def _case_labels(
     docking_debug: dict[str, Any],
     handoff_yaw_servo_debug: dict[str, Any],
     pre_stage_fsm_debug: dict[str, Any],
+    pre_stage_path_tracker_debug: dict[str, Any],
 ) -> list[str]:
     labels: list[str] = []
     handoff_pass = _pre_stage_handoff_pass(case)
@@ -863,6 +989,11 @@ def _case_labels(
     ):
         labels.append("ball_contact_during_reacquire")
     if float(pre_stage_fsm_debug.get("pre_stage_fsm_max_ball_motion_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
+        labels.append("ball_contact_during_reacquire")
+    if (
+        float(pre_stage_path_tracker_debug.get("pre_stage_path_tracker_max_ball_motion_m", 0.0) or 0.0)
+        >= BALL_DRIFT_CONTACT_THRESHOLD_M
+    ):
         labels.append("ball_contact_during_reacquire")
     if int(nav2_debug.get("post_reacquire_not_handoff_ready_count", 0) or 0) > 0:
         labels.append("post_reacquire_not_handoff_ready")
@@ -901,6 +1032,31 @@ def _case_labels(
             max_ball_motion = float(pre_stage_fsm_debug.get("pre_stage_fsm_max_ball_motion_m", 0.0) or 0.0)
             if max_ball_motion < BALL_DRIFT_CONTACT_THRESHOLD_M and fsm_release_count == 0:
                 labels.append("pre_stage_fsm_timeout_without_ball_contact")
+    if str(branch_name or "") == PRE_STAGE_PATH_TRACKER_BRANCH:
+        path_active_count = int(
+            pre_stage_path_tracker_debug.get("pre_stage_path_tracker_active_row_count", 0) or 0
+        )
+        path_release_count = int(
+            pre_stage_path_tracker_debug.get("pre_stage_path_tracker_release_reason_count", 0) or 0
+        )
+        path_final_waypoint = str(
+            pre_stage_path_tracker_debug.get("pre_stage_path_tracker_final_waypoint", "") or ""
+        )
+        path_rejection_reasons = set(
+            str(reason)
+            for reason in _list_value(pre_stage_path_tracker_debug.get("pre_stage_path_tracker_rejection_reasons"))
+            if str(reason)
+        )
+        if handoff_pass is False and path_active_count > 0:
+            if path_final_waypoint == "escape":
+                labels.append("pre_stage_path_tracker_escape_not_converged")
+            if "waypoint_progress_stall" in path_rejection_reasons:
+                labels.append("pre_stage_path_tracker_progress_stalled")
+            max_ball_motion = float(
+                pre_stage_path_tracker_debug.get("pre_stage_path_tracker_max_ball_motion_m", 0.0) or 0.0
+            )
+            if max_ball_motion < BALL_DRIFT_CONTACT_THRESHOLD_M and path_release_count == 0:
+                labels.append("pre_stage_path_tracker_timeout_without_ball_contact")
 
     latest = _dict_value(_first_run(case).get("latest_approach_progress"))
     latest_pre_stage = _dict_value(latest.get("pre_stage"))
@@ -947,6 +1103,7 @@ def build_case_failure_summary(
     docking_debug = _docking_debug_summary(state_rows)
     handoff_yaw_servo_debug = _handoff_yaw_servo_debug_summary(state_rows)
     pre_stage_fsm_debug = _pre_stage_fsm_debug_summary(state_rows)
+    pre_stage_path_tracker_debug = _pre_stage_path_tracker_debug_summary(state_rows)
 
     missing_evidence: list[str] = []
     if mission_verdict_status in {"not_referenced", "missing", "unreadable"}:
@@ -965,6 +1122,7 @@ def build_case_failure_summary(
         docking_debug=docking_debug,
         handoff_yaw_servo_debug=handoff_yaw_servo_debug,
         pre_stage_fsm_debug=pre_stage_fsm_debug,
+        pre_stage_path_tracker_debug=pre_stage_path_tracker_debug,
     )
     handoff_pass = _pre_stage_handoff_pass(case)
     pose_reached = _pre_stage_pose_reached(case)
@@ -995,6 +1153,7 @@ def build_case_failure_summary(
         "docking_debug": docking_debug,
         "handoff_yaw_servo_debug": handoff_yaw_servo_debug,
         "pre_stage_fsm_debug": pre_stage_fsm_debug,
+        "pre_stage_path_tracker_debug": pre_stage_path_tracker_debug,
     }
 
 
@@ -1028,6 +1187,9 @@ def build_branch_failure_summary(
         labels = [label for label in FAILURE_LABELS if label in set(labels)]
     if str(branch_name or "") == PRE_STAGE_REACQUIRE_FSM_BRANCH and primary_handoff_blocked:
         labels.append("pre_stage_fsm_zero_plus45_pre_stage_handoff_blocked")
+        labels = [label for label in FAILURE_LABELS if label in set(labels)]
+    if str(branch_name or "") == PRE_STAGE_PATH_TRACKER_BRANCH and primary_handoff_blocked:
+        labels.append("pre_stage_path_tracker_zero_plus45_pre_stage_handoff_blocked")
         labels = [label for label in FAILURE_LABELS if label in set(labels)]
     return {
         "type": "gather_control_failure_audit_branch",
@@ -1078,6 +1240,7 @@ def _recommend_next_action(branches: list[dict[str, Any]]) -> tuple[str, list[st
                 "docking_reacquire_v1_zero_plus45_pre_stage_handoff_blocked",
                 "handoff_yaw_servo_v1_zero_plus45_pre_stage_handoff_blocked",
                 "pre_stage_reacquire_fsm_v1_zero_plus45_pre_stage_handoff_blocked",
+                "pre_stage_path_tracker_v1_zero_plus45_pre_stage_handoff_blocked",
             ],
         )
     if BLOCKED_CANDIDATE_BRANCHES.issubset(branch_names) and BLOCKED_CANDIDATE_BRANCHES.issubset(blocked_branches):
