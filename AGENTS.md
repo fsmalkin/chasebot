@@ -134,6 +134,7 @@ Lane-specific configs:
 22. `handoff_yaw_servo_v1` is a blocked experimental last-mile pre-stage yaw-alignment branch after the April 25/26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 23. `pre_stage_reacquire_fsm_v1` is a blocked experimental first-attempt pre-stage reacquire branch after the April 26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 24. `pre_stage_path_tracker_v1` is a blocked experimental first-attempt pre-stage branch after the April 26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a larger repaired control-stack branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
+25. Next gather-control work should peel back test and architecture assumptions before adding another branch: audit command authority, run a minimal motion-realization probe, split failure types, and compare broader architecture families including options not already tried.
 
 ## Latest Validated Artifacts
 

@@ -453,7 +453,7 @@ Failure audit contract:
 4. reports `zero` and `plus45` first as primary evidence, with `minus45` and `backside180` retained as secondary context
 5. may emit `recommended_next_action=retire_current_candidates_and_design_constrained_local_planner_branch` when the first two blocked candidates fail fresh `zero` and `plus45` pre-stage handoff, or `recommended_next_action=retire_blocked_candidates_and_define_next_reacquire_architecture_requirements` when `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, `pre_stage_reacquire_fsm_v1`, and `pre_stage_path_tracker_v1` are also blocked on those primary cases
 6. is analyzer-only: it does not refresh portfolio/stress evidence, promote any blocked branch including `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, `pre_stage_reacquire_fsm_v1`, or `pre_stage_path_tracker_v1`, rerun live sim, or change runtime control
-7. feeds the next larger control-stack requirements note in `docs/gather_pre_stage_control_stack_requirements.md` after the seven-branch closeout confirms the shared pre-stage blocker shape
+7. feeds the next larger control-stack requirements note in `docs/gather_pre_stage_control_stack_requirements.md` after the seven-branch closeout confirms the shared pre-stage blocker shape; next work should audit command authority and test assumptions before naming another branch
 
 ## Gather Escape Oracle (Offline Truth-State Probe)
 
