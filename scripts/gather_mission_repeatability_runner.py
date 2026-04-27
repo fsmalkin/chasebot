@@ -38,6 +38,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "handoff_yaw_servo_v1",
     "pre_stage_reacquire_fsm_v1",
     "pre_stage_path_tracker_v1",
+    "pre_stage_trajectory_owner_v1",
 )
 
 

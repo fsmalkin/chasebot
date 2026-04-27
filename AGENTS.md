@@ -67,6 +67,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather handoff yaw servo helper (internal) | `scripts/gather_handoff_yaw_servo_helpers.py` |
 | Gather pre-stage reacquire FSM helper (internal) | `scripts/gather_pre_stage_reacquire_fsm_helpers.py` |
 | Gather pre-stage path tracker helper (internal) | `scripts/gather_pre_stage_path_tracker_helpers.py` |
+| Gather pre-stage trajectory owner helper (internal) | `scripts/gather_pre_stage_trajectory_owner_helpers.py` |
 | Gather control portfolio analyzer (internal) | `scripts/gather_control_portfolio.py` |
 | Gather hard-case stress analyzer (internal) | `scripts/gather_control_stress_analyzer.py` |
 | Gather control failure audit analyzer (internal) | `scripts/gather_control_failure_audit.py` |
@@ -136,8 +137,9 @@ Lane-specific configs:
 22. `handoff_yaw_servo_v1` is a blocked experimental last-mile pre-stage yaw-alignment branch after the April 25/26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 23. `pre_stage_reacquire_fsm_v1` is a blocked experimental first-attempt pre-stage reacquire branch after the April 26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 24. `pre_stage_path_tracker_v1` is a blocked experimental first-attempt pre-stage branch after the April 26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a larger repaired control-stack branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
-25. Next gather-control work should peel back test and architecture assumptions before adding another branch: audit command authority, run a minimal motion-realization probe, split failure types, and compare broader architecture families including options not already tried.
+25. The assumption peel-back step selected a measured trajectory-owner branch. Do not add another gather-control branch until `pre_stage_trajectory_owner_v1` has either passed or failed the fresh `zero` / `plus45` live pre-stage gate.
 26. Gather pre-stage command authority audit is analyzer-only assumption-peel-back evidence. It reads existing matrix/state-history artifacts, does not rerun live sim, and does not promote or refresh portfolio/stress evidence for any blocked gather-control branch.
+27. `pre_stage_trajectory_owner_v1` is the current experimental pre-stage branch selected from the command-authority audit. It owns measured `pre_stage` trajectory tracking to handoff and must stay out of portfolio/stress comparison until fresh one-run `zero` and `plus45` matrix attempts both clear pre-stage handoff without ball drift/contact.
 
 ## Latest Validated Artifacts
 
@@ -223,6 +225,11 @@ Gather pre-stage path tracker experimental branch status:
 - Scope: one-ball first-attempt `pre_stage` reacquisition only; explicit waypoint path tracker covers escape, off-axis approach, port, and final yaw-align waypoints before baseline handoff.
 - Smoke: `artifacts/session/live_pre_stage_path_tracker_v1_matrix_smoke_20260426/gather_goal_side_matrix/campaign_summary.json`
 - Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff; path-tracker debug showed no pre-stage ball motion/contact, but both primary cases stayed on the `escape` waypoint until timeout, so no portfolio/stress refresh was produced for this branch.
+
+Gather pre-stage trajectory owner experimental branch status:
+- Candidate: `pre_stage_trajectory_owner_v1`
+- Scope: one-ball first-attempt `pre_stage` only; in-process measured trajectory owner through `escape_clear`, `corridor_approach`, `port`, and `handoff_yaw`, with one alternate-side replan and strict measured handoff release.
+- Status: offline implementation pending live gate. No portfolio/stress refresh is allowed until fresh `zero` and `plus45` one-run matrix attempts both pass pre-stage handoff without pre-stage ball drift/contact.
 
 ## Testing
 

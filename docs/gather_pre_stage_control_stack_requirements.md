@@ -4,15 +4,13 @@
 
 The blocked gather-control candidates now share the same first-attempt blocker: fresh `zero` and `plus45` live matrix attempts do not reliably reach behind-ball pre-stage handoff. The latest `pre_stage_path_tracker_v1` smoke failed safely: it recorded no pre-stage ball motion/contact, but both primary cases stayed on the `escape` waypoint until timeout.
 
-The next step is an assumption peel-back, not another gather-control family. The evidence can still mean "bad geometry," but it may also mean command authority, timing, frame interpretation, manual-drive realization, or gate threshold mismatch. New runtime architecture work should wait until those possibilities are separated.
+The assumption peel-back is complete enough for the next runtime branch. The command-authority audit indicates that selected commands are usually realized and geometry often improves, but the measured handoff gate still times out. The next active branch is `pre_stage_trajectory_owner_v1`: an in-process owner that plans and tracks the full measured pre-stage trajectory rather than layering another reactive overlay.
 
-## Next Audit Steps
+## Next Branch Steps
 
-- Add a pre-stage command-authority analyzer (`scripts/gather_pre_stage_command_authority_audit.py`) that compares selected `linear_x` / `angular_z` commands against realized world-motion deltas during `pre_stage`.
-- Split blocked evidence into geometry failure, command-realization failure, timeout despite progress, ball-safety failure, and handoff-threshold mismatch.
-- Run a minimal live motion probe on the same `zero` and `plus45` setup that commands small controlled turns/arcs away from the ball and records measured response.
-- Keep the current `zero` / `plus45` pre-stage handoff gate, but add intermediate diagnostics for goal-side cleared, escape waypoint reached, lateral error reduced, yaw reduced, and ball remained still.
-- Use `docs/gather_pre_stage_architecture_options_review.md` to compare the remaining broader options before selecting the next runtime branch, including at least one pass that looks for architectures outside the current overlay/local-planner/Nav2/MPPI set.
+- Implement `pre_stage_trajectory_owner_v1` as the next active branch.
+- Keep the current `zero` / `plus45` pre-stage handoff gate, while recording intermediate diagnostics for goal-side cleared, trajectory milestone progress, lateral error reduced, yaw reduced, and ball remained still.
+- If the branch fails fresh `zero`, stop promotion work and move to a lower-stack fallback such as a Nav2 controller plugin or MPPI/MPC-style local controller instead of retuning blocked overlays.
 
 ## Requirements
 
@@ -36,5 +34,5 @@ The next step is an assumption peel-back, not another gather-control family. The
 ## Non-Goals
 
 - Do not retune `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, `pre_stage_reacquire_fsm_v1`, or `pre_stage_path_tracker_v1`.
-- Do not name or implement the next runtime branch until command authority and motion-realization evidence are available.
+- Do not name or implement another runtime branch until `pre_stage_trajectory_owner_v1` either passes the fresh `zero` / `plus45` pre-stage gate or fails with evidence that justifies a lower-stack fallback.
 - Do not refresh portfolio or stress evidence for blocked branches.

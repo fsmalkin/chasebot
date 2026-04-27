@@ -129,6 +129,16 @@ def test_gather_control_family_allows_pre_stage_path_tracker_v1(tmp_path, monkey
     assert runner.gather_control_family == "pre_stage_path_tracker_v1"
 
 
+def test_gather_control_family_allows_pre_stage_trajectory_owner_v1(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "pre_stage_trajectory_owner_v1"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.gather_control_family == "pre_stage_trajectory_owner_v1"
+
+
 def test_parse_args_allows_region_funnel_v1(monkeypatch):
     monkeypatch.setattr(
         gather_runner.sys,
@@ -211,6 +221,18 @@ def test_parse_args_allows_pre_stage_path_tracker_v1(monkeypatch):
     args = gather_runner.parse_args()
 
     assert args.gather_control_family == "pre_stage_path_tracker_v1"
+
+
+def test_parse_args_allows_pre_stage_trajectory_owner_v1(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        ["gather_mission_runner.py", "--gather-control-family", "pre_stage_trajectory_owner_v1"],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.gather_control_family == "pre_stage_trajectory_owner_v1"
 
 
 def test_nav2_reacquire_goal_generation_covers_zero_plus_minus_and_ready_states():
@@ -1613,6 +1635,138 @@ def test_pre_stage_target_records_pre_stage_path_tracker_debug_fields(tmp_path, 
     assert first_row["pre_stage_path_tracker_rejected_count"] == 0
     assert first_row["pre_stage_path_tracker_rejection_reasons"] == []
     assert first_row["pre_stage_path_tracker_progress_timeout"] is False
+
+
+def test_pre_stage_target_records_pre_stage_trajectory_owner_debug_fields(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    runner.gather_control_family = "pre_stage_trajectory_owner_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    ready_pose = {"x": 6.348, "y": 0.0, "yaw": gather_runner.math.pi}
+    sequence = [ready_pose, ready_pose, ready_pose]
+    index = {"value": 0}
+
+    command = gather_runner.PlaceControlCommand(
+        mode="pre_stage_trajectory_owner",
+        linear_x=0.18,
+        angular_z=-0.24,
+        target_speed_scale=0.78,
+        rationale="Pre-stage trajectory owner override.",
+    )
+    decision = SimpleNamespace(
+        active=True,
+        milestone_index=1,
+        milestone_kind="corridor_approach",
+        milestone_count=4,
+        strategy_name="trajectory_corridor_approach",
+        objective_name="pre_stage_trajectory_owner",
+        progress_score=135.5,
+        progress_rate_mps=0.11,
+        command=command,
+        release_reason="",
+        release_blockers=("distance_not_converged",),
+        measured_snapshot={"pre_stage_pose_reached": False, "robot_on_goal_side": False},
+        projected_snapshot={"pre_stage_pose_reached": False, "pre_stage_pose_distance_m": 0.64},
+        measured_handoff_ready=False,
+        projected_handoff_ready=False,
+        target_pose={"x": 6.42, "y": -0.74, "yaw": 3.141593},
+        target_distance_m=0.82,
+        target_heading_error_rad=-0.16,
+        milestone_reached=True,
+        side_sign=-1.0,
+        next_side_sign=-1.0,
+        replan_count=0,
+        next_replan_count=0,
+        replan_reason="",
+        projection_m=-0.42,
+        lateral_error_m=0.31,
+        distance_m=0.82,
+        yaw_error_deg=32.0,
+        projected_projection_gain=0.05,
+        projected_lateral_gain=0.04,
+        projected_distance_gain=0.09,
+        projected_yaw_gain_deg=5.0,
+        ball_motion_m=0.0,
+        min_ball_clearance_m=0.76,
+        segment_ball_clearance_m=0.92,
+        measured_ball_clearance_m=1.08,
+        candidate_count=1,
+        accepted_count=1,
+        rejected_count=0,
+        rejection_reasons=(),
+    )
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        current = sequence[min(index["value"], len(sequence) - 1)]
+        index["value"] += 1
+        return {}, current, ball_pose
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: state_rows.append(dict(payload)))
+    monkeypatch.setattr(gather_runner, "decide_pre_stage_trajectory_owner_command", lambda *args, **kwargs: decision)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-trajectory-owner",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    assert pre_stage_pass is True
+    assert payload["pre_stage_pose_reached"] is True
+    assert state_rows
+    first_row = state_rows[0]
+    assert first_row["controller_family"] == "pre_stage_trajectory_owner_v1"
+    assert first_row["strategy_name"] == "trajectory_corridor_approach"
+    assert first_row["objective_name"] == "pre_stage_trajectory_owner"
+    assert first_row["selected_command"] == command.to_dict()
+    assert first_row["pre_stage_trajectory_owner_active"] is True
+    assert first_row["pre_stage_trajectory_owner_milestone_index"] == 1
+    assert first_row["pre_stage_trajectory_owner_milestone_kind"] == "corridor_approach"
+    assert first_row["pre_stage_trajectory_owner_milestone_count"] == 4
+    assert first_row["pre_stage_trajectory_owner_target_pose"] == {"x": 6.42, "y": -0.74, "yaw": 3.141593}
+    assert first_row["pre_stage_trajectory_owner_target_distance_m"] == 0.82
+    assert first_row["pre_stage_trajectory_owner_target_heading_error_rad"] == -0.16
+    assert first_row["pre_stage_trajectory_owner_milestone_reached"] is True
+    assert first_row["pre_stage_trajectory_owner_progress_rate_mps"] == 0.11
+    assert first_row["pre_stage_trajectory_owner_side_sign"] == -1.0
+    assert first_row["pre_stage_trajectory_owner_replan_count"] == 0
+    assert first_row["pre_stage_trajectory_owner_replan_reason"] == ""
+    assert first_row["pre_stage_trajectory_owner_release_reason"] == ""
+    assert first_row["pre_stage_trajectory_owner_release_blockers"] == ["distance_not_converged"]
+    assert first_row["pre_stage_trajectory_owner_measured_handoff_ready"] is False
+    assert first_row["pre_stage_trajectory_owner_projected_handoff_ready"] is False
+    assert first_row["pre_stage_trajectory_owner_measured_pre_stage"]["robot_on_goal_side"] is False
+    assert first_row["pre_stage_trajectory_owner_projected_pre_stage"]["pre_stage_pose_distance_m"] == 0.64
+    assert first_row["pre_stage_trajectory_owner_projection_m"] == -0.42
+    assert first_row["pre_stage_trajectory_owner_lateral_error_m"] == 0.31
+    assert first_row["pre_stage_trajectory_owner_distance_m"] == 0.82
+    assert first_row["pre_stage_trajectory_owner_yaw_error_deg"] == 32.0
+    assert first_row["pre_stage_trajectory_owner_projected_yaw_gain_deg"] == 5.0
+    assert first_row["pre_stage_trajectory_owner_ball_motion_m"] == 0.0
+    assert first_row["pre_stage_trajectory_owner_min_ball_clearance_m"] == 0.76
+    assert first_row["pre_stage_trajectory_owner_segment_ball_clearance_m"] == 0.92
+    assert first_row["pre_stage_trajectory_owner_measured_ball_clearance_m"] == 1.08
+    assert first_row["pre_stage_trajectory_owner_candidate_count"] == 1
+    assert first_row["pre_stage_trajectory_owner_accepted_count"] == 1
+    assert first_row["pre_stage_trajectory_owner_rejected_count"] == 0
+    assert first_row["pre_stage_trajectory_owner_rejection_reasons"] == []
 
 
 def test_pre_stage_target_aborts_path_tracker_on_ball_motion_guard(tmp_path, monkeypatch):

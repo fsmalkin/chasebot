@@ -99,6 +99,18 @@ def test_parse_args_allows_pre_stage_path_tracker_v1(monkeypatch):
     assert args.gather_control_family == "pre_stage_path_tracker_v1"
 
 
+def test_parse_args_allows_pre_stage_trajectory_owner_v1(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        ["repeatability", "--gather-control-family", "pre_stage_trajectory_owner_v1"],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.gather_control_family == "pre_stage_trajectory_owner_v1"
+
+
 def test_ensure_environment_ready_noops_when_dashboard_already_ready(monkeypatch):
     calls: list[tuple[str, str]] = []
 
@@ -1073,7 +1085,14 @@ def test_run_dashboard_scenario_once_ignores_stale_error_result(monkeypatch):
     assert summary["mission_verdict_path"] == "new-path"
 
 
-@pytest.mark.parametrize("family", ["pre_stage_reacquire_fsm_v1", "pre_stage_path_tracker_v1"])
+@pytest.mark.parametrize(
+    "family",
+    [
+        "pre_stage_reacquire_fsm_v1",
+        "pre_stage_path_tracker_v1",
+        "pre_stage_trajectory_owner_v1",
+    ],
+)
 def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
     tmp_path: Path,
     monkeypatch,
