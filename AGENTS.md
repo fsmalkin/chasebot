@@ -140,8 +140,8 @@ Lane-specific configs:
 24. `pre_stage_path_tracker_v1` is a blocked experimental first-attempt pre-stage branch after the April 26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a larger repaired control-stack branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 25. `pre_stage_trajectory_owner_v1` is a blocked experimental pre-stage trajectory-owner branch after the April 27, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison.
 26. Gather pre-stage command authority audit is analyzer-only assumption-peel-back evidence. It reads existing matrix/state-history artifacts, does not rerun live sim, and does not promote or refresh portfolio/stress evidence for any blocked gather-control branch.
-27. Current active gather-control branch is `nav2_follow_path_reacquire_v1`, a one-ball `pre_stage`-only Nav2 controller-server `FollowPath` / DWB owner over an explicit short odom-frame path. Keep it out of portfolio/stress ingestion until fresh one-run `zero` and `plus45` both reach measured pre-stage handoff with no pre-stage ball drift/contact.
-28. MPPI/MPC remains the fallback if `nav2_follow_path_reacquire_v1` cannot clear fresh `zero`; do not add another helper/manual-drive overlay before planning that lower-stack change.
+27. `nav2_follow_path_reacquire_v1` is a blocked experimental one-ball `pre_stage` Nav2 controller-server `FollowPath` / DWB branch after the April 27, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison.
+28. MPPI/MPC or controller-plugin/config-level work is the next fallback after `nav2_follow_path_reacquire_v1`; do not add another helper/manual-drive overlay before planning that lower-stack change.
 
 ## Latest Validated Artifacts
 
@@ -237,7 +237,8 @@ Gather pre-stage trajectory owner experimental branch status:
 Gather Nav2 FollowPath reacquire experimental branch status:
 - Candidate: `nav2_follow_path_reacquire_v1`
 - Scope: one-ball `pre_stage` only; builds an explicit odom-frame path through `escape_clear`, `corridor_approach`, `port`, and `handoff_yaw`, dispatches `/follow_path` with DWB, disables manual drive while Nav2 owns the path, and accepts only measured pre-stage handoff dwell.
-- Status: source implementation is the current active lower-stack experiment; live matrix evidence is still pending, and no portfolio/stress refresh should include it before fresh `zero` and `plus45` one-run handoff passes.
+- Smoke: `artifacts/session/live_nav2_follow_path_reacquire_v1_matrix_smoke_20260427/gather_goal_side_matrix/campaign_summary.json`
+- Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff; `/follow_path` goals were accepted but immediately aborted with `status_code=6`, no pre-stage ball motion/contact, and no measured handoff, so no portfolio/stress refresh was produced for this branch.
 
 ## Testing
 
