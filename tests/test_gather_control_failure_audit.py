@@ -221,6 +221,15 @@ def test_failure_audit_recommends_next_architecture_when_all_current_candidates_
             _case("plus45", mission_root=tmp_path / "pre_stage_path_tracker_plus45"),
         ],
     )
+    trajectory_owner_path = _matrix_summary(
+        tmp_path,
+        "pre_stage_trajectory_owner",
+        family="pre_stage_trajectory_owner_v1",
+        cases=[
+            _case("zero", mission_root=tmp_path / "pre_stage_trajectory_owner_zero"),
+            _case("plus45", mission_root=tmp_path / "pre_stage_trajectory_owner_plus45"),
+        ],
+    )
 
     summary = audit.build_failure_audit_summary(
         campaign_id="failure_audit_test",
@@ -232,24 +241,30 @@ def test_failure_audit_recommends_next_architecture_when_all_current_candidates_
             ("handoff_yaw_servo_v1", handoff_yaw_path),
             ("pre_stage_reacquire_fsm_v1", fsm_path),
             ("pre_stage_path_tracker_v1", path_tracker_path),
+            ("pre_stage_trajectory_owner_v1", trajectory_owner_path),
         ],
     )
 
-    assert summary["recommended_next_action"] == audit.RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS
+    assert summary["recommended_next_action"] == audit.RECOMMENDED_RETIRE_BLOCKED_AND_DESIGN_NAV2_FOLLOW_PATH
     assert "constrained_local_planner_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
     assert "docking_reacquire_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
     assert "handoff_yaw_servo_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
     assert "pre_stage_reacquire_fsm_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
     assert "pre_stage_path_tracker_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
+    assert "pre_stage_trajectory_owner_v1_zero_plus45_pre_stage_handoff_blocked" in summary["blocking_reasons"]
     handoff_branch = next(branch for branch in summary["branches"] if branch["branch_name"] == "handoff_yaw_servo_v1")
     assert "handoff_yaw_servo_zero_plus45_pre_stage_handoff_blocked" in handoff_branch["failure_labels"]
     fsm_branch = next(branch for branch in summary["branches"] if branch["branch_name"] == "pre_stage_reacquire_fsm_v1")
     assert "pre_stage_fsm_zero_plus45_pre_stage_handoff_blocked" in fsm_branch["failure_labels"]
     path_branch = next(branch for branch in summary["branches"] if branch["branch_name"] == "pre_stage_path_tracker_v1")
     assert "pre_stage_path_tracker_zero_plus45_pre_stage_handoff_blocked" in path_branch["failure_labels"]
+    trajectory_branch = next(
+        branch for branch in summary["branches"] if branch["branch_name"] == "pre_stage_trajectory_owner_v1"
+    )
+    assert "pre_stage_trajectory_owner_zero_plus45_pre_stage_handoff_blocked" in trajectory_branch["failure_labels"]
 
 
-def test_failure_audit_does_not_final_closeout_without_pre_stage_path_tracker_candidate(tmp_path: Path):
+def test_failure_audit_does_not_final_closeout_without_pre_stage_trajectory_owner_candidate(tmp_path: Path):
     branch_specs = []
     for name in (
         "region_funnel_v1",
@@ -258,6 +273,7 @@ def test_failure_audit_does_not_final_closeout_without_pre_stage_path_tracker_ca
         "docking_reacquire_v1",
         "handoff_yaw_servo_v1",
         "pre_stage_reacquire_fsm_v1",
+        "pre_stage_path_tracker_v1",
     ):
         path = _matrix_summary(
             tmp_path,
@@ -275,7 +291,7 @@ def test_failure_audit_does_not_final_closeout_without_pre_stage_path_tracker_ca
         branch_specs=branch_specs,
     )
 
-    assert summary["recommended_next_action"] != audit.RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS
+    assert summary["recommended_next_action"] != audit.RECOMMENDED_RETIRE_BLOCKED_AND_DESIGN_NAV2_FOLLOW_PATH
 
 
 def test_nav2_timeout_and_ball_contact_are_extracted_from_state_history(tmp_path: Path):
@@ -850,6 +866,131 @@ def test_pre_stage_path_tracker_rows_emit_path_failure_labels(tmp_path: Path):
     assert debug["pre_stage_path_tracker_rejected_count"] == 1
     assert debug["pre_stage_path_tracker_max_ball_motion_m"] == 0.0
     assert debug["pre_stage_path_tracker_min_ball_clearance_m"] == 3.0
+
+
+def test_pre_stage_trajectory_owner_rows_emit_owner_failure_labels(tmp_path: Path):
+    mission_root = tmp_path / "pre_stage_trajectory_owner_plus45"
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "controller_family": "pre_stage_trajectory_owner_v1",
+                "objective_name": "pre_stage_trajectory_owner",
+                "selected_command": {"mode": "pre_stage_trajectory_owner"},
+                "pre_stage_trajectory_owner_active": True,
+                "pre_stage_trajectory_owner_milestone_index": 0,
+                "pre_stage_trajectory_owner_milestone_kind": "escape_clear",
+                "pre_stage_trajectory_owner_milestone_count": 4,
+                "pre_stage_trajectory_owner_release_reason": "",
+                "pre_stage_trajectory_owner_release_blockers": ["robot_on_goal_side", "projection_not_cleared"],
+                "pre_stage_trajectory_owner_measured_handoff_ready": False,
+                "pre_stage_trajectory_owner_projected_handoff_ready": False,
+                "pre_stage_trajectory_owner_measured_pre_stage": {
+                    "robot_on_goal_side": True,
+                    "pre_stage_pose_reached": False,
+                },
+                "pre_stage_trajectory_owner_projected_pre_stage": {"pre_stage_pose_reached": False},
+                "pre_stage_trajectory_owner_projection_m": 4.7,
+                "pre_stage_trajectory_owner_lateral_error_m": 1.7,
+                "pre_stage_trajectory_owner_distance_m": 5.9,
+                "pre_stage_trajectory_owner_yaw_error_deg": 135.0,
+                "pre_stage_trajectory_owner_ball_motion_m": 0.0,
+                "pre_stage_trajectory_owner_min_ball_clearance_m": 3.0,
+                "pre_stage_trajectory_owner_replan_count": 0,
+                "pre_stage_trajectory_owner_next_replan_count": 0,
+                "pre_stage_trajectory_owner_replan_reason": "",
+                "pre_stage_trajectory_owner_accepted_count": 1,
+                "pre_stage_trajectory_owner_rejected_count": 0,
+                "pre_stage_trajectory_owner_rejection_reasons": [],
+            },
+            {
+                "controller_family": "pre_stage_trajectory_owner_v1",
+                "objective_name": "pre_stage_trajectory_owner",
+                "selected_command": {"mode": "pre_stage_trajectory_owner_abort"},
+                "pre_stage_trajectory_owner_active": False,
+                "pre_stage_trajectory_owner_milestone_index": 0,
+                "pre_stage_trajectory_owner_milestone_kind": "escape_clear",
+                "pre_stage_trajectory_owner_milestone_count": 4,
+                "pre_stage_trajectory_owner_release_reason": "trajectory_clearance_guard",
+                "pre_stage_trajectory_owner_release_blockers": ["segment_clearance_violation"],
+                "pre_stage_trajectory_owner_measured_handoff_ready": False,
+                "pre_stage_trajectory_owner_projected_handoff_ready": False,
+                "pre_stage_trajectory_owner_measured_pre_stage": {"pre_stage_pose_reached": False},
+                "pre_stage_trajectory_owner_projected_pre_stage": {"pre_stage_pose_reached": False},
+                "pre_stage_trajectory_owner_projection_m": 2.9,
+                "pre_stage_trajectory_owner_lateral_error_m": 1.1,
+                "pre_stage_trajectory_owner_distance_m": 4.0,
+                "pre_stage_trajectory_owner_yaw_error_deg": 166.0,
+                "pre_stage_trajectory_owner_ball_motion_m": 0.0,
+                "pre_stage_trajectory_owner_min_ball_clearance_m": 3.2,
+                "pre_stage_trajectory_owner_replan_count": 0,
+                "pre_stage_trajectory_owner_next_replan_count": 1,
+                "pre_stage_trajectory_owner_replan_reason": "trajectory_progress_stalled",
+                "pre_stage_trajectory_owner_accepted_count": 0,
+                "pre_stage_trajectory_owner_rejected_count": 1,
+                "pre_stage_trajectory_owner_rejection_reasons": [
+                    "trajectory_progress_stalled",
+                    "segment_clearance_violation",
+                ],
+            },
+        ],
+    )
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "pre_stage_trajectory_owner",
+        family="pre_stage_trajectory_owner_v1",
+        cases=[_case("plus45", mission_root=mission_root, goal_side_count=0, fresh_reason="trajectory_progress_stalled")],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="pre_stage_trajectory_owner_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    case = branch["cases"][0]
+
+    assert "pre_stage_trajectory_owner_escape_not_converged" in case["failure_labels"]
+    assert "pre_stage_trajectory_owner_progress_stalled" in case["failure_labels"]
+    assert "pre_stage_trajectory_owner_clearance_guard" in case["failure_labels"]
+    assert "pre_stage_trajectory_owner_timeout_without_ball_contact" in case["failure_labels"]
+    assert "ball_contact_during_reacquire" not in case["failure_labels"]
+    debug = case["pre_stage_trajectory_owner_debug"]
+    assert debug["pre_stage_trajectory_owner_active_row_count"] == 2
+    assert debug["pre_stage_trajectory_owner_milestone_counts"] == {"escape_clear": 2}
+    assert debug["pre_stage_trajectory_owner_final_milestone"] == "escape_clear"
+    assert debug["pre_stage_trajectory_owner_command_counts"] == {
+        "pre_stage_trajectory_owner": 1,
+        "pre_stage_trajectory_owner_abort": 1,
+    }
+    assert debug["pre_stage_trajectory_owner_release_reason_count"] == 1
+    assert debug["pre_stage_trajectory_owner_release_reasons"] == ["trajectory_clearance_guard"]
+    assert debug["pre_stage_trajectory_owner_release_blockers"] == [
+        "robot_on_goal_side",
+        "projection_not_cleared",
+        "segment_clearance_violation",
+    ]
+    assert debug["pre_stage_trajectory_owner_rejection_reasons"] == [
+        "trajectory_progress_stalled",
+        "segment_clearance_violation",
+    ]
+    assert debug["pre_stage_trajectory_owner_replan_reasons"] == ["trajectory_progress_stalled"]
+    assert debug["pre_stage_trajectory_owner_next_replan_count_max"] == 1.0
+    assert debug["pre_stage_trajectory_owner_measured_handoff_not_ready_count"] == 2
+    assert debug["pre_stage_trajectory_owner_projected_handoff_not_ready_count"] == 2
+    assert debug["pre_stage_trajectory_owner_projection_start_m"] == 4.7
+    assert debug["pre_stage_trajectory_owner_projection_end_m"] == 2.9
+    assert debug["pre_stage_trajectory_owner_projection_min_m"] == 2.9
+    assert debug["pre_stage_trajectory_owner_projection_max_m"] == 4.7
+    assert debug["pre_stage_trajectory_owner_lateral_error_start_m"] == 1.7
+    assert debug["pre_stage_trajectory_owner_lateral_error_end_m"] == 1.1
+    assert debug["pre_stage_trajectory_owner_distance_start_m"] == 5.9
+    assert debug["pre_stage_trajectory_owner_distance_end_m"] == 4.0
+    assert debug["pre_stage_trajectory_owner_yaw_error_start_deg"] == 135.0
+    assert debug["pre_stage_trajectory_owner_yaw_error_end_deg"] == 166.0
+    assert debug["pre_stage_trajectory_owner_accepted_count"] == 1
+    assert debug["pre_stage_trajectory_owner_rejected_count"] == 1
+    assert debug["pre_stage_trajectory_owner_max_ball_motion_m"] == 0.0
+    assert debug["pre_stage_trajectory_owner_min_ball_clearance_m"] == 3.0
 
 
 def test_write_failure_audit_bundle_writes_summary_and_scorecard(tmp_path: Path):

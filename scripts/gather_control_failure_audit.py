@@ -43,6 +43,11 @@ FAILURE_LABELS = (
     "pre_stage_path_tracker_escape_not_converged",
     "pre_stage_path_tracker_progress_stalled",
     "pre_stage_path_tracker_timeout_without_ball_contact",
+    "pre_stage_trajectory_owner_zero_plus45_pre_stage_handoff_blocked",
+    "pre_stage_trajectory_owner_progress_stalled",
+    "pre_stage_trajectory_owner_clearance_guard",
+    "pre_stage_trajectory_owner_escape_not_converged",
+    "pre_stage_trajectory_owner_timeout_without_ball_contact",
 )
 BLOCKED_CANDIDATE_BRANCHES = {"region_funnel_v1", "nav2_reacquire_v1"}
 CONSTRAINED_LOCAL_PLANNER_BRANCH = "constrained_local_planner_v1"
@@ -50,16 +55,21 @@ DOCKING_REACQUIRE_BRANCH = "docking_reacquire_v1"
 HANDOFF_YAW_SERVO_BRANCH = "handoff_yaw_servo_v1"
 PRE_STAGE_REACQUIRE_FSM_BRANCH = "pre_stage_reacquire_fsm_v1"
 PRE_STAGE_PATH_TRACKER_BRANCH = "pre_stage_path_tracker_v1"
+PRE_STAGE_TRAJECTORY_OWNER_BRANCH = "pre_stage_trajectory_owner_v1"
 BLOCKED_CURRENT_CANDIDATE_BRANCHES = BLOCKED_CANDIDATE_BRANCHES | {
     CONSTRAINED_LOCAL_PLANNER_BRANCH,
     DOCKING_REACQUIRE_BRANCH,
     HANDOFF_YAW_SERVO_BRANCH,
     PRE_STAGE_REACQUIRE_FSM_BRANCH,
     PRE_STAGE_PATH_TRACKER_BRANCH,
+    PRE_STAGE_TRAJECTORY_OWNER_BRANCH,
 }
 RECOMMENDED_RETIRE_AND_DESIGN = "retire_current_candidates_and_design_constrained_local_planner_branch"
 RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS = (
     "retire_blocked_candidates_and_define_next_reacquire_architecture_requirements"
+)
+RECOMMENDED_RETIRE_BLOCKED_AND_DESIGN_NAV2_FOLLOW_PATH = (
+    "retire_blocked_candidates_and_design_nav2_follow_path_pre_stage_branch"
 )
 BALL_DRIFT_CONTACT_THRESHOLD_M = 0.05
 
@@ -955,6 +965,143 @@ def _pre_stage_path_tracker_debug_summary(rows: list[dict[str, Any]]) -> dict[st
     }
 
 
+def _pre_stage_trajectory_owner_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    owner_rows = [
+        row
+        for row in rows
+        if row.get("controller_family") == PRE_STAGE_TRAJECTORY_OWNER_BRANCH
+        or str(row.get("objective_name", "") or "") == "pre_stage_trajectory_owner"
+        or any(str(key).startswith("pre_stage_trajectory_owner_") for key in row)
+    ]
+    active_rows = [
+        row
+        for row in owner_rows
+        if bool(row.get("pre_stage_trajectory_owner_active", False))
+        or str(_dict_value(row.get("selected_command")).get("mode", "") or "").startswith(
+            "pre_stage_trajectory_owner"
+        )
+        or str(row.get("objective_name", "") or "") == "pre_stage_trajectory_owner"
+    ]
+    release_reasons = _ordered_unique(
+        [
+            str(row.get("pre_stage_trajectory_owner_release_reason", "") or "")
+            for row in owner_rows
+            if str(row.get("pre_stage_trajectory_owner_release_reason", "") or "")
+        ]
+    )
+    release_blockers = _ordered_unique(
+        [
+            str(blocker)
+            for row in owner_rows
+            for blocker in _list_value(row.get("pre_stage_trajectory_owner_release_blockers"))
+            if str(blocker)
+        ]
+    )
+    rejection_reasons = _ordered_unique(
+        [
+            str(reason)
+            for row in owner_rows
+            for reason in _list_value(row.get("pre_stage_trajectory_owner_rejection_reasons"))
+            if str(reason)
+        ]
+    )
+    replan_reasons = _ordered_unique(
+        [
+            str(row.get("pre_stage_trajectory_owner_replan_reason", "") or "")
+            for row in owner_rows
+            if str(row.get("pre_stage_trajectory_owner_replan_reason", "") or "")
+        ]
+    )
+    milestone_counts: dict[str, int] = {}
+    milestone_kinds: list[str] = []
+    command_counts: dict[str, int] = {}
+    for row in active_rows:
+        milestone_kind = str(row.get("pre_stage_trajectory_owner_milestone_kind", "") or "")
+        if milestone_kind:
+            milestone_kinds.append(milestone_kind)
+            milestone_counts[milestone_kind] = milestone_counts.get(milestone_kind, 0) + 1
+        command_mode = str(_dict_value(row.get("selected_command")).get("mode", "") or "")
+        if command_mode:
+            command_counts[command_mode] = command_counts.get(command_mode, 0) + 1
+
+    measured_ready_values = _handoff_ready_values(
+        owner_rows,
+        (
+            "pre_stage_trajectory_owner_measured_handoff_ready",
+            "handoff_ready",
+            "handoff_pass",
+            "pre_stage_pose_reached",
+        ),
+        ("pre_stage_trajectory_owner_measured_pre_stage", "pre_stage"),
+    )
+    projected_ready_values = _handoff_ready_values(
+        owner_rows,
+        (
+            "pre_stage_trajectory_owner_projected_handoff_ready",
+            "handoff_ready",
+            "handoff_pass",
+            "pre_stage_pose_reached",
+        ),
+        ("pre_stage_trajectory_owner_projected_pre_stage",),
+    )
+    projection_values = [_finite_float(row.get("pre_stage_trajectory_owner_projection_m")) for row in owner_rows]
+    lateral_values = [_finite_float(row.get("pre_stage_trajectory_owner_lateral_error_m")) for row in owner_rows]
+    distance_values = [_finite_float(row.get("pre_stage_trajectory_owner_distance_m")) for row in owner_rows]
+    yaw_values = [_finite_float(row.get("pre_stage_trajectory_owner_yaw_error_deg")) for row in owner_rows]
+    ball_motion_values = [_finite_float(row.get("pre_stage_trajectory_owner_ball_motion_m")) for row in owner_rows]
+    clearance_values = [
+        _finite_float(row.get("pre_stage_trajectory_owner_min_ball_clearance_m"))
+        for row in owner_rows
+    ]
+    replan_count_values = [_finite_float(row.get("pre_stage_trajectory_owner_replan_count")) for row in owner_rows]
+    next_replan_count_values = [
+        _finite_float(row.get("pre_stage_trajectory_owner_next_replan_count"))
+        for row in owner_rows
+    ]
+    return {
+        "pre_stage_trajectory_owner_row_count": len(owner_rows),
+        "pre_stage_trajectory_owner_active_row_count": len(active_rows),
+        "pre_stage_trajectory_owner_milestone_counts": milestone_counts,
+        "pre_stage_trajectory_owner_final_milestone": milestone_kinds[-1] if milestone_kinds else "",
+        "pre_stage_trajectory_owner_command_counts": command_counts,
+        "pre_stage_trajectory_owner_release_reason_count": len(release_reasons),
+        "pre_stage_trajectory_owner_release_reasons": release_reasons,
+        "pre_stage_trajectory_owner_release_blockers": release_blockers,
+        "pre_stage_trajectory_owner_rejection_reasons": rejection_reasons,
+        "pre_stage_trajectory_owner_replan_reasons": replan_reasons,
+        "pre_stage_trajectory_owner_replan_count_max": _max_number(replan_count_values),
+        "pre_stage_trajectory_owner_next_replan_count_max": _max_number(next_replan_count_values),
+        "pre_stage_trajectory_owner_measured_handoff_ready_count": sum(value is True for value in measured_ready_values),
+        "pre_stage_trajectory_owner_measured_handoff_not_ready_count": sum(value is False for value in measured_ready_values),
+        "pre_stage_trajectory_owner_projected_handoff_ready_count": sum(value is True for value in projected_ready_values),
+        "pre_stage_trajectory_owner_projected_handoff_not_ready_count": sum(value is False for value in projected_ready_values),
+        "pre_stage_trajectory_owner_projection_start_m": _first_number(projection_values),
+        "pre_stage_trajectory_owner_projection_end_m": _last_number(projection_values),
+        "pre_stage_trajectory_owner_projection_min_m": _min_number(projection_values),
+        "pre_stage_trajectory_owner_projection_max_m": _max_number(projection_values),
+        "pre_stage_trajectory_owner_lateral_error_start_m": _first_number(lateral_values),
+        "pre_stage_trajectory_owner_lateral_error_end_m": _last_number(lateral_values),
+        "pre_stage_trajectory_owner_lateral_error_min_m": _min_number(lateral_values),
+        "pre_stage_trajectory_owner_lateral_error_max_m": _max_number(lateral_values),
+        "pre_stage_trajectory_owner_distance_start_m": _first_number(distance_values),
+        "pre_stage_trajectory_owner_distance_end_m": _last_number(distance_values),
+        "pre_stage_trajectory_owner_distance_min_m": _min_number(distance_values),
+        "pre_stage_trajectory_owner_distance_max_m": _max_number(distance_values),
+        "pre_stage_trajectory_owner_yaw_error_start_deg": _first_number(yaw_values),
+        "pre_stage_trajectory_owner_yaw_error_end_deg": _last_number(yaw_values),
+        "pre_stage_trajectory_owner_yaw_error_min_deg": _min_number(yaw_values),
+        "pre_stage_trajectory_owner_yaw_error_max_deg": _max_number(yaw_values),
+        "pre_stage_trajectory_owner_accepted_count": sum(
+            _int_value(row.get("pre_stage_trajectory_owner_accepted_count")) for row in owner_rows
+        ),
+        "pre_stage_trajectory_owner_rejected_count": sum(
+            _int_value(row.get("pre_stage_trajectory_owner_rejected_count")) for row in owner_rows
+        ),
+        "pre_stage_trajectory_owner_max_ball_motion_m": _max_number(ball_motion_values),
+        "pre_stage_trajectory_owner_min_ball_clearance_m": _min_number(clearance_values),
+    }
+
+
 def _case_labels(
     *,
     branch_name: str,
@@ -968,6 +1115,7 @@ def _case_labels(
     handoff_yaw_servo_debug: dict[str, Any],
     pre_stage_fsm_debug: dict[str, Any],
     pre_stage_path_tracker_debug: dict[str, Any],
+    pre_stage_trajectory_owner_debug: dict[str, Any],
 ) -> list[str]:
     labels: list[str] = []
     handoff_pass = _pre_stage_handoff_pass(case)
@@ -992,6 +1140,11 @@ def _case_labels(
         labels.append("ball_contact_during_reacquire")
     if (
         float(pre_stage_path_tracker_debug.get("pre_stage_path_tracker_max_ball_motion_m", 0.0) or 0.0)
+        >= BALL_DRIFT_CONTACT_THRESHOLD_M
+    ):
+        labels.append("ball_contact_during_reacquire")
+    if (
+        float(pre_stage_trajectory_owner_debug.get("pre_stage_trajectory_owner_max_ball_motion_m", 0.0) or 0.0)
         >= BALL_DRIFT_CONTACT_THRESHOLD_M
     ):
         labels.append("ball_contact_during_reacquire")
@@ -1057,6 +1210,48 @@ def _case_labels(
             )
             if max_ball_motion < BALL_DRIFT_CONTACT_THRESHOLD_M and path_release_count == 0:
                 labels.append("pre_stage_path_tracker_timeout_without_ball_contact")
+    if str(branch_name or "") == PRE_STAGE_TRAJECTORY_OWNER_BRANCH:
+        owner_active_count = int(
+            pre_stage_trajectory_owner_debug.get("pre_stage_trajectory_owner_active_row_count", 0) or 0
+        )
+        owner_release_count = int(
+            pre_stage_trajectory_owner_debug.get("pre_stage_trajectory_owner_release_reason_count", 0) or 0
+        )
+        owner_final_milestone = str(
+            pre_stage_trajectory_owner_debug.get("pre_stage_trajectory_owner_final_milestone", "") or ""
+        )
+        owner_rejection_reasons = set(
+            str(reason)
+            for reason in _list_value(pre_stage_trajectory_owner_debug.get("pre_stage_trajectory_owner_rejection_reasons"))
+            if str(reason)
+        )
+        owner_release_reasons = set(
+            str(reason)
+            for reason in _list_value(pre_stage_trajectory_owner_debug.get("pre_stage_trajectory_owner_release_reasons"))
+            if str(reason)
+        )
+        if handoff_pass is False and owner_active_count > 0:
+            if owner_final_milestone == "escape_clear":
+                labels.append("pre_stage_trajectory_owner_escape_not_converged")
+            if "trajectory_progress_stalled" in owner_rejection_reasons or "trajectory_progress_stalled" in owner_release_reasons:
+                labels.append("pre_stage_trajectory_owner_progress_stalled")
+            clearance_tokens = {
+                "trajectory_clearance_guard",
+                "predicted_clearance_violation",
+                "segment_clearance_violation",
+                "measured_clearance_violation",
+            }
+            if owner_release_reasons.intersection(clearance_tokens) or owner_rejection_reasons.intersection(clearance_tokens):
+                labels.append("pre_stage_trajectory_owner_clearance_guard")
+            max_ball_motion = float(
+                pre_stage_trajectory_owner_debug.get("pre_stage_trajectory_owner_max_ball_motion_m", 0.0) or 0.0
+            )
+            if max_ball_motion < BALL_DRIFT_CONTACT_THRESHOLD_M and (
+                owner_release_count == 0
+                or "trajectory_progress_stalled" in owner_rejection_reasons
+                or "trajectory_progress_stalled" in owner_release_reasons
+            ):
+                labels.append("pre_stage_trajectory_owner_timeout_without_ball_contact")
 
     latest = _dict_value(_first_run(case).get("latest_approach_progress"))
     latest_pre_stage = _dict_value(latest.get("pre_stage"))
@@ -1104,6 +1299,7 @@ def build_case_failure_summary(
     handoff_yaw_servo_debug = _handoff_yaw_servo_debug_summary(state_rows)
     pre_stage_fsm_debug = _pre_stage_fsm_debug_summary(state_rows)
     pre_stage_path_tracker_debug = _pre_stage_path_tracker_debug_summary(state_rows)
+    pre_stage_trajectory_owner_debug = _pre_stage_trajectory_owner_debug_summary(state_rows)
 
     missing_evidence: list[str] = []
     if mission_verdict_status in {"not_referenced", "missing", "unreadable"}:
@@ -1123,6 +1319,7 @@ def build_case_failure_summary(
         handoff_yaw_servo_debug=handoff_yaw_servo_debug,
         pre_stage_fsm_debug=pre_stage_fsm_debug,
         pre_stage_path_tracker_debug=pre_stage_path_tracker_debug,
+        pre_stage_trajectory_owner_debug=pre_stage_trajectory_owner_debug,
     )
     handoff_pass = _pre_stage_handoff_pass(case)
     pose_reached = _pre_stage_pose_reached(case)
@@ -1154,6 +1351,7 @@ def build_case_failure_summary(
         "handoff_yaw_servo_debug": handoff_yaw_servo_debug,
         "pre_stage_fsm_debug": pre_stage_fsm_debug,
         "pre_stage_path_tracker_debug": pre_stage_path_tracker_debug,
+        "pre_stage_trajectory_owner_debug": pre_stage_trajectory_owner_debug,
     }
 
 
@@ -1190,6 +1388,9 @@ def build_branch_failure_summary(
         labels = [label for label in FAILURE_LABELS if label in set(labels)]
     if str(branch_name or "") == PRE_STAGE_PATH_TRACKER_BRANCH and primary_handoff_blocked:
         labels.append("pre_stage_path_tracker_zero_plus45_pre_stage_handoff_blocked")
+        labels = [label for label in FAILURE_LABELS if label in set(labels)]
+    if str(branch_name or "") == PRE_STAGE_TRAJECTORY_OWNER_BRANCH and primary_handoff_blocked:
+        labels.append("pre_stage_trajectory_owner_zero_plus45_pre_stage_handoff_blocked")
         labels = [label for label in FAILURE_LABELS if label in set(labels)]
     return {
         "type": "gather_control_failure_audit_branch",
@@ -1232,7 +1433,7 @@ def _recommend_next_action(branches: list[dict[str, Any]]) -> tuple[str, list[st
         and BLOCKED_CURRENT_CANDIDATE_BRANCHES.issubset(blocked_branches)
     ):
         return (
-            RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS,
+            RECOMMENDED_RETIRE_BLOCKED_AND_DESIGN_NAV2_FOLLOW_PATH,
             [
                 "region_funnel_v1_zero_plus45_pre_stage_handoff_blocked",
                 "nav2_reacquire_v1_zero_plus45_pre_stage_handoff_blocked",
@@ -1241,6 +1442,7 @@ def _recommend_next_action(branches: list[dict[str, Any]]) -> tuple[str, list[st
                 "handoff_yaw_servo_v1_zero_plus45_pre_stage_handoff_blocked",
                 "pre_stage_reacquire_fsm_v1_zero_plus45_pre_stage_handoff_blocked",
                 "pre_stage_path_tracker_v1_zero_plus45_pre_stage_handoff_blocked",
+                "pre_stage_trajectory_owner_v1_zero_plus45_pre_stage_handoff_blocked",
             ],
         )
     if BLOCKED_CANDIDATE_BRANCHES.issubset(branch_names) and BLOCKED_CANDIDATE_BRANCHES.issubset(blocked_branches):
@@ -1281,7 +1483,11 @@ def build_failure_audit_summary(
     status = (
         "blocked"
         if recommended_next_action
-        in {RECOMMENDED_RETIRE_AND_DESIGN, RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS}
+        in {
+            RECOMMENDED_RETIRE_AND_DESIGN,
+            RECOMMENDED_RETIRE_BLOCKED_AND_DEFINE_REQUIREMENTS,
+            RECOMMENDED_RETIRE_BLOCKED_AND_DESIGN_NAV2_FOLLOW_PATH,
+        }
         else "needs_review"
     )
     return {
