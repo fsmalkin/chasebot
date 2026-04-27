@@ -455,6 +455,25 @@ Failure audit contract:
 6. is analyzer-only: it does not refresh portfolio/stress evidence, promote any blocked branch including `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, `pre_stage_reacquire_fsm_v1`, or `pre_stage_path_tracker_v1`, rerun live sim, or change runtime control
 7. feeds the next larger control-stack requirements note in `docs/gather_pre_stage_control_stack_requirements.md` after the seven-branch closeout confirms the shared pre-stage blocker shape; next work should audit command authority and test assumptions before naming another branch
 
+## Gather Pre-Stage Command Authority Audit (Offline Analyzer)
+
+Use this after the seven-branch failure audit and before naming another gather-control family. It separates command realization, geometry progress, ball-safety, and handoff-gate assumptions from the current `zero` / `plus45` pre-stage blocker.
+
+Command:
+
+1. `python scripts/gather_pre_stage_command_authority_audit.py --campaign-id <id> --branch region_funnel_v1=<matrix_summary> --branch nav2_reacquire_v1=<matrix_summary> --branch constrained_local_planner_v1=<matrix_summary> --branch docking_reacquire_v1=<matrix_summary> --branch handoff_yaw_servo_v1=<matrix_summary> --branch pre_stage_reacquire_fsm_v1=<matrix_summary> --branch pre_stage_path_tracker_v1=<matrix_summary>`
+
+Command-authority audit contract:
+
+1. reads existing `gather_goal_side_matrix/campaign_summary.json` files plus referenced mission verdict and `state_history.jsonl` evidence only
+2. writes `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json` and `scorecard.md`
+3. reports `zero` and `plus45` first as primary evidence, with `minus45` and `backside180` retained as secondary context
+4. compares selected `linear_x` / `angular_z` commands against realized robot pose/yaw, pre-stage projection, lateral error, distance, waypoint/phase progress, ball motion, and clearance
+5. keeps audit labels fixed at `command_realization_limited`, `geometry_progress_limited`, `timeout_despite_progress`, `handoff_threshold_mismatch`, `ball_safety_blocked`, and `missing_motion_evidence`
+6. emits `recommended_next_action=run_minimal_motion_realization_probe`, `architecture_review_before_next_branch`, or `handoff_gate_contract_audit`
+7. is analyzer-only: it does not refresh portfolio/stress evidence, promote any blocked branch, rerun live sim, or change runtime control
+8. feeds the architecture/test-assumption review in `docs/gather_pre_stage_architecture_options_review.md`
+
 ## Gather Escape Oracle (Offline Truth-State Probe)
 
 Use this before adding another gather escape family when fresh-only `plus45` is still blocked in `pre_stage`.
@@ -1026,6 +1045,10 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<campaign_id>/gather_control_failure_audit/failure_audit_summary.json`
    - `artifacts/session/<campaign_id>/gather_control_failure_audit/scorecard.md`
    - failure-audit outputs are analyzer-only evidence; they close out blocked candidate branches before the next architecture design and do not refresh portfolio/stress comparison or promote any blocked branch, including `pre_stage_path_tracker_v1`
+27. Gather pre-stage command authority audit:
+   - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
+   - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/scorecard.md`
+   - command-authority outputs are analyzer-only assumption-peel-back evidence; missing state history or missing debug fields are recorded as missing evidence rather than pass/fail, and no blocked branch is promoted or ingested into portfolio/stress comparison
 
 ## Failure Triage Path
 

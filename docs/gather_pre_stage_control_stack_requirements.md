@@ -8,11 +8,11 @@ The next step is an assumption peel-back, not another gather-control family. The
 
 ## Next Audit Steps
 
-- Add a pre-stage command-authority analyzer that compares selected `linear_x` / `angular_z` commands against realized world-motion deltas during `pre_stage`.
+- Add a pre-stage command-authority analyzer (`scripts/gather_pre_stage_command_authority_audit.py`) that compares selected `linear_x` / `angular_z` commands against realized world-motion deltas during `pre_stage`.
 - Split blocked evidence into geometry failure, command-realization failure, timeout despite progress, ball-safety failure, and handoff-threshold mismatch.
 - Run a minimal live motion probe on the same `zero` and `plus45` setup that commands small controlled turns/arcs away from the ball and records measured response.
 - Keep the current `zero` / `plus45` pre-stage handoff gate, but add intermediate diagnostics for goal-side cleared, escape waypoint reached, lateral error reduced, yaw reduced, and ball remained still.
-- Write an architecture review note comparing the remaining broader options before selecting the next runtime branch, including at least one pass that looks for architectures outside the current overlay/local-planner/Nav2/MPPI set.
+- Use `docs/gather_pre_stage_architecture_options_review.md` to compare the remaining broader options before selecting the next runtime branch, including at least one pass that looks for architectures outside the current overlay/local-planner/Nav2/MPPI set.
 
 ## Requirements
 

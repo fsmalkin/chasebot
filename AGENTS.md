@@ -50,6 +50,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather control portfolio | `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary> --baseline-branch helper` |
 | Gather hard-case stress analyzer | `python scripts/gather_control_stress_analyzer.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary>` |
 | Gather control failure audit | `python scripts/gather_control_failure_audit.py --campaign-id <id> --branch region_funnel_v1=<matrix_summary> --branch nav2_reacquire_v1=<matrix_summary> --branch constrained_local_planner_v1=<matrix_summary> --branch docking_reacquire_v1=<matrix_summary> --branch handoff_yaw_servo_v1=<matrix_summary> --branch pre_stage_reacquire_fsm_v1=<matrix_summary> --branch pre_stage_path_tracker_v1=<matrix_summary>` |
+| Gather pre-stage command authority audit | `python scripts/gather_pre_stage_command_authority_audit.py --campaign-id <id> --branch region_funnel_v1=<matrix_summary> --branch nav2_reacquire_v1=<matrix_summary> --branch constrained_local_planner_v1=<matrix_summary> --branch docking_reacquire_v1=<matrix_summary> --branch handoff_yaw_servo_v1=<matrix_summary> --branch pre_stage_reacquire_fsm_v1=<matrix_summary> --branch pre_stage_path_tracker_v1=<matrix_summary>` |
 | Gather portfolio stress ingestion | `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --stress helper=artifacts/session/<id>/gather_control_portfolio/helper/stress_summary.json --baseline-branch helper` |
 | Gather escape oracle | `scripts/run_gather_escape_oracle.ps1 -CampaignId <id>` |
 | Gather escape sandbox | `scripts/run_gather_escape_sandbox.ps1 -CampaignId <id>` |
@@ -69,6 +70,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather control portfolio analyzer (internal) | `scripts/gather_control_portfolio.py` |
 | Gather hard-case stress analyzer (internal) | `scripts/gather_control_stress_analyzer.py` |
 | Gather control failure audit analyzer (internal) | `scripts/gather_control_failure_audit.py` |
+| Gather pre-stage command authority audit analyzer (internal) | `scripts/gather_pre_stage_command_authority_audit.py` |
 | Gather escape oracle helper (internal) | `scripts/gather_escape_oracle.py` |
 | Gather escape sandbox helper (internal) | `scripts/gather_escape_sandbox.py` |
 | Gather escape reference helper (internal) | `scripts/gather_escape_reference.py` |
@@ -135,6 +137,7 @@ Lane-specific configs:
 23. `pre_stage_reacquire_fsm_v1` is a blocked experimental first-attempt pre-stage reacquire branch after the April 26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 24. `pre_stage_path_tracker_v1` is a blocked experimental first-attempt pre-stage branch after the April 26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a larger repaired control-stack branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 25. Next gather-control work should peel back test and architecture assumptions before adding another branch: audit command authority, run a minimal motion-realization probe, split failure types, and compare broader architecture families including options not already tried.
+26. Gather pre-stage command authority audit is analyzer-only assumption-peel-back evidence. It reads existing matrix/state-history artifacts, does not rerun live sim, and does not promote or refresh portfolio/stress evidence for any blocked gather-control branch.
 
 ## Latest Validated Artifacts
 
