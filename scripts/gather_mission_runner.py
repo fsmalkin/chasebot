@@ -38,6 +38,14 @@ from gather_handoff_yaw_servo_helpers import HANDOFF_YAW_SERVO_CONTROL_FAMILY
 from gather_handoff_yaw_servo_helpers import decide_handoff_yaw_servo_pre_stage_command
 from gather_manager_helpers import GatherManagerState
 from gather_manager_helpers import decide_gather_manager_directive
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_BALL_MOTION_TOLERANCE_M
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_GOAL_TIMEOUT_S
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_SERVER_WAIT_S
+from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_REACQUIRE_CONTROL_FAMILY
+from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_REACQUIRE_OBJECTIVE
+from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_RESULT_MARKER
+from gather_nav2_follow_path_reacquire_helpers import build_nav2_follow_path_reacquire_plan
 from gather_pre_stage_reacquire_fsm_helpers import PRE_STAGE_REACQUIRE_FSM_CONTROL_FAMILY
 from gather_pre_stage_reacquire_fsm_helpers import decide_pre_stage_reacquire_fsm_command
 from gather_pre_stage_path_tracker_helpers import PRE_STAGE_PATH_TRACKER_CONTROL_FAMILY
@@ -117,6 +125,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "pre_stage_reacquire_fsm_v1",
     "pre_stage_path_tracker_v1",
     "pre_stage_trajectory_owner_v1",
+    "nav2_follow_path_reacquire_v1",
 )
 NAV2_REACQUIRE_CONTROL_FAMILY = "nav2_reacquire_v1"
 DEFAULT_NAV2_REACQUIRE_TRIGGER_DISTANCE_M = 1.20
@@ -1229,6 +1238,232 @@ PY
         result.setdefault("goal_pose", dict(goal_pose))
         return result
 
+    def _parse_nav2_follow_path_result(self, output: str, *, rc: int) -> dict[str, Any]:
+        for line in reversed(str(output or "").splitlines()):
+            line = line.strip()
+            if not line.startswith(NAV2_FOLLOW_PATH_RESULT_MARKER):
+                continue
+            raw = line[len(NAV2_FOLLOW_PATH_RESULT_MARKER):].strip()
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError:
+                break
+            if isinstance(payload, dict):
+                payload.setdefault("process_returncode", int(rc))
+                return payload
+        return {
+            "dispatch_status": "client_error",
+            "accepted": False,
+            "success": False,
+            "status_code": None,
+            "elapsed_s": 0.0,
+            "error": clean_text(output, "missing_nav2_follow_path_result"),
+            "process_returncode": int(rc),
+        }
+
+    def _dispatch_nav2_follow_path_reacquire(
+        self,
+        *,
+        compose_project: str,
+        path_poses: list[dict[str, Any]],
+        controller_id: str,
+        goal_checker_id: str,
+        timeout_s: float,
+    ) -> dict[str, Any]:
+        if not path_poses:
+            return {
+                "dispatch_status": "empty_path",
+                "accepted": False,
+                "success": False,
+                "status_code": None,
+                "elapsed_s": 0.0,
+                "error": "follow_path_empty_path",
+            }
+        gate_stack_container = self._container_id(compose_project, "gate-stack")
+        payload = {
+            "path_poses": [
+                {
+                    "frame_id": clean_text(pose.get("frame_id"), "odom"),
+                    "x": float(clean_number(pose.get("x")) or 0.0),
+                    "y": float(clean_number(pose.get("y")) or 0.0),
+                    "yaw": float(clean_number(pose.get("yaw")) or 0.0),
+                    "kind": clean_text(pose.get("kind")),
+                }
+                for pose in path_poses
+                if isinstance(pose, dict)
+            ],
+            "controller_id": clean_text(controller_id, "FollowPath"),
+            "goal_checker_id": clean_text(goal_checker_id, DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID),
+            "server_wait_s": float(DEFAULT_NAV2_FOLLOW_PATH_SERVER_WAIT_S),
+            "timeout_s": float(max(timeout_s, 0.1)),
+        }
+        script = (
+            "set -eo pipefail\n"
+            "set +u\n"
+            "source /opt/ros/${CORE_ROS_DISTRO:-kilted}/setup.bash\n"
+            "if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi\n"
+            "set -u\n"
+            f"export NAV2_FOLLOW_PATH_PAYLOAD={shlex.quote(json.dumps(payload, separators=(',', ':')))}\n"
+            r"""python3 - <<'PY'
+import json
+import math
+import os
+import time
+
+import rclpy
+from action_msgs.msg import GoalStatus
+from geometry_msgs.msg import PoseStamped
+from nav_msgs.msg import Path
+from nav2_msgs.action import FollowPath
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from rclpy.parameter import Parameter
+
+MARKER = "NAV2_FOLLOW_PATH_RESULT="
+
+
+def yaw_to_quaternion(yaw):
+    half = 0.5 * float(yaw)
+    return 0.0, 0.0, math.sin(half), math.cos(half)
+
+
+def wait_future(node, future, timeout_s):
+    deadline = time.monotonic() + max(float(timeout_s), 0.1)
+    while time.monotonic() < deadline and rclpy.ok():
+        if future.done():
+            return True
+        rclpy.spin_once(node, timeout_sec=0.1)
+    return bool(future.done())
+
+
+def emit(payload):
+    print(MARKER + json.dumps(payload, sort_keys=True), flush=True)
+
+
+payload = json.loads(os.environ["NAV2_FOLLOW_PATH_PAYLOAD"])
+path_poses = payload.get("path_poses", [])
+started = time.monotonic()
+rclpy.init()
+node = Node("gather_nav2_follow_path_reacquire_client")
+node.set_parameters([Parameter("use_sim_time", Parameter.Type.BOOL, True)])
+client = ActionClient(node, FollowPath, "/follow_path")
+try:
+    if not path_poses:
+        emit({
+            "dispatch_status": "empty_path",
+            "accepted": False,
+            "success": False,
+            "status_code": int(GoalStatus.STATUS_UNKNOWN),
+            "elapsed_s": round(time.monotonic() - started, 6),
+            "error": "follow_path_empty_path",
+        })
+    else:
+        server_ready = bool(client.wait_for_server(timeout_sec=max(float(payload["server_wait_s"]), 0.1)))
+        if not server_ready:
+            emit({
+                "dispatch_status": "server_unavailable",
+                "accepted": False,
+                "success": False,
+                "status_code": int(GoalStatus.STATUS_UNKNOWN),
+                "elapsed_s": round(time.monotonic() - started, 6),
+                "error": "follow_path_action_server_unavailable",
+            })
+        else:
+            now = node.get_clock().now().to_msg()
+            frame_id = str(path_poses[0].get("frame_id") or "odom")
+            path = Path()
+            path.header.frame_id = frame_id
+            path.header.stamp = now
+            for item in path_poses:
+                pose = PoseStamped()
+                pose.header.frame_id = str(item.get("frame_id") or frame_id)
+                pose.header.stamp = now
+                pose.pose.position.x = float(item["x"])
+                pose.pose.position.y = float(item["y"])
+                pose.pose.position.z = 0.0
+                qx, qy, qz, qw = yaw_to_quaternion(float(item["yaw"]))
+                pose.pose.orientation.x = qx
+                pose.pose.orientation.y = qy
+                pose.pose.orientation.z = qz
+                pose.pose.orientation.w = qw
+                path.poses.append(pose)
+            goal = FollowPath.Goal()
+            goal.path = path
+            goal.controller_id = str(payload.get("controller_id") or "FollowPath")
+            goal.goal_checker_id = str(payload.get("goal_checker_id") or "general_goal_checker")
+            if hasattr(goal, "progress_checker_id"):
+                goal.progress_checker_id = ""
+            send_future = client.send_goal_async(goal)
+            if not wait_future(node, send_future, timeout_s=5.0):
+                emit({
+                    "dispatch_status": "send_goal_timeout",
+                    "accepted": False,
+                    "success": False,
+                    "status_code": int(GoalStatus.STATUS_UNKNOWN),
+                    "elapsed_s": round(time.monotonic() - started, 6),
+                    "error": "send_goal_timeout",
+                })
+            else:
+                goal_handle = send_future.result()
+                if goal_handle is None:
+                    emit({
+                        "dispatch_status": "send_goal_result_none",
+                        "accepted": False,
+                        "success": False,
+                        "status_code": int(GoalStatus.STATUS_UNKNOWN),
+                        "elapsed_s": round(time.monotonic() - started, 6),
+                        "error": "send_goal_result_none",
+                    })
+                elif not goal_handle.accepted:
+                    emit({
+                        "dispatch_status": "goal_rejected",
+                        "accepted": False,
+                        "success": False,
+                        "status_code": int(GoalStatus.STATUS_REJECTED),
+                        "elapsed_s": round(time.monotonic() - started, 6),
+                        "error": "goal_rejected",
+                    })
+                else:
+                    result_future = goal_handle.get_result_async()
+                    if not wait_future(node, result_future, timeout_s=float(payload["timeout_s"])):
+                        try:
+                            goal_handle.cancel_goal_async()
+                        except Exception:
+                            pass
+                        emit({
+                            "dispatch_status": "goal_result_timeout",
+                            "accepted": True,
+                            "success": False,
+                            "status_code": int(GoalStatus.STATUS_ABORTED),
+                            "elapsed_s": round(time.monotonic() - started, 6),
+                            "error": "goal_result_timeout",
+                        })
+                    else:
+                        result = result_future.result()
+                        status_code = int(result.status) if result is not None else int(GoalStatus.STATUS_UNKNOWN)
+                        success = status_code == int(GoalStatus.STATUS_SUCCEEDED)
+                        emit({
+                            "dispatch_status": "goal_succeeded" if success else "goal_finished",
+                            "accepted": True,
+                            "success": bool(success),
+                            "status_code": status_code,
+                            "elapsed_s": round(time.monotonic() - started, 6),
+                            "error": "" if success else f"goal_status_{status_code}",
+                        })
+finally:
+    node.destroy_node()
+    if rclpy.ok():
+        rclpy.shutdown()
+PY
+"""
+        )
+        rc, output = self._docker_exec(gate_stack_container, script)
+        result = self._parse_nav2_follow_path_result(output, rc=rc)
+        result.setdefault("path_pose_count", len(payload["path_poses"]))
+        result.setdefault("controller_id", payload["controller_id"])
+        result.setdefault("goal_checker_id", payload["goal_checker_id"])
+        return result
+
     def _robot_pose_components(self, state: dict[str, Any]) -> tuple[float, float, float]:
         belief = state.get("belief", {}) if isinstance(state.get("belief"), dict) else {}
         robot_pose = belief.get("latest_robot_pose", {}) if isinstance(belief.get("latest_robot_pose"), dict) else {}
@@ -1911,6 +2146,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         short_horizon_last_progress_monotonic = pre_stage_started_monotonic
         short_horizon_strategy_started_monotonic = pre_stage_started_monotonic
         nav2_reacquire_attempted = False
+        nav2_follow_path_reacquire_attempted = False
         constrained_local_previous_ball_pose: dict[str, Any] | None = None
         docking_reacquire_previous_ball_pose: dict[str, Any] | None = None
         handoff_yaw_servo_previous_ball_pose: dict[str, Any] | None = None
@@ -2159,6 +2395,259 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         enabled=False,
                         mode="nav2_reacquire_complete",
                         rationale="Nav2 pre-stage reacquire completed; returning control to baseline gather staging.",
+                    )
+                    time.sleep(self.args.poll_s)
+                    continue
+            if (
+                self.gather_control_family == NAV2_FOLLOW_PATH_REACQUIRE_CONTROL_FAMILY
+                and not nav2_follow_path_reacquire_attempted
+                and robot_pose
+                and ball_pose
+                and isinstance(pre_stage_snapshot, dict)
+            ):
+                follow_path_plan = build_nav2_follow_path_reacquire_plan(
+                    robot_pose,
+                    ball_pose or {},
+                    zone=self.zone,
+                    snapshot=pre_stage_snapshot,
+                )
+                follow_path_plan_dict = follow_path_plan.to_dict()
+                follow_path_reason = clean_text(follow_path_plan_dict.get("reason"))
+                if (
+                    not bool(follow_path_plan_dict.get("active", False))
+                    and follow_path_reason
+                    and follow_path_reason != "pre_stage_handoff_already_ready"
+                ):
+                    nav2_follow_path_reacquire_attempted = True
+                    failure_reason = (
+                        "nav2_follow_path_path_clearance_guard"
+                        if follow_path_reason == "follow_path_clearance_guard"
+                        else "nav2_follow_path_path_unavailable"
+                    )
+                    pre_stage_time_s = time.monotonic() - pre_stage_started_monotonic
+                    self._set_manual_drive(
+                        enabled=False,
+                        mode=failure_reason,
+                        rationale="Nav2 FollowPath pre-stage reacquire could not build a safe path.",
+                    )
+                    failure_payload = {
+                        "failure_reason": failure_reason,
+                        "failure_stage": "pre_stage",
+                        "pre_stage_pose_world": pre_stage_pose_world,
+                        "pre_stage_pose_reached": bool(pre_stage_pose_reached_once),
+                        "pre_stage_time_s": round(pre_stage_time_s, 6),
+                        "pre_stage_handoff_pass": False,
+                        "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
+                        "approach_failure_reason": last_failure_reason,
+                        "entered_goal_side_before_capture": last_failure_reason == "entered_goal_side_before_capture",
+                        "nav2_follow_path_plan": follow_path_plan_dict,
+                    }
+                    write_json(mission_root / f"{target.id}_{failure_reason}.json", failure_payload)
+                    return False, failure_payload
+                if bool(follow_path_plan_dict.get("active", False)):
+                    nav2_follow_path_reacquire_attempted = True
+                    path_poses = [
+                        dict(item)
+                        for item in follow_path_plan_dict.get("path_poses", [])
+                        if isinstance(item, dict)
+                    ]
+                    compose_project = clean_text(_dashboard_state.get("compose_project"))
+                    self._set_manual_drive(
+                        enabled=False,
+                        mode="nav2_follow_path_reacquire_path",
+                        rationale="Nav2 FollowPath owns the explicit pre-stage reacquire path.",
+                    )
+                    self._update_gather_runtime_state(
+                        latest_feedback=f"Nav2 FollowPath is reacquiring the behind-ball pre-stage pose for {target.label}.",
+                        latest_control_command={
+                            "mode": "nav2_follow_path_reacquire_path",
+                            "linear_x": 0.0,
+                            "angular_z": 0.0,
+                            "target_speed_scale": 0.0,
+                            "rationale": "Manual gather drive disabled while Nav2 FollowPath owns pre-stage reacquire.",
+                        },
+                    )
+                    append_jsonl(
+                        state_history_path,
+                        {
+                            "generated_utc": utc_now(),
+                            "phase": "pre_stage",
+                            "event_type": "nav2_follow_path_reacquire_dispatch",
+                            "attempt": int(attempt_index),
+                            "attempt_kind": str(attempt_kind),
+                            "target_id": target.id,
+                            "robot_pose": robot_pose,
+                            "ball_pose": ball_pose,
+                            "pre_stage": pre_stage_snapshot or {},
+                            "pre_stage_at_dispatch": pre_stage_snapshot or {},
+                            "nav2_follow_path_plan": follow_path_plan_dict,
+                            "nav2_follow_path_path_poses": path_poses,
+                            "nav2_follow_path_controller_id": clean_text(
+                                follow_path_plan_dict.get("controller_id"),
+                                "FollowPath",
+                            ),
+                            "nav2_follow_path_goal_checker_id": clean_text(
+                                follow_path_plan_dict.get("goal_checker_id"),
+                                DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID,
+                            ),
+                            "nav2_follow_path_dispatch_status": "planned",
+                            "selected_command": {},
+                            **self._control_debug_fields(
+                                strategy_name=NAV2_FOLLOW_PATH_REACQUIRE_OBJECTIVE,
+                                objective_name="follow_path_pre_stage_path",
+                            ),
+                        },
+                    )
+                    remaining_timeout_s = max(0.1, deadline - time.monotonic())
+                    follow_path_timeout_s = min(DEFAULT_NAV2_FOLLOW_PATH_GOAL_TIMEOUT_S, remaining_timeout_s)
+                    if compose_project:
+                        try:
+                            follow_path_result = self._dispatch_nav2_follow_path_reacquire(
+                                compose_project=compose_project,
+                                path_poses=path_poses,
+                                controller_id=clean_text(
+                                    follow_path_plan_dict.get("controller_id"),
+                                    "FollowPath",
+                                ),
+                                goal_checker_id=clean_text(
+                                    follow_path_plan_dict.get("goal_checker_id"),
+                                    DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID,
+                                ),
+                                timeout_s=follow_path_timeout_s,
+                            )
+                        except Exception as exc:
+                            follow_path_result = {
+                                "dispatch_status": "client_error",
+                                "accepted": False,
+                                "success": False,
+                                "status_code": None,
+                                "elapsed_s": 0.0,
+                                "error": str(exc),
+                            }
+                    else:
+                        follow_path_result = {
+                            "dispatch_status": "missing_compose_project",
+                            "accepted": False,
+                            "success": False,
+                            "status_code": None,
+                            "elapsed_s": 0.0,
+                            "error": "dashboard_state_missing_compose_project",
+                        }
+                    completion_dashboard_state, completion_robot_pose, completion_ball_pose = self._control_loop_state(
+                        session_id=session_id,
+                        target=target,
+                    )
+                    _ = completion_dashboard_state
+                    completion_snapshot = (
+                        pre_stage_arrival_snapshot(completion_robot_pose, completion_ball_pose or {}, zone=self.zone)
+                        if completion_robot_pose and completion_ball_pose
+                        else None
+                    )
+                    follow_path_ball_motion_m = (
+                        pose_delta_m(ball_pose, completion_ball_pose)
+                        if ball_pose and completion_ball_pose
+                        else None
+                    )
+                    completion_ball_clearance_m = None
+                    completion_robot_xyyaw = world_pose_xyyaw(completion_robot_pose or {})
+                    completion_ball_xyyaw = world_pose_xyyaw(completion_ball_pose or {})
+                    if completion_robot_xyyaw is not None and completion_ball_xyyaw is not None:
+                        completion_ball_clearance_m = round(
+                            math.hypot(
+                                completion_robot_xyyaw[0] - completion_ball_xyyaw[0],
+                                completion_robot_xyyaw[1] - completion_ball_xyyaw[1],
+                            ),
+                            6,
+                        )
+                    completion_handoff_ready = bool(
+                        completion_snapshot.get("pre_stage_pose_reached", False)
+                    ) if isinstance(completion_snapshot, dict) else False
+                    append_jsonl(
+                        state_history_path,
+                        {
+                            "generated_utc": utc_now(),
+                            "phase": "pre_stage",
+                            "event_type": "nav2_follow_path_reacquire_complete",
+                            "attempt": int(attempt_index),
+                            "attempt_kind": str(attempt_kind),
+                            "target_id": target.id,
+                            "robot_pose": completion_robot_pose,
+                            "ball_pose": completion_ball_pose,
+                            "pre_stage": completion_snapshot or {},
+                            "pre_stage_at_dispatch": pre_stage_snapshot or {},
+                            "pre_stage_at_completion": completion_snapshot or {},
+                            "nav2_follow_path_plan": follow_path_plan_dict,
+                            "nav2_follow_path_path_poses": path_poses,
+                            "nav2_follow_path_dispatch_status": clean_text(
+                                follow_path_result.get("dispatch_status"),
+                                "unknown",
+                            ),
+                            "nav2_follow_path_result": follow_path_result,
+                            "nav2_follow_path_ball_motion_m": clean_number(follow_path_ball_motion_m),
+                            "nav2_follow_path_min_ball_clearance_m": clean_number(
+                                follow_path_plan_dict.get("min_path_ball_clearance_m")
+                            ),
+                            "nav2_follow_path_completion_ball_clearance_m": clean_number(
+                                completion_ball_clearance_m
+                            ),
+                            "nav2_follow_path_measured_handoff_ready": completion_handoff_ready,
+                            "selected_command": {},
+                            **self._control_debug_fields(
+                                strategy_name=NAV2_FOLLOW_PATH_REACQUIRE_OBJECTIVE,
+                                objective_name="follow_path_pre_stage_path",
+                            ),
+                        },
+                    )
+                    failure_reason = ""
+                    if not bool(follow_path_result.get("success", False)):
+                        failure_reason = (
+                            "nav2_follow_path_timeout"
+                            if clean_text(follow_path_result.get("dispatch_status")) == "goal_result_timeout"
+                            else "nav2_follow_path_failed"
+                        )
+                    elif (
+                        follow_path_ball_motion_m is not None
+                        and float(follow_path_ball_motion_m) > DEFAULT_NAV2_FOLLOW_PATH_BALL_MOTION_TOLERANCE_M
+                    ):
+                        failure_reason = "nav2_follow_path_ball_motion_guard"
+                    elif not completion_handoff_ready:
+                        failure_reason = "nav2_follow_path_post_action_not_handoff_ready"
+                    if failure_reason:
+                        pre_stage_time_s = time.monotonic() - pre_stage_started_monotonic
+                        self._set_manual_drive(
+                            enabled=False,
+                            mode=failure_reason,
+                            rationale="Nav2 FollowPath pre-stage reacquire stopped before measured handoff.",
+                        )
+                        failure_payload = {
+                            "failure_reason": failure_reason,
+                            "failure_stage": "pre_stage",
+                            "pre_stage_pose_world": pre_stage_pose_world,
+                            "pre_stage_pose_reached": bool(pre_stage_pose_reached_once or completion_handoff_ready),
+                            "pre_stage_time_s": round(pre_stage_time_s, 6),
+                            "pre_stage_handoff_pass": False,
+                            "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
+                            "approach_failure_reason": (
+                                last_failure_reason
+                                if last_failure_reason
+                                else (
+                                    "ball_motion_guard"
+                                    if failure_reason == "nav2_follow_path_ball_motion_guard"
+                                    else failure_reason
+                                )
+                            ),
+                            "entered_goal_side_before_capture": last_failure_reason == "entered_goal_side_before_capture",
+                            "nav2_follow_path_plan": follow_path_plan_dict,
+                            "nav2_follow_path_result": follow_path_result,
+                            "nav2_follow_path_ball_motion_m": clean_number(follow_path_ball_motion_m),
+                            "pre_stage_at_completion": completion_snapshot or {},
+                        }
+                        write_json(mission_root / f"{target.id}_{failure_reason}.json", failure_payload)
+                        return False, failure_payload
+                    self._set_manual_drive(
+                        enabled=False,
+                        mode="nav2_follow_path_reacquire_complete",
+                        rationale="Nav2 FollowPath pre-stage reacquire completed; waiting for measured handoff dwell.",
                     )
                     time.sleep(self.args.poll_s)
                     continue

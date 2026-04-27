@@ -50,7 +50,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather control portfolio | `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary> --baseline-branch helper` |
 | Gather hard-case stress analyzer | `python scripts/gather_control_stress_analyzer.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary>` |
 | Gather control failure audit | `python scripts/gather_control_failure_audit.py --campaign-id <id> --branch region_funnel_v1=<matrix_summary> --branch nav2_reacquire_v1=<matrix_summary> --branch constrained_local_planner_v1=<matrix_summary> --branch docking_reacquire_v1=<matrix_summary> --branch handoff_yaw_servo_v1=<matrix_summary> --branch pre_stage_reacquire_fsm_v1=<matrix_summary> --branch pre_stage_path_tracker_v1=<matrix_summary> --branch pre_stage_trajectory_owner_v1=<matrix_summary>` |
-| Gather pre-stage command authority audit | `python scripts/gather_pre_stage_command_authority_audit.py --campaign-id <id> --branch region_funnel_v1=<matrix_summary> --branch nav2_reacquire_v1=<matrix_summary> --branch constrained_local_planner_v1=<matrix_summary> --branch docking_reacquire_v1=<matrix_summary> --branch handoff_yaw_servo_v1=<matrix_summary> --branch pre_stage_reacquire_fsm_v1=<matrix_summary> --branch pre_stage_path_tracker_v1=<matrix_summary>` |
+| Gather pre-stage command authority audit | `python scripts/gather_pre_stage_command_authority_audit.py --campaign-id <id> --branch region_funnel_v1=<matrix_summary> --branch nav2_reacquire_v1=<matrix_summary> --branch constrained_local_planner_v1=<matrix_summary> --branch docking_reacquire_v1=<matrix_summary> --branch handoff_yaw_servo_v1=<matrix_summary> --branch pre_stage_reacquire_fsm_v1=<matrix_summary> --branch pre_stage_path_tracker_v1=<matrix_summary> --branch pre_stage_trajectory_owner_v1=<matrix_summary>` |
 | Gather portfolio stress ingestion | `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --stress helper=artifacts/session/<id>/gather_control_portfolio/helper/stress_summary.json --baseline-branch helper` |
 | Gather escape oracle | `scripts/run_gather_escape_oracle.ps1 -CampaignId <id>` |
 | Gather escape sandbox | `scripts/run_gather_escape_sandbox.ps1 -CampaignId <id>` |
@@ -68,6 +68,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather pre-stage reacquire FSM helper (internal) | `scripts/gather_pre_stage_reacquire_fsm_helpers.py` |
 | Gather pre-stage path tracker helper (internal) | `scripts/gather_pre_stage_path_tracker_helpers.py` |
 | Gather pre-stage trajectory owner helper (internal) | `scripts/gather_pre_stage_trajectory_owner_helpers.py` |
+| Gather Nav2 FollowPath reacquire helper (internal) | `scripts/gather_nav2_follow_path_reacquire_helpers.py` |
 | Gather control portfolio analyzer (internal) | `scripts/gather_control_portfolio.py` |
 | Gather hard-case stress analyzer (internal) | `scripts/gather_control_stress_analyzer.py` |
 | Gather control failure audit analyzer (internal) | `scripts/gather_control_failure_audit.py` |
@@ -139,7 +140,8 @@ Lane-specific configs:
 24. `pre_stage_path_tracker_v1` is a blocked experimental first-attempt pre-stage branch after the April 26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a larger repaired control-stack branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 25. `pre_stage_trajectory_owner_v1` is a blocked experimental pre-stage trajectory-owner branch after the April 27, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison.
 26. Gather pre-stage command authority audit is analyzer-only assumption-peel-back evidence. It reads existing matrix/state-history artifacts, does not rerun live sim, and does not promote or refresh portfolio/stress evidence for any blocked gather-control branch.
-27. Next gather-control work should move below manual-drive overlays to a Nav2 `FollowPath` / DWB pre-stage owner; MPPI/MPC remains the fallback if `FollowPath` cannot clear fresh `zero`.
+27. Current active gather-control branch is `nav2_follow_path_reacquire_v1`, a one-ball `pre_stage`-only Nav2 controller-server `FollowPath` / DWB owner over an explicit short odom-frame path. Keep it out of portfolio/stress ingestion until fresh one-run `zero` and `plus45` both reach measured pre-stage handoff with no pre-stage ball drift/contact.
+28. MPPI/MPC remains the fallback if `nav2_follow_path_reacquire_v1` cannot clear fresh `zero`; do not add another helper/manual-drive overlay before planning that lower-stack change.
 
 ## Latest Validated Artifacts
 
@@ -231,6 +233,11 @@ Gather pre-stage trajectory owner experimental branch status:
 - Scope: one-ball first-attempt `pre_stage` only; in-process measured trajectory owner through `escape_clear`, `corridor_approach`, `port`, and `handoff_yaw`, with one alternate-side replan and strict measured handoff release.
 - Smoke: `artifacts/session/live_pre_stage_trajectory_owner_v1_matrix_smoke_20260427/gather_goal_side_matrix/campaign_summary.json`
 - Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff with no pre-stage ball motion/contact; the branch mostly stopped on `trajectory_progress_stalled`, with `plus45` also showing a latest-retry `trajectory_clearance_guard`, so no portfolio/stress refresh was produced for this branch.
+
+Gather Nav2 FollowPath reacquire experimental branch status:
+- Candidate: `nav2_follow_path_reacquire_v1`
+- Scope: one-ball `pre_stage` only; builds an explicit odom-frame path through `escape_clear`, `corridor_approach`, `port`, and `handoff_yaw`, dispatches `/follow_path` with DWB, disables manual drive while Nav2 owns the path, and accepts only measured pre-stage handoff dwell.
+- Status: source implementation is the current active lower-stack experiment; live matrix evidence is still pending, and no portfolio/stress refresh should include it before fresh `zero` and `plus45` one-run handoff passes.
 
 ## Testing
 
