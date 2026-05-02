@@ -141,8 +141,8 @@ Lane-specific configs:
 25. `pre_stage_trajectory_owner_v1` is a blocked experimental pre-stage trajectory-owner branch after the April 27, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison.
 26. Gather pre-stage command authority audit is analyzer-only assumption-peel-back evidence. It reads existing matrix/state-history artifacts, does not rerun live sim, and does not promote or refresh portfolio/stress evidence for any blocked gather-control branch.
 27. `nav2_follow_path_reacquire_v1` is a blocked experimental one-ball `pre_stage` Nav2 controller-server `FollowPath` / DWB branch after the April 27, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison.
-28. `nav2_mppi_follow_path_reacquire_v1` is a blocked lower-stack one-ball `pre_stage` MPPI FollowPath branch after the April 29, 2026 matrix/tangent rechecks; it uses `controller_id=MppiFollowPath`, a start-anchored dense odom-frame path with tangent headings, and the same measured handoff dwell acceptance, but it still timed out before measured pre-stage handoff.
-29. Keep `nav2_mppi_follow_path_reacquire_v1` out of portfolio/stress comparison until a repaired controller-stack branch shows fresh `zero` and `plus45` matrix attempts both clear pre-stage handoff without pre-stage ball drift/contact; next work should inspect/tune MPPI/controller convergence rather than adding another helper/manual-drive overlay.
+28. `nav2_mppi_follow_path_reacquire_v1` is a blocked lower-stack one-ball `pre_stage` MPPI FollowPath branch. The May 2, 2026 recovery and capture-entry diagnostics prove fresh `zero` and `plus45` primary pre-stage handoff with `STATUS_SUCCEEDED` and no pre-stage ball motion/contact, but the full matrix still fails downstream (`zero` never reaches the capture-entry ready band, `plus45` reaches capture-entry samples then fails first-contact alignment, and `backside180` remains guarded by `path_clearance_guard`).
+29. Keep `nav2_mppi_follow_path_reacquire_v1` out of portfolio/stress comparison until the downstream `stage -> capture_entry -> capture` blocker is repaired and a fresh full gate clears without pre-stage ball drift/contact; next work should diagnose capture-entry geometry/authority after the recovered MPPI handoff rather than adding another helper/manual-drive overlay.
 
 ## Latest Validated Artifacts
 
@@ -244,9 +244,9 @@ Gather Nav2 FollowPath reacquire experimental branch status:
 Gather Nav2 MPPI FollowPath reacquire experimental branch status:
 - Candidate: `nav2_mppi_follow_path_reacquire_v1`
 - Scope: one-ball `pre_stage` only; dispatches `/follow_path` with the Nav2 MPPI `MppiFollowPath` controller, sends a start-anchored dense odom-frame path with tangent headings through `escape_clear`, `corridor_approach`, `port`, and `handoff_yaw`, disables manual drive while Nav2 owns the path, and accepts only measured pre-stage handoff dwell.
-- Matrix: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_matrix_smoke_20260429_rerun/gather_goal_side_matrix/campaign_summary.json`
-- Tangent recheck: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_plus45_tangent_20260429/gather_mission_repeatability/campaign_run_summary.json`
-- Result: blocked. The MPPI branch improved on DWB by accepting FollowPath goals and producing measured robot progress with no pre-stage ball motion/contact, but `zero`, `plus45`, and `minus45` still timed out before handoff in the matrix, `backside180` tripped the path-clearance guard, and the tangent-heading `plus45` recheck still failed with `nav2_follow_path_timeout`; no portfolio/stress refresh was produced for this branch.
+- Recovery matrix: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_capture_entry_diag_20260502/gather_goal_side_matrix/campaign_summary.json`
+- Recovery audit: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_capture_entry_diag_20260502_failure_audit/gather_control_failure_audit/failure_audit_summary.json`
+- Result: blocked downstream. Fresh `zero` and `plus45` now clear MPPI pre-stage handoff with `STATUS_SUCCEEDED`, no timeout, and `0.0m` pre-stage ball motion, but the branch still fails after baseline handoff: `zero` times out in capture-entry with `ready_band_never_reached`, `plus45` reaches capture-entry samples but fails first-contact alignment, `minus45` is secondary context with the same first-contact alignment symptom, and `backside180` remains path-clearance guarded. No portfolio/stress refresh was produced.
 
 ## Testing
 

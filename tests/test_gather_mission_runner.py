@@ -3564,6 +3564,7 @@ def test_capture_target_off_axis_extended_corridor_still_times_out_in_capture_en
     target = runner.targets[0]
     clock = {"now": 0.0}
     phase_entries: list[str] = []
+    state_rows: list[dict[str, object]] = []
 
     def fake_monotonic():
         return clock["now"]
@@ -3576,7 +3577,11 @@ def test_capture_target_off_axis_extended_corridor_still_times_out_in_capture_en
     monkeypatch.setattr(
         gather_runner,
         "append_jsonl",
-        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+        lambda _path, payload: (
+            state_rows.append(payload) or phase_entries.append(str(payload.get("phase", "")))
+            if isinstance(payload, dict)
+            else None
+        ),
     )
     monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
@@ -3605,6 +3610,19 @@ def test_capture_target_off_axis_extended_corridor_still_times_out_in_capture_en
     assert payload["capture_entry_time_s"] >= 4.0
     assert phase_entries.count("capture_entry") > 0
     assert "capture" not in phase_entries
+    capture_entry_rows = [row for row in state_rows if row.get("phase") == "capture_entry"]
+    assert capture_entry_rows
+    diagnostics = capture_entry_rows[-1]["capture_entry_diagnostics"]
+    assert diagnostics["timeout_cause"] == "ready_band_never_reached"
+    assert diagnostics["selected_command_mode"] == "capture_entry"
+    assert diagnostics["manager_directive"] == "close_capture_gap"
+    assert abs(float(diagnostics["ball_x_m"]) - 0.54) <= 0.02
+    assert abs(float(diagnostics["ball_y_m"]) - 0.09) <= 0.02
+    assert abs(float(diagnostics["robot_delta_from_handoff_m"]) - 0.0) <= 1.0e-6
+    assert abs(float(diagnostics["ball_delta_from_handoff_m"]) - 0.0) <= 1.0e-6
+    assert payload["capture_entry_diagnostics"]["timeout_cause"] == "ready_band_never_reached"
+    assert abs(float(payload["capture_entry_diagnostics"]["robot_delta_from_handoff_m"]) - 0.0) <= 1.0e-6
+    assert payload["capture_entry_snapshot"]["capture_entry_reached"] is False
 
 
 def test_capture_target_records_capture_entry_before_generic_capture_timeout(tmp_path, monkeypatch):

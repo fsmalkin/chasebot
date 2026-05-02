@@ -4269,6 +4269,82 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         approach_failure_reason = ""
         last_approach_snapshot: dict[str, Any] = {}
         latest_pre_capture_command_mode = ""
+        handoff_robot_pose: dict[str, Any] | None = None
+        handoff_ball_pose: dict[str, Any] | None = None
+        last_capture_entry_snapshot: dict[str, Any] = {}
+        last_capture_entry_diagnostics: dict[str, Any] = {}
+
+        def _capture_entry_timeout_cause(*, manager_directive: str = "") -> str:
+            directive = str(manager_directive or "")
+            if (
+                directive == "recover_goal_side"
+                or approach_failure_reason == "capture_entry_goal_side_loss"
+                or entered_goal_side_before_capture
+            ):
+                return "goal_side_authority_lost"
+            if capture_entry_reached_once or capture_entry_ready_latched:
+                return "ready_dwell_not_completed"
+            return "ready_band_never_reached"
+
+        def _capture_entry_diagnostics_payload(
+            *,
+            now_monotonic: float,
+            snapshot: dict[str, Any] | None,
+            ready_signal: bool,
+            manager_directive: str,
+            selected_command: Any = None,
+            robot_pose: dict[str, Any] | None = None,
+            ball_pose: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            capture_entry_elapsed_s = 0.0
+            if capture_entry_started_monotonic is not None:
+                capture_entry_elapsed_s = max(0.0, now_monotonic - float(capture_entry_started_monotonic))
+            ready_dwell_s = 0.0
+            if capture_entry_ready_started_monotonic is not None:
+                ready_dwell_s = max(0.0, now_monotonic - float(capture_entry_ready_started_monotonic))
+            snapshot_payload = dict(snapshot or {})
+            selected_command_payload = selected_command.to_dict() if selected_command is not None else {}
+            robot_delta_m = (
+                pose_delta_m(handoff_robot_pose, robot_pose)
+                if handoff_robot_pose is not None and robot_pose is not None
+                else None
+            )
+            ball_delta_m = (
+                pose_delta_m(handoff_ball_pose, ball_pose)
+                if handoff_ball_pose is not None and ball_pose is not None
+                else None
+            )
+            return {
+                "elapsed_s": round(float(capture_entry_elapsed_s), 6),
+                "timeout_s": round(float(DEFAULT_CAPTURE_ENTRY_TIMEOUT_S), 6),
+                "ready_signal": bool(ready_signal),
+                "ready_latched": bool(capture_entry_ready_latched),
+                "ready_reached_once": bool(capture_entry_reached_once),
+                "ready_dwell_s": round(float(ready_dwell_s), 6),
+                "ready_dwell_required_s": round(float(DEFAULT_CAPTURE_ENTRY_READY_DWELL_S), 6),
+                "ready_dwell_completed": bool(
+                    capture_entry_ready_started_monotonic is not None
+                    and ready_dwell_s >= DEFAULT_CAPTURE_ENTRY_READY_DWELL_S
+                ),
+                "timeout_cause": _capture_entry_timeout_cause(manager_directive=manager_directive),
+                "manager_directive": str(manager_directive or ""),
+                "selected_command": selected_command_payload,
+                "selected_command_mode": str(selected_command_payload.get("mode", "") or ""),
+                "robot_delta_from_handoff_m": clean_rounded_number(robot_delta_m),
+                "ball_delta_from_handoff_m": clean_rounded_number(ball_delta_m),
+                "handoff_robot_pose": dict(handoff_robot_pose or {}),
+                "handoff_ball_pose": dict(handoff_ball_pose or {}),
+                "capture_entry_snapshot": snapshot_payload,
+                "ball_x_m": clean_rounded_number(snapshot_payload.get("ball_x_m")),
+                "ball_y_m": clean_rounded_number(snapshot_payload.get("ball_y_m")),
+                "bearing_rad": clean_rounded_number(snapshot_payload.get("bearing_rad")),
+                "robot_longitudinal_projection_m": clean_rounded_number(
+                    snapshot_payload.get("robot_longitudinal_projection_m")
+                ),
+                "robot_lateral_error_m": clean_rounded_number(snapshot_payload.get("robot_lateral_error_m")),
+                "robot_on_goal_side": bool(snapshot_payload.get("robot_on_goal_side", False)),
+                "entered_goal_side_before_capture": bool(entered_goal_side_before_capture),
+            }
 
         def _approach_result_payload(*, failure_reason: str = "") -> dict[str, Any]:
             if failure_reason:
@@ -4299,6 +4375,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
             _dashboard_state, robot_pose, ball_pose = self._control_loop_state(session_id=session_id, target=target)
+            if handoff_robot_pose is None and isinstance(robot_pose, dict):
+                handoff_robot_pose = dict(robot_pose)
+            if handoff_ball_pose is None and isinstance(ball_pose, dict):
+                handoff_ball_pose = dict(ball_pose)
             capture = capture_snapshot(robot_pose, ball_pose or {}, self.capture_envelope) if robot_pose and ball_pose else None
             zone_score = zone_snapshot(ball_pose or {}, self.zone) if ball_pose else None
             approach_snapshot = (
@@ -4530,11 +4610,32 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         latest_command_mode=latest_pre_capture_command_mode,
                     )
                 )
+                capture_entry_diagnostics_payload = _capture_entry_diagnostics_payload(
+                    now_monotonic=now_monotonic,
+                    snapshot=capture_entry_snapshot_payload,
+                    ready_signal=capture_entry_ready_signal,
+                    manager_directive=capture_entry_manager_decision.directive,
+                    selected_command=capture_entry_command,
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                )
+                last_capture_entry_snapshot = dict(capture_entry_snapshot_payload or {})
+                last_capture_entry_diagnostics = dict(capture_entry_diagnostics_payload)
                 if capture_entry_manager_decision.directive == "recover_goal_side":
                     capture_entry_ready_latched = False
                     capture_entry_ready_started_monotonic = None
                     entered_goal_side_before_capture = True
                     approach_failure_reason = "capture_entry_goal_side_loss"
+                    capture_entry_diagnostics_payload = _capture_entry_diagnostics_payload(
+                        now_monotonic=now_monotonic,
+                        snapshot=capture_entry_snapshot_payload,
+                        ready_signal=capture_entry_ready_signal,
+                        manager_directive=capture_entry_manager_decision.directive,
+                        selected_command=capture_entry_command,
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                    )
+                    last_capture_entry_diagnostics = dict(capture_entry_diagnostics_payload)
                     self._set_manual_drive(
                         enabled=False,
                         mode="capture_entry_goal_side_loss",
@@ -4545,6 +4646,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "failure_stage": "capture_entry",
                         "capture_state": capture.to_dict() if capture else {},
                         "zone_score": zone_score.to_dict() if zone_score else {},
+                        "capture_entry_snapshot": last_capture_entry_snapshot,
+                        "capture_entry_diagnostics": last_capture_entry_diagnostics,
                         **_approach_result_payload(failure_reason=approach_failure_reason),
                     }
                     write_json(mission_root / f"{target.id}_capture_entry_goal_side_loss.json", failure_payload)
@@ -4575,6 +4678,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "zone_score": zone_score.to_dict() if zone_score else {},
                         "approach_side": approach_snapshot or {},
                         "capture_entry": capture_entry_snapshot_payload or {},
+                        "capture_entry_diagnostics": capture_entry_diagnostics_payload,
                         "manager_directive": capture_entry_manager_decision.directive,
                         "selected_command": capture_entry_command.to_dict() if capture_entry_command else {},
                         "ball_motion_m": ball_motion_m,
@@ -4620,6 +4724,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "failure_stage": "capture_entry",
                         "capture_state": capture.to_dict() if capture else {},
                         "zone_score": zone_score.to_dict() if zone_score else {},
+                        "capture_entry_snapshot": last_capture_entry_snapshot,
+                        "capture_entry_diagnostics": last_capture_entry_diagnostics,
                         **_approach_result_payload(failure_reason=approach_failure_reason),
                     }
                     write_json(mission_root / f"{target.id}_capture_entry_timeout.json", timeout_payload)
@@ -4832,6 +4938,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "zone_score": last_zone_payload,
             "zone_edge_correction_eligible": bool(correction_eligible),
             "allow_full_revisit": False,
+            "capture_entry_snapshot": last_capture_entry_snapshot,
+            "capture_entry_diagnostics": last_capture_entry_diagnostics,
             **_approach_result_payload(failure_reason=approach_failure_reason),
         }
         write_json(mission_root / f"{target.id}_capture_timeout.json", timeout_payload)

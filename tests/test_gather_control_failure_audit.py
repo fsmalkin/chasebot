@@ -418,6 +418,138 @@ def test_mppi_follow_path_timeout_is_classified_from_diagnostics(tmp_path: Path)
     assert case["nav2_follow_path_debug"]["nav2_follow_path_controller_log_excerpt"]
 
 
+def test_capture_entry_timeout_debug_is_summarized_from_state_history(tmp_path: Path):
+    mission_root = tmp_path / "mppi_zero_capture_entry"
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "phase": "capture_entry",
+                "manager_directive": "close_capture_gap",
+                "selected_command": {"mode": "capture_entry", "linear_x": 0.02, "angular_z": 0.45},
+                "capture_entry": {
+                    "ball_x_m": 0.54,
+                    "ball_y_m": 0.09,
+                    "bearing_rad": 0.16,
+                    "robot_longitudinal_projection_m": 0.58,
+                    "robot_lateral_error_m": 0.09,
+                    "capture_entry_reached": False,
+                    "robot_on_goal_side": False,
+                },
+                "capture_entry_diagnostics": {
+                    "elapsed_s": 3.5,
+                    "ready_signal": False,
+                    "ready_latched": False,
+                    "ready_reached_once": False,
+                    "timeout_cause": "ready_band_never_reached",
+                    "manager_directive": "close_capture_gap",
+                    "selected_command_mode": "capture_entry",
+                    "robot_delta_from_handoff_m": 0.12,
+                    "ball_delta_from_handoff_m": 0.0,
+                    "ball_x_m": 0.54,
+                    "ball_y_m": 0.09,
+                    "bearing_rad": 0.16,
+                    "robot_longitudinal_projection_m": 0.58,
+                    "robot_lateral_error_m": 0.09,
+                },
+            },
+            {
+                "phase": "capture_entry",
+                "manager_directive": "close_capture_gap",
+                "selected_command": {"mode": "capture_entry", "linear_x": 0.02, "angular_z": 0.42},
+                "capture_entry": {
+                    "ball_x_m": 0.52,
+                    "ball_y_m": 0.085,
+                    "bearing_rad": 0.15,
+                    "robot_longitudinal_projection_m": 0.56,
+                    "robot_lateral_error_m": 0.085,
+                    "capture_entry_reached": False,
+                    "robot_on_goal_side": False,
+                },
+                "capture_entry_diagnostics": {
+                    "elapsed_s": 4.0,
+                    "ready_signal": False,
+                    "ready_latched": False,
+                    "ready_reached_once": False,
+                    "timeout_cause": "ready_band_never_reached",
+                    "manager_directive": "close_capture_gap",
+                    "selected_command_mode": "capture_entry",
+                    "robot_delta_from_handoff_m": 0.18,
+                    "ball_delta_from_handoff_m": 0.0,
+                    "ball_x_m": 0.52,
+                    "ball_y_m": 0.085,
+                    "bearing_rad": 0.15,
+                    "robot_longitudinal_projection_m": 0.56,
+                    "robot_lateral_error_m": 0.085,
+                },
+            },
+        ],
+    )
+    mission_verdict = {
+        "failure_stage": "capture_entry",
+        "failure_reason": "capture_entry_timeout",
+        "capture_entry_snapshot": {
+            "ball_x_m": 0.52,
+            "ball_y_m": 0.085,
+            "bearing_rad": 0.15,
+            "robot_longitudinal_projection_m": 0.56,
+            "robot_lateral_error_m": 0.085,
+            "capture_entry_reached": False,
+        },
+        "capture_entry_diagnostics": {
+            "elapsed_s": 4.0,
+            "timeout_cause": "ready_band_never_reached",
+            "manager_directive": "close_capture_gap",
+            "selected_command_mode": "capture_entry",
+            "robot_delta_from_handoff_m": 0.18,
+            "ball_delta_from_handoff_m": 0.0,
+            "ball_x_m": 0.52,
+            "ball_y_m": 0.085,
+            "bearing_rad": 0.15,
+            "robot_longitudinal_projection_m": 0.56,
+            "robot_lateral_error_m": 0.085,
+        },
+    }
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "mppi_capture_entry",
+        family="nav2_mppi_follow_path_reacquire_v1",
+        cases=[
+            _case(
+                "zero",
+                mission_root=mission_root,
+                fresh_handoff=True,
+                fresh_reason="capture_entry_timeout",
+                latest_reason="capture_entry_timeout",
+                goal_side_count=0,
+                mission_verdict=mission_verdict,
+            )
+        ],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="nav2_mppi_follow_path_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    case = branch["cases"][0]
+    debug = case["capture_entry_debug"]
+
+    assert debug["capture_entry_row_count"] == 2
+    assert debug["capture_entry_timeout_count"] == 1
+    assert debug["capture_entry_timeout_causes"] == ["ready_band_never_reached"]
+    assert debug["capture_entry_command_modes"] == ["capture_entry"]
+    assert debug["capture_entry_manager_directives"] == ["close_capture_gap"]
+    assert debug["capture_entry_ready_observed_count"] == 0
+    assert debug["capture_entry_final_ball_x_m"] == 0.52
+    assert debug["capture_entry_final_ball_y_m"] == 0.085
+    assert debug["capture_entry_final_bearing_rad"] == 0.15
+    assert debug["capture_entry_final_robot_longitudinal_projection_m"] == 0.56
+    assert debug["capture_entry_final_robot_lateral_error_m"] == 0.085
+    assert debug["capture_entry_robot_delta_from_handoff_max_m"] == 0.18
+    assert debug["capture_entry_ball_delta_from_handoff_max_m"] == 0.0
+
+
 def test_mppi_follow_path_clearance_action_and_handoff_labels_are_extracted(tmp_path: Path):
     clearance_root = tmp_path / "mppi_clearance"
     action_root = tmp_path / "mppi_action"
