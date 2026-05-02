@@ -336,6 +336,145 @@ def test_nav2_timeout_and_ball_contact_are_extracted_from_state_history(tmp_path
     assert case["nav2_debug"]["ball_drift_max_m"] >= audit.BALL_DRIFT_CONTACT_THRESHOLD_M
 
 
+def test_mppi_follow_path_timeout_is_classified_from_diagnostics(tmp_path: Path):
+    mission_root = tmp_path / "mppi_plus45"
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "event_type": "nav2_follow_path_reacquire_dispatch",
+                "attempt": 1,
+                "controller_family": "nav2_mppi_follow_path_reacquire_v1",
+                "ball_pose": {"x": 5.448, "y": 0.0},
+            },
+            {
+                "event_type": "nav2_follow_path_reacquire_complete",
+                "attempt": 1,
+                "controller_family": "nav2_mppi_follow_path_reacquire_v1",
+                "nav2_follow_path_dispatch_status": "goal_result_timeout",
+                "nav2_follow_path_result": {
+                    "dispatch_status": "goal_result_timeout",
+                    "feedback_count": 4,
+                    "feedback_samples": [{"elapsed_s": 0.5, "feedback": {"distance_to_goal": 0.8}}],
+                    "timed_out": True,
+                    "cancel_requested": True,
+                },
+                "nav2_follow_path_diagnostics": {
+                    "dispatch_status": "goal_result_timeout",
+                    "robot_motion_m": 1.25,
+                    "ball_motion_m": 0.0,
+                    "completion_terminal_path_distance_m": 0.7,
+                    "completion_terminal_yaw_error_deg": 38.0,
+                    "feedback_count": 4,
+                    "measured_handoff_ready": False,
+                    "cancel_requested": True,
+                },
+                "nav2_follow_path_measured_handoff_ready": False,
+            },
+        ],
+    )
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "mppi",
+        family="nav2_mppi_follow_path_reacquire_v1",
+        cases=[_case("plus45", mission_root=mission_root)],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="nav2_mppi_follow_path_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    case = branch["cases"][0]
+
+    assert "nav2_goal_timeout" in case["failure_labels"]
+    assert "slow_controller_convergence" in case["failure_labels"]
+    assert "no_controller_progress" not in case["failure_labels"]
+    assert "ball_motion_guard" not in case["failure_labels"]
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_timeout_count"] == 1
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_feedback_count_max"] == 4
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_cancel_requested_count"] == 1
+
+
+def test_mppi_follow_path_clearance_action_and_handoff_labels_are_extracted(tmp_path: Path):
+    clearance_root = tmp_path / "mppi_clearance"
+    action_root = tmp_path / "mppi_action"
+    handoff_root = tmp_path / "mppi_handoff"
+    _write_jsonl(
+        clearance_root / "state_history.jsonl",
+        [
+            {
+                "event_type": "nav2_follow_path_reacquire_plan_blocked",
+                "controller_family": "nav2_mppi_follow_path_reacquire_v1",
+                "nav2_follow_path_dispatch_status": "follow_path_clearance_guard",
+                "nav2_follow_path_plan": {"reason": "follow_path_clearance_guard"},
+            }
+        ],
+    )
+    _write_jsonl(
+        action_root / "state_history.jsonl",
+        [
+            {
+                "event_type": "nav2_follow_path_reacquire_complete",
+                "controller_family": "nav2_mppi_follow_path_reacquire_v1",
+                "nav2_follow_path_result": {"dispatch_status": "server_unavailable", "error": "no server"},
+            }
+        ],
+    )
+    _write_jsonl(
+        handoff_root / "state_history.jsonl",
+        [
+            {
+                "event_type": "nav2_follow_path_reacquire_complete",
+                "controller_family": "nav2_mppi_follow_path_reacquire_v1",
+                "nav2_follow_path_result": {"dispatch_status": "goal_succeeded", "success": True},
+                "nav2_follow_path_diagnostics": {
+                    "dispatch_status": "goal_succeeded",
+                    "robot_motion_m": 1.0,
+                    "ball_motion_m": 0.061,
+                    "completion_terminal_path_distance_m": 0.08,
+                    "measured_handoff_ready": False,
+                },
+            }
+        ],
+    )
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "mppi_multi",
+        family="nav2_mppi_follow_path_reacquire_v1",
+        cases=[
+            _case(
+                "zero",
+                mission_root=clearance_root,
+                mission_verdict={"failure_stage": "pre_stage", "failure_reason": "nav2_follow_path_path_clearance_guard"},
+            ),
+            _case(
+                "minus45",
+                mission_root=action_root,
+                mission_verdict={"failure_stage": "pre_stage", "failure_reason": "nav2_follow_path_failed"},
+            ),
+            _case(
+                "backside180",
+                mission_root=handoff_root,
+                mission_verdict={"failure_stage": "pre_stage", "failure_reason": "nav2_follow_path_post_action_not_handoff_ready"},
+            ),
+        ],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="nav2_mppi_follow_path_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    cases = {case["case_id"]: case for case in branch["cases"]}
+
+    assert "path_clearance_guard" in cases["zero"]["failure_labels"]
+    assert "action_error" in cases["minus45"]["failure_labels"]
+    assert "handoff_gate_mismatch" in cases["backside180"]["failure_labels"]
+    assert "ball_motion_guard" in cases["backside180"]["failure_labels"]
+    assert "ball_contact_during_reacquire" in cases["backside180"]["failure_labels"]
+
+
 def test_stage_timeout_after_prestage_is_classified_from_verdict(tmp_path: Path):
     matrix_path = _matrix_summary(
         tmp_path,

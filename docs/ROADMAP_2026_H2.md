@@ -514,7 +514,12 @@ Current direction update:
    - smoke `artifacts/session/live_nav2_reacquire_v1_matrix_smoke_20260424/gather_goal_side_matrix/campaign_summary.json` kept fresh `zero` and `plus45` blocked at pre-stage handoff
    - accepted Nav2 goals timed out instead of reaching the handoff pose, so no portfolio/stress ingestion was produced
    - keep the branch available as evidence, but repair/requalify it before any promotion discussion
-6. the preserved helper contract lane is still not the next promotion path:
+6. `nav2_follow_path_reacquire_v1` and `nav2_mppi_follow_path_reacquire_v1` are blocked lower-stack controller-server probes:
+   - DWB FollowPath smoke `artifacts/session/live_nav2_follow_path_reacquire_v1_matrix_smoke_20260427/gather_goal_side_matrix/campaign_summary.json` accepted `/follow_path` goals but immediately aborted with `status_code=6` in fresh `zero` and `plus45`
+   - MPPI matrix smoke `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_matrix_smoke_20260429_rerun/gather_goal_side_matrix/campaign_summary.json` accepted `/follow_path` goals and moved the robot with no pre-stage ball motion, but `zero`, `plus45`, and `minus45` still timed out before handoff and `backside180` tripped the path-clearance guard
+   - tangent-heading `plus45` recheck `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_plus45_tangent_20260429/gather_mission_repeatability/campaign_run_summary.json` still failed with `nav2_follow_path_timeout`, so the next work is MPPI/controller convergence repair rather than portfolio ingestion
+   - do not feed either branch into portfolio/stress ingestion until fresh `zero` and `plus45` clear pre-stage handoff without pre-stage ball drift/contact
+7. the preserved helper contract lane is still not the next promotion path:
    - `helper_turn_authority_contract_audit` returned `stop_and_branch` with blocking_reason=`sign_parity`
    - `manual_drive_sign_parity_audit` now points to the `probe_odom_world_sign_chain` runtime probe wrapper (`scripts/run_probe_odom_world_sign_chain.ps1`)
    - the refreshed April 21, 2026 provenance rerun now lands in `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260421_provenance_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`

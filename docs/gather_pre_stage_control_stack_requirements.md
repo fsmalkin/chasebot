@@ -2,19 +2,19 @@
 
 ## Context
 
-The blocked gather-control candidates now share the same first-attempt blocker: fresh `zero` and `plus45` live matrix attempts do not reliably reach behind-ball pre-stage handoff. The latest `pre_stage_path_tracker_v1` smoke failed safely: it recorded no pre-stage ball motion/contact, but both primary cases stayed on the `escape` waypoint until timeout.
+The blocked gather-control candidates now share the same first-attempt blocker: fresh `zero` and `plus45` live matrix attempts do not reliably reach behind-ball pre-stage handoff. The latest helper-layer owners failed safely with no pre-stage ball motion/contact. The first lower-stack DWB FollowPath probe accepted `/follow_path` goals but aborted immediately before measured robot progress, while the MPPI FollowPath probe accepted goals and moved the robot without moving the ball but still timed out before measured handoff.
 
-The assumption peel-back is complete enough for the next runtime branch. The command-authority audit indicates that selected commands are usually realized and geometry often improves, but the measured handoff gate still times out. The next active branch is `pre_stage_trajectory_owner_v1`: an in-process owner that plans and tracks the full measured pre-stage trajectory rather than layering another reactive overlay.
+The assumption peel-back is complete enough to keep work below the helper layer. The command-authority audit and MPPI evidence indicate that selected commands can be realized and geometry can improve, but the measured handoff gate still times out. The next work is controller-stack repair/tuning for the `nav2_mppi_follow_path_reacquire_v1` evidence path or an equivalent controller-plugin design, not another manual-drive overlay.
 
 ## Next Branch Steps
 
-- Implement `pre_stage_trajectory_owner_v1` as the next active branch.
+- Treat `nav2_mppi_follow_path_reacquire_v1` as blocked evidence and repair/tune controller convergence before any promotion work.
 - Keep the current `zero` / `plus45` pre-stage handoff gate, while recording intermediate diagnostics for goal-side cleared, trajectory milestone progress, lateral error reduced, yaw reduced, and ball remained still.
-- If the branch fails fresh `zero`, stop promotion work and move to a lower-stack fallback such as a Nav2 controller plugin or MPPI/MPC-style local controller instead of retuning blocked overlays.
+- Inspect controller-server feedback/logs and MPPI realization metrics before retuning blocked overlays.
 
 ## Requirements
 
-- Own the full pre-stage motion from measured robot pose to measured handoff readiness, instead of layering another reactive overlay around the current pre-stage loop.
+- Own the full pre-stage motion from measured robot pose to measured handoff readiness through Nav2 controller-server ownership, instead of layering another reactive overlay around the current pre-stage loop.
 - Separate planned geometry progress from realized controller authority, so the evidence can distinguish "bad waypoint/path" from "commanded motion did not realize enough escape progress."
 - Emit explicit commanded-vs-realized progress evidence for projection, lateral error, distance, yaw, waypoint/path progress, command mode, and manual-drive authority.
 - Stop or hold on ball motion, predicted clearance violation, or measured clearance violation before handoff.
@@ -34,5 +34,5 @@ The assumption peel-back is complete enough for the next runtime branch. The com
 ## Non-Goals
 
 - Do not retune `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, `pre_stage_reacquire_fsm_v1`, or `pre_stage_path_tracker_v1`.
-- Do not name or implement another runtime branch until `pre_stage_trajectory_owner_v1` either passes the fresh `zero` / `plus45` pre-stage gate or fails with evidence that justifies a lower-stack fallback.
+- Do not name or implement another helper/manual-drive runtime branch while the MPPI/controller-stack blocker is under repair.
 - Do not refresh portfolio or stress evidence for blocked branches.

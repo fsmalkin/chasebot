@@ -25,6 +25,12 @@ FAILURE_LABELS = (
     "nav2_goal_timeout",
     "ball_contact_during_reacquire",
     "post_reacquire_not_handoff_ready",
+    "path_clearance_guard",
+    "no_controller_progress",
+    "slow_controller_convergence",
+    "handoff_gate_mismatch",
+    "ball_motion_guard",
+    "action_error",
     "stage_timeout_after_prestage",
     "local_planner_progress_insufficient",
     "local_planner_release_not_reached",
@@ -50,6 +56,9 @@ FAILURE_LABELS = (
     "pre_stage_trajectory_owner_timeout_without_ball_contact",
 )
 BLOCKED_CANDIDATE_BRANCHES = {"region_funnel_v1", "nav2_reacquire_v1"}
+NAV2_FOLLOW_PATH_BRANCH = "nav2_follow_path_reacquire_v1"
+NAV2_MPPI_FOLLOW_PATH_BRANCH = "nav2_mppi_follow_path_reacquire_v1"
+NAV2_FOLLOW_PATH_BRANCHES = {NAV2_FOLLOW_PATH_BRANCH, NAV2_MPPI_FOLLOW_PATH_BRANCH}
 CONSTRAINED_LOCAL_PLANNER_BRANCH = "constrained_local_planner_v1"
 DOCKING_REACQUIRE_BRANCH = "docking_reacquire_v1"
 HANDOFF_YAW_SERVO_BRANCH = "handoff_yaw_servo_v1"
@@ -350,6 +359,108 @@ def _nav2_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "ball_drift_sample_count": len(drift_samples),
         "ball_drift_max_m": round(max_drift_m, 6),
         "ball_drift_samples": drift_samples,
+    }
+
+
+def _nav2_follow_path_debug_summary(rows: list[dict[str, Any]], mission_verdict: dict[str, Any]) -> dict[str, Any]:
+    dispatch_rows = [row for row in rows if row.get("event_type") == "nav2_follow_path_reacquire_dispatch"]
+    complete_rows = [row for row in rows if row.get("event_type") == "nav2_follow_path_reacquire_complete"]
+    blocked_rows = [row for row in rows if row.get("event_type") == "nav2_follow_path_reacquire_plan_blocked"]
+    statuses: list[str] = []
+    errors: list[str] = []
+    robot_motion_values: list[float | None] = []
+    ball_motion_values: list[float | None] = []
+    terminal_distance_values: list[float | None] = []
+    terminal_yaw_values: list[float | None] = []
+    handoff_ready_values: list[bool | None] = []
+    feedback_counts: list[int] = []
+    timeout_count = 0
+    action_error_count = 0
+    cancel_requested_count = 0
+    feedback_sample_count = 0
+
+    for row in complete_rows:
+        result = _dict_value(row.get("nav2_follow_path_result"))
+        diagnostics = _dict_value(row.get("nav2_follow_path_diagnostics"))
+        dispatch_status = str(
+            diagnostics.get("dispatch_status")
+            or row.get("nav2_follow_path_dispatch_status")
+            or result.get("dispatch_status")
+            or ""
+        )
+        if dispatch_status:
+            statuses.append(dispatch_status)
+        error = str(diagnostics.get("error") or result.get("error") or "")
+        if error:
+            errors.append(error)
+        if dispatch_status == "goal_result_timeout" or _boolish(result.get("timed_out")) is True:
+            timeout_count += 1
+        if dispatch_status and dispatch_status not in {"goal_succeeded", "goal_result_timeout"}:
+            action_error_count += 1
+        if _boolish(result.get("cancel_requested")) is True or _boolish(diagnostics.get("cancel_requested")) is True:
+            cancel_requested_count += 1
+        feedback_count = _int_value(diagnostics.get("feedback_count", result.get("feedback_count")))
+        feedback_counts.append(feedback_count)
+        feedback_sample_count += len(_list_value(result.get("feedback_samples")))
+        robot_motion_values.append(
+            _finite_float(diagnostics.get("robot_motion_m", row.get("nav2_follow_path_robot_motion_m")))
+        )
+        ball_motion_values.append(
+            _finite_float(diagnostics.get("ball_motion_m", row.get("nav2_follow_path_ball_motion_m")))
+        )
+        terminal_distance_values.append(
+            _finite_float(
+                diagnostics.get(
+                    "completion_terminal_path_distance_m",
+                    row.get("nav2_follow_path_terminal_path_distance_m"),
+                )
+            )
+        )
+        terminal_yaw_values.append(
+            _finite_float(
+                diagnostics.get(
+                    "completion_terminal_yaw_error_deg",
+                    row.get("nav2_follow_path_terminal_yaw_error_deg"),
+                )
+            )
+        )
+        parsed_handoff = _boolish(
+            diagnostics.get("measured_handoff_ready", row.get("nav2_follow_path_measured_handoff_ready"))
+        )
+        if parsed_handoff is not None:
+            handoff_ready_values.append(parsed_handoff)
+
+    mission_failure_reason = str(mission_verdict.get("failure_reason", "") or "")
+    path_clearance_guard_count = sum(
+        1
+        for row in blocked_rows
+        if str(row.get("nav2_follow_path_dispatch_status", "") or "") == "follow_path_clearance_guard"
+        or str(_dict_value(row.get("nav2_follow_path_plan")).get("reason", "") or "") == "follow_path_clearance_guard"
+    )
+    if mission_failure_reason == "nav2_follow_path_path_clearance_guard":
+        path_clearance_guard_count += 1
+    max_robot_motion_m = _max_number(robot_motion_values) or 0.0
+    max_ball_motion_m = _max_number(ball_motion_values) or 0.0
+    min_terminal_path_distance_m = _min_number(terminal_distance_values)
+    min_abs_terminal_yaw_error_deg = _min_number([abs(value) if value is not None else None for value in terminal_yaw_values])
+    return {
+        "nav2_follow_path_dispatch_count": len(dispatch_rows),
+        "nav2_follow_path_complete_count": len(complete_rows),
+        "nav2_follow_path_plan_blocked_count": len(blocked_rows),
+        "nav2_follow_path_statuses": _ordered_unique(statuses),
+        "nav2_follow_path_errors": _ordered_unique(errors),
+        "nav2_follow_path_timeout_count": timeout_count,
+        "nav2_follow_path_action_error_count": action_error_count,
+        "nav2_follow_path_path_clearance_guard_count": path_clearance_guard_count,
+        "nav2_follow_path_cancel_requested_count": cancel_requested_count,
+        "nav2_follow_path_feedback_count_max": max(feedback_counts, default=0),
+        "nav2_follow_path_feedback_sample_count": feedback_sample_count,
+        "nav2_follow_path_robot_motion_max_m": round(float(max_robot_motion_m), 6),
+        "nav2_follow_path_ball_motion_max_m": round(float(max_ball_motion_m), 6),
+        "nav2_follow_path_min_terminal_path_distance_m": min_terminal_path_distance_m,
+        "nav2_follow_path_min_abs_terminal_yaw_error_deg": min_abs_terminal_yaw_error_deg,
+        "nav2_follow_path_handoff_ready_count": sum(value is True for value in handoff_ready_values),
+        "nav2_follow_path_handoff_not_ready_count": sum(value is False for value in handoff_ready_values),
     }
 
 
@@ -1110,6 +1221,7 @@ def _case_labels(
     capture_entry: dict[str, Any],
     mission_verdict: dict[str, Any],
     nav2_debug: dict[str, Any],
+    nav2_follow_path_debug: dict[str, Any],
     local_planner_debug: dict[str, Any],
     docking_debug: dict[str, Any],
     handoff_yaw_servo_debug: dict[str, Any],
@@ -1126,6 +1238,11 @@ def _case_labels(
     if int(nav2_debug.get("nav2_goal_timeout_count", 0) or 0) > 0:
         labels.append("nav2_goal_timeout")
     if float(nav2_debug.get("ball_drift_max_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
+        labels.append("ball_contact_during_reacquire")
+    if (
+        float(nav2_follow_path_debug.get("nav2_follow_path_ball_motion_max_m", 0.0) or 0.0)
+        >= BALL_DRIFT_CONTACT_THRESHOLD_M
+    ):
         labels.append("ball_contact_during_reacquire")
     if float(local_planner_debug.get("local_planner_max_ball_motion_m", 0.0) or 0.0) >= BALL_DRIFT_CONTACT_THRESHOLD_M:
         labels.append("ball_contact_during_reacquire")
@@ -1150,6 +1267,45 @@ def _case_labels(
         labels.append("ball_contact_during_reacquire")
     if int(nav2_debug.get("post_reacquire_not_handoff_ready_count", 0) or 0) > 0:
         labels.append("post_reacquire_not_handoff_ready")
+    if str(branch_name or "") in NAV2_FOLLOW_PATH_BRANCHES:
+        follow_path_failure_reason = str(mission_verdict.get("failure_reason", "") or "")
+        follow_path_timeout_count = int(nav2_follow_path_debug.get("nav2_follow_path_timeout_count", 0) or 0)
+        follow_path_action_error_count = int(
+            nav2_follow_path_debug.get("nav2_follow_path_action_error_count", 0) or 0
+        )
+        follow_path_motion_m = float(
+            nav2_follow_path_debug.get("nav2_follow_path_robot_motion_max_m", 0.0) or 0.0
+        )
+        follow_path_ball_motion_m = float(
+            nav2_follow_path_debug.get("nav2_follow_path_ball_motion_max_m", 0.0) or 0.0
+        )
+        follow_path_handoff_not_ready_count = int(
+            nav2_follow_path_debug.get("nav2_follow_path_handoff_not_ready_count", 0) or 0
+        )
+        follow_path_terminal_distance = _finite_float(
+            nav2_follow_path_debug.get("nav2_follow_path_min_terminal_path_distance_m")
+        )
+        if follow_path_timeout_count > 0:
+            labels.append("nav2_goal_timeout")
+        if int(nav2_follow_path_debug.get("nav2_follow_path_path_clearance_guard_count", 0) or 0) > 0:
+            labels.append("path_clearance_guard")
+        if follow_path_ball_motion_m >= BALL_DRIFT_CONTACT_THRESHOLD_M:
+            labels.append("ball_motion_guard")
+        if follow_path_timeout_count > 0 and follow_path_motion_m < 0.05:
+            labels.append("no_controller_progress")
+        if (
+            follow_path_timeout_count > 0
+            and follow_path_motion_m >= 0.05
+            and follow_path_ball_motion_m < BALL_DRIFT_CONTACT_THRESHOLD_M
+        ):
+            labels.append("slow_controller_convergence")
+        if (
+            follow_path_handoff_not_ready_count > 0
+            and (follow_path_terminal_distance is not None and follow_path_terminal_distance <= 0.25)
+        ) or follow_path_failure_reason == "nav2_follow_path_post_action_not_handoff_ready":
+            labels.append("handoff_gate_mismatch")
+        if follow_path_action_error_count > 0 or follow_path_failure_reason == "nav2_follow_path_failed":
+            labels.append("action_error")
     if str(branch_name or "") == CONSTRAINED_LOCAL_PLANNER_BRANCH:
         local_active_count = int(local_planner_debug.get("local_planner_active_row_count", 0) or 0)
         local_release_count = int(local_planner_debug.get("local_planner_release_reason_count", 0) or 0)
@@ -1294,6 +1450,7 @@ def build_case_failure_summary(
     if state_history_path is not None:
         state_history_status, state_rows = _load_jsonl(state_history_path)
     nav2_debug = _nav2_debug_summary(state_rows)
+    nav2_follow_path_debug = _nav2_follow_path_debug_summary(state_rows, mission_verdict)
     local_planner_debug = _local_planner_debug_summary(state_rows)
     docking_debug = _docking_debug_summary(state_rows)
     handoff_yaw_servo_debug = _handoff_yaw_servo_debug_summary(state_rows)
@@ -1314,6 +1471,7 @@ def build_case_failure_summary(
         capture_entry=capture_entry,
         mission_verdict=mission_verdict,
         nav2_debug=nav2_debug,
+        nav2_follow_path_debug=nav2_follow_path_debug,
         local_planner_debug=local_planner_debug,
         docking_debug=docking_debug,
         handoff_yaw_servo_debug=handoff_yaw_servo_debug,
@@ -1346,6 +1504,7 @@ def build_case_failure_summary(
         "state_history_status": state_history_status,
         "missing_evidence": missing_evidence,
         "nav2_debug": nav2_debug,
+        "nav2_follow_path_debug": nav2_follow_path_debug,
         "local_planner_debug": local_planner_debug,
         "docking_debug": docking_debug,
         "handoff_yaw_servo_debug": handoff_yaw_servo_debug,

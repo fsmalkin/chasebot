@@ -149,6 +149,16 @@ def test_gather_control_family_allows_nav2_follow_path_reacquire_v1(tmp_path, mo
     assert runner.gather_control_family == "nav2_follow_path_reacquire_v1"
 
 
+def test_gather_control_family_allows_nav2_mppi_follow_path_reacquire_v1(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "nav2_mppi_follow_path_reacquire_v1"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.gather_control_family == "nav2_mppi_follow_path_reacquire_v1"
+
+
 def test_parse_args_allows_region_funnel_v1(monkeypatch):
     monkeypatch.setattr(
         gather_runner.sys,
@@ -255,6 +265,18 @@ def test_parse_args_allows_nav2_follow_path_reacquire_v1(monkeypatch):
     args = gather_runner.parse_args()
 
     assert args.gather_control_family == "nav2_follow_path_reacquire_v1"
+
+
+def test_parse_args_allows_nav2_mppi_follow_path_reacquire_v1(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        ["gather_mission_runner.py", "--gather-control-family", "nav2_mppi_follow_path_reacquire_v1"],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.gather_control_family == "nav2_mppi_follow_path_reacquire_v1"
 
 
 def test_nav2_reacquire_goal_generation_covers_zero_plus_minus_and_ready_states():
@@ -2274,6 +2296,10 @@ def test_nav2_follow_path_failed_dispatch_returns_pre_stage_failure_with_goal_si
             "status_code": 0,
             "elapsed_s": 0.25,
             "error": "follow_path_action_server_unavailable",
+            "feedback_count": 2,
+            "feedback_samples": [{"elapsed_s": 0.1, "feedback": {"speed": 0.02}}],
+            "feedback_last": {"elapsed_s": 0.2, "feedback": {"speed": 0.01}},
+            "cancel_requested": False,
         }
 
     monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
@@ -2329,6 +2355,84 @@ def test_nav2_follow_path_failed_dispatch_returns_pre_stage_failure_with_goal_si
     assert command_log[0]["mode"] == "nav2_follow_path_reacquire_path"
     assert command_log[-1]["mode"] == "nav2_follow_path_failed"
     assert all(not bool(item["enabled"]) for item in command_log)
+
+
+def test_nav2_mppi_follow_path_dispatch_uses_mppi_controller_and_dense_path(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.1
+    runner.gather_control_family = "nav2_mppi_follow_path_reacquire_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    dispatch_calls: list[dict[str, object]] = []
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(dict(kwargs))
+        return {
+            "dispatch_status": "server_unavailable",
+            "accepted": False,
+            "success": False,
+            "status_code": 0,
+            "elapsed_s": 0.25,
+            "error": "follow_path_action_server_unavailable",
+            "feedback_count": 2,
+            "feedback_samples": [{"elapsed_s": 0.1, "feedback": {"speed": 0.02}}],
+            "feedback_last": {"elapsed_s": 0.2, "feedback": {"speed": 0.01}},
+            "cancel_requested": False,
+        }
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: state_rows.append(dict(payload)))
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda **kwargs: ({"compose_project": "gate"}, robot_pose, ball_pose),
+    )
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-mppi-follow-path-fail",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    dispatch_rows = [item for item in state_rows if item["event_type"] == "nav2_follow_path_reacquire_dispatch"]
+    complete_rows = [item for item in state_rows if item["event_type"] == "nav2_follow_path_reacquire_complete"]
+    assert pre_stage_pass is False
+    assert payload["failure_reason"] == "nav2_follow_path_failed"
+    assert dispatch_calls
+    assert dispatch_calls[0]["controller_id"] == "MppiFollowPath"
+    assert dispatch_calls[0]["timeout_s"] == gather_runner.DEFAULT_NAV2_MPPI_FOLLOW_PATH_GOAL_TIMEOUT_S
+    assert len(dispatch_calls[0]["path_poses"]) > 4
+    assert dispatch_calls[0]["path_poses"][0]["kind"] == "start"
+    assert dispatch_rows
+    assert dispatch_rows[0]["controller_family"] == "nav2_mppi_follow_path_reacquire_v1"
+    assert dispatch_rows[0]["strategy_name"] == "nav2_mppi_follow_path_reacquire"
+    assert dispatch_rows[0]["nav2_follow_path_controller_id"] == "MppiFollowPath"
+    assert complete_rows
+    diagnostics = complete_rows[0]["nav2_follow_path_diagnostics"]
+    assert diagnostics["controller_id"] == "MppiFollowPath"
+    assert diagnostics["feedback_count"] == 2
+    assert diagnostics["feedback_samples"] == [{"elapsed_s": 0.1, "feedback": {"speed": 0.02}}]
+    assert diagnostics["robot_motion_m"] == 0.0
+    assert diagnostics["ball_motion_m"] == 0.0
+    assert diagnostics["measured_handoff_ready"] is False
+    assert "nav2_follow_path_diagnostics" in payload
 
 
 def test_nav2_follow_path_success_returns_to_measured_handoff_dwell(tmp_path, monkeypatch):
