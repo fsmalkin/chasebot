@@ -368,6 +368,20 @@ def test_mppi_follow_path_timeout_is_classified_from_diagnostics(tmp_path: Path)
                     "feedback_count": 4,
                     "measured_handoff_ready": False,
                     "cancel_requested": True,
+                    "status_text": "STATUS_ABORTED",
+                    "controller_log_excerpt": {"excerpt": ["controller_server: MPPI goal aborted near terminal"]},
+                    "cmd_vel_counts": {"/cmd_vel_nav": 9},
+                    "cmd_vel_samples": [{"elapsed_s": 1.0, "topic": "/cmd_vel_nav", "linear_x": 0.12, "angular_z": 0.4}],
+                    "odom_count": 6,
+                    "odom_delta": {"distance_m": 1.25},
+                    "path_progress_samples": [
+                        {"elapsed_s": 1.0, "terminal_path_distance_m": 0.72, "terminal_yaw_error_deg": 39.0}
+                    ],
+                    "path_progress_last": {
+                        "elapsed_s": 2.0,
+                        "terminal_path_distance_m": 0.7,
+                        "terminal_yaw_error_deg": 38.0,
+                    },
                 },
                 "nav2_follow_path_measured_handoff_ready": False,
             },
@@ -394,6 +408,14 @@ def test_mppi_follow_path_timeout_is_classified_from_diagnostics(tmp_path: Path)
     assert case["nav2_follow_path_debug"]["nav2_follow_path_timeout_count"] == 1
     assert case["nav2_follow_path_debug"]["nav2_follow_path_feedback_count_max"] == 4
     assert case["nav2_follow_path_debug"]["nav2_follow_path_cancel_requested_count"] == 1
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_status_texts"] == ["STATUS_ABORTED"]
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_cmd_vel_topic_counts"]["/cmd_vel_nav"] == 9
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_cmd_vel_sample_count"] == 1
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_odom_count_max"] == 6
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_odom_delta_max_m"] == 1.25
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_progress_min_terminal_path_distance_m"] == 0.7
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_progress_min_abs_terminal_yaw_error_deg"] == 38.0
+    assert case["nav2_follow_path_debug"]["nav2_follow_path_controller_log_excerpt"]
 
 
 def test_mppi_follow_path_clearance_action_and_handoff_labels_are_extracted(tmp_path: Path):

@@ -2300,6 +2300,14 @@ def test_nav2_follow_path_failed_dispatch_returns_pre_stage_failure_with_goal_si
             "feedback_samples": [{"elapsed_s": 0.1, "feedback": {"speed": 0.02}}],
             "feedback_last": {"elapsed_s": 0.2, "feedback": {"speed": 0.01}},
             "cancel_requested": False,
+            "status_text": "STATUS_UNKNOWN",
+            "controller_log_excerpt": {"excerpt": ["controller_server: MPPI failed to converge"]},
+            "cmd_vel_counts": {"/cmd_vel_nav": 3},
+            "cmd_vel_samples": [{"elapsed_s": 0.1, "topic": "/cmd_vel_nav", "linear_x": 0.02, "angular_z": 0.1}],
+            "odom_count": 2,
+            "odom_delta": {"distance_m": 0.0, "dyaw_deg": 0.0},
+            "path_progress_samples": [{"elapsed_s": 0.2, "terminal_path_distance_m": 6.348, "terminal_yaw_error_deg": 180.0}],
+            "path_progress_last": {"elapsed_s": 0.2, "terminal_path_distance_m": 6.348, "terminal_yaw_error_deg": 180.0},
         }
 
     monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
@@ -2389,6 +2397,14 @@ def test_nav2_mppi_follow_path_dispatch_uses_mppi_controller_and_dense_path(tmp_
             "feedback_samples": [{"elapsed_s": 0.1, "feedback": {"speed": 0.02}}],
             "feedback_last": {"elapsed_s": 0.2, "feedback": {"speed": 0.01}},
             "cancel_requested": False,
+            "status_text": "STATUS_UNKNOWN",
+            "controller_log_excerpt": {"excerpt": ["controller_server: MPPI failed to converge"]},
+            "cmd_vel_counts": {"/cmd_vel_nav": 3},
+            "cmd_vel_samples": [{"elapsed_s": 0.1, "topic": "/cmd_vel_nav", "linear_x": 0.02, "angular_z": 0.1}],
+            "odom_count": 2,
+            "odom_delta": {"distance_m": 0.0, "dyaw_deg": 0.0},
+            "path_progress_samples": [{"elapsed_s": 0.2, "terminal_path_distance_m": 6.348, "terminal_yaw_error_deg": 180.0}],
+            "path_progress_last": {"elapsed_s": 0.2, "terminal_path_distance_m": 6.348, "terminal_yaw_error_deg": 180.0},
         }
 
     monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
@@ -2429,6 +2445,13 @@ def test_nav2_mppi_follow_path_dispatch_uses_mppi_controller_and_dense_path(tmp_
     assert diagnostics["controller_id"] == "MppiFollowPath"
     assert diagnostics["feedback_count"] == 2
     assert diagnostics["feedback_samples"] == [{"elapsed_s": 0.1, "feedback": {"speed": 0.02}}]
+    assert diagnostics["status_text"] == "STATUS_UNKNOWN"
+    assert diagnostics["controller_log_excerpt"]["excerpt"]
+    assert diagnostics["cmd_vel_counts"]["/cmd_vel_nav"] == 3
+    assert diagnostics["cmd_vel_samples"][0]["angular_z"] == 0.1
+    assert diagnostics["odom_count"] == 2
+    assert diagnostics["odom_delta"]["distance_m"] == 0.0
+    assert diagnostics["path_progress_last"]["terminal_path_distance_m"] == 6.348
     assert diagnostics["robot_motion_m"] == 0.0
     assert diagnostics["ball_motion_m"] == 0.0
     assert diagnostics["measured_handoff_ready"] is False

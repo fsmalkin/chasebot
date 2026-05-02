@@ -367,17 +367,25 @@ def _nav2_follow_path_debug_summary(rows: list[dict[str, Any]], mission_verdict:
     complete_rows = [row for row in rows if row.get("event_type") == "nav2_follow_path_reacquire_complete"]
     blocked_rows = [row for row in rows if row.get("event_type") == "nav2_follow_path_reacquire_plan_blocked"]
     statuses: list[str] = []
+    status_texts: list[str] = []
     errors: list[str] = []
     robot_motion_values: list[float | None] = []
     ball_motion_values: list[float | None] = []
     terminal_distance_values: list[float | None] = []
     terminal_yaw_values: list[float | None] = []
+    progress_terminal_distance_values: list[float | None] = []
+    progress_terminal_yaw_values: list[float | None] = []
+    odom_delta_values: list[float | None] = []
     handoff_ready_values: list[bool | None] = []
     feedback_counts: list[int] = []
     timeout_count = 0
     action_error_count = 0
     cancel_requested_count = 0
     feedback_sample_count = 0
+    cmd_vel_sample_count = 0
+    cmd_vel_topic_counts: dict[str, int] = {}
+    odom_count_max = 0
+    controller_log_excerpt: list[str] = []
 
     for row in complete_rows:
         result = _dict_value(row.get("nav2_follow_path_result"))
@@ -390,6 +398,9 @@ def _nav2_follow_path_debug_summary(rows: list[dict[str, Any]], mission_verdict:
         )
         if dispatch_status:
             statuses.append(dispatch_status)
+        status_text = str(diagnostics.get("status_text") or result.get("status_text") or "")
+        if status_text:
+            status_texts.append(status_text)
         error = str(diagnostics.get("error") or result.get("error") or "")
         if error:
             errors.append(error)
@@ -402,6 +413,29 @@ def _nav2_follow_path_debug_summary(rows: list[dict[str, Any]], mission_verdict:
         feedback_count = _int_value(diagnostics.get("feedback_count", result.get("feedback_count")))
         feedback_counts.append(feedback_count)
         feedback_sample_count += len(_list_value(result.get("feedback_samples")))
+        cmd_vel_sample_count += len(_list_value(diagnostics.get("cmd_vel_samples", result.get("cmd_vel_samples"))))
+        cmd_counts = _dict_value(diagnostics.get("cmd_vel_counts", result.get("cmd_vel_counts")))
+        for topic, count in cmd_counts.items():
+            cmd_vel_topic_counts[str(topic)] = cmd_vel_topic_counts.get(str(topic), 0) + _int_value(count)
+        odom_count_max = max(
+            odom_count_max,
+            _int_value(diagnostics.get("odom_count", result.get("odom_count"))),
+        )
+        odom_delta = _dict_value(diagnostics.get("odom_delta", result.get("odom_delta")))
+        odom_delta_values.append(_finite_float(odom_delta.get("distance_m")))
+        progress_rows = _list_value(
+            diagnostics.get("path_progress_samples", result.get("path_progress_samples"))
+        )
+        progress_last = _dict_value(diagnostics.get("path_progress_last", result.get("path_progress_last")))
+        for progress in progress_rows + ([progress_last] if progress_last else []):
+            progress_payload = _dict_value(progress)
+            progress_terminal_distance_values.append(_finite_float(progress_payload.get("terminal_path_distance_m")))
+            progress_terminal_yaw_values.append(_finite_float(progress_payload.get("terminal_yaw_error_deg")))
+        log_payload = _dict_value(diagnostics.get("controller_log_excerpt", result.get("controller_log_excerpt")))
+        for line in _list_value(log_payload.get("excerpt")):
+            text = str(line)
+            if text and text not in controller_log_excerpt:
+                controller_log_excerpt.append(text)
         robot_motion_values.append(
             _finite_float(diagnostics.get("robot_motion_m", row.get("nav2_follow_path_robot_motion_m")))
         )
@@ -448,6 +482,7 @@ def _nav2_follow_path_debug_summary(rows: list[dict[str, Any]], mission_verdict:
         "nav2_follow_path_complete_count": len(complete_rows),
         "nav2_follow_path_plan_blocked_count": len(blocked_rows),
         "nav2_follow_path_statuses": _ordered_unique(statuses),
+        "nav2_follow_path_status_texts": _ordered_unique(status_texts),
         "nav2_follow_path_errors": _ordered_unique(errors),
         "nav2_follow_path_timeout_count": timeout_count,
         "nav2_follow_path_action_error_count": action_error_count,
@@ -455,6 +490,15 @@ def _nav2_follow_path_debug_summary(rows: list[dict[str, Any]], mission_verdict:
         "nav2_follow_path_cancel_requested_count": cancel_requested_count,
         "nav2_follow_path_feedback_count_max": max(feedback_counts, default=0),
         "nav2_follow_path_feedback_sample_count": feedback_sample_count,
+        "nav2_follow_path_cmd_vel_sample_count": cmd_vel_sample_count,
+        "nav2_follow_path_cmd_vel_topic_counts": dict(sorted(cmd_vel_topic_counts.items())),
+        "nav2_follow_path_odom_count_max": int(odom_count_max),
+        "nav2_follow_path_odom_delta_max_m": _max_number(odom_delta_values),
+        "nav2_follow_path_progress_min_terminal_path_distance_m": _min_number(progress_terminal_distance_values),
+        "nav2_follow_path_progress_min_abs_terminal_yaw_error_deg": _min_number(
+            [abs(value) if value is not None else None for value in progress_terminal_yaw_values]
+        ),
+        "nav2_follow_path_controller_log_excerpt": controller_log_excerpt[-20:],
         "nav2_follow_path_robot_motion_max_m": round(float(max_robot_motion_m), 6),
         "nav2_follow_path_ball_motion_max_m": round(float(max_ball_motion_m), 6),
         "nav2_follow_path_min_terminal_path_distance_m": min_terminal_path_distance_m,

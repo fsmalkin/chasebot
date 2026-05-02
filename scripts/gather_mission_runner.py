@@ -122,6 +122,9 @@ DEFAULT_PRE_STAGE_TIMEOUT_S = 30.0
 DEFAULT_STAGE_TIMEOUT_S = 6.0
 DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_MAX = 12
 DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_INTERVAL_S = 0.5
+DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_MAX = 20
+DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_INTERVAL_S = 0.25
+DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_LOG_TAIL = 400
 ALLOWED_GATHER_CONTROL_FAMILIES = (
     "baseline",
     "short_horizon_v1",
@@ -1097,6 +1100,50 @@ class GatherMissionRunner:
         output += ("\n" + (proc.stderr or b"").decode("utf-8", errors="replace")) if proc.stderr else ""
         return proc.returncode, output.strip()
 
+    def _docker_logs_since(self, container_id: str, since_utc: datetime, *, tail: int = 400) -> dict[str, Any]:
+        since_text = since_utc.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        proc = subprocess.run(
+            [
+                self.docker,
+                "logs",
+                "--since",
+                since_text,
+                "--tail",
+                str(max(int(tail), 1)),
+                container_id,
+            ],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            check=False,
+        )
+        output = (proc.stdout or b"").decode("utf-8", errors="replace")
+        output += ("\n" + (proc.stderr or b"").decode("utf-8", errors="replace")) if proc.stderr else ""
+        raw_lines = [line.strip() for line in output.splitlines() if line.strip()]
+        needles = (
+            "controller_server",
+            "mppifollowpath",
+            "mppi",
+            "followpath",
+            "goal_status",
+            "aborted",
+            "error",
+            "warn",
+            "failed",
+        )
+        excerpt = [
+            line[-600:]
+            for line in raw_lines
+            if any(needle in line.lower() for needle in needles)
+        ]
+        return {
+            "returncode": int(proc.returncode),
+            "since_utc": since_text,
+            "raw_line_count": len(raw_lines),
+            "excerpt_line_count": len(excerpt[-80:]),
+            "excerpt": excerpt[-80:],
+            "error": "" if proc.returncode == 0 else output[-1200:],
+        }
+
     def _safe_stop(self) -> None:
         try:
             self._request("POST", "/api/intents/dispatch", {"intent": "safe_stop", "args": {}}, timeout_s=10.0)
@@ -1348,7 +1395,12 @@ PY
             "timeout_s": float(max(timeout_s, 0.1)),
             "feedback_sample_max": int(DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_MAX),
             "feedback_sample_interval_s": float(DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_INTERVAL_S),
+            "diagnostic_sample_max": int(DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_MAX),
+            "diagnostic_sample_interval_s": float(DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_INTERVAL_S),
+            "cmd_vel_topics": ["/cmd_vel_nav", "/cmd_vel", "/jetbot_base_controller/cmd_vel"],
+            "odom_topic": "/jetbot_base_controller/odom",
         }
+        log_since_utc = datetime.now(timezone.utc)
         script = (
             "set -eo pipefail\n"
             "set +u\n"
@@ -1365,6 +1417,9 @@ import time
 import rclpy
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import Twist
+from geometry_msgs.msg import TwistStamped
+from nav_msgs.msg import Odometry
 from nav_msgs.msg import Path
 from nav2_msgs.action import FollowPath
 from rclpy.action import ActionClient
@@ -1372,6 +1427,15 @@ from rclpy.node import Node
 from rclpy.parameter import Parameter
 
 MARKER = "NAV2_FOLLOW_PATH_RESULT="
+STATUS_TEXT = {
+    int(GoalStatus.STATUS_UNKNOWN): "STATUS_UNKNOWN",
+    int(GoalStatus.STATUS_ACCEPTED): "STATUS_ACCEPTED",
+    int(GoalStatus.STATUS_EXECUTING): "STATUS_EXECUTING",
+    int(GoalStatus.STATUS_CANCELING): "STATUS_CANCELING",
+    int(GoalStatus.STATUS_SUCCEEDED): "STATUS_SUCCEEDED",
+    int(GoalStatus.STATUS_CANCELED): "STATUS_CANCELED",
+    int(GoalStatus.STATUS_ABORTED): "STATUS_ABORTED",
+}
 
 
 def ros_to_plain(value, depth=0):
@@ -1409,6 +1473,70 @@ def yaw_to_quaternion(yaw):
     return 0.0, 0.0, math.sin(half), math.cos(half)
 
 
+def quaternion_to_yaw(q):
+    siny_cosp = 2.0 * ((q.w * q.z) + (q.x * q.y))
+    cosy_cosp = 1.0 - (2.0 * ((q.y * q.y) + (q.z * q.z)))
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
+def normalize_angle(value):
+    result = math.fmod(float(value) + math.pi, 2.0 * math.pi)
+    if result < 0.0:
+        result += 2.0 * math.pi
+    return result - math.pi
+
+
+def status_text(status_code):
+    return STATUS_TEXT.get(int(status_code), f"STATUS_{int(status_code)}")
+
+
+def append_ring(buffer, sample, limit):
+    if limit <= 0:
+        return
+    buffer.append(sample)
+    while len(buffer) > limit:
+        buffer.pop(0)
+
+
+def path_progress_for_pose(x, y, yaw):
+    if not path_poses:
+        return {}
+    nearest_index = 0
+    nearest_distance = None
+    for index, item in enumerate(path_poses):
+        dx = float(item.get("x", 0.0)) - float(x)
+        dy = float(item.get("y", 0.0)) - float(y)
+        distance = math.hypot(dx, dy)
+        if nearest_distance is None or distance < nearest_distance:
+            nearest_index = index
+            nearest_distance = distance
+    terminal = path_poses[-1]
+    terminal_dx = float(terminal.get("x", 0.0)) - float(x)
+    terminal_dy = float(terminal.get("y", 0.0)) - float(y)
+    terminal_yaw_error = normalize_angle(float(yaw) - float(terminal.get("yaw", 0.0)))
+    nearest = path_poses[nearest_index]
+    return {
+        "nearest_path_index": int(nearest_index),
+        "nearest_path_kind": str(nearest.get("kind", "")),
+        "nearest_path_distance_m": round(float(nearest_distance or 0.0), 6),
+        "remaining_path_pose_count": int(max(len(path_poses) - nearest_index - 1, 0)),
+        "terminal_path_distance_m": round(math.hypot(terminal_dx, terminal_dy), 6),
+        "terminal_yaw_error_deg": round(math.degrees(terminal_yaw_error), 6),
+    }
+
+
+def twist_payload(msg):
+    twist = msg.twist if hasattr(msg, "twist") else msg
+    return {
+        "linear_x": round(float(twist.linear.x), 6),
+        "linear_y": round(float(twist.linear.y), 6),
+        "linear_z": round(float(twist.linear.z), 6),
+        "angular_x": round(float(twist.angular.x), 6),
+        "angular_y": round(float(twist.angular.y), 6),
+        "angular_z": round(float(twist.angular.z), 6),
+    }
+
+
 def wait_future(node, future, timeout_s):
     deadline = time.monotonic() + max(float(timeout_s), 0.1)
     while time.monotonic() < deadline and rclpy.ok():
@@ -1426,10 +1554,23 @@ payload = json.loads(os.environ["NAV2_FOLLOW_PATH_PAYLOAD"])
 path_poses = payload.get("path_poses", [])
 feedback_sample_max = max(int(payload.get("feedback_sample_max") or 0), 0)
 feedback_sample_interval_s = max(float(payload.get("feedback_sample_interval_s") or 0.0), 0.0)
+diagnostic_sample_max = max(int(payload.get("diagnostic_sample_max") or 0), 0)
+diagnostic_sample_interval_s = max(float(payload.get("diagnostic_sample_interval_s") or 0.0), 0.0)
 feedback_count = 0
 feedback_samples = []
 feedback_last = {}
 last_feedback_sample_elapsed_s = -999999.0
+cmd_vel_counts = {}
+cmd_vel_samples = []
+cmd_vel_last = {}
+odom_count = 0
+odom_samples = []
+odom_last = {}
+odom_first = {}
+path_progress_samples = []
+path_progress_last = {}
+last_cmd_vel_sample_elapsed_s = -999999.0
+last_odom_sample_elapsed_s = -999999.0
 started = time.monotonic()
 rclpy.init()
 node = Node("gather_nav2_follow_path_reacquire_client")
@@ -1437,13 +1578,41 @@ node.set_parameters([Parameter("use_sim_time", Parameter.Type.BOOL, True)])
 client = ActionClient(node, FollowPath, "/follow_path")
 
 
+def odom_delta_payload():
+    if not odom_first or not odom_last:
+        return {}
+    dx = float(odom_last.get("x", 0.0)) - float(odom_first.get("x", 0.0))
+    dy = float(odom_last.get("y", 0.0)) - float(odom_first.get("y", 0.0))
+    dyaw = normalize_angle(float(odom_last.get("yaw", 0.0)) - float(odom_first.get("yaw", 0.0)))
+    return {
+        "dx_m": round(dx, 6),
+        "dy_m": round(dy, 6),
+        "distance_m": round(math.hypot(dx, dy), 6),
+        "dyaw_deg": round(math.degrees(dyaw), 6),
+        "elapsed_s": round(float(odom_last.get("elapsed_s", 0.0)) - float(odom_first.get("elapsed_s", 0.0)), 6),
+    }
+
+
 def result_payload(extra):
     result = dict(extra)
+    if "status_text" not in result and result.get("status_code") is not None:
+        result["status_text"] = status_text(int(result["status_code"]))
     result.setdefault("feedback_count", int(feedback_count))
     result.setdefault("feedback_samples", feedback_samples)
     result.setdefault("feedback_last", feedback_last)
     result.setdefault("feedback_sample_max", int(feedback_sample_max))
     result.setdefault("feedback_sample_interval_s", round(float(feedback_sample_interval_s), 6))
+    result.setdefault("diagnostic_sample_max", int(diagnostic_sample_max))
+    result.setdefault("diagnostic_sample_interval_s", round(float(diagnostic_sample_interval_s), 6))
+    result.setdefault("cmd_vel_counts", dict(cmd_vel_counts))
+    result.setdefault("cmd_vel_samples", cmd_vel_samples)
+    result.setdefault("cmd_vel_last", cmd_vel_last)
+    result.setdefault("odom_count", int(odom_count))
+    result.setdefault("odom_samples", odom_samples)
+    result.setdefault("odom_last", odom_last)
+    result.setdefault("odom_delta", odom_delta_payload())
+    result.setdefault("path_progress_samples", path_progress_samples)
+    result.setdefault("path_progress_last", path_progress_last)
     result.setdefault("timeout_s", round(float(payload.get("timeout_s") or 0.0), 6))
     return result
 
@@ -1462,6 +1631,58 @@ def feedback_callback(feedback_msg):
     if not feedback_samples or elapsed_s - last_feedback_sample_elapsed_s >= feedback_sample_interval_s:
         feedback_samples.append(sample)
         last_feedback_sample_elapsed_s = elapsed_s
+
+
+def make_cmd_callback(topic):
+    def _callback(msg):
+        global cmd_vel_last, last_cmd_vel_sample_elapsed_s
+        elapsed_s = round(time.monotonic() - started, 6)
+        cmd_vel_counts[topic] = int(cmd_vel_counts.get(topic, 0)) + 1
+        sample = {"elapsed_s": elapsed_s, "topic": topic, **twist_payload(msg)}
+        cmd_vel_last = sample
+        if elapsed_s - last_cmd_vel_sample_elapsed_s >= diagnostic_sample_interval_s:
+            append_ring(cmd_vel_samples, sample, diagnostic_sample_max)
+            last_cmd_vel_sample_elapsed_s = elapsed_s
+    return _callback
+
+
+def odom_callback(msg):
+    global odom_count, odom_first, odom_last, path_progress_last, last_odom_sample_elapsed_s
+    odom_count += 1
+    elapsed_s = round(time.monotonic() - started, 6)
+    pose = msg.pose.pose
+    twist = msg.twist.twist
+    yaw = quaternion_to_yaw(pose.orientation)
+    sample = {
+        "elapsed_s": elapsed_s,
+        "x": round(float(pose.position.x), 6),
+        "y": round(float(pose.position.y), 6),
+        "yaw": round(float(yaw), 6),
+        "linear_x": round(float(twist.linear.x), 6),
+        "angular_z": round(float(twist.angular.z), 6),
+    }
+    progress = path_progress_for_pose(sample["x"], sample["y"], yaw)
+    if progress:
+        sample["path_progress"] = progress
+        path_progress_last = {"elapsed_s": elapsed_s, **progress}
+        if progress.get("terminal_path_distance_m", 999.0) <= 1.5:
+            append_ring(path_progress_samples, path_progress_last, diagnostic_sample_max)
+    if not odom_first:
+        odom_first = dict(sample)
+    odom_last = dict(sample)
+    if elapsed_s - last_odom_sample_elapsed_s >= diagnostic_sample_interval_s:
+        append_ring(odom_samples, sample, diagnostic_sample_max)
+        last_odom_sample_elapsed_s = elapsed_s
+
+
+for topic in payload.get("cmd_vel_topics", []):
+    topic = str(topic)
+    cmd_vel_counts[topic] = 0
+    if topic == "/jetbot_base_controller/cmd_vel":
+        node.create_subscription(TwistStamped, topic, make_cmd_callback(topic), 20)
+    else:
+        node.create_subscription(Twist, topic, make_cmd_callback(topic), 20)
+node.create_subscription(Odometry, str(payload.get("odom_topic") or "/jetbot_base_controller/odom"), odom_callback, 20)
 
 
 try:
@@ -1560,6 +1781,7 @@ try:
                             "accepted": True,
                             "success": False,
                             "status_code": int(GoalStatus.STATUS_ABORTED),
+                            "status_text": status_text(int(GoalStatus.STATUS_ABORTED)),
                             "elapsed_s": round(time.monotonic() - started, 6),
                             "error": "goal_result_timeout",
                             "timed_out": True,
@@ -1578,6 +1800,8 @@ try:
                             "accepted": True,
                             "success": bool(success),
                             "status_code": status_code,
+                            "status_text": status_text(status_code),
+                            "action_result": ros_to_plain(getattr(result, "result", None)),
                             "elapsed_s": round(time.monotonic() - started, 6),
                             "error": "" if success else f"goal_status_{status_code}",
                             "timed_out": False,
@@ -1592,6 +1816,14 @@ PY
         )
         rc, output = self._docker_exec(gate_stack_container, script)
         result = self._parse_nav2_follow_path_result(output, rc=rc)
+        result.setdefault(
+            "controller_log_excerpt",
+            self._docker_logs_since(
+                gate_stack_container,
+                log_since_utc,
+                tail=DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_LOG_TAIL,
+            ),
+        )
         result.setdefault("path_pose_count", len(payload["path_poses"]))
         result.setdefault("controller_id", payload["controller_id"])
         result.setdefault("goal_checker_id", payload["goal_checker_id"])
@@ -1600,6 +1832,17 @@ PY
         result.setdefault("feedback_last", {})
         result.setdefault("feedback_sample_max", payload["feedback_sample_max"])
         result.setdefault("feedback_sample_interval_s", payload["feedback_sample_interval_s"])
+        result.setdefault("diagnostic_sample_max", payload["diagnostic_sample_max"])
+        result.setdefault("diagnostic_sample_interval_s", payload["diagnostic_sample_interval_s"])
+        result.setdefault("cmd_vel_counts", {})
+        result.setdefault("cmd_vel_samples", [])
+        result.setdefault("cmd_vel_last", {})
+        result.setdefault("odom_count", 0)
+        result.setdefault("odom_samples", [])
+        result.setdefault("odom_last", {})
+        result.setdefault("odom_delta", {})
+        result.setdefault("path_progress_samples", [])
+        result.setdefault("path_progress_last", {})
         result.setdefault("timeout_s", payload["timeout_s"])
         result.setdefault("cancel_requested", False)
         return result
@@ -2810,7 +3053,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "dispatch_status": clean_text(follow_path_result.get("dispatch_status"), "unknown"),
                         "success": bool(follow_path_result.get("success", False)),
                         "status_code": clean_number(follow_path_result.get("status_code")),
+                        "status_text": clean_text(follow_path_result.get("status_text")),
                         "error": clean_text(follow_path_result.get("error")),
+                        "action_result": follow_path_result.get("action_result", {}),
                         "timeout_s": clean_rounded_number(follow_path_result.get("timeout_s")),
                         "elapsed_s": clean_rounded_number(follow_path_result.get("elapsed_s")),
                         "timed_out": bool(follow_path_result.get("timed_out", False)),
@@ -2820,6 +3065,16 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         ),
                         "cancel_goal_count": int(clean_number(follow_path_result.get("cancel_goal_count")) or 0),
                         "cancel_elapsed_s": clean_rounded_number(follow_path_result.get("cancel_elapsed_s")),
+                        "controller_log_excerpt": follow_path_result.get("controller_log_excerpt", {}),
+                        "cmd_vel_counts": follow_path_result.get("cmd_vel_counts", {}),
+                        "cmd_vel_samples": follow_path_result.get("cmd_vel_samples", []),
+                        "cmd_vel_last": follow_path_result.get("cmd_vel_last", {}),
+                        "odom_count": int(clean_number(follow_path_result.get("odom_count")) or 0),
+                        "odom_samples": follow_path_result.get("odom_samples", []),
+                        "odom_last": follow_path_result.get("odom_last", {}),
+                        "odom_delta": follow_path_result.get("odom_delta", {}),
+                        "path_progress_samples": follow_path_result.get("path_progress_samples", []),
+                        "path_progress_last": follow_path_result.get("path_progress_last", {}),
                         "dispatch_terminal_path_distance_m": clean_rounded_number(
                             dispatch_terminal_path_distance_m
                         ),
