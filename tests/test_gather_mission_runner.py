@@ -3176,7 +3176,7 @@ def test_capture_target_close_in_stage_ready_hands_off_into_capture_entry(tmp_pa
     mission_root.mkdir(parents=True, exist_ok=True)
     target = runner.targets[0]
     clock = {"now": 0.0}
-    phase_entries: list[str] = []
+    state_rows: list[dict[str, object]] = []
 
     def fake_monotonic():
         return clock["now"]
@@ -3189,7 +3189,7 @@ def test_capture_target_close_in_stage_ready_hands_off_into_capture_entry(tmp_pa
     monkeypatch.setattr(
         gather_runner,
         "append_jsonl",
-        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
     )
     monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
@@ -3216,6 +3216,7 @@ def test_capture_target_close_in_stage_ready_hands_off_into_capture_entry(tmp_pa
     assert payload["failure_stage"] == "capture_entry"
     assert payload["staging_pose_reached"] is True
     assert payload["capture_entry_reached"] is False
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
     assert phase_entries.count("stage") > 0
     assert phase_entries.count("capture_entry") > 0
     assert phase_entries.index("stage") < phase_entries.index("capture_entry")
@@ -3340,7 +3341,7 @@ def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_
     mission_root.mkdir(parents=True, exist_ok=True)
     target = runner.targets[0]
     clock = {"now": 0.0}
-    phase_entries: list[str] = []
+    state_rows: list[dict[str, object]] = []
 
     def fake_monotonic():
         return clock["now"]
@@ -3353,7 +3354,7 @@ def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_
     monkeypatch.setattr(
         gather_runner,
         "append_jsonl",
-        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
     )
     monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
@@ -3386,6 +3387,7 @@ def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_
     assert payload["capture_entry_reached"] is False
     assert payload["capture_entry_time_s"] >= 4.0
     assert timeout_payload["failure_stage"] == "capture_entry"
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
     assert phase_entries.count("capture_entry") > 0
     assert "capture" not in phase_entries
 
@@ -3398,7 +3400,7 @@ def test_capture_target_late_ready_sample_skips_same_loop_capture_entry_timeout(
     mission_root.mkdir(parents=True, exist_ok=True)
     target = runner.targets[0]
     clock = {"now": 0.0}
-    phase_entries: list[str] = []
+    state_rows: list[dict[str, object]] = []
     capture_entry_calls = {"count": 0}
 
     class _FakeCommand:
@@ -3450,7 +3452,7 @@ def test_capture_target_late_ready_sample_skips_same_loop_capture_entry_timeout(
     monkeypatch.setattr(
         gather_runner,
         "append_jsonl",
-        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
     )
     monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
@@ -3496,6 +3498,7 @@ def test_capture_target_late_ready_sample_skips_same_loop_capture_entry_timeout(
     assert payload["capture_entry_reached"] is True
     assert payload["capture_entry_time_s"] >= 4.0
     assert capture_entry_calls["count"] >= 9
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
     assert phase_entries.count("capture_entry") > 0
     assert "capture" in phase_entries
     assert phase_entries.index("capture_entry") < phase_entries.index("capture")
@@ -3510,7 +3513,7 @@ def test_capture_target_centered_extended_corridor_hands_off_before_capture_time
     mission_root.mkdir(parents=True, exist_ok=True)
     target = runner.targets[0]
     clock = {"now": 0.0}
-    phase_entries: list[str] = []
+    state_rows: list[dict[str, object]] = []
 
     def fake_monotonic():
         return clock["now"]
@@ -3523,7 +3526,7 @@ def test_capture_target_centered_extended_corridor_hands_off_before_capture_time
     monkeypatch.setattr(
         gather_runner,
         "append_jsonl",
-        lambda _path, payload: phase_entries.append(str(payload.get("phase", ""))) if isinstance(payload, dict) else None,
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
     )
     monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
@@ -3550,9 +3553,24 @@ def test_capture_target_centered_extended_corridor_hands_off_before_capture_time
     assert payload["failure_stage"] == "capture"
     assert payload["capture_entry_reached"] is True
     assert payload["capture_entry_time_s"] >= 0.3
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
     assert "capture_entry" in phase_entries
     assert "capture" in phase_entries
     assert phase_entries.index("capture_entry") < phase_entries.index("capture")
+    capture_rows = [row for row in state_rows if row.get("phase") == "capture"]
+    assert capture_rows
+    capture_row = capture_rows[-1]
+    assert capture_row["selected_command"]["mode"] == "capture_handoff_hold"
+    assert capture_row["capture_entry"]["capture_entry_reached"] is True
+    assert capture_row["capture_diagnostics"]["selected_command_mode"] == "capture_handoff_hold"
+    assert capture_row["capture_diagnostics"]["command_source"] == "near_zone_place_handoff"
+    assert capture_row["capture_diagnostics"]["command_limited"] is True
+    assert capture_row["capture_diagnostics"]["raw_selected_command"]["mode"] == "place_recapture"
+    assert capture_row["capture_diagnostics"]["captured_now"] is False
+    assert capture_row["capture_diagnostics"]["terminal_cause"] == ""
+    assert capture_row["capture_diagnostics"]["robot_delta_from_capture_entry_handoff_m"] is not None
+    assert payload["capture_diagnostics"]["terminal_cause"] == "capture_timeout"
+    assert payload["capture_diagnostics"]["selected_command_mode"] == "capture_handoff_hold"
 
 
 def test_capture_target_off_axis_extended_corridor_still_times_out_in_capture_entry(tmp_path, monkeypatch):

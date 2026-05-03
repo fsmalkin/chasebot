@@ -690,6 +690,172 @@ def _capture_entry_debug_summary(rows: list[dict[str, Any]], mission_verdict: di
     }
 
 
+def _capture_debug_summary(rows: list[dict[str, Any]], mission_verdict: dict[str, Any]) -> dict[str, Any]:
+    capture_rows = [row for row in rows if row.get("phase") == "capture"]
+    command_modes: list[str] = []
+    command_sources: list[str] = []
+    command_limit_reasons: list[str] = []
+    terminal_causes: list[str] = []
+    ball_x_values: list[float | None] = []
+    ball_y_values: list[float | None] = []
+    bearing_values: list[float | None] = []
+    linear_values: list[float | None] = []
+    angular_values: list[float | None] = []
+    target_speed_values: list[float | None] = []
+    first_contact_values: list[float | None] = []
+    robot_delta_values: list[float | None] = []
+    ball_delta_values: list[float | None] = []
+    command_limited_count = 0
+    captured_count = 0
+    secure_ready_count = 0
+    soft_handoff_ready_count = 0
+    zone_entry_ready_count = 0
+    first_contact_alignment_count = 0
+    final_snapshot: dict[str, Any] = {}
+    final_diagnostics: dict[str, Any] = {}
+
+    def _record_snapshot(snapshot: dict[str, Any]) -> None:
+        ball_x_values.append(_finite_float(snapshot.get("ball_x_m")))
+        ball_y_values.append(_finite_float(snapshot.get("ball_y_m")))
+        bearing_values.append(_finite_float(snapshot.get("bearing_rad")))
+
+    def _record_diagnostics(
+        diagnostics: dict[str, Any],
+        fallback_command: dict[str, Any],
+        *,
+        count_state_flags: bool = True,
+    ) -> None:
+        nonlocal command_limited_count
+        nonlocal captured_count
+        nonlocal secure_ready_count
+        nonlocal soft_handoff_ready_count
+        nonlocal zone_entry_ready_count
+        nonlocal first_contact_alignment_count
+
+        command = _dict_value(diagnostics.get("selected_command")) or fallback_command
+        command_mode = str(diagnostics.get("selected_command_mode") or command.get("mode") or "")
+        if command_mode:
+            command_modes.append(command_mode)
+        command_source = str(diagnostics.get("command_source", "") or "")
+        if command_source:
+            command_sources.append(command_source)
+        limit_reason = str(diagnostics.get("command_limit_reason", "") or "")
+        if limit_reason:
+            command_limit_reasons.append(limit_reason)
+        terminal_cause = str(diagnostics.get("terminal_cause", "") or "")
+        if terminal_cause:
+            terminal_causes.append(terminal_cause)
+        if count_state_flags and _boolish(diagnostics.get("command_limited")) is True:
+            command_limited_count += 1
+        if count_state_flags and _boolish(diagnostics.get("captured_now")) is True:
+            captured_count += 1
+        if count_state_flags and _boolish(diagnostics.get("secure_capture_ready")) is True:
+            secure_ready_count += 1
+        if count_state_flags and _boolish(diagnostics.get("soft_capture_handoff_ready")) is True:
+            soft_handoff_ready_count += 1
+        if count_state_flags and _boolish(diagnostics.get("zone_entry_handoff_ready")) is True:
+            zone_entry_ready_count += 1
+        alignment_value = _finite_float(diagnostics.get("first_contact_push_alignment_deg"))
+        if count_state_flags and (
+            _boolish(diagnostics.get("first_contact_alignment_seen")) is True
+            or alignment_value is not None
+        ):
+            first_contact_alignment_count += 1
+        first_contact_values.append(alignment_value)
+        robot_delta_values.append(_finite_float(diagnostics.get("robot_delta_from_capture_entry_handoff_m")))
+        ball_delta_values.append(_finite_float(diagnostics.get("ball_delta_from_capture_entry_handoff_m")))
+        linear_values.append(_finite_float(diagnostics.get("linear_x", command.get("linear_x"))))
+        angular_values.append(_finite_float(diagnostics.get("angular_z", command.get("angular_z"))))
+        target_speed_values.append(_finite_float(diagnostics.get("target_speed_scale", command.get("target_speed_scale"))))
+
+    for row in capture_rows:
+        snapshot = _dict_value(row.get("capture"))
+        diagnostics = _dict_value(row.get("capture_diagnostics"))
+        diagnostic_snapshot = _dict_value(diagnostics.get("capture_snapshot"))
+        snapshot_source = diagnostic_snapshot or snapshot
+        if snapshot_source:
+            final_snapshot = snapshot_source
+            _record_snapshot(snapshot_source)
+        fallback_command = _dict_value(row.get("selected_command"))
+        if diagnostics:
+            final_diagnostics = diagnostics
+            _record_diagnostics(diagnostics, fallback_command)
+        elif fallback_command:
+            command_mode = str(fallback_command.get("mode", "") or "")
+            if command_mode:
+                command_modes.append(command_mode)
+            linear_values.append(_finite_float(fallback_command.get("linear_x")))
+            angular_values.append(_finite_float(fallback_command.get("angular_z")))
+            target_speed_values.append(_finite_float(fallback_command.get("target_speed_scale")))
+        if not diagnostics and _boolish(snapshot_source.get("captured")) is True:
+            captured_count += 1
+
+    verdict_snapshot = _dict_value(mission_verdict.get("capture_state"))
+    verdict_diagnostics = _dict_value(mission_verdict.get("capture_diagnostics"))
+    if verdict_snapshot:
+        final_snapshot = verdict_snapshot
+        _record_snapshot(verdict_snapshot)
+    if verdict_diagnostics:
+        final_diagnostics = verdict_diagnostics
+        diagnostic_snapshot = _dict_value(verdict_diagnostics.get("capture_snapshot"))
+        if diagnostic_snapshot and not verdict_snapshot:
+            final_snapshot = diagnostic_snapshot
+            _record_snapshot(diagnostic_snapshot)
+        _record_diagnostics(
+            verdict_diagnostics,
+            _dict_value(verdict_diagnostics.get("selected_command")),
+            count_state_flags=False,
+        )
+
+    mission_failure_stage = str(mission_verdict.get("failure_stage", "") or "")
+    mission_failure_reason = str(mission_verdict.get("failure_reason", "") or "")
+    if mission_failure_stage == "capture" and mission_failure_reason:
+        terminal_causes.append(mission_failure_reason)
+
+    def _final_metric(key: str) -> float | None:
+        value = _finite_float(final_diagnostics.get(key))
+        if value is None:
+            value = _finite_float(final_snapshot.get(key))
+        return _round_number(value)
+
+    return {
+        "capture_row_count": len(capture_rows),
+        "capture_command_modes": _ordered_unique(command_modes),
+        "capture_command_sources": _ordered_unique(command_sources),
+        "capture_command_limited_count": command_limited_count,
+        "capture_command_limit_reasons": _ordered_unique(command_limit_reasons),
+        "capture_linear_x_max": _max_number(linear_values),
+        "capture_max_abs_angular_z": _max_number(
+            [abs(value) if value is not None else None for value in angular_values]
+        ),
+        "capture_target_speed_scale_max": _max_number(target_speed_values),
+        "capture_captured_count": captured_count,
+        "capture_secure_ready_count": secure_ready_count,
+        "capture_soft_handoff_ready_count": soft_handoff_ready_count,
+        "capture_zone_entry_ready_count": zone_entry_ready_count,
+        "capture_first_contact_alignment_count": first_contact_alignment_count,
+        "capture_first_contact_alignment_final_deg": _last_number(first_contact_values),
+        "capture_first_contact_alignment_min_deg": _min_number(first_contact_values),
+        "capture_first_contact_alignment_max_deg": _max_number(first_contact_values),
+        "capture_terminal_causes": _ordered_unique(terminal_causes),
+        "capture_final_ball_x_m": _final_metric("ball_x_m"),
+        "capture_final_ball_y_m": _final_metric("ball_y_m"),
+        "capture_final_bearing_rad": _final_metric("bearing_rad"),
+        "capture_min_ball_x_m": _min_number(ball_x_values),
+        "capture_max_ball_x_m": _max_number(ball_x_values),
+        "capture_min_abs_ball_y_m": _min_number(
+            [abs(value) if value is not None else None for value in ball_y_values]
+        ),
+        "capture_min_abs_bearing_rad": _min_number(
+            [abs(value) if value is not None else None for value in bearing_values]
+        ),
+        "capture_robot_delta_from_capture_entry_handoff_max_m": _max_number(robot_delta_values),
+        "capture_ball_delta_from_capture_entry_handoff_max_m": _max_number(ball_delta_values),
+        "capture_final_snapshot": final_snapshot,
+        "capture_final_diagnostics": final_diagnostics,
+    }
+
+
 def _local_planner_debug_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     local_rows = [
         row
@@ -1638,6 +1804,7 @@ def build_case_failure_summary(
     nav2_debug = _nav2_debug_summary(state_rows)
     nav2_follow_path_debug = _nav2_follow_path_debug_summary(state_rows, mission_verdict)
     capture_entry_debug = _capture_entry_debug_summary(state_rows, mission_verdict)
+    capture_debug = _capture_debug_summary(state_rows, mission_verdict)
     local_planner_debug = _local_planner_debug_summary(state_rows)
     docking_debug = _docking_debug_summary(state_rows)
     handoff_yaw_servo_debug = _handoff_yaw_servo_debug_summary(state_rows)
@@ -1693,6 +1860,7 @@ def build_case_failure_summary(
         "nav2_debug": nav2_debug,
         "nav2_follow_path_debug": nav2_follow_path_debug,
         "capture_entry_debug": capture_entry_debug,
+        "capture_debug": capture_debug,
         "local_planner_debug": local_planner_debug,
         "docking_debug": docking_debug,
         "handoff_yaw_servo_debug": handoff_yaw_servo_debug,

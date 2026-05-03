@@ -4273,6 +4273,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         handoff_ball_pose: dict[str, Any] | None = None
         last_capture_entry_snapshot: dict[str, Any] = {}
         last_capture_entry_diagnostics: dict[str, Any] = {}
+        capture_handoff_robot_pose: dict[str, Any] | None = None
+        capture_handoff_ball_pose: dict[str, Any] | None = None
+        capture_started_monotonic: float | None = None
+        last_capture_diagnostics: dict[str, Any] = {}
 
         def _capture_entry_timeout_cause(*, manager_directive: str = "") -> str:
             directive = str(manager_directive or "")
@@ -4345,6 +4349,136 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "robot_on_goal_side": bool(snapshot_payload.get("robot_on_goal_side", False)),
                 "entered_goal_side_before_capture": bool(entered_goal_side_before_capture),
             }
+
+        def _command_payload(command: Any = None) -> dict[str, Any]:
+            if command is None:
+                return {}
+            if isinstance(command, dict):
+                return dict(command)
+            to_dict = getattr(command, "to_dict", None)
+            if callable(to_dict):
+                payload = to_dict()
+                return dict(payload) if isinstance(payload, dict) else {}
+            return {}
+
+        def _capture_diagnostics_payload(
+            *,
+            now_monotonic: float,
+            capture: Any = None,
+            zone_score: Any = None,
+            approach_snapshot: dict[str, Any] | None = None,
+            selected_command: Any = None,
+            raw_command: Any = None,
+            command_source: str = "",
+            command_limit_reason: str = "",
+            robot_pose: dict[str, Any] | None = None,
+            ball_pose: dict[str, Any] | None = None,
+            zone_entry_handoff_ready: bool = False,
+            secure_capture_ready: bool = False,
+            soft_capture_handoff_ready: bool = False,
+            terminal_cause: str = "",
+        ) -> dict[str, Any]:
+            capture_elapsed_s = 0.0
+            if capture_started_monotonic is not None:
+                capture_elapsed_s = max(0.0, now_monotonic - float(capture_started_monotonic))
+            selected_command_payload = _command_payload(selected_command)
+            raw_command_payload = _command_payload(raw_command)
+            robot_delta_m = (
+                pose_delta_m(capture_handoff_robot_pose, robot_pose)
+                if capture_handoff_robot_pose is not None and robot_pose is not None
+                else None
+            )
+            ball_delta_m = (
+                pose_delta_m(capture_handoff_ball_pose, ball_pose)
+                if capture_handoff_ball_pose is not None and ball_pose is not None
+                else None
+            )
+            capture_payload = capture.to_dict() if capture else {}
+            zone_payload = zone_score.to_dict() if zone_score else {}
+            first_contact_alignment = clean_rounded_number(first_contact_alignment_value)
+            command_limited = bool(
+                raw_command_payload
+                and selected_command_payload
+                and (
+                    clean_rounded_number(raw_command_payload.get("linear_x"))
+                    != clean_rounded_number(selected_command_payload.get("linear_x"))
+                    or clean_rounded_number(raw_command_payload.get("angular_z"))
+                    != clean_rounded_number(selected_command_payload.get("angular_z"))
+                    or clean_rounded_number(raw_command_payload.get("target_speed_scale"))
+                    != clean_rounded_number(selected_command_payload.get("target_speed_scale"))
+                    or str(raw_command_payload.get("mode", "") or "")
+                    != str(selected_command_payload.get("mode", "") or "")
+                )
+            )
+            return {
+                "elapsed_s": round(float(capture_elapsed_s), 6),
+                "terminal_cause": str(terminal_cause or ""),
+                "command_source": str(command_source or ""),
+                "command_limited": command_limited,
+                "command_limit_reason": str(command_limit_reason or ""),
+                "selected_command": selected_command_payload,
+                "raw_selected_command": raw_command_payload,
+                "selected_command_mode": str(selected_command_payload.get("mode", "") or ""),
+                "linear_x": clean_rounded_number(selected_command_payload.get("linear_x")),
+                "angular_z": clean_rounded_number(selected_command_payload.get("angular_z")),
+                "target_speed_scale": clean_rounded_number(selected_command_payload.get("target_speed_scale")),
+                "capture_snapshot": capture_payload,
+                "zone_snapshot": zone_payload,
+                "approach_snapshot": dict(approach_snapshot or {}),
+                "capture_entry_snapshot": last_capture_entry_snapshot,
+                "capture_entry_diagnostics": last_capture_entry_diagnostics,
+                "robot_delta_from_capture_entry_handoff_m": clean_rounded_number(robot_delta_m),
+                "ball_delta_from_capture_entry_handoff_m": clean_rounded_number(ball_delta_m),
+                "capture_entry_handoff_robot_pose": dict(capture_handoff_robot_pose or {}),
+                "capture_entry_handoff_ball_pose": dict(capture_handoff_ball_pose or {}),
+                "captured_now": bool(capture and capture.captured),
+                "secure_capture_ready": bool(secure_capture_ready),
+                "soft_capture_handoff_ready": bool(soft_capture_handoff_ready),
+                "zone_entry_handoff_ready": bool(zone_entry_handoff_ready),
+                "first_contact_alignment_seen": first_contact_alignment is not None,
+                "first_contact_push_alignment_deg": first_contact_alignment,
+                "ball_ahead": bool(capture_payload.get("ball_ahead", False)),
+                "ball_x_m": clean_rounded_number(capture_payload.get("ball_x_m")),
+                "ball_y_m": clean_rounded_number(capture_payload.get("ball_y_m")),
+                "bearing_rad": clean_rounded_number(capture_payload.get("bearing_rad")),
+                "within_capture_window": bool(capture_payload.get("within_capture_window", False)),
+                "within_recapture_window": bool(capture_payload.get("within_recapture_window", False)),
+                "zone_center_inside_zone": bool(zone_payload.get("center_inside_zone", False)),
+                "zone_inside_zone": bool(zone_payload.get("inside_zone", False)),
+                "entered_goal_side_before_capture": bool(entered_goal_side_before_capture),
+            }
+
+        def _append_capture_state(
+            *,
+            robot_pose: dict[str, Any] | None,
+            ball_pose: dict[str, Any] | None,
+            capture: Any = None,
+            zone_score: Any = None,
+            ball_motion_m: float | None = None,
+            selected_command: Any = None,
+            capture_diagnostics: dict[str, Any] | None = None,
+        ) -> None:
+            append_jsonl(
+                state_history_path,
+                {
+                    "generated_utc": utc_now(),
+                    "phase": "capture",
+                    "attempt": int(attempt_index),
+                    "attempt_kind": str(attempt_kind),
+                    "target_id": target.id,
+                    "robot_pose": robot_pose,
+                    "ball_pose": ball_pose,
+                    "capture": capture.to_dict() if capture else {},
+                    "zone_score": zone_score.to_dict() if zone_score else {},
+                    "approach_side": last_approach_snapshot,
+                    "capture_entry": last_capture_entry_snapshot,
+                    "capture_entry_diagnostics": last_capture_entry_diagnostics,
+                    "capture_diagnostics": capture_diagnostics or {},
+                    "selected_command": _command_payload(selected_command),
+                    "ball_motion_m": ball_motion_m,
+                    **self._control_debug_fields(),
+                },
+            )
 
         def _approach_result_payload(*, failure_reason: str = "") -> dict[str, Any]:
             if failure_reason:
@@ -4695,6 +4829,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     capture_entry_completed = True
                     capture_entry_ready_latched = False
                     capture_entry_time_s = now_monotonic - float(capture_entry_started_monotonic or now_monotonic)
+                    capture_started_monotonic = now_monotonic
+                    capture_handoff_robot_pose = dict(robot_pose or {}) if isinstance(robot_pose, dict) else None
+                    capture_handoff_ball_pose = dict(ball_pose or {}) if isinstance(ball_pose, dict) else None
                     self._set_manual_drive(
                         enabled=False,
                         mode="capture_entry_ready",
@@ -4756,22 +4893,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             )
             if ball_pose:
                 self._update_prior_from_ball_pose(target.id, ball_pose)
-            append_jsonl(
-                state_history_path,
-                {
-                    "generated_utc": utc_now(),
-                    "phase": "capture",
-                    "attempt": int(attempt_index),
-                    "attempt_kind": str(attempt_kind),
-                    "target_id": target.id,
-                    "robot_pose": robot_pose,
-                    "ball_pose": ball_pose,
-                    "capture": capture.to_dict() if capture else {},
-                    "zone_score": zone_score.to_dict() if zone_score else {},
-                    "ball_motion_m": ball_motion_m,
-                    **self._control_debug_fields(),
-                },
-            )
+            if capture_started_monotonic is None:
+                capture_started_monotonic = now_monotonic
+            if capture_handoff_robot_pose is None and isinstance(robot_pose, dict):
+                capture_handoff_robot_pose = dict(robot_pose)
+            if capture_handoff_ball_pose is None and isinstance(ball_pose, dict):
+                capture_handoff_ball_pose = dict(ball_pose)
             zone_entry_handoff_ready = bool(
                 zone_score
                 and zone_score.center_inside_zone
@@ -4782,23 +4909,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     or ball_motion_m <= max(DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M * 2.0, 0.02)
                 )
             )
-            if zone_entry_handoff_ready:
-                self._set_manual_drive(False, mode="capture_handoff", rationale="Ball reached zone during capture; handing off to place verification.")
-                return True, {
-                    "capture_state": capture.to_dict() if capture else {},
-                    "zone_score": zone_score.to_dict(),
-                    "entered_zone_during_capture": True,
-                    "handoff_kind": "zone_entry",
-                    **_approach_result_payload(),
-                }
-            if secure_capture(capture, self.capture_envelope):
-                self._set_manual_drive(False, mode="captured", rationale="Ball captured.")
-                return True, {
-                    "capture_state": capture.to_dict(),
-                    "zone_score": zone_score.to_dict() if zone_score else {},
-                    "handoff_kind": "secure_capture",
-                    **_approach_result_payload(),
-                }
+            secure_capture_ready = bool(secure_capture(capture, self.capture_envelope))
             soft_capture_handoff_ready = bool(
                 capture
                 and capture.captured
@@ -4806,16 +4917,133 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and (now_monotonic - captured_started_monotonic) >= 0.5
                 and float(capture.ball_x_m) <= 0.35
             )
+            if zone_entry_handoff_ready:
+                terminal_command = {
+                    "mode": "capture_handoff",
+                    "linear_x": 0.0,
+                    "angular_z": 0.0,
+                    "target_speed_scale": 0.0,
+                    "rationale": "Ball reached zone during capture; handing off to place verification.",
+                }
+                last_capture_diagnostics = _capture_diagnostics_payload(
+                    now_monotonic=now_monotonic,
+                    capture=capture,
+                    zone_score=zone_score,
+                    approach_snapshot=approach_snapshot or {},
+                    selected_command=terminal_command,
+                    raw_command=terminal_command,
+                    command_source="terminal",
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    zone_entry_handoff_ready=zone_entry_handoff_ready,
+                    secure_capture_ready=secure_capture_ready,
+                    soft_capture_handoff_ready=soft_capture_handoff_ready,
+                    terminal_cause="zone_entry",
+                )
+                _append_capture_state(
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    capture=capture,
+                    zone_score=zone_score,
+                    ball_motion_m=ball_motion_m,
+                    selected_command=terminal_command,
+                    capture_diagnostics=last_capture_diagnostics,
+                )
+                self._set_manual_drive(False, mode="capture_handoff", rationale="Ball reached zone during capture; handing off to place verification.")
+                return True, {
+                    "capture_state": capture.to_dict() if capture else {},
+                    "zone_score": zone_score.to_dict() if zone_score else {},
+                    "entered_zone_during_capture": True,
+                    "handoff_kind": "zone_entry",
+                    "capture_diagnostics": last_capture_diagnostics,
+                    **_approach_result_payload(),
+                }
+            if secure_capture_ready:
+                terminal_command = {
+                    "mode": "captured",
+                    "linear_x": 0.0,
+                    "angular_z": 0.0,
+                    "target_speed_scale": 0.0,
+                    "rationale": "Ball captured.",
+                }
+                last_capture_diagnostics = _capture_diagnostics_payload(
+                    now_monotonic=now_monotonic,
+                    capture=capture,
+                    zone_score=zone_score,
+                    approach_snapshot=approach_snapshot or {},
+                    selected_command=terminal_command,
+                    raw_command=terminal_command,
+                    command_source="terminal",
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    zone_entry_handoff_ready=zone_entry_handoff_ready,
+                    secure_capture_ready=secure_capture_ready,
+                    soft_capture_handoff_ready=soft_capture_handoff_ready,
+                    terminal_cause="secure_capture",
+                )
+                _append_capture_state(
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    capture=capture,
+                    zone_score=zone_score,
+                    ball_motion_m=ball_motion_m,
+                    selected_command=terminal_command,
+                    capture_diagnostics=last_capture_diagnostics,
+                )
+                self._set_manual_drive(False, mode="captured", rationale="Ball captured.")
+                return True, {
+                    "capture_state": capture.to_dict(),
+                    "zone_score": zone_score.to_dict() if zone_score else {},
+                    "handoff_kind": "secure_capture",
+                    "capture_diagnostics": last_capture_diagnostics,
+                    **_approach_result_payload(),
+                }
             if soft_capture_handoff_ready:
+                terminal_command = {
+                    "mode": "capture_handoff",
+                    "linear_x": 0.0,
+                    "angular_z": 0.0,
+                    "target_speed_scale": 0.0,
+                    "rationale": "Ball is stably inside the spur; handing off to place control.",
+                }
+                last_capture_diagnostics = _capture_diagnostics_payload(
+                    now_monotonic=now_monotonic,
+                    capture=capture,
+                    zone_score=zone_score,
+                    approach_snapshot=approach_snapshot or {},
+                    selected_command=terminal_command,
+                    raw_command=terminal_command,
+                    command_source="terminal",
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    zone_entry_handoff_ready=zone_entry_handoff_ready,
+                    secure_capture_ready=secure_capture_ready,
+                    soft_capture_handoff_ready=soft_capture_handoff_ready,
+                    terminal_cause="soft_capture",
+                )
+                _append_capture_state(
+                    robot_pose=robot_pose,
+                    ball_pose=ball_pose,
+                    capture=capture,
+                    zone_score=zone_score,
+                    ball_motion_m=ball_motion_m,
+                    selected_command=terminal_command,
+                    capture_diagnostics=last_capture_diagnostics,
+                )
                 self._set_manual_drive(False, mode="capture_handoff", rationale="Ball is stably inside the spur; handing off to place control.")
                 return True, {
                     "capture_state": capture.to_dict(),
                     "zone_score": zone_score.to_dict() if zone_score else {},
                     "soft_capture_handoff": True,
                     "handoff_kind": "soft_capture",
+                    "capture_diagnostics": last_capture_diagnostics,
                     **_approach_result_payload(),
                 }
             handoff_near_zone_control = False
+            command = None
+            raw_command = None
+            command_source = "no_pose_or_ball"
+            command_limit_reason = ""
             if robot_pose and ball_pose:
                 handoff_near_zone_control = bool(
                     not prefer_zone_recovery
@@ -4846,8 +5074,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             zone=self.zone,
                             envelope=self.capture_envelope,
                         )
+                        command_source = "place_recapture"
                     else:
                         command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope)
+                        command_source = "capture_fallback"
                 elif handoff_near_zone_control:
                     command = compute_place_command(
                         robot_pose,
@@ -4855,10 +5085,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         zone=self.zone,
                         envelope=self.capture_envelope,
                     )
+                    command_source = "near_zone_place_handoff"
                 else:
                     command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope)
-            else:
-                command = None
+                    command_source = "capture_command"
+                raw_command = command
             if prefer_zone_recovery and command is not None:
                 angular_limit = 0.50
                 linear_limit = 0.055
@@ -4886,6 +5117,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     target_speed_scale=min(float(command.target_speed_scale), 0.55 if linear_limit > 0.02 else 0.35),
                     rationale=rationale,
                 )
+                command_limit_reason = rationale
             elif handoff_near_zone_control and command is not None:
                 linear_limit = 0.03
                 angular_limit = 0.35
@@ -4911,6 +5143,31 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     target_speed_scale=min(float(command.target_speed_scale), 0.45 if linear_limit > 0.015 else 0.30),
                     rationale=rationale,
                 )
+                command_limit_reason = rationale
+            last_capture_diagnostics = _capture_diagnostics_payload(
+                now_monotonic=now_monotonic,
+                capture=capture,
+                zone_score=zone_score,
+                approach_snapshot=approach_snapshot or {},
+                selected_command=command,
+                raw_command=raw_command,
+                command_source=command_source,
+                command_limit_reason=command_limit_reason,
+                robot_pose=robot_pose,
+                ball_pose=ball_pose,
+                zone_entry_handoff_ready=zone_entry_handoff_ready,
+                secure_capture_ready=secure_capture_ready,
+                soft_capture_handoff_ready=soft_capture_handoff_ready,
+            )
+            _append_capture_state(
+                robot_pose=robot_pose,
+                ball_pose=ball_pose,
+                capture=capture,
+                zone_score=zone_score,
+                ball_motion_m=ball_motion_m,
+                selected_command=command,
+                capture_diagnostics=last_capture_diagnostics,
+            )
             if command is not None:
                 self._set_manual_drive(
                     True,
@@ -4926,6 +5183,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         self._set_manual_drive(False, mode="capture_timeout", rationale="Capture timed out.")
         last_capture_payload = last_capture.to_dict() if last_capture else {}
         last_zone_payload = last_zone_score.to_dict() if last_zone_score else {}
+        timeout_capture_diagnostics = dict(last_capture_diagnostics)
+        timeout_capture_diagnostics["terminal_cause"] = "capture_timeout"
+        last_capture_diagnostics = timeout_capture_diagnostics
         correction_eligible = zone_edge_correction_eligible(
             capture=last_capture,
             zone_score=last_zone_score,
@@ -4940,6 +5200,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "allow_full_revisit": False,
             "capture_entry_snapshot": last_capture_entry_snapshot,
             "capture_entry_diagnostics": last_capture_entry_diagnostics,
+            "capture_diagnostics": last_capture_diagnostics,
             **_approach_result_payload(failure_reason=approach_failure_reason),
         }
         write_json(mission_root / f"{target.id}_capture_timeout.json", timeout_payload)

@@ -550,6 +550,178 @@ def test_capture_entry_timeout_debug_is_summarized_from_state_history(tmp_path: 
     assert debug["capture_entry_ball_delta_from_handoff_max_m"] == 0.0
 
 
+def test_capture_debug_is_summarized_from_state_history(tmp_path: Path):
+    mission_root = tmp_path / "mppi_plus45_capture"
+    first_command = {
+        "mode": "capture",
+        "linear_x": 0.16,
+        "angular_z": 0.08,
+        "target_speed_scale": 1.0,
+    }
+    limited_command = {
+        "mode": "capture_handoff_hold",
+        "linear_x": 0.03,
+        "angular_z": 0.30,
+        "target_speed_scale": 0.45,
+    }
+    _write_jsonl(
+        mission_root / "state_history.jsonl",
+        [
+            {
+                "phase": "capture",
+                "selected_command": first_command,
+                "capture": {
+                    "ball_x_m": 0.50,
+                    "ball_y_m": 0.04,
+                    "bearing_rad": 0.08,
+                    "captured": False,
+                    "within_capture_window": False,
+                },
+                "capture_diagnostics": {
+                    "terminal_cause": "",
+                    "command_source": "capture_command",
+                    "command_limited": False,
+                    "selected_command": first_command,
+                    "selected_command_mode": "capture",
+                    "linear_x": 0.16,
+                    "angular_z": 0.08,
+                    "target_speed_scale": 1.0,
+                    "capture_snapshot": {
+                        "ball_x_m": 0.50,
+                        "ball_y_m": 0.04,
+                        "bearing_rad": 0.08,
+                        "captured": False,
+                    },
+                    "captured_now": False,
+                    "secure_capture_ready": False,
+                    "soft_capture_handoff_ready": False,
+                    "zone_entry_handoff_ready": False,
+                    "first_contact_alignment_seen": False,
+                    "robot_delta_from_capture_entry_handoff_m": 0.10,
+                    "ball_delta_from_capture_entry_handoff_m": 0.01,
+                },
+            },
+            {
+                "phase": "capture",
+                "selected_command": limited_command,
+                "capture": {
+                    "ball_x_m": 0.32,
+                    "ball_y_m": 0.02,
+                    "bearing_rad": 0.05,
+                    "captured": True,
+                    "within_capture_window": True,
+                },
+                "capture_diagnostics": {
+                    "terminal_cause": "",
+                    "command_source": "near_zone_place_handoff",
+                    "command_limited": True,
+                    "command_limit_reason": "Near zone gentle hold.",
+                    "selected_command": limited_command,
+                    "raw_selected_command": {
+                        "mode": "place",
+                        "linear_x": 0.14,
+                        "angular_z": 0.60,
+                        "target_speed_scale": 1.0,
+                    },
+                    "selected_command_mode": "capture_handoff_hold",
+                    "linear_x": 0.03,
+                    "angular_z": 0.30,
+                    "target_speed_scale": 0.45,
+                    "capture_snapshot": {
+                        "ball_x_m": 0.32,
+                        "ball_y_m": 0.02,
+                        "bearing_rad": 0.05,
+                        "captured": True,
+                    },
+                    "captured_now": True,
+                    "secure_capture_ready": False,
+                    "soft_capture_handoff_ready": True,
+                    "zone_entry_handoff_ready": False,
+                    "first_contact_alignment_seen": True,
+                    "first_contact_push_alignment_deg": 7.5,
+                    "robot_delta_from_capture_entry_handoff_m": 0.20,
+                    "ball_delta_from_capture_entry_handoff_m": 0.03,
+                },
+            },
+        ],
+    )
+    mission_verdict = {
+        "failure_stage": "capture",
+        "failure_reason": "capture_timeout",
+        "capture_state": {
+            "ball_x_m": 0.31,
+            "ball_y_m": 0.018,
+            "bearing_rad": 0.04,
+            "captured": True,
+        },
+        "capture_diagnostics": {
+            "terminal_cause": "capture_timeout",
+            "command_source": "near_zone_place_handoff",
+            "command_limited": True,
+            "command_limit_reason": "Near zone gentle hold.",
+            "selected_command": limited_command,
+            "selected_command_mode": "capture_handoff_hold",
+            "linear_x": 0.03,
+            "angular_z": 0.30,
+            "target_speed_scale": 0.45,
+            "ball_x_m": 0.31,
+            "ball_y_m": 0.018,
+            "bearing_rad": 0.04,
+            "captured_now": True,
+            "secure_capture_ready": False,
+            "soft_capture_handoff_ready": True,
+            "zone_entry_handoff_ready": False,
+            "first_contact_alignment_seen": True,
+            "first_contact_push_alignment_deg": 7.5,
+            "robot_delta_from_capture_entry_handoff_m": 0.20,
+            "ball_delta_from_capture_entry_handoff_m": 0.03,
+        },
+    }
+    matrix_path = _matrix_summary(
+        tmp_path,
+        "mppi_capture",
+        family="nav2_mppi_follow_path_reacquire_v1",
+        cases=[
+            _case(
+                "plus45",
+                mission_root=mission_root,
+                fresh_handoff=True,
+                fresh_reason="missing_first_contact_alignment",
+                latest_reason="missing_first_contact_alignment",
+                goal_side_count=0,
+                mission_verdict=mission_verdict,
+            )
+        ],
+    )
+
+    branch = audit.build_branch_failure_summary(
+        branch_name="nav2_mppi_follow_path_reacquire_v1",
+        source_summary_path=matrix_path,
+        source_summary=json.loads(matrix_path.read_text(encoding="utf-8")),
+    )
+    debug = branch["cases"][0]["capture_debug"]
+
+    assert debug["capture_row_count"] == 2
+    assert debug["capture_command_modes"] == ["capture", "capture_handoff_hold"]
+    assert debug["capture_command_sources"] == ["capture_command", "near_zone_place_handoff"]
+    assert debug["capture_command_limited_count"] == 1
+    assert debug["capture_command_limit_reasons"] == ["Near zone gentle hold."]
+    assert debug["capture_linear_x_max"] == 0.16
+    assert debug["capture_max_abs_angular_z"] == 0.3
+    assert debug["capture_captured_count"] == 1
+    assert debug["capture_soft_handoff_ready_count"] == 1
+    assert debug["capture_zone_entry_ready_count"] == 0
+    assert debug["capture_first_contact_alignment_count"] == 1
+    assert debug["capture_first_contact_alignment_final_deg"] == 7.5
+    assert debug["capture_terminal_causes"] == ["capture_timeout"]
+    assert debug["capture_final_ball_x_m"] == 0.31
+    assert debug["capture_final_ball_y_m"] == 0.018
+    assert debug["capture_final_bearing_rad"] == 0.04
+    assert debug["capture_min_abs_ball_y_m"] == 0.018
+    assert debug["capture_robot_delta_from_capture_entry_handoff_max_m"] == 0.2
+    assert debug["capture_ball_delta_from_capture_entry_handoff_max_m"] == 0.03
+
+
 def test_mppi_follow_path_clearance_action_and_handoff_labels_are_extracted(tmp_path: Path):
     clearance_root = tmp_path / "mppi_clearance"
     action_root = tmp_path / "mppi_action"
