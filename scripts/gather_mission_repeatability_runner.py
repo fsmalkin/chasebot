@@ -41,6 +41,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "pre_stage_trajectory_owner_v1",
     "nav2_follow_path_reacquire_v1",
     "nav2_mppi_follow_path_reacquire_v1",
+    "object_centric_gather_policy_v1",
 )
 
 

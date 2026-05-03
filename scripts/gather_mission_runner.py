@@ -38,6 +38,8 @@ from gather_handoff_yaw_servo_helpers import HANDOFF_YAW_SERVO_CONTROL_FAMILY
 from gather_handoff_yaw_servo_helpers import decide_handoff_yaw_servo_pre_stage_command
 from gather_manager_helpers import GatherManagerState
 from gather_manager_helpers import decide_gather_manager_directive
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+from gather_object_centric_policy_helpers import decide_object_centric_gather_command
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_BALL_MOTION_TOLERANCE_M
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_ID
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID
@@ -139,6 +141,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "pre_stage_trajectory_owner_v1",
     "nav2_follow_path_reacquire_v1",
     "nav2_mppi_follow_path_reacquire_v1",
+    "object_centric_gather_policy_v1",
 )
 NAV2_REACQUIRE_CONTROL_FAMILY = "nav2_reacquire_v1"
 DEFAULT_NAV2_REACQUIRE_TRIGGER_DISTANCE_M = 1.20
@@ -2546,6 +2549,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         pre_stage_trajectory_owner_milestone_index = 0
         pre_stage_trajectory_owner_side_sign: float | None = None
         pre_stage_trajectory_owner_replan_count = 0
+        object_centric_previous_command: PlaceControlCommand | None = None
+        object_centric_previous_ball_pose: dict[str, Any] | None = None
+        last_object_centric_policy: dict[str, Any] = {}
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -2575,6 +2581,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             pre_stage_reacquire_fsm_debug_fields: dict[str, Any] = {}
             pre_stage_path_tracker_debug_fields: dict[str, Any] = {}
             pre_stage_trajectory_owner_debug_fields: dict[str, Any] = {}
+            object_centric_debug_fields: dict[str, Any] = {}
             pre_stage_reacquire_fsm_abort_reason = ""
             pre_stage_path_tracker_abort_reason = ""
             pre_stage_trajectory_owner_abort_reason = ""
@@ -2609,6 +2616,27 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 if pre_stage_trajectory_owner_previous_ball_pose is not None and ball_pose
                 else None
             )
+            if (
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+            ):
+                object_decision = decide_object_centric_gather_command(
+                    robot_pose,
+                    ball_pose or {},
+                    phase="pre_stage",
+                    zone=self.zone,
+                    envelope=self.capture_envelope,
+                    previous_command=object_centric_previous_command,
+                    previous_ball_pose=object_centric_previous_ball_pose,
+                )
+                last_object_centric_policy = dict(object_decision.diagnostics)
+                object_centric_debug_fields = {"object_centric_policy": last_object_centric_policy}
+                if object_decision.command is not None:
+                    pre_stage_command = object_decision.command
+                    pre_stage_strategy_name = str(object_decision.strategy_name or "")
+                    pre_stage_objective_name = str(object_decision.objective_name or "")
+                    pre_stage_progress_score = clean_number(object_decision.progress_score)
             if isinstance(pre_stage_snapshot, dict):
                 pre_stage_pose_world = (
                     dict(pre_stage_snapshot.get("pre_stage_pose_world", {}))
@@ -4098,8 +4126,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **pre_stage_reacquire_fsm_debug_fields,
                     **pre_stage_path_tracker_debug_fields,
                     **pre_stage_trajectory_owner_debug_fields,
+                    **object_centric_debug_fields,
                 },
             )
+            if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                object_centric_previous_command = pre_stage_command
+                object_centric_previous_ball_pose = dict(ball_pose or {}) if ball_pose else object_centric_previous_ball_pose
             constrained_local_previous_ball_pose = dict(ball_pose or {}) if ball_pose else constrained_local_previous_ball_pose
             docking_reacquire_previous_ball_pose = (
                 dict(ball_pose or {}) if ball_pose else docking_reacquire_previous_ball_pose
@@ -4201,6 +4233,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "pre_stage_time_s": round(pre_stage_time_s, 6),
                     "pre_stage_handoff_pass": True,
                     "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
+                    "object_centric_policy": last_object_centric_policy,
                 }
             if pre_stage_command is not None:
                 self._set_manual_drive(
@@ -4229,6 +4262,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
             "approach_failure_reason": last_failure_reason,
             "entered_goal_side_before_capture": last_failure_reason == "entered_goal_side_before_capture",
+            "object_centric_policy": last_object_centric_policy,
         }
         write_json(mission_root / f"{target.id}_pre_stage_timeout.json", timeout_payload)
         return False, timeout_payload
@@ -4277,6 +4311,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         capture_handoff_ball_pose: dict[str, Any] | None = None
         capture_started_monotonic: float | None = None
         last_capture_diagnostics: dict[str, Any] = {}
+        object_centric_previous_command: PlaceControlCommand | None = None
+        object_centric_previous_ball_pose: dict[str, Any] | None = None
+        last_object_centric_policy: dict[str, Any] = {}
 
         def _capture_entry_timeout_cause(*, manager_directive: str = "") -> str:
             directive = str(manager_directive or "")
@@ -4457,6 +4494,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             ball_motion_m: float | None = None,
             selected_command: Any = None,
             capture_diagnostics: dict[str, Any] | None = None,
+            object_centric_policy: dict[str, Any] | None = None,
         ) -> None:
             append_jsonl(
                 state_history_path,
@@ -4474,6 +4512,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "capture_entry": last_capture_entry_snapshot,
                     "capture_entry_diagnostics": last_capture_entry_diagnostics,
                     "capture_diagnostics": capture_diagnostics or {},
+                    "object_centric_policy": object_centric_policy or {},
                     "selected_command": _command_payload(selected_command),
                     "ball_motion_m": ball_motion_m,
                     **self._control_debug_fields(),
@@ -4558,6 +4597,25 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if robot_pose and ball_pose
                     else None
                 )
+                stage_object_centric_policy: dict[str, Any] = {}
+                if (
+                    self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                    and robot_pose
+                    and ball_pose
+                ):
+                    object_decision = decide_object_centric_gather_command(
+                        robot_pose,
+                        ball_pose or {},
+                        phase="stage",
+                        zone=self.zone,
+                        envelope=self.capture_envelope,
+                        previous_command=object_centric_previous_command,
+                        previous_ball_pose=object_centric_previous_ball_pose,
+                    )
+                    last_object_centric_policy = dict(object_decision.diagnostics)
+                    stage_object_centric_policy = last_object_centric_policy
+                    if object_decision.command is not None:
+                        stage_command = object_decision.command
                 if stage_command is not None:
                     latest_pre_capture_command_mode = str(stage_command.mode)
                 stage_ready_signal = bool(
@@ -4601,6 +4659,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         rationale="Hold the first valid staging pose steady until capture entry begins.",
                     )
                     latest_pre_capture_command_mode = str(stage_command.mode)
+                    if stage_object_centric_policy:
+                        stage_object_centric_policy = {
+                            **stage_object_centric_policy,
+                            "selected_command": stage_command.to_dict(),
+                            "mode": str(stage_command.mode),
+                        }
+                        last_object_centric_policy = dict(stage_object_centric_policy)
                 self._update_gather_runtime_state(
                     mission_phase="stage",
                     gather_phase="stage",
@@ -4628,6 +4693,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "approach_side": approach_snapshot or {},
                         "manager_directive": stage_manager_decision.directive,
                         "selected_command": stage_command.to_dict() if stage_command else {},
+                        "object_centric_policy": stage_object_centric_policy,
                         "ball_motion_m": ball_motion_m,
                         **self._control_debug_fields(),
                     },
@@ -4678,6 +4744,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "failure_stage": "stage",
                         "capture_state": capture.to_dict() if capture else {},
                         "zone_score": zone_score.to_dict() if zone_score else {},
+                        "object_centric_policy": last_object_centric_policy,
                         **_approach_result_payload(failure_reason=approach_failure_reason),
                     }
                     write_json(mission_root / f"{target.id}_stage_timeout.json", timeout_payload)
@@ -4691,6 +4758,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         rationale=stage_command.rationale,
                     )
                     self._update_gather_runtime_state(latest_control_command=stage_command.to_dict())
+                    if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                        object_centric_previous_command = stage_command
+                if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                    object_centric_previous_ball_pose = dict(ball_pose or {}) if ball_pose else object_centric_previous_ball_pose
                 previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
                 time.sleep(self.args.poll_s)
                 continue
@@ -4729,6 +4800,25 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if robot_pose and ball_pose
                     else None
                 )
+                capture_entry_object_centric_policy: dict[str, Any] = {}
+                if (
+                    self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                    and robot_pose
+                    and ball_pose
+                ):
+                    object_decision = decide_object_centric_gather_command(
+                        robot_pose,
+                        ball_pose or {},
+                        phase="capture_entry",
+                        zone=self.zone,
+                        envelope=self.capture_envelope,
+                        previous_command=object_centric_previous_command,
+                        previous_ball_pose=object_centric_previous_ball_pose,
+                    )
+                    last_object_centric_policy = dict(object_decision.diagnostics)
+                    capture_entry_object_centric_policy = last_object_centric_policy
+                    if object_decision.command is not None:
+                        capture_entry_command = object_decision.command
                 if capture_entry_command is not None:
                     latest_pre_capture_command_mode = str(capture_entry_command.mode)
                 capture_entry_manager_decision = decide_gather_manager_directive(
@@ -4782,6 +4872,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "zone_score": zone_score.to_dict() if zone_score else {},
                         "capture_entry_snapshot": last_capture_entry_snapshot,
                         "capture_entry_diagnostics": last_capture_entry_diagnostics,
+                        "object_centric_policy": last_object_centric_policy,
                         **_approach_result_payload(failure_reason=approach_failure_reason),
                     }
                     write_json(mission_root / f"{target.id}_capture_entry_goal_side_loss.json", failure_payload)
@@ -4815,6 +4906,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "capture_entry_diagnostics": capture_entry_diagnostics_payload,
                         "manager_directive": capture_entry_manager_decision.directive,
                         "selected_command": capture_entry_command.to_dict() if capture_entry_command else {},
+                        "object_centric_policy": capture_entry_object_centric_policy,
                         "ball_motion_m": ball_motion_m,
                         **self._control_debug_fields(),
                     },
@@ -4863,6 +4955,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "zone_score": zone_score.to_dict() if zone_score else {},
                         "capture_entry_snapshot": last_capture_entry_snapshot,
                         "capture_entry_diagnostics": last_capture_entry_diagnostics,
+                        "object_centric_policy": last_object_centric_policy,
                         **_approach_result_payload(failure_reason=approach_failure_reason),
                     }
                     write_json(mission_root / f"{target.id}_capture_entry_timeout.json", timeout_payload)
@@ -4876,6 +4969,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         rationale=capture_entry_command.rationale,
                     )
                     self._update_gather_runtime_state(latest_control_command=capture_entry_command.to_dict())
+                    if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                        object_centric_previous_command = capture_entry_command
+                if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                    object_centric_previous_ball_pose = dict(ball_pose or {}) if ball_pose else object_centric_previous_ball_pose
                 previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
                 time.sleep(self.args.poll_s)
                 continue
@@ -4948,6 +5045,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     ball_motion_m=ball_motion_m,
                     selected_command=terminal_command,
                     capture_diagnostics=last_capture_diagnostics,
+                    object_centric_policy=last_object_centric_policy,
                 )
                 self._set_manual_drive(False, mode="capture_handoff", rationale="Ball reached zone during capture; handing off to place verification.")
                 return True, {
@@ -4956,6 +5054,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "entered_zone_during_capture": True,
                     "handoff_kind": "zone_entry",
                     "capture_diagnostics": last_capture_diagnostics,
+                    "object_centric_policy": last_object_centric_policy,
                     **_approach_result_payload(),
                 }
             if secure_capture_ready:
@@ -4989,6 +5088,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     ball_motion_m=ball_motion_m,
                     selected_command=terminal_command,
                     capture_diagnostics=last_capture_diagnostics,
+                    object_centric_policy=last_object_centric_policy,
                 )
                 self._set_manual_drive(False, mode="captured", rationale="Ball captured.")
                 return True, {
@@ -4996,6 +5096,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "zone_score": zone_score.to_dict() if zone_score else {},
                     "handoff_kind": "secure_capture",
                     "capture_diagnostics": last_capture_diagnostics,
+                    "object_centric_policy": last_object_centric_policy,
                     **_approach_result_payload(),
                 }
             if soft_capture_handoff_ready:
@@ -5029,6 +5130,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     ball_motion_m=ball_motion_m,
                     selected_command=terminal_command,
                     capture_diagnostics=last_capture_diagnostics,
+                    object_centric_policy=last_object_centric_policy,
                 )
                 self._set_manual_drive(False, mode="capture_handoff", rationale="Ball is stably inside the spur; handing off to place control.")
                 return True, {
@@ -5037,6 +5139,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "soft_capture_handoff": True,
                     "handoff_kind": "soft_capture",
                     "capture_diagnostics": last_capture_diagnostics,
+                    "object_centric_policy": last_object_centric_policy,
                     **_approach_result_payload(),
                 }
             handoff_near_zone_control = False
@@ -5044,6 +5147,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             raw_command = None
             command_source = "no_pose_or_ball"
             command_limit_reason = ""
+            capture_object_centric_policy: dict[str, Any] = {}
             if robot_pose and ball_pose:
                 handoff_near_zone_control = bool(
                     not prefer_zone_recovery
@@ -5052,7 +5156,23 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     and zone_score is not None
                     and float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
                 )
-                if prefer_zone_recovery:
+                if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                    object_decision = decide_object_centric_gather_command(
+                        robot_pose,
+                        ball_pose or {},
+                        phase="capture",
+                        zone=self.zone,
+                        envelope=self.capture_envelope,
+                        previous_command=object_centric_previous_command,
+                        previous_ball_pose=object_centric_previous_ball_pose,
+                    )
+                    command = object_decision.command
+                    raw_command = object_decision.raw_command
+                    last_object_centric_policy = dict(object_decision.diagnostics)
+                    capture_object_centric_policy = last_object_centric_policy
+                    command_source = "object_centric_policy"
+                    command_limit_reason = str(capture_object_centric_policy.get("guard_rejection_reason", "") or "")
+                elif prefer_zone_recovery:
                     use_zone_recovery = bool(
                         capture
                         and capture.ball_ahead
@@ -5086,8 +5206,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 else:
                     command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope)
                     command_source = "capture_command"
-                raw_command = command
-            if prefer_zone_recovery and command is not None:
+                if raw_command is None:
+                    raw_command = command
+            if (
+                self.gather_control_family != OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and prefer_zone_recovery
+                and command is not None
+            ):
                 angular_limit = 0.50
                 linear_limit = 0.055
                 rationale = "Keep the ball local during post-place recapture instead of driving through it."
@@ -5115,7 +5240,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     rationale=rationale,
                 )
                 command_limit_reason = rationale
-            elif handoff_near_zone_control and command is not None:
+            elif (
+                self.gather_control_family != OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and handoff_near_zone_control
+                and command is not None
+            ):
                 linear_limit = 0.03
                 angular_limit = 0.35
                 rationale = "Near the corral, switch to a gentle handoff instead of driving through the ball."
@@ -5164,6 +5293,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 ball_motion_m=ball_motion_m,
                 selected_command=command,
                 capture_diagnostics=last_capture_diagnostics,
+                object_centric_policy=capture_object_centric_policy,
             )
             if command is not None:
                 self._set_manual_drive(
@@ -5174,6 +5304,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     rationale=command.rationale,
                 )
                 self._update_gather_runtime_state(latest_control_command=command.to_dict())
+                if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                    object_centric_previous_command = command
+            if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                object_centric_previous_ball_pose = dict(ball_pose or {}) if ball_pose else object_centric_previous_ball_pose
             previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
             time.sleep(self.args.poll_s)
 
@@ -5198,6 +5332,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "capture_entry_snapshot": last_capture_entry_snapshot,
             "capture_entry_diagnostics": last_capture_entry_diagnostics,
             "capture_diagnostics": last_capture_diagnostics,
+            "object_centric_policy": last_object_centric_policy,
             **_approach_result_payload(failure_reason=approach_failure_reason),
         }
         write_json(mission_root / f"{target.id}_capture_timeout.json", timeout_payload)

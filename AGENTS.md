@@ -51,6 +51,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather hard-case stress analyzer | `python scripts/gather_control_stress_analyzer.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary>` |
 | Gather control failure audit | `python scripts/gather_control_failure_audit.py --campaign-id <id> --branch region_funnel_v1=<matrix_summary> --branch nav2_reacquire_v1=<matrix_summary> --branch constrained_local_planner_v1=<matrix_summary> --branch docking_reacquire_v1=<matrix_summary> --branch handoff_yaw_servo_v1=<matrix_summary> --branch pre_stage_reacquire_fsm_v1=<matrix_summary> --branch pre_stage_path_tracker_v1=<matrix_summary> --branch pre_stage_trajectory_owner_v1=<matrix_summary> --branch nav2_follow_path_reacquire_v1=<matrix_summary> --branch nav2_mppi_follow_path_reacquire_v1=<matrix_summary>` |
 | Gather FollowPath research analyzer | `python scripts/gather_follow_path_research_analyzer.py --campaign-id <id> --artifact may2=<summary> --artifact may3=<summary>` |
+| Gather object-centric policy evaluator | `python scripts/gather_object_centric_policy_evaluator.py --campaign-id <id> --artifact mppi=<summary> --artifact object_policy=<summary>` |
 | Gather pre-stage command authority audit | `python scripts/gather_pre_stage_command_authority_audit.py --campaign-id <id> --branch region_funnel_v1=<matrix_summary> --branch nav2_reacquire_v1=<matrix_summary> --branch constrained_local_planner_v1=<matrix_summary> --branch docking_reacquire_v1=<matrix_summary> --branch handoff_yaw_servo_v1=<matrix_summary> --branch pre_stage_reacquire_fsm_v1=<matrix_summary> --branch pre_stage_path_tracker_v1=<matrix_summary> --branch pre_stage_trajectory_owner_v1=<matrix_summary>` |
 | Gather portfolio stress ingestion | `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --stress helper=artifacts/session/<id>/gather_control_portfolio/helper/stress_summary.json --baseline-branch helper` |
 | Gather escape oracle | `scripts/run_gather_escape_oracle.ps1 -CampaignId <id>` |
@@ -74,6 +75,8 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather hard-case stress analyzer (internal) | `scripts/gather_control_stress_analyzer.py` |
 | Gather control failure audit analyzer (internal) | `scripts/gather_control_failure_audit.py` |
 | Gather FollowPath research analyzer (internal) | `scripts/gather_follow_path_research_analyzer.py` |
+| Gather object-centric policy evaluator (internal) | `scripts/gather_object_centric_policy_evaluator.py` |
+| Gather object-centric policy helper (internal) | `scripts/gather_object_centric_policy_helpers.py` |
 | Gather pre-stage command authority audit analyzer (internal) | `scripts/gather_pre_stage_command_authority_audit.py` |
 | Gather escape oracle helper (internal) | `scripts/gather_escape_oracle.py` |
 | Gather escape sandbox helper (internal) | `scripts/gather_escape_sandbox.py` |
@@ -263,7 +266,7 @@ Gather object-centric policy research direction:
 - Planning doc: `docs/OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md`
 - Scope: one-ball gather from pre-stage through capture/place as a short-horizon object-centric manipulation skill over robot pose, ball pose, zone pose, recent deltas, previous command, and contact/capture flags.
 - Runtime boundary: Nav2/MPPI remains available for long-range repositioning; the object-centric policy owns ball interaction and must be wrapped in deterministic guards for ball drift, goal-side violation, clearance, command bounds, timeout, and stuck state.
-- First milestone: build an offline evaluation harness over the existing MPPI artifacts, then implement a structured object-servo baseline before any learned residual or direct policy.
+- Current implementation surface: `scripts/gather_object_centric_policy_evaluator.py` scores existing artifacts; `scripts/gather_object_centric_policy_helpers.py` provides the structured object-servo baseline; `object_centric_gather_policy_v1` is selectable through the existing gather-control family CLI but still needs fresh live gates.
 - Promotion rule: portfolio/stress ingestion remains blocked until fresh saved-layout `zero` and `plus45` pass full mission gates without pre-stage ball drift/contact, followed by the full four-case matrix.
 
 ## Testing

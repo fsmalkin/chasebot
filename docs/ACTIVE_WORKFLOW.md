@@ -487,16 +487,28 @@ Analyzer contract:
 
 Use this direction after MPPI FollowPath evidence shows safe pre-stage movement but downstream contact behavior remains brittle. The detailed research plan lives in [OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md](OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md).
 
+Commands:
+
+1. offline evaluator: `python scripts/gather_object_centric_policy_evaluator.py --campaign-id <id> --artifact mppi=<summary> --artifact object_policy=<summary>`
+2. runtime family: `powershell -ExecutionPolicy Bypass -File scripts/run_gather_goal_side_matrix.ps1 -GatherControlFamily object_centric_gather_policy_v1 -RunsPerCase 1 -MaxRetriesPerTarget 0`
+
 Research contract:
 
 1. freeze `nav2_mppi_follow_path_reacquire_v1` as the baseline/evidence branch rather than continuing broad MPPI/capture threshold tuning
 2. reserve Nav2/MPPI for long-range repositioning and obstacle-aware path following
 3. let `object_centric_gather_policy_v1` own ball interaction as a short-horizon policy over robot pose, ball pose, zone pose, recent robot/ball deltas, previous command, and capture/contact flags
 4. keep deterministic safety filters around every policy proposal: command bounds, ball drift, clearance, goal-side violation, timeout, stuck state, and safe-stop fallback
-5. build an offline evaluator over existing MPPI artifacts before adding runtime behavior
-6. implement a structured object-servo baseline before any learned residual or direct policy
+5. use `scripts/gather_object_centric_policy_evaluator.py` to score MPPI baseline and future policy artifacts on the same state-history metrics before promotion
+6. use `scripts/gather_object_centric_policy_helpers.py` as the structured object-servo baseline before any learned residual or direct policy
 7. use learned residuals only after structured servo failure modes are measured
 8. keep direct high-frequency LLM motor control out of scope
+
+Evaluator contract:
+
+1. reads existing `gather_goal_side_matrix/campaign_summary.json`, `gather_mission_repeatability/campaign_run_summary.json`, mission verdicts, and referenced `state_history.jsonl` only
+2. writes `artifacts/session/<campaign_id>/gather_object_centric_policy_evaluator/object_centric_policy_summary.json` and `scorecard.md`
+3. reports pre-stage handoff, capture-entry reached, first-contact alignment, premature ball motion, capture/secure/soft capture, zone entry, terminal cause, safety stops, command smoothness, and mode churn
+4. is analyzer-only: it does not refresh portfolio/stress evidence, rerun live sim, promote a branch, or change runtime control
 
 Live gates:
 
@@ -1101,7 +1113,11 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<campaign_id>/gather_follow_path_research_analyzer/follow_path_research_summary.json`
    - `artifacts/session/<campaign_id>/gather_follow_path_research_analyzer/scorecard.md`
    - FollowPath research outputs are analyzer-only evidence; they compare existing FollowPath/MPPI dispatch, path geometry, controller progress, and terminal convergence artifacts without promoting blocked branches or changing runtime control
-28. Gather pre-stage command authority audit:
+28. Gather object-centric policy evaluator:
+   - `artifacts/session/<campaign_id>/gather_object_centric_policy_evaluator/object_centric_policy_summary.json`
+   - `artifacts/session/<campaign_id>/gather_object_centric_policy_evaluator/scorecard.md`
+   - object-centric policy outputs are analyzer-only evidence; they compare MPPI baseline and object-policy traces on pre-stage handoff, contact/capture, zone entry, safety, and command smoothness without promoting a branch or changing runtime control
+29. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/scorecard.md`
    - command-authority outputs are analyzer-only assumption-peel-back evidence; missing state history or missing debug fields are recorded as missing evidence rather than pass/fail, and no blocked branch is promoted or ingested into portfolio/stress comparison

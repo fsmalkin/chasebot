@@ -71,6 +71,7 @@ Required metrics:
 Deliverable:
 
 - an analyzer that can score the MPPI baseline and future `object_centric_gather_policy_v1` traces on the same cases
+- implementation surface: `scripts/gather_object_centric_policy_evaluator.py`
 
 ## Milestone 2: Structured Object Servo Baseline
 
@@ -94,6 +95,7 @@ Behavior:
 - regulate robot-ball distance, lateral offset, push-line yaw, and ball-zone progress continuously
 - emit bounded `linear_x` / `angular_z`
 - keep deterministic safety guards for ball drift, goal-side violation, clearance, max command, timeout, and stuck state
+- implementation surface: `scripts/gather_object_centric_policy_helpers.py`
 
 Success gate:
 
