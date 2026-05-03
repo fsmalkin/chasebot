@@ -37,6 +37,42 @@ def test_policy_returns_pre_stage_ready_at_measured_handoff_pose():
     assert decision.diagnostics["guard_rejection_reason"] == ""
 
 
+def test_policy_goal_side_far_from_ball_orbits_toward_behind_port():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.command.mode == "object_pre_stage_goal_side_orbit"
+    assert decision.command.linear_x > 0.0
+    assert decision.command.target_speed_scale <= 0.75
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] > 0.0
+
+
+def test_policy_goal_side_near_ball_keeps_reverse_clearance_escape():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 4.9, "y": 0.0, "yaw": 0.0}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.command.mode == "object_pre_stage_escape_goal_side"
+    assert decision.command.linear_x < 0.0
+
+
 def test_policy_capture_command_is_object_centric_and_bounded():
     zone = build_zone_spec("corral_single_ball_place")
     ball_pose = {"x": 1.0, "y": 0.10}

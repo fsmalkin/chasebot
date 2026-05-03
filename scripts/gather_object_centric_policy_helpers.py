@@ -39,6 +39,8 @@ OBJECT_CENTRIC_MAX_LINEAR_DELTA_MPS = 0.04
 OBJECT_CENTRIC_MAX_ANGULAR_DELTA_RADPS = 0.20
 OBJECT_CENTRIC_PRE_CONTACT_BALL_MOTION_GUARD_M = 0.05
 OBJECT_CENTRIC_PRE_CONTACT_MIN_BALL_DISTANCE_M = 0.16
+OBJECT_CENTRIC_GOAL_SIDE_ORBIT_CLEARANCE_M = 0.72
+OBJECT_CENTRIC_GOAL_SIDE_ORBIT_MIN_BALL_DISTANCE_M = 1.05
 
 
 @dataclass(frozen=True)
@@ -284,6 +286,31 @@ def _guard_command(mode: str, rationale: str) -> PlaceControlCommand:
     return PlaceControlCommand(mode=mode, linear_x=0.0, angular_z=0.0, target_speed_scale=0.0, rationale=rationale)
 
 
+def _goal_side_orbit_target_robot_frame(
+    geometry: dict[str, Any],
+    *,
+    target_x_m: float,
+    target_y_m: float,
+    lateral_signed: float,
+) -> tuple[float, float]:
+    push_yaw = float(geometry["push_yaw"])
+    yaw_error = float(geometry["push_yaw_error_signed"])
+    robot_yaw = normalize_angle(push_yaw - yaw_error)
+    lateral_ux = -math.sin(push_yaw)
+    lateral_uy = math.cos(push_yaw)
+    if abs(lateral_signed) > 0.05:
+        side = 1.0 if lateral_signed >= 0.0 else -1.0
+    else:
+        side = 1.0
+    offset_world_x = side * OBJECT_CENTRIC_GOAL_SIDE_ORBIT_CLEARANCE_M * lateral_ux
+    offset_world_y = side * OBJECT_CENTRIC_GOAL_SIDE_ORBIT_CLEARANCE_M * lateral_uy
+    cos_yaw = math.cos(robot_yaw)
+    sin_yaw = math.sin(robot_yaw)
+    offset_robot_x = (cos_yaw * offset_world_x) + (sin_yaw * offset_world_y)
+    offset_robot_y = (-sin_yaw * offset_world_x) + (cos_yaw * offset_world_y)
+    return target_x_m + offset_robot_x, target_y_m + offset_robot_y
+
+
 def _approach_command(phase: str, geometry: dict[str, Any]) -> PlaceControlCommand:
     behind = geometry["behind_ball"]
     target_x_m = float(behind["target_x_m"])
@@ -296,6 +323,30 @@ def _approach_command(phase: str, geometry: dict[str, Any]) -> PlaceControlComma
     phase_prefix = "object_pre_stage" if phase == "pre_stage" else "object_stage"
     desired_behind = float(behind["desired_distance_m"])
     if longitudinal > 0.0:
+        capture = geometry.get("capture", {})
+        ball_distance_m = float(capture.get("distance_m", 999.0) or 999.0)
+        if ball_distance_m > OBJECT_CENTRIC_GOAL_SIDE_ORBIT_MIN_BALL_DISTANCE_M and target_distance_m > 0.55:
+            orbit_x_m, orbit_y_m = _goal_side_orbit_target_robot_frame(
+                geometry,
+                target_x_m=target_x_m,
+                target_y_m=target_y_m,
+                lateral_signed=lateral_signed,
+            )
+            orbit_heading_error = math.atan2(orbit_y_m, orbit_x_m if abs(orbit_x_m) > 1.0e-6 else 1.0e-6)
+            if orbit_x_m < -0.05 or abs(orbit_heading_error) > 0.95:
+                linear = 0.0
+            else:
+                linear = clamp(orbit_x_m * 0.18, 0.055, 0.14)
+            angular = clamp(orbit_heading_error * 1.25, -0.8, 0.8)
+            if abs(angular) < 0.12 and abs(orbit_heading_error) > 0.05:
+                angular = 0.12 if orbit_heading_error >= 0.0 else -0.12
+            return PlaceControlCommand(
+                mode=f"{phase_prefix}_goal_side_orbit",
+                linear_x=round(linear, 6),
+                angular_z=round(angular, 6),
+                target_speed_scale=0.65,
+                rationale="Traverse toward a lateral behind-ball port before converging onto the push line.",
+            )
         escape_yaw = normalize_angle(float(geometry["push_yaw"]) + math.pi)
         angular = clamp((escape_yaw * 0.0) + (yaw_error * -0.85) + (lateral_signed * 0.30), -0.8, 0.8)
         if abs(angular) < 0.18 and abs(yaw_error) > 0.12:
