@@ -479,5 +479,5 @@ def build_nav2_mppi_follow_path_reacquire_plan(
         max_path_spacing_m=max_path_spacing_m,
         include_start_pose=True,
         path_yaw_mode="tangent",
-        include_handoff_align_pose=True,
+        include_handoff_align_pose=False,
     )

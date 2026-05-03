@@ -60,12 +60,14 @@ def test_nav2_mppi_follow_path_uses_dedicated_controller_and_dense_path():
     assert payload["controller_id"] == "MppiFollowPath"
     assert payload["goal_checker_id"] == "general_goal_checker"
     assert payload["path_kinds"][0] == "start"
-    assert "handoff_align" in payload["path_kinds"]
+    assert "handoff_align" not in payload["path_kinds"]
     assert payload["path_kinds"][-1] == "handoff_yaw"
     assert len(payload["path_poses"]) > 4
     assert payload["path_poses"][0]["x"] == robot_pose["x"]
     assert payload["path_poses"][0]["y"] == robot_pose["y"]
     assert payload["path_poses"][1]["yaw_deg"] > 30.0
+    semantic_kinds = [pose["kind"] for pose in payload["path_poses"] if pose["kind"] in {"start", "escape_clear", "corridor_approach", "port", "handoff_yaw"}]
+    assert semantic_kinds == ["start", "escape_clear", "corridor_approach", "port", "handoff_yaw"]
     terminal_yaw_deg = payload["path_poses"][-1]["yaw_deg"]
     handoff_segment = [pose for pose in payload["path_poses"] if str(pose["kind"]).startswith("handoff_")]
     assert handoff_segment

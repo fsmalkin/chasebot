@@ -408,10 +408,10 @@ Matrix contract:
 18. treats `pre_stage_trajectory_owner_v1` as a blocked experimental first-attempt pre-stage branch after `artifacts/session/live_pre_stage_trajectory_owner_v1_matrix_smoke_20260427/gather_goal_side_matrix/campaign_summary.json`; it owns the measured pre-stage trajectory through `escape_clear`, `corridor_approach`, `port`, and `handoff_yaw`, emits additive trajectory-owner debug fields in `state_history.jsonl`, and remains out of portfolio/stress comparison
 19. treats `nav2_follow_path_reacquire_v1` as a blocked lower-stack pre-stage experiment after `artifacts/session/live_nav2_follow_path_reacquire_v1_matrix_smoke_20260427/gather_goal_side_matrix/campaign_summary.json`; it built an explicit odom-frame path through `escape_clear`, `corridor_approach`, `port`, and `handoff_yaw`, dispatched `/follow_path` with `controller_id=FollowPath` and `goal_checker_id=general_goal_checker`, disabled manual drive while Nav2 owned the path, and accepted only measured pre-stage handoff dwell
 20. keeps `nav2_follow_path_reacquire_v1` out of portfolio/stress ingestion; fresh `zero` and `plus45` accepted FollowPath goals but aborted immediately with no measured handoff and no pre-stage ball drift/contact
-21. treats `nav2_mppi_follow_path_reacquire_v1` as a blocked lower-stack pre-stage controller-plugin branch after the May 2 recovery evidence and May 3 clean rerun; it dispatches `/follow_path` with `controller_id=MppiFollowPath`, uses the same measured handoff dwell acceptance, and sends a start-anchored dense odom-frame path with tangent headings so controller-server path tracking gets a continuous local path instead of only four sparse waypoints
-22. keeps `nav2_mppi_follow_path_reacquire_v1` out of portfolio/stress ingestion; May 2 evidence recovered fresh `zero` and `plus45` pre-stage handoff with `STATUS_SUCCEEDED`, no timeout, and no pre-stage ball motion/contact, but the latest May 3 clean rerun `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_capture_diag_rerun_20260503/gather_goal_side_matrix/campaign_summary.json` regressed before capture-entry/capture (`zero`, `plus45`, and `minus45` moved with `0.0m` ball motion then hit `goal_result_timeout`; `capture_entry_rows=0` and `capture_rows=0` in the audit)
-23. treats the May 3 saved-layout targeted repros as the latest MPPI primary-case evidence: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_prestage_repro_zero_20260503/gather_mission_repeatability/campaign_run_summary.json` and `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_prestage_repro_plus45_20260503/gather_mission_repeatability/campaign_run_summary.json` both went 0/3 on measured pre-stage handoff with `goal_result_timeout`, `0.0m` ball motion, and no capture-entry/capture rows
-24. treats the May 3 research reset `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_research_reset_20260503/research_reset_summary.json` as the latest MPPI controller-stack result: both `8dfe93b` and `eafdc59` fail saved-layout `zero`, loaded runtime params match `nav2_params_simple.yaml`, and the first near-goal critic/pruning patch worsened progress before being reverted
+21. treats `nav2_mppi_follow_path_reacquire_v1` as a blocked lower-stack pre-stage controller-plugin branch; it dispatches `/follow_path` with `controller_id=MppiFollowPath`, uses the same measured handoff dwell acceptance, and sends a start-anchored dense odom-frame path with tangent headings through `escape_clear`, `corridor_approach`, `port`, and `handoff_yaw`
+22. keeps `nav2_mppi_follow_path_reacquire_v1` out of portfolio/stress ingestion; the May 3 research reset `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_research_reset_20260503/research_reset_summary.json` showed both `8dfe93b` and `eafdc59` fail saved-layout `zero`, loaded runtime params match `nav2_params_simple.yaml`, and the first near-goal critic/pruning patch worsened progress before being reverted
+23. treats the May 3 terminal-geometry live audit as the latest MPPI primary-case evidence: removing the extra MPPI-only `handoff_align` waypoint recovered saved-layout `zero` pre-stage handoff 1/1 and then 3/3, and saved-layout `plus45` pre-stage handoff 3/3, all with `STATUS_SUCCEEDED`, `0.0m` pre-stage ball motion, and no `handoff_align` path segment; audit summary: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_terminal_geometry_live_audit_20260503/gather_follow_path_research_analyzer/follow_path_research_summary.json`
+24. keeps MPPI work blocked downstream rather than promotion-ready: `zero` now fails at `capture_entry_timeout`, while `plus45` reaches capture-entry and then fails around first-contact/release alignment (`missing_first_contact_alignment` / `release_roll_away`); next repair work should use the existing capture-entry/capture diagnostics without loosening pre-stage handoff, changing `/odom`, altering frozen contracts, or adding another helper/manual-drive branch
 25. counts pre-stage goal-side failures through the fresh-attempt approach surface when `approach_failure_reason=entered_goal_side_before_capture`, so matrix summaries do not hide early goal-side regressions behind later retry progress
 26. proves robust cross-phase behavior through the `capture_entry_ready` handoff, not just one threshold band
 27. emits a matrix campaign summary plus one repeatability campaign per case
@@ -466,6 +466,21 @@ Failure audit contract:
 7. summarizes additive `capture_entry_debug` and `capture_debug` rows and verdict fields so downstream capture-entry and generic capture timeouts can be separated into ready-band misses, goal-side authority loss, ready-dwell failures after a transient ready sample, command limiting, first-contact alignment, and terminal capture causes
 8. is analyzer-only: it does not refresh portfolio/stress evidence, promote any blocked branch including `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, `pre_stage_reacquire_fsm_v1`, `pre_stage_path_tracker_v1`, `pre_stage_trajectory_owner_v1`, `nav2_follow_path_reacquire_v1`, or `nav2_mppi_follow_path_reacquire_v1`, rerun live sim, or change runtime control
 9. feeds the next lower-stack control branch after the eight-branch closeout confirms helper/manual-drive overlays have not cleared the shared pre-stage blocker
+
+## Gather FollowPath Research Analyzer (Offline Analyzer)
+
+Use this during Nav2 FollowPath / MPPI FollowPath triage to compare existing state-history evidence before changing controller settings or terminal geometry.
+
+Command:
+
+1. `python scripts/gather_follow_path_research_analyzer.py --campaign-id <id> --artifact may2=<summary> --artifact may3=<summary> --artifact reset=<research_reset_summary>`
+
+Analyzer contract:
+
+1. reads existing `gather_goal_side_matrix/campaign_summary.json`, `gather_mission_repeatability/campaign_run_summary.json`, or MPPI research-reset summaries plus referenced `state_history.jsonl` evidence only
+2. writes `artifacts/session/<campaign_id>/gather_follow_path_research_analyzer/follow_path_research_summary.json` and `scorecard.md`
+3. summarizes FollowPath dispatch/completion status, loaded MPPI params, path geometry, path progress, cmd velocity tails, feedback distance, terminal distance/yaw, robot motion, and ball motion
+4. is analyzer-only: it does not refresh portfolio/stress evidence, rerun live sim, promote blocked FollowPath branches, or change runtime control
 
 ## Gather Pre-Stage Command Authority Audit (Offline Analyzer)
 
@@ -1057,7 +1072,11 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<campaign_id>/gather_control_failure_audit/failure_audit_summary.json`
    - `artifacts/session/<campaign_id>/gather_control_failure_audit/scorecard.md`
    - failure-audit outputs are analyzer-only evidence; they close out blocked candidate branches before the next architecture design and do not refresh portfolio/stress comparison or promote any blocked branch, including `pre_stage_path_tracker_v1`
-27. Gather pre-stage command authority audit:
+27. Gather FollowPath research analyzer:
+   - `artifacts/session/<campaign_id>/gather_follow_path_research_analyzer/follow_path_research_summary.json`
+   - `artifacts/session/<campaign_id>/gather_follow_path_research_analyzer/scorecard.md`
+   - FollowPath research outputs are analyzer-only evidence; they compare existing FollowPath/MPPI dispatch, path geometry, controller progress, and terminal convergence artifacts without promoting blocked branches or changing runtime control
+28. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/scorecard.md`
    - command-authority outputs are analyzer-only assumption-peel-back evidence; missing state history or missing debug fields are recorded as missing evidence rather than pass/fail, and no blocked branch is promoted or ingested into portfolio/stress comparison
