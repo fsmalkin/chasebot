@@ -2020,6 +2020,39 @@ def build_failure_audit_summary(
     }
 
 
+def _scorecard_repro_debug_cell(case: dict[str, Any]) -> str:
+    nav2_follow_path = _dict_value(case.get("nav2_follow_path_debug"))
+    capture_entry = _dict_value(case.get("capture_entry_debug"))
+    capture = _dict_value(case.get("capture_debug"))
+    statuses = ",".join(_ordered_unique([str(value) for value in _list_value(nav2_follow_path.get("nav2_follow_path_statuses"))]))
+    errors = ",".join(_ordered_unique([str(value) for value in _list_value(nav2_follow_path.get("nav2_follow_path_errors"))]))
+    if not statuses:
+        statuses = "none"
+    if not errors:
+        errors = "none"
+    terminal_distance = _round_number(
+        _finite_float(nav2_follow_path.get("nav2_follow_path_min_terminal_path_distance_m"))
+    )
+    yaw_error = _round_number(
+        _finite_float(nav2_follow_path.get("nav2_follow_path_min_abs_terminal_yaw_error_deg"))
+    )
+    robot_motion = _round_number(_finite_float(nav2_follow_path.get("nav2_follow_path_robot_motion_max_m")))
+    ball_motion = _round_number(_finite_float(nav2_follow_path.get("nav2_follow_path_ball_motion_max_m")))
+    handoff_ready = _int_value(nav2_follow_path.get("nav2_follow_path_handoff_ready_count"))
+    handoff_not_ready = _int_value(nav2_follow_path.get("nav2_follow_path_handoff_not_ready_count"))
+    capture_entry_rows = _int_value(capture_entry.get("capture_entry_row_count"))
+    capture_rows = _int_value(capture.get("capture_row_count"))
+    return (
+        f"fp={statuses}/{errors}; "
+        f"dist={terminal_distance if terminal_distance is not None else 'n/a'}; "
+        f"yaw={yaw_error if yaw_error is not None else 'n/a'}; "
+        f"robot={robot_motion if robot_motion is not None else 'n/a'}; "
+        f"ball={ball_motion if ball_motion is not None else 'n/a'}; "
+        f"handoff={handoff_ready}/{handoff_not_ready}; "
+        f"rows={capture_entry_rows}/{capture_rows}"
+    )
+
+
 def build_scorecard_markdown(summary: dict[str, Any]) -> str:
     lines = [
         "# Gather Control Failure Audit",
@@ -2028,8 +2061,8 @@ def build_scorecard_markdown(summary: dict[str, Any]) -> str:
         f"- status: `{summary.get('status', '')}`",
         f"- recommended_next_action: `{summary.get('recommended_next_action', '')}`",
         "",
-        "| branch | primary handoff blocked | zero handoff | plus45 handoff | labels | missing evidence | zero reason | plus45 reason |",
-        "|---|---:|---:|---:|---|---:|---|---|",
+        "| branch | primary handoff blocked | zero handoff | plus45 handoff | labels | missing evidence | zero reason | plus45 reason | zero FollowPath/capture | plus45 FollowPath/capture |",
+        "|---|---:|---:|---:|---|---:|---|---|---|---|",
     ]
     for branch in _list_value(summary.get("branches")):
         if not isinstance(branch, dict):
@@ -2055,7 +2088,9 @@ def build_scorecard_markdown(summary: dict[str, Any]) -> str:
             f"`{', '.join(str(label) for label in branch.get('labels', [])) or 'none'}` | "
             f"{missing_evidence_count} | "
             f"`{zero.get('fresh_attempt_reason', '') or 'none'}` | "
-            f"`{plus45.get('fresh_attempt_reason', '') or 'none'}` |"
+            f"`{plus45.get('fresh_attempt_reason', '') or 'none'}` | "
+            f"`{_scorecard_repro_debug_cell(zero)}` | "
+            f"`{_scorecard_repro_debug_cell(plus45)}` |"
         )
     lines.append("")
     return "\n".join(lines)

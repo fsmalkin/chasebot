@@ -1481,3 +1481,68 @@ def test_write_failure_audit_bundle_writes_summary_and_scorecard(tmp_path: Path)
     scorecard = paths["scorecard_path"].read_text(encoding="utf-8")
     assert "# Gather Control Failure Audit" in scorecard
     assert "recommended_next_action" in scorecard
+
+
+def test_failure_audit_scorecard_surfaces_mppi_repro_gap_debug():
+    summary = {
+        "campaign_id": "mppi_repro_gap",
+        "status": "needs_review",
+        "recommended_next_action": "inspect_blocked_primary_case_evidence",
+        "branches": [
+            {
+                "branch_name": "nav2_mppi_follow_path_reacquire_v1",
+                "primary_cases_pre_stage_handoff_blocked": True,
+                "labels": ["pre_stage_handoff_blocked", "slow_controller_convergence"],
+                "cases": [
+                    {
+                        "case_id": "zero",
+                        "fresh_pre_stage_handoff_pass": False,
+                        "fresh_attempt_reason": "entered_goal_side_before_capture",
+                        "missing_evidence": [],
+                        "nav2_follow_path_debug": {
+                            "nav2_follow_path_statuses": ["goal_result_timeout"],
+                            "nav2_follow_path_errors": ["goal_result_timeout"],
+                            "nav2_follow_path_min_terminal_path_distance_m": 0.342288,
+                            "nav2_follow_path_min_abs_terminal_yaw_error_deg": 81.342492,
+                            "nav2_follow_path_robot_motion_max_m": 6.314278,
+                            "nav2_follow_path_ball_motion_max_m": 0.0,
+                            "nav2_follow_path_handoff_ready_count": 0,
+                            "nav2_follow_path_handoff_not_ready_count": 1,
+                        },
+                        "capture_entry_debug": {"capture_entry_row_count": 0},
+                        "capture_debug": {"capture_row_count": 0},
+                    },
+                    {
+                        "case_id": "plus45",
+                        "fresh_pre_stage_handoff_pass": False,
+                        "fresh_attempt_reason": "entered_goal_side_before_capture",
+                        "missing_evidence": [],
+                        "nav2_follow_path_debug": {
+                            "nav2_follow_path_statuses": ["goal_result_timeout"],
+                            "nav2_follow_path_errors": ["goal_result_timeout"],
+                            "nav2_follow_path_min_terminal_path_distance_m": 1.27683,
+                            "nav2_follow_path_min_abs_terminal_yaw_error_deg": 144.489815,
+                            "nav2_follow_path_robot_motion_max_m": 6.039194,
+                            "nav2_follow_path_ball_motion_max_m": 0.0,
+                            "nav2_follow_path_handoff_ready_count": 0,
+                            "nav2_follow_path_handoff_not_ready_count": 1,
+                        },
+                        "capture_entry_debug": {"capture_entry_row_count": 0},
+                        "capture_debug": {"capture_row_count": 0},
+                    },
+                ],
+            }
+        ],
+    }
+
+    scorecard = audit.build_scorecard_markdown(summary)
+
+    assert "zero FollowPath/capture" in scorecard
+    assert "plus45 FollowPath/capture" in scorecard
+    assert "fp=goal_result_timeout/goal_result_timeout" in scorecard
+    assert "dist=0.342288" in scorecard
+    assert "yaw=144.489815" in scorecard
+    assert "robot=6.314278" in scorecard
+    assert "ball=0.0" in scorecard
+    assert "handoff=0/1" in scorecard
+    assert "rows=0/0" in scorecard
