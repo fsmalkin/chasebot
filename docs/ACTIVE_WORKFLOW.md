@@ -412,10 +412,11 @@ Matrix contract:
 22. keeps `nav2_mppi_follow_path_reacquire_v1` out of portfolio/stress ingestion; the May 3 research reset `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_research_reset_20260503/research_reset_summary.json` showed both `8dfe93b` and `eafdc59` fail saved-layout `zero`, loaded runtime params match `nav2_params_simple.yaml`, and the first near-goal critic/pruning patch worsened progress before being reverted
 23. treats the May 3 terminal-geometry live audit as the latest MPPI primary-case evidence: removing the extra MPPI-only `handoff_align` waypoint recovered saved-layout `zero` pre-stage handoff 1/1 and then 3/3, and saved-layout `plus45` pre-stage handoff 3/3, all with `STATUS_SUCCEEDED`, `0.0m` pre-stage ball motion, and no `handoff_align` path segment; audit summary: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_terminal_geometry_live_audit_20260503/gather_follow_path_research_analyzer/follow_path_research_summary.json`
 24. keeps MPPI work blocked downstream rather than promotion-ready: `zero` now fails at `capture_entry_timeout`, while `plus45` reaches capture-entry and then fails around first-contact/release alignment (`missing_first_contact_alignment` / `release_roll_away`); the current capture-layer repair patch is offline-green only and still needs fresh live `zero`/`plus45` gates, with no pre-stage handoff loosening, `/odom` change, frozen-contract change, or new helper/manual-drive branch
-25. counts pre-stage goal-side failures through the fresh-attempt approach surface when `approach_failure_reason=entered_goal_side_before_capture`, so matrix summaries do not hide early goal-side regressions behind later retry progress
-26. proves robust cross-phase behavior through the `capture_entry_ready` handoff, not just one threshold band
-27. emits a matrix campaign summary plus one repeatability campaign per case
-28. is the offline gate for the gather path; dashboard UAT stays blocked until this matrix and nearby geometry sweeps are green, while `visit_route_planning` remains the protected regression floor
+25. treats continued MPPI/capture threshold tuning as a baseline-maintenance activity, not the main research path; the next research branch should be `object_centric_gather_policy_v1`, a short-horizon object-centric manipulation policy with deterministic safety gates and Nav2 reserved for long-range repositioning
+26. counts pre-stage goal-side failures through the fresh-attempt approach surface when `approach_failure_reason=entered_goal_side_before_capture`, so matrix summaries do not hide early goal-side regressions behind later retry progress
+27. proves robust cross-phase behavior through the `capture_entry_ready` handoff, not just one threshold band
+28. emits a matrix campaign summary plus one repeatability campaign per case
+29. is the offline gate for the gather path; dashboard UAT stays blocked until this matrix and nearby geometry sweeps are green, while `visit_route_planning` remains the protected regression floor
 
 ## Gather Control Portfolio (Offline Analyzer)
 
@@ -481,6 +482,30 @@ Analyzer contract:
 2. writes `artifacts/session/<campaign_id>/gather_follow_path_research_analyzer/follow_path_research_summary.json` and `scorecard.md`
 3. summarizes FollowPath dispatch/completion status, loaded MPPI params, path geometry, path progress, cmd velocity tails, feedback distance, terminal distance/yaw, robot motion, and ball motion
 4. is analyzer-only: it does not refresh portfolio/stress evidence, rerun live sim, promote blocked FollowPath branches, or change runtime control
+
+## Object-Centric Gather Policy Research
+
+Use this direction after MPPI FollowPath evidence shows safe pre-stage movement but downstream contact behavior remains brittle. The detailed research plan lives in [OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md](OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md).
+
+Research contract:
+
+1. freeze `nav2_mppi_follow_path_reacquire_v1` as the baseline/evidence branch rather than continuing broad MPPI/capture threshold tuning
+2. reserve Nav2/MPPI for long-range repositioning and obstacle-aware path following
+3. let `object_centric_gather_policy_v1` own ball interaction as a short-horizon policy over robot pose, ball pose, zone pose, recent robot/ball deltas, previous command, and capture/contact flags
+4. keep deterministic safety filters around every policy proposal: command bounds, ball drift, clearance, goal-side violation, timeout, stuck state, and safe-stop fallback
+5. build an offline evaluator over existing MPPI artifacts before adding runtime behavior
+6. implement a structured object-servo baseline before any learned residual or direct policy
+7. use learned residuals only after structured servo failure modes are measured
+8. keep direct high-frequency LLM motor control out of scope
+
+Live gates:
+
+1. saved-layout `zero`, one run, no retries
+2. saved-layout `plus45`, one run, no retries
+3. saved-layout `zero --runs 3`, no retries
+4. saved-layout `plus45 --runs 3`, no retries
+5. full four-case goal-side matrix
+6. portfolio/stress consideration only after full mission gates are green or explicitly re-scoped
 
 ## Gather Pre-Stage Command Authority Audit (Offline Analyzer)
 

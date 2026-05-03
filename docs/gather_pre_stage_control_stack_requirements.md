@@ -2,37 +2,40 @@
 
 ## Context
 
-The blocked gather-control candidates now share the same first-attempt blocker: fresh `zero` and `plus45` live matrix attempts do not reliably reach behind-ball pre-stage handoff. The latest helper-layer owners failed safely with no pre-stage ball motion/contact. The first lower-stack DWB FollowPath probe accepted `/follow_path` goals but aborted immediately before measured robot progress, while the MPPI FollowPath probe accepted goals and moved the robot without moving the ball but still timed out before measured handoff.
+The blocked gather-control candidates originally shared the same first-attempt blocker: fresh `zero` and `plus45` live matrix attempts did not reliably reach behind-ball pre-stage handoff. The latest helper-layer owners failed safely with no pre-stage ball motion/contact. The first lower-stack DWB FollowPath probe accepted `/follow_path` goals but aborted immediately before measured robot progress, while the MPPI FollowPath probe accepted goals and moved the robot without moving the ball. The May 3, 2026 terminal-geometry repair recovered saved-layout `zero` and `plus45` MPPI pre-stage handoff, but full missions remained blocked downstream at capture-entry/capture.
 
-The assumption peel-back is complete enough to keep work below the helper layer. The command-authority audit and MPPI evidence indicate that selected commands can be realized and geometry can improve, but the measured handoff gate still times out. The next work is controller-stack repair/tuning for the `nav2_mppi_follow_path_reacquire_v1` evidence path or an equivalent controller-plugin design, not another manual-drive overlay.
+The assumption peel-back is complete enough to stop treating path-following convergence as the main research problem. MPPI is useful baseline evidence for safe pre-stage movement, but contact-rich ball capture and placement need an object-centric manipulation policy. The next work is `object_centric_gather_policy_v1`, beginning with an offline evaluator and structured object-servo baseline.
 
 ## Next Branch Steps
 
-- Treat `nav2_mppi_follow_path_reacquire_v1` as blocked evidence and repair/tune controller convergence before any promotion work.
-- Keep the current `zero` / `plus45` pre-stage handoff gate, while recording intermediate diagnostics for goal-side cleared, trajectory milestone progress, lateral error reduced, yaw reduced, and ball remained still.
-- Inspect controller-server feedback/logs and MPPI realization metrics before retuning blocked overlays.
+- Treat `nav2_mppi_follow_path_reacquire_v1` as blocked baseline evidence rather than the primary promotion path.
+- Create `object_centric_gather_policy_v1` as the next experimental family.
+- Build an offline evaluator over existing MPPI artifacts before adding runtime behavior.
+- Implement a structured object-servo baseline before any learned residual or direct policy.
+- Keep the current `zero` / `plus45` gates, measured pre-stage handoff acceptance, `/odom`, and frozen contracts unchanged.
 
 ## Requirements
 
-- Own the full pre-stage motion from measured robot pose to measured handoff readiness through Nav2 controller-server ownership, instead of layering another reactive overlay around the current pre-stage loop.
-- Separate planned geometry progress from realized controller authority, so the evidence can distinguish "bad waypoint/path" from "commanded motion did not realize enough escape progress."
-- Emit explicit commanded-vs-realized progress evidence for projection, lateral error, distance, yaw, waypoint/path progress, command mode, and manual-drive authority.
-- Stop or hold on ball motion, predicted clearance violation, or measured clearance violation before handoff.
-- Release to baseline only when measured pre-stage handoff is ready or a strict baseline-safe envelope is met.
-- Stay out of portfolio/stress ingestion until a fresh one-run goal-side matrix shows `zero` and `plus45` both pass pre-stage handoff without pre-stage ball drift/contact.
+- Own one-ball gather interaction from pre-stage through capture/place as a short-horizon object-centric policy.
+- Use robot pose, ball pose, zone pose, recent robot/ball deltas, previous command, and capture/contact flags as the core structured state.
+- Emit bounded `linear_x` / `angular_z` commands or bounded relative waypoints.
+- Keep deterministic safety filters around every proposal: command bounds, ball drift, clearance, goal-side violation, timeout, stuck state, and safe-stop fallback.
+- Separate object-servo nominal commands from learned residual corrections if learning is introduced.
+- Stay out of portfolio/stress ingestion until fresh saved-layout `zero` and `plus45` pass full mission gates without pre-stage ball drift/contact, followed by the full four-case matrix.
 
 ## Architecture Options To Revisit
 
-- Authority-owning local trajectory controller: default next candidate if the audit shows commanded motion is not being realized reliably.
-- True local trajectory tracker: continuous SE(2) path tracking with measured progress, not waypoint overlays.
-- MPC/MPPI-style local planner: short-horizon command optimization against ball clearance, goal-side escape, and handoff geometry.
-- Nav2 controller-plugin path: use controller-server/local-planner machinery rather than black-box `NavigateToPose`.
-- Contact-aware manipulation planner: later option if non-contact pre-stage remains too brittle.
-- Learned or Google/RT-style model path: shadow-mode proposer or critic only; no direct motor control in this phase.
+- Structured object servo: default next candidate for `object_centric_gather_policy_v1`.
+- Learned residual: add only after structured servo failure modes are measured.
+- Direct short-horizon policy: later candidate, still behind deterministic safety gates.
+- MPC/MPPI-style local planner: retain as long-range repositioning and baseline evidence, not the main contact-control owner.
+- Nav2 controller-plugin path: use for infrastructure and comparison, not final ball manipulation.
+- Learned or Google/RT-style model path: bounded policy/proposer/critic only; no direct high-frequency LLM motor control.
 - Other architecture families: explicitly search for and evaluate alternatives not already represented here before committing to the next branch.
 
 ## Non-Goals
 
 - Do not retune `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, `pre_stage_reacquire_fsm_v1`, or `pre_stage_path_tracker_v1`.
-- Do not name or implement another helper/manual-drive runtime branch while the MPPI/controller-stack blocker is under repair.
+- Do not keep tuning MPPI/capture thresholds as the main research path.
+- Do not name or implement another helper/manual-drive runtime branch as a substitute for object-centric policy work.
 - Do not refresh portfolio or stress evidence for blocked branches.

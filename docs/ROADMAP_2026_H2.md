@@ -517,12 +517,21 @@ Current direction update:
 6. `nav2_follow_path_reacquire_v1` and `nav2_mppi_follow_path_reacquire_v1` are blocked lower-stack controller-server probes:
    - DWB FollowPath smoke `artifacts/session/live_nav2_follow_path_reacquire_v1_matrix_smoke_20260427/gather_goal_side_matrix/campaign_summary.json` accepted `/follow_path` goals but immediately aborted with `status_code=6` in fresh `zero` and `plus45`
    - MPPI matrix smoke `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_matrix_smoke_20260429_rerun/gather_goal_side_matrix/campaign_summary.json` accepted `/follow_path` goals and moved the robot with no pre-stage ball motion, but `zero`, `plus45`, and `minus45` still timed out before handoff and `backside180` tripped the path-clearance guard
-   - tangent-heading `plus45` recheck `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_plus45_tangent_20260429/gather_mission_repeatability/campaign_run_summary.json` still failed with `nav2_follow_path_timeout`, so the next work is MPPI/controller convergence repair rather than portfolio ingestion
+   - tangent-heading `plus45` recheck `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_plus45_tangent_20260429/gather_mission_repeatability/campaign_run_summary.json` still failed with `nav2_follow_path_timeout`; at that point the next work was MPPI/controller convergence repair rather than portfolio ingestion
    - May 3 research reset `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_research_reset_20260503/research_reset_summary.json` showed the recovery commit `eafdc59` also fails saved-layout `zero`, loaded runtime MPPI params match `nav2_params_simple.yaml`, and the first near-goal critic/pruning patch worsened progress before being reverted
    - May 3 terminal-geometry repair removed the extra MPPI-only `handoff_align` waypoint while leaving MPPI params, measured handoff acceptance, capture behavior, `/odom`, and frozen contracts unchanged
    - latest live audit `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_terminal_geometry_live_audit_20260503/gather_follow_path_research_analyzer/follow_path_research_summary.json` recovered saved-layout primary pre-stage reproducibility: `zero` passed measured handoff 1/1 and then 3/3, `plus45` passed 3/3, all with `STATUS_SUCCEEDED`, `0.0m` pre-stage ball motion, and no `handoff_align` path segment
    - do not feed MPPI into portfolio/stress ingestion yet: full missions remain blocked downstream, with `zero` failing at `capture_entry_timeout` and `plus45` reaching capture-entry before first-contact/release alignment failure; the current capture-layer repair patch is offline-green only until fresh live `zero`/`plus45` repair gates pass
-7. the preserved helper contract lane is still not the next promotion path:
+   - preserve MPPI as baseline evidence, not the main research path; the next gather branch should be `object_centric_gather_policy_v1`, documented in [OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md](OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md)
+7. `object_centric_gather_policy_v1` is the next gather research direction:
+   - use Nav2/MPPI for long-range repositioning and obstacle-aware path following only
+   - own ball interaction as a short-horizon object-centric manipulation policy over robot pose, ball pose, zone pose, recent robot/ball deltas, previous command, and capture/contact flags
+   - start with an offline evaluator over the MPPI evidence set, then a structured object-servo baseline
+   - add learned residuals only after structured servo failure modes are measured
+   - keep deterministic safety gates around every command or waypoint proposal
+   - prohibit direct high-frequency LLM motor control, `/odom` changes, frozen-contract changes, and handoff-gate loosening
+   - first live gate remains saved-layout `zero` and `plus45`, one run each, no retries; repeatability and full matrix come only after those pass
+8. the preserved helper contract lane is still not the next promotion path:
    - `helper_turn_authority_contract_audit` returned `stop_and_branch` with blocking_reason=`sign_parity`
    - `manual_drive_sign_parity_audit` now points to the `probe_odom_world_sign_chain` runtime probe wrapper (`scripts/run_probe_odom_world_sign_chain.ps1`)
    - the refreshed April 21, 2026 provenance rerun now lands in `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260421_provenance_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json`
