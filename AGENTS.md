@@ -251,7 +251,8 @@ Gather Nav2 MPPI FollowPath reacquire experimental branch status:
 - Latest clean audit: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_capture_diag_rerun_20260503_failure_audit/gather_control_failure_audit/failure_audit_summary.json`
 - Targeted saved-layout `zero` repro: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_prestage_repro_zero_20260503/gather_mission_repeatability/campaign_run_summary.json`
 - Targeted saved-layout `plus45` repro: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_prestage_repro_plus45_20260503/gather_mission_repeatability/campaign_run_summary.json`
-- Result: blocked with a confirmed reproducibility gap. May 2 remains positive baseline evidence that `zero` and `plus45` can clear MPPI pre-stage handoff, but the May 3 clean rerun and targeted saved-layout repros failed before capture-entry/capture: primary `zero` and `plus45` both have fresh pre-stage handoff `false`, `goal_result_timeout`, `0.0m` ball motion, and no capture-entry/capture rows. No portfolio/stress refresh was produced.
+- Research reset summary: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_research_reset_20260503/research_reset_summary.json`
+- Result: blocked with a confirmed reproducibility gap. May 2 remains positive baseline evidence that `zero` and `plus45` can clear MPPI pre-stage handoff, but the May 3 clean rerun and targeted saved-layout repros failed before capture-entry/capture: primary `zero` and `plus45` both have fresh pre-stage handoff `false`, `goal_result_timeout`, `0.0m` ball motion, and no capture-entry/capture rows. The May 3 research reset showed both `8dfe93b` and the recovery commit `eafdc59` fail saved-layout `zero`; loaded runtime MPPI params match `nav2_params_simple.yaml`; the first near-goal critic/pruning patch was loaded but worsened progress and was reverted. No portfolio/stress refresh was produced.
 
 ## Testing
 
