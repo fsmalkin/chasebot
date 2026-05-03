@@ -1079,6 +1079,48 @@ def test_pre_stage_target_records_object_centric_policy_diagnostics(tmp_path, mo
     assert first_row["object_centric_policy"]["guard_rejection_reason"] == ""
 
 
+def test_pre_stage_target_object_centric_uses_extended_timeout_budget(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.poll_s = 0.5
+    runner.gather_control_family = "object_centric_gather_policy_v1"
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    monkeypatch.setattr(gather_runner, "DEFAULT_PRE_STAGE_TIMEOUT_S", 1.0)
+    monkeypatch.setattr(gather_runner, "DEFAULT_OBJECT_CENTRIC_PRE_STAGE_TIMEOUT_S", 3.0)
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(gather_runner, "append_jsonl", lambda path, payload: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_control_loop_state", lambda **kwargs: ({}, robot_pose, ball_pose))
+
+    pre_stage_pass, payload = runner._pre_stage_target(
+        session_id="session-pre-stage-object-centric-timeout",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+    )
+
+    timeout_payload = read_json(mission_root / f"{target.id}_pre_stage_timeout.json")
+    assert pre_stage_pass is False
+    assert payload["failure_reason"] == "pre_stage_timeout"
+    assert payload["pre_stage_time_s"] >= 3.0
+    assert payload["pre_stage_timeout_budget_s"] == 3.0
+    assert timeout_payload["pre_stage_timeout_budget_s"] == 3.0
+
+
 def test_pre_stage_target_records_region_funnel_v1_debug_fields(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.poll_s = 0.1

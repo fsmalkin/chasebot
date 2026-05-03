@@ -121,6 +121,7 @@ DEFAULT_SETTLE_NO_CHASE_ESCAPE_TIMEOUT_S = 0.75
 DEFAULT_MULTI_BALL_ADVANCE_DWELL_S = 0.5
 DEFAULT_MULTI_BALL_ADVANCE_MOTION_TOLERANCE_M = 0.04
 DEFAULT_PRE_STAGE_TIMEOUT_S = 30.0
+DEFAULT_OBJECT_CENTRIC_PRE_STAGE_TIMEOUT_S = 70.0
 DEFAULT_STAGE_TIMEOUT_S = 6.0
 DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_MAX = 12
 DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_INTERVAL_S = 0.5
@@ -2524,6 +2525,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 pre_stage_timeout_s,
                 DEFAULT_NAV2_MPPI_FOLLOW_PATH_PRE_STAGE_TIMEOUT_S,
             )
+        if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+            pre_stage_timeout_s = max(
+                pre_stage_timeout_s,
+                DEFAULT_OBJECT_CENTRIC_PRE_STAGE_TIMEOUT_S,
+            )
         deadline = time.monotonic() + max(pre_stage_timeout_s, 0.1)
         pre_stage_started_monotonic = time.monotonic()
         pre_stage_ready_started_monotonic: float | None = None
@@ -4231,6 +4237,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "pre_stage_pose_world": pre_stage_pose_world,
                     "pre_stage_pose_reached": True,
                     "pre_stage_time_s": round(pre_stage_time_s, 6),
+                    "pre_stage_timeout_budget_s": round(pre_stage_timeout_s, 6),
                     "pre_stage_handoff_pass": True,
                     "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
                     "object_centric_policy": last_object_centric_policy,
@@ -4258,6 +4265,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "pre_stage_pose_world": pre_stage_pose_world,
             "pre_stage_pose_reached": bool(pre_stage_pose_reached_once),
             "pre_stage_time_s": round(pre_stage_time_s, 6),
+            "pre_stage_timeout_budget_s": round(pre_stage_timeout_s, 6),
             "pre_stage_handoff_pass": False,
             "push_direction_yaw_deg": round(push_direction_yaw_deg, 6),
             "approach_failure_reason": last_failure_reason,
