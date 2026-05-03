@@ -5050,10 +5050,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     and capture
                     and capture.ball_ahead
                     and zone_score is not None
-                    and (
-                        capture.within_recapture_window
-                        or float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
-                    )
+                    and float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
                 )
                 if prefer_zone_recovery:
                     use_zone_recovery = bool(

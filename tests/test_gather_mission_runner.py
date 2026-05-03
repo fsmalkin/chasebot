@@ -3560,17 +3560,17 @@ def test_capture_target_centered_extended_corridor_hands_off_before_capture_time
     capture_rows = [row for row in state_rows if row.get("phase") == "capture"]
     assert capture_rows
     capture_row = capture_rows[-1]
-    assert capture_row["selected_command"]["mode"] == "capture_handoff_hold"
+    assert capture_row["selected_command"]["mode"] == "capture"
     assert capture_row["capture_entry"]["capture_entry_reached"] is True
-    assert capture_row["capture_diagnostics"]["selected_command_mode"] == "capture_handoff_hold"
-    assert capture_row["capture_diagnostics"]["command_source"] == "near_zone_place_handoff"
-    assert capture_row["capture_diagnostics"]["command_limited"] is True
-    assert capture_row["capture_diagnostics"]["raw_selected_command"]["mode"] == "place_recapture"
+    assert capture_row["capture_diagnostics"]["selected_command_mode"] == "capture"
+    assert capture_row["capture_diagnostics"]["command_source"] == "capture_command"
+    assert capture_row["capture_diagnostics"]["command_limited"] is False
+    assert capture_row["capture_diagnostics"]["raw_selected_command"]["mode"] == "capture"
     assert capture_row["capture_diagnostics"]["captured_now"] is False
     assert capture_row["capture_diagnostics"]["terminal_cause"] == ""
     assert capture_row["capture_diagnostics"]["robot_delta_from_capture_entry_handoff_m"] is not None
     assert payload["capture_diagnostics"]["terminal_cause"] == "capture_timeout"
-    assert payload["capture_diagnostics"]["selected_command_mode"] == "capture_handoff_hold"
+    assert payload["capture_diagnostics"]["selected_command_mode"] == "capture"
 
 
 def test_capture_target_off_axis_extended_corridor_still_times_out_in_capture_entry(tmp_path, monkeypatch):

@@ -69,7 +69,7 @@ DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MIN_BALL_X_M = 0.50
 DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MAX_ABS_BALL_Y_M = 0.03
 DEFAULT_CAPTURE_ENTRY_CENTERED_CLOSE_MAX_BEARING_RAD = 0.06
 DEFAULT_CAPTURE_ENTRY_READY_DWELL_S = 0.30
-DEFAULT_CAPTURE_ENTRY_TIMEOUT_S = 4.0
+DEFAULT_CAPTURE_ENTRY_TIMEOUT_S = 6.0
 DEFAULT_GOAL_SIDE_VIOLATION_PROJECTION_M = 0.0
 DEFAULT_FIRST_CONTACT_ALIGNMENT_PASS_DEG = 25.0
 
@@ -1206,11 +1206,11 @@ def compute_capture_entry_command(
             rationale="The ball is already centered; close the final capture gap before oscillation reopens it.",
         )
     angular = clamp((ball_y_m * 9.0) + (bearing_rad * 0.85), -0.45, 0.45)
-    linear = 0.045
+    linear = 0.055
     if abs(ball_y_m) > 0.06:
-        linear = 0.020
+        linear = 0.035
     elif ball_x_m > 0.55:
-        linear = 0.055
+        linear = 0.065
     return PlaceControlCommand(
         mode="capture_entry",
         linear_x=round(linear, 6),

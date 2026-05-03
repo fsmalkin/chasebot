@@ -250,6 +250,17 @@ def test_compute_capture_entry_command_uses_centered_close_speedup_and_bounds_of
     assert 0.0 < closing_command.linear_x < 0.07
     assert closing_command.angular_z > 0.0
 
+    zero_repair_command = compute_capture_entry_command(
+        {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        {"x": 0.70, "y": 0.12, "z": 0.05},
+        zone=zone,
+        envelope=CaptureEnvelope(),
+    )
+    assert zero_repair_command is not None
+    assert zero_repair_command.mode == "capture_entry"
+    assert zero_repair_command.linear_x >= 0.03
+    assert zero_repair_command.angular_z > 0.0
+
 
 def test_zone_edge_correction_eligible_accepts_inside_zone_or_near_zone_recapture():
     zone = build_zone_spec("corral_single_ball_place")

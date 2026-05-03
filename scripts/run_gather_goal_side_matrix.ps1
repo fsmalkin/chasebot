@@ -117,8 +117,22 @@ foreach ($case in $cases) {
         "--target-layout-json", $layoutPath
     )
 
-    & python @args 1> $caseStdoutPath 2> $caseStderrPath
-    $caseExitCode = $LASTEXITCODE
+    $nativeErrorPreference = Get-Variable -Name PSNativeCommandUseErrorActionPreference -Scope Global -ErrorAction SilentlyContinue
+    $previousNativeErrorPreference = if ($nativeErrorPreference) { $global:PSNativeCommandUseErrorActionPreference } else { $null }
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        if ($nativeErrorPreference) {
+            $global:PSNativeCommandUseErrorActionPreference = $false
+        }
+        & python @args 1> $caseStdoutPath 2> $caseStderrPath
+        $caseExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+        if ($nativeErrorPreference) {
+            $global:PSNativeCommandUseErrorActionPreference = $previousNativeErrorPreference
+        }
+    }
     $stdoutText = if (Test-Path $caseStdoutPath) { Get-Content -Path $caseStdoutPath -Raw } else { "" }
     $stderrText = if (Test-Path $caseStderrPath) { Get-Content -Path $caseStderrPath -Raw } else { "" }
     $output = ($stdoutText + $(if ($stderrText) { "`n$stderrText" } else { "" }))
