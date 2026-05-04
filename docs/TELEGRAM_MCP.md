@@ -1,89 +1,41 @@
 # Telegram MCP
 
-This repo includes a repo-local Telegram wait bridge for Codex MCP.
-
-The runtime has two parts:
-
-1. `telegram-daemon`: long-lived Docker service that sends prompts and long-polls Telegram for direct replies.
-2. `telegram-mcp-stdio`: long-lived helper container that hosts on-demand stdio MCP sessions via `docker compose exec`.
-
-## Required Env Vars
-
-Add these to the repo-root `.env`:
-
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- `ALLOWED_CHAT_IDS`
-
-`TELEGRAM_CHAT_ID` is the default target chat. `ALLOWED_CHAT_IDS` is a comma-separated allowlist for inbound replies.
-
-Optional wait-bridge tuning:
-
-- `WAIT_DEFAULT_TIMEOUT_SEC`
-- `WAIT_MAX_TIMEOUT_SEC`
-- `WAIT_DAEMON_IDLE_POLL_TIMEOUT_SEC`
-- `WAIT_STATUS_POLL_INTERVAL_SEC`
-- `WAIT_SEND_POLL_INTERVAL_SEC`
-- `WAIT_SEND_MAX_DELAY_SEC`
-
-## Preflight
-
-Check the bot credentials:
+The canonical Telegram MCP bridge is global, not repo-local:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/telegram_preflight.ps1 -CheckBot
+powershell -ExecutionPolicy Bypass -File D:\services\codex-telegram\scripts\serve-mcp.ps1
 ```
 
-Find the latest chat id seen by the bot:
+Codex and Claude should use the MCP server named `telegram`, registered by:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/telegram_preflight.ps1 -LatestChatId
+powershell -ExecutionPolicy Bypass -File D:\services\codex-telegram\scripts\install-global.ps1
 ```
 
-Send a manual ping:
+Verify the global bridge with:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/telegram_preflight.ps1 -SendChatId <chat_id> -Text "UAT ping"
+powershell -ExecutionPolicy Bypass -File D:\services\codex-telegram\scripts\verify-global.ps1
 ```
 
-## Start The Bridge Services
+## Tools
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/run_telegram_wait_daemon.ps1 -Action up -Build
-```
+- `telegram_notify`: fire-and-forget status update.
+- `telegram_send`: send a prompt and create a wait.
+- `telegram_wait`: wait for a reply.
+- `telegram_status`: inspect active/recent waits.
+- `telegram_cancel`: cancel a wait.
 
-By default the wrapper uses compose project `chasecar_telegram`, so the runtime
-shows up as `chasecar_telegram-*` containers instead of inheriting a more
-generic repo-local compose prefix.
+Multiple waits may be active in the same chat. Replies must be direct replies to
+the prompt message so the global daemon can match the correct wait.
 
-The wrapper starts both `telegram-daemon` and the reusable `telegram-mcp-stdio`
-helper container. It also prunes legacy `telegram-mcp-stdio-run-*` leftovers
-from the older `docker compose run` launch path before the services come up.
+## Repo-Local Fallback
 
-Other daemon actions:
+The Chasecar `scripts/telegram_preflight.ps1`,
+`scripts/run_telegram_wait_daemon.ps1`, `scripts/register_telegram_mcp.ps1`, and
+`telegram_wait_bridge/` files are retained only as recovery/reference material.
+Do not register the repo-local MCP bridge during routine work.
 
-- `-Action status`
-- `-Action logs`
-- `-Action down`
-- `-Action cleanup`
-
-## Register The MCP Server
-
-This repo registers a repo-specific MCP name so it does not clobber a global `telegram-wait` install from another checkout.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/register_telegram_mcp.ps1
-```
-
-Default MCP server name: `chasecar-telegram-wait`
-
-Registration now points Codex at a repo-local PowerShell wrapper that reuses
-the `telegram-mcp-stdio` helper container with `docker compose exec` instead of
-creating a fresh `telegram-mcp-stdio-run-*` container per MCP session.
-
-## Behavioral Contract
-
-- `telegram_send` creates exactly one active wait per chat.
-- The human reply must be a direct Telegram reply to the prompt message.
-- `/status` in Telegram reports whether a prompt is still pending.
-- Unauthorized chat ids are ignored.
+If an existing Codex or Claude session reports `Transport closed`, restart that
+session after `verify-global.ps1` passes. Live sessions can cache a dead stdio
+transport and may not hot-reload MCP configuration changes.

@@ -39,8 +39,18 @@ OBJECT_CENTRIC_MAX_LINEAR_DELTA_MPS = 0.04
 OBJECT_CENTRIC_MAX_ANGULAR_DELTA_RADPS = 0.20
 OBJECT_CENTRIC_PRE_CONTACT_BALL_MOTION_GUARD_M = 0.05
 OBJECT_CENTRIC_PRE_CONTACT_MIN_BALL_DISTANCE_M = 0.16
-OBJECT_CENTRIC_GOAL_SIDE_ORBIT_CLEARANCE_M = 0.72
+OBJECT_CENTRIC_GOAL_SIDE_ORBIT_CLEARANCE_M = 0.78
 OBJECT_CENTRIC_GOAL_SIDE_ORBIT_MIN_BALL_DISTANCE_M = 1.05
+OBJECT_CENTRIC_GOAL_SIDE_ORBIT_NEAR_BALL_MIN_DISTANCE_M = 0.90
+OBJECT_CENTRIC_GOAL_SIDE_ORBIT_NEAR_BALL_MIN_LATERAL_M = 0.42
+OBJECT_CENTRIC_GOAL_SIDE_ORBIT_CLOSE_BALL_MIN_DISTANCE_M = 0.78
+OBJECT_CENTRIC_GOAL_SIDE_ORBIT_CLOSE_BALL_MIN_LATERAL_M = 0.52
+OBJECT_CENTRIC_GOAL_SIDE_ORBIT_VERY_CLOSE_BALL_MIN_DISTANCE_M = 0.62
+OBJECT_CENTRIC_GOAL_SIDE_ORBIT_VERY_CLOSE_BALL_MIN_LATERAL_M = 0.60
+OBJECT_CENTRIC_PRE_STAGE_CLOSE_YAW_SETTLE_LONGITUDINAL_M = -0.55
+OBJECT_CENTRIC_PRE_STAGE_CLOSE_YAW_SETTLE_LATERAL_M = 0.22
+OBJECT_CENTRIC_PRE_STAGE_CLOSE_YAW_SETTLE_TARGET_DISTANCE_M = 0.43
+OBJECT_CENTRIC_PRE_STAGE_CLOSE_YAW_SETTLE_YAW_ERROR_RAD = math.radians(35.0)
 
 
 @dataclass(frozen=True)
@@ -325,7 +335,22 @@ def _approach_command(phase: str, geometry: dict[str, Any]) -> PlaceControlComma
     if longitudinal > 0.0:
         capture = geometry.get("capture", {})
         ball_distance_m = float(capture.get("distance_m", 999.0) or 999.0)
-        if ball_distance_m > OBJECT_CENTRIC_GOAL_SIDE_ORBIT_MIN_BALL_DISTANCE_M and target_distance_m > 0.55:
+        orbit_has_clearance = (
+            ball_distance_m > OBJECT_CENTRIC_GOAL_SIDE_ORBIT_MIN_BALL_DISTANCE_M
+            or (
+                ball_distance_m > OBJECT_CENTRIC_GOAL_SIDE_ORBIT_NEAR_BALL_MIN_DISTANCE_M
+                and abs(lateral_signed) >= OBJECT_CENTRIC_GOAL_SIDE_ORBIT_NEAR_BALL_MIN_LATERAL_M
+            )
+            or (
+                ball_distance_m > OBJECT_CENTRIC_GOAL_SIDE_ORBIT_CLOSE_BALL_MIN_DISTANCE_M
+                and abs(lateral_signed) >= OBJECT_CENTRIC_GOAL_SIDE_ORBIT_CLOSE_BALL_MIN_LATERAL_M
+            )
+            or (
+                ball_distance_m > OBJECT_CENTRIC_GOAL_SIDE_ORBIT_VERY_CLOSE_BALL_MIN_DISTANCE_M
+                and abs(lateral_signed) >= OBJECT_CENTRIC_GOAL_SIDE_ORBIT_VERY_CLOSE_BALL_MIN_LATERAL_M
+            )
+        )
+        if orbit_has_clearance and target_distance_m > 0.55:
             orbit_x_m, orbit_y_m = _goal_side_orbit_target_robot_frame(
                 geometry,
                 target_x_m=target_x_m,
@@ -357,6 +382,23 @@ def _approach_command(phase: str, geometry: dict[str, Any]) -> PlaceControlComma
             angular_z=round(angular, 6),
             target_speed_scale=0.0,
             rationale="Back away from the goal side and rotate around the ball before contact.",
+        )
+    if (
+        phase == "pre_stage"
+        and longitudinal <= OBJECT_CENTRIC_PRE_STAGE_CLOSE_YAW_SETTLE_LONGITUDINAL_M
+        and abs(lateral_signed) <= OBJECT_CENTRIC_PRE_STAGE_CLOSE_YAW_SETTLE_LATERAL_M
+        and target_distance_m <= OBJECT_CENTRIC_PRE_STAGE_CLOSE_YAW_SETTLE_TARGET_DISTANCE_M
+        and abs(yaw_error) > OBJECT_CENTRIC_PRE_STAGE_CLOSE_YAW_SETTLE_YAW_ERROR_RAD
+    ):
+        angular = clamp(yaw_error * 1.10, -0.8, 0.8)
+        if abs(angular) < 0.20 and abs(yaw_error) > 0.12:
+            angular = 0.20 if yaw_error >= 0.0 else -0.20
+        return PlaceControlCommand(
+            mode="object_pre_stage_close_yaw_settle",
+            linear_x=0.0,
+            angular_z=round(angular, 6),
+            target_speed_scale=0.0,
+            rationale="Hold the close behind-ball pose while settling push-line yaw before handoff.",
         )
     if target_distance_m > 0.18 and (target_x_m < -0.05 or abs(heading_error) > 0.55):
         angular = clamp(heading_error * 1.25, -0.8, 0.8)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -10,6 +11,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 
 from gather_mission_helpers import build_zone_spec  # noqa: E402
 from gather_object_centric_policy_helpers import (  # noqa: E402
+    OBJECT_CENTRIC_GOAL_SIDE_ORBIT_MIN_BALL_DISTANCE_M,
     OBJECT_CENTRIC_MAX_ABS_ANGULAR_Z_RADPS,
     OBJECT_CENTRIC_MAX_FORWARD_LINEAR_X_MPS,
     OBJECT_CENTRIC_MAX_LINEAR_DELTA_MPS,
@@ -71,6 +73,90 @@ def test_policy_goal_side_near_ball_keeps_reverse_clearance_escape():
     assert decision.command is not None
     assert decision.command.mode == "object_pre_stage_escape_goal_side"
     assert decision.command.linear_x < 0.0
+
+
+def test_policy_goal_side_near_ball_with_safe_lateral_offset_keeps_orbit():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 4.67, "y": -0.50, "yaw": 0.0}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.command.mode == "object_pre_stage_goal_side_orbit"
+    assert decision.command.linear_x > 0.0
+    assert (
+        decision.diagnostics["capture_snapshot"]["distance_m"]
+        < OBJECT_CENTRIC_GOAL_SIDE_ORBIT_MIN_BALL_DISTANCE_M
+    )
+    assert decision.diagnostics["behind_ball"]["robot_lateral_error_m"] >= 0.42
+
+
+def test_policy_goal_side_close_ball_with_large_lateral_offset_keeps_orbit():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 4.75, "y": -0.54, "yaw": -0.19}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.command.mode == "object_pre_stage_goal_side_orbit"
+    assert decision.command.linear_x > 0.0
+    assert decision.diagnostics["capture_snapshot"]["distance_m"] < 0.90
+    assert decision.diagnostics["behind_ball"]["robot_lateral_error_m"] >= 0.52
+
+
+def test_policy_goal_side_very_close_ball_requires_wide_lateral_offset_for_orbit():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 5.12, "y": -0.61, "yaw": 0.16}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.command.mode == "object_pre_stage_goal_side_orbit"
+    assert decision.command.linear_x > 0.0
+    assert decision.diagnostics["capture_snapshot"]["distance_m"] < 0.70
+    assert decision.diagnostics["behind_ball"]["robot_lateral_error_m"] >= 0.60
+
+
+def test_policy_close_pre_stage_pose_settles_push_line_yaw_before_handoff():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 6.136, "y": -0.059, "yaw": math.radians(57.5)}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_close_yaw_settle"
+    assert decision.raw_command.linear_x == 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.43
+    assert decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.22
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.55
+    assert decision.diagnostics["behind_ball"]["yaw_error_deg"] > 35.0
 
 
 def test_policy_capture_command_is_object_centric_and_bounded():

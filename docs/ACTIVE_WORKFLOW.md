@@ -23,8 +23,8 @@ Legacy compatibility:
 3. UAT orchestrator:
    - `docker compose --profile uat run uat-orchestrator`
 4. Telegram wait bridge:
-   - `docker compose --profile telegram up -d telegram-daemon telegram-mcp-stdio`
-   - repo wrapper uses dedicated compose project `chasecar_telegram` so the containers are clearly Telegram-specific
+   - Use the global bridge at `D:\services\codex-telegram`; Chasecar-local
+     bridge scripts are retained only for recovery/reference.
 
 Windows wrappers:
 
@@ -35,8 +35,8 @@ Windows wrappers:
 
 Telegram adjunct tools:
 
-1. `scripts/telegram_preflight.ps1`
-2. `scripts/register_telegram_mcp.ps1`
+1. `D:\services\codex-telegram\scripts\verify-global.ps1`
+2. `D:\services\codex-telegram\scripts\serve-mcp.ps1`
 
 Compose hygiene:
 
@@ -52,22 +52,14 @@ Compose hygiene:
 
 This is an operator-adjacent service and does not participate in sim/UAT pass-fail.
 
-1. Preflight bot credentials:
-   - `powershell -ExecutionPolicy Bypass -File scripts/telegram_preflight.ps1 -CheckBot`
-2. Resolve the latest chat id when pairing a new bot/chat:
-   - `powershell -ExecutionPolicy Bypass -File scripts/telegram_preflight.ps1 -LatestChatId`
-3. Start the daemon:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_telegram_wait_daemon.ps1 -Action up -Build`
-4. Register the repo-local MCP entry:
-   - `powershell -ExecutionPolicy Bypass -File scripts/register_telegram_mcp.ps1`
-5. Clean up legacy `telegram-mcp-stdio-run-*` leftovers if needed:
-   - `powershell -ExecutionPolicy Bypass -File scripts/run_telegram_wait_daemon.ps1 -Action cleanup`
-6. Container naming note:
-   - Telegram bridge containers intentionally use compose project `chasecar_telegram` instead of inheriting the repo's generic local project prefix
-7. Operational note:
+1. Verify bot credentials, daemon health, and MCP registration:
+   - `powershell -ExecutionPolicy Bypass -File D:\services\codex-telegram\scripts\verify-global.ps1`
+2. Register/repair global Codex and Claude MCP config:
+   - `powershell -ExecutionPolicy Bypass -File D:\services\codex-telegram\scripts\install-global.ps1`
+3. Operational note:
    - `telegram_send` expects the human to reply directly to the Telegram prompt message so the daemon can match the response.
-8. MCP runtime note:
-   - Repo registration reuses the long-lived `telegram-mcp-stdio` helper container through `docker compose exec`, so MCP sessions no longer accumulate per-session `*-run-*` containers.
+4. MCP runtime note:
+   - Existing sessions that report `Transport closed` need a session restart after global verification passes.
 
 ## First Operator Path
 

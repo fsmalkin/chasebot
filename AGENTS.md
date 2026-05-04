@@ -2,6 +2,45 @@
 
 This file captures repo-specific execution guidance for coding agents.
 
+## Global Agent Policy
+
+Global policy: `D:/dev/canon/docs/ops/agent-guidance/global-working-agreement.md @ 2026-05-04-act-or-wait`.
+
+Runtime mirror: `C:/Users/afutu/.codex/GLOBAL_WORKING_AGREEMENT.md`.
+
+This file is the Chasecar repo overlay. Keep universal agent behavior in the
+global policy; keep runtime, ROS, Docker, UAT, artifact, and safety rules here.
+
+## Act-Or-Wait Discipline
+
+During material work, an agent must always be in one of two states:
+
+- Acting: inspecting, editing, validating, documenting, committing, pushing, or
+  taking the next safe reversible step.
+- Waiting: explicitly waiting on a running command, tool result, Telegram reply,
+  or required human decision, with the reason stated.
+
+Do not idle silently. If a safe next step exists, take it. If a human decision is
+required, ask for it and wait through the available tool when possible.
+
+For Telegram:
+- Send start, material milestone, blocker/input, and completion updates when the
+  Telegram tool is available.
+- Use `timeout_seconds >= 5`.
+- If a Telegram send fails, retry once when safe.
+- If Telegram worked earlier but later fails, try to rediscover or reuse the tool
+  once before final handoff.
+- If Telegram still fails, continue in chat and state the failure in the handoff.
+- When waiting for Fred input, include a recommended default. If the wait times
+  out and the default is safe under repo gates, continue with the default;
+  otherwise stop and state the exact blocker.
+
+Before final handoff:
+- Confirm no needed commands, tool waits, or background sessions are still
+  running.
+- Send a completion Telegram update for material work, or state the failure and
+  retry outcome.
+
 ## Baseline
 
 1. Runtime substrate: Docker-first (`docker compose` profiles).
@@ -91,10 +130,8 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Route-planning parallel soak | `scripts/run_route_planning_parallel_soak.ps1 -Workers 2 -RunsPerWorker 1` |
 | Dashboard service | `scripts/run_dashboard_service.ps1` |
 | Dashboard validation | `scripts/run_dashboard_validation.ps1` |
-| Telegram preflight | `scripts/telegram_preflight.ps1 -CheckBot` |
-| Telegram daemon | `scripts/run_telegram_wait_daemon.ps1 -Action up -Build` |
-| Telegram cleanup | `scripts/run_telegram_wait_daemon.ps1 -Action cleanup` |
-| Telegram MCP register | `scripts/register_telegram_mcp.ps1` |
+| Telegram global verify | `D:\services\codex-telegram\scripts\verify-global.ps1` |
+| Telegram global install/repair | `D:\services\codex-telegram\scripts\install-global.ps1` |
 
 ## Compose Profiles
 
@@ -103,7 +140,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gate lane | `scripts/run_compose_gate.ps1` |
 | Isaac lane | `scripts/run_compose_isaac.ps1` |
 | UAT orchestrator | `scripts/run_compose_uat.ps1` |
-| Telegram wait bridge | `scripts/run_telegram_wait_daemon.ps1` |
+| Telegram wait bridge | Global bridge at `D:\services\codex-telegram` |
 
 UAT modes: `prepare`, `coordinate`, `snapshot`, `orientation`, `nav2`, `multi_target`, `first_uat`, `full_replay`, `pre_llm`
 

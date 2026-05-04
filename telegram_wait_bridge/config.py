@@ -110,7 +110,7 @@ def load_settings(require_openai_api_key: bool = False, require_allowed_chat_ids
     telegram_retry_sec = _read_int("TELEGRAM_RETRY_SEC", default=5, minimum=1)
     wait_daemon_idle_poll_timeout_sec = _read_int(
         "WAIT_DAEMON_IDLE_POLL_TIMEOUT_SEC",
-        default=min(telegram_poll_timeout_sec, 5),
+        default=1,
         minimum=1,
     )
     daemon_health_max_age_sec = _read_int(
