@@ -8,6 +8,7 @@ from mcp.server.fastmcp import FastMCP
 
 from telegram_wait_bridge.config import Settings, load_settings
 from telegram_wait_bridge.db import ACTIVE_WAIT_STATUSES, Database
+from telegram_wait_bridge.telegram_api import TelegramApi
 from telegram_wait_bridge.wait_service import (
     clamp_timeout,
     resolve_chat_id,
@@ -18,8 +19,10 @@ from telegram_wait_bridge.wait_service import (
 )
 
 INSTRUCTIONS = (
-    "Use telegram_send to send a Telegram prompt to the configured user, then use telegram_wait "
-    "to block until they reply. Replies must be direct Telegram replies to the prompt message."
+    "Use telegram_notify to send a fire-and-forget Telegram message (status updates, FYIs). "
+    "Use telegram_send when you need a reply: it appends a 'reply directly to this message' "
+    "footer and creates a wait request — follow it with telegram_wait to block on the user's "
+    "reply. Replies must be direct Telegram replies to the prompt message."
 )
 
 mcp = FastMCP("chasecar-telegram-wait", instructions=INSTRUCTIONS, log_level="INFO")
@@ -90,6 +93,33 @@ def telegram_wait(wait_id: str, max_wait_seconds: Optional[int] = None) -> Dict[
         return payload
     finally:
         db.close()
+
+
+@mcp.tool(
+    description=(
+        "Send a fire-and-forget Telegram message (no reply expected, no footer appended). "
+        "Use this for status updates, milestone pings, and FYIs."
+    ),
+    structured_output=True,
+)
+def telegram_notify(message: str, chat_id: Optional[int] = None) -> Dict[str, Any]:
+    settings = _load_settings()
+    resolved_chat_id = resolve_chat_id(settings, chat_id)
+    text = validate_prompt_text(message)
+    telegram = TelegramApi(settings.telegram_bot_token)
+    try:
+        sent = telegram.send_message(chat_id=resolved_chat_id, text=text, allow_chunking=True)
+    finally:
+        telegram.close()
+    if not sent:
+        raise ValueError("Telegram sendMessage returned no message metadata")
+    first_message_id = sent[0].get("message_id") if isinstance(sent[0], dict) else None
+    return {
+        "chat_id": resolved_chat_id,
+        "delivered": True,
+        "message_count": len(sent),
+        "first_message_id": first_message_id,
+    }
 
 
 @mcp.tool(description="Cancel a pending Telegram wait request.", structured_output=True)
