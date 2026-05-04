@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 from mcp.server.fastmcp import FastMCP
 
 from telegram_wait_bridge.config import Settings, load_settings
-from telegram_wait_bridge.db import ACTIVE_WAIT_STATUSES, ActiveWaitConflictError, Database
+from telegram_wait_bridge.db import ACTIVE_WAIT_STATUSES, Database
 from telegram_wait_bridge.wait_service import (
     clamp_timeout,
     resolve_chat_id,
@@ -49,14 +49,11 @@ def telegram_send(
         resolved_chat_id = resolve_chat_id(settings, chat_id)
         prompt_text = validate_prompt_text(message)
         effective_timeout = clamp_timeout(settings, timeout_seconds)
-        try:
-            created = db.create_wait_request(
-                chat_id=resolved_chat_id,
-                prompt_text=prompt_text,
-                timeout_seconds=effective_timeout,
-            )
-        except ActiveWaitConflictError as exc:
-            raise ValueError(str(exc)) from exc
+        created = db.create_wait_request(
+            chat_id=resolved_chat_id,
+            prompt_text=prompt_text,
+            timeout_seconds=effective_timeout,
+        )
 
         dispatched = wait_until_dispatched(
             db=db,

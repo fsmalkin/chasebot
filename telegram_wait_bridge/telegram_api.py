@@ -7,6 +7,10 @@ from typing import Any, Dict, Iterable, List, Optional
 import httpx
 
 
+class TelegramConflictError(RuntimeError):
+    """Raised when Telegram rejects getUpdates because another poller owns the bot."""
+
+
 class TelegramApi:
     def __init__(self, bot_token: str) -> None:
         self.base_url = f"https://api.telegram.org/bot{bot_token}"
@@ -24,12 +28,19 @@ class TelegramApi:
         if response.is_error:
             description = body.get("description") if isinstance(body, dict) else None
             if description:
-                raise RuntimeError(f"Telegram API {method} failed: {description}")
+                raise self._build_error(method, description)
             response.raise_for_status()
         if not body.get("ok"):
             description = body.get("description", "unknown Telegram API error")
-            raise RuntimeError(f"Telegram API {method} failed: {description}")
+            raise self._build_error(method, description)
         return body.get("result")
+
+    @staticmethod
+    def _build_error(method: str, description: str) -> RuntimeError:
+        message = f"Telegram API {method} failed: {description}"
+        if method == "getUpdates" and "Conflict" in description:
+            return TelegramConflictError(message)
+        return RuntimeError(message)
 
     def get_updates(self, offset: int, timeout_sec: int) -> List[Dict[str, Any]]:
         payload = {

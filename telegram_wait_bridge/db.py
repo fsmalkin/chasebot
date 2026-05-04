@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -11,14 +10,6 @@ from uuid import uuid4
 
 
 ACTIVE_WAIT_STATUSES = ("queued", "sending", "awaiting_reply")
-
-
-@dataclass
-class ActiveWaitConflictError(RuntimeError):
-    existing_wait_id: str
-
-    def __str__(self) -> str:
-        return f"Chat already has an active wait request: {self.existing_wait_id}"
 
 
 def _utc_now() -> str:
@@ -274,20 +265,6 @@ class Database:
         expires_at = _utc_after_seconds(timeout_seconds)
         self.conn.execute("BEGIN IMMEDIATE")
         try:
-            existing = self.conn.execute(
-                """
-                SELECT id
-                FROM wait_requests
-                WHERE chat_id = ?
-                  AND status IN ('queued', 'sending', 'awaiting_reply')
-                ORDER BY created_at ASC
-                LIMIT 1
-                """,
-                (chat_id,),
-            ).fetchone()
-            if existing is not None:
-                raise ActiveWaitConflictError(str(existing["id"]))
-
             self.conn.execute(
                 """
                 INSERT INTO wait_requests (

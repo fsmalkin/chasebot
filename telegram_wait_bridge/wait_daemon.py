@@ -8,10 +8,12 @@ from typing import Any, Dict, Optional, Tuple
 
 from telegram_wait_bridge.config import Settings, load_settings
 from telegram_wait_bridge.db import Database
-from telegram_wait_bridge.telegram_api import TelegramApi
+from telegram_wait_bridge.telegram_api import TelegramApi, TelegramConflictError
 from telegram_wait_bridge.wait_service import format_prompt_for_delivery
 
 LOG = logging.getLogger("telegram-daemon")
+
+GETUPDATES_CONFLICT_STATE_KEY = "getupdates_consecutive_conflicts"
 
 HELP_TEXT = (
     "This bot is running in wait-bridge mode.\n"
@@ -43,7 +45,13 @@ def main() -> None:
                 _dispatch_queued_waits(db=db, telegram=telegram)
 
                 timeout_sec = 1 if db.has_queued_wait_requests() else settings.wait_daemon_idle_poll_timeout_sec
-                updates = telegram.get_updates(offset=offset, timeout_sec=timeout_sec)
+                try:
+                    updates = telegram.get_updates(offset=offset, timeout_sec=timeout_sec)
+                except TelegramConflictError as conflict:
+                    _record_getupdates_conflict(db, conflict)
+                    time.sleep(settings.telegram_retry_sec)
+                    continue
+                db.set_state(GETUPDATES_CONFLICT_STATE_KEY, "0")
                 _touch_heartbeat(db)
 
                 for update in updates:
@@ -61,6 +69,22 @@ def main() -> None:
 
 def _touch_heartbeat(db: Database) -> None:
     db.set_state("daemon_heartbeat", time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()))
+
+
+def _record_getupdates_conflict(db: Database, error: TelegramConflictError) -> None:
+    raw = db.get_state(GETUPDATES_CONFLICT_STATE_KEY)
+    try:
+        current = int(raw) if raw is not None else 0
+    except ValueError:
+        current = 0
+    next_count = current + 1
+    db.set_state(GETUPDATES_CONFLICT_STATE_KEY, str(next_count))
+    db.set_state("daemon_last_error", str(error)[:1000])
+    LOG.error(
+        "Telegram getUpdates Conflict (consecutive=%s) — another bot poller is active. "
+        "Replies will be lost until the duplicate poller stops.",
+        next_count,
+    )
 
 
 def _read_offset(db: Database) -> int:

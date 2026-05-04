@@ -5,21 +5,28 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from telegram_wait_bridge.db import ActiveWaitConflictError, Database
+from telegram_wait_bridge.db import Database
 
 
-def test_create_wait_request_blocks_second_active_wait(tmp_path: Path) -> None:
+def test_create_wait_request_allows_concurrent_waits_per_chat(tmp_path: Path) -> None:
     db = Database(str(tmp_path / "state.db"))
     try:
         db.upsert_chat(chat_id=123, username="tester", first_name="Test", last_name="User")
         first = db.create_wait_request(chat_id=123, prompt_text="First prompt", timeout_seconds=60)
+        second = db.create_wait_request(chat_id=123, prompt_text="Second prompt", timeout_seconds=60)
 
-        try:
-            db.create_wait_request(chat_id=123, prompt_text="Second prompt", timeout_seconds=60)
-        except ActiveWaitConflictError as exc:
-            assert str(first["id"]) == exc.existing_wait_id
-        else:
-            raise AssertionError("Expected ActiveWaitConflictError for a second active wait")
+        assert first["id"] != second["id"]
+        assert first["status"] == "queued"
+        assert second["status"] == "queued"
+
+        db.mark_wait_request_sent(wait_id=str(first["id"]), prompt_message_id=1001)
+        db.mark_wait_request_sent(wait_id=str(second["id"]), prompt_message_id=1002)
+
+        match_first = db.find_wait_request_by_prompt_message(chat_id=123, prompt_message_id=1001)
+        match_second = db.find_wait_request_by_prompt_message(chat_id=123, prompt_message_id=1002)
+
+        assert match_first is not None and str(match_first["id"]) == str(first["id"])
+        assert match_second is not None and str(match_second["id"]) == str(second["id"])
     finally:
         db.close()
 
