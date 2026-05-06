@@ -15,7 +15,7 @@ LOG = logging.getLogger("telegram-daemon")
 
 HELP_TEXT = (
     "This bot is running in wait-bridge mode.\n"
-    "When I send you a prompt, reply directly to that message so I can match your response."
+    "Use Telegram's direct reply action on the specific prompt message you want to answer."
 )
 
 
@@ -150,7 +150,7 @@ def _handle_update(update: Dict[str, Any], settings: Settings, db: Database, tel
     if active_wait is not None:
         telegram.send_message(
             chat_id=chat_id,
-            text="I still have a pending prompt for you. Reply directly to that message so I can match your response.",
+            text="I still have a pending prompt for you. Use Telegram's direct reply action on that prompt.",
         )
 
 

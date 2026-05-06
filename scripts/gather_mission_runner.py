@@ -39,6 +39,191 @@ from gather_handoff_yaw_servo_helpers import decide_handoff_yaw_servo_pre_stage_
 from gather_manager_helpers import GatherManagerState
 from gather_manager_helpers import decide_gather_manager_directive
 from gather_object_centric_policy_helpers import OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_KEEPUP_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_CAPTURE_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_LATERAL_TO_ZONE_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_LINE_RECENTER_KEEPUP_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_LINE_RECENTER_MAX_CAPTURE_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_POSITIVE_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_FAR_WORLD_RECENTER_KEEPUP_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_MOTION_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MIN_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_EDGE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_EDGE_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_WORLD_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_ZONE_MARGIN_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_X_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MIN_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_RECOVERY_RECENTER_MAX_LATERAL_M
+from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_RECOVERY_RECENTER_MAX_X_M
 from gather_object_centric_policy_helpers import decide_object_centric_gather_command
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_BALL_MOTION_TOLERANCE_M
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_ID
@@ -112,12 +297,43 @@ DEFAULT_ZONE_MODEL_SDF = REPO_ROOT / "ros2_config" / "corral_zone_marker.sdf"
 DEFAULT_MISSION_START_POSE = {"x": 0.0, "y": 0.0, "yaw": 0.0}
 DEFAULT_PLACE_RECOVERY_SETTLE_S = 0.20
 DEFAULT_PLACE_MARGINAL_CAPTURE_SETTLE_S = 0.25
+DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S = 60.0
 DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S = 1.25
 DEFAULT_STATIONARY_RECAPTURE_NUDGE_DELAY_S = 1.0
 DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S = 0.25
 DEFAULT_SETTLE_NO_CHASE_MOTION_TOLERANCE_M = 0.03
 DEFAULT_SETTLE_NO_CHASE_ESCAPE_MARGIN_M = 0.08
 DEFAULT_SETTLE_NO_CHASE_ESCAPE_TIMEOUT_S = 0.75
+DEFAULT_OBJECT_CENTRIC_UNSECURE_SETTLE_ZONE_MAX_M = 0.25
+DEFAULT_OBJECT_CENTRIC_UNSECURE_MOVING_SETTLE_ZONE_MAX_M = 0.36
+DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_ZONE_MAX_M = 0.12
+DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MOTION_MAX_M = 0.045
+DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MIN_X_M = 1.20
+DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MAX_LATERAL_M = 0.42
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_ZONE_MAX_M = 0.36
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MOTION_MAX_M = 0.045
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MIN_X_M = 0.80
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MAX_X_M = 1.25
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MIN_LATERAL_M = 0.35
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MAX_LATERAL_M = 1.50
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_ZONE_MAX_M = 0.55
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MOTION_MAX_M = 0.045
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MIN_X_M = 0.65
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MAX_X_M = 0.85
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MIN_LATERAL_M = 0.55
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MAX_LATERAL_M = 0.75
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_ZONE_MAX_M = 0.70
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MOTION_MAX_M = 0.045
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MIN_X_M = 1.40
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MAX_X_M = 1.75
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MIN_LATERAL_M = 0.70
+DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MAX_LATERAL_M = 0.95
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MIN_X_M = -0.45
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_X_M = 0.10
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_LATERAL_M = 1.45
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MIN_WORLD_LATERAL_M = 0.24
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_WORLD_LATERAL_M = 0.65
+DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_MOTION_M = 0.055
 DEFAULT_MULTI_BALL_ADVANCE_DWELL_S = 0.5
 DEFAULT_MULTI_BALL_ADVANCE_MOTION_TOLERANCE_M = 0.04
 DEFAULT_PRE_STAGE_TIMEOUT_S = 30.0
@@ -5004,6 +5220,31 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 capture_handoff_robot_pose = dict(robot_pose)
             if capture_handoff_ball_pose is None and isinstance(ball_pose, dict):
                 capture_handoff_ball_pose = dict(ball_pose)
+            command = None
+            raw_command = None
+            command_source = "no_pose_or_ball"
+            command_limit_reason = ""
+            capture_object_centric_policy: dict[str, Any] = {}
+            if (
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+            ):
+                object_decision = decide_object_centric_gather_command(
+                    robot_pose,
+                    ball_pose or {},
+                    phase="capture",
+                    zone=self.zone,
+                    envelope=self.capture_envelope,
+                    previous_command=object_centric_previous_command,
+                    previous_ball_pose=object_centric_previous_ball_pose,
+                )
+                command = object_decision.command
+                raw_command = object_decision.raw_command
+                last_object_centric_policy = dict(object_decision.diagnostics)
+                capture_object_centric_policy = last_object_centric_policy
+                command_source = "object_centric_policy"
+                command_limit_reason = str(capture_object_centric_policy.get("guard_rejection_reason", "") or "")
             zone_entry_handoff_ready = bool(
                 zone_score
                 and zone_score.center_inside_zone
@@ -5015,8 +5256,15 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 )
             )
             secure_capture_ready = bool(secure_capture(capture, self.capture_envelope))
+            if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                secure_capture_ready = bool(
+                    secure_capture_ready
+                    and command is not None
+                    and str(getattr(command, "mode", "") or "") == "captured"
+                )
             soft_capture_handoff_ready = bool(
-                capture
+                self.gather_control_family != OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
                 and capture.captured
                 and captured_started_monotonic is not None
                 and (now_monotonic - captured_started_monotonic) >= 0.5
@@ -5151,11 +5399,6 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_approach_result_payload(),
                 }
             handoff_near_zone_control = False
-            command = None
-            raw_command = None
-            command_source = "no_pose_or_ball"
-            command_limit_reason = ""
-            capture_object_centric_policy: dict[str, Any] = {}
             if robot_pose and ball_pose:
                 handoff_near_zone_control = bool(
                     not prefer_zone_recovery
@@ -5164,56 +5407,41 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     and zone_score is not None
                     and float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
                 )
-                if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
-                    object_decision = decide_object_centric_gather_command(
-                        robot_pose,
-                        ball_pose or {},
-                        phase="capture",
-                        zone=self.zone,
-                        envelope=self.capture_envelope,
-                        previous_command=object_centric_previous_command,
-                        previous_ball_pose=object_centric_previous_ball_pose,
-                    )
-                    command = object_decision.command
-                    raw_command = object_decision.raw_command
-                    last_object_centric_policy = dict(object_decision.diagnostics)
-                    capture_object_centric_policy = last_object_centric_policy
-                    command_source = "object_centric_policy"
-                    command_limit_reason = str(capture_object_centric_policy.get("guard_rejection_reason", "") or "")
-                elif prefer_zone_recovery:
-                    use_zone_recovery = bool(
-                        capture
-                        and capture.ball_ahead
-                        and (
-                            capture.within_recapture_window
-                            or (
-                                zone_score is not None
-                                and float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
+                if self.gather_control_family != OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                    if prefer_zone_recovery:
+                        use_zone_recovery = bool(
+                            capture
+                            and capture.ball_ahead
+                            and (
+                                capture.within_recapture_window
+                                or (
+                                    zone_score is not None
+                                    and float(zone_score.zone_distance_m) <= (float(self.zone.control_radius_m) + 0.35)
+                                )
                             )
                         )
-                    )
-                    if use_zone_recovery:
+                        if use_zone_recovery:
+                            command = compute_place_command(
+                                robot_pose,
+                                ball_pose or {},
+                                zone=self.zone,
+                                envelope=self.capture_envelope,
+                            )
+                            command_source = "place_recapture"
+                        else:
+                            command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope)
+                            command_source = "capture_fallback"
+                    elif handoff_near_zone_control:
                         command = compute_place_command(
                             robot_pose,
                             ball_pose or {},
                             zone=self.zone,
                             envelope=self.capture_envelope,
                         )
-                        command_source = "place_recapture"
+                        command_source = "near_zone_place_handoff"
                     else:
                         command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope)
-                        command_source = "capture_fallback"
-                elif handoff_near_zone_control:
-                    command = compute_place_command(
-                        robot_pose,
-                        ball_pose or {},
-                        zone=self.zone,
-                        envelope=self.capture_envelope,
-                    )
-                    command_source = "near_zone_place_handoff"
-                else:
-                    command = compute_capture_command(robot_pose, ball_pose or {}, envelope=self.capture_envelope)
-                    command_source = "capture_command"
+                        command_source = "capture_command"
                 if raw_command is None:
                     raw_command = command
             if (
@@ -5355,7 +5583,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         attempt_index: int = 0,
         attempt_kind: str = "",
     ) -> tuple[bool, dict[str, Any]]:
-        deadline = time.monotonic() + max(self.args.place_timeout_s, 0.1)
+        place_timeout_budget_s = max(self.args.place_timeout_s, 0.1)
+        if (
+            self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+            and place_timeout_budget_s >= 30.0
+        ):
+            place_timeout_budget_s = max(place_timeout_budget_s, DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S)
+        deadline = time.monotonic() + place_timeout_budget_s
         last_captured_monotonic: float | None = None
         local_recovery_attempted = False
         local_recovery_started_monotonic: float | None = None
@@ -5385,6 +5619,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         release_gate_blocked_reason = "none"
         stationary_recapture_signature: tuple[float, float, float] | None = None
         stationary_recapture_started_monotonic: float | None = None
+        object_centric_place_previous_command: PlaceControlCommand | None = None
+        object_centric_place_previous_ball_pose: dict[str, Any] | None = None
 
         def _record_stop_capture(current_capture: Any) -> None:
             nonlocal stop_capture_state
@@ -5515,11 +5751,139 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
 
         def _settle_no_chase_ready(
             *,
+            current_capture: Any = None,
             current_zone_score: Any = None,
             ball_motion_m: float | None = None,
             now_monotonic: float,
         ) -> bool:
             if not current_zone_score or not bool(current_zone_score.center_inside_retrieval_corral):
+                return False
+            object_centric_family = self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+            if object_centric_family and current_capture and not current_capture.ball_ahead:
+                return False
+            object_centric_unsecured = bool(
+                object_centric_family
+                and current_capture
+                and current_capture.ball_ahead
+                and not current_capture.captured
+            )
+            if object_centric_unsecured:
+                unsecured_still_dwell_ready = bool(
+                    pre_release_still_started_monotonic is not None
+                    and (now_monotonic - pre_release_still_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                )
+                if (
+                    float(current_zone_score.zone_distance_m)
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_MOVING_SETTLE_ZONE_MAX_M
+                    and bool(current_zone_score.center_inside_zone)
+                    and retrieval_centered_started_monotonic is not None
+                    and (now_monotonic - retrieval_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_SETTLE_NO_CHASE_MOTION_TOLERANCE_M
+                    and unsecured_still_dwell_ready
+                ):
+                    return True
+                if (
+                    bool(current_zone_score.center_inside_zone)
+                    and float(current_zone_score.zone_distance_m)
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_ZONE_MAX_M
+                    and retrieval_centered_started_monotonic is not None
+                    and (now_monotonic - retrieval_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and control_centered_started_monotonic is not None
+                    and (now_monotonic - control_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MOTION_MAX_M
+                    and unsecured_still_dwell_ready
+                    and float(current_capture.ball_x_m) >= DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MIN_X_M
+                    and abs(float(current_capture.ball_y_m))
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_CENTER_ROLLTHROUGH_MAX_LATERAL_M
+                ):
+                    return True
+                if (
+                    not bool(current_zone_score.center_inside_zone)
+                    and float(current_zone_score.zone_distance_m)
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_ZONE_MAX_M
+                    and retrieval_centered_started_monotonic is not None
+                    and (now_monotonic - retrieval_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MOTION_MAX_M
+                    and unsecured_still_dwell_ready
+                    and float(current_capture.ball_x_m) >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MIN_X_M
+                    and float(current_capture.ball_x_m) <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MAX_X_M
+                    and abs(float(current_capture.ball_y_m))
+                    >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MIN_LATERAL_M
+                    and abs(float(current_capture.ball_y_m))
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_SHOULDER_MAX_LATERAL_M
+                ):
+                    return True
+                if (
+                    not bool(current_zone_score.center_inside_zone)
+                    and float(current_zone_score.zone_distance_m)
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_ZONE_MAX_M
+                    and retrieval_centered_started_monotonic is not None
+                    and (now_monotonic - retrieval_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MOTION_MAX_M
+                    and unsecured_still_dwell_ready
+                    and float(current_capture.ball_x_m) >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MIN_X_M
+                    and float(current_capture.ball_x_m) <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MAX_X_M
+                    and abs(float(current_capture.ball_y_m))
+                    >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MIN_LATERAL_M
+                    and abs(float(current_capture.ball_y_m))
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_ROLLTHROUGH_MAX_LATERAL_M
+                ):
+                    return True
+                if (
+                    not bool(current_zone_score.center_inside_zone)
+                    and float(current_zone_score.zone_distance_m)
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_ZONE_MAX_M
+                    and retrieval_centered_started_monotonic is not None
+                    and (now_monotonic - retrieval_centered_started_monotonic)
+                    >= DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MOTION_MAX_M
+                    and unsecured_still_dwell_ready
+                    and float(current_capture.ball_x_m) >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MIN_X_M
+                    and float(current_capture.ball_x_m) <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MAX_X_M
+                    and abs(float(current_capture.ball_y_m))
+                    >= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MIN_LATERAL_M
+                    and abs(float(current_capture.ball_y_m))
+                    <= DEFAULT_OBJECT_CENTRIC_UNSECURE_RETRIEVAL_HIGH_LATERAL_MAX_LATERAL_M
+                ):
+                    return True
+                if float(current_zone_score.zone_distance_m) > DEFAULT_OBJECT_CENTRIC_UNSECURE_SETTLE_ZONE_MAX_M:
+                    return False
+                if (
+                    bool(current_zone_score.center_inside_zone)
+                    and ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_SETTLE_NO_CHASE_MOTION_TOLERANCE_M
+                    and unsecured_still_dwell_ready
+                ):
+                    return True
+                if (
+                    pre_release_still_started_monotonic is None
+                    or (now_monotonic - pre_release_still_started_monotonic) < DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S
+                ):
+                    return False
+                return bool(
+                    ball_motion_m is not None
+                    and ball_motion_m <= DEFAULT_SETTLE_NO_CHASE_MOTION_TOLERANCE_M
+                )
+            if (
+                object_centric_family
+                and current_capture
+                and current_capture.ball_ahead
+                and not current_capture.captured
+                and not current_capture.within_recapture_window
+                and not bool(current_zone_score.center_inside_zone)
+                and float(current_zone_score.zone_distance_m) > DEFAULT_OBJECT_CENTRIC_UNSECURE_SETTLE_ZONE_MAX_M
+            ):
                 return False
             if float(current_zone_score.zone_distance_m) > max(float(self.zone.retrieval_radius_m) - 0.05, 0.0):
                 return False
@@ -5808,6 +6172,47 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         **_settle_no_chase_fields(),
                     }
                 if settle_no_chase_active:
+                    object_centric_no_chase_overlap_recontact = bool(
+                        self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                        and within_zone_overlap
+                        and zone_score
+                        and not bool(zone_score.center_inside_zone)
+                        and release_recontact_count < 1
+                        and capture
+                        and (
+                            not capture.ball_ahead
+                            or float(capture.ball_x_m) < 0.0
+                            or abs(float(capture.ball_y_m)) > 1.0
+                            or (
+                                capture.ball_ahead
+                                and not capture.captured
+                                and not capture.within_recapture_window
+                                and ball_motion_m is not None
+                                and ball_motion_m > DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
+                                and zone_score
+                                and float(zone_score.zone_distance_m) > float(self.zone.control_radius_m)
+                                and float(zone_score.zone_distance_m) <= float(self.zone.retrieval_radius_m)
+                                and float(capture.ball_x_m) >= 1.0
+                                and abs(float(capture.ball_y_m)) <= 0.35
+                            )
+                        )
+                    )
+                    if object_centric_no_chase_overlap_recontact:
+                        release_recontact_count += 1
+                        zone_edge_correction_count += 1
+                        zone_edge_correction_started_monotonic = now_monotonic
+                        settle_no_chase_exit_reason = "corrected"
+                        _reset_release_monitor(ball_pose)
+                        self._append_runtime_event(
+                            f"{target.label}: early correction after leaving the center during object-centric no-chase.",
+                            key=f"settle_no_chase_overlap_recontact:{target.id}:{release_recontact_count}",
+                        )
+                        self._update_gather_runtime_state(
+                            latest_feedback=f"Recontacting {target.label} before it leaves the retrieval overlap.",
+                            settle_metrics=settle_metrics,
+                        )
+                        time.sleep(self.args.poll_s)
+                        continue
                     if outside_no_chase_window:
                         settle_no_chase_exit_started_monotonic = (
                             now_monotonic
@@ -6023,6 +6428,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and not settle_monitor_ready
             )
             settle_no_chase_ready = _settle_no_chase_ready(
+                current_capture=capture,
                 current_zone_score=zone_score,
                 ball_motion_m=ball_motion_m,
                 now_monotonic=now_monotonic,
@@ -6117,8 +6523,789 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and (now_monotonic - stationary_recapture_started_monotonic) >= DEFAULT_STATIONARY_RECAPTURE_NUDGE_DELAY_S
             )
             local_recovery_active = local_recovery_started_monotonic is not None
+            object_centric_far_lateral_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_LATERAL_M
+            )
+            object_centric_far_wide_lateral_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_LATERAL_M
+            )
+            object_centric_far_extreme_opposed_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.captured
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                > OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_LATERAL_M
+                and float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) < 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_EXTREME_OPPOSED_RECENTER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_same_side_high_lateral_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.captured
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                >= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_LATERAL_M
+                and float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) > 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_SAME_SIDE_HIGH_LATERAL_RECENTER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_transition_opposed_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.captured
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m >= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_MOTION_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                > OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_LATERAL_M
+                and float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) < 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_TRANSITION_OPPOSED_RECENTER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_world_moderate_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_world_high_lateral_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_WORLD_HIGH_LATERAL_RECENTER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_positive_world_edge_hold_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.captured
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and (
+                    (
+                        ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_MOTION_M
+                    )
+                    or ball_motion_m <= 0.005
+                )
+                and (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_WORLD_LATERAL_M
+                and (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_WORLD_LATERAL_M
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_X_M
+                and (float(capture.ball_x_m) >= 0.85 or float(capture.ball_y_m) >= 0.0)
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_LATERAL_M
+                and (
+                    (
+                        (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) <= 0.60
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        >= 0.75
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        <= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MAX_ZONE_MARGIN_M
+                    )
+                    or (
+                        (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) >= 0.60
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        <= 0.75
+                        and abs(float(capture.ball_y_m)) >= 0.55
+                    )
+                    or (
+                        (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) >= 0.50
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        <= 0.75
+                        and abs(float(capture.ball_y_m)) >= 0.90
+                    )
+                    or (
+                        float(capture.ball_y_m) >= 0.0
+                        and (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) >= 0.35
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        <= 0.78
+                        and abs(float(capture.ball_y_m)) >= 0.85
+                    )
+                    or (
+                        ball_motion_m <= 0.005
+                        and (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) >= 0.55
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        >= OBJECT_CENTRIC_PLACE_FAR_POSITIVE_WORLD_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                        and (
+                            float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                        )
+                        <= 0.85
+                    )
+                )
+            )
+            object_centric_far_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_KEEPUP_LATERAL_M
+            )
+            object_centric_far_line_recapture_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and capture.within_recapture_window
+                and zone_score
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_RECOVERY_RECENTER_MAX_X_M
+                and (
+                    (
+                        ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and
+                        abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_RECOVERY_RECENTER_MAX_LATERAL_M
+                    )
+                    or (
+                        ball_motion_m >= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_MOTION_M
+                        and
+                        ball_pose
+                        and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                        >= OBJECT_CENTRIC_PLACE_FAR_WORLD_RECENTER_KEEPUP_MIN_WORLD_LATERAL_M
+                        and float(capture.ball_x_m)
+                        <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_X_M
+                        and abs(float(capture.ball_y_m))
+                        <= OBJECT_CENTRIC_PLACE_FAR_WORLD_MODERATE_LINE_RECENTER_MAX_LATERAL_M
+                    )
+                )
+            )
+            object_centric_far_line_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and (
+                    (
+                        float(zone_score.zone_distance_m)
+                        <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_ZONE_MARGIN_M + 0.05)
+                        and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_LINE_RECENTER_KEEPUP_MAX_X_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_LINE_RECENTER_MAX_CAPTURE_LATERAL_M
+                    )
+                    or (
+                        ball_motion_m is not None
+                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MAX_MOTION_M
+                        and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_LINE_RECENTER_KEEPUP_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECENTER_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m))
+                        <= OBJECT_CENTRIC_PLACE_FAR_MOVING_LINE_RECENTER_MAX_LATERAL_M
+                    )
+                )
+            )
+            object_centric_far_straight_rollout_coast_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.captured
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m >= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_MOTION_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_MOTION_M
+                and (
+                    float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                )
+                >= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_ZONE_MARGIN_M
+                and (
+                    float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                )
+                <= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_ZONE_MARGIN_M
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_STRAIGHT_ROLLOUT_COAST_MAX_WORLD_LATERAL_M
+            )
+            object_centric_far_captured_gap_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and (capture.captured or capture.within_recapture_window)
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m >= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_MOTION_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_MOTION_M
+                and (
+                    float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                )
+                >= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_ZONE_MARGIN_M
+                and (
+                    float(zone_score.zone_distance_m) - float(self.zone.retrieval_radius_m)
+                )
+                <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_ZONE_MARGIN_M
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_LATERAL_M
+                and float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) < 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_WORLD_LATERAL_M
+                and (
+                    (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y)) < 0.0
+                    or (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                    <= OBJECT_CENTRIC_PLACE_FAR_CAPTURED_GAP_KEEPUP_MAX_POSITIVE_WORLD_LATERAL_M
+                )
+            )
+            object_centric_far_recapture_reel_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and (
+                    float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                    or (
+                        ball_motion_m is not None
+                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MAX_X_M
+                        and float(zone_score.zone_distance_m)
+                        <= (
+                            float(self.zone.retrieval_radius_m)
+                            + OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MARGIN_M
+                        )
+                    )
+                )
+                and (
+                    (
+                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_LATERAL_M
+                    )
+                    or (
+                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MAX_LATERAL_M
+                    )
+                    or (
+                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MAX_X_M
+                        and abs(float(capture.ball_y_m))
+                        > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m))
+                        <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MAX_LATERAL_M
+                        and ball_motion_m is not None
+                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and float(zone_score.zone_distance_m)
+                        <= (
+                            float(self.zone.retrieval_radius_m)
+                            + OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MARGIN_M
+                        )
+                    )
+                )
+            )
+            object_centric_far_low_x_recapture_reel_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_motion_m is not None
+                and ball_motion_m >= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_MOTION_M
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(zone_score.zone_distance_m)
+                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LOW_X_MAX_LATERAL_M
+            )
+            object_centric_far_high_x_line_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m))
+                <= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_CAPTURE_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_LATERAL_TO_ZONE_M
+            )
+            object_centric_far_reorient_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and not capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and ball_pose
+                and ball_motion_m is not None
+                and ball_motion_m <= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_MOTION_M
+                and float(zone_score.zone_distance_m)
+                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) >= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MIN_X_M
+                and float(capture.ball_x_m) <= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= DEFAULT_OBJECT_CENTRIC_FAR_REORIENT_MAX_WORLD_LATERAL_M
+            )
+            object_centric_near_lateral_recenter_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and not zone_score.inside_retrieval_corral
+                and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                and float(zone_score.zone_distance_m)
+                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MARGIN_M)
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_LATERAL_M
+            )
+            object_centric_near_finish_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and not zone_score.inside_retrieval_corral
+                and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                and float(zone_score.zone_distance_m)
+                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MARGIN_M)
+                and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_LATERAL_M
+            )
+            object_centric_near_forward_keepup_available = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and not zone_score.inside_retrieval_corral
+                and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                and float(zone_score.zone_distance_m)
+                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_ZONE_MARGIN_M)
+                and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_LATERAL_M
+            )
+            object_centric_near_wide_reel_common = bool(
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and capture
+                and capture.ball_ahead
+                and not capture.within_recapture_window
+                and zone_score
+                and not zone_score.inside_retrieval_corral
+                and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                and float(zone_score.zone_distance_m)
+                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_ZONE_MARGIN_M)
+            )
+            object_centric_near_low_x_opposed_wide_reel_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_MOTION_M
+                and ball_pose
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_LATERAL_M
+                and (float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))) < 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MAX_WORLD_LATERAL_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_LOW_X_OPPOSED_WIDE_REEL_MIN_ZONE_MARGIN_M
+                )
+            )
+            object_centric_near_low_x_same_side_edge_hold_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_MOTION_M
+                and ball_pose
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_LATERAL_M
+                and (float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))) > 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_WORLD_LATERAL_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_LOW_X_SAME_SIDE_EDGE_HOLD_MAX_ZONE_MARGIN_M
+                )
+            )
+            object_centric_near_stale_edge_wide_hold_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_MOTION_M
+                and ball_pose
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_STALE_WIDE_HOLD_MAX_WORLD_LATERAL_M
+            )
+            object_centric_near_high_x_final_edge_hold_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and (
+                    (
+                        ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and ball_motion_m <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_MOTION_M
+                        and (
+                            abs(float(capture.ball_y_m)) <= 0.18
+                            or (
+                                float(capture.ball_y_m)
+                                * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                            )
+                            < 0.0
+                        )
+                    )
+                    or ball_motion_m <= 0.005
+                )
+                and ball_pose
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_FINAL_EDGE_HOLD_MAX_WORLD_LATERAL_M
+            )
+            object_centric_near_high_x_escape_edge_hold_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                and ball_motion_m <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_MOTION_M
+                and ball_pose
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_LATERAL_M
+                and (float(capture.ball_y_m) * (float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))) < 0.0
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_WORLD_LATERAL_M
+                and float(zone_score.zone_distance_m)
+                >= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MIN_ZONE_MARGIN_M
+                )
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_HIGH_X_ESCAPE_EDGE_HOLD_MAX_ZONE_MARGIN_M
+                )
+            )
+            object_centric_near_mouth_world_edge_resteer_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and (ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M or ball_motion_m <= 0.005)
+                and ball_pose
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_X_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_MOUTH_WORLD_EDGE_RESTEER_MAX_WORLD_LATERAL_M
+            )
+            object_centric_near_edge_escape_world_hold_available = bool(
+                object_centric_near_wide_reel_common
+                and ball_motion_m is not None
+                and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                and ball_pose
+                and float(zone_score.zone_distance_m)
+                <= (
+                    float(self.zone.retrieval_radius_m)
+                    + OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_ZONE_MARGIN_M
+                )
+                and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_X_M
+                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_X_M
+                and abs(float(capture.ball_y_m)) >= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_LATERAL_M
+                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                >= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MIN_WORLD_LATERAL_M
+                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                <= OBJECT_CENTRIC_PLACE_NEAR_EDGE_ESCAPE_WORLD_HOLD_MAX_WORLD_LATERAL_M
+            )
+            object_centric_near_wide_reel_available = bool(
+                object_centric_near_wide_reel_common
+                and (
+                    object_centric_near_low_x_opposed_wide_reel_available
+                    or object_centric_near_low_x_same_side_edge_hold_available
+                    or object_centric_near_stale_edge_wide_hold_available
+                    or object_centric_near_high_x_final_edge_hold_available
+                    or object_centric_near_high_x_escape_edge_hold_available
+                    or object_centric_near_mouth_world_edge_resteer_available
+                    or object_centric_near_edge_escape_world_hold_available
+                    or
+                    (
+                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_LATERAL_M
+                    )
+                    or (
+                        ball_motion_m is not None
+                        and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_LATERAL_M
+                    )
+                    or (
+                        ball_motion_m is not None
+                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and ball_pose
+                        and float(zone_score.zone_distance_m)
+                        > (
+                            float(self.zone.retrieval_radius_m)
+                            + OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_ZONE_MARGIN_M
+                        )
+                        and float(capture.ball_x_m) >= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_LATERAL_M
+                        and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                        <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_LOW_X_MAX_WORLD_LATERAL_M
+                    )
+                    or (
+                        ball_motion_m is not None
+                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                        and float(zone_score.zone_distance_m)
+                        <= (
+                            float(self.zone.retrieval_radius_m)
+                            + OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_EDGE_MARGIN_M
+                        )
+                        and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_X_M
+                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_EDGE_MAX_X_M
+                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MIN_LATERAL_M
+                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_WIDE_REEL_MAX_LATERAL_M
+                    )
+                )
+            )
             if local_recovery_active:
-                if recaptured_settle_started_monotonic is None and (not local_recovery_viable) and (not local_settle_correction_eligible):
+                if (
+                    recaptured_settle_started_monotonic is None
+                    and (not local_recovery_viable)
+                    and (not local_settle_correction_eligible)
+                    and (not object_centric_far_lateral_recenter_available)
+                    and (not object_centric_far_wide_lateral_recenter_available)
+                    and (not object_centric_far_extreme_opposed_recenter_available)
+                    and (not object_centric_far_same_side_high_lateral_recenter_available)
+                    and (not object_centric_far_transition_opposed_recenter_available)
+                    and (not object_centric_far_world_moderate_recenter_available)
+                    and (not object_centric_far_world_high_lateral_recenter_available)
+                    and (not object_centric_far_positive_world_edge_hold_available)
+                    and (not object_centric_far_keepup_available)
+                    and (not object_centric_far_line_keepup_available)
+                    and (not object_centric_far_straight_rollout_coast_available)
+                    and (not object_centric_far_recapture_reel_available)
+                    and (not object_centric_far_low_x_recapture_reel_available)
+                    and (not object_centric_far_high_x_line_recenter_available)
+                    and (not object_centric_far_reorient_available)
+                    and (not object_centric_near_lateral_recenter_available)
+                    and (not object_centric_near_finish_keepup_available)
+                    and (not object_centric_near_forward_keepup_available)
+                    and (not object_centric_near_wide_reel_available)
+                ):
                     escape_elapsed_s = (
                         now_monotonic - escaped_zone_correction_started_monotonic
                         if escaped_zone_correction_started_monotonic is not None
@@ -6240,7 +7427,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     continue
                 recaptured_settle_started_monotonic = None
             if capture and capture.captured:
-                marginal_capture_now = abs(float(capture.ball_y_m)) > 0.04 or float(capture.ball_x_m) < 0.08
+                marginal_capture_now = (
+                    (abs(float(capture.ball_y_m)) > 0.04 or float(capture.ball_x_m) < 0.08)
+                    and not object_centric_far_captured_gap_keepup_available
+                )
                 if marginal_capture_now:
                     marginal_capture_started_monotonic = marginal_capture_started_monotonic or now_monotonic
                 else:
@@ -6263,11 +7453,57 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     continue
             else:
                 marginal_capture_started_monotonic = None
-            if local_recovery_started_monotonic is not None:
-                command = compute_place_command(robot_pose, ball_pose or {}, zone=self.zone, envelope=self.capture_envelope) if robot_pose and ball_pose else None
-            else:
-                command = compute_place_command(robot_pose, ball_pose or {}, zone=self.zone, envelope=self.capture_envelope) if robot_pose and ball_pose else None
+            command = compute_place_command(robot_pose, ball_pose or {}, zone=self.zone, envelope=self.capture_envelope) if robot_pose and ball_pose else None
+            if (
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+            ):
+                object_decision = decide_object_centric_gather_command(
+                    robot_pose,
+                    ball_pose or {},
+                    phase="place",
+                    zone=self.zone,
+                    envelope=self.capture_envelope,
+                    previous_command=object_centric_place_previous_command,
+                    previous_ball_pose=object_centric_place_previous_ball_pose,
+                )
+                if object_decision.command is not None:
+                    command = object_decision.command
             if command is not None:
+                object_centric_inside_retrieval_hold = bool(
+                    self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                    and command.mode in {"object_place_inside_retrieval_hold", "object_place_inside_retrieval_shepherd"}
+                    and zone_score
+                    and (zone_score.center_inside_retrieval_corral or zone_score.inside_retrieval_corral)
+                )
+                if object_centric_inside_retrieval_hold:
+                    local_recovery_started_monotonic = None
+                    recaptured_settle_started_monotonic = None
+                    if command.mode == "object_place_inside_retrieval_shepherd":
+                        self._set_manual_drive(
+                            True,
+                            linear_x=command.linear_x,
+                            angular_z=command.angular_z,
+                            mode=command.mode,
+                            rationale=command.rationale,
+                        )
+                    else:
+                        self._set_manual_drive(
+                            False,
+                            mode=command.mode,
+                            rationale=command.rationale,
+                        )
+                    self._update_gather_runtime_state(
+                        latest_feedback=f"Holding position while {target.label} settles inside the retrieval corral.",
+                        latest_control_command=command.to_dict(),
+                    )
+                    object_centric_place_previous_command = command
+                    object_centric_place_previous_ball_pose = (
+                        dict(ball_pose or {}) if ball_pose else object_centric_place_previous_ball_pose
+                    )
+                    time.sleep(self.args.poll_s)
+                    continue
                 if (
                     local_settle_correction_eligible
                     and zone_score
@@ -6276,6 +7512,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     and ball_motion_m > DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M
                     and not settle_shepherd_needed
                 ):
+                    if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                        object_centric_place_previous_ball_pose = (
+                            dict(ball_pose or {}) if ball_pose else object_centric_place_previous_ball_pose
+                        )
                     self._set_manual_drive(False, mode="zone_edge_wait", rationale="Ball is still moving inside the corral overlap; let it settle before nudging again.")
                     self._update_gather_runtime_state(
                         latest_feedback=f"Letting {target.label} settle near the corral edge before another correction.",
@@ -6290,42 +7530,314 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     time.sleep(self.args.poll_s)
                     continue
                 if local_recovery_started_monotonic is not None:
-                    recovery_linear = min(float(command.linear_x), 0.05)
-                    recovery_angular = clamp(float(command.angular_z), -0.45, 0.45)
-                    recovery_scale = min(float(command.target_speed_scale), 0.55)
-                    recovery_mode = "capture_recovery"
-                    recovery_rationale = "Briefly recenter the ball under the catcher before resuming place."
-                    if capture and not capture.ball_ahead:
-                        recovery_linear = 0.0
-                        recovery_angular = clamp(0.90 if float(capture.ball_y_m) >= 0.0 else -0.90, -0.90, 0.90)
-                        recovery_scale = 0.0
-                        recovery_mode = "capture_recovery_turn"
-                        recovery_rationale = "Ball slipped behind inside the corral; turn in place quickly before it escapes."
-                    elif capture and capture.within_recapture_window and (
-                        float(capture.ball_x_m) > 0.40 or abs(float(capture.ball_y_m)) > 0.08
-                    ):
-                        near_zone_hold = bool(
-                            zone_score
-                            and float(zone_score.zone_distance_m) <= (float(self.zone.retrieval_radius_m) + 0.40)
-                        )
-                        laterally_misaligned_hold = abs(float(capture.ball_y_m)) > 0.08
-                        if laterally_misaligned_hold or near_zone_hold or not stationary_recapture_nudge_ready:
-                            recovery_linear = 0.0
-                            recovery_angular = clamp((float(capture.ball_y_m) * 5.0), -0.35, 0.35)
-                            recovery_scale = 0.30
-                            recovery_mode = "capture_recovery_hold"
-                            recovery_rationale = "Ball is ahead of the spur mouth; hold and yaw gently before pushing again."
-                        else:
-                            recovery_rationale = (
-                                "Ball stayed centered in local recovery while still far from the corral; allow a bounded forward recapture nudge."
+                    object_centric_lateral_place_recenter = bool(
+                        self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                        and command.mode
+                        in {
+                            "object_place_lateral_recenter",
+                            "object_place_far_line_recenter",
+                            "object_place_far_wide_lateral_recenter",
+                        }
+                        and not (
+                            command.mode == "object_place_far_line_recenter"
+                            and float(command.linear_x) > 0.0
+                            and (
+                                object_centric_far_line_keepup_available
+                                or object_centric_far_line_recapture_keepup_available
                             )
-                    command = command.__class__(
-                        mode=recovery_mode,
-                        linear_x=recovery_linear,
-                        angular_z=recovery_angular,
-                        target_speed_scale=recovery_scale,
-                        rationale=recovery_rationale,
+                        )
+                        and capture
+                        and capture.ball_ahead
+                        and zone_score
+                        and (
+                            object_centric_far_world_moderate_recenter_available
+                            or
+                                object_centric_far_world_high_lateral_recenter_available
+                                or
+                                object_centric_far_positive_world_edge_hold_available
+                                or
+                                object_centric_far_same_side_high_lateral_recenter_available
+                                or
+                                object_centric_far_transition_opposed_recenter_available
+                                or
+                                object_centric_far_straight_rollout_coast_available
+                                or
+                                (
+                                capture.within_recapture_window
+                                and float(zone_score.zone_distance_m) > (float(self.zone.retrieval_radius_m) + 0.40)
+                            )
+                            or (
+                                (not capture.within_recapture_window)
+                                and float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_X_M
+                                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECENTER_MAX_LATERAL_M
+                            )
+                            or (
+                                (not capture.within_recapture_window)
+                                and float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_X_M
+                                and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MIN_LATERAL_M
+                                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_WIDE_RECENTER_MAX_LATERAL_M
+                            )
+                            or (
+                                (not capture.within_recapture_window)
+                                and ball_pose
+                                and float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                                and float(capture.ball_x_m)
+                                > OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_X_M
+                                and float(capture.ball_x_m)
+                                <= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_X_M
+                                and abs(float(capture.ball_y_m))
+                                <= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MAX_CAPTURE_LATERAL_M
+                                and abs(float(ball_pose.get("y", 0.0)) - float(self.zone.world_y))
+                                >= OBJECT_CENTRIC_PLACE_FAR_HIGH_X_LINE_RECENTER_MIN_LATERAL_TO_ZONE_M
+                            )
+                            or (
+                                (not capture.within_recapture_window)
+                                and not zone_score.inside_retrieval_corral
+                                and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                                and float(zone_score.zone_distance_m)
+                                <= (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MARGIN_M)
+                                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                                and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MIN_LATERAL_M
+                                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_LATERAL_M
+                            )
+                        )
                     )
+                    object_centric_place_drive_preserve = False
+                    if (
+                        self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                        and command.mode
+                        in {
+                            "object_place_drive_to_zone",
+                            "object_place_recapture_drive",
+                            "object_place_far_line_recenter",
+                            "object_place_far_recapture_reel",
+                            "object_place_near_zone_recapture_drive",
+                            "object_place_near_zone_wide_reel",
+                        }
+                        and capture
+                        and capture.ball_ahead
+                        and zone_score
+                    ):
+                        if capture.within_recapture_window:
+                            preserve_margin_m = (
+                                0.0 if command.mode == "object_place_near_zone_recapture_drive" else 0.40
+                            )
+                            object_centric_place_drive_preserve = bool(
+                                float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + preserve_margin_m)
+                            )
+                        elif command.mode == "object_place_recapture_drive":
+                            object_centric_place_drive_preserve = bool(
+                                float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                                and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MIN_X_M
+                                and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_KEEPUP_MAX_X_M
+                                and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_KEEPUP_LATERAL_M
+                            )
+                        elif command.mode == "object_place_far_line_recenter":
+                            object_centric_place_drive_preserve = bool(
+                                (
+                                    object_centric_far_line_keepup_available
+                                    or object_centric_far_line_recapture_keepup_available
+                                )
+                                and float(command.linear_x) > 0.0
+                            )
+                        elif command.mode == "object_place_far_recapture_reel":
+                            object_centric_place_drive_preserve = bool(
+                                float(zone_score.zone_distance_m)
+                                > (float(self.zone.retrieval_radius_m) + OBJECT_CENTRIC_PLACE_FAR_ZONE_MARGIN_M)
+                                and (
+                                    float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                                    or (
+                                        ball_motion_m is not None
+                                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                                        and float(capture.ball_x_m)
+                                        <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MAX_X_M
+                                        and float(zone_score.zone_distance_m)
+                                        <= (
+                                            float(self.zone.retrieval_radius_m)
+                                            + OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MARGIN_M
+                                        )
+                                    )
+                                )
+                                and (
+                                    (
+                                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_X_M
+                                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MIN_LATERAL_M
+                                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_LATERAL_M
+                                    )
+                                    or (
+                                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_X_M
+                                        and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                                        and abs(float(capture.ball_y_m)) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MIN_LATERAL_M
+                                        and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_WIDE_MAX_LATERAL_M
+                                    )
+                                    or (
+                                        float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_MAX_X_M
+                                        and float(capture.ball_x_m)
+                                        <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MAX_X_M
+                                        and abs(float(capture.ball_y_m))
+                                        > OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_HIGH_X_MIN_LATERAL_M
+                                        and abs(float(capture.ball_y_m))
+                                        <= OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MAX_LATERAL_M
+                                        and ball_motion_m is not None
+                                        and ball_motion_m > OBJECT_CENTRIC_PLACE_COAST_MOTION_GUARD_M
+                                        and float(zone_score.zone_distance_m)
+                                        <= (
+                                            float(self.zone.retrieval_radius_m)
+                                            + OBJECT_CENTRIC_PLACE_FAR_RECAPTURE_REEL_LATE_KEEPUP_MARGIN_M
+                                        )
+                                    )
+                                )
+                            )
+                        elif command.mode == "object_place_near_zone_recapture_drive":
+                            object_centric_place_drive_preserve = bool(
+                                (
+                                    float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                                    and float(zone_score.zone_distance_m)
+                                    <= (
+                                        float(self.zone.retrieval_radius_m)
+                                        + OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MARGIN_M
+                                    )
+                                    and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                                    and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_MAX_X_M
+                                    and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_FINISH_KEEPUP_LATERAL_M
+                                )
+                                or (
+                                    not zone_score.inside_retrieval_corral
+                                    and float(zone_score.zone_distance_m) > float(self.zone.retrieval_radius_m)
+                                    and float(zone_score.zone_distance_m)
+                                    <= (
+                                        float(self.zone.retrieval_radius_m)
+                                        + OBJECT_CENTRIC_PLACE_NEAR_ZONE_MARGIN_M
+                                    )
+                                    and float(capture.ball_x_m) > OBJECT_CENTRIC_PLACE_NEAR_RECENTER_MAX_X_M
+                                    and float(capture.ball_x_m) <= OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_MAX_X_M
+                                    and abs(float(capture.ball_y_m)) <= OBJECT_CENTRIC_PLACE_NEAR_FORWARD_KEEPUP_LATERAL_M
+                                )
+                            )
+                        elif command.mode == "object_place_near_zone_wide_reel":
+                            object_centric_place_drive_preserve = bool(
+                                object_centric_near_wide_reel_available
+                            )
+                    if object_centric_lateral_place_recenter:
+                        lateral_recenter_angular_limit = (
+                            0.80
+                            if (
+                                command.mode == "object_place_far_wide_lateral_recenter"
+                                or object_centric_far_world_high_lateral_recenter_available
+                                or object_centric_far_positive_world_edge_hold_available
+                            )
+                            else 0.45
+                        )
+                        command = command.__class__(
+                            mode=(
+                                "object_place_far_wide_lateral_recenter"
+                                if command.mode == "object_place_far_wide_lateral_recenter"
+                                else "object_place_lateral_recenter"
+                            ),
+                            linear_x=0.0,
+                            angular_z=round(
+                                clamp(
+                                    float(command.angular_z),
+                                    -lateral_recenter_angular_limit,
+                                    lateral_recenter_angular_limit,
+                                ),
+                                6,
+                            ),
+                            target_speed_scale=0.0,
+                            rationale="Preserve the object-centric lateral recenter before resuming far-zone recapture push.",
+                        )
+                    elif object_centric_place_drive_preserve:
+                        command_linear = float(command.linear_x)
+                        recovery_linear = 0.0 if command_linear <= 0.0 else min(max(command_linear, 0.025), 0.085)
+                        if (
+                            command.mode
+                            in {
+                                "object_place_far_line_recenter",
+                                "object_place_far_recapture_reel",
+                                "object_place_near_zone_wide_reel",
+                            }
+                            and command_linear > 0.0
+                        ):
+                            recovery_linear = min(max(command_linear, 0.010), 0.032)
+                        if command.mode == "object_place_near_zone_recapture_drive" and command_linear > 0.0:
+                            recovery_linear = min(max(command_linear, 0.012), 0.040)
+                        if capture and abs(float(capture.ball_y_m)) > 0.12:
+                            capture_ball_x = float(capture.ball_x_m)
+                            capture_lateral_abs = abs(float(capture.ball_y_m))
+                            keepup_recapture = bool(
+                                command_linear >= 0.060
+                                and capture_ball_x >= 0.65
+                                and capture_lateral_abs <= 0.16
+                            )
+                            if keepup_recapture:
+                                recovery_linear = max(recovery_linear, min(command_linear, 0.085))
+                            else:
+                                recovery_linear = min(recovery_linear, 0.030)
+                        command = command.__class__(
+                            mode=command.mode,
+                            linear_x=round(recovery_linear, 6),
+                            angular_z=round(
+                                clamp(
+                                    float(command.angular_z),
+                                    -0.80
+                                    if command.mode
+                                    in {"object_place_far_recapture_reel", "object_place_near_zone_wide_reel"}
+                                    else -0.45,
+                                    0.80
+                                    if command.mode
+                                    in {"object_place_far_recapture_reel", "object_place_near_zone_wide_reel"}
+                                    else 0.45,
+                                ),
+                                6,
+                            ),
+                            target_speed_scale=min(float(command.target_speed_scale), 0.65),
+                            rationale="Continue the object-centric far-zone recapture push instead of holding while the ball rolls away.",
+                        )
+                    else:
+                        recovery_linear = min(float(command.linear_x), 0.05)
+                        recovery_angular = clamp(float(command.angular_z), -0.45, 0.45)
+                        recovery_scale = min(float(command.target_speed_scale), 0.55)
+                        recovery_mode = "capture_recovery"
+                        recovery_rationale = "Briefly recenter the ball under the catcher before resuming place."
+                        if capture and not capture.ball_ahead:
+                            recovery_linear = 0.0
+                            recovery_angular = clamp(0.90 if float(capture.ball_y_m) >= 0.0 else -0.90, -0.90, 0.90)
+                            recovery_scale = 0.0
+                            recovery_mode = "capture_recovery_turn"
+                            recovery_rationale = "Ball slipped behind inside the corral; turn in place quickly before it escapes."
+                        elif capture and capture.within_recapture_window and (
+                            float(capture.ball_x_m) > 0.40 or abs(float(capture.ball_y_m)) > 0.08
+                        ):
+                            near_zone_hold = bool(
+                                zone_score
+                                and float(zone_score.zone_distance_m) <= (float(self.zone.retrieval_radius_m) + 0.40)
+                            )
+                            laterally_misaligned_hold = abs(float(capture.ball_y_m)) > 0.08
+                            if laterally_misaligned_hold or near_zone_hold or not stationary_recapture_nudge_ready:
+                                recovery_linear = 0.0
+                                recovery_angular = clamp((float(capture.ball_y_m) * 5.0), -0.35, 0.35)
+                                recovery_scale = 0.30
+                                recovery_mode = "capture_recovery_hold"
+                                recovery_rationale = "Ball is ahead of the spur mouth; hold and yaw gently before pushing again."
+                            else:
+                                recovery_rationale = (
+                                    "Ball stayed centered in local recovery while still far from the corral; allow a bounded forward recapture nudge."
+                                )
+                        command = command.__class__(
+                            mode=recovery_mode,
+                            linear_x=recovery_linear,
+                            angular_z=recovery_angular,
+                            target_speed_scale=recovery_scale,
+                            rationale=recovery_rationale,
+                        )
                 elif settle_shepherd_needed and command.mode in {"retrieval_hold", "capture", "place_recapture", "place"}:
                     shepherd_linear = 0.02
                     if float(capture.ball_x_m) > 0.95:
@@ -6363,6 +7875,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     rationale=command.rationale,
                 )
                 self._update_gather_runtime_state(latest_control_command=command.to_dict())
+                if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                    object_centric_place_previous_command = command
+            if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+                object_centric_place_previous_ball_pose = dict(ball_pose or {}) if ball_pose else object_centric_place_previous_ball_pose
             time.sleep(self.args.poll_s)
 
         self._set_manual_drive(False, mode="place_timeout", rationale="Place timed out.")
