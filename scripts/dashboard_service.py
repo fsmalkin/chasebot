@@ -99,7 +99,17 @@ OPERATOR_VIEW_PORT_END = 14520
 OPERATOR_VIEW_HEARTBEAT_STALE_S = 5.0
 REQUIRED_GATE_SERVICES = ("sim-gate", "world-viewer", "gate-stack", "operator-view")
 HEADLESS_SOAK_GATE_SERVICES = ("sim-gate", "gate-stack")
-SELF_CONTAINED_SCENARIO_IDS = {"visit_route_planning", "corral_single_ball_place", "gather_three_ball_zone"}
+SELF_CONTAINED_SCENARIO_IDS = {
+    "visit_route_planning",
+    "corral_single_ball_place",
+    "gather_three_ball_zone",
+    "object_centric_zero_saved_layout",
+}
+OBJECT_CENTRIC_ZERO_SCENARIO_ID = "object_centric_zero_saved_layout"
+OBJECT_CENTRIC_ZERO_TARGET_LAYOUT_JSON = (
+    "artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_capture_diag_rerun_20260503/"
+    "gather_goal_side_matrix/target_layouts/zero.json"
+)
 
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 POWERSHELL_EXE = shutil.which("powershell.exe") or shutil.which("powershell") or "powershell.exe"
@@ -121,6 +131,10 @@ class ScenarioDefinition:
     target_x: float = 1.10
     target_y: float = 0.00
     target_z: float = 0.05
+    runner_scenario_id: str = ""
+    gather_control_family: str = ""
+    target_layout_json: str = ""
+    max_retries_per_target: int = 2
 
     def to_api(self) -> Dict[str, Any]:
         return asdict(self)
@@ -238,6 +252,21 @@ SCENARIOS = [
         description="LLM-planned multi-target visit: the LLM chooses which target to visit next.",
         mode="visit_mission",
         featured=True,
+    ),
+    ScenarioDefinition(
+        id=OBJECT_CENTRIC_ZERO_SCENARIO_ID,
+        phase="corral_single_ball_place",
+        target_id="ball_1",
+        label="Object-Centric Zero",
+        description="Saved-layout zero run for object_centric_gather_policy_v1.",
+        mode="gather_mission",
+        robot_sdf_name=CORRAL_ROBOT_SDF_NAME,
+        world_file=SHORT_TURF_WORLD_FILE,
+        surface_profile="short_turf",
+        runner_scenario_id="corral_single_ball_place",
+        gather_control_family="object_centric_gather_policy_v1",
+        target_layout_json=OBJECT_CENTRIC_ZERO_TARGET_LAYOUT_JSON,
+        max_retries_per_target=2,
     ),
     ScenarioDefinition(
         id="corral_single_ball_place",
@@ -1861,6 +1890,40 @@ class DashboardController:
         with self.state_lock:
             env_state = self.state["environment_state"]
             scenario_state = self.state["scenario_state"]
+        if env_state == "stopped" and scenario.id == OBJECT_CENTRIC_ZERO_SCENARIO_ID:
+            self._refresh_control_plane_state(force=True)
+            with self.state_lock:
+                if not self.state.get("control_plane_ready", False):
+                    return self._control_plane_unavailable_response()
+            if self._lifecycle_busy():
+                if not self._wait_for_lifecycle_idle(2.0):
+                    return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
+            self.pending_scenario_id = scenario_id
+            self.pending_scenario_overrides = {
+                "world_file": world_file,
+                "surface_profile": surface_profile,
+            }
+            self.lifecycle_cancel.clear()
+            self._record_operator_event(f"{scenario.label} queued after environment start.", category="scenario")
+            self._update_state(
+                environment_state="starting",
+                scenario_state="idle",
+                environment_message="environment start queued",
+                scenario_message=f"{scenario.label} queued after environment start",
+                world_file=world_file,
+                surface_profile=surface_profile,
+                robot_sdf_name=scenario.robot_sdf_name,
+                target_id="",
+                target_transition_active=False,
+            )
+            self.lifecycle_thread = threading.Thread(target=self._start_environment_worker, name="dashboard-start", daemon=True)
+            self.lifecycle_thread.start()
+            return HTTPStatus.ACCEPTED, {
+                "accepted": True,
+                "message": f"scenario {scenario_id} queued after environment start",
+                "world_file": world_file,
+                "surface_profile": surface_profile,
+            }
         if env_state != "environment_ready":
             return HTTPStatus.CONFLICT, {"accepted": False, "error": "environment not ready"}
         self._refresh_control_plane_state(force=True)
@@ -3875,13 +3938,14 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         scenario_dir = self._scenarios_dir() or ensure_dir(self._current_validation_dir() or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation"))
         log_path = ensure_dir(scenario_dir) / f"{scenario.id}.log"
         env = self._scenario_env(scenario)
+        runner_scenario_id = str(scenario.runner_scenario_id or scenario.id)
         command = [
             sys.executable,
             str(SCRIPTS_DIR / "gather_mission_runner.py"),
             "--dashboard-url",
             str(self.state.get("dashboard_url", f"http://127.0.0.1:{self.port}") or f"http://127.0.0.1:{self.port}"),
             "--scenario-id",
-            scenario.id,
+            runner_scenario_id,
             "--scenario-label",
             scenario.label,
             "--world-file",
@@ -3894,6 +3958,12 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             str(self.gather_mission_runtime_path),
             "--keep-environment",
         ]
+        if scenario.gather_control_family:
+            command.extend(["--gather-control-family", scenario.gather_control_family])
+        if scenario.target_layout_json:
+            command.extend(["--target-layout-json", scenario.target_layout_json])
+        if scenario.max_retries_per_target > 0:
+            command.extend(["--max-retries-per-target", str(scenario.max_retries_per_target)])
 
         with log_path.open("w", encoding="utf-8") as handle:
             proc = subprocess.Popen(
@@ -3933,6 +4003,9 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
 
         payload = {
             "scenario_id": scenario.id,
+            "runner_scenario_id": runner_scenario_id,
+            "gather_control_family": scenario.gather_control_family,
+            "target_layout_json": scenario.target_layout_json,
             "phase": scenario.phase,
             "pass": pass_flag,
             "artifacts": artifacts,

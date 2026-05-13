@@ -2,17 +2,35 @@
 
 ## Status
 
-This is the next research direction after the May 3, 2026 MPPI FollowPath work. Treat `nav2_mppi_follow_path_reacquire_v1` as a baseline/evidence branch, not the primary promotion path. MPPI recovered saved-layout `zero` and `plus45` pre-stage handoff after terminal geometry repair, but full missions still fail downstream in contact-rich capture behavior.
+Superseded by the fetch pivot in [OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md).
 
-## Thesis
+This document remains as historical context for the May 3, 2026 post-MPPI
+research direction. Treat `nav2_mppi_follow_path_reacquire_v1` as a
+baseline/evidence branch, not the primary promotion path. MPPI recovered
+saved-layout `zero` and `plus45` pre-stage handoff after terminal geometry
+repair, but full missions still fail downstream in contact-rich capture
+behavior.
 
-Use Nav2/MPPI for long-range repositioning and obstacle-aware path following. Do not rely on FollowPath to infer ball capture or placement. The gather skill should be an object-centric policy over robot, ball, zone, recent motion, and contact state, wrapped by deterministic safety gates.
+The active research target is no longer object-centric gather/place into the
+corral. The emergent roll/launch behavior is now the core primitive. Near-term
+work should prove `fetch_to_pose` first, then add user/person detection once the
+pose-delivery loop is measurable and repeatable.
 
-The next experimental family is:
+## Historical Thesis
+
+Use Nav2/MPPI for long-range repositioning and obstacle-aware path following.
+Do not rely on FollowPath to infer ball capture or placement. The gather skill
+was proposed as an object-centric policy over robot, ball, zone, recent motion,
+and contact state, wrapped by deterministic safety gates.
+
+The previous experimental family was:
 
 `object_centric_gather_policy_v1`
 
-It should own the one-ball gather behavior from pre-stage through capture/place as a short-horizon object manipulation skill. It may emit bounded `linear_x` / `angular_z` commands or short relative waypoints, but every proposal must pass deterministic guards before execution.
+It would have owned one-ball gather behavior from pre-stage through
+capture/place as a short-horizon object manipulation skill. That line is frozen
+unless fetch-to-pose evidence later shows that corral/place behavior is again
+needed.
 
 ## Research Basis
 
@@ -46,7 +64,7 @@ Baseline artifacts:
 - `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_terminal_geometry_zero_3run_20260503/gather_mission_repeatability/campaign_run_summary.json`
 - `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_terminal_geometry_plus45_3run_20260503/gather_mission_repeatability/campaign_run_summary.json`
 
-## Milestone 1: Offline Evaluation Harness
+## Historical Milestone 1: Offline Evaluation Harness
 
 Build an offline evaluator before adding the runtime branch.
 
@@ -73,7 +91,7 @@ Deliverable:
 - an analyzer that can score the MPPI baseline and future `object_centric_gather_policy_v1` traces on the same cases
 - implementation surface: `scripts/gather_object_centric_policy_evaluator.py`
 
-## Milestone 2: Structured Object Servo Baseline
+## Historical Milestone 2: Structured Object Servo Baseline
 
 Start with an interpretable object-centric servo policy, not full RL.
 
@@ -102,7 +120,7 @@ Success gate:
 - saved-layout `zero` and `plus45`, one run each, no retries, must pass full mission progress without pre-stage ball drift/contact
 - then `zero --runs 3` and `plus45 --runs 3`, no retries
 
-## Milestone 3: Learned Residual
+## Historical Milestone 3: Learned Residual
 
 Only after the structured servo baseline exists, add a learned residual if the failure cases show consistent model error.
 
@@ -118,7 +136,7 @@ Training data:
 - generated in sim with randomized friction, ball mass/radius, spawn angle, robot pose noise, perception noise, and wheel slip
 - include recovery states and failures, not only clean demonstrations
 
-## Milestone 4: Direct Short-Horizon Policy
+## Historical Milestone 4: Direct Short-Horizon Policy
 
 Consider direct policy control only after the residual-policy lane is understood.
 
@@ -129,7 +147,7 @@ Constraints:
 - policy horizon stays short and bounded
 - rejected policy actions must become explicit audit events
 
-## Live Gates
+## Historical Live Gates
 
 1. Object-servo smoke:
    - saved-layout `zero`, one run, no retries
@@ -145,7 +163,7 @@ Constraints:
 4. Portfolio/stress consideration:
    - only after full mission gates are green or the promotion scope is explicitly redefined
 
-## Non-Goals
+## Historical Non-Goals
 
 - Do not loosen pre-stage handoff acceptance.
 - Do not redefine `/odom`.
@@ -154,7 +172,7 @@ Constraints:
 - Do not keep tuning MPPI/capture thresholds as the main research path.
 - Do not allow a learned policy to bypass deterministic safety gates.
 
-## Stop Criteria
+## Historical Stop Criteria
 
 Retire or freeze a branch when:
 

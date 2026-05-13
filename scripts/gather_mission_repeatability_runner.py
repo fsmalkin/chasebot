@@ -43,10 +43,20 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "nav2_mppi_follow_path_reacquire_v1",
     "object_centric_gather_policy_v1",
 )
+ALLOWED_MISSION_OBJECTIVES = ("gather_here", "fetch_to_pose")
 
 
 def current_utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def optional_float_arg(value: object) -> float | None:
+    if value in {None, ""}:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(f"invalid float value: {value!r}") from exc
 
 
 def parse_args() -> argparse.Namespace:
@@ -54,6 +64,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dashboard-url", default=os.environ.get("CHASECAR_DASHBOARD_URL", "http://127.0.0.1:8860"))
     parser.add_argument("--scenario-id", default="corral_single_ball_place")
     parser.add_argument("--scenario-label", default="Corral Single Ball Place")
+    parser.add_argument("--mission-objective", choices=ALLOWED_MISSION_OBJECTIVES, default=os.environ.get("CHASECAR_MISSION_OBJECTIVE", "gather_here"))
+    parser.add_argument("--fetch-target-x", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_X", "")))
+    parser.add_argument("--fetch-target-y", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Y", "")))
+    parser.add_argument("--fetch-target-z", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Z", "")))
+    parser.add_argument("--fetch-delivery-radius-m", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_DELIVERY_RADIUS_M", 0.762)))
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--campaign-id", default="")
     parser.add_argument("--timeout-s", type=float, default=30.0)
@@ -85,11 +100,24 @@ def wait_for_dashboard(dashboard_url: str, timeout_s: float) -> None:
 
 
 def _environment_request_payload(args: argparse.Namespace) -> dict[str, object]:
+    mission_objective = str(getattr(args, "mission_objective", "gather_here") or "gather_here")
     payload: dict[str, object] = {"scenario_id": args.scenario_id}
+    if mission_objective != "gather_here":
+        payload["mission_objective"] = mission_objective
     if str(args.world_file or "").strip():
         payload["world_file"] = str(args.world_file).strip()
     if str(args.surface_profile or "").strip():
         payload["surface_profile"] = str(args.surface_profile).strip()
+    if mission_objective == "fetch_to_pose":
+        for arg_name, payload_name in (
+            ("fetch_target_x", "fetch_target_x"),
+            ("fetch_target_y", "fetch_target_y"),
+            ("fetch_target_z", "fetch_target_z"),
+            ("fetch_delivery_radius_m", "fetch_delivery_radius_m"),
+        ):
+            raw_value = getattr(args, arg_name, "")
+            if raw_value is not None and str(raw_value).strip():
+                payload[payload_name] = float(raw_value)
     return payload
 
 
@@ -175,6 +203,26 @@ def _float_list_from_runs(runs: list[dict[str, object]], key: str) -> list[float
         except (TypeError, ValueError):
             continue
     return values
+
+
+def _fetch_to_pose_rollup(runs: list[dict[str, object]]) -> dict[str, object]:
+    times = _float_list_from_runs(runs, "fetch_to_pose_time_s")
+    reasons = sorted(
+        {
+            str(item.get("fetch_to_pose_failure_reason", "") or "").strip()
+            for item in runs
+            if str(item.get("fetch_to_pose_failure_reason", "") or "").strip()
+        }
+    )
+    pass_count = sum(1 for item in runs if bool(item.get("fetch_to_pose_pass", item.get("fetch_to_pose_reached", False))))
+    return {
+        "fetch_to_pose_pass_count": pass_count,
+        "fetch_to_pose_fail_count": max(len(runs) - pass_count, 0),
+        "fetch_to_pose_failure_reasons": reasons,
+        "fetch_to_pose_time_avg_s": round(sum(times) / len(times), 6) if times else 0.0,
+        "fetch_to_pose_time_min_s": round(min(times), 6) if times else 0.0,
+        "fetch_to_pose_time_max_s": round(max(times), 6) if times else 0.0,
+    }
 
 
 def _clean_text(value: object, default: str = "") -> str:
@@ -696,6 +744,14 @@ def _enrich_run_with_approach_side_fields(run_summary: dict[str, object]) -> dic
             "latest_approach_progress": latest_approach_progress,
             "approach_side_pass": bool(latest_approach_progress.get("pass", False)),
             "approach_side_reason": _clean_text(latest_approach_progress.get("reason")),
+            "mission_objective": str(merged.get("mission_objective", run_summary.get("mission_objective", "gather_here")) or "gather_here"),
+            "fetch_to_pose_reached": bool(merged.get("fetch_to_pose_reached", run_summary.get("fetch_to_pose_reached", False))),
+            "fetch_to_pose_pass": bool(merged.get("fetch_to_pose_pass", run_summary.get("fetch_to_pose_pass", False))),
+            "fetch_to_pose_time_s": _float_value(merged.get("fetch_to_pose_time_s", run_summary.get("fetch_to_pose_time_s", 0.0))),
+            "fetch_to_pose_failure_reason": _clean_text(merged.get("fetch_to_pose_failure_reason", run_summary.get("fetch_to_pose_failure_reason", ""))),
+            "fetch_pose_world": _dict_value(merged.get("fetch_pose_world", run_summary.get("fetch_pose_world", {}))),
+            "fetch_delivery_radius_m": _float_value(merged.get("fetch_delivery_radius_m", run_summary.get("fetch_delivery_radius_m", 0.0))),
+            "shot_outcome": _dict_value(merged.get("shot_outcome", run_summary.get("shot_outcome", {}))),
             **legacy_fields,
         }
     )
@@ -751,6 +807,18 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
         "ball_stopped_in_corral": bool(verdict.get("ball_stopped_in_corral", summary.get("ball_stopped_in_corral", False))),
         "rolled_away_after_release": bool(verdict.get("rolled_away_after_release", summary.get("rolled_away_after_release", False))),
         "settled_in_corral_pass": bool(verdict.get("settled_in_corral_pass", summary.get("settled_in_corral_pass", False))),
+        "mission_objective": str(verdict.get("mission_objective", summary.get("mission_objective", "gather_here")) or "gather_here"),
+        "fetch_to_pose_reached": bool(verdict.get("fetch_to_pose_reached", summary.get("fetch_to_pose_reached", False))),
+        "fetch_to_pose_pass": bool(verdict.get("fetch_to_pose_pass", summary.get("fetch_to_pose_pass", False))),
+        "fetch_to_pose_time_s": float(verdict.get("fetch_to_pose_time_s", summary.get("fetch_to_pose_time_s", 0.0)) or 0.0),
+        "fetch_to_pose_failure_reason": str(verdict.get("fetch_to_pose_failure_reason", summary.get("fetch_to_pose_failure_reason", "")) or ""),
+        "fetch_pose_world": verdict.get("fetch_pose_world", summary.get("fetch_pose_world", {}))
+        if isinstance(verdict.get("fetch_pose_world", summary.get("fetch_pose_world", {})), dict)
+        else {},
+        "fetch_delivery_radius_m": float(verdict.get("fetch_delivery_radius_m", summary.get("fetch_delivery_radius_m", 0.0)) or 0.0),
+        "shot_outcome": verdict.get("shot_outcome", summary.get("shot_outcome", {}))
+        if isinstance(verdict.get("shot_outcome", summary.get("shot_outcome", {})), dict)
+        else {},
         "final_corral_audit": verdict.get("final_corral_audit", summary.get("final_corral_audit", {}))
         if isinstance(verdict.get("final_corral_audit", summary.get("final_corral_audit", {})), dict)
         else {},
@@ -824,11 +892,24 @@ def run_dashboard_scenario_once(args: argparse.Namespace, *, run_index: int) -> 
         raise RuntimeError(f"Unable to fetch dashboard state before run {run_index}.")
     previous_session_id = str(before_state.get("session_id", "") or "")
     previous_mission_verdict_path = _latest_mission_verdict_path(before_state)
+    mission_objective = str(getattr(args, "mission_objective", "gather_here") or "gather_here")
     payload = {"scenario_id": args.scenario_id}
+    if mission_objective != "gather_here":
+        payload["mission_objective"] = mission_objective
     if args.world_file.strip():
         payload["world_file"] = args.world_file.strip()
     if args.surface_profile.strip():
         payload["surface_profile"] = args.surface_profile.strip()
+    if mission_objective == "fetch_to_pose":
+        for arg_name, payload_name in (
+            ("fetch_target_x", "fetch_target_x"),
+            ("fetch_target_y", "fetch_target_y"),
+            ("fetch_target_z", "fetch_target_z"),
+            ("fetch_delivery_radius_m", "fetch_delivery_radius_m"),
+        ):
+            raw_value = getattr(args, arg_name, "")
+            if raw_value is not None and str(raw_value).strip():
+                payload[payload_name] = float(raw_value)
     status, response = http_json(
         f"{args.dashboard_url.rstrip('/')}/api/scenario/run",
         method="POST",
@@ -961,11 +1042,19 @@ def main() -> int:
                     "scorecard_path": "",
                     "placed_count": 0,
                     "capture_loss_count": 0,
+                    "mission_objective": args.mission_objective,
                     "surface_profile": args.surface_profile.strip(),
                     "final_settle_distance_m": 0.0,
                     "max_overshoot_distance_m": 0.0,
                     "settle_time_s": 0.0,
                     "release_recontact_count": 0,
+                    "fetch_to_pose_reached": False,
+                    "fetch_to_pose_pass": False,
+                    "fetch_to_pose_time_s": 0.0,
+                    "fetch_to_pose_failure_reason": str(exc),
+                    "fetch_pose_world": {},
+                    "fetch_delivery_radius_m": 0.0,
+                    "shot_outcome": {},
                     "mission_time_s": 0.0,
                     "route_order": [],
                     "target_results": [],
@@ -991,7 +1080,18 @@ def main() -> int:
                 args.scenario_id,
                 "--scenario-label",
                 args.scenario_label,
+                "--mission-objective",
+                args.mission_objective,
             ]
+            for arg_name, option_name in (
+                ("fetch_target_x", "--fetch-target-x"),
+                ("fetch_target_y", "--fetch-target-y"),
+                ("fetch_target_z", "--fetch-target-z"),
+                ("fetch_delivery_radius_m", "--fetch-delivery-radius-m"),
+            ):
+                raw_value = getattr(args, arg_name, "")
+                if raw_value is not None and str(raw_value).strip():
+                    command.extend([option_name, str(raw_value)])
             if args.world_file.strip():
                 command.extend(["--world-file", args.world_file.strip()])
             if args.surface_profile.strip():
@@ -1022,6 +1122,7 @@ def main() -> int:
 
     rollup = summarize_runs(runs)
     approach_side_rollup = _approach_side_rollup(runs)
+    fetch_to_pose_rollup = _fetch_to_pose_rollup(runs)
     promotion_gate_pass = promotion_gate_pass_for_runs(runs, mode=args.promotion_gate_mode)
     summary = {
         "generated_utc": utc_now(),
@@ -1029,16 +1130,24 @@ def main() -> int:
         "campaign_id": campaign_id,
         "scenario_id": args.scenario_id,
         "scenario_label": args.scenario_label,
+        "mission_objective": args.mission_objective,
         "execution_mode": args.execution_mode,
         "requested_world_file": args.world_file.strip(),
         "requested_surface_profile": args.surface_profile.strip(),
         "requested_target_layout_json": args.target_layout_json.strip(),
+        "requested_fetch_pose_world": {
+            "x": float(args.fetch_target_x) if getattr(args, "fetch_target_x", None) is not None else None,
+            "y": float(args.fetch_target_y) if getattr(args, "fetch_target_y", None) is not None else None,
+            "z": float(args.fetch_target_z) if getattr(args, "fetch_target_z", None) is not None else None,
+            "radius_m": float(args.fetch_delivery_radius_m) if getattr(args, "fetch_delivery_radius_m", None) is not None else None,
+        },
         "required_green_runs": max(args.runs, 1),
         "promotion_gate_mode": args.promotion_gate_mode,
         "promotion_gate_pass": promotion_gate_pass,
         "history_path": str(history_path),
         "runs": runs,
         **approach_side_rollup,
+        **fetch_to_pose_rollup,
         **rollup,
     }
     write_json(campaign_root / "campaign_run_summary.json", summary)

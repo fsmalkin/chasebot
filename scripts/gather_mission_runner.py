@@ -344,6 +344,13 @@ DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_INTERVAL_S = 0.5
 DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_MAX = 20
 DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_INTERVAL_S = 0.25
 DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_LOG_TAIL = 400
+MISSION_OBJECTIVE_GATHER_HERE = "gather_here"
+MISSION_OBJECTIVE_FETCH_TO_POSE = "fetch_to_pose"
+ALLOWED_MISSION_OBJECTIVES = (
+    MISSION_OBJECTIVE_GATHER_HERE,
+    MISSION_OBJECTIVE_FETCH_TO_POSE,
+)
+DEFAULT_FETCH_DELIVERY_RADIUS_M = 0.762
 ALLOWED_GATHER_CONTROL_FAMILIES = (
     "baseline",
     "short_horizon_v1",
@@ -556,11 +563,61 @@ def clean_number(value: Any) -> float | None:
     return numeric
 
 
+def optional_float_arg(value: Any) -> float | None:
+    if value in {None, ""}:
+        return None
+    numeric = clean_number(value)
+    if numeric is None:
+        raise argparse.ArgumentTypeError(f"invalid float value: {value!r}")
+    return float(numeric)
+
+
 def clean_rounded_number(value: Any, digits: int = 6) -> float | None:
     numeric = clean_number(value)
     if numeric is None:
         return None
     return round(float(numeric), int(digits))
+
+
+def pose_payload(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    x_value = clean_number(value.get("x"))
+    y_value = clean_number(value.get("y"))
+    if x_value is None or y_value is None:
+        return {}
+    payload: dict[str, Any] = {
+        "x": round(float(x_value), 6),
+        "y": round(float(y_value), 6),
+    }
+    z_value = clean_number(value.get("z"))
+    yaw_value = clean_number(value.get("yaw"))
+    yaw_deg_value = clean_number(value.get("yaw_deg"))
+    if z_value is not None:
+        payload["z"] = round(float(z_value), 6)
+    if yaw_value is not None:
+        payload["yaw"] = round(float(yaw_value), 6)
+    if yaw_deg_value is not None:
+        payload["yaw_deg"] = round(float(yaw_deg_value), 6)
+    return payload
+
+
+def _ball_pose_from_state_row(row: dict[str, Any]) -> dict[str, Any]:
+    for key in (
+        "ball_pose",
+        "final_ball_pose",
+        "target_pose_world",
+        "target_pose",
+    ):
+        pose = pose_payload(row.get(key))
+        if pose:
+            return pose
+    belief = row.get("belief", {}) if isinstance(row.get("belief"), dict) else {}
+    pose = pose_payload(belief.get("ball_pose"))
+    if pose:
+        return pose
+    target_state = row.get("target", {}) if isinstance(row.get("target"), dict) else {}
+    return pose_payload(target_state.get("pose"))
 
 
 def pose_to_path_distance_m(pose: dict[str, Any] | None, path_pose: dict[str, Any] | None) -> float | None:
@@ -782,6 +839,16 @@ class GatherMissionRunner:
         self.gather_control_family = clean_text(getattr(args, "gather_control_family", "baseline"), "baseline").lower()
         if self.gather_control_family not in ALLOWED_GATHER_CONTROL_FAMILIES:
             self.gather_control_family = "baseline"
+        self.mission_objective = clean_text(
+            getattr(args, "mission_objective", MISSION_OBJECTIVE_GATHER_HERE),
+            MISSION_OBJECTIVE_GATHER_HERE,
+        ).lower()
+        if self.mission_objective not in ALLOWED_MISSION_OBJECTIVES:
+            self.mission_objective = MISSION_OBJECTIVE_GATHER_HERE
+        self.fetch_delivery_radius_m = max(
+            0.05,
+            float(clean_number(getattr(args, "fetch_delivery_radius_m", DEFAULT_FETCH_DELIVERY_RADIUS_M)) or DEFAULT_FETCH_DELIVERY_RADIUS_M),
+        )
         self.visit_runtime_state_path = resolve_visit_runtime_state_path(args.visit_runtime_json)
         self.gather_runtime_state_path = resolve_gather_runtime_state_path(args.gather_runtime_json)
         self.visit_runtime_state: dict[str, Any] = {}
@@ -827,6 +894,184 @@ class GatherMissionRunner:
                 if projected_distance_gain is not None
                 else None
             ),
+        }
+
+    def _fetch_pose_world(self) -> dict[str, Any]:
+        configured_x = clean_number(getattr(self.args, "fetch_target_x", None))
+        configured_y = clean_number(getattr(self.args, "fetch_target_y", None))
+        configured_z = clean_number(getattr(self.args, "fetch_target_z", None))
+        fetch_x = float(configured_x) if configured_x is not None else float(self.zone.world_x)
+        fetch_y = float(configured_y) if configured_y is not None else float(self.zone.world_y)
+        fetch_z = float(configured_z) if configured_z is not None else float(self.zone.z_m)
+        return {
+            "x": round(fetch_x, 6),
+            "y": round(fetch_y, 6),
+            "z": round(fetch_z, 6),
+            "radius_m": round(float(self.fetch_delivery_radius_m), 6),
+        }
+
+    def _state_history_ball_samples(
+        self,
+        *,
+        state_history_path: Path,
+        target_id: str,
+    ) -> list[dict[str, Any]]:
+        if not state_history_path.exists():
+            return []
+        samples: list[dict[str, Any]] = []
+        with state_history_path.open(encoding="utf-8", errors="ignore") as handle:
+            for line_index, raw_line in enumerate(handle):
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                try:
+                    row = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                row_target_id = clean_text(row.get("target_id"))
+                if row_target_id and row_target_id != target_id:
+                    continue
+                ball_pose = _ball_pose_from_state_row(row)
+                if not ball_pose:
+                    continue
+                samples.append(
+                    {
+                        "line_index": line_index,
+                        "generated_utc": clean_text(row.get("generated_utc")),
+                        "event_type": clean_text(row.get("event_type")),
+                        "phase": clean_text(row.get("phase")),
+                        "ball_pose": ball_pose,
+                    }
+                )
+        return samples
+
+    def _build_fetch_to_pose_outcome(
+        self,
+        *,
+        target: GatherTargetSpec,
+        state_history_path: Path,
+        final_ball_pose: dict[str, Any] | None,
+        place_payload: dict[str, Any] | None,
+        place_failure_reason: str = "",
+    ) -> dict[str, Any]:
+        fetch_pose = self._fetch_pose_world()
+        fetch_xy = world_pose_xyyaw(fetch_pose)
+        samples = self._state_history_ball_samples(
+            state_history_path=state_history_path,
+            target_id=target.id,
+        )
+        final_pose_payload = pose_payload(final_ball_pose or {})
+        if final_pose_payload:
+            samples.append(
+                {
+                    "line_index": -1,
+                    "generated_utc": utc_now(),
+                    "event_type": "fetch_to_pose_final_pose",
+                    "phase": "fetch_to_pose",
+                    "ball_pose": final_pose_payload,
+                }
+            )
+        if fetch_xy is None:
+            return {
+                "observed": bool(samples),
+                "pass": False,
+                "reason": "missing_fetch_pose",
+                "fetch_pose_world": fetch_pose,
+                "delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                "sample_count": len(samples),
+                "ball_start_pose": {},
+                "ball_end_pose": final_pose_payload,
+                "distance_to_fetch_pose_m": None,
+                "closest_approach_distance_m": None,
+                "closest_pose": {},
+                "surface_profile": self.surface_profile,
+            }
+
+        radius_m = max(float(self.fetch_delivery_radius_m), 0.0)
+        closest_distance: float | None = None
+        closest_pose: dict[str, Any] = {}
+        previous_xy: tuple[float, float] | None = None
+        previous_pose: dict[str, Any] = {}
+        fetch_point = (float(fetch_xy[0]), float(fetch_xy[1]))
+        for sample in samples:
+            pose = pose_payload(sample.get("ball_pose"))
+            pose_xyyaw = world_pose_xyyaw(pose)
+            if pose_xyyaw is None:
+                continue
+            current_xy = (float(pose_xyyaw[0]), float(pose_xyyaw[1]))
+            point_distance = math.hypot(current_xy[0] - fetch_point[0], current_xy[1] - fetch_point[1])
+            if closest_distance is None or point_distance < closest_distance:
+                closest_distance = point_distance
+                closest_pose = dict(pose)
+            if previous_xy is not None:
+                segment_distance = _segment_distance_m(fetch_point, previous_xy, current_xy)
+                if closest_distance is None or segment_distance < closest_distance:
+                    closest_distance = segment_distance
+                    closest_pose = dict(pose if point_distance <= math.hypot(previous_xy[0] - fetch_point[0], previous_xy[1] - fetch_point[1]) else previous_pose)
+            previous_xy = current_xy
+            previous_pose = dict(pose)
+
+        observed = closest_distance is not None
+        pass_delivery = bool(observed and closest_distance is not None and closest_distance <= radius_m)
+        ball_start_pose = dict(samples[0]["ball_pose"]) if samples else {}
+        ball_end_pose = dict(samples[-1]["ball_pose"]) if samples else {}
+        end_xyyaw = world_pose_xyyaw(ball_end_pose)
+        distance_to_fetch_pose_m = (
+            math.hypot(float(end_xyyaw[0]) - fetch_point[0], float(end_xyyaw[1]) - fetch_point[1])
+            if end_xyyaw is not None
+            else None
+        )
+        zone_score = zone_snapshot(ball_end_pose, self.zone) if ball_end_pose else None
+        settle_metrics = (
+            place_payload.get("settle_metrics", {})
+            if isinstance(place_payload, dict) and isinstance(place_payload.get("settle_metrics"), dict)
+            else {}
+        )
+        if pass_delivery:
+            reason = "trajectory_intersects_delivery_radius"
+        elif not observed:
+            reason = "no_ball_samples"
+        else:
+            reason = "missed_delivery_radius"
+            if place_failure_reason:
+                reason = f"{reason}_after_{place_failure_reason}"
+        return {
+            "observed": bool(observed),
+            "pass": bool(pass_delivery),
+            "reason": reason,
+            "fetch_pose_world": fetch_pose,
+            "delivery_radius_m": round(float(radius_m), 6),
+            "sample_count": len(samples),
+            "ball_start_pose": ball_start_pose,
+            "ball_end_pose": ball_end_pose,
+            "distance_to_fetch_pose_m": (
+                round(float(distance_to_fetch_pose_m), 6)
+                if distance_to_fetch_pose_m is not None
+                else None
+            ),
+            "closest_approach_distance_m": (
+                round(float(closest_distance), 6)
+                if closest_distance is not None
+                else None
+            ),
+            "closest_pose": closest_pose,
+            "distance_to_zone_m": (
+                round(float(zone_score.retrieval_distance_m), 6)
+                if zone_score is not None
+                else None
+            ),
+            "inside_retrieval_corral": bool(zone_score.center_inside_retrieval_corral) if zone_score is not None else False,
+            "ball_stopped": bool(settle_metrics.get("ball_stopped_in_corral", False)),
+            "rolled_away": bool(
+                settle_metrics.get(
+                    "rolled_away_after_release",
+                    place_payload.get("rolled_away_after_release", False) if isinstance(place_payload, dict) else False,
+                )
+            ),
+            "max_overshoot_distance_m": round(float(clean_number(settle_metrics.get("max_overshoot_distance_m")) or 0.0), 6),
+            "surface_profile": self.surface_profile,
         }
 
     def _persist_visit_runtime_state(self) -> None:
@@ -914,6 +1159,11 @@ class GatherMissionRunner:
         approach_failure_reason: str = "",
         latest_approach_progress: dict[str, Any] | None = None,
         fresh_attempt_approach: dict[str, Any] | None = None,
+        fetch_to_pose_reached: bool = False,
+        fetch_to_pose_time_s: float = 0.0,
+        fetch_to_pose_failure_reason: str = "",
+        fetch_pose_world: dict[str, Any] | None = None,
+        shot_outcome: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         approach_fields = resolve_approach_result_fields(
             pre_stage_pose_world=pre_stage_pose_world,
@@ -945,6 +1195,7 @@ class GatherMissionRunner:
             "target_id": target.id,
             "label": target.label,
             "pass": False,
+            "mission_objective": self.mission_objective,
             "failure_reason": str(failure_reason),
             "failure_stage": str(failure_stage),
             "attempts": int(attempts),
@@ -954,6 +1205,13 @@ class GatherMissionRunner:
             "local_recovery_attempted": bool(local_recovery_attempted),
             "revisit_attempted": bool(revisit_attempted),
             "surface_profile": self.surface_profile,
+            "fetched": bool(fetch_to_pose_reached),
+            "fetch_to_pose_reached": bool(fetch_to_pose_reached),
+            "fetch_to_pose_time_s": round(float(fetch_to_pose_time_s), 6),
+            "fetch_to_pose_failure_reason": clean_text(fetch_to_pose_failure_reason, clean_text(failure_reason)),
+            "fetch_pose_world": dict(fetch_pose_world) if isinstance(fetch_pose_world, dict) else {},
+            "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+            "shot_outcome": dict(shot_outcome) if isinstance(shot_outcome, dict) else {},
             "handoff_kind": clean_text(handoff_kind, "unspecified"),
             "zone_edge_correction_count": int(zone_edge_correction_count),
             "place_controller_reentry_count": int(place_controller_reentry_count),
@@ -1049,6 +1307,11 @@ class GatherMissionRunner:
         approach_failure_reason: str = "",
         latest_approach_progress: dict[str, Any] | None = None,
         fresh_attempt_approach: dict[str, Any] | None = None,
+        fetch_to_pose_reached: bool = False,
+        fetch_to_pose_time_s: float = 0.0,
+        fetch_to_pose_failure_reason: str = "",
+        fetch_pose_world: dict[str, Any] | None = None,
+        shot_outcome: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         approach_fields = resolve_approach_result_fields(
             pre_stage_pose_world=pre_stage_pose_world,
@@ -1096,7 +1359,11 @@ class GatherMissionRunner:
             if practical_retrieval_pass is None
             else bool(practical_retrieval_pass)
         )
-        target_pass = practical_pass if self.args.scenario_id == "gather_three_ball_zone" else bool(settled_pass)
+        fetch_pass = bool(fetch_to_pose_reached)
+        if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+            target_pass = fetch_pass
+        else:
+            target_pass = practical_pass if self.args.scenario_id == "gather_three_ball_zone" else bool(settled_pass)
         resolved_settle_exit_reason = clean_text(
             settle_payload.get("settle_exit_reason") if isinstance(settle_payload, dict) else "",
             clean_text(
@@ -1116,11 +1383,19 @@ class GatherMissionRunner:
             "target_id": target.id,
             "label": target.label,
             "pass": bool(target_pass),
+            "mission_objective": self.mission_objective,
             "attempts": int(attempts),
             "attempt_kind": str(attempt_kind),
             "capture_loss_count": int(capture_loss_count),
             "route_index": int(route_index),
             "placed": bool(target_pass),
+            "fetched": bool(fetch_pass),
+            "fetch_to_pose_reached": bool(fetch_pass),
+            "fetch_to_pose_time_s": round(float(fetch_to_pose_time_s), 6),
+            "fetch_to_pose_failure_reason": clean_text(fetch_to_pose_failure_reason),
+            "fetch_pose_world": dict(fetch_pose_world) if isinstance(fetch_pose_world, dict) else {},
+            "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+            "shot_outcome": dict(shot_outcome) if isinstance(shot_outcome, dict) else {},
             "final_ball_pose": final_ball_pose,
             "place_time_s": round(float(place_time_s), 6),
             "local_recovery_attempted": bool(local_recovery_attempted),
@@ -8232,6 +8507,158 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 ),
             }
 
+        def _mark_fetch_objective_complete(final_ball_pose: dict[str, Any], shot_outcome: dict[str, Any]) -> None:
+            if final_ball_pose:
+                self._record_target_position(
+                    target.id,
+                    x=float(final_ball_pose.get("x", 0.0)),
+                    y=float(final_ball_pose.get("y", 0.0)),
+                    z=float(final_ball_pose.get("z", target.z_m) or target.z_m),
+                )
+            placed_targets = list(self.gather_runtime_state.get("placed_targets", []))
+            if target.id not in placed_targets:
+                placed_targets.append(target.id)
+            fetched_targets = list(self.gather_runtime_state.get("fetched_targets", []))
+            if target.id not in fetched_targets:
+                fetched_targets.append(target.id)
+            visited_targets = list(self.visit_runtime_state.get("visited_targets", []))
+            if target.id not in visited_targets:
+                visited_targets.append(target.id)
+            remaining_targets = [item for item in self.gather_runtime_state.get("remaining_targets", []) if item != target.id]
+            self._update_gather_runtime_state(
+                mission_phase="advance",
+                gather_phase="advance",
+                placed_targets=placed_targets,
+                fetched_targets=fetched_targets,
+                remaining_targets=remaining_targets,
+                capture_loss_count=capture_loss_count,
+                latest_feedback=f"{target.label} fetched through the delivery pose.",
+                last_fetch_to_pose_result=shot_outcome,
+            )
+            self._update_visit_runtime_state(
+                visited_targets=visited_targets,
+                remaining_targets=remaining_targets,
+                last_visit_result={"target_id": target.id, "pass": True, "mission_objective": self.mission_objective},
+                current_target_prior={},
+                mission_phase="advance",
+                latest_feedback=f"{target.label} fetched through the delivery pose.",
+            )
+            self._append_runtime_event(
+                f"{target.label} fetched through the delivery pose.",
+                key=f"fetch_to_pose:{target.id}",
+            )
+
+        def _resolve_fetch_to_pose_place_result(
+            *,
+            place_pass: bool,
+            place_payload: dict[str, Any],
+            capture_payload: dict[str, Any],
+            attempt_kind: str,
+            local_recovery_attempted: bool,
+            terminal_failure: bool,
+        ) -> dict[str, Any] | None:
+            if self.mission_objective != MISSION_OBJECTIVE_FETCH_TO_POSE:
+                return None
+            if not place_pass and not terminal_failure:
+                return None
+            place_failure_reason = "" if place_pass else str(place_payload.get("failure_reason", "place_failed"))
+            final_ball_pose = pose_payload(place_payload.get("final_ball_pose"))
+            shot_outcome = self._build_fetch_to_pose_outcome(
+                target=target,
+                state_history_path=state_history_path,
+                final_ball_pose=final_ball_pose,
+                place_payload=place_payload,
+                place_failure_reason=place_failure_reason,
+            )
+            fetch_pose_world = shot_outcome.get("fetch_pose_world", {}) if isinstance(shot_outcome.get("fetch_pose_world"), dict) else {}
+            final_ball_pose = pose_payload(shot_outcome.get("ball_end_pose")) or final_ball_pose
+            fetch_to_pose_reached = bool(shot_outcome.get("pass", False))
+            fetch_failure_reason = "" if fetch_to_pose_reached else clean_text(shot_outcome.get("reason"), "fetch_to_pose_missed")
+            fetch_time_s = time.monotonic() - target_start_monotonic
+            fetch_fields = {
+                "fetch_to_pose_reached": fetch_to_pose_reached,
+                "fetch_to_pose_time_s": fetch_time_s,
+                "fetch_to_pose_failure_reason": fetch_failure_reason,
+                "fetch_pose_world": fetch_pose_world,
+                "shot_outcome": shot_outcome,
+            }
+            fetch_result_row = {
+                "generated_utc": utc_now(),
+                "event_type": "fetch_to_pose_result",
+                "phase": "fetch_to_pose",
+                "target_id": target.id,
+                "attempt": int(attempt),
+                "attempt_kind": attempt_kind,
+                "fetch_to_pose": {
+                    "pass": fetch_to_pose_reached,
+                    "reached": fetch_to_pose_reached,
+                    "time_s": round(float(fetch_time_s), 6),
+                    "distance_to_fetch_pose_m": shot_outcome.get("distance_to_fetch_pose_m"),
+                    "closest_approach_distance_m": shot_outcome.get("closest_approach_distance_m"),
+                    "failure_reason": fetch_failure_reason,
+                },
+                "fetch_pose_world": fetch_pose_world,
+                "shot_outcome": shot_outcome,
+            }
+            append_jsonl(state_history_path, fetch_result_row)
+            append_jsonl(gather_sequence_path, fetch_result_row)
+
+            settle_metrics = place_payload.get("settle_metrics") if isinstance(place_payload.get("settle_metrics"), dict) else None
+            if fetch_to_pose_reached:
+                _mark_fetch_objective_complete(final_ball_pose, shot_outcome)
+                return self._target_success_result(
+                    target=target,
+                    attempts=attempt,
+                    capture_loss_count=capture_loss_count,
+                    route_index=route_index,
+                    final_ball_pose=final_ball_pose,
+                    place_time_s=fetch_time_s,
+                    attempt_kind=attempt_kind,
+                    local_recovery_attempted=local_recovery_attempted,
+                    revisit_attempted=post_visit_revisit_count > 0,
+                    settle_metrics=settle_metrics,
+                    handoff_kind=clean_text(active_handoff_kind, "unspecified"),
+                    zone_edge_correction_count=zone_edge_correction_count,
+                    place_controller_reentry_count=place_controller_reentry_count,
+                    post_visit_revisit_count=post_visit_revisit_count,
+                    **fetch_fields,
+                    **_retention_kwargs(place_payload),
+                    **_settle_kwargs(place_payload),
+                    **_control_diag_kwargs(place_payload),
+                    **_approach_kwargs(capture_payload),
+                    **_latest_approach_progress_kwargs(),
+                    **_fresh_attempt_approach_kwargs(),
+                )
+
+            self._update_visit_runtime_state(
+                proof_state="failed",
+                mission_phase="failed",
+                latest_feedback=f"{target.label} fetch-to-pose missed.",
+            )
+            return self._target_failure_result(
+                target=target,
+                failure_reason=fetch_failure_reason,
+                failure_stage="fetch_to_pose",
+                attempts=attempt,
+                capture_loss_count=capture_loss_count,
+                route_index=route_index,
+                attempt_kind=attempt_kind,
+                local_recovery_attempted=local_recovery_attempted,
+                revisit_attempted=post_visit_revisit_count > 0,
+                settle_metrics=settle_metrics,
+                handoff_kind=clean_text(active_handoff_kind, "unspecified"),
+                zone_edge_correction_count=zone_edge_correction_count,
+                place_controller_reentry_count=place_controller_reentry_count,
+                post_visit_revisit_count=post_visit_revisit_count,
+                **fetch_fields,
+                **_retention_kwargs(place_payload),
+                **_settle_kwargs(place_payload),
+                **_control_diag_kwargs(place_payload),
+                **_approach_kwargs(capture_payload),
+                **_latest_approach_progress_kwargs(),
+                **_fresh_attempt_approach_kwargs(),
+            )
+
         while attempt <= self.args.max_retries_per_target:
             attempt += 1
             direct_recapture_attempt = resume_with_capture
@@ -8532,6 +8959,16 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     place_controller_reentry_count += 1
 
             if isinstance(capture_payload.get("final_ball_pose"), dict):
+                fetch_resolution = _resolve_fetch_to_pose_place_result(
+                    place_pass=True,
+                    place_payload=capture_payload,
+                    capture_payload=capture_payload,
+                    attempt_kind=attempt_kind,
+                    local_recovery_attempted=local_recovery_attempted_any,
+                    terminal_failure=False,
+                )
+                if fetch_resolution is not None:
+                    return fetch_resolution
                 final_ball_pose = capture_payload.get("final_ball_pose", {})
                 if final_ball_pose:
                     self._record_target_position(
@@ -8611,6 +9048,28 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 attempt_kind=attempt_kind,
             )
             zone_edge_correction_count += int(place_payload.get("zone_edge_correction_count", 0) or 0)
+            failure_reason = str(place_payload.get("failure_reason", "place_failed")) if not place_pass else ""
+            failure_stage = str(place_payload.get("failure_stage", "place")) if not place_pass else ""
+            local_recovery_attempted = bool(place_payload.get("local_recovery_attempted", False))
+            local_recovery_attempted_any = local_recovery_attempted_any or local_recovery_attempted
+            place_recovery_failure = failure_reason in {"capture_lost", "release_unsettled", "release_roll_away"}
+            if failure_reason == "capture_lost":
+                capture_loss_count += 1
+                self._update_gather_runtime_state(capture_loss_count=capture_loss_count)
+            fetch_resolution = _resolve_fetch_to_pose_place_result(
+                place_pass=place_pass,
+                place_payload=place_payload,
+                capture_payload=capture_payload,
+                attempt_kind=attempt_kind,
+                local_recovery_attempted=local_recovery_attempted_any or bool(place_payload.get("local_recovery_attempted", False)),
+                terminal_failure=bool(
+                    failure_reason == "release_roll_away"
+                    or attempt > self.args.max_retries_per_target
+                    or (not place_recovery_failure and not place_pass and attempt > self.args.max_retries_per_target)
+                ),
+            )
+            if fetch_resolution is not None:
+                return fetch_resolution
             if place_pass:
                 final_ball_pose = place_payload.get("final_ball_pose") if isinstance(place_payload.get("final_ball_pose"), dict) else {}
                 if final_ball_pose:
@@ -8668,14 +9127,6 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_fresh_attempt_approach_kwargs(),
                 )
 
-            failure_reason = str(place_payload.get("failure_reason", "place_failed"))
-            failure_stage = str(place_payload.get("failure_stage", "place"))
-            local_recovery_attempted = bool(place_payload.get("local_recovery_attempted", False))
-            local_recovery_attempted_any = local_recovery_attempted_any or local_recovery_attempted
-            place_recovery_failure = failure_reason in {"capture_lost", "release_unsettled", "release_roll_away"}
-            if failure_reason == "capture_lost":
-                capture_loss_count += 1
-                self._update_gather_runtime_state(capture_loss_count=capture_loss_count)
             if place_recovery_failure:
                 recovery_label = "place-stage correction" if failure_reason == "capture_lost" else "release-stage correction"
                 if failure_reason != "release_roll_away" and attempt <= self.args.max_retries_per_target:
@@ -8933,6 +9384,20 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             )
             settle_time_s = float(final_result.get("settle_time_s", 0.0) or 0.0)
             release_recontact_count = sum(int(item.get("release_recontact_count", 0) or 0) for item in target_results)
+            fetch_to_pose_reached = bool(final_result.get("fetch_to_pose_reached", False))
+            fetch_to_pose_time_s = float(clean_number(final_result.get("fetch_to_pose_time_s")) or 0.0)
+            fetch_to_pose_failure_reason = clean_text(final_result.get("fetch_to_pose_failure_reason"))
+            fetch_pose_world = (
+                final_result.get("fetch_pose_world", {})
+                if isinstance(final_result.get("fetch_pose_world"), dict)
+                else {}
+            )
+            shot_outcome = (
+                final_result.get("shot_outcome", {})
+                if isinstance(final_result.get("shot_outcome"), dict)
+                else {}
+            )
+            fetch_to_pose_pass = bool(mission_completed_pass and fetch_to_pose_reached)
             final_corral_audit: dict[str, Any] = {}
             final_all_targets_inside_retrieval_corral = False
             final_all_targets_stopped = False
@@ -8968,16 +9433,27 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     and post_visit_revisit_count == 0
                 )
             final_mission_error = mission_error
-            if self.args.scenario_id == "gather_three_ball_zone":
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+                if mission_completed_pass and not fetch_to_pose_pass and not final_mission_error:
+                    final_mission_error = fetch_to_pose_failure_reason or "fetch_to_pose_failed"
+            elif self.args.scenario_id == "gather_three_ball_zone":
                 if mission_completed_pass and not final_three_ball_corral_pass and not final_mission_error:
                     final_mission_error = "final_corral_audit_failed"
             elif mission_completed_pass and not settled_in_corral_pass and not final_mission_error:
                 final_mission_error = "settled_in_corral_failed"
+            objective_pass = (
+                fetch_to_pose_pass
+                if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+                else final_three_ball_corral_pass
+                if self.args.scenario_id == "gather_three_ball_zone"
+                else settled_in_corral_pass
+            )
             mission_verdict = {
                 "generated_utc": utc_now(),
                 "type": "gather_mission",
-                "pass": final_three_ball_corral_pass if self.args.scenario_id == "gather_three_ball_zone" else settled_in_corral_pass,
+                "pass": bool(objective_pass),
                 "mission_completed_pass": mission_completed_pass,
+                "mission_objective": self.mission_objective,
                 "scenario_id": self.args.scenario_id,
                 "scenario_label": self.args.scenario_label,
                 "session_id": session_id,
@@ -9021,6 +9497,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "ball_stopped_in_corral": ball_stopped_in_corral,
                 "rolled_away_after_release": rolled_away_after_release,
                 "settled_in_corral_pass": settled_in_corral_pass,
+                "fetch_to_pose_reached": fetch_to_pose_reached,
+                "fetch_to_pose_pass": fetch_to_pose_pass,
+                "fetch_to_pose_time_s": round(fetch_to_pose_time_s, 6),
+                "fetch_to_pose_failure_reason": fetch_to_pose_failure_reason,
+                "fetch_pose_world": fetch_pose_world,
+                "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                "shot_outcome": shot_outcome,
                 "final_corral_audit": final_corral_audit,
                 "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
                 "final_all_targets_stopped": final_all_targets_stopped,
@@ -9050,6 +9533,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "pass": bool(mission_verdict["pass"]),
                 "scenario_id": self.args.scenario_id,
                 "scenario_label": self.args.scenario_label,
+                "mission_objective": self.mission_objective,
                 "session_id": session_id,
                 "world_file": self.world_file,
                 "surface_profile": self.surface_profile,
@@ -9091,6 +9575,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "ball_stopped_in_corral": ball_stopped_in_corral,
                 "rolled_away_after_release": rolled_away_after_release,
                 "settled_in_corral_pass": settled_in_corral_pass,
+                "fetch_to_pose_reached": fetch_to_pose_reached,
+                "fetch_to_pose_pass": fetch_to_pose_pass,
+                "fetch_to_pose_time_s": round(fetch_to_pose_time_s, 6),
+                "fetch_to_pose_failure_reason": fetch_to_pose_failure_reason,
+                "fetch_pose_world": fetch_pose_world,
+                "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                "shot_outcome": shot_outcome,
                 "final_corral_audit": final_corral_audit,
                 "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
                 "final_all_targets_stopped": final_all_targets_stopped,
@@ -9113,6 +9604,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "promotion_gate_pass": summary["pass"],
                     "settled_in_corral_pass_count": 1 if settled_in_corral_pass else 0,
                     "settled_in_corral_fail_count": 0 if settled_in_corral_pass else 1,
+                    "fetch_to_pose_pass_count": 1 if fetch_to_pose_pass else 0,
+                    "fetch_to_pose_fail_count": 0 if fetch_to_pose_pass else 1,
                     "final_inside_retrieval_corral_count": 1 if final_inside_retrieval_corral else 0,
                     "final_center_inside_zone_count": 1 if final_center_inside_zone else 0,
                     "ball_stopped_in_corral_count": 1 if ball_stopped_in_corral else 0,
@@ -9258,6 +9751,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reasoning-effort", default=os.environ.get("OPENAI_SUPERVISOR_REASONING_EFFORT") or os.environ.get("OPENAI_REASONING_EFFORT") or DEFAULT_REASONING_EFFORT)
     parser.add_argument("--scenario-id", default="corral_single_ball_place")
     parser.add_argument("--scenario-label", default="Corral Single Ball Place")
+    parser.add_argument("--mission-objective", choices=ALLOWED_MISSION_OBJECTIVES, default=os.environ.get("CHASECAR_MISSION_OBJECTIVE", MISSION_OBJECTIVE_GATHER_HERE))
+    parser.add_argument("--fetch-target-x", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_X", "")))
+    parser.add_argument("--fetch-target-y", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Y", "")))
+    parser.add_argument("--fetch-target-z", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Z", "")))
+    parser.add_argument("--fetch-delivery-radius-m", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_DELIVERY_RADIUS_M", DEFAULT_FETCH_DELIVERY_RADIUS_M)))
     parser.add_argument("--world-file", default=os.environ.get("WORLD_FILE", ""))
     parser.add_argument("--surface-profile", default=os.environ.get("CHASECAR_SURFACE_PROFILE", "baseline"))
     parser.add_argument("--artifact-kind", default="gather_mission")

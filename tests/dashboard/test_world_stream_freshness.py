@@ -1202,8 +1202,9 @@ def test_beta_dashboard_includes_corral_menu_and_stage_mapping():
 
     assert "pickScenario('corral_single_ball_place')" in html
     assert "pickScenario('gather_three_ball_zone')" in html
-    assert "runScenario('corral_single_ball_place')" in html
-    assert "Run Single-Ball Corral" in html
+    assert "runObjectCentricZero()" in html
+    assert "Run Object-Centric Zero" in html
+    assert "const OBJECT_CENTRIC_ZERO_SCENARIO_ID = 'object_centric_zero_saved_layout';" in html
     assert "const CORRAL_STAGE_LABELS = ['Init','Visit','Capture','Place','Done'];" in html
     assert "Acquiring the ball" in html
     assert "Controlling the ball" in html
@@ -1577,6 +1578,43 @@ def test_request_scenario_run_three_ball_gather_queues_after_sim_reset(monkeypat
     assert started[0].target == controller._reset_environment_worker
 
 
+def test_request_object_centric_zero_from_stopped_starts_environment_and_queues_scenario(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["environment_state"] = "stopped"
+    controller.state["scenario_state"] = "idle"
+    controller._refresh_control_plane_state = lambda force=False: None
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            self._alive = False
+            started.append(self)
+
+        def start(self) -> None:
+            self._alive = True
+
+        def is_alive(self) -> bool:
+            return self._alive
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_scenario_run(dashboard_service.OBJECT_CENTRIC_ZERO_SCENARIO_ID)
+
+    assert status == 202
+    assert payload["accepted"] is True
+    assert "queued after environment start" in payload["message"]
+    assert controller.pending_scenario_id == dashboard_service.OBJECT_CENTRIC_ZERO_SCENARIO_ID
+    assert controller.state["environment_state"] == "starting"
+    assert controller.state["world_file"] == dashboard_service.SHORT_TURF_WORLD_FILE
+    assert controller.state["surface_profile"] == "short_turf"
+    assert controller.state["robot_sdf_name"] == dashboard_service.CORRAL_ROBOT_SDF_NAME
+    assert started
+    assert started[0].target == controller._start_environment_worker
+
+
 def test_robot_sdf_name_for_startup_defaults_to_baseline(tmp_path):
     controller = _make_controller(tmp_path)
 
@@ -1781,6 +1819,57 @@ def test_run_gather_mission_scenario_uses_host_runtime_paths(tmp_path, monkeypat
     assert result["pass"] is True
     assert result["artifacts"]["gather_mission"] == str(mission_root)
     assert result["surface_profile"] == "short_turf"
+
+
+def test_run_object_centric_zero_dashboard_scenario_uses_saved_layout_and_policy(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    controller.state["dashboard_url"] = "http://127.0.0.1:8860/"
+    controller._scenarios_dir = lambda: tmp_path / "scenarios"
+    controller._current_validation_dir = lambda: tmp_path / "validation"
+    controller._visit_mission_runtime_state = lambda: {"proof_state": "completed"}
+    controller._gather_mission_runtime_state = lambda: {
+        "mission_phase": "completed",
+        "mission_status": "completed",
+        "gather_phase": "completed",
+        "surface_profile": "short_turf",
+    }
+    controller._scenario_env = lambda _scenario: {
+        "WORLD_FILE": "yolo_test_world_v6_clean_uat_short_turf.world",
+        "CHASECAR_SURFACE_PROFILE": "short_turf",
+    }
+
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    mission_verdict_path = mission_root / "mission_verdict.json"
+    _write_json(mission_verdict_path, {"pass": True, "type": "gather_mission"})
+    _write_json(mission_root / "summary.json", {"pass": True})
+    _write_json(mission_root / "target_results.json", {"targets": []})
+
+    captured: dict[str, object] = {}
+
+    class _FakeProc:
+        def __init__(self, cmd, stdout_handle) -> None:
+            captured["cmd"] = list(cmd)
+            stdout_handle.write(f"GATHER_MISSION_SUMMARY={mission_verdict_path}\n")
+            stdout_handle.flush()
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(dashboard_service.subprocess, "Popen", lambda command, **kwargs: _FakeProc(command, kwargs["stdout"]))
+
+    scenario = dashboard_service.SCENARIOS_BY_ID[dashboard_service.OBJECT_CENTRIC_ZERO_SCENARIO_ID]
+    result = controller._run_gather_mission_scenario(scenario)
+
+    command = captured["cmd"]
+    assert command[command.index("--scenario-id") + 1] == "corral_single_ball_place"
+    assert command[command.index("--gather-control-family") + 1] == "object_centric_gather_policy_v1"
+    assert command[command.index("--target-layout-json") + 1] == dashboard_service.OBJECT_CENTRIC_ZERO_TARGET_LAYOUT_JSON
+    assert command[command.index("--max-retries-per-target") + 1] == "2"
+    assert result["scenario_id"] == dashboard_service.OBJECT_CENTRIC_ZERO_SCENARIO_ID
+    assert result["runner_scenario_id"] == "corral_single_ball_place"
+    assert result["gather_control_family"] == "object_centric_gather_policy_v1"
 
 
 def test_run_three_ball_gather_scenario_returns_aggregate_corral_fields(tmp_path, monkeypatch):

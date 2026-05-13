@@ -475,27 +475,41 @@ Analyzer contract:
 3. summarizes FollowPath dispatch/completion status, loaded MPPI params, path geometry, path progress, cmd velocity tails, feedback distance, terminal distance/yaw, robot motion, and ball motion
 4. is analyzer-only: it does not refresh portfolio/stress evidence, rerun live sim, promote blocked FollowPath branches, or change runtime control
 
-## Object-Centric Gather Policy Research
+## Object-Centric Fetch Policy Research
 
-Use this direction after MPPI FollowPath evidence shows safe pre-stage movement but downstream contact behavior remains brittle. The detailed research plan lives in [OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md](OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md).
+This is the active direction after the object-centric gather/place work exposed
+a useful launch/roll primitive. The detailed plan lives in
+[OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md).
+The previous gather/place plan remains as historical context in
+[OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md](OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md).
 
 Commands:
 
-1. offline evaluator: `python scripts/gather_object_centric_policy_evaluator.py --campaign-id <id> --artifact mppi=<summary> --artifact object_policy=<summary>`
-2. runtime family: `powershell -ExecutionPolicy Bypass -File scripts/run_gather_goal_side_matrix.ps1 -GatherControlFamily object_centric_gather_policy_v1 -RunsPerCase 1 -MaxRetriesPerTarget 0`
+1. historical gather evaluator: `python scripts/gather_object_centric_policy_evaluator.py --campaign-id <id> --artifact mppi=<summary> --artifact object_policy=<summary>`
+2. historical gather runtime family: `powershell -ExecutionPolicy Bypass -File scripts/run_gather_goal_side_matrix.ps1 -GatherControlFamily object_centric_gather_policy_v1 -RunsPerCase 1 -MaxRetriesPerTarget 0`
+3. fetch runtime command: not implemented yet; first implementation should add a `fetch_to_pose` phase to the existing gather mission runner rather than creating a new runner
 
 Research contract:
 
 1. freeze `nav2_mppi_follow_path_reacquire_v1` as the baseline/evidence branch rather than continuing broad MPPI/capture threshold tuning
 2. reserve Nav2/MPPI for long-range repositioning and obstacle-aware path following
-3. let `object_centric_gather_policy_v1` own ball interaction as a short-horizon policy over robot pose, ball pose, zone pose, recent robot/ball deltas, previous command, and capture/contact flags
-4. keep deterministic safety filters around every policy proposal: command bounds, ball drift, clearance, goal-side violation, timeout, stuck state, and safe-stop fallback
-5. use `scripts/gather_object_centric_policy_evaluator.py` to score MPPI baseline and future policy artifacts on the same state-history metrics before promotion
-6. use `scripts/gather_object_centric_policy_helpers.py` as the structured object-servo baseline before any learned residual or direct policy
-7. use learned residuals only after structured servo failure modes are measured
-8. keep direct high-frequency LLM motor control out of scope
+3. treat `object_centric_gather_policy_v1` as a historical gather/place baseline and source of useful launch/roll behavior
+4. define `fetch_to_pose` first; user/person detection comes later through the same target-pose contract
+5. score fetch success by measured ball-trajectory intersection with a delivery radius, not final stop in a corral
+6. run fetch as bounded `setup -> launch -> observe -> recover/re-aim -> done/give_up` cycles with explicit attempt and mission budgets
+7. keep deterministic safety filters around every policy proposal: command bounds, ball drift, clearance, target freshness, timeout, stuck state, and safe-stop fallback
+8. capture shot-outcome, surface-calibration, failure-replay, and counterfactual-prediction data before tuning launch behavior
+9. use learned residuals only after structured fetch and calibration failure modes are measured
+10. keep direct high-frequency LLM motor control out of scope
 
-Evaluator contract:
+Implementation contract:
+
+1. add the first `fetch_to_pose` phase inside `scripts/gather_mission_runner.py` after successful capture/setup and before legacy place/release behavior
+2. extend `scripts/gather_object_centric_policy_helpers.py` with `phase="fetch_to_pose"` while preserving the existing `object_centric_policy` diagnostics shape
+3. keep detailed shot rows in `state_history.jsonl`; use `gather_sequence.jsonl` only for milestones and result events
+4. propagate fetch verdict and shot-outcome summaries through `mission_verdict.json`, repeatability campaign summaries, and the evaluator before adding dashboard-specific live visualization
+
+Historical evaluator contract:
 
 1. reads existing `gather_goal_side_matrix/campaign_summary.json`, `gather_mission_repeatability/campaign_run_summary.json`, mission verdicts, and referenced `state_history.jsonl` only
 2. writes `artifacts/session/<campaign_id>/gather_object_centric_policy_evaluator/object_centric_policy_summary.json` and `scorecard.md`
@@ -504,12 +518,13 @@ Evaluator contract:
 
 Live gates:
 
-1. saved-layout `zero`, one run, no retries
-2. saved-layout `plus45`, one run, no retries
-3. saved-layout `zero --runs 3`, no retries
-4. saved-layout `plus45 --runs 3`, no retries
-5. full four-case goal-side matrix
-6. portfolio/stress consideration only after full mission gates are green or explicitly re-scoped
+1. fetch outcome schema/offline replay exists before tuning
+2. calibration smoke: straight target pose, one launch, one run, with shot outcome evidence
+3. fetch-to-pose smoke: saved-layout `zero`, one run, bounded recovery
+4. fetch-to-pose smoke: saved-layout `plus45`, one run, bounded recovery
+5. recovery smoke: one allowed recovery cycle and explicit give-up when the second shot cannot be made safely
+6. repeatability: saved-layout `zero --runs 3` and `plus45 --runs 3`, bounded recovery
+7. person target prototype only after pose-target gates are green
 
 ## Gather Pre-Stage Command Authority Audit (Offline Analyzer)
 
@@ -1109,7 +1124,12 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<campaign_id>/gather_object_centric_policy_evaluator/object_centric_policy_summary.json`
    - `artifacts/session/<campaign_id>/gather_object_centric_policy_evaluator/scorecard.md`
    - object-centric policy outputs are analyzer-only evidence; they compare MPPI baseline and object-policy traces on pre-stage handoff, contact/capture, zone entry, safety, and command smoothness without promoting a branch or changing runtime control
-29. Gather pre-stage command authority audit:
+29. Object-centric fetch policy evidence (planned):
+   - `artifacts/session/<campaign_id>/fetch_to_pose/shot_outcomes.jsonl`
+   - `artifacts/session/<campaign_id>/fetch_to_pose/fetch_policy_summary.json`
+   - `artifacts/session/<campaign_id>/fetch_to_pose/scorecard.md`
+   - first implementation may emit these fields through existing gather mission artifacts before a dedicated fetch analyzer exists; detailed per-tick shot evidence belongs in `state_history.jsonl`, while milestone/result events belong in `gather_sequence.jsonl`
+30. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/scorecard.md`
    - command-authority outputs are analyzer-only assumption-peel-back evidence; missing state history or missing debug fields are recorded as missing evidence rather than pass/fail, and no blocked branch is promoted or ingested into portfolio/stress comparison

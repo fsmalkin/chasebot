@@ -358,7 +358,7 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
         <button class="btn btn-ghost"   id="btn-stop-env" onclick="post('/api/env/stop',{})">Stop env</button>
         <button class="btn btn-ghost"   id="btn-reset"    onclick="post('/api/sim/reset',{})">Reset</button>
         <div class="sep-v"></div>
-        <button class="btn btn-primary" id="btn-llm"      onclick="runScenario('corral_single_ball_place')">Run Single-Ball Corral</button>
+        <button class="btn btn-primary" id="btn-llm"      onclick="runObjectCentricZero()">Run Object-Centric Zero</button>
         <div class="dropdown-wrap" id="sc-wrap">
           <button class="btn btn-default" id="btn-scenarios" onclick="toggleScenarios(event)">Scenarios v</button>
           <div class="dropdown-menu" id="sc-menu">
@@ -368,6 +368,7 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
             <button class="dm-item" onclick="pickScenario('m3_left')">M3 Left</button>
             <button class="dm-item" onclick="pickScenario('m3_right')">M3 Right</button>
             <div class="dm-sep"></div>
+            <button class="dm-item" onclick="pickScenario('object_centric_zero_saved_layout')">Object-centric zero</button>
             <button class="dm-item" onclick="pickScenario('corral_single_ball_place')">Corral 1-ball</button>
             <button class="dm-item" onclick="pickScenario('gather_three_ball_zone')">Gather 3-ball</button>
             <button class="dm-item" onclick="pickScenario('visit_route_planning')">LLM Route Plan</button>
@@ -470,6 +471,7 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
 let S = null;
 let activeTab = 'watch';
 let prevDistM = null;
+const OBJECT_CENTRIC_ZERO_SCENARIO_ID = 'object_centric_zero_saved_layout';
 const STREAM_RECOVER_COOLDOWN_MS = 1500;
 const streamUi = {
   world: createStreamUiState(),
@@ -522,6 +524,10 @@ async function post(url, body) {
 
 async function runScenario(id) { await post('/api/scenario/run', { scenario_id: id }); }
 
+async function runObjectCentricZero() {
+  await runScenario(OBJECT_CENTRIC_ZERO_SCENARIO_ID);
+}
+
 async function dispatchIntent(intent) {
   setDriveResp('warn', 'dispatching ' + intent + '...');
   await post('/api/intents/dispatch', { intent });
@@ -563,7 +569,11 @@ function currentScenarioId(s) {
 
 function isCorralScenario(s) {
   const scenarioId = currentScenarioId(s);
-  return scenarioId === 'corral_single_ball_place' || scenarioId === 'gather_three_ball_zone';
+  return (
+    scenarioId === 'corral_single_ball_place'
+    || scenarioId === 'gather_three_ball_zone'
+    || scenarioId === OBJECT_CENTRIC_ZERO_SCENARIO_ID
+  );
 }
 
 function stageLabelsForState(s) {
@@ -1205,13 +1215,18 @@ function renderButtons() {
   const c      = S.controls || {};
   const running = (S.scenario_state || 'idle') === 'running';
   const canRun  = !running && (c.can_run_scenario ?? true);
+  const canStartObjectCentricZero = !running && S.environment_state === 'stopped' && (c.can_start ?? false);
+  const cta = document.getElementById('btn-llm');
 
   setDisabled('btn-start',     !(c.can_start ?? true));
   setDisabled('btn-stop-env',  !(c.can_stop  ?? true));
   setDisabled('btn-reset',     !(c.can_reset_sim ?? true));
-  setDisabled('btn-llm',       !canRun);
+  setDisabled('btn-llm',       !(canRun || canStartObjectCentricZero));
   setDisabled('btn-scenarios', !canRun);
   setDisabled('btn-stop-sc',   !running);
+  if (cta) {
+    cta.textContent = canStartObjectCentricZero ? 'Start + Run Object-Centric Zero' : 'Run Object-Centric Zero';
+  }
   document.querySelectorAll('#sc-menu .dm-item').forEach(el => { el.disabled = !canRun; });
 }
 

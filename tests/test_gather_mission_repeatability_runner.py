@@ -147,6 +147,31 @@ def test_parse_args_allows_object_centric_gather_policy_v1(monkeypatch):
     assert args.gather_control_family == "object_centric_gather_policy_v1"
 
 
+def test_parse_args_allows_fetch_to_pose_objective(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        [
+            "repeatability",
+            "--mission-objective",
+            "fetch_to_pose",
+            "--fetch-target-x",
+            "2.8",
+            "--fetch-target-y",
+            "-0.2",
+            "--fetch-delivery-radius-m",
+            "0.5",
+        ],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.mission_objective == "fetch_to_pose"
+    assert args.fetch_target_x == 2.8
+    assert args.fetch_target_y == -0.2
+    assert args.fetch_delivery_radius_m == 0.5
+
+
 def test_ensure_environment_ready_noops_when_dashboard_already_ready(monkeypatch):
     calls: list[tuple[str, str]] = []
 
@@ -666,6 +691,47 @@ def test_summarize_gather_artifacts_reads_clean_retention_fields(tmp_path: Path)
     assert summary["ball_stopped_in_corral"] is False
     assert summary["rolled_away_after_release"] is False
     assert summary["settled_in_corral_pass"] is False
+
+
+def test_summarize_gather_artifacts_reads_fetch_to_pose_fields(tmp_path: Path):
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    verdict_path = mission_root / "mission_verdict.json"
+    shot_outcome = {
+        "pass": True,
+        "reason": "trajectory_intersects_delivery_radius",
+        "closest_approach_distance_m": 0.12,
+    }
+    verdict_path.write_text(
+        json.dumps(
+            {
+                "pass": True,
+                "mission_completed_pass": True,
+                "mission_objective": "fetch_to_pose",
+                "fetch_to_pose_reached": True,
+                "fetch_to_pose_pass": True,
+                "fetch_to_pose_time_s": 4.25,
+                "fetch_to_pose_failure_reason": "",
+                "fetch_pose_world": {"x": 2.4, "y": 0.0, "z": 0.001, "radius_m": 0.5},
+                "fetch_delivery_radius_m": 0.5,
+                "shot_outcome": shot_outcome,
+                "placed_count": 1,
+                "surface_profile": "short_turf",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (mission_root / "summary.json").write_text(json.dumps({}), encoding="utf-8")
+    (mission_root / "target_results.json").write_text(json.dumps({"targets": []}), encoding="utf-8")
+
+    summary = repeatability_runner.summarize_gather_artifacts(run_index=1, mission_verdict_path=str(verdict_path))
+
+    assert summary["mission_objective"] == "fetch_to_pose"
+    assert summary["fetch_to_pose_reached"] is True
+    assert summary["fetch_to_pose_pass"] is True
+    assert summary["fetch_to_pose_time_s"] == 4.25
+    assert summary["fetch_pose_world"]["radius_m"] == 0.5
+    assert summary["shot_outcome"] == shot_outcome
 
 
 def test_summarize_gather_artifacts_preserves_fresh_attempt_approach_across_release_failure(tmp_path: Path):

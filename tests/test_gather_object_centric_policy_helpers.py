@@ -58,6 +58,26 @@ def test_policy_goal_side_far_from_ball_orbits_toward_behind_port():
     assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] > 0.0
 
 
+def test_policy_fetch_to_pose_launches_toward_delivery_pose():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 1.25, "y": 0.25}
+    robot_pose = {"x": 0.95, "y": 0.20, "yaw": 0.0}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="fetch_to_pose",
+        zone=zone,
+    )
+
+    assert decision.active is True
+    assert decision.command is not None
+    assert decision.command.mode == "object_fetch_to_pose_launch"
+    assert decision.command.linear_x > 0.0
+    assert decision.objective_name == "fetch_to_pose_object_state"
+    assert decision.diagnostics["phase"] == "fetch_to_pose"
+
+
 def test_policy_goal_side_near_ball_keeps_reverse_clearance_escape():
     zone = build_zone_spec("corral_single_ball_place")
     ball_pose = {"x": 5.448, "y": 0.0}
@@ -559,6 +579,636 @@ def test_policy_late_close_pre_stage_pose_reverses_instead_of_zero_turn_loop():
     assert decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 35.0
 
 
+def test_policy_late_close_pre_stage_pose_reverses_before_latest_timeout_yaw_cliff():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 6.037059, "y": -0.243371, "yaw": 2.501968}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.35 < decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.41
+    assert 0.22 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.26
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.58
+    assert 35.0 < decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 40.0
+
+
+def test_policy_late_close_finish_reverse_recovers_latest_zero_terminal_stall():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 6.101802, "y": -0.221783, "yaw": 3.129984}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["behind_ball"]["target_distance_m"] > 0.30
+    assert decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.35
+    assert decision.diagnostics["behind_ball"]["robot_lateral_error_m"] > 0.20
+    assert decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.24
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.60
+    assert decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 35.0
+
+
+def test_policy_late_close_finish_reverse_overrides_coarse_ready_before_handoff():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 6.125, "y": -0.212, "yaw": -2.592}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert decision.diagnostics["behind_ball"]["target_distance_m"] > 0.30
+    assert decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.35
+    assert decision.diagnostics["behind_ball"]["robot_lateral_error_m"] > 0.20
+    assert decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.24
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.60
+    assert decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 35.0
+
+
+def test_policy_late_close_finish_reverse_overrides_terminal_coarse_ready_before_handoff():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 6.145, "y": -0.191, "yaw": -2.611}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert decision.diagnostics["behind_ball"]["target_distance_m"] > 0.27
+    assert decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.30
+    assert decision.diagnostics["behind_ball"]["robot_lateral_error_m"] > 0.18
+    assert decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.20
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.60
+    assert decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 35.0
+
+
+def test_policy_late_close_finish_reverse_keeps_latest_attempt_from_coarse_ready():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 6.131427, "y": -0.178893, "yaw": -2.686887}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.27 < decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.30
+    assert 0.17 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.19
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.60
+    assert 25.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 45.0
+
+
+def test_policy_late_close_finish_reverse_continues_latest_coarse_ready_before_handoff():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.175889, "y": -0.206131, "yaw": -2.756813}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.26 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.27
+    assert 0.20 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.21
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.72
+    assert -0.24 <= decision.diagnostics["behind_ball"]["target_x_m"] <= -0.23
+    assert 20.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 25.0
+
+
+def test_policy_late_close_finish_reverse_keeps_next_tick_from_coarse_ready():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.182141, "y": -0.203995, "yaw": -2.991873}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.26 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.27
+    assert 0.20 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.21
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.73
+    assert -0.20 <= decision.diagnostics["behind_ball"]["target_x_m"] <= -0.19
+    assert 8.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 9.0
+
+
+def test_policy_late_close_finish_reverse_is_not_shadowed_by_yaw_settle():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.106371, "y": -0.195305, "yaw": -2.413746}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.30 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.32
+    assert 0.19 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.20
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.60
+    assert 40.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 45.0
+
+
+def test_policy_late_close_yaw_reverse_catches_latest_fresh_yaw_settle_escape_tick():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.160705, "y": -0.220654, "yaw": -2.313778}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.28 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.30
+    assert 0.22 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.23
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.71
+    assert -0.30 <= decision.diagnostics["behind_ball"]["target_x_m"] <= -0.28
+    assert -0.02 <= decision.diagnostics["behind_ball"]["target_y_m"] <= 0.0
+    assert 45.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 50.0
+
+
+def test_policy_late_close_finish_reverse_catches_latest_centered_fresh_coarse_ready_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.161736, "y": -0.165630, "yaw": -2.444224}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.24 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.26
+    assert 0.16 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.17
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.71
+    assert -0.26 <= decision.diagnostics["behind_ball"]["target_x_m"] <= -0.24
+    assert -0.02 <= decision.diagnostics["behind_ball"]["target_y_m"] <= 0.0
+    assert 39.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 41.0
+
+
+def test_policy_late_close_near_zero_reverse_starts_before_timeout_tick():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.008883, "y": -0.227100, "yaw": 2.215050}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.40 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.42
+    assert 0.22 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.23
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.55
+    assert -0.03 <= decision.diagnostics["behind_ball"]["target_x_m"] <= 0.03
+    assert 50.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 55.0
+
+
+def test_policy_late_close_terminal_reverse_starts_before_yaw_settle_timeout():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 5.989545, "y": -0.190833, "yaw": 1.683431}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.40 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.42
+    assert 0.18 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.20
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.53
+    assert 0.14 <= decision.diagnostics["behind_ball"]["target_x_m"] <= 0.16
+    assert 80.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 85.0
+
+
+def test_policy_late_close_terminal_reverse_catches_slightly_wide_timeout_pose():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 5.985060, "y": -0.223173, "yaw": 1.759694}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.42 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.43
+    assert 0.22 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.23
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.53
+    assert 0.14 <= decision.diagnostics["behind_ball"]["target_x_m"] <= 0.16
+    assert 75.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 80.0
+
+
+def test_policy_late_close_terminal_reverse_catches_wider_timeout_yaw_settle_pose():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.047672, "y": -0.234187, "yaw": 1.903034}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.37 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.39
+    assert 0.23 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.24
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.59
+    assert 0.12 <= decision.diagnostics["behind_ball"]["target_x_m"] <= 0.13
+    assert 65.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 75.0
+
+
+def test_policy_late_close_terminal_reverse_continues_after_target_x_crosses_zero():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 5.985060, "y": -0.223173, "yaw": 2.383694}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.42 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.43
+    assert 0.22 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.23
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.53
+    assert -0.12 <= decision.diagnostics["behind_ball"]["target_x_m"] <= -0.10
+    assert 40.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 45.0
+
+
+def test_policy_late_close_terminal_reverse_starts_one_tick_before_latest_timeout_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.027000, "y": -0.234000, "yaw": 1.781000}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.39 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.40
+    assert 0.23 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.24
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.57
+    assert 0.15 <= decision.diagnostics["behind_ball"]["target_x_m"] <= 0.18
+    assert 75.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 80.0
+
+
+def test_policy_late_close_terminal_reverse_catches_latest_fresh_wide_yaw_settle_tick():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 5.997628, "y": -0.241888, "yaw": 2.104789}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.42 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.43
+    assert 0.24 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.25
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.54
+    assert 0.02 <= decision.diagnostics["behind_ball"]["target_x_m"] <= 0.04
+    assert 55.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 65.0
+
+
+def test_policy_late_close_wide_continue_reverse_avoids_latest_fresh_turn_loop():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.076456, "y": -0.265258, "yaw": 2.723998}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.37 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.39
+    assert 0.26 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.27
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.62
+    assert -0.15 <= decision.diagnostics["behind_ball"]["target_x_m"] <= -0.13
+    assert 20.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 25.0
+
+
+def test_policy_late_close_wide_continue_reverse_keeps_latest_fresh_wide_terminal_state():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.092058, "y": -0.269759, "yaw": -2.928207}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.37 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.38
+    assert 0.26 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.28
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.64
+    assert -0.31 <= decision.diagnostics["behind_ball"]["target_x_m"] <= -0.30
+    assert 10.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 15.0
+
+
+def test_policy_late_close_yaw_reverse_keeps_push_yaw_authority_at_timeout_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.148195, "y": -0.218686, "yaw": -2.357078}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.29 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.30
+    assert 0.21 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.22
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.68
+    assert -0.30 <= decision.diagnostics["behind_ball"]["target_x_m"] <= -0.29
+    assert abs(decision.diagnostics["behind_ball"]["target_y_m"]) <= 0.02
+    assert 40.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 50.0
+
+
+def test_policy_late_close_yaw_reverse_starts_before_latest_wrap_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.154090, "y": -0.221237, "yaw": -2.452776}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.29 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.30
+    assert 0.22 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.23
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.70
+    assert -0.30 <= decision.diagnostics["behind_ball"]["target_x_m"] <= -0.29
+    assert abs(decision.diagnostics["behind_ball"]["target_y_m"]) <= 0.05
+    assert 35.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 40.0
+
+
+def test_policy_late_close_yaw_reverse_catches_latest_wide_wrap_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.148583, "y": -0.233320, "yaw": -2.476177}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.30 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.31
+    assert 0.23 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.24
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.70
+    assert -0.31 <= decision.diagnostics["behind_ball"]["target_x_m"] <= -0.30
+    assert abs(decision.diagnostics["behind_ball"]["target_y_m"]) <= 0.07
+    assert 35.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 40.0
+
+
+def test_policy_late_close_finish_reverse_avoids_smoothed_turn_at_wide_timeout_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.130087, "y": -0.247468, "yaw": -2.788152}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="pre_stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_pre_stage_late_close_reverse_to_handoff"
+    assert decision.command.linear_x < -0.04
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["terminal_cause"] == ""
+    assert 0.32 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.34
+    assert 0.24 <= decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.25
+    assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.68
+    assert -0.30 <= decision.diagnostics["behind_ball"]["target_x_m"] <= -0.28
+    assert 15.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 25.0
+
+
 def test_policy_outer_close_reverse_recovers_latest_fresh_timeout_boundary():
     zone = build_zone_spec("corral_single_ball_place")
     ball_pose = {"x": 5.448, "y": 0.0}
@@ -805,6 +1455,28 @@ def test_policy_near_close_stage_pose_starts_yaw_settle_before_plus45_timeout():
     assert decision.diagnostics["behind_ball"]["yaw_error_deg"] > 20.0
 
 
+def test_policy_stage_terminal_yaw_settle_does_not_taper_before_zero_timeout():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0}
+    robot_pose = {"x": 6.048, "y": -0.101, "yaw": 2.735}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_stage_close_yaw_settle"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.65
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.17 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.21
+    assert 20.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 25.0
+
+
 def test_policy_stage_close_nudges_latest_two_mm_radius_miss_into_ready():
     zone = build_zone_spec("corral_single_ball_place")
     ball_pose = {"x": 5.448, "y": 0.0}
@@ -838,6 +1510,80 @@ def test_policy_stage_close_nudges_latest_two_mm_radius_miss_into_ready():
     assert decision.diagnostics["behind_ball"]["robot_lateral_error_m"] <= 0.16
     assert decision.diagnostics["behind_ball"]["robot_longitudinal_projection_m"] <= -0.56
     assert decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 35.0
+
+
+def test_policy_stage_centerline_nudges_latest_zero_before_yaw_settle_timeout():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.066650, "y": -0.109902, "yaw": 2.549493}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_stage_close_nudge_to_ready"
+    assert decision.command.linear_x > 0.0
+    assert decision.command.angular_z >= 0.65
+    assert decision.command.target_speed_scale == 0.35
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["behind_ball"]["target_distance_m"] > 0.18
+    assert decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.23
+    assert abs(decision.diagnostics["behind_ball"]["target_y_m"]) <= 0.02
+    assert decision.diagnostics["behind_ball"]["yaw_error_deg"] > 30.0
+    assert decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 35.0
+
+
+def test_policy_stage_terminal_nudges_latest_zero_radius_miss_with_yaw_error():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.051289, "y": -0.098900, "yaw": 2.780995}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_stage_close_nudge_to_ready"
+    assert decision.command.linear_x > 0.0
+    assert decision.command.angular_z >= 0.45
+    assert decision.command.target_speed_scale == 0.35
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.18 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.19
+    assert abs(decision.diagnostics["behind_ball"]["target_y_m"]) <= 0.05
+    assert 20.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 22.0
+
+
+def test_policy_stage_terminal_nudges_latest_fresh_stage_timeout_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 5.448, "y": 0.0, "z": 0.05}
+    robot_pose = {"x": 6.058894, "y": -0.119021, "yaw": 2.768860}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="stage",
+        zone=zone,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_stage_close_nudge_to_ready"
+    assert decision.command.linear_x > 0.0
+    assert decision.command.angular_z >= 0.45
+    assert decision.command.target_speed_scale == 0.35
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.19 <= decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.21
+    assert 0.05 <= abs(decision.diagnostics["behind_ball"]["target_y_m"]) <= 0.06
+    assert 20.0 <= decision.diagnostics["behind_ball"]["yaw_error_deg"] <= 22.0
 
 
 def test_policy_capture_entry_close_does_not_smooth_against_live_lateral_sign():
@@ -1543,7 +2289,7 @@ def test_policy_place_bleeds_recapture_keepup_on_growing_world_lateral_drift():
     assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] > 2.0
 
 
-def test_policy_place_keeps_straight_push_on_tiny_captured_diagonal_roll():
+def test_policy_place_limits_shallow_push_on_tiny_captured_diagonal_roll():
     zone = build_zone_spec("corral_single_ball_place")
     previous_ball_pose = {"x": 5.432000, "y": -0.010000, "z": 0.05}
     ball_pose = {"x": 5.398000, "y": -0.033000, "z": 0.05}
@@ -1560,7 +2306,9 @@ def test_policy_place_keeps_straight_push_on_tiny_captured_diagonal_roll():
     assert decision.command is not None
     assert decision.raw_command is not None
     assert decision.command.mode == "object_place_drive_to_zone"
-    assert decision.command.linear_x >= 0.07
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.22
     assert decision.diagnostics["guard_rejection_reason"] == ""
     assert decision.diagnostics["capture_snapshot"]["captured"] is True
     assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.04
@@ -1569,7 +2317,7 @@ def test_policy_place_keeps_straight_push_on_tiny_captured_diagonal_roll():
     assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] > 2.5
 
 
-def test_policy_place_keeps_straight_push_on_modest_captured_lateral_roll():
+def test_policy_place_limits_shallow_push_on_modest_captured_lateral_roll():
     zone = build_zone_spec("corral_single_ball_place")
     previous_ball_pose = {"x": 5.315000, "y": -0.092000, "z": 0.05}
     ball_pose = {"x": 5.276000, "y": -0.083000, "z": 0.05}
@@ -1586,7 +2334,9 @@ def test_policy_place_keeps_straight_push_on_modest_captured_lateral_roll():
     assert decision.command is not None
     assert decision.raw_command is not None
     assert decision.command.mode == "object_place_drive_to_zone"
-    assert decision.command.linear_x >= 0.07
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.22
     assert decision.diagnostics["guard_rejection_reason"] == ""
     assert decision.diagnostics["capture_snapshot"]["captured"] is True
     assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.08
@@ -2890,6 +3640,418 @@ def test_policy_place_coasts_latest_zero_early_captured_far_centerline_rollout()
     assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.05
     zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
     assert 1.75 <= zone_margin_m <= 1.85
+
+
+def test_policy_place_uses_tiny_keepup_latest_zero_shallow_captured_far_start():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 5.442229, "y": -0.005607, "z": 0.05}
+    ball_pose = {"x": 5.418107, "y": -0.029032, "z": 0.05}
+    robot_pose = {"x": 5.658161, "y": -0.043054, "yaw": 3.053848}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.22
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.030 <= decision.diagnostics["ball_motion_m"] <= 0.035
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.26
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.03
+    assert -0.04 <= ball_pose["y"] - zone.world_y <= -0.02
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 2.20 <= zone_margin_m <= 2.30
+
+
+def test_policy_place_keeps_contact_latest_zero_low_x_captured_far_rollout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 5.064691, "y": -0.026678, "z": 0.05}
+    ball_pose = {"x": 5.020126, "y": -0.035455, "z": 0.05}
+    robot_pose = {"x": 5.210694, "y": 0.009860, "yaw": 3.119249}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.052
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.18 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.25
+    assert 0.03 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= 0.06
+    assert -0.06 <= ball_pose["y"] - zone.world_y <= -0.02
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.78 <= zone_margin_m <= 1.90
+
+
+def test_policy_place_keeps_contact_latest_zero_low_lateral_captured_far_rollout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.820299, "y": -0.032032, "z": 0.05}
+    ball_pose = {"x": 4.782004, "y": -0.024752, "z": 0.05}
+    robot_pose = {"x": 5.080753, "y": -0.009462, "yaw": 3.134624}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.038 <= decision.diagnostics["ball_motion_m"] <= 0.052
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.25 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.34
+    assert 0.015 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= 0.06
+    assert -0.06 <= ball_pose["y"] - zone.world_y <= -0.015
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.55 <= zone_margin_m <= 1.75
+
+
+def test_policy_place_biases_world_line_latest_zero_before_low_x_opposed_slip():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 5.240, "y": 0.008, "z": 0.05}
+    ball_pose = {"x": 5.207, "y": 0.027, "z": 0.05}
+    robot_pose = {"x": 5.524, "y": -0.032, "yaw": 2.955}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.angular_z < 0.0
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.038 <= decision.diagnostics["ball_motion_m"] <= 0.052
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.30 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.34
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.02
+    assert 0.020 <= ball_pose["y"] - zone.world_y <= 0.040
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 2.00 <= zone_margin_m <= 2.10
+
+
+def test_policy_place_keeps_contact_latest_zero_early_positive_opposed_slip():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 5.207, "y": 0.027, "z": 0.05}
+    ball_pose = {"x": 5.173, "y": 0.048, "z": 0.05}
+    robot_pose = {"x": 5.493, "y": -0.027, "yaw": 3.019}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.angular_z < 0.0
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.038 <= decision.diagnostics["ball_motion_m"] <= 0.052
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.30 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.34
+    assert -0.06 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= -0.03
+    assert 0.03 <= ball_pose["y"] - zone.world_y <= 0.065
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.95 <= zone_margin_m <= 2.05
+
+
+def test_policy_place_keeps_contact_latest_zero_stale_early_positive_opposed_slip():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 5.173, "y": 0.048, "z": 0.05}
+    ball_pose = {"x": 5.173, "y": 0.048, "z": 0.05}
+    robot_pose = {"x": 5.463, "y": -0.024, "yaw": 3.078}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.angular_z < 0.0
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.28 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.31
+    assert -0.06 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= -0.04
+    assert 0.03 <= ball_pose["y"] - zone.world_y <= 0.065
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.95 <= zone_margin_m <= 2.05
+
+
+def test_policy_place_keeps_latest_zero_centerline_contact_before_far_coast_gap():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 5.112, "y": 0.041, "z": 0.05}
+    ball_pose = {"x": 5.075, "y": 0.021, "z": 0.05}
+    robot_pose = {"x": 5.302, "y": 0.018, "yaw": 3.110}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.038 <= decision.diagnostics["ball_motion_m"] <= 0.052
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.26
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.03
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.03
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.86 <= zone_margin_m <= 1.95
+
+
+def test_policy_place_keeps_latest_zero_centerline_contact_on_next_far_coast_gap():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 5.075, "y": 0.021, "z": 0.05}
+    ball_pose = {"x": 5.038, "y": 0.001, "z": 0.05}
+    robot_pose = {"x": 5.283, "y": 0.018, "yaw": -3.141}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.038 <= decision.diagnostics["ball_motion_m"] <= 0.052
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.26
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.03
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.03
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.86 <= zone_margin_m <= 1.95
+
+
+def test_policy_place_steers_latest_zero_low_x_capture_by_world_line_sign():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.998, "y": -0.021, "z": 0.05}
+    ball_pose = {"x": 4.959, "y": -0.043, "z": 0.05}
+    robot_pose = {"x": 5.281, "y": 0.018, "yaw": -3.135}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.038 <= decision.diagnostics["ball_motion_m"] <= 0.052
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.30 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.34
+    assert 0.05 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= 0.06
+    assert -0.06 <= ball_pose["y"] - zone.world_y <= -0.02
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.75 <= zone_margin_m <= 1.85
+
+
+def test_policy_place_resteers_latest_zero_mid_low_x_positive_opposed_before_capture_loss():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.905, "y": 0.030, "z": 0.05}
+    ball_pose = {"x": 4.869, "y": 0.043, "z": 0.05}
+    robot_pose = {"x": 5.205, "y": -0.002, "yaw": -3.141}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.angular_z < 0.0
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.33 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.40
+    assert -0.07 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= -0.035
+    assert 0.035 <= ball_pose["y"] - zone.world_y <= 0.075
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.60 <= zone_margin_m <= 1.75
+
+
+def test_policy_place_resteers_latest_zero_terminal_mid_low_x_positive_opposed_before_capture_loss():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.869, "y": 0.043, "z": 0.05}
+    ball_pose = {"x": 4.835, "y": 0.055, "z": 0.05}
+    robot_pose = {"x": 5.205, "y": -0.002, "yaw": 3.114}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.angular_z < 0.0
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.33 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.40
+    assert -0.07 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= -0.035
+    assert 0.035 <= ball_pose["y"] - zone.world_y <= 0.075
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.60 <= zone_margin_m <= 1.75
+
+
+def test_policy_place_resteers_latest_zero_mid_low_x_negative_opposed_before_capture_loss():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 5.015, "y": -0.034, "z": 0.05}
+    ball_pose = {"x": 4.973, "y": -0.061, "z": 0.05}
+    robot_pose = {"x": 5.290, "y": 0.002, "yaw": -3.125}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.31 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.38
+    assert 0.05 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= 0.08
+    assert -0.10 <= ball_pose["y"] - zone.world_y <= -0.055
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.70 <= zone_margin_m <= 1.85
+
+
+def test_policy_place_resteers_latest_zero_terminal_mid_low_x_negative_opposed_before_capture_loss():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.973, "y": -0.061, "z": 0.05}
+    ball_pose = {"x": 4.931, "y": -0.088, "z": 0.05}
+    robot_pose = {"x": 5.286, "y": 0.002, "yaw": -3.074}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_drive_to_zone"
+    assert 0.014 <= decision.command.linear_x <= 0.020
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.31 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.38
+    assert 0.05 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= 0.08
+    assert -0.10 <= ball_pose["y"] - zone.world_y <= -0.055
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.70 <= zone_margin_m <= 1.85
 
 
 def test_policy_place_coasts_latest_zero_stale_captured_far_centerline_sample():
@@ -4407,6 +5569,36 @@ def test_policy_place_holds_latest_zero_large_world_high_x_terminal_lateral_by_z
     assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] >= zone.retrieval_radius_m + 0.50
 
 
+def test_policy_place_holds_latest_zero_large_world_high_x_edge_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.110375, "y": 0.700389, "z": 0.05}
+    ball_pose = {"x": 4.080432, "y": 0.718568, "z": 0.05}
+    robot_pose = {"x": 5.392119, "y": 0.002568, "yaw": 1.907094}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.70
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.05 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.45
+    assert 0.95 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.05
+    assert 0.55 <= ball_pose["y"] - zone.world_y <= 0.80
+    assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] >= zone.retrieval_radius_m + 0.50
+
+
 def test_policy_place_keeps_up_late_zero_far_wide_reel_before_rollaway():
     zone = build_zone_spec("corral_single_ball_place")
     previous_ball_pose = {"x": 4.062832, "y": -0.856158, "z": 0.05}
@@ -4954,6 +6146,190 @@ def test_policy_place_coasts_latest_zero_high_x_pre_entry_roll_before_corral_mou
     assert 0.15 <= zone_margin_m <= 0.55
 
 
+def test_policy_place_coasts_latest_zero_high_margin_pre_entry_drive_pulse():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.994857, "y": -0.099581, "z": 0.05}
+    ball_pose = {"x": 3.944478, "y": -0.107563, "z": 0.05}
+    robot_pose = {"x": 4.914788, "y": 0.007388, "yaw": 3.098029}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.05
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.95 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.00
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.20
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.12
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.75 <= zone_margin_m <= 0.80
+
+
+def test_policy_place_coasts_latest_zero_mid_margin_pre_entry_drive_pulse():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.796603, "y": -0.130991, "z": 0.05}
+    ball_pose = {"x": 3.748433, "y": -0.138623, "z": 0.05}
+    robot_pose = {"x": 4.861686, "y": 0.000082, "yaw": -3.032174}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.10 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.15
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.05
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.15
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.60
+
+
+def test_policy_place_coasts_latest_zero_centered_low_motion_pre_entry_roll():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.774169, "y": -0.071731, "z": 0.05}
+    ball_pose = {"x": 3.741989, "y": -0.072359, "z": 0.05}
+    robot_pose = {"x": 4.944336, "y": 0.044067, "yaw": -3.018513}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_coast_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.028 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.35
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.10
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.10
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.62
+
+
+def test_policy_place_coasts_latest_zero_low_margin_centered_pre_entry_roll():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.415903, "y": -0.080931, "z": 0.05}
+    ball_pose = {"x": 3.384064, "y": -0.081628, "z": 0.05}
+    robot_pose = {"x": 4.828955, "y": 0.028873, "yaw": -2.945895}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_coast_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.028 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.35 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.50
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.20
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.10
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.20 <= zone_margin_m <= 0.25
+
+
+def test_policy_place_coasts_latest_zero_stale_centered_pre_entry_pulse():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.676142, "y": -0.073920, "z": 0.05}
+    ball_pose = {"x": 3.676142, "y": -0.073920, "z": 0.05}
+    robot_pose = {"x": 4.911484, "y": 0.031071, "yaw": 3.132216}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_coast_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.30
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.15
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.10
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.50 <= zone_margin_m <= 0.55
+
+
+def test_policy_place_coasts_latest_zero_final_wide_centered_entry_pulse():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.262836, "y": -0.084955, "z": 0.05}
+    ball_pose = {"x": 3.234489, "y": -0.085816, "z": 0.05}
+    robot_pose = {"x": 4.816050, "y": 0.026405, "yaw": 2.758093}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_coast_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.025 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.40 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.50
+    assert 0.65 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.75
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.10
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.06 <= zone_margin_m <= 0.09
+
+
 def test_policy_place_coasts_latest_zero_centered_recapture_before_mouth_keepup():
     zone = build_zone_spec("corral_single_ball_place")
     previous_ball_pose = {"x": 3.615, "y": -0.036, "z": 0.05}
@@ -5379,6 +6755,102 @@ def test_policy_place_holds_latest_zero_positive_world_edge_before_keepup_repush
     assert 0.25 <= ball_pose["y"] - zone.world_y <= 0.35
     zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
     assert 1.35 <= zone_margin_m <= 1.45
+
+
+def test_policy_place_keeps_up_high_margin_positive_world_edge_before_contact_loss():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.588174, "y": 0.375547, "z": 0.05}
+    ball_pose = {"x": 4.551785, "y": 0.395504, "z": 0.05}
+    robot_pose = {"x": 5.419290, "y": -0.014370, "yaw": 2.698594}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert 0.008 <= decision.command.linear_x <= 0.012
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["captured"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.85 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.08
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.45
+    assert 0.38 <= ball_pose["y"] - zone.world_y <= 0.48
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.30 <= zone_margin_m <= 1.45
+
+
+def test_policy_place_keeps_up_high_margin_positive_world_edge_with_local_offset():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.486890, "y": 0.431094, "z": 0.05}
+    ball_pose = {"x": 4.455201, "y": 0.448474, "z": 0.05}
+    robot_pose = {"x": 5.419290, "y": -0.014370, "yaw": 2.344060}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert 0.008 <= decision.command.linear_x <= 0.012
+    assert decision.command.angular_z < -0.60
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["captured"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.85 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.08
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.45
+    assert 0.38 <= ball_pose["y"] - zone.world_y <= 0.48
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.30 <= zone_margin_m <= 1.45
+
+
+def test_policy_place_keeps_up_high_margin_positive_world_edge_with_wider_local_offset():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.455201, "y": 0.448474, "z": 0.05}
+    ball_pose = {"x": 4.422678, "y": 0.466310, "z": 0.05}
+    robot_pose = {"x": 5.419290, "y": -0.014370, "yaw": 2.071995}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert 0.008 <= decision.command.linear_x <= 0.012
+    assert decision.command.angular_z < -0.60
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["captured"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.85 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.08
+    assert 0.45 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.70
+    assert 0.38 <= ball_pose["y"] - zone.world_y <= 0.48
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.30 <= zone_margin_m <= 1.45
 
 
 def test_policy_place_holds_latest_zero_high_lateral_positive_world_before_capture_fallback():
@@ -5955,7 +7427,7 @@ def test_policy_place_recenters_latest_zero_local_dominant_wide_before_third_rol
 
     assert decision.command is not None
     assert decision.raw_command is not None
-    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.mode == "object_place_far_line_recenter"
     assert decision.command.linear_x == 0.0
     assert decision.command.angular_z < -0.45
     assert decision.command.target_speed_scale == 0.0
@@ -6065,6 +7537,38 @@ def test_policy_place_holds_latest_zero_same_side_high_lateral_far_edge_before_c
     assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= zone.retrieval_radius_m + 0.75
 
 
+def test_policy_place_holds_latest_zero_outer_same_side_high_lateral_far_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.877368, "y": 0.749871, "z": 0.05}
+    ball_pose = {"x": 3.838532, "y": 0.771514, "z": 0.05}
+    robot_pose = {"x": 5.362577, "y": -0.002332, "yaw": 1.414848}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.75
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.04 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["captured"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.50 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.65
+    assert 1.50 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.70
+    assert 0.70 <= abs(ball_pose["y"] - zone.world_y) <= 0.80
+    assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] > zone.retrieval_radius_m + 0.85
+    assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= zone.retrieval_radius_m + 0.90
+
+
 def test_policy_place_holds_mirrored_terminal_extreme_opposed_before_capture_fallback():
     zone = build_zone_spec("corral_single_ball_place")
     previous_ball_pose = {"x": 3.901318, "y": 0.483737, "z": 0.05}
@@ -6081,7 +7585,7 @@ def test_policy_place_holds_mirrored_terminal_extreme_opposed_before_capture_fal
 
     assert decision.command is not None
     assert decision.raw_command is not None
-    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.mode == "object_place_far_line_recenter"
     assert decision.command.linear_x == 0.0
     assert decision.command.angular_z < -0.45
     assert decision.command.target_speed_scale == 0.0
@@ -6156,6 +7660,38 @@ def test_policy_place_holds_mirrored_low_x_same_side_extreme_far_lateral():
     assert 0.65 <= abs(ball_pose["y"] - zone.world_y) <= 0.75
     assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] > zone.retrieval_radius_m + 0.55
     assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= zone.retrieval_radius_m + 0.65
+
+
+def test_policy_place_holds_latest_zero_low_x_positive_same_side_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.843361, "y": 0.365397, "z": 0.05}
+    ball_pose = {"x": 3.794481, "y": 0.379264, "z": 0.05}
+    robot_pose = {"x": 5.313795, "y": -0.013719, "yaw": 1.451307}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.18 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.25
+    assert 1.50 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.60
+    assert 0.36 <= ball_pose["y"] - zone.world_y <= 0.40
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.65 <= zone_margin_m <= 0.72
 
 
 def test_policy_place_holds_latest_zero_high_x_transition_before_capture_fallback():
@@ -7003,7 +8539,7 @@ def test_policy_place_holds_latest_zero_stale_high_x_final_world_edge():
     assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= zone.retrieval_radius_m + 0.12
 
 
-def test_policy_place_reorients_latest_zero_far_negative_x_local_escape():
+def test_policy_place_holds_latest_zero_far_negative_x_local_escape_by_zone_line():
     zone = build_zone_spec("corral_single_ball_place")
     previous_ball_pose = {"x": 4.208882, "y": 0.389998, "z": 0.05}
     ball_pose = {"x": 4.165617, "y": 0.407093, "z": 0.05}
@@ -7019,9 +8555,9 @@ def test_policy_place_reorients_latest_zero_far_negative_x_local_escape():
 
     assert decision.command is not None
     assert decision.raw_command is not None
-    assert decision.command.mode == "object_place_reorient"
+    assert decision.command.mode == "object_place_far_line_recenter"
     assert decision.command.linear_x == 0.0
-    assert decision.command.angular_z > 0.70
+    assert decision.command.angular_z < -0.55
     assert decision.command.target_speed_scale == 0.0
     assert decision.diagnostics["smoothing_applied"] is False
     assert decision.diagnostics["guard_rejection_reason"] == ""
@@ -7033,7 +8569,7 @@ def test_policy_place_reorients_latest_zero_far_negative_x_local_escape():
     assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] > zone.retrieval_radius_m + 1.00
 
 
-def test_policy_place_reorients_latest_zero_deeper_far_negative_x_local_escape():
+def test_policy_place_holds_latest_zero_deeper_far_negative_x_positive_world_escape():
     zone = build_zone_spec("corral_single_ball_place")
     previous_ball_pose = {"x": 4.044365, "y": 0.396935, "z": 0.05}
     ball_pose = {"x": 4.005398, "y": 0.412934, "z": 0.05}
@@ -7049,9 +8585,9 @@ def test_policy_place_reorients_latest_zero_deeper_far_negative_x_local_escape()
 
     assert decision.command is not None
     assert decision.raw_command is not None
-    assert decision.command.mode == "object_place_reorient"
+    assert decision.command.mode == "object_place_far_line_recenter"
     assert decision.command.linear_x == 0.0
-    assert decision.command.angular_z > 0.70
+    assert decision.command.angular_z < -0.55
     assert decision.command.target_speed_scale == 0.0
     assert decision.diagnostics["smoothing_applied"] is False
     assert decision.diagnostics["guard_rejection_reason"] == ""
@@ -7063,7 +8599,7 @@ def test_policy_place_reorients_latest_zero_deeper_far_negative_x_local_escape()
     assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] > zone.retrieval_radius_m + 0.85
 
 
-def test_policy_place_reorients_latest_zero_deepest_far_negative_x_local_escape():
+def test_policy_place_holds_latest_zero_deepest_far_negative_x_local_escape_by_zone_line():
     zone = build_zone_spec("corral_single_ball_place")
     previous_ball_pose = {"x": 4.011377, "y": 0.394718, "z": 0.05}
     ball_pose = {"x": 4.011377, "y": 0.394718, "z": 0.05}
@@ -7079,9 +8615,9 @@ def test_policy_place_reorients_latest_zero_deepest_far_negative_x_local_escape(
 
     assert decision.command is not None
     assert decision.raw_command is not None
-    assert decision.command.mode == "object_place_reorient"
+    assert decision.command.mode == "object_place_far_line_recenter"
     assert decision.command.linear_x == 0.0
-    assert decision.command.angular_z > 0.70
+    assert decision.command.angular_z < -0.45
     assert decision.command.target_speed_scale == 0.0
     assert decision.diagnostics["smoothing_applied"] is False
     assert decision.diagnostics["guard_rejection_reason"] == ""
@@ -8702,6 +10238,3145 @@ def test_policy_place_resteers_mirrored_centered_inside_edge_by_world_lateral():
     assert ball_pose["y"] - zone.world_y >= 0.50
 
 
+def test_policy_place_holds_latest_zero_negative_world_high_x_far_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.663, "y": -0.482, "z": 0.05}
+    ball_pose = {"x": 3.625, "y": -0.497, "z": 0.05}
+    robot_pose = {"x": 4.987, "y": 0.035, "yaw": -3.109}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.10 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.65
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.95
+    assert -0.60 <= ball_pose["y"] - zone.world_y <= -0.38
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.40 <= zone_margin_m <= 0.75
+
+
+def test_policy_place_steers_latest_zero_negative_world_high_motion_far_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.002098, "y": -0.340553, "z": 0.05}
+    ball_pose = {"x": 3.944280, "y": -0.359215, "z": 0.05}
+    robot_pose = {"x": 5.224, "y": 0.032, "yaw": 2.869}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert 0.006 <= decision.command.linear_x <= 0.012
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.060
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.10 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.15
+    assert 0.70 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.75
+    assert -0.37 <= ball_pose["y"] - zone.world_y <= -0.34
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.80 <= zone_margin_m <= 0.85
+
+
+def test_policy_place_coasts_latest_zero_terminal_negative_world_far_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.532783, "y": -0.492036, "z": 0.05}
+    ball_pose = {"x": 3.476847, "y": -0.510091, "z": 0.05}
+    robot_pose = {"x": 5.193, "y": 0.035, "yaw": 2.812}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.40 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.50
+    assert 1.00 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.10
+    assert -0.53 <= ball_pose["y"] - zone.world_y <= -0.50
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.40 <= zone_margin_m <= 0.45
+
+
+def test_policy_place_keeps_latest_zero_near_negative_world_escape_under_place_control():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.476847, "y": -0.510091, "z": 0.05}
+    ball_pose = {"x": 3.420660, "y": -0.528227, "z": 0.05}
+    robot_pose = {"x": 5.189, "y": 0.037, "yaw": 2.540}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.10 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.20
+    assert 1.40 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.50
+    assert -0.55 <= ball_pose["y"] - zone.world_y <= -0.50
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.36 <= zone_margin_m <= 0.40
+
+
+def test_policy_place_coasts_latest_zero_high_x_negative_mouth_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.469265, "y": -0.506524, "z": 0.05}
+    ball_pose = {"x": 3.409564, "y": -0.525238, "z": 0.05}
+    robot_pose = {"x": 5.197065, "y": 0.013488, "yaw": -2.883190}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.055 <= decision.diagnostics["ball_motion_m"] <= 0.075
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.80 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.90
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.10
+    assert -0.54 <= ball_pose["y"] - zone.world_y <= -0.50
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.36 <= zone_margin_m <= 0.40
+
+
+def test_policy_place_keeps_latest_zero_final_negative_mouth_under_place_control():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.409564, "y": -0.525238, "z": 0.05}
+    ball_pose = {"x": 3.342446, "y": -0.546276, "z": 0.05}
+    robot_pose = {"x": 5.196324, "y": 0.013159, "yaw": -2.712630}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.055 <= decision.diagnostics["ball_motion_m"] <= 0.075
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.90 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 2.00
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.30
+    assert -0.56 <= ball_pose["y"] - zone.world_y <= -0.54
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.30 <= zone_margin_m <= 0.34
+
+
+def test_policy_place_holds_latest_zero_far_negative_edge_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.555, "y": -0.795, "z": 0.05}
+    ball_pose = {"x": 3.505, "y": -0.820, "z": 0.05}
+    robot_pose = {"x": 5.160, "y": -0.035, "yaw": -2.546}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.03
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.65 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.85
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.95
+    assert -0.85 <= ball_pose["y"] - zone.world_y <= -0.70
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.40 <= zone_margin_m <= 1.05
+
+
+def test_policy_place_keeps_up_latest_zero_high_x_negative_edge_near_mouth():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.863137, "y": -0.605067, "z": 0.05}
+    ball_pose = {"x": 3.823490, "y": -0.627813, "z": 0.05}
+    robot_pose = {"x": 5.128339, "y": 0.018064, "yaw": -2.193161}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.35
+    assert 0.60 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.75
+    assert -0.65 <= ball_pose["y"] - zone.world_y <= -0.60
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.75 <= zone_margin_m <= 0.82
+
+
+def test_policy_place_reels_latest_zero_terminal_negative_edge_instead_of_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.749367, "y": -0.646260, "z": 0.05}
+    ball_pose = {"x": 3.712976, "y": -0.666160, "z": 0.05}
+    robot_pose = {"x": 5.065428, "y": 0.015211, "yaw": -1.901690}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert 0.006 <= decision.command.linear_x <= 0.010
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.035
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.00 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.20
+    assert 0.95 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.20
+    assert -0.75 <= ball_pose["y"] - zone.world_y <= -0.60
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.65 <= zone_margin_m <= 0.85
+
+
+def test_policy_place_reels_latest_zero_outer_negative_terminal_edge_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.896144, "y": -0.703183, "z": 0.05}
+    ball_pose = {"x": 3.853762, "y": -0.726798, "z": 0.05}
+    robot_pose = {"x": 5.244421, "y": 0.001334, "yaw": -1.848081}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert 0.006 <= decision.command.linear_x <= 0.010
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.05 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.15
+    assert 1.10 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.20
+    assert -0.75 <= ball_pose["y"] - zone.world_y <= -0.70
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.85 <= zone_margin_m <= 0.90
+
+
+def test_policy_place_reels_latest_zero_high_x_outer_negative_terminal_edge_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.664522, "y": -0.734234, "z": 0.05}
+    ball_pose = {"x": 3.621476, "y": -0.758003, "z": 0.05}
+    robot_pose = {"x": 5.191963, "y": 0.016713, "yaw": -1.97545}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.25 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.35
+    assert 1.10 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.20
+    assert -0.78 <= ball_pose["y"] - zone.world_y <= -0.74
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.65 <= zone_margin_m <= 0.70
+
+
+def test_policy_place_coasts_latest_zero_wide_negative_terminal_edge_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.553125, "y": -0.711716, "z": 0.05}
+    ball_pose = {"x": 3.506900, "y": -0.732890, "z": 0.05}
+    robot_pose = {"x": 5.182008, "y": 0.012982, "yaw": -1.885453}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.25
+    assert 1.30 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.40
+    assert -0.75 <= ball_pose["y"] - zone.world_y <= -0.70
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.60
+
+
+def test_policy_place_holds_latest_zero_stale_centerline_rollthrough_inside_retrieval():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.089, "y": -0.068, "z": 0.05}
+    ball_pose = {"x": 3.089, "y": -0.068, "z": 0.05}
+    robot_pose = {"x": 4.901, "y": -0.029, "yaw": 2.926}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.65 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.90
+    assert 0.30 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.55
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.14
+
+
+def test_policy_place_holds_latest_zero_shallow_moving_centerline_rollthrough_inside_retrieval():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.171, "y": -0.095, "z": 0.05}
+    ball_pose = {"x": 3.121, "y": -0.099, "z": 0.05}
+    robot_pose = {"x": 4.809, "y": -0.016, "yaw": -2.864}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.060
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.55 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.80
+    assert 0.30 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.45
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.14
+
+
+def test_policy_place_holds_latest_zero_low_motion_centered_retrieval_entry():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.166541, "y": -0.117228, "z": 0.05}
+    ball_pose = {"x": 3.140987, "y": -0.118206, "z": 0.05}
+    robot_pose = {"x": 4.974649, "y": 0.031068, "yaw": -2.942950}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.024 <= decision.diagnostics["ball_motion_m"] <= 0.027
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.80 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.85
+    assert 0.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.25
+    assert 0.74 <= decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= 0.76
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.13
+
+
+def test_policy_place_holds_latest_zero_low_motion_deeper_centered_retrieval():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 2.910007, "y": -0.127044, "z": 0.05}
+    ball_pose = {"x": 2.882531, "y": -0.128095, "z": 0.05}
+    robot_pose = {"x": 4.916581, "y": 0.039511, "yaw": 2.899457}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.026 <= decision.diagnostics["ball_motion_m"] <= 0.029
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.90 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.96
+    assert 0.62 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.68
+    assert 0.48 <= decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= 0.52
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.14
+
+
+def test_policy_place_holds_latest_zero_moving_outer_negative_world_high_x_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.652, "y": -1.046, "z": 0.05}
+    ball_pose = {"x": 3.615, "y": -1.075, "z": 0.05}
+    robot_pose = {"x": 5.045, "y": 0.023, "yaw": -2.251}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.70 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.90
+    assert 0.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.65
+    assert -1.20 <= ball_pose["y"] - zone.world_y <= -1.00
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.80 <= zone_margin_m <= 0.90
+
+
+def test_policy_place_holds_latest_zero_centered_outer_negative_world_high_x_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.688, "y": -1.016, "z": 0.05}
+    ball_pose = {"x": 3.652, "y": -1.046, "z": 0.05}
+    robot_pose = {"x": 5.047, "y": 0.025, "yaw": -2.535}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.70 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.90
+    assert 0.05 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.20
+    assert -1.20 <= ball_pose["y"] - zone.world_y <= -1.00
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.80 <= zone_margin_m <= 0.90
+
+
+def test_policy_place_holds_latest_zero_low_x_outer_negative_world_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.760, "y": -0.711, "z": 0.05}
+    ball_pose = {"x": 3.717, "y": -0.736, "z": 0.05}
+    robot_pose = {"x": 5.099, "y": -0.004, "yaw": -1.303}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.30 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.40
+    assert 1.45 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.60
+    assert -0.78 <= ball_pose["y"] - zone.world_y <= -0.68
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.72 <= zone_margin_m <= 0.80
+
+
+def test_policy_place_holds_latest_zero_mid_x_outer_negative_world_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.878, "y": -0.640, "z": 0.05}
+    ball_pose = {"x": 3.839, "y": -0.664, "z": 0.05}
+    robot_pose = {"x": 5.099, "y": 0.0, "yaw": -1.902}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.00 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.10
+    assert 0.90 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.05
+    assert -0.70 <= ball_pose["y"] - zone.world_y <= -0.64
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.80 <= zone_margin_m <= 0.84
+
+
+def test_policy_place_holds_latest_zero_mid_low_x_outer_negative_world_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.839, "y": -0.664, "z": 0.05}
+    ball_pose = {"x": 3.799, "y": -0.688, "z": 0.05}
+    robot_pose = {"x": 5.099, "y": -0.002, "yaw": -1.590}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.65 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.75
+    assert 1.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.35
+    assert -0.72 <= ball_pose["y"] - zone.world_y <= -0.66
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.78 <= zone_margin_m <= 0.82
+
+
+def test_policy_place_holds_latest_zero_stale_outer_negative_world_high_x_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.540, "y": -1.136, "z": 0.05}
+    ball_pose = {"x": 3.540, "y": -1.136, "z": 0.05}
+    robot_pose = {"x": 5.037, "y": 0.015, "yaw": -2.773}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.70 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.90
+    assert 0.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.65
+    assert -1.20 <= ball_pose["y"] - zone.world_y <= -1.00
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.80 <= zone_margin_m <= 0.90
+
+
+def test_policy_place_steers_latest_zero_wide_negative_terminal_edge_by_world_line():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.736252, "y": -0.507218, "z": 0.05}
+    ball_pose = {"x": 3.686122, "y": -0.525220, "z": 0.05}
+    robot_pose = {"x": 5.241312, "y": 0.009589, "yaw": -1.638151}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.05
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.60 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.70
+    assert 1.45 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.60
+    assert -0.55 <= ball_pose["y"] - zone.world_y <= -0.48
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.60 <= zone_margin_m <= 0.70
+
+
+def test_policy_place_holds_latest_zero_low_x_negative_same_side_terminal_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.721204, "y": -0.547809, "z": 0.05}
+    ball_pose = {"x": 3.673471, "y": -0.567907, "z": 0.05}
+    robot_pose = {"x": 5.135721, "y": 0.013892, "yaw": -1.382780}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] <= 0.060
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.15 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.35
+    assert 1.45 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.65
+    assert -0.62 <= ball_pose["y"] - zone.world_y <= -0.50
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.70
+
+
+def test_policy_place_holds_latest_zero_low_x_positive_same_side_terminal_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.656984, "y": 0.520284, "z": 0.05}
+    ball_pose = {"x": 3.618081, "y": 0.535509, "z": 0.05}
+    robot_pose = {"x": 5.065575, "y": 0.031326, "yaw": 1.351492}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] <= 0.060
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.15 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.35
+    assert 1.45 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.65
+    assert 0.50 <= ball_pose["y"] - zone.world_y <= 0.62
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.70
+
+
+def test_policy_place_holds_latest_zero_negative_world_near_mouth_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.185, "y": -0.676, "z": 0.05}
+    ball_pose = {"x": 3.146, "y": -0.691, "z": 0.05}
+    robot_pose = {"x": 4.881, "y": 0.002, "yaw": -2.507}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.03
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.75 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.95
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.60
+    assert -0.82 <= ball_pose["y"] - zone.world_y <= -0.62
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.18 <= zone_margin_m <= 0.32
+
+
+def test_policy_place_holds_latest_zero_early_negative_world_near_mouth_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.403, "y": -0.587, "z": 0.05}
+    ball_pose = {"x": 3.368, "y": -0.601, "z": 0.05}
+    robot_pose = {"x": 4.910, "y": 0.010, "yaw": -2.336}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.03
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.50 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.95
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.75
+    assert -0.82 <= ball_pose["y"] - zone.world_y <= -0.58
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.18 <= zone_margin_m <= 0.40
+
+
+def test_policy_place_holds_latest_zero_terminal_negative_world_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.108, "y": -0.707, "z": 0.05}
+    ball_pose = {"x": 3.069, "y": -0.722, "z": 0.05}
+    robot_pose = {"x": 4.870, "y": -0.004, "yaw": -2.981}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.03
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.75 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.95
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.60
+    assert -0.82 <= ball_pose["y"] - zone.world_y <= -0.62
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.18 <= zone_margin_m <= 0.32
+
+
+def test_policy_place_holds_latest_zero_negative_wide_mouth_escape_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.455967, "y": -0.413530, "z": 0.05}
+    ball_pose = {"x": 3.413187, "y": -0.423962, "z": 0.05}
+    robot_pose = {"x": 5.076913, "y": 0.032076, "yaw": -2.124869}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.04
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.45
+    assert 1.10 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.30
+    assert -0.48 <= ball_pose["y"] - zone.world_y <= -0.38
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.30 <= zone_margin_m <= 0.38
+
+
+def test_policy_place_holds_latest_zero_positive_same_side_terminal_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.276, "y": 0.411, "z": 0.05}
+    ball_pose = {"x": 3.236, "y": 0.421, "z": 0.05}
+    robot_pose = {"x": 4.850, "y": 0.034, "yaw": 1.843}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.03
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.75 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.90
+    assert 1.35 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.60
+    assert 0.38 <= ball_pose["y"] - zone.world_y <= 0.50
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.12 <= zone_margin_m <= 0.20
+
+
+def test_policy_place_holds_latest_zero_low_x_positive_near_edge_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.284836, "y": 0.426645, "z": 0.05}
+    ball_pose = {"x": 3.247557, "y": 0.437643, "z": 0.05}
+    robot_pose = {"x": 4.801871, "y": 0.022343, "yaw": 1.631143}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.03 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.55
+    assert 1.45 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.60
+    assert 0.40 <= ball_pose["y"] - zone.world_y <= 0.46
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.15 <= zone_margin_m <= 0.23
+
+
+def test_policy_place_holds_latest_zero_stale_mid_x_positive_near_mouth_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.398248, "y": 0.383942, "z": 0.05}
+    ball_pose = {"x": 3.398248, "y": 0.383942, "z": 0.05}
+    robot_pose = {"x": 4.899004, "y": 0.025475, "yaw": 3.044245}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.50 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.60
+    assert 0.18 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.25
+    assert 0.35 <= ball_pose["y"] - zone.world_y <= 0.45
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.30 <= zone_margin_m <= 0.32
+
+
+def test_policy_place_holds_latest_zero_stale_high_x_positive_near_edge_before_release():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.356162, "y": 0.032426, "z": 0.05}
+    ball_pose = {"x": 3.356162, "y": 0.032426, "z": 0.05}
+    robot_pose = {"x": 5.276334, "y": -0.020435, "yaw": 2.907027}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.35
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.85 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.90
+    assert 0.38 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.42
+    assert 0.02 <= ball_pose["y"] - zone.world_y <= 0.04
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.18 <= zone_margin_m <= 0.21
+
+
+def test_policy_place_holds_latest_zero_terminal_positive_near_mouth_edge_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.319170, "y": 0.404067, "z": 0.05}
+    ball_pose = {"x": 3.280222, "y": 0.413980, "z": 0.05}
+    robot_pose = {"x": 4.890642, "y": 0.028955, "yaw": 2.112792}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.10 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.20
+    assert 1.10 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.25
+    assert 0.35 <= ball_pose["y"] - zone.world_y <= 0.45
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.20 <= zone_margin_m <= 0.22
+
+
+def test_policy_place_holds_latest_zero_stale_positive_near_mouth_edge_at_low_local_x():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.374413, "y": 0.404767, "z": 0.05}
+    ball_pose = {"x": 3.374413, "y": 0.404767, "z": 0.05}
+    robot_pose = {"x": 4.908254, "y": 0.016646, "yaw": 2.021978}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.00 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.05
+    assert 1.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.25
+    assert 0.35 <= ball_pose["y"] - zone.world_y <= 0.45
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.28 <= zone_margin_m <= 0.31
+
+
+def test_policy_place_holds_latest_zero_low_x_opposed_near_mouth_edge_at_lateral_boundary():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.472915, "y": -0.354842, "z": 0.05}
+    ball_pose = {"x": 3.432981, "y": -0.365127, "z": 0.05}
+    robot_pose = {"x": 4.910158, "y": 0.028348, "yaw": 2.317752}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.70 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.75
+    assert 1.35 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.40
+    assert -0.38 <= ball_pose["y"] - zone.world_y <= -0.35
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.32 <= zone_margin_m <= 0.35
+
+
+def test_policy_place_steers_latest_zero_low_x_positive_same_side_far_edge_by_world_line():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.903, "y": 0.349, "z": 0.05}
+    ball_pose = {"x": 3.864, "y": 0.362, "z": 0.05}
+    robot_pose = {"x": 5.174, "y": -0.001, "yaw": 1.453}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.03
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.00 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.25
+    assert 1.30 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.50
+    assert 0.34 <= ball_pose["y"] - zone.world_y <= 0.42
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.65 <= zone_margin_m <= 0.80
+
+
+def test_policy_place_steers_latest_zero_terminal_low_x_positive_same_side_far_edge_by_world_line():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.824, "y": 0.375, "z": 0.05}
+    ball_pose = {"x": 3.784, "y": 0.387, "z": 0.05}
+    robot_pose = {"x": 5.174, "y": -0.001, "yaw": 1.440}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.03
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.00 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.25
+    assert 1.35 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.50
+    assert 0.36 <= ball_pose["y"] - zone.world_y <= 0.42
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.65 <= zone_margin_m <= 0.80
+
+
+def test_policy_place_holds_latest_zero_terminal_positive_edge_after_ball_slips_behind():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.822, "y": 0.389, "z": 0.05}
+    ball_pose = {"x": 3.781, "y": 0.404, "z": 0.05}
+    robot_pose = {"x": 5.126, "y": 0.007, "yaw": 1.111}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.03
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["ball_x_m"] < -0.20
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.35 <= ball_pose["y"] - zone.world_y <= 0.52
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.40 <= zone_margin_m <= 0.70
+
+
+def test_policy_place_holds_latest_zero_near_mouth_positive_slip_before_reorient():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.745596, "y": 0.378757, "z": 0.05}
+    ball_pose = {"x": 3.699224, "y": 0.393820, "z": 0.05}
+    robot_pose = {"x": 5.105673, "y": 0.018111, "yaw": 1.156475}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.25 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.20
+    assert 1.40 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.45
+    assert 0.39 <= ball_pose["y"] - zone.world_y <= 0.40
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.59 <= zone_margin_m <= 0.60
+
+
+def test_policy_place_recenters_latest_zero_terminal_positive_edge_barely_behind():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.871388, "y": 0.375099, "z": 0.05}
+    ball_pose = {"x": 3.831459, "y": 0.388243, "z": 0.05}
+    robot_pose = {"x": 5.095962, "y": 0.020916, "yaw": 1.149067}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.035
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert -0.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.0
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.35 <= ball_pose["y"] - zone.world_y <= 0.52
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.70 <= zone_margin_m <= 0.75
+
+
+def test_policy_place_recenters_latest_zero_terminal_positive_edge_moderately_behind():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.792034, "y": 0.401222, "z": 0.05}
+    ball_pose = {"x": 3.752273, "y": 0.414311, "z": 0.05}
+    robot_pose = {"x": 5.095962, "y": 0.020916, "yaw": 1.061084}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.035
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert -0.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.20
+    assert 1.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.38
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.38 <= ball_pose["y"] - zone.world_y <= 0.42
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.60 <= zone_margin_m <= 0.70
+
+
+def test_policy_place_holds_latest_zero_wide_positive_terminal_edge_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.626683, "y": 0.437474, "z": 0.05}
+    ball_pose = {"x": 3.585354, "y": 0.450392, "z": 0.05}
+    robot_pose = {"x": 5.163277, "y": 0.012151, "yaw": 1.491820}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.04
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.30 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.35
+    assert 1.55 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.65
+    assert 0.42 <= ball_pose["y"] - zone.world_y <= 0.48
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.48 <= zone_margin_m <= 0.53
+
+
+def test_policy_place_holds_latest_zero_outer_positive_terminal_edge_before_release_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.739200, "y": 0.454274, "z": 0.05}
+    ball_pose = {"x": 3.695765, "y": 0.469457, "z": 0.05}
+    robot_pose = {"x": 5.176988, "y": 0.017159, "yaw": 1.388485}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.15 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.25
+    assert 1.50 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.60
+    assert 0.45 <= ball_pose["y"] - zone.world_y <= 0.50
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.58 <= zone_margin_m <= 0.65
+
+
+def test_policy_place_keeps_tiny_contact_latest_zero_low_x_positive_terminal_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.539881, "y": 0.402951, "z": 0.05}
+    ball_pose = {"x": 3.493135, "y": 0.416293, "z": 0.05}
+    robot_pose = {"x": 5.079712, "y": 0.016713, "yaw": 1.620366}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.55
+    assert 1.50 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.60
+    assert 0.40 <= ball_pose["y"] - zone.world_y <= 0.45
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.40 <= zone_margin_m <= 0.45
+
+
+def test_policy_place_keeps_contact_latest_zero_high_margin_positive_terminal_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.881404, "y": 0.420286, "z": 0.05}
+    ball_pose = {"x": 3.841145, "y": 0.435407, "z": 0.05}
+    robot_pose = {"x": 5.137542, "y": 0.016787, "yaw": 1.511466}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.30 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.40
+    assert 1.30 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.35
+    assert 0.43 <= ball_pose["y"] - zone.world_y <= 0.44
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.70 <= zone_margin_m <= 0.75
+
+
+def test_policy_place_keeps_contact_latest_zero_earlier_positive_terminal_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.881995, "y": 0.347601, "z": 0.05}
+    ball_pose = {"x": 3.843592, "y": 0.359799, "z": 0.05}
+    robot_pose = {"x": 5.082010, "y": 0.010341, "yaw": 1.892331}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.70 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.75
+    assert 1.05 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.10
+    assert 0.35 <= ball_pose["y"] - zone.world_y <= 0.37
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.70 <= zone_margin_m <= 0.75
+
+
+def test_policy_place_keeps_contact_latest_zero_wide_positive_mouth_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.730089, "y": 0.395850, "z": 0.05}
+    ball_pose = {"x": 3.691443, "y": 0.408125, "z": 0.05}
+    robot_pose = {"x": 5.082010, "y": 0.010341, "yaw": 1.497358}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.28 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.30
+    assert 1.40 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.45
+    assert 0.40 <= ball_pose["y"] - zone.world_y <= 0.42
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.60
+
+
+def test_policy_place_keeps_contact_latest_zero_low_x_high_margin_positive_terminal_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.754811, "y": 0.467832, "z": 0.05}
+    ball_pose = {"x": 3.709721, "y": 0.484767, "z": 0.05}
+    robot_pose = {"x": 5.137542, "y": 0.016787, "yaw": 1.468826}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert 0.006 <= decision.command.linear_x <= 0.010
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.30 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.35
+    assert 1.45 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.50
+    assert 0.48 <= ball_pose["y"] - zone.world_y <= 0.49
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.60 <= zone_margin_m <= 0.65
+
+
+def test_policy_place_keeps_tiny_contact_latest_zero_positive_terminal_edge_stall():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.726927, "y": 0.343957, "z": 0.05}
+    ball_pose = {"x": 3.686088, "y": 0.355540, "z": 0.05}
+    robot_pose = {"x": 5.054364, "y": 0.007294, "yaw": 2.401115}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert 0.006 <= decision.command.linear_x <= 0.010
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.30
+    assert 0.60 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= 0.70
+    assert 0.35 <= ball_pose["y"] - zone.world_y <= 0.37
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.58
+
+
+def test_policy_place_holds_latest_zero_positive_world_opposed_mouth_rollout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.752, "y": 0.294, "z": 0.05}
+    ball_pose = {"x": 3.706, "y": 0.307, "z": 0.05}
+    robot_pose = {"x": 4.873, "y": 0.011, "yaw": 3.058}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.15 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.25
+    assert -0.25 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= -0.15
+    assert 0.30 <= ball_pose["y"] - zone.world_y <= 0.32
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.60
+
+
+def test_policy_place_holds_latest_zero_positive_world_wide_opposed_mouth_rollout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.630, "y": 0.327, "z": 0.05}
+    ball_pose = {"x": 3.589, "y": 0.339, "z": 0.05}
+    robot_pose = {"x": 4.851, "y": 0.012, "yaw": -2.899}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.10 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.20
+    assert -0.65 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= -0.55
+    assert 0.33 <= ball_pose["y"] - zone.world_y <= 0.35
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.45 <= zone_margin_m <= 0.50
+
+
+def test_policy_place_coasts_latest_zero_negative_world_mouth_rollout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.401131, "y": -0.363047, "z": 0.05}
+    ball_pose = {"x": 3.352218, "y": -0.373991, "z": 0.05}
+    robot_pose = {"x": 5.047456, "y": 0.002703, "yaw": -2.942211}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_coast_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.04 <= decision.diagnostics["ball_motion_m"] <= 0.06
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.70 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.80
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.05
+    assert -0.40 <= ball_pose["y"] - zone.world_y <= -0.35
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.25 <= zone_margin_m <= 0.28
+
+
+def test_policy_place_keeps_up_latest_zero_low_lateral_positive_world_edge_before_timeout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.102, "y": 0.290, "z": 0.05}
+    ball_pose = {"x": 4.062, "y": 0.304, "z": 0.05}
+    robot_pose = {"x": 5.126, "y": 0.007, "yaw": 2.737}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert 0.008 <= decision.command.linear_x <= 0.014
+    assert decision.command.angular_z < -0.22
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.03
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.95 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.15
+    assert -0.10 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= 0.55
+    assert 0.28 <= ball_pose["y"] - zone.world_y <= 0.34
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.85 <= zone_margin_m <= 1.00
+
+
+def test_policy_place_keeps_up_latest_zero_mid_lateral_positive_world_edge_before_timeout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.062, "y": 0.304, "z": 0.05}
+    ball_pose = {"x": 4.022, "y": 0.318, "z": 0.05}
+    robot_pose = {"x": 5.126, "y": 0.007, "yaw": 2.431}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert 0.008 <= decision.command.linear_x <= 0.014
+    assert decision.command.angular_z < -0.22
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.03
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.95 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.15
+    assert -0.10 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= 0.55
+    assert 0.28 <= ball_pose["y"] - zone.world_y <= 0.34
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.85 <= zone_margin_m <= 1.00
+
+
+def test_policy_place_coasts_latest_zero_high_x_positive_pre_entry_roll():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.524, "y": 0.161, "z": 0.05}
+    ball_pose = {"x": 3.466, "y": 0.169, "z": 0.05}
+    robot_pose = {"x": 4.955, "y": 0.011, "yaw": -3.132}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.05
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.65
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.25
+    assert 0.15 <= ball_pose["y"] - zone.world_y <= 0.22
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.18 <= zone_margin_m <= 0.34
+
+
+def test_policy_place_coasts_latest_zero_terminal_high_x_positive_pre_entry_roll():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.408, "y": 0.177, "z": 0.05}
+    ball_pose = {"x": 3.351, "y": 0.185, "z": 0.05}
+    robot_pose = {"x": 4.947, "y": 0.011, "yaw": 2.959}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.05
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.65
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.25
+    assert 0.15 <= ball_pose["y"] - zone.world_y <= 0.22
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.18 <= zone_margin_m <= 0.34
+
+
+def test_policy_place_coasts_latest_zero_far_centerline_before_keepup_pulse():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.840882, "y": -0.077123, "z": 0.05}
+    ball_pose = {"x": 3.802692, "y": -0.078427, "z": 0.05}
+    robot_pose = {"x": 5.020162, "y": 0.050086, "yaw": -2.948419}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.15 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.30
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.18
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.12
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.68
+
+
+def test_policy_place_coasts_latest_zero_low_motion_high_x_before_near_zone_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.419973, "y": -0.091490, "z": 0.05}
+    ball_pose = {"x": 3.383729, "y": -0.092728, "z": 0.05}
+    robot_pose = {"x": 4.993542, "y": 0.036310, "yaw": -3.042573}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.55 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.65
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.08
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.12
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.18 <= zone_margin_m <= 0.30
+
+
+def test_policy_place_coasts_latest_zero_negative_wide_far_mouth_reel_pulse():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.860195, "y": -0.168607, "z": 0.05}
+    ball_pose = {"x": 3.823955, "y": -0.172611, "z": 0.05}
+    robot_pose = {"x": 4.978278, "y": 0.010974, "yaw": 2.819879}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.00 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.08
+    assert 0.40 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.60
+    assert -0.22 <= ball_pose["y"] - zone.world_y <= -0.14
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.65 <= zone_margin_m <= 0.72
+
+
+def test_policy_place_coasts_latest_zero_negative_local_wide_keepup_sample():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.152828, "y": -0.305691, "z": 0.05}
+    ball_pose = {"x": 4.117318, "y": -0.321589, "z": 0.05}
+    robot_pose = {"x": 4.957425, "y": 0.012042, "yaw": 2.634707}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.038 <= decision.diagnostics["ball_motion_m"] <= 0.041
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.55 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.60
+    assert 0.65 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.75
+    assert -0.33 <= ball_pose["y"] - zone.world_y <= -0.31
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.95 <= zone_margin_m <= 1.00
+
+
+def test_policy_place_coasts_latest_zero_negative_world_line_low_margin_sample():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.895744, "y": -0.417678, "z": 0.05}
+    ball_pose = {"x": 3.860746, "y": -0.433094, "z": 0.05}
+    robot_pose = {"x": 4.941904, "y": 0.027444, "yaw": -3.105489}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.036 <= decision.diagnostics["ball_motion_m"] <= 0.039
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.05 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.12
+    assert 0.40 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.45
+    assert -0.44 <= ball_pose["y"] - zone.world_y <= -0.42
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.74 <= zone_margin_m <= 0.78
+
+
+def test_policy_place_holds_latest_zero_fast_negative_mouth_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.462925, "y": -0.606756, "z": 0.05}
+    ball_pose = {"x": 3.390353, "y": -0.638399, "z": 0.05}
+    robot_pose = {"x": 4.935955, "y": 0.027768, "yaw": -1.903088}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.075 <= decision.diagnostics["ball_motion_m"] <= 0.082
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.10 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.16
+    assert 1.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.28
+    assert -0.65 <= ball_pose["y"] - zone.world_y <= -0.62
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.40 <= zone_margin_m <= 0.43
+
+
+def test_policy_place_coasts_latest_zero_negative_edge_near_mouth_keepup_sample():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.063225, "y": -0.420778, "z": 0.05}
+    ball_pose = {"x": 4.022616, "y": -0.437147, "z": 0.05}
+    robot_pose = {"x": 5.177832, "y": 0.012554, "yaw": 2.953521}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.042 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.02 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.08
+    assert 0.63 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.68
+    assert -0.45 <= ball_pose["y"] - zone.world_y <= -0.43
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.90 <= zone_margin_m <= 0.94
+
+
+def test_policy_place_holds_latest_zero_moderate_negative_mouth_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.756837, "y": -0.544281, "z": 0.05}
+    ball_pose = {"x": 3.712867, "y": -0.562005, "z": 0.05}
+    robot_pose = {"x": 5.162987, "y": 0.000697, "yaw": -1.971232}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.05 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.12
+    assert 1.08 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.15
+    assert -0.58 <= ball_pose["y"] - zone.world_y <= -0.55
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.64 <= zone_margin_m <= 0.69
+
+
+def test_policy_place_coasts_latest_zero_stale_negative_high_x_mouth_sample():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.635872, "y": -0.193389, "z": 0.05}
+    ball_pose = {"x": 3.635872, "y": -0.193389, "z": 0.05}
+    robot_pose = {"x": 4.939639, "y": 0.004720, "yaw": 2.978498}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.30
+    assert 0.35 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.45
+    assert -0.22 <= ball_pose["y"] - zone.world_y <= -0.15
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.45 <= zone_margin_m <= 0.52
+
+
+def test_policy_place_coasts_latest_zero_negative_near_line_keepup_pulse():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.530750, "y": -0.205003, "z": 0.05}
+    ball_pose = {"x": 3.494909, "y": -0.208962, "z": 0.05}
+    robot_pose = {"x": 4.931185, "y": 0.003998, "yaw": -3.031263}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_coast_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.40 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.50
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.12
+    assert -0.25 <= ball_pose["y"] - zone.world_y <= -0.18
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.30 <= zone_margin_m <= 0.38
+
+
+def test_policy_place_coasts_latest_zero_negative_near_wide_reel_pulse():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.494909, "y": -0.208962, "z": 0.05}
+    ball_pose = {"x": 3.460509, "y": -0.212763, "z": 0.05}
+    robot_pose = {"x": 4.924593, "y": 0.004247, "yaw": 2.959802}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.030 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.35 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.45
+    assert 0.18 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.60
+    assert -0.25 <= ball_pose["y"] - zone.world_y <= -0.18
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.25 <= zone_margin_m <= 0.40
+
+
+def test_policy_place_yaws_latest_zero_negative_inside_retrieval_without_forward_nudge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.134823, "y": -0.248743, "z": 0.05}
+    ball_pose = {"x": 3.099623, "y": -0.252632, "z": 0.05}
+    robot_pose = {"x": 4.884311, "y": 0.001272, "yaw": -2.843848}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_shepherd"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.command.angular_z > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.70 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.85
+    assert 0.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.35
+    assert -0.30 <= ball_pose["y"] - zone.world_y <= -0.20
+
+
+def test_policy_place_holds_latest_zero_shallow_positive_entry_rollthrough():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.177, "y": 0.210, "z": 0.05}
+    ball_pose = {"x": 3.122, "y": 0.218, "z": 0.05}
+    robot_pose = {"x": 4.940, "y": 0.014, "yaw": -2.886}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.05
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.55 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.85
+    assert 0.55 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.80
+    assert 0.18 <= ball_pose["y"] - zone.world_y <= 0.28
+    assert 0.72 <= decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= 0.80
+
+
+def test_policy_place_holds_latest_zero_mid_positive_rollthrough_before_reorient():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.122, "y": 0.218, "z": 0.05}
+    ball_pose = {"x": 3.064, "y": 0.226, "z": 0.05}
+    robot_pose = {"x": 4.934, "y": 0.012, "yaw": -2.811}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.05
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.85
+    assert 0.75 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.70
+    assert 0.22 <= ball_pose["y"] - zone.world_y <= 0.28
+    assert 0.40 <= decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= 0.72
+
+
+def test_policy_place_holds_latest_zero_stale_positive_rollthrough_sample():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.122, "y": 0.218, "z": 0.05}
+    ball_pose = {"x": 3.122, "y": 0.218, "z": 0.05}
+    robot_pose = {"x": 4.937, "y": 0.013, "yaw": -2.803}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert decision.diagnostics["capture_snapshot"]["ball_x_m"] >= 0.0
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) >= 0.70
+    assert 0.20 <= ball_pose["y"] - zone.world_y <= 0.42
+
+
+def test_policy_place_holds_latest_zero_stale_wide_mouth_before_entry():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.225614, "y": -0.098125, "z": 0.05}
+    ball_pose = {"x": 3.225614, "y": -0.098125, "z": 0.05}
+    robot_pose = {"x": 4.986970, "y": 0.034512, "yaw": 2.802052}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.55 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.75
+    assert 0.60 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.80
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.14
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.05 <= zone_margin_m <= 0.09
+
+
+def test_policy_place_holds_latest_zero_low_motion_shallow_entry_rollthrough():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.152476, "y": -0.100621, "z": 0.05}
+    ball_pose = {"x": 3.115339, "y": -0.101889, "z": 0.05}
+    robot_pose = {"x": 4.981732, "y": 0.034454, "yaw": -2.901064}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.80 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.86
+    assert 0.30 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.37
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.14
+    assert 0.72 <= decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= 0.77
+
+
+def test_policy_place_holds_latest_zero_stale_high_x_centerline_inside_retrieval():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 2.941089, "y": -0.107836, "z": 0.05}
+    ball_pose = {"x": 2.941089, "y": -0.107836, "z": 0.05}
+    robot_pose = {"x": 4.970363, "y": 0.032614, "yaw": -3.073644}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.90 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 2.10
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.12
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.14
+    assert 0.45 <= decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= 0.65
+
+
+def test_policy_place_holds_latest_zero_deep_positive_rollthrough_before_finish_nudge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 2.667, "y": 0.282, "z": 0.05}
+    ball_pose = {"x": 2.607, "y": 0.290, "z": 0.05}
+    robot_pose = {"x": 4.934, "y": 0.012, "yaw": -2.242}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.05
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 0.35 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.30
+    assert 1.70 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 2.80
+    assert 0.26 <= ball_pose["y"] - zone.world_y <= 0.36
+    assert 0.30 <= decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= 0.45
+
+
+def test_policy_place_keeps_up_latest_zero_far_positive_world_wide_rollout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.998527, "y": 0.316304, "z": 0.05}
+    ball_pose = {"x": 3.956892, "y": 0.329696, "z": 0.05}
+    robot_pose = {"x": 5.013833, "y": 0.023545, "yaw": 2.171691}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert 0.008 <= decision.command.linear_x <= 0.014
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.04
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.30 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.90
+    assert 0.65 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.35
+    assert 0.32 <= ball_pose["y"] - zone.world_y <= 0.40
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.65 <= zone_margin_m <= 0.85
+
+
+def test_policy_place_coasts_latest_zero_low_margin_positive_world_wide_rollout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.898089, "y": 0.307687, "z": 0.05}
+    ball_pose = {"x": 3.853592, "y": 0.321375, "z": 0.05}
+    robot_pose = {"x": 5.121631, "y": 0.021907, "yaw": 2.036402}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.048
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.80 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.85
+    assert 0.95 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.05
+    assert 0.32 <= ball_pose["y"] - zone.world_y <= 0.33
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.70 <= zone_margin_m <= 0.75
+
+
+def test_policy_place_steers_latest_zero_terminal_far_positive_world_wide_rollout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.826168, "y": 0.371742, "z": 0.05}
+    ball_pose = {"x": 3.782858, "y": 0.385673, "z": 0.05}
+    robot_pose = {"x": 5.013833, "y": 0.023545, "yaw": 1.395287}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.65
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.04
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.10 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.30
+    assert 1.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.30
+    assert 0.32 <= ball_pose["y"] - zone.world_y <= 0.40
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.65 <= zone_margin_m <= 0.85
+
+
+def test_policy_place_steers_latest_zero_low_x_positive_terminal_edge_before_generic_wide_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.792161, "y": 0.363631, "z": 0.05}
+    ball_pose = {"x": 3.745596, "y": 0.378757, "z": 0.05}
+    robot_pose = {"x": 5.105673, "y": 0.018111, "yaw": 1.361216}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.05 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.10
+    assert 1.35 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.45
+    assert 0.37 <= ball_pose["y"] - zone.world_y <= 0.39
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.63 <= zone_margin_m <= 0.65
+
+
+def test_policy_place_steers_latest_zero_terminal_low_x_positive_tail_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.659581, "y": 0.354048, "z": 0.05}
+    ball_pose = {"x": 3.620234, "y": 0.389866, "z": 0.05}
+    robot_pose = {"x": 5.095308, "y": 0.020765, "yaw": 1.336375}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.050 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.0 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.05
+    assert 1.45 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.60
+    assert 0.38 <= ball_pose["y"] - zone.world_y <= 0.40
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.50 <= zone_margin_m <= 0.55
+
+
+def test_policy_place_coasts_latest_zero_terminal_positive_world_keepup_sample():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.815615, "y": 0.404537, "z": 0.05}
+    ball_pose = {"x": 3.778102, "y": 0.417705, "z": 0.05}
+    robot_pose = {"x": 5.075565, "y": 0.029091, "yaw": 1.949990}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.030 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.80 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.90
+    assert 1.00 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.10
+    assert 0.40 <= ball_pose["y"] - zone.world_y <= 0.43
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.65 <= zone_margin_m <= 0.70
+
+
+def test_policy_place_coasts_latest_zero_late_positive_world_keepup_sample():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.708113, "y": 0.442273, "z": 0.05}
+    ball_pose = {"x": 3.671530, "y": 0.455115, "z": 0.05}
+    robot_pose = {"x": 5.073449, "y": 0.037116, "yaw": 1.605770}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.030 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.50
+    assert 1.35 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.40
+    assert 0.44 <= ball_pose["y"] - zone.world_y <= 0.46
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.60
+
+
+def test_policy_place_holds_latest_zero_positive_world_slipped_behind_before_reorient():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.633552, "y": 0.468446, "z": 0.05}
+    ball_pose = {"x": 3.596814, "y": 0.481342, "z": 0.05}
+    robot_pose = {"x": 5.074220, "y": 0.043075, "yaw": 1.100150}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.030 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.30 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.25
+    assert 1.50 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.55
+    assert 0.47 <= ball_pose["y"] - zone.world_y <= 0.49
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.50 <= zone_margin_m <= 0.55
+
+
+def test_policy_place_keeps_up_latest_zero_last_ahead_positive_world_edge():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.175581, "y": 0.335551, "z": 0.05}
+    ball_pose = {"x": 4.139897, "y": 0.348629, "z": 0.05}
+    robot_pose = {"x": 5.222710, "y": 0.014458, "yaw": 1.459326}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert 0.006 <= decision.command.linear_x <= 0.008
+    assert decision.command.angular_z <= -0.45
+    assert decision.command.target_speed_scale == 0.18
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.03 <= decision.diagnostics["ball_motion_m"] <= 0.04
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.25
+    assert 1.00 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.20
+    assert 0.32 <= ball_pose["y"] - zone.world_y <= 0.38
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.95 <= zone_margin_m <= 1.05
+
+
+def test_policy_place_holds_latest_zero_moderate_positive_world_behind_terminal():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.782858, "y": 0.385673, "z": 0.05}
+    ball_pose = {"x": 3.738754, "y": 0.399858, "z": 0.05}
+    robot_pose = {"x": 5.013833, "y": 0.023545, "yaw": 0.973804}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.04
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.20
+    assert 1.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.35
+    assert 0.38 <= ball_pose["y"] - zone.world_y <= 0.40
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.60 <= zone_margin_m <= 0.70
+
+
+def test_policy_place_holds_latest_zero_high_lateral_moderate_positive_world_behind_terminal():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.756, "y": 0.386, "z": 0.05}
+    ball_pose = {"x": 3.719, "y": 0.398, "z": 0.05}
+    robot_pose = {"x": 5.055, "y": 0.035, "yaw": 1.099}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.035
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.20
+    assert 1.30 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.38
+    assert 0.38 <= ball_pose["y"] - zone.world_y <= 0.40
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.60 <= zone_margin_m <= 0.70
+
+
+def test_policy_place_steers_latest_zero_terminal_local_dominant_by_world_line():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.719, "y": 0.398, "z": 0.05}
+    ball_pose = {"x": 3.682, "y": 0.409, "z": 0.05}
+    robot_pose = {"x": 5.055, "y": 0.035, "yaw": 1.420}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.035
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.10 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.25
+    assert 1.35 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.50
+    assert 0.40 <= ball_pose["y"] - zone.world_y <= 0.43
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.65
+
+
+def test_policy_place_steers_latest_zero_extended_terminal_local_dominant_by_world_line():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.73194, "y": 0.433259, "z": 0.05}
+    ball_pose = {"x": 3.690976, "y": 0.446854, "z": 0.05}
+    robot_pose = {"x": 5.084472, "y": 0.031797, "yaw": 1.380483}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.10 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.20
+    assert 1.40 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.50
+    assert 0.44 <= ball_pose["y"] - zone.world_y <= 0.46
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.55 <= zone_margin_m <= 0.65
+
+
+def test_policy_place_holds_latest_zero_outer_positive_terminal_edge_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.603809, "y": 0.525291, "z": 0.05}
+    ball_pose = {"x": 3.570267, "y": 0.537879, "z": 0.05}
+    robot_pose = {"x": 5.10042, "y": 0.018233, "yaw": 1.509416}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.030 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.35 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.50
+    assert 1.50 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.65
+    assert 0.52 <= ball_pose["y"] - zone.world_y <= 0.56
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.50 <= zone_margin_m <= 0.58
+
+
+def test_policy_place_resteers_latest_zero_same_side_high_positive_tail_by_world_line():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.741430, "y": 0.546996, "z": 0.05}
+    ball_pose = {"x": 3.707121, "y": 0.561156, "z": 0.05}
+    robot_pose = {"x": 5.188332, "y": 0.012357, "yaw": 1.592251}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.55 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.60
+    assert 1.45 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.50
+    assert 0.55 <= ball_pose["y"] - zone.world_y <= 0.57
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.65 <= zone_margin_m <= 0.68
+
+
+def test_policy_place_resteers_latest_zero_same_side_low_x_positive_tail_by_world_line():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.707121, "y": 0.561156, "z": 0.05}
+    ball_pose = {"x": 3.674351, "y": 0.574680, "z": 0.05}
+    robot_pose = {"x": 5.188332, "y": 0.012357, "yaw": 1.357991}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.25
+    assert 1.55 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.65
+    assert 0.57 <= ball_pose["y"] - zone.world_y <= 0.58
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.63 <= zone_margin_m <= 0.65
+
+
+def test_policy_place_coasts_latest_zero_negative_high_x_final_mouth_rollout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.312, "y": -0.182, "z": 0.05}
+    ball_pose = {"x": 3.263, "y": -0.189, "z": 0.05}
+    robot_pose = {"x": 4.887, "y": 0.004, "yaw": -3.004}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_coast_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.16
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.04
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.72
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.08
+    assert -0.22 <= ball_pose["y"] - zone.world_y <= -0.16
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.06 <= zone_margin_m <= 0.23
+
+
+def test_policy_place_coasts_latest_zero_negative_stale_final_mouth_rollout():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.214976, "y": -0.194730, "z": 0.05}
+    ball_pose = {"x": 3.214976, "y": -0.194730, "z": 0.05}
+    robot_pose = {"x": 4.876395, "y": 0.003736, "yaw": 3.122870}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_coast_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z > 0.16
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.72
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.30
+    assert -0.22 <= ball_pose["y"] - zone.world_y <= -0.16
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.06 <= zone_margin_m <= 0.23
+
+
+def test_policy_place_holds_latest_zero_negative_shallow_entry_rollthrough():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.164, "y": -0.201, "z": 0.05}
+    ball_pose = {"x": 3.117, "y": -0.207, "z": 0.05}
+    robot_pose = {"x": 4.869, "y": 0.003, "yaw": -2.749}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.04
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.55 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.85
+    assert 0.45 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.80
+    assert -0.28 <= ball_pose["y"] - zone.world_y <= -0.18
+
+
+def test_policy_place_holds_latest_zero_negative_mid_entry_rollthrough():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.117451, "y": -0.207038, "z": 0.05}
+    ball_pose = {"x": 3.065802, "y": -0.213556, "z": 0.05}
+    robot_pose = {"x": 4.866716, "y": 0.001802, "yaw": -2.619579}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.045
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.85
+    assert 0.70 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.70
+    assert -0.28 <= ball_pose["y"] - zone.world_y <= -0.18
+    assert 0.40 <= decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= 0.72
+
+
+def test_policy_place_holds_latest_zero_negative_deep_entry_rollthrough():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.014153, "y": -0.220075, "z": 0.05}
+    ball_pose = {"x": 2.965548, "y": -0.226209, "z": 0.05}
+    robot_pose = {"x": 4.862868, "y": -0.001133, "yaw": -2.364505}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] > 0.045
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.85
+    assert 0.70 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.70
+    assert -0.28 <= ball_pose["y"] - zone.world_y <= -0.18
+    assert 0.40 <= decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= 0.72
+
+
+def test_policy_place_yaws_latest_zero_negative_centerline_rollthrough_before_passive_hold():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.161303, "y": -0.089671, "z": 0.05}
+    ball_pose = {"x": 3.126477, "y": -0.090514, "z": 0.05}
+    robot_pose = {"x": 5.013984, "y": 0.033041, "yaw": 3.115787}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_shepherd"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.16
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.030 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert 1.85 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.90
+    assert 0.16 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= 0.18
+    assert -0.10 <= ball_pose["y"] - zone.world_y <= -0.08
+
+
+def test_policy_place_yaws_latest_zero_deep_negative_centerline_rollthrough_before_passive_hold():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 2.516828, "y": -0.105272, "z": 0.05}
+    ball_pose = {"x": 2.479587, "y": -0.106173, "z": 0.05}
+    robot_pose = {"x": 5.008455, "y": 0.033509, "yaw": 3.024575}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_shepherd"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.30
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.030 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_zone"] is True
+    assert 2.45 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 2.55
+    assert 0.42 <= decision.diagnostics["capture_snapshot"]["ball_y_m"] <= 0.45
+    assert -0.12 <= ball_pose["y"] - zone.world_y <= -0.10
+
+
 def test_policy_place_holds_latest_zero_outside_edge_escape_under_place_control():
     zone = build_zone_spec("corral_single_ball_place")
     previous_ball_pose = {"x": 2.150247, "y": -0.757630, "z": 0.05}
@@ -8787,6 +13462,1438 @@ def test_policy_place_resteers_mirrored_inside_edge_by_world_lateral_before_reor
     assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is False
     assert 1.70 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 2.15
     assert ball_pose["y"] - zone.world_y <= -0.65
+
+
+def test_policy_place_keeps_latest_zero_low_x_near_mouth_wide_reel():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.577651, "y": 0.090695, "z": 0.05}
+    ball_pose = {"x": 3.541813, "y": 0.091611, "z": 0.05}
+    robot_pose = {"x": 4.556088, "y": -0.023877, "yaw": -2.435979}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x <= 0.014
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.4
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.037
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    assert zone.retrieval_radius_m + 0.35 <= decision.diagnostics["zone_snapshot"]["zone_distance_m"]
+    assert decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= zone.retrieval_radius_m + 0.40
+    assert 0.68 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.72
+    assert 0.70 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.78
+    assert 0.08 <= ball_pose["y"] - zone.world_y <= 0.10
+
+
+def test_policy_place_keeps_latest_zero_far_low_x_negative_outer_recenter():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.770219, "y": -0.512419, "z": 0.05}
+    ball_pose = {"x": 3.687351, "y": -0.544326, "z": 0.05}
+    robot_pose = {"x": 5.187505, "y": 0.013415, "yaw": -1.500926}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.085 <= decision.diagnostics["ball_motion_m"] <= 0.095
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.62 <= zone_margin_m <= 0.66
+    assert 0.44 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.47
+    assert 1.50 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.58
+    assert -0.56 <= ball_pose["y"] - zone.world_y <= -0.52
+
+
+def test_policy_place_holds_latest_zero_positive_rollout_after_slipping_behind():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.876392, "y": 0.413200, "z": 0.05}
+    ball_pose = {"x": 3.831939, "y": 0.431675, "z": 0.05}
+    robot_pose = {"x": 5.010934, "y": 0.011449, "yaw": 0.965582}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.047 <= decision.diagnostics["ball_motion_m"] <= 0.049
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.72 <= zone_margin_m <= 0.74
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.34 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.31
+    assert 1.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.22
+    assert 0.42 <= ball_pose["y"] - zone.world_y <= 0.44
+
+
+def test_policy_place_holds_latest_zero_deeper_positive_rollout_after_slipping_behind():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.831939, "y": 0.431675, "z": 0.05}
+    ball_pose = {"x": 3.787487, "y": 0.450150, "z": 0.05}
+    robot_pose = {"x": 5.010934, "y": 0.011449, "yaw": 0.858210}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.047 <= decision.diagnostics["ball_motion_m"] <= 0.049
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.69 <= zone_margin_m <= 0.71
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.48 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.46
+    assert 1.20 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.22
+    assert 0.44 <= ball_pose["y"] - zone.world_y <= 0.46
+
+
+def test_policy_place_holds_latest_zero_high_margin_positive_rollout_after_slipping_behind():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.095338, "y": 0.398332, "z": 0.05}
+    ball_pose = {"x": 4.065074, "y": 0.410261, "z": 0.05}
+    robot_pose = {"x": 5.306700, "y": -0.006764, "yaw": 1.138720}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.031 <= decision.diagnostics["ball_motion_m"] <= 0.034
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.94 <= zone_margin_m <= 0.97
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.16 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.12
+    assert 1.29 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.32
+    assert 0.40 <= ball_pose["y"] - zone.world_y <= 0.42
+
+
+def test_policy_place_holds_latest_zero_high_margin_deeper_positive_rollout_after_slipping_behind():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.065074, "y": 0.410261, "z": 0.05}
+    ball_pose = {"x": 4.035267, "y": 0.422010, "z": 0.05}
+    robot_pose = {"x": 5.306700, "y": -0.006764, "yaw": 0.960230}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.031 <= decision.diagnostics["ball_motion_m"] <= 0.034
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.91 <= zone_margin_m <= 0.94
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.39 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.36
+    assert 1.27 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.30
+    assert 0.42 <= ball_pose["y"] - zone.world_y <= 0.43
+
+
+def test_policy_place_holds_latest_zero_high_margin_positive_tail_after_slipping_behind():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.323346, "y": 0.381010, "z": 0.05}
+    ball_pose = {"x": 4.280265, "y": 0.398412, "z": 0.05}
+    robot_pose = {"x": 5.394941, "y": 0.009035, "yaw": 1.170222}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.047
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.09 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.06
+    assert 1.17 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.19
+    assert 0.39 <= ball_pose["y"] - zone.world_y <= 0.41
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.15 <= zone_margin_m <= 1.17
+
+
+def test_policy_place_holds_latest_zero_moderate_positive_tail_after_slipping_behind():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.280265, "y": 0.398412, "z": 0.05}
+    ball_pose = {"x": 4.236233, "y": 0.416187, "z": 0.05}
+    robot_pose = {"x": 5.394941, "y": 0.009035, "yaw": 0.992885}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.30 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.28
+    assert 1.18 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.21
+    assert 0.41 <= ball_pose["y"] - zone.world_y <= 0.42
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.11 <= zone_margin_m <= 1.13
+
+
+def test_policy_place_holds_latest_zero_last_ahead_positive_tail_by_zone_line():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.067028, "y": 0.484544, "z": 0.05}
+    ball_pose = {"x": 4.022713, "y": 0.502439, "z": 0.05}
+    robot_pose = {"x": 5.394941, "y": 0.009035, "yaw": 1.335010}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.15 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.17
+    assert 1.44 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.46
+    assert 0.50 <= ball_pose["y"] - zone.world_y <= 0.51
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.93 <= zone_margin_m <= 0.95
+
+
+def test_policy_place_holds_latest_zero_positive_tail_after_second_slip_behind():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.022713, "y": 0.502439, "z": 0.05}
+    ball_pose = {"x": 3.980558, "y": 0.519462, "z": 0.05}
+    robot_pose = {"x": 5.394941, "y": 0.009035, "yaw": 1.134997}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.050
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.15 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.12
+    assert 1.49 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.51
+    assert 0.51 <= ball_pose["y"] - zone.world_y <= 0.53
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.89 <= zone_margin_m <= 0.91
+
+
+def test_policy_place_holds_latest_zero_positive_tail_just_behind_threshold():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.966385, "y": 0.364642, "z": 0.05}
+    ball_pose = {"x": 3.930303, "y": 0.377821, "z": 0.05}
+    robot_pose = {"x": 5.082547, "y": 0.018392, "yaw": 0.977638}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.36 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.33
+    assert 1.14 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.17
+    assert 0.37 <= ball_pose["y"] - zone.world_y <= 0.39
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.80 <= zone_margin_m <= 0.83
+
+
+def test_policy_place_holds_latest_zero_positive_tail_deeper_behind_threshold():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.930303, "y": 0.377821, "z": 0.05}
+    ball_pose = {"x": 3.895168, "y": 0.390372, "z": 0.05}
+    robot_pose = {"x": 5.082547, "y": 0.018392, "yaw": 0.868068}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.50 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.47
+    assert 1.13 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.16
+    assert 0.38 <= ball_pose["y"] - zone.world_y <= 0.40
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.77 <= zone_margin_m <= 0.80
+
+
+def test_policy_place_holds_latest_zero_positive_edge_after_retrieval_escape():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 1.916228, "y": 0.638956, "z": 0.05}
+    ball_pose = {"x": 1.873376, "y": 0.648405, "z": 0.05}
+    robot_pose = {"x": 4.899166, "y": 0.023317, "yaw": -2.474722}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.75
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.043 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.07 <= zone_margin_m <= 0.08
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.95 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 2.05
+    assert 2.30 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 2.40
+    assert 0.64 <= ball_pose["y"] - zone.world_y <= 0.66
+
+
+def test_policy_place_holds_latest_zero_high_x_positive_edge_after_retrieval_escape():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 1.788403, "y": 0.667143, "z": 0.05}
+    ball_pose = {"x": 1.746739, "y": 0.676330, "z": 0.05}
+    robot_pose = {"x": 4.899166, "y": 0.023317, "yaw": -2.777962}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.75
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.042 <= decision.diagnostics["ball_motion_m"] <= 0.044
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.17 <= zone_margin_m <= 0.19
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 2.70 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 2.75
+    assert 1.70 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.75
+    assert 0.67 <= ball_pose["y"] - zone.world_y <= 0.69
+
+
+def test_policy_place_keeps_latest_zero_low_motion_high_x_near_edge_in_place_ownership():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.282338, "y": 0.105147, "z": 0.05}
+    ball_pose = {"x": 3.253237, "y": 0.107883, "z": 0.05}
+    robot_pose = {"x": 5.196250, "y": 0.003800, "yaw": -2.964492}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert 0.0 <= decision.command.linear_x <= 0.010
+    assert decision.command.angular_z <= -0.75
+    assert decision.command.target_speed_scale <= 0.4
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.028 <= decision.diagnostics["ball_motion_m"] <= 0.030
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.09 <= zone_margin_m <= 0.11
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.88 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.91
+    assert 0.43 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.46
+    assert 0.10 <= ball_pose["y"] - zone.world_y <= 0.12
+
+
+def test_policy_place_coasts_latest_zero_negative_terminal_edge_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.551136, "y": -0.580494, "z": 0.05}
+    ball_pose = {"x": 3.509758, "y": -0.597971, "z": 0.05}
+    robot_pose = {"x": 5.048464, "y": 0.020211, "yaw": -2.030446}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.044 <= decision.diagnostics["ball_motion_m"] <= 0.046
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.49 <= zone_margin_m <= 0.51
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.25
+    assert 1.09 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.12
+    assert -0.61 <= ball_pose["y"] - zone.world_y <= -0.59
+
+
+def test_policy_place_keeps_latest_zero_centered_low_x_near_mouth_in_place_ownership():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.529305, "y": 0.014068, "z": 0.05}
+    ball_pose = {"x": 3.490423, "y": 0.014577, "z": 0.05}
+    robot_pose = {"x": 4.532311, "y": -0.053770, "yaw": -2.464258}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert 0.0 <= decision.command.linear_x <= 0.010
+    assert decision.command.angular_z <= -0.75
+    assert decision.command.target_speed_scale <= 0.4
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.038 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is False
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.32 <= zone_margin_m <= 0.34
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.75 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.78
+    assert 0.69 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.72
+    assert 0.01 <= ball_pose["y"] - zone.world_y <= 0.02
+
+
+def test_policy_place_resteers_latest_zero_first_positive_centerline_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.963036, "y": -0.011760, "z": 0.05}
+    ball_pose = {"x": 4.922760, "y": 0.004755, "z": 0.05}
+    robot_pose = {"x": 5.137762, "y": 0.003122, "yaw": 3.015402}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.08
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.040 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.20 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.22
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.03
+    assert 0.0 < ball_pose["y"] - zone.world_y <= 0.01
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.75 <= zone_margin_m <= 1.77
+
+
+def test_policy_place_holds_latest_zero_early_positive_recapture_drift_without_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.802238, "y": 0.053992, "z": 0.05}
+    ball_pose = {"x": 4.760209, "y": 0.071329, "z": 0.05}
+    robot_pose = {"x": 5.137762, "y": 0.003122, "yaw": 3.080032}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.08
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.046
+    assert decision.diagnostics["capture_snapshot"]["captured"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.37 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.39
+    assert 0.04 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.05
+    assert 0.07 <= ball_pose["y"] - zone.world_y <= 0.08
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.59 <= zone_margin_m <= 1.61
+
+
+def test_policy_place_holds_latest_zero_stale_positive_recapture_drift_without_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.678475, "y": 0.104568, "z": 0.05}
+    ball_pose = {"x": 4.678475, "y": 0.104568, "z": 0.05}
+    robot_pose = {"x": 5.096025, "y": 0.004201, "yaw": 3.030520}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.08
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["capture_snapshot"]["captured"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.42 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.44
+    assert 0.05 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.06
+    assert 0.10 <= ball_pose["y"] - zone.world_y <= 0.11
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.51 <= zone_margin_m <= 1.53
+
+
+def test_policy_place_holds_latest_zero_extended_positive_centerline_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.595189, "y": 0.138988, "z": 0.05}
+    ball_pose = {"x": 4.552035, "y": 0.156428, "z": 0.05}
+    robot_pose = {"x": 5.044805, "y": 0.009351, "yaw": 3.016678}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.08
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.047
+    assert decision.diagnostics["capture_snapshot"]["captured"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.50 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.52
+    assert 0.08 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.09
+    assert 0.15 <= ball_pose["y"] - zone.world_y <= 0.16
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.39 <= zone_margin_m <= 1.40
+
+
+def test_policy_place_holds_latest_zero_mid_positive_recapture_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.650146, "y": 0.105258, "z": 0.05}
+    ball_pose = {"x": 4.609381, "y": 0.118398, "z": 0.05}
+    robot_pose = {"x": 5.178630, "y": 0.015335, "yaw": 2.644953}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.18
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.042 <= decision.diagnostics["ball_motion_m"] <= 0.044
+    assert decision.diagnostics["capture_snapshot"]["captured"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.54 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.56
+    assert 0.18 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.19
+    assert 0.11 <= ball_pose["y"] - zone.world_y <= 0.12
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.44 <= zone_margin_m <= 1.46
+
+
+def test_policy_place_holds_latest_zero_stale_mid_positive_recapture_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.566394, "y": 0.131432, "z": 0.05}
+    ball_pose = {"x": 4.566394, "y": 0.131432, "z": 0.05}
+    robot_pose = {"x": 5.178630, "y": 0.015335, "yaw": 2.779994}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.18
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["capture_snapshot"]["captured"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.61 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.62
+    assert 0.10 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.11
+    assert 0.13 <= ball_pose["y"] - zone.world_y <= 0.14
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.40 <= zone_margin_m <= 1.42
+
+
+def test_policy_place_holds_latest_zero_high_x_positive_drift_without_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.317075, "y": 0.208726, "z": 0.05}
+    ball_pose = {"x": 4.278795, "y": 0.220624, "z": 0.05}
+    robot_pose = {"x": 5.127653, "y": 0.020382, "yaw": 2.687430}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.22
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.039 <= decision.diagnostics["ball_motion_m"] <= 0.041
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.84 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.86
+    assert 0.19 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.20
+    assert 0.22 <= ball_pose["y"] - zone.world_y <= 0.23
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.12 <= zone_margin_m <= 1.14
+
+
+def test_policy_place_holds_latest_zero_terminal_positive_behind_after_high_x_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.722834, "y": 0.396069, "z": 0.05}
+    ball_pose = {"x": 3.676790, "y": 0.410365, "z": 0.05}
+    robot_pose = {"x": 5.106170, "y": 0.038568, "yaw": 1.067912}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.046 <= decision.diagnostics["ball_motion_m"] <= 0.049
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert -0.37 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= -0.35
+    assert 1.42 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.44
+    assert 0.40 <= ball_pose["y"] - zone.world_y <= 0.42
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.57 <= zone_margin_m <= 0.59
+
+
+def test_policy_place_resteers_latest_zero_early_negative_centerline_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 5.350934, "y": -0.059777, "z": 0.05}
+    ball_pose = {"x": 5.317928, "y": -0.079975, "z": 0.05}
+    robot_pose = {"x": 5.608886, "y": -0.040614, "yaw": 3.071888}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.10
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.038 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.28 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.30
+    assert 0.05 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.07
+    assert -0.09 <= ball_pose["y"] - zone.world_y <= -0.07
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 2.15 <= zone_margin_m <= 2.17
+
+
+def test_policy_place_holds_latest_zero_low_x_negative_drift_without_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 5.086811, "y": -0.222343, "z": 0.05}
+    ball_pose = {"x": 5.051209, "y": -0.244289, "z": 0.05}
+    robot_pose = {"x": 5.605253, "y": -0.038730, "yaw": 2.389955}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_wide_lateral_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.35
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.041 <= decision.diagnostics["ball_motion_m"] <= 0.043
+    assert decision.diagnostics["capture_snapshot"]["captured"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.25 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.28
+    assert 0.52 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.54
+    assert -0.25 <= ball_pose["y"] - zone.world_y <= -0.24
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.89 <= zone_margin_m <= 1.91
+
+
+def test_policy_place_holds_latest_zero_mid_high_x_negative_drift_without_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.311830, "y": -0.699337, "z": 0.05}
+    ball_pose = {"x": 4.278135, "y": -0.720260, "z": 0.05}
+    robot_pose = {"x": 5.476063, "y": -0.053538, "yaw": -2.193490}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.039 <= decision.diagnostics["ball_motion_m"] <= 0.041
+    assert decision.diagnostics["capture_snapshot"]["captured"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.23 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.25
+    assert 0.58 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.59
+    assert -0.73 <= ball_pose["y"] - zone.world_y <= -0.71
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.24 <= zone_margin_m <= 1.26
+
+
+def test_policy_place_holds_latest_zero_stale_outer_negative_high_x_without_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.426588, "y": -0.729036, "z": 0.05}
+    ball_pose = {"x": 4.426588, "y": -0.729036, "z": 0.05}
+    robot_pose = {"x": 5.593773, "y": -0.047869, "yaw": -1.901885}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.00 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.05
+    assert 0.85 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.90
+    assert -0.75 <= ball_pose["y"] - zone.world_y <= -0.70
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.38 <= zone_margin_m <= 1.40
+
+
+def test_policy_place_holds_latest_zero_outer_negative_tail_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.196984, "y": -0.892917, "z": 0.05}
+    ball_pose = {"x": 4.171927, "y": -0.910802, "z": 0.05}
+    robot_pose = {"x": 5.589033, "y": -0.058455, "yaw": -1.807165}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.030 <= decision.diagnostics["ball_motion_m"] <= 0.032
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.15 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.18
+    assert 1.17 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.19
+    assert -0.92 <= ball_pose["y"] - zone.world_y <= -0.90
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.22 <= zone_margin_m <= 1.24
+
+
+def test_policy_place_holds_latest_zero_mid_high_negative_tail_without_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.377369, "y": -0.779763, "z": 0.05}
+    ball_pose = {"x": 4.346210, "y": -0.802325, "z": 0.05}
+    robot_pose = {"x": 5.589325, "y": -0.042409, "yaw": -1.870099}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.035 <= decision.diagnostics["ball_motion_m"] <= 0.040
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.08 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.11
+    assert 0.95 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.98
+    assert -0.82 <= ball_pose["y"] - zone.world_y <= -0.79
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.33 <= zone_margin_m <= 1.35
+
+
+def test_policy_place_holds_latest_zero_terminal_negative_tail_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.314201, "y": -0.825495, "z": 0.05}
+    ball_pose = {"x": 4.282429, "y": -0.848503, "z": 0.05}
+    robot_pose = {"x": 5.589325, "y": -0.048926, "yaw": -1.856022}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.038 <= decision.diagnostics["ball_motion_m"] <= 0.042
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.12 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.15
+    assert 1.02 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.04
+    assert -0.86 <= ball_pose["y"] - zone.world_y <= -0.84
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.29 <= zone_margin_m <= 1.31
+
+
+def test_policy_place_holds_latest_zero_high_x_negative_terminal_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.696943, "y": -1.078093, "z": 0.05}
+    ball_pose = {"x": 3.660724, "y": -1.100392, "z": 0.05}
+    robot_pose = {"x": 5.375857, "y": -0.113066, "yaw": -3.040976}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z >= 0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.042 <= decision.diagnostics["ball_motion_m"] <= 0.044
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.80 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.82
+    assert 0.80 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.82
+    assert -1.11 <= ball_pose["y"] - zone.world_y <= -1.09
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.90 <= zone_margin_m <= 0.92
+
+
+def test_policy_place_coasts_latest_zero_fast_far_centerline_before_mouth_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.630993, "y": -0.039446, "z": 0.05}
+    ball_pose = {"x": 4.578940, "y": -0.041940, "z": 0.05}
+    robot_pose = {"x": 5.128474, "y": 0.024013, "yaw": 2.849322}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.052 <= decision.diagnostics["ball_motion_m"] <= 0.054
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.50 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.52
+    assert 0.21 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.23
+    assert -0.05 <= ball_pose["y"] - zone.world_y <= -0.03
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.41 <= zone_margin_m <= 1.43
+
+
+def test_policy_place_coasts_latest_zero_fast_recapture_centerline_before_mouth_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.842861, "y": -0.029831, "z": 0.05}
+    ball_pose = {"x": 4.789519, "y": -0.033176, "z": 0.05}
+    robot_pose = {"x": 5.221366, "y": 0.016252, "yaw": -3.139797}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.053 <= decision.diagnostics["ball_motion_m"] <= 0.055
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.42 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.44
+    assert 0.04 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.06
+    assert -0.04 <= ball_pose["y"] - zone.world_y <= -0.03
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.62 <= zone_margin_m <= 1.64
+
+
+def test_policy_place_coasts_latest_zero_fast_near_centerline_before_final_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.568481, "y": -0.084638, "z": 0.05}
+    ball_pose = {"x": 3.515438, "y": -0.086670, "z": 0.05}
+    robot_pose = {"x": 5.043651, "y": 0.042081, "yaw": -2.956254}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_coast_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.052 <= decision.diagnostics["ball_motion_m"] <= 0.054
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.52 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.54
+    assert 0.15 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.17
+    assert -0.09 <= ball_pose["y"] - zone.world_y <= -0.08
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.35 <= zone_margin_m <= 0.37
+
+
+def test_policy_place_holds_latest_zero_stale_shallow_centerline_mouth_sample():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.197972, "y": -0.100204, "z": 0.05}
+    ball_pose = {"x": 3.197972, "y": -0.100204, "z": 0.05}
+    robot_pose = {"x": 5.013116, "y": 0.036826, "yaw": -3.070639}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_inside_retrieval_hold"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z == 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["ball_motion_m"] == 0.0
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert decision.diagnostics["zone_snapshot"]["inside_retrieval_corral"] is True
+    assert decision.diagnostics["zone_snapshot"]["center_inside_retrieval_corral"] is False
+    assert 1.81 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.83
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.02
+    assert 0.80 <= decision.diagnostics["zone_snapshot"]["zone_distance_m"] <= 0.81
+    assert abs(ball_pose["y"] - zone.world_y) <= 0.11
+
+
+def test_policy_place_coasts_latest_zero_positive_centerline_recapture_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.368, "y": 0.144, "z": 0.05}
+    ball_pose = {"x": 4.324, "y": 0.156, "z": 0.05}
+    robot_pose = {"x": 5.127, "y": 0.011, "yaw": 2.978}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z < 0.0
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.047
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert 0.80 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.83
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.03
+    assert 0.15 <= ball_pose["y"] - zone.world_y <= 0.16
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.16 <= zone_margin_m <= 1.18
+
+
+def test_policy_place_coasts_latest_zero_early_positive_recapture_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.860255, "y": 0.185451, "z": 0.05}
+    ball_pose = {"x": 4.823566, "y": 0.200262, "z": 0.05}
+    robot_pose = {"x": 5.475500, "y": 0.009103, "yaw": 3.044889}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.18
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.039 <= decision.diagnostics["ball_motion_m"] <= 0.041
+    assert 0.65 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.69
+    assert 0.11 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.15
+    assert 0.19 <= ball_pose["y"] - zone.world_y <= 0.21
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.65 <= zone_margin_m <= 1.69
+
+
+def test_policy_place_coasts_latest_zero_positive_midline_before_far_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.144, "y": 0.203, "z": 0.05}
+    ball_pose = {"x": 4.102, "y": 0.214, "z": 0.05}
+    robot_pose = {"x": 5.093, "y": 0.018, "yaw": 2.919}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.18
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.042 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.99 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.02
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.05
+    assert 0.21 <= ball_pose["y"] - zone.world_y <= 0.22
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.94 <= zone_margin_m <= 0.96
+
+
+def test_policy_place_coasts_latest_zero_low_lateral_positive_midline_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 4.378, "y": 0.169, "z": 0.05}
+    ball_pose = {"x": 4.335, "y": 0.182, "z": 0.05}
+    robot_pose = {"x": 5.142351, "y": 0.013876, "yaw": 2.671769}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_line_recenter"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.18
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.044 <= decision.diagnostics["ball_motion_m"] <= 0.046
+    assert 0.78 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.82
+    assert 0.19 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.23
+    assert 0.17 <= ball_pose["y"] - zone.world_y <= 0.19
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 1.17 <= zone_margin_m <= 1.20
+
+
+def test_policy_place_coasts_latest_zero_positive_mouth_drift_before_reel_keepup():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.631, "y": 0.337, "z": 0.05}
+    ball_pose = {"x": 3.586, "y": 0.349, "z": 0.05}
+    robot_pose = {"x": 5.038, "y": 0.026, "yaw": 2.982}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.048
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.47 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.50
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.12
+    assert 0.34 <= ball_pose["y"] - zone.world_y <= 0.36
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.46 <= zone_margin_m <= 0.49
+
+
+def test_policy_place_coasts_latest_zero_positive_near_mouth_drift():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.542, "y": 0.360, "z": 0.05}
+    ball_pose = {"x": 3.495, "y": 0.373, "z": 0.05}
+    robot_pose = {"x": 5.024, "y": 0.027, "yaw": -3.064}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.047 <= decision.diagnostics["ball_motion_m"] <= 0.049
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.48 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.52
+    assert 0.44 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.48
+    assert 0.36 <= ball_pose["y"] - zone.world_y <= 0.38
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.38 <= zone_margin_m <= 0.41
+
+
+def test_policy_place_holds_latest_zero_positive_terminal_before_capture_fallback():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.226, "y": 0.443, "z": 0.05}
+    ball_pose = {"x": 3.182, "y": 0.455, "z": 0.05}
+    robot_pose = {"x": 5.010, "y": 0.028, "yaw": 1.993}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_near_zone_wide_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.45
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.045 <= decision.diagnostics["ball_motion_m"] <= 0.047
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 1.12 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 1.16
+    assert 1.45 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.52
+    assert 0.44 <= ball_pose["y"] - zone.world_y <= 0.47
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.13 <= zone_margin_m <= 0.15
+
+
+def test_policy_place_holds_latest_zero_low_x_high_lateral_positive_mouth():
+    zone = build_zone_spec("corral_single_ball_place")
+    previous_ball_pose = {"x": 3.543515, "y": 0.411160, "z": 0.05}
+    ball_pose = {"x": 3.501523, "y": 0.423602, "z": 0.05}
+    robot_pose = {"x": 5.119265, "y": 0.036027, "yaw": 1.346042}
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="place",
+        zone=zone,
+        previous_ball_pose=previous_ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_place_far_recapture_reel"
+    assert decision.command.linear_x == 0.0
+    assert decision.command.angular_z <= -0.55
+    assert decision.command.target_speed_scale == 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert 0.043 <= decision.diagnostics["ball_motion_m"] <= 0.045
+    assert decision.diagnostics["capture_snapshot"]["ball_ahead"] is True
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is False
+    assert 0.0 <= decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.03
+    assert 1.60 <= abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 1.70
+    assert 0.42 <= ball_pose["y"] - zone.world_y <= 0.43
+    zone_margin_m = decision.diagnostics["zone_snapshot"]["zone_distance_m"] - zone.retrieval_radius_m
+    assert 0.40 <= zone_margin_m <= 0.43
 
 
 def test_policy_smooths_command_delta_from_previous_command():

@@ -301,6 +301,31 @@ def test_parse_args_allows_object_centric_gather_policy_v1(monkeypatch):
     assert args.gather_control_family == "object_centric_gather_policy_v1"
 
 
+def test_parse_args_allows_fetch_to_pose_objective(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        [
+            "gather_mission_runner.py",
+            "--mission-objective",
+            "fetch_to_pose",
+            "--fetch-target-x",
+            "2.8",
+            "--fetch-target-y",
+            "-0.2",
+            "--fetch-delivery-radius-m",
+            "0.5",
+        ],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.mission_objective == "fetch_to_pose"
+    assert args.fetch_target_x == 2.8
+    assert args.fetch_target_y == -0.2
+    assert args.fetch_delivery_radius_m == 0.5
+
+
 def test_nav2_reacquire_goal_generation_covers_zero_plus_minus_and_ready_states():
     zone = gather_runner.build_zone_spec("corral_single_ball_place")
     zero_ball = {"x": 5.448, "y": 0.0, "z": 0.05}
@@ -8318,6 +8343,71 @@ def test_place_target_three_ball_advances_after_practical_retrieval_without_full
     assert payload["settled_in_corral_pass"] is False
     assert payload["settle_no_chase_activated"] is True
     assert any(item["mode"] == "settle_no_chase" for item in command_log)
+
+
+def test_run_target_fetch_to_pose_accepts_rollthrough_delivery_intersection(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = "fetch_to_pose"
+    runner.fetch_delivery_radius_m = 0.25
+
+    monkeypatch.setattr(
+        gather_runner,
+        "fetch_dashboard_state",
+        lambda dashboard_url, timeout_s=0: {
+            "brain": {"last_feedback_status": "", "last_feedback_text": ""},
+            "belief": {"latest_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0}},
+        },
+    )
+    monkeypatch.setattr(runner, "_dispatch_visit_target", lambda target_id: None)
+    monkeypatch.setattr(runner, "_wait_for_visit_result", lambda **kwargs: (True, {}, "visit_target_reached"))
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_ball_truth_pose", lambda session_id, target: {"x": 1.0, "y": 0.0, "z": 0.05})
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_capture_target",
+        lambda **kwargs: (True, {"capture_state": {"captured": True}, "zone_score": {}, "handoff_kind": "secure_capture"}),
+    )
+
+    def _place_target(**kwargs):
+        gather_runner.append_jsonl(
+            kwargs["state_history_path"],
+            {
+                "generated_utc": "2026-05-13T00:00:00Z",
+                "event_type": "place_tick",
+                "phase": "place",
+                "target_id": "ball_1",
+                "ball_pose": {"x": 2.4, "y": 0.0, "z": 0.05},
+            },
+        )
+        return (
+            False,
+            {
+                "failure_reason": "release_roll_away",
+                "failure_stage": "release",
+                "final_ball_pose": {"x": 3.1, "y": 0.0, "z": 0.05},
+                "rolled_away_after_release": True,
+            },
+        )
+
+    monkeypatch.setattr(runner, "_place_target", _place_target)
+
+    result = runner._run_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        route_index=1,
+        gather_sequence_path=tmp_path / "gather_sequence.jsonl",
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=tmp_path / "mission",
+    )
+
+    assert result["pass"] is True
+    assert result["mission_objective"] == "fetch_to_pose"
+    assert result["fetch_to_pose_reached"] is True
+    assert result["shot_outcome"]["reason"] == "trajectory_intersects_delivery_radius"
+    assert result["settled_in_corral_pass"] is False
 
 
 def test_run_target_fails_settled_placement_loss_when_ball_leaves_local_correction_range(tmp_path, monkeypatch):
