@@ -338,7 +338,12 @@ DEFAULT_MULTI_BALL_ADVANCE_DWELL_S = 0.5
 DEFAULT_MULTI_BALL_ADVANCE_MOTION_TOLERANCE_M = 0.04
 DEFAULT_PRE_STAGE_TIMEOUT_S = 30.0
 DEFAULT_OBJECT_CENTRIC_PRE_STAGE_TIMEOUT_S = 70.0
+DEFAULT_OBJECT_CENTRIC_FETCH_PRE_STAGE_TIMEOUT_S = 90.0
 DEFAULT_STAGE_TIMEOUT_S = 6.0
+DEFAULT_OBJECT_CENTRIC_STAGE_TIMEOUT_S = 14.0
+DEFAULT_OBJECT_CENTRIC_FETCH_CAPTURE_TIMEOUT_S = 32.0
+DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S = 4.0
+DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M = 0.03
 DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_MAX = 12
 DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_INTERVAL_S = 0.5
 DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_MAX = 20
@@ -915,6 +920,7 @@ class GatherMissionRunner:
         *,
         state_history_path: Path,
         target_id: str,
+        phase: str | None = None,
     ) -> list[dict[str, Any]]:
         if not state_history_path.exists():
             return []
@@ -933,6 +939,9 @@ class GatherMissionRunner:
                 row_target_id = clean_text(row.get("target_id"))
                 if row_target_id and row_target_id != target_id:
                     continue
+                row_phase = clean_text(row.get("phase"))
+                if phase is not None and row_phase != phase:
+                    continue
                 ball_pose = _ball_pose_from_state_row(row)
                 if not ball_pose:
                     continue
@@ -941,7 +950,7 @@ class GatherMissionRunner:
                         "line_index": line_index,
                         "generated_utc": clean_text(row.get("generated_utc")),
                         "event_type": clean_text(row.get("event_type")),
-                        "phase": clean_text(row.get("phase")),
+                        "phase": row_phase,
                         "ball_pose": ball_pose,
                     }
                 )
@@ -961,6 +970,7 @@ class GatherMissionRunner:
         samples = self._state_history_ball_samples(
             state_history_path=state_history_path,
             target_id=target.id,
+            phase="fetch_to_pose",
         )
         final_pose_payload = pose_payload(final_ball_pose or {})
         if final_pose_payload:
@@ -1029,6 +1039,21 @@ class GatherMissionRunner:
             if isinstance(place_payload, dict) and isinstance(place_payload.get("settle_metrics"), dict)
             else {}
         )
+        fetch_phase_metrics = {}
+        if isinstance(place_payload, dict):
+            for key in (
+                "fetch_observe_count",
+                "fetch_elapsed_s",
+                "fetch_still_s",
+                "fetch_ball_displacement_m",
+                "fetch_ball_moved_since_fetch",
+                "fetch_min_launch_observe_s",
+                "fetch_launch_motion_evidence_m",
+                "fetch_max_commanded_linear_x_mps",
+                "fetch_max_target_speed_scale",
+            ):
+                if key in place_payload:
+                    fetch_phase_metrics[key] = place_payload.get(key)
         if pass_delivery:
             reason = "trajectory_intersects_delivery_radius"
         elif not observed:
@@ -1072,6 +1097,7 @@ class GatherMissionRunner:
             ),
             "max_overshoot_distance_m": round(float(clean_number(settle_metrics.get("max_overshoot_distance_m")) or 0.0), 6),
             "surface_profile": self.surface_profile,
+            **fetch_phase_metrics,
         }
 
     def _persist_visit_runtime_state(self) -> None:
@@ -3021,6 +3047,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 pre_stage_timeout_s,
                 DEFAULT_OBJECT_CENTRIC_PRE_STAGE_TIMEOUT_S,
             )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+                pre_stage_timeout_s = max(
+                    pre_stage_timeout_s,
+                    DEFAULT_OBJECT_CENTRIC_FETCH_PRE_STAGE_TIMEOUT_S,
+                )
         deadline = time.monotonic() + max(pre_stage_timeout_s, 0.1)
         pre_stage_started_monotonic = time.monotonic()
         pre_stage_ready_started_monotonic: float | None = None
@@ -4778,13 +4809,27 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         attempt_index: int = 0,
         attempt_kind: str = "",
     ) -> tuple[bool, dict[str, Any]]:
-        deadline = time.monotonic() + max(self.args.capture_timeout_s, 0.1)
+        capture_timeout_s = max(self.args.capture_timeout_s, 0.1)
+        if (
+            self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            and self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+        ):
+            capture_timeout_s = max(capture_timeout_s, DEFAULT_OBJECT_CENTRIC_FETCH_CAPTURE_TIMEOUT_S)
+        deadline = time.monotonic() + capture_timeout_s
         captured_started_monotonic: float | None = None
         zone_centered_started_monotonic: float | None = None
         previous_ball_pose: dict[str, Any] | None = None
         last_capture = None
         last_zone_score = None
         stage_started_monotonic = time.monotonic() if enable_goal_side_stage else None
+        stage_timeout_s = (
+            DEFAULT_OBJECT_CENTRIC_STAGE_TIMEOUT_S
+            if (
+                enable_goal_side_stage
+                and self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+            )
+            else DEFAULT_STAGE_TIMEOUT_S
+        )
         stage_ready_started_monotonic: float | None = None
         stage_ready_latched = False
         stage_completed = not enable_goal_side_stage
@@ -5223,7 +5268,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     continue
                 if (
                     stage_started_monotonic is not None
-                    and (now_monotonic - stage_started_monotonic) >= DEFAULT_STAGE_TIMEOUT_S
+                    and (now_monotonic - stage_started_monotonic) >= stage_timeout_s
                     and not stage_ready_latched
                 ):
                     stage_time_s = now_monotonic - float(stage_started_monotonic)
@@ -8182,11 +8227,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         timeout_budget_s = max(self.args.place_timeout_s, 0.1)
         if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
             timeout_budget_s = max(timeout_budget_s, DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S)
-        deadline = time.monotonic() + timeout_budget_s
+        fetch_started_monotonic = time.monotonic()
+        deadline = fetch_started_monotonic + timeout_budget_s
         fetch_pose_world = self._fetch_pose_world()
         fetch_xyyaw = world_pose_xyyaw(fetch_pose_world)
         previous_command: PlaceControlCommand | None = None
         previous_ball_pose: dict[str, Any] | None = None
+        fetch_start_ball_pose: dict[str, Any] | None = None
         latest_ball_pose: dict[str, Any] = {}
         latest_capture: dict[str, Any] = {}
         latest_zone_score: dict[str, Any] = {}
@@ -8194,6 +8241,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         closest_distance_m: float | None = None
         closest_pose: dict[str, Any] = {}
         still_started_monotonic: float | None = None
+        latest_still_s: float | None = None
+        latest_ball_displacement_m: float | None = None
+        ball_moved_since_fetch = False
+        max_commanded_linear_x_mps: float | None = None
+        max_target_speed_scale: float | None = None
         observe_count = 0
         failure_reason = "fetch_to_pose_timeout"
 
@@ -8207,10 +8259,26 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
 
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
+            fetch_elapsed_s = max(0.0, now_monotonic - fetch_started_monotonic)
             _dashboard_state, robot_pose, ball_pose = self._control_loop_state(session_id=session_id, target=target)
             capture = capture_snapshot(robot_pose, ball_pose or {}, self.capture_envelope) if robot_pose and ball_pose else None
             zone_score = zone_snapshot(ball_pose or {}, self.zone) if ball_pose else None
             ball_motion_m = pose_delta_m(previous_ball_pose, ball_pose) if previous_ball_pose is not None and ball_pose else None
+            if fetch_start_ball_pose is None and ball_pose:
+                fetch_start_ball_pose = dict(ball_pose)
+            latest_ball_displacement_m = (
+                pose_delta_m(fetch_start_ball_pose, ball_pose)
+                if fetch_start_ball_pose is not None and ball_pose
+                else None
+            )
+            if (
+                (ball_motion_m is not None and ball_motion_m > DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M)
+                or (
+                    latest_ball_displacement_m is not None
+                    and latest_ball_displacement_m > DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M
+                )
+            ):
+                ball_moved_since_fetch = True
             distance_to_fetch_pose_m = _distance_to_fetch_pose(ball_pose)
             if ball_pose:
                 latest_ball_pose = dict(ball_pose)
@@ -8238,6 +8306,30 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "failure_reason": "",
                         "failure_stage": "",
                         "fetch_observe_count": int(observe_count),
+                        "fetch_elapsed_s": round(float(fetch_elapsed_s), 6),
+                        "fetch_still_s": (
+                            round(float(latest_still_s), 6)
+                            if latest_still_s is not None
+                            else None
+                        ),
+                        "fetch_ball_displacement_m": (
+                            round(float(latest_ball_displacement_m), 6)
+                            if latest_ball_displacement_m is not None
+                            else None
+                        ),
+                        "fetch_ball_moved_since_fetch": bool(ball_moved_since_fetch),
+                        "fetch_min_launch_observe_s": round(float(DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S), 6),
+                        "fetch_launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                        "fetch_max_commanded_linear_x_mps": (
+                            round(float(max_commanded_linear_x_mps), 6)
+                            if max_commanded_linear_x_mps is not None
+                            else None
+                        ),
+                        "fetch_max_target_speed_scale": (
+                            round(float(max_target_speed_scale), 6)
+                            if max_target_speed_scale is not None
+                            else None
+                        ),
                         "fetch_closest_approach_distance_m": round(float(closest_distance_m), 6),
                         "fetch_closest_pose": closest_pose,
                         "settle_exit_reason": "trajectory_intersects_delivery_radius",
@@ -8247,9 +8339,19 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 still_started_monotonic = now_monotonic if still_started_monotonic is None else still_started_monotonic
             else:
                 still_started_monotonic = None
+            latest_still_s = (
+                max(0.0, now_monotonic - still_started_monotonic)
+                if still_started_monotonic is not None
+                else None
+            )
             if (
                 still_started_monotonic is not None
-                and (now_monotonic - still_started_monotonic) >= DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
+                and latest_still_s is not None
+                and latest_still_s >= DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
+                and (
+                    ball_moved_since_fetch
+                    or fetch_elapsed_s >= DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S
+                )
                 and distance_to_fetch_pose_m is not None
                 and distance_to_fetch_pose_m > float(self.fetch_delivery_radius_m)
             ):
@@ -8308,6 +8410,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             distance_to_fetch_pose_m is not None
                             and distance_to_fetch_pose_m <= float(self.fetch_delivery_radius_m)
                         ),
+                        "elapsed_s": round(float(fetch_elapsed_s), 6),
+                        "observe_count": int(observe_count),
                         "distance_to_fetch_pose_m": (
                             round(float(distance_to_fetch_pose_m), 6)
                             if distance_to_fetch_pose_m is not None
@@ -8319,6 +8423,29 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             else None
                         ),
                         "delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                        "still_s": (
+                            round(float(latest_still_s), 6)
+                            if latest_still_s is not None
+                            else None
+                        ),
+                        "ball_displacement_m": (
+                            round(float(latest_ball_displacement_m), 6)
+                            if latest_ball_displacement_m is not None
+                            else None
+                        ),
+                        "ball_moved_since_fetch": bool(ball_moved_since_fetch),
+                        "min_launch_observe_s": round(float(DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S), 6),
+                        "launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                        "max_commanded_linear_x_mps": (
+                            round(float(max_commanded_linear_x_mps), 6)
+                            if max_commanded_linear_x_mps is not None
+                            else None
+                        ),
+                        "max_target_speed_scale": (
+                            round(float(max_target_speed_scale), 6)
+                            if max_target_speed_scale is not None
+                            else None
+                        ),
                     },
                     "ball_motion_m": ball_motion_m,
                     "selected_command": command.to_dict() if command else {},
@@ -8352,6 +8479,18 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 latest_feedback=f"Fetching {target.label} through the delivery pose.",
             )
             if command is not None:
+                linear_abs = abs(float(command.linear_x))
+                max_commanded_linear_x_mps = (
+                    linear_abs
+                    if max_commanded_linear_x_mps is None
+                    else max(max_commanded_linear_x_mps, linear_abs)
+                )
+                target_speed_scale = float(command.target_speed_scale)
+                max_target_speed_scale = (
+                    target_speed_scale
+                    if max_target_speed_scale is None
+                    else max(max_target_speed_scale, target_speed_scale)
+                )
                 self._set_manual_drive(
                     True,
                     linear_x=command.linear_x,
@@ -8373,6 +8512,32 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "zone_score": latest_zone_score,
             "object_centric_policy": latest_policy,
             "fetch_observe_count": int(observe_count),
+            "fetch_elapsed_s": (
+                round(float(max(0.0, time.monotonic() - fetch_started_monotonic)), 6)
+            ),
+            "fetch_still_s": (
+                round(float(latest_still_s), 6)
+                if latest_still_s is not None
+                else None
+            ),
+            "fetch_ball_displacement_m": (
+                round(float(latest_ball_displacement_m), 6)
+                if latest_ball_displacement_m is not None
+                else None
+            ),
+            "fetch_ball_moved_since_fetch": bool(ball_moved_since_fetch),
+            "fetch_min_launch_observe_s": round(float(DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S), 6),
+            "fetch_launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+            "fetch_max_commanded_linear_x_mps": (
+                round(float(max_commanded_linear_x_mps), 6)
+                if max_commanded_linear_x_mps is not None
+                else None
+            ),
+            "fetch_max_target_speed_scale": (
+                round(float(max_target_speed_scale), 6)
+                if max_target_speed_scale is not None
+                else None
+            ),
             "fetch_closest_approach_distance_m": (
                 round(float(closest_distance_m), 6)
                 if closest_distance_m is not None
@@ -8789,7 +8954,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             final_ball_pose = pose_payload(shot_outcome.get("ball_end_pose")) or final_ball_pose
             fetch_to_pose_reached = bool(shot_outcome.get("pass", False))
             fetch_failure_reason = "" if fetch_to_pose_reached else clean_text(shot_outcome.get("reason"), "fetch_to_pose_missed")
-            fetch_time_s = time.monotonic() - target_start_monotonic
+            fetch_elapsed_s = clean_number(place_payload.get("fetch_elapsed_s"))
+            fetch_time_s = float(fetch_elapsed_s) if fetch_elapsed_s is not None else time.monotonic() - target_start_monotonic
             fetch_fields = {
                 "fetch_to_pose_reached": fetch_to_pose_reached,
                 "fetch_to_pose_time_s": fetch_time_s,

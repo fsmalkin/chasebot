@@ -8389,6 +8389,7 @@ def test_run_target_fetch_to_pose_accepts_rollthrough_delivery_intersection(tmp_
                 "failure_reason": "",
                 "failure_stage": "",
                 "final_ball_pose": {"x": 2.4, "y": 0.0, "z": 0.05},
+                "fetch_elapsed_s": 1.25,
                 "settle_exit_reason": "trajectory_intersects_delivery_radius",
                 "rolled_away_after_release": False,
             },
@@ -8413,6 +8414,7 @@ def test_run_target_fetch_to_pose_accepts_rollthrough_delivery_intersection(tmp_
     assert result["pass"] is True
     assert result["mission_objective"] == "fetch_to_pose"
     assert result["fetch_to_pose_reached"] is True
+    assert result["fetch_to_pose_time_s"] == 1.25
     assert result["shot_outcome"]["reason"] == "trajectory_intersects_delivery_radius"
     assert result["settled_in_corral_pass"] is False
     rows = [
@@ -8421,6 +8423,107 @@ def test_run_target_fetch_to_pose_accepts_rollthrough_delivery_intersection(tmp_
         if line.strip()
     ]
     assert any(row.get("phase") == "fetch_to_pose" for row in rows)
+
+
+def test_fetch_to_pose_outcome_ignores_pre_fetch_ball_samples(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.fetch_delivery_radius_m = 0.25
+    state_history_path = tmp_path / "state_history.jsonl"
+    target = runner.targets_by_id["ball_1"]
+
+    gather_runner.append_jsonl(
+        state_history_path,
+        {
+            "generated_utc": "2026-05-13T00:00:00Z",
+            "event_type": "capture_tick",
+            "phase": "capture",
+            "target_id": target.id,
+            "ball_pose": {"x": 2.4, "y": 0.0, "z": 0.05},
+        },
+    )
+    gather_runner.append_jsonl(
+        state_history_path,
+        {
+            "generated_utc": "2026-05-13T00:00:01Z",
+            "event_type": "fetch_to_pose_tick",
+            "phase": "fetch_to_pose",
+            "target_id": target.id,
+            "ball_pose": {"x": 3.0, "y": 0.0, "z": 0.05},
+        },
+    )
+
+    outcome = runner._build_fetch_to_pose_outcome(
+        target=target,
+        state_history_path=state_history_path,
+        final_ball_pose={"x": 3.0, "y": 0.0, "z": 0.05},
+        place_payload={},
+    )
+
+    assert outcome["pass"] is False
+    assert outcome["closest_approach_distance_m"] == 0.6
+    assert outcome["sample_count"] == 2
+
+
+def test_fetch_to_pose_waits_for_launch_window_before_short_stop(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.25
+    runner.args.place_timeout_s = 2.5
+    runner.args.poll_s = 0.5
+
+    monkeypatch.setattr(gather_runner, "DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S", 2.5)
+    monkeypatch.setattr(gather_runner, "DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S", 2.0)
+    clock = {"now": 0.0}
+    monkeypatch.setattr(gather_runner.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(gather_runner.time, "sleep", lambda seconds: clock.__setitem__("now", clock["now"] + seconds))
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+
+    robot_pose = {"x": 4.736887, "y": 2.375382, "yaw": -2.234298}
+    ball_pose = {"x": 4.555261, "y": 2.155261, "z": 0.05}
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda session_id, target: ({}, robot_pose, ball_pose),
+    )
+    command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {
+                "enabled": enabled,
+                "linear_x": linear_x,
+                "angular_z": angular_z,
+                "mode": mode,
+                "rationale": rationale,
+            }
+        ),
+    )
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-1",
+        target=runner.targets_by_id["ball_1"],
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "fetch_to_pose_ball_stopped_short"
+    assert payload["fetch_ball_moved_since_fetch"] is False
+    assert payload["fetch_elapsed_s"] >= 2.0
+    assert payload["fetch_launch_motion_evidence_m"] == 0.03
+    assert payload["fetch_max_commanded_linear_x_mps"] == 0.08
+    assert payload["fetch_max_target_speed_scale"] == 0.35
+    launch_commands = [item for item in command_log if item["enabled"] and item["mode"] == "object_fetch_to_pose_launch"]
+    assert len(launch_commands) >= 4
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "state_history.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert any(row["fetch_to_pose"]["elapsed_s"] >= 1.5 for row in rows)
+    assert all(row["fetch_to_pose"]["ball_moved_since_fetch"] is False for row in rows)
 
 
 def test_run_target_fails_settled_placement_loss_when_ball_leaves_local_correction_range(tmp_path, monkeypatch):
@@ -9179,7 +9282,7 @@ def test_object_centric_capture_target_waits_for_secure_capture_instead_of_soft_
     assert payload["handoff_kind"] == "secure_capture"
     assert payload.get("soft_capture_handoff", False) is False
     assert payload["capture_state"]["ball_x_m"] <= 0.30
-    assert any(item["mode"] == "object_capture_seat" for item in command_log)
+    assert any(item["mode"] in {"object_capture_seat", "object_capture_finish_seat"} for item in command_log)
     assert command_log[-1]["mode"] == "captured"
 
 

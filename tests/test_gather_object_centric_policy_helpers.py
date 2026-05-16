@@ -1766,6 +1766,39 @@ def test_policy_capture_close_yaw_settle_holds_near_seated_live_pose():
     assert decision.diagnostics["behind_ball"]["yaw_error_deg"] > 35.0
 
 
+def test_policy_capture_finish_seats_plus45_just_outside_secure_envelope():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 4.45913, "y": 1.991465, "z": 0.05}
+    robot_pose = {"x": 4.623784, "y": 2.246573, "yaw": -2.153325}
+    previous = PlaceControlCommand(
+        mode="object_capture_close_yaw_settle",
+        linear_x=0.0,
+        angular_z=-0.18,
+        target_speed_scale=0.0,
+        rationale="previous",
+    )
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="capture",
+        zone=zone,
+        previous_command=previous,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_capture_finish_seat"
+    assert decision.command.linear_x > 0.0
+    assert abs(decision.command.angular_z) > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["guard_rejection_reason"] == ""
+    assert decision.diagnostics["capture_snapshot"]["captured"] is True
+    assert 0.30 < decision.diagnostics["capture_snapshot"]["ball_x_m"] <= 0.335
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.035
+    assert 12.0 < abs(decision.diagnostics["behind_ball"]["yaw_error_deg"]) < 16.0
+
+
 def test_policy_capture_close_yaw_settle_continues_after_first_live_settle_step():
     zone = build_zone_spec("corral_single_ball_place")
     ball_pose = {"x": 5.373613, "y": 0.156017}

@@ -168,6 +168,9 @@ OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_TARGET_DISTANCE_M = 0.38
 OBJECT_CENTRIC_CAPTURE_CLOSE_YAW_SETTLE_MAX_X_M = 0.46
 OBJECT_CENTRIC_CAPTURE_CLOSE_YAW_SETTLE_LATERAL_M = 0.20
 OBJECT_CENTRIC_CAPTURE_CLOSE_YAW_SETTLE_YAW_ERROR_RAD = math.radians(12.0)
+OBJECT_CENTRIC_CAPTURE_FINISH_SEAT_X_MARGIN_M = 0.035
+OBJECT_CENTRIC_CAPTURE_FINISH_SEAT_LATERAL_M = 0.035
+OBJECT_CENTRIC_CAPTURE_FINISH_SEAT_MAX_YAW_ERROR_RAD = math.radians(16.0)
 OBJECT_CENTRIC_CAPTURE_MOUTH_YAW_SETTLE_MAX_X_M = 0.62
 OBJECT_CENTRIC_CAPTURE_MOUTH_YAW_SETTLE_LATERAL_M = 0.08
 OBJECT_CENTRIC_CAPTURE_LATERAL_RECENTER_MAX_X_M = 0.62
@@ -1526,6 +1529,7 @@ OBJECT_CENTRIC_UNSMOOTHED_COMMAND_MODES = {
     "object_capture_entry_close",
     "object_capture_entry_lateral_recenter",
     "object_capture_entry_ready_hold",
+    "object_capture_finish_seat",
     "object_capture_seat",
     "object_capture_close_yaw_settle",
     "object_capture_lateral_recenter",
@@ -2631,6 +2635,8 @@ def _capture_command(geometry: dict[str, Any], envelope: CaptureEnvelope | None)
     ball_x = float(capture.get("ball_x_m", 0.0) or 0.0)
     ball_y = float(capture.get("ball_y_m", 0.0) or 0.0)
     yaw_error = float(geometry["push_yaw_error_signed"])
+    seated_max_x_m = float(active_envelope.seated_max_x_m)
+    seated_max_abs_y_m = float(active_envelope.seated_max_abs_y_m)
     if (
         bool(capture.get("ball_ahead", False))
         and bool(zone_payload.get("center_inside_zone", False))
@@ -2658,6 +2664,23 @@ def _capture_command(geometry: dict[str, Any], envelope: CaptureEnvelope | None)
             angular_z=0.0,
             target_speed_scale=0.0,
             rationale="Ball is already inside practical retrieval during capture; hold instead of chasing it back out of the corral.",
+        )
+    if (
+        bool(capture.get("captured", False))
+        and ball_x > seated_max_x_m
+        and ball_x <= seated_max_x_m + OBJECT_CENTRIC_CAPTURE_FINISH_SEAT_X_MARGIN_M
+        and abs(ball_y) <= max(seated_max_abs_y_m, OBJECT_CENTRIC_CAPTURE_FINISH_SEAT_LATERAL_M)
+        and abs(yaw_error) <= OBJECT_CENTRIC_CAPTURE_FINISH_SEAT_MAX_YAW_ERROR_RAD
+    ):
+        angular = clamp((ball_y * 4.0) + (yaw_error * 0.35), -0.25, 0.25)
+        if abs(angular) < 0.06 and abs(yaw_error) > math.radians(8.0):
+            angular = 0.06 if yaw_error >= 0.0 else -0.06
+        return PlaceControlCommand(
+            mode="object_capture_finish_seat",
+            linear_x=0.035,
+            angular_z=round(angular, 6),
+            target_speed_scale=0.45,
+            rationale="Apply a final seated-capture nudge when the ball is centered just outside the secure envelope.",
         )
     if (
         bool(capture.get("ball_ahead", False))
@@ -2694,7 +2717,7 @@ def _capture_command(geometry: dict[str, Any], envelope: CaptureEnvelope | None)
             )
         return PlaceControlCommand(
             mode="object_capture_seat",
-            linear_x=0.055 if ball_x > float(active_envelope.seated_max_x_m) else 0.040,
+            linear_x=0.055 if ball_x > seated_max_x_m else 0.040,
             angular_z=round(ball_y * 5.0, 6),
             target_speed_scale=0.55,
             rationale="Keep the ball seated while nudging it deeper before place control.",
