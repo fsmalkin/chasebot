@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -8371,28 +8372,34 @@ def test_run_target_fetch_to_pose_accepts_rollthrough_delivery_intersection(tmp_
         lambda **kwargs: (True, {"capture_state": {"captured": True}, "zone_score": {}, "handoff_kind": "secure_capture"}),
     )
 
-    def _place_target(**kwargs):
+    def _fetch_to_pose_target(**kwargs):
         gather_runner.append_jsonl(
             kwargs["state_history_path"],
             {
                 "generated_utc": "2026-05-13T00:00:00Z",
-                "event_type": "place_tick",
-                "phase": "place",
+                "event_type": "fetch_to_pose_tick",
+                "phase": "fetch_to_pose",
                 "target_id": "ball_1",
                 "ball_pose": {"x": 2.4, "y": 0.0, "z": 0.05},
             },
         )
         return (
-            False,
+            True,
             {
-                "failure_reason": "release_roll_away",
-                "failure_stage": "release",
-                "final_ball_pose": {"x": 3.1, "y": 0.0, "z": 0.05},
-                "rolled_away_after_release": True,
+                "failure_reason": "",
+                "failure_stage": "",
+                "final_ball_pose": {"x": 2.4, "y": 0.0, "z": 0.05},
+                "settle_exit_reason": "trajectory_intersects_delivery_radius",
+                "rolled_away_after_release": False,
             },
         )
 
-    monkeypatch.setattr(runner, "_place_target", _place_target)
+    monkeypatch.setattr(runner, "_fetch_to_pose_target", _fetch_to_pose_target)
+    monkeypatch.setattr(
+        runner,
+        "_place_target",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("fetch_to_pose should not run legacy place")),
+    )
 
     result = runner._run_target(
         session_id="session-1",
@@ -8408,6 +8415,12 @@ def test_run_target_fetch_to_pose_accepts_rollthrough_delivery_intersection(tmp_
     assert result["fetch_to_pose_reached"] is True
     assert result["shot_outcome"]["reason"] == "trajectory_intersects_delivery_radius"
     assert result["settled_in_corral_pass"] is False
+    rows = [
+        json.loads(line)
+        for line in (tmp_path / "state_history.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert any(row.get("phase") == "fetch_to_pose" for row in rows)
 
 
 def test_run_target_fails_settled_placement_loss_when_ball_leaves_local_correction_range(tmp_path, monkeypatch):

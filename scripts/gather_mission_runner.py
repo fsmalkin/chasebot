@@ -8170,6 +8170,221 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             **_settle_no_chase_fields(),
         }
 
+    def _fetch_to_pose_target(
+        self,
+        *,
+        session_id: str,
+        target: GatherTargetSpec,
+        state_history_path: Path,
+        attempt_index: int = 0,
+        attempt_kind: str = "",
+    ) -> tuple[bool, dict[str, Any]]:
+        timeout_budget_s = max(self.args.place_timeout_s, 0.1)
+        if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+            timeout_budget_s = max(timeout_budget_s, DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S)
+        deadline = time.monotonic() + timeout_budget_s
+        fetch_pose_world = self._fetch_pose_world()
+        fetch_xyyaw = world_pose_xyyaw(fetch_pose_world)
+        previous_command: PlaceControlCommand | None = None
+        previous_ball_pose: dict[str, Any] | None = None
+        latest_ball_pose: dict[str, Any] = {}
+        latest_capture: dict[str, Any] = {}
+        latest_zone_score: dict[str, Any] = {}
+        latest_policy: dict[str, Any] = {}
+        closest_distance_m: float | None = None
+        closest_pose: dict[str, Any] = {}
+        still_started_monotonic: float | None = None
+        observe_count = 0
+        failure_reason = "fetch_to_pose_timeout"
+
+        def _distance_to_fetch_pose(ball_pose: dict[str, Any] | None) -> float | None:
+            if fetch_xyyaw is None or not ball_pose:
+                return None
+            ball_xyyaw = world_pose_xyyaw(ball_pose)
+            if ball_xyyaw is None:
+                return None
+            return math.hypot(float(ball_xyyaw[0]) - float(fetch_xyyaw[0]), float(ball_xyyaw[1]) - float(fetch_xyyaw[1]))
+
+        while time.monotonic() < deadline:
+            now_monotonic = time.monotonic()
+            _dashboard_state, robot_pose, ball_pose = self._control_loop_state(session_id=session_id, target=target)
+            capture = capture_snapshot(robot_pose, ball_pose or {}, self.capture_envelope) if robot_pose and ball_pose else None
+            zone_score = zone_snapshot(ball_pose or {}, self.zone) if ball_pose else None
+            ball_motion_m = pose_delta_m(previous_ball_pose, ball_pose) if previous_ball_pose is not None and ball_pose else None
+            distance_to_fetch_pose_m = _distance_to_fetch_pose(ball_pose)
+            if ball_pose:
+                latest_ball_pose = dict(ball_pose)
+                self._update_prior_from_ball_pose(target.id, ball_pose)
+            latest_capture = capture.to_dict() if capture else {}
+            latest_zone_score = zone_score.to_dict() if zone_score else {}
+            observe_count += 1
+            if distance_to_fetch_pose_m is not None:
+                if closest_distance_m is None or distance_to_fetch_pose_m < closest_distance_m:
+                    closest_distance_m = float(distance_to_fetch_pose_m)
+                    closest_pose = dict(ball_pose or {})
+                if distance_to_fetch_pose_m <= float(self.fetch_delivery_radius_m):
+                    self._set_manual_drive(
+                        False,
+                        mode="fetch_to_pose_complete",
+                        rationale="Ball trajectory intersected the delivery radius.",
+                    )
+                    self._update_gather_runtime_state(
+                        mission_phase="advance",
+                        gather_phase="advance",
+                        latest_feedback=f"{target.label} fetched through the delivery pose.",
+                    )
+                    return True, {
+                        "final_ball_pose": latest_ball_pose,
+                        "failure_reason": "",
+                        "failure_stage": "",
+                        "fetch_observe_count": int(observe_count),
+                        "fetch_closest_approach_distance_m": round(float(closest_distance_m), 6),
+                        "fetch_closest_pose": closest_pose,
+                        "settle_exit_reason": "trajectory_intersects_delivery_radius",
+                        "rolled_away_after_release": False,
+                    }
+            if ball_motion_m is not None and ball_motion_m <= DEFAULT_RELEASE_SETTLE_MOTION_TOLERANCE_M:
+                still_started_monotonic = now_monotonic if still_started_monotonic is None else still_started_monotonic
+            else:
+                still_started_monotonic = None
+            if (
+                still_started_monotonic is not None
+                and (now_monotonic - still_started_monotonic) >= DEFAULT_RELEASE_SETTLE_STABLE_WINDOW_S
+                and distance_to_fetch_pose_m is not None
+                and distance_to_fetch_pose_m > float(self.fetch_delivery_radius_m)
+            ):
+                failure_reason = "fetch_to_pose_ball_stopped_short"
+                break
+
+            command: PlaceControlCommand | None = None
+            raw_command: PlaceControlCommand | None = None
+            policy_fields: dict[str, Any] = {}
+            if (
+                self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+            ):
+                decision = decide_object_centric_gather_command(
+                    robot_pose,
+                    ball_pose,
+                    phase="fetch_to_pose",
+                    zone=self.zone,
+                    envelope=self.capture_envelope,
+                    previous_command=previous_command,
+                    previous_ball_pose=previous_ball_pose,
+                )
+                command = decision.command
+                raw_command = decision.raw_command
+                latest_policy = dict(decision.diagnostics)
+                policy_fields = {
+                    "object_centric_policy": latest_policy,
+                    **self._control_debug_fields(
+                        strategy_name=str(decision.strategy_name or ""),
+                        objective_name=str(decision.objective_name or ""),
+                        progress_score=clean_number(decision.progress_score),
+                    ),
+                }
+            elif robot_pose and ball_pose:
+                command = compute_place_command(robot_pose, ball_pose, zone=self.zone, envelope=self.capture_envelope)
+                raw_command = command
+                policy_fields = self._control_debug_fields(objective_name="fetch_to_pose_fallback")
+
+            append_jsonl(
+                state_history_path,
+                {
+                    "generated_utc": utc_now(),
+                    "event_type": "fetch_to_pose_tick",
+                    "phase": "fetch_to_pose",
+                    "attempt": int(attempt_index),
+                    "attempt_kind": str(attempt_kind),
+                    "target_id": target.id,
+                    "robot_pose": robot_pose,
+                    "ball_pose": ball_pose,
+                    "capture": latest_capture,
+                    "zone_score": latest_zone_score,
+                    "fetch_pose_world": fetch_pose_world,
+                    "fetch_to_pose": {
+                        "reached": bool(
+                            distance_to_fetch_pose_m is not None
+                            and distance_to_fetch_pose_m <= float(self.fetch_delivery_radius_m)
+                        ),
+                        "distance_to_fetch_pose_m": (
+                            round(float(distance_to_fetch_pose_m), 6)
+                            if distance_to_fetch_pose_m is not None
+                            else None
+                        ),
+                        "closest_approach_distance_m": (
+                            round(float(closest_distance_m), 6)
+                            if closest_distance_m is not None
+                            else None
+                        ),
+                        "delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                    },
+                    "ball_motion_m": ball_motion_m,
+                    "selected_command": command.to_dict() if command else {},
+                    "raw_command": raw_command.to_dict() if raw_command else {},
+                    **policy_fields,
+                },
+            )
+            self._update_gather_runtime_state(
+                mission_phase="fetch_to_pose",
+                gather_phase="fetch_to_pose",
+                capture_state=latest_capture,
+                zone_score=latest_zone_score,
+                latest_feedback=f"Fetching {target.label} through the delivery pose.",
+                last_fetch_to_pose_result={
+                    "distance_to_fetch_pose_m": (
+                        round(float(distance_to_fetch_pose_m), 6)
+                        if distance_to_fetch_pose_m is not None
+                        else None
+                    ),
+                    "closest_approach_distance_m": (
+                        round(float(closest_distance_m), 6)
+                        if closest_distance_m is not None
+                        else None
+                    ),
+                    "fetch_pose_world": fetch_pose_world,
+                },
+            )
+            self._update_visit_runtime_state(
+                proof_state="fetching",
+                mission_phase="fetch_to_pose",
+                latest_feedback=f"Fetching {target.label} through the delivery pose.",
+            )
+            if command is not None:
+                self._set_manual_drive(
+                    True,
+                    linear_x=command.linear_x,
+                    angular_z=command.angular_z,
+                    mode=command.mode,
+                    rationale=command.rationale,
+                )
+                self._update_gather_runtime_state(latest_control_command=command.to_dict())
+                previous_command = command
+            previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+            time.sleep(self.args.poll_s)
+
+        self._set_manual_drive(False, mode=failure_reason, rationale="Fetch-to-pose observation budget ended.")
+        return False, {
+            "failure_reason": failure_reason,
+            "failure_stage": "fetch_to_pose",
+            "final_ball_pose": latest_ball_pose,
+            "capture_state": latest_capture,
+            "zone_score": latest_zone_score,
+            "object_centric_policy": latest_policy,
+            "fetch_observe_count": int(observe_count),
+            "fetch_closest_approach_distance_m": (
+                round(float(closest_distance_m), 6)
+                if closest_distance_m is not None
+                else None
+            ),
+            "fetch_closest_pose": closest_pose,
+            "settle_exit_reason": failure_reason,
+            "rolled_away_after_release": False,
+            "allow_full_revisit": False,
+            "local_recovery_attempted": False,
+        }
+
     def _run_target(
         self,
         *,
@@ -9039,6 +9254,25 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **_latest_approach_progress_kwargs(),
                     **_fresh_attempt_approach_kwargs(),
                 )
+
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+                fetch_pass, fetch_payload = self._fetch_to_pose_target(
+                    session_id=session_id,
+                    target=target,
+                    state_history_path=state_history_path,
+                    attempt_index=attempt,
+                    attempt_kind=attempt_kind,
+                )
+                fetch_resolution = _resolve_fetch_to_pose_place_result(
+                    place_pass=fetch_pass,
+                    place_payload=fetch_payload,
+                    capture_payload=capture_payload,
+                    attempt_kind=attempt_kind,
+                    local_recovery_attempted=local_recovery_attempted_any,
+                    terminal_failure=True,
+                )
+                if fetch_resolution is not None:
+                    return fetch_resolution
 
             place_pass, place_payload = self._place_target(
                 session_id=session_id,
