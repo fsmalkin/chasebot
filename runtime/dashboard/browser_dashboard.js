@@ -82,6 +82,7 @@ const controls = {
 };
 
 const demoFlow = [
+  { id: 'golf_ball_circle_delivery_uat', label: 'Golf-Ball Circle Delivery' },
   { id: 'corral_single_ball_place', label: 'Single-Ball Corral' },
   { id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' },
   { id: 'visit_route_planning', label: 'LLM Route Planning' },

@@ -58,6 +58,7 @@ DEFAULT_WORLD_FILE = "yolo_test_world_v6_clean_uat.world"
 DEFAULT_SURFACE_PROFILE = "baseline"
 SHORT_TURF_WORLD_FILE = "yolo_test_world_v6_clean_uat_short_turf.world"
 SHORT_GRASS_WORLD_FILE = "yolo_test_world_v6_clean_uat_short_grass.world"
+CALIBRATED_GOLF_TURF_WORLD_FILE = "yolo_test_world_v6_calibrated_golf_turf.world"
 DEFAULT_WORLD_NAME = "yolo_test_world"
 DEFAULT_INFERENCE_BACKEND = "tensorrt_int8"
 DEFAULT_GATE_PROFILE = "compat"
@@ -65,6 +66,8 @@ DEFAULT_INFERENCE_DEVICE = "cuda:0"
 DEFAULT_MULTI_TARGET_CONFIG = "ros2_config/config/multi_target_nav2_fidelity.yaml"
 DEFAULT_NAV2_CONFIG = "ros2_config/config/nav2_readiness_fidelity.yaml"
 TARGET_MODEL_SDF = "ros2_config/frisbee_target_ball.sdf"
+CALIBRATED_GOLF_BALL_SDF = "ros2_config/calibrated_golf_ball.sdf"
+GOLF_BALL_DELIVERY_ZONE_SDF = "ros2_config/golf_ball_delivery_zone_marker.sdf"
 BASELINE_ROBOT_SDF_NAME = "jetbot_core_ignition_v1.6.0.sdf"
 CORRAL_ROBOT_SDF_NAME = "jetbot_core_ignition_v1.7.0.sdf"
 TARGET_MODEL_NAME_NAV2 = "uat_nav2_target"
@@ -104,12 +107,15 @@ SELF_CONTAINED_SCENARIO_IDS = {
     "corral_single_ball_place",
     "gather_three_ball_zone",
     "object_centric_zero_saved_layout",
+    "golf_ball_circle_delivery_uat",
 }
 OBJECT_CENTRIC_ZERO_SCENARIO_ID = "object_centric_zero_saved_layout"
 OBJECT_CENTRIC_ZERO_TARGET_LAYOUT_JSON = (
     "artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_capture_diag_rerun_20260503/"
     "gather_goal_side_matrix/target_layouts/zero.json"
 )
+GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID = "golf_ball_circle_delivery_uat"
+GOLF_BALL_CIRCLE_DELIVERY_TARGET_LAYOUT_JSON = "ros2_config/target_layouts/golf_ball_circle_delivery_zero.json"
 
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 POWERSHELL_EXE = shutil.which("powershell.exe") or shutil.which("powershell") or "powershell.exe"
@@ -132,8 +138,15 @@ class ScenarioDefinition:
     target_y: float = 0.00
     target_z: float = 0.05
     runner_scenario_id: str = ""
+    mission_objective: str = ""
+    fetch_target_x: Optional[float] = None
+    fetch_target_y: Optional[float] = None
+    fetch_target_z: Optional[float] = None
+    fetch_delivery_radius_m: Optional[float] = None
     gather_control_family: str = ""
     target_layout_json: str = ""
+    target_model_sdf: str = ""
+    zone_model_sdf: str = ""
     max_retries_per_target: int = 2
 
     def to_api(self) -> Dict[str, Any]:
@@ -267,6 +280,31 @@ SCENARIOS = [
         gather_control_family="object_centric_gather_policy_v1",
         target_layout_json=OBJECT_CENTRIC_ZERO_TARGET_LAYOUT_JSON,
         max_retries_per_target=2,
+    ),
+    ScenarioDefinition(
+        id=GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID,
+        phase="golf_ball_circle_delivery_uat",
+        target_id="ball_1",
+        label="Golf Ball Circle Delivery",
+        description="Calibrated golf-ball fetch-to-pose UAT with a visible delivery circle.",
+        mode="gather_mission",
+        robot_sdf_name=CORRAL_ROBOT_SDF_NAME,
+        world_file=CALIBRATED_GOLF_TURF_WORLD_FILE,
+        surface_profile="calibrated_golf_turf",
+        target_x=0.38,
+        target_y=0.0,
+        target_z=0.021336,
+        runner_scenario_id="corral_single_ball_place",
+        mission_objective="fetch_to_pose",
+        fetch_target_x=0.95,
+        fetch_target_y=0.0,
+        fetch_target_z=0.001,
+        fetch_delivery_radius_m=0.30,
+        gather_control_family="object_centric_gather_policy_v1",
+        target_layout_json=GOLF_BALL_CIRCLE_DELIVERY_TARGET_LAYOUT_JSON,
+        target_model_sdf=CALIBRATED_GOLF_BALL_SDF,
+        zone_model_sdf=GOLF_BALL_DELIVERY_ZONE_SDF,
+        max_retries_per_target=0,
     ),
     ScenarioDefinition(
         id="corral_single_ball_place",
@@ -1673,6 +1711,13 @@ class DashboardController:
         snapshot["capture_state"] = gather_runtime.get("capture_state", snapshot.get("capture_state", {})) if isinstance(gather_runtime.get("capture_state", snapshot.get("capture_state", {})), dict) else {}
         snapshot["zone_pose"] = gather_runtime.get("zone_pose", snapshot.get("zone_pose", {})) if isinstance(gather_runtime.get("zone_pose", snapshot.get("zone_pose", {})), dict) else {}
         snapshot["zone_score"] = gather_runtime.get("zone_score", snapshot.get("zone_score", {})) if isinstance(gather_runtime.get("zone_score", snapshot.get("zone_score", {})), dict) else {}
+        snapshot["last_fetch_to_pose_result"] = gather_runtime.get(
+            "last_fetch_to_pose_result",
+            snapshot.get("last_fetch_to_pose_result", {}),
+        ) if isinstance(
+            gather_runtime.get("last_fetch_to_pose_result", snapshot.get("last_fetch_to_pose_result", {})),
+            dict,
+        ) else {}
         snapshot["final_corral_audit"] = gather_runtime.get(
             "final_corral_audit",
             gather_verdict.get("final_corral_audit", snapshot.get("final_corral_audit", {})),
@@ -1890,7 +1935,7 @@ class DashboardController:
         with self.state_lock:
             env_state = self.state["environment_state"]
             scenario_state = self.state["scenario_state"]
-        if env_state == "stopped" and scenario.id == OBJECT_CENTRIC_ZERO_SCENARIO_ID:
+        if env_state == "stopped" and scenario.id in {OBJECT_CENTRIC_ZERO_SCENARIO_ID, GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID}:
             self._refresh_control_plane_state(force=True)
             with self.state_lock:
                 if not self.state.get("control_plane_ready", False):
@@ -3939,13 +3984,14 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         log_path = ensure_dir(scenario_dir) / f"{scenario.id}.log"
         env = self._scenario_env(scenario)
         runner_scenario_id = str(scenario.runner_scenario_id or scenario.id)
+        runner_script = "golf_ball_circle_delivery_demo_runner.py" if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID else "gather_mission_runner.py"
         command = [
             sys.executable,
-            str(SCRIPTS_DIR / "gather_mission_runner.py"),
+            str(SCRIPTS_DIR / runner_script),
             "--dashboard-url",
             str(self.state.get("dashboard_url", f"http://127.0.0.1:{self.port}") or f"http://127.0.0.1:{self.port}"),
             "--scenario-id",
-            runner_scenario_id,
+            scenario.id if runner_script == "golf_ball_circle_delivery_demo_runner.py" else runner_scenario_id,
             "--scenario-label",
             scenario.label,
             "--world-file",
@@ -3958,11 +4004,25 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             str(self.gather_mission_runtime_path),
             "--keep-environment",
         ]
-        if scenario.gather_control_family:
+        if scenario.mission_objective:
+            command.extend(["--mission-objective", scenario.mission_objective])
+        if scenario.fetch_target_x is not None:
+            command.extend(["--fetch-target-x", f"{float(scenario.fetch_target_x):.6f}"])
+        if scenario.fetch_target_y is not None:
+            command.extend(["--fetch-target-y", f"{float(scenario.fetch_target_y):.6f}"])
+        if scenario.fetch_target_z is not None:
+            command.extend(["--fetch-target-z", f"{float(scenario.fetch_target_z):.6f}"])
+        if scenario.fetch_delivery_radius_m is not None:
+            command.extend(["--fetch-delivery-radius-m", f"{float(scenario.fetch_delivery_radius_m):.6f}"])
+        if scenario.gather_control_family and runner_script == "gather_mission_runner.py":
             command.extend(["--gather-control-family", scenario.gather_control_family])
-        if scenario.target_layout_json:
+        if scenario.target_layout_json and runner_script == "gather_mission_runner.py":
             command.extend(["--target-layout-json", scenario.target_layout_json])
-        if scenario.max_retries_per_target > 0:
+        if scenario.target_model_sdf:
+            command.extend(["--target-model-sdf", scenario.target_model_sdf])
+        if scenario.zone_model_sdf:
+            command.extend(["--zone-model-sdf", scenario.zone_model_sdf])
+        if scenario.max_retries_per_target >= 0 and runner_script == "gather_mission_runner.py":
             command.extend(["--max-retries-per-target", str(scenario.max_retries_per_target)])
 
         with log_path.open("w", encoding="utf-8") as handle:
@@ -4004,8 +4064,12 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         payload = {
             "scenario_id": scenario.id,
             "runner_scenario_id": runner_scenario_id,
+            "mission_objective": scenario.mission_objective,
+            "fetch_delivery_radius_m": scenario.fetch_delivery_radius_m,
             "gather_control_family": scenario.gather_control_family,
             "target_layout_json": scenario.target_layout_json,
+            "target_model_sdf": scenario.target_model_sdf,
+            "zone_model_sdf": scenario.zone_model_sdf,
             "phase": scenario.phase,
             "pass": pass_flag,
             "artifacts": artifacts,

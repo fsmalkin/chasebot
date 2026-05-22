@@ -368,6 +368,7 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
             <button class="dm-item" onclick="pickScenario('m3_left')">M3 Left</button>
             <button class="dm-item" onclick="pickScenario('m3_right')">M3 Right</button>
             <div class="dm-sep"></div>
+            <button class="dm-item" onclick="pickScenario('golf_ball_circle_delivery_uat')">Golf-ball circle delivery</button>
             <button class="dm-item" onclick="pickScenario('object_centric_zero_saved_layout')">Object-centric zero</button>
             <button class="dm-item" onclick="pickScenario('corral_single_ball_place')">Corral 1-ball</button>
             <button class="dm-item" onclick="pickScenario('gather_three_ball_zone')">Gather 3-ball</button>
@@ -559,6 +560,7 @@ function renderAll() {
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const DEFAULT_STAGE_LABELS = ['Init','Spawn','Search','Approach','Done'];
 const CORRAL_STAGE_LABELS = ['Init','Visit','Capture','Place','Done'];
+const FETCH_STAGE_LABELS = ['Init','Visit','Capture','Deliver','Done'];
 
 function currentScenarioId(s) {
   const active = String(s.active_scenario || '').trim();
@@ -576,7 +578,15 @@ function isCorralScenario(s) {
   );
 }
 
+function isFetchScenario(s) {
+  const scenarioId = currentScenarioId(s);
+  const verdict = s.mission_verdict || {};
+  return scenarioId === 'golf_ball_circle_delivery_uat'
+    || String(verdict.mission_objective || '') === 'fetch_to_pose';
+}
+
 function stageLabelsForState(s) {
+  if (isFetchScenario(s)) return FETCH_STAGE_LABELS;
   return isCorralScenario(s) ? CORRAL_STAGE_LABELS : DEFAULT_STAGE_LABELS;
 }
 
@@ -588,9 +598,10 @@ function stageForState(s) {
 
   if (verdict.pass === true || ps === 'completed') return stageLabels.length;
   if (scenario !== 'running') return 0;
-  if (isCorralScenario(s)) {
+  if (isFetchScenario(s) || isCorralScenario(s)) {
     if (ps === 'visiting')   return 1;
     if (ps === 'capturing')  return 2;
+    if (ps === 'fetching')   return 3;
     if (ps === 'placing')    return 3;
     return 0;
   }
