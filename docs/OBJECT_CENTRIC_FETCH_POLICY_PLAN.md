@@ -20,10 +20,44 @@ Latest green UAT:
 - World: `yolo_test_world_v6_calibrated_golf_turf.world`
 - Ball model: `ros2_config/calibrated_golf_ball.sdf`
 - Delivery marker: `ros2_config/golf_ball_delivery_zone_marker.sdf`
-- Session: `artifacts/session/20260522T055454253626Z/golf_ball_circle_delivery/20260522T055504453763Z`
+- Session: `artifacts/session/20260522T130431721734Z/golf_ball_circle_delivery/20260522T130442256465Z`
 - Verdict: `mission_completed_pass=true`, `fetch_to_pose_pass=true`,
   `fetch_to_pose_pass_count=1`, `fetch_to_pose_fail_count=0`
-- Closest approach: `0.051999m` inside a `0.300m` delivery radius
+- Closest approach: `0.049893m` inside a `0.300m` delivery radius
+- Approach telemetry: `stable_contact_approach_pass=true`,
+  `robot_yaw_error_sign_changes_pre_contact=0`,
+  `max_abs_robot_lateral_error_pre_contact_m=0.0`,
+  `max_abs_robot_yaw_error_pre_contact_deg=0.000003`
+
+## Current Control Pivot
+
+The next fetch-control work is approach-stability first, not harder contact
+tuning. Operator observation from the May 22 dashboard demo suggests the robot
+may visually appear to move laterally into the ball and over-rotate before
+correcting. The latest artifact did not preserve enough robot pose/yaw history
+to prove or reject that observation from telemetry, so the next gate must make
+approach quality explicit.
+
+Control order:
+
+1. Stabilize the pre-contact approach on the ball-target line.
+2. Make first contact with low lateral error and low yaw error.
+3. Keep pushing toward the target while applying bounded directional correction.
+4. Use a wider attachment/funnel as an allowed mechanical robustness path, but
+   do not let width hide unstable approach telemetry.
+
+Approach-quality evidence must record:
+
+- per-tick robot pose/yaw and ball pose
+- signed robot lateral error to the ball-target line
+- robot yaw error to the intended push line
+- yaw-error sign changes before first contact
+- first-contact pose, lateral error, yaw error, and ball displacement
+- ball lateral displacement and contact trajectory angle after first contact
+
+Promotion rule: a run can pass the delivery circle and still be classified as
+control-quality suspect when approach telemetry shows lateral knock-away,
+pre-contact oscillation, or high first-contact yaw/lateral error.
 
 ## Thesis
 
@@ -103,7 +137,8 @@ Current surfaces:
   golf-ball circle-delivery UAT. It spawns the calibrated ball and delivery
   circle, drives the robot through `/jetbot_base_controller/cmd_vel`, samples
   fresh Gazebo truth, and writes `mission_verdict.json`, `summary.json`,
-  `target_results.json`, `scorecard.md`, and `ball_trace.jsonl`.
+  `target_results.json`, `scorecard.md`, `ball_trace.jsonl`,
+  `contact_trace.jsonl`, and `approach_metrics.json`.
 - `scripts/passive_ball_roll_calibration_helpers.py` and
   `scripts/passive_ball_roll_calibration_runner.py`: passive roll calibration
   scaffolding. The current live sim does not expose a reliable ball impulse or
@@ -147,6 +182,8 @@ Planned per-tick fields:
 - `event_type`: `fetch_to_pose_tick`, `fetch_to_pose_result`, or `shot_outcome`
 - `target_id`, `attempt`, and `attempt_kind`
 - `robot_pose`, `ball_pose`, and `fetch_pose_world`
+- `approach_contact_metrics`: signed lateral error, yaw error, first-contact
+  state, ball lateral displacement, and oscillation counters
 - `fetch_to_pose`: pass/reached/time/failure/distance/yaw fields
 - `selected_command`
 - `object_centric_policy.objective_name: "fetch_to_pose_object_state"`
@@ -231,7 +268,9 @@ Behavior:
 
 - choose a contact line from ball to target pose
 - select a measured setup pocket behind the ball
+- settle yaw and lateral error before first contact
 - execute one bounded contact profile
+- apply bounded directional correction while pushing, after stable contact
 - observe ball trajectory until success, rest, timeout, or unsafe drift
 - recover and re-aim only when budgets allow
 
@@ -240,6 +279,10 @@ Guards:
 - max contact effort
 - max angular command
 - ball drift before intended contact
+- max pre-contact lateral error
+- max pre-contact yaw error
+- max pre-contact yaw-error sign changes
+- max ball lateral displacement during initial contact
 - obstacle/person clearance
 - target freshness
 - cycle timeout
@@ -289,20 +332,28 @@ the same bounded budgets.
      `artifacts/session/20260522T055454253626Z/golf_ball_circle_delivery/20260522T055504453763Z/mission_verdict.json`
    - acceptance: visible calibrated golf ball enters a `0.300m` delivery circle
      through real robot contact
-2. Golf-ball circle-delivery repeatability:
+2. Approach-stability instrumentation gate:
+   - status: green on May 22, 2026
+   - artifact:
+     `artifacts/session/20260522T130431721734Z/golf_ball_circle_delivery/20260522T130442256465Z/approach_metrics.json`
+   - same dashboard scenario
+   - require per-tick robot pose/yaw plus ball pose in `contact_trace.jsonl`
+   - require `approach_metrics.stable_contact_approach_pass=true`
+   - classify lateral knock-away or pre-contact oscillation before tuning
+3. Golf-ball circle-delivery repeatability:
    - same dashboard scenario, at least 3 runs, no code changes during the gate
    - require `fetch_to_pose_pass_count=3`, `fetch_to_pose_fail_count=0`, and
      every `shot_outcome.closest_approach_distance_m <= 0.300`
-3. Autonomous fetch-to-pose smoke on calibrated golf turf:
+4. Autonomous fetch-to-pose smoke on calibrated golf turf:
    - saved-layout `zero`, one run, no retries
    - saved-layout `plus45`, one run, no retries
-4. Autonomous recovery smoke:
+5. Autonomous recovery smoke:
    - one allowed recovery cycle
    - explicit give-up when the second contact cannot be made safely
-5. Autonomous repeatability:
+6. Autonomous repeatability:
    - saved-layout `zero --runs 3`, bounded recovery
    - saved-layout `plus45 --runs 3`, bounded recovery
-6. Person target prototype:
+7. Person target prototype:
    - only after pose-target gates are green
 
 ## Non-Goals

@@ -1718,6 +1718,13 @@ class DashboardController:
             gather_runtime.get("last_fetch_to_pose_result", snapshot.get("last_fetch_to_pose_result", {})),
             dict,
         ) else {}
+        snapshot["last_approach_contact_metrics"] = gather_runtime.get(
+            "last_approach_contact_metrics",
+            snapshot.get("last_approach_contact_metrics", {}),
+        ) if isinstance(
+            gather_runtime.get("last_approach_contact_metrics", snapshot.get("last_approach_contact_metrics", {})),
+            dict,
+        ) else {}
         snapshot["final_corral_audit"] = gather_runtime.get(
             "final_corral_audit",
             gather_verdict.get("final_corral_audit", snapshot.get("final_corral_audit", {})),
@@ -4055,6 +4062,9 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "gather_mission": str(mission_root) if mission_root is not None else "",
             "mission_verdict": str(summary_path) if summary_path and summary_path.exists() else "",
             "target_results": str(mission_root / "target_results.json") if mission_root is not None else "",
+            "approach_metrics": str(mission_root / "approach_metrics.json") if mission_root is not None else "",
+            "contact_trace": str(mission_root / "contact_trace.jsonl") if mission_root is not None else "",
+            "ball_trace": str(mission_root / "ball_trace.jsonl") if mission_root is not None else "",
             "scorecard": str(mission_root / "scorecard.md") if mission_root is not None else "",
             "log": str(log_path),
         }
