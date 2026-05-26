@@ -88,6 +88,8 @@ WORLD_STREAM_TRANSPORT_WINDOW_S = 5.0
 WORLD_STREAM_TRANSPORT_MIN_FRAMES = 3
 WORLD_STREAM_TRANSPORT_MAX_AGE_S = 4.0
 WORLD_STREAM_RENDERABLE_GRACE_S = 10.0
+DEFAULT_IDLE_SHUTDOWN_AFTER_S = 30.0 * 60.0
+IDLE_SHUTDOWN_WATCHDOG_POLL_S = 15.0
 GATE_SERVICE_READY_TIMEOUT_S = 25.0
 GATE_SERVICE_POLL_S = 0.5
 DEFAULT_CONTROL_MODE = "host_powershell"
@@ -355,6 +357,34 @@ def parse_utc_timestamp(value: str) -> Optional[datetime]:
         return None
 
 
+def env_bool(name: str, default: bool) -> bool:
+    raw_value = os.environ.get(name, "").strip().lower()
+    if raw_value in {"1", "true", "yes", "on"}:
+        return True
+    if raw_value in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def env_float(name: str, default: float) -> float:
+    raw_value = os.environ.get(name, "").strip()
+    if not raw_value:
+        return default
+    try:
+        return float(raw_value)
+    except ValueError:
+        return default
+
+
+def as_utc_datetime(value: str) -> Optional[datetime]:
+    parsed = parse_utc_timestamp(value)
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def _truth_world_xy(pose: Dict[str, Any]) -> Optional[Dict[str, float]]:
     if not isinstance(pose, dict):
         return None
@@ -505,6 +535,12 @@ class DashboardController:
             self.docker = ""
         warm_services_raw = os.environ.get("CHASECAR_DASHBOARD_WARM_SERVICES", ",".join(DEFAULT_WARM_SERVICES)).strip()
         self.warm_services = tuple(item.strip() for item in warm_services_raw.split(",") if item.strip()) or DEFAULT_WARM_SERVICES
+        self.idle_shutdown_after_s = max(0.0, env_float("CHASECAR_DASHBOARD_IDLE_SHUTDOWN_S", DEFAULT_IDLE_SHUTDOWN_AFTER_S))
+        self.idle_shutdown_enabled = (
+            self.idle_shutdown_after_s > 0.0
+            and env_bool("CHASECAR_DASHBOARD_IDLE_SHUTDOWN_ENABLED", True)
+        )
+        self.idle_shutdown_poll_s = max(1.0, env_float("CHASECAR_DASHBOARD_IDLE_SHUTDOWN_POLL_S", IDLE_SHUTDOWN_WATCHDOG_POLL_S))
         self.compose_file = REPO_ROOT / "docker-compose.yml"
         self.launcher_project = ""
         self.host_repo_mount_source = os.environ.get("HOST_REPO_MOUNT_SOURCE", "").strip()
@@ -517,11 +553,13 @@ class DashboardController:
         self.intent_lock = threading.Lock()
         self.lifecycle_cancel = threading.Event()
         self.scenario_cancel = threading.Event()
+        self.idle_shutdown_cancel = threading.Event()
         self.world_stream_watchdog_cancel = threading.Event()
 
         self.lifecycle_thread: Optional[threading.Thread] = None
         self.scenario_thread: Optional[threading.Thread] = None
         self.intent_thread: Optional[threading.Thread] = None
+        self.idle_shutdown_thread: Optional[threading.Thread] = None
         self.world_stream_watchdog_thread: Optional[threading.Thread] = None
 
         self.active_env_proc: Optional[subprocess.Popen[str]] = None
@@ -630,6 +668,19 @@ class DashboardController:
                 "world_stream_restart_in_progress": False,
                 "world_stream_restart_cooldown_s": WORLD_STREAM_RESTART_COOLDOWN_S,
                 "world_stream_restart_max_attempts": WORLD_STREAM_RESTART_MAX_ATTEMPTS,
+                "idle_shutdown_enabled": self.idle_shutdown_enabled,
+                "idle_shutdown_after_s": self.idle_shutdown_after_s,
+                "idle_shutdown_poll_s": self.idle_shutdown_poll_s,
+                "idle_shutdown_state": "watching" if self.idle_shutdown_enabled else "disabled",
+                "idle_shutdown_blocker": "",
+                "idle_shutdown_idle_since_utc": "",
+                "idle_shutdown_deadline_utc": "",
+                "idle_shutdown_remaining_s": None,
+                "idle_shutdown_triggered_utc": "",
+                "idle_shutdown_last_checked_utc": "",
+                "idle_shutdown_last_error": "",
+                "last_operator_activity_utc": utc_now(),
+                "last_operator_activity_reason": "service_start",
                 "startup_retry_count": 0,
                 "startup_cleanup_count": 0,
                 "startup_last_cleanup_projects": [],
@@ -649,6 +700,12 @@ class DashboardController:
             daemon=True,
         )
         self.world_stream_watchdog_thread.start()
+        self.idle_shutdown_thread = threading.Thread(
+            target=self._idle_shutdown_watchdog_loop,
+            name="dashboard-idle-shutdown-watchdog",
+            daemon=True,
+        )
+        self.idle_shutdown_thread.start()
 
     def _load_contract(self) -> Dict[str, Any]:
         contract_path = REPO_ROOT / "runtime" / "contracts" / "llm_control_contract.yaml"
@@ -739,11 +796,196 @@ class DashboardController:
             self.state.update(updates)
             self._persist_state_locked()
 
+    def _mark_operator_activity(self, reason: str) -> None:
+        self._update_state(
+            last_operator_activity_utc=utc_now(),
+            last_operator_activity_reason=str(reason or "operator_action"),
+            idle_shutdown_idle_since_utc="",
+            idle_shutdown_deadline_utc="",
+            idle_shutdown_remaining_s=None,
+            idle_shutdown_blocker="",
+            idle_shutdown_last_error="",
+            idle_shutdown_state="watching" if getattr(self, "idle_shutdown_enabled", False) else "disabled",
+        )
+
     def _lifecycle_busy(self) -> bool:
         thread = self.lifecycle_thread
         if thread is not None and not thread.is_alive():
             self.lifecycle_thread = None
         return self.lifecycle_lock.locked()
+
+    @staticmethod
+    def _process_alive(proc: Optional[subprocess.Popen[str]]) -> bool:
+        if proc is None:
+            return False
+        try:
+            return proc.poll() is None
+        except Exception:
+            return True
+
+    def _idle_shutdown_runtime_blocker(self) -> str:
+        try:
+            proof_runtime = self._llm_proof_runtime_state()
+        except Exception:
+            proof_runtime = {}
+        try:
+            visit_runtime = self._visit_mission_runtime_state()
+        except Exception:
+            visit_runtime = {}
+        try:
+            gather_runtime = self._gather_mission_runtime_state()
+        except Exception:
+            gather_runtime = {}
+
+        runtime_items = (
+            ("proof_runtime_running", proof_runtime),
+            ("visit_runtime_running", visit_runtime),
+            ("gather_runtime_running", gather_runtime),
+        )
+        for blocker, runtime in runtime_items:
+            if isinstance(runtime, dict) and bool(runtime.get("running", False)):
+                return blocker
+
+        active_statuses = {"running", "setup"}
+        mission_statuses = {
+            str(visit_runtime.get("mission_status", "") or "").lower() if isinstance(visit_runtime, dict) else "",
+            str(gather_runtime.get("mission_status", "") or "").lower() if isinstance(gather_runtime, dict) else "",
+            str(proof_runtime.get("proof_state", "") or "").lower() if isinstance(proof_runtime, dict) else "",
+        }
+        if mission_statuses & active_statuses:
+            return "mission_runtime_active"
+        return ""
+
+    def _idle_shutdown_blocker(self) -> str:
+        if not getattr(self, "idle_shutdown_enabled", False):
+            return "disabled"
+        with self.state_lock:
+            environment_state = str(self.state.get("environment_state", "stopped") or "stopped")
+            scenario_state = str(self.state.get("scenario_state", "idle") or "idle")
+            mission_status = str(self.state.get("mission_status", "idle") or "idle")
+            gather_phase = str(self.state.get("gather_phase", "idle") or "idle")
+        if environment_state != "environment_ready":
+            return f"environment_{environment_state}"
+        if self._lifecycle_busy():
+            return "lifecycle_busy"
+        if scenario_state == "running":
+            return "scenario_running"
+        if self.scenario_thread is not None and self.scenario_thread.is_alive():
+            return "scenario_thread_running"
+        if self.intent_thread is not None and self.intent_thread.is_alive():
+            return "intent_thread_running"
+        if self._process_alive(self.active_scenario_proc):
+            return "scenario_process_running"
+        if self._process_alive(self.active_intent_proc):
+            return "intent_process_running"
+        if mission_status.lower() in {"running", "setup"}:
+            return "mission_status_active"
+        if gather_phase.lower() in {"setup", "running"}:
+            return "gather_phase_active"
+        return self._idle_shutdown_runtime_blocker()
+
+    def _queue_idle_shutdown_stop(self, now_utc: str) -> bool:
+        self._refresh_control_plane_state(force=True)
+        with self.state_lock:
+            if not self.state.get("control_plane_ready", False):
+                self.state.update(
+                    {
+                        "idle_shutdown_state": "blocked",
+                        "idle_shutdown_blocker": "control_plane_unavailable",
+                        "idle_shutdown_last_checked_utc": now_utc,
+                    }
+                )
+                self._persist_state_locked()
+                return False
+        blocker = self._idle_shutdown_blocker()
+        if blocker:
+            state_name = "disabled" if blocker == "disabled" else ("inactive" if blocker.startswith("environment_") else "busy")
+            self._update_state(
+                idle_shutdown_state=state_name,
+                idle_shutdown_blocker=blocker,
+                idle_shutdown_idle_since_utc="",
+                idle_shutdown_deadline_utc="",
+                idle_shutdown_remaining_s=None,
+                idle_shutdown_last_checked_utc=now_utc,
+            )
+            return False
+        if self._lifecycle_busy():
+            self._update_state(
+                idle_shutdown_state="busy",
+                idle_shutdown_blocker="lifecycle_busy",
+                idle_shutdown_last_checked_utc=now_utc,
+            )
+            return False
+        self.pending_scenario_id = ""
+        self.pending_scenario_overrides = {}
+        self._update_state(
+            idle_shutdown_state="queued",
+            idle_shutdown_triggered_utc=now_utc,
+            idle_shutdown_last_checked_utc=now_utc,
+            idle_shutdown_last_error="",
+            environment_message="idle shutdown queued",
+        )
+        idle_after_s = float(getattr(self, "idle_shutdown_after_s", DEFAULT_IDLE_SHUTDOWN_AFTER_S) or 0.0)
+        idle_label = f"{idle_after_s / 60.0:.0f} minutes" if idle_after_s >= 60.0 else f"{idle_after_s:.0f} seconds"
+        self._record_operator_event(f"Environment auto-stop queued after {idle_label} idle.", category="environment")
+        self.lifecycle_thread = threading.Thread(target=self._stop_environment_worker, name="dashboard-idle-stop", daemon=True)
+        self.lifecycle_thread.start()
+        return True
+
+    def _evaluate_idle_shutdown(self) -> None:
+        now_utc = utc_now()
+        now_dt = as_utc_datetime(now_utc) or datetime.now(timezone.utc)
+        blocker = self._idle_shutdown_blocker()
+        if blocker:
+            state_name = "disabled" if blocker == "disabled" else ("inactive" if blocker.startswith("environment_") else "busy")
+            self._update_state(
+                idle_shutdown_enabled=getattr(self, "idle_shutdown_enabled", False),
+                idle_shutdown_after_s=getattr(self, "idle_shutdown_after_s", DEFAULT_IDLE_SHUTDOWN_AFTER_S),
+                idle_shutdown_poll_s=getattr(self, "idle_shutdown_poll_s", IDLE_SHUTDOWN_WATCHDOG_POLL_S),
+                idle_shutdown_state=state_name,
+                idle_shutdown_blocker=blocker,
+                idle_shutdown_idle_since_utc="",
+                idle_shutdown_deadline_utc="",
+                idle_shutdown_remaining_s=None,
+                idle_shutdown_last_checked_utc=now_utc,
+            )
+            return
+
+        with self.state_lock:
+            idle_since_text = str(self.state.get("idle_shutdown_idle_since_utc", "") or "")
+        idle_since_dt = as_utc_datetime(idle_since_text)
+        if idle_since_dt is None:
+            idle_since_dt = now_dt
+            idle_since_text = idle_since_dt.isoformat()
+
+        idle_after_s = max(0.0, float(getattr(self, "idle_shutdown_after_s", DEFAULT_IDLE_SHUTDOWN_AFTER_S) or 0.0))
+        deadline_dt = idle_since_dt.timestamp() + idle_after_s
+        remaining_s = max(0.0, deadline_dt - now_dt.timestamp())
+        deadline_text = datetime.fromtimestamp(deadline_dt, tz=timezone.utc).isoformat()
+        if remaining_s > 0.0:
+            self._update_state(
+                idle_shutdown_enabled=True,
+                idle_shutdown_after_s=idle_after_s,
+                idle_shutdown_poll_s=getattr(self, "idle_shutdown_poll_s", IDLE_SHUTDOWN_WATCHDOG_POLL_S),
+                idle_shutdown_state="idle",
+                idle_shutdown_blocker="",
+                idle_shutdown_idle_since_utc=idle_since_text,
+                idle_shutdown_deadline_utc=deadline_text,
+                idle_shutdown_remaining_s=remaining_s,
+                idle_shutdown_last_checked_utc=now_utc,
+                idle_shutdown_last_error="",
+            )
+            return
+
+        self._update_state(
+            idle_shutdown_state="expired",
+            idle_shutdown_blocker="",
+            idle_shutdown_idle_since_utc=idle_since_text,
+            idle_shutdown_deadline_utc=deadline_text,
+            idle_shutdown_remaining_s=0.0,
+            idle_shutdown_last_checked_utc=now_utc,
+        )
+        self._queue_idle_shutdown_stop(now_utc)
 
     def _scenario_requires_clean_reset(self, scenario: ScenarioDefinition) -> bool:
         return scenario.id in SELF_CONTAINED_SCENARIO_IDS
@@ -1827,6 +2069,7 @@ class DashboardController:
         return world_file, surface_profile, robot_sdf_name
 
     def request_start(self, overrides: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("env_start")
         with self.state_lock:
             env_state = self.state["environment_state"]
         if env_state == "environment_ready":
@@ -1870,6 +2113,7 @@ class DashboardController:
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "environment start queued"}
 
     def request_stop(self) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("env_stop")
         with self.state_lock:
             env_state = self.state["environment_state"]
         if env_state == "stopped":
@@ -1893,6 +2137,7 @@ class DashboardController:
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "environment stop queued"}
 
     def request_refresh(self) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("env_refresh")
         self._refresh_control_plane_state(force=True)
         with self.state_lock:
             if not self.state.get("control_plane_ready", False):
@@ -1904,6 +2149,7 @@ class DashboardController:
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "environment refresh queued"}
 
     def request_reset_sim(self, overrides: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("sim_reset")
         with self.state_lock:
             env_state = self.state["environment_state"]
         if env_state not in {"environment_ready", "error"}:
@@ -1930,6 +2176,7 @@ class DashboardController:
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "sim reset queued"}
 
     def request_scenario_run(self, scenario_id: str, overrides: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity(f"scenario_run:{scenario_id}")
         scenario = SCENARIOS_BY_ID.get(scenario_id)
         if scenario is None:
             return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown scenario: {scenario_id}"}
@@ -2015,6 +2262,7 @@ class DashboardController:
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": f"scenario {scenario_id} queued"}
 
     def request_scenario_stop(self) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("scenario_stop")
         if not (self.scenario_thread and self.scenario_thread.is_alive()):
             return HTTPStatus.OK, {"accepted": False, "message": "no active scenario", "state": self.get_state()}
         self._refresh_control_plane_state(force=True)
@@ -2028,6 +2276,7 @@ class DashboardController:
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "scenario stop requested"}
 
     def request_intent_preview(self, body: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("intent_preview")
         try:
             intent_name, args_payload = self._resolve_intent_request(body)
             preview = self._prepare_intent_preview(intent_name, args_payload)
@@ -2043,13 +2292,16 @@ class DashboardController:
         return HTTPStatus.OK, {"accepted": True, "preview": preview}
 
     def request_intent_dispatch(self, body: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
+        self._mark_operator_activity("intent_dispatch")
         try:
             intent_name, args_payload = self._resolve_intent_request(body)
         except Exception as exc:
             return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
-        return self.request_intent(intent_name, args_payload)
+        return self.request_intent(intent_name, args_payload, record_activity=False)
 
-    def request_intent(self, intent_name: str, args_payload: Dict[str, Any]) -> tuple[int, Dict[str, Any]]:
+    def request_intent(self, intent_name: str, args_payload: Dict[str, Any], *, record_activity: bool = True) -> tuple[int, Dict[str, Any]]:
+        if record_activity:
+            self._mark_operator_activity(f"intent:{intent_name}")
         if intent_name not in self.frozen_intents:
             return HTTPStatus.NOT_FOUND, {"accepted": False, "error": f"unknown frozen intent: {intent_name}"}
         try:
@@ -2683,6 +2935,18 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     world_stream_last_restart_error=str(exc),
                 )
 
+    def _idle_shutdown_watchdog_loop(self) -> None:
+        poll_s = max(1.0, float(getattr(self, "idle_shutdown_poll_s", IDLE_SHUTDOWN_WATCHDOG_POLL_S) or 1.0))
+        while not self.idle_shutdown_cancel.wait(poll_s):
+            try:
+                self._evaluate_idle_shutdown()
+            except Exception as exc:
+                self._update_state(
+                    idle_shutdown_state="error",
+                    idle_shutdown_last_checked_utc=utc_now(),
+                    idle_shutdown_last_error=str(exc),
+                )
+
     def _base_env(self, *, session_id: str, world_stream_port: int, operator_view_port: int) -> Dict[str, str]:
         env = self._compose_env()
         env["GAZEBO_PARTITION"] = session_id
@@ -2997,6 +3261,10 @@ echo "TRUTH_LOG=$LOG_FILE"
                     world_stream_recovery_state="idle",
                     world_stream_restart_in_progress=False,
                     world_stream_last_restart_error="",
+                    idle_shutdown_idle_since_utc="",
+                    idle_shutdown_deadline_utc="",
+                    idle_shutdown_remaining_s=None,
+                    idle_shutdown_state="watching" if self.idle_shutdown_enabled else "disabled",
                 )
                 self._record_operator_event("Environment ready (headless soak mode).", category="environment")
                 self._write_operator_status(
@@ -3098,6 +3366,10 @@ echo "VISUAL_LOG=$LOG_FILE"
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
                 world_stream_last_restart_error="",
+                idle_shutdown_idle_since_utc="",
+                idle_shutdown_deadline_utc="",
+                idle_shutdown_remaining_s=None,
+                idle_shutdown_state="watching" if self.idle_shutdown_enabled else "disabled",
             )
             self._record_operator_event("Environment ready.", category="environment")
             self._write_operator_status(
@@ -3195,6 +3467,10 @@ echo "VISUAL_LOG=$LOG_FILE"
                 gate_service_states={},
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
+                idle_shutdown_idle_since_utc="",
+                idle_shutdown_deadline_utc="",
+                idle_shutdown_remaining_s=None,
+                idle_shutdown_state="inactive" if self.idle_shutdown_enabled else "disabled",
             )
             self._world_stream_stale_since_monotonic = 0.0
             self._record_operator_event("Environment stopping.", category="environment")
@@ -3229,6 +3505,10 @@ echo "VISUAL_LOG=$LOG_FILE"
                 gate_service_states={},
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
+                idle_shutdown_idle_since_utc="",
+                idle_shutdown_deadline_utc="",
+                idle_shutdown_remaining_s=None,
+                idle_shutdown_state="inactive" if self.idle_shutdown_enabled else "disabled",
             )
             self._clear_llm_proof_runtime_state()
             self._clear_visit_mission_runtime_state()
@@ -4532,6 +4812,8 @@ def main() -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        controller.world_stream_watchdog_cancel.set()
+        controller.idle_shutdown_cancel.set()
         server.server_close()
     return 0
 

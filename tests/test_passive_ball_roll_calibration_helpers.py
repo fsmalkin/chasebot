@@ -56,6 +56,32 @@ def test_roll_sample_metrics_compute_distance_speed_and_stop_time():
     assert metrics["stop_time_s"] == pytest.approx(1.6)
 
 
+def test_roll_sample_metrics_can_start_at_first_motion_for_direct_launch():
+    samples = [
+        {"t_s": 0.0, "position": {"x": 0.0, "y": 0.0}},
+        {"t_s": 0.5, "position": {"x": 0.0, "y": 0.0}},
+        {"t_s": 0.6, "position": {"x": 0.10, "y": 0.0}},
+        {"t_s": 1.1, "position": {"x": 0.40, "y": 0.0}},
+        {"t_s": 1.6, "position": {"x": 0.40, "y": 0.0}},
+        {"t_s": 2.2, "position": {"x": 0.40, "y": 0.0}},
+    ]
+
+    metrics = summarize_roll_samples(
+        samples,
+        ground_start_x_m=0.0,
+        stop_speed_threshold_mps=0.03,
+        rest_dwell_s=0.5,
+        start_selection="first_motion",
+        motion_start_speed_threshold_mps=0.05,
+    )
+
+    assert metrics["start_pose"]["x"] == pytest.approx(0.0)
+    assert metrics["start_pose"]["t_s"] == pytest.approx(0.5)
+    assert metrics["roll_distance_m"] == pytest.approx(0.40)
+    assert metrics["peak_speed_mps"] == pytest.approx(1.0)
+    assert metrics["stopped"] is True
+
+
 def test_roll_classification_flags_under_over_and_in_band():
     base = {
         "observed": True,
@@ -67,6 +93,23 @@ def test_roll_classification_flags_under_over_and_in_band():
     assert classify_roll_result({**base, "roll_distance_m": 0.44}, reference_band=GOLF_SHORT_TURF_ROLL_BAND)["reason"] == "under_roll"
     assert classify_roll_result({**base, "roll_distance_m": 0.60}, reference_band=GOLF_SHORT_TURF_ROLL_BAND)["pass"] is True
     assert classify_roll_result({**base, "roll_distance_m": 0.91}, reference_band=GOLF_SHORT_TURF_ROLL_BAND)["reason"] == "over_roll"
+
+
+def test_roll_classification_can_use_requested_direct_launch_speed():
+    result = classify_roll_result(
+        {
+            "observed": True,
+            "stopped": True,
+            "peak_speed_mps": 1.7,
+            "reference_initial_speed_mps": 1.0,
+            "lateral_drift_ratio": 0.0,
+            "roll_distance_m": 0.60,
+        },
+        reference_band=GOLF_SHORT_TURF_ROLL_BAND,
+    )
+
+    assert result["pass"] is True
+    assert result["classification_speed_mps"] == pytest.approx(1.0)
 
 
 def test_campaign_summary_preserves_surface_ball_and_reference_profiles():

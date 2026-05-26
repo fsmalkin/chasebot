@@ -206,6 +206,8 @@ def summarize_roll_samples(
     ground_start_x_m: float = 0.0,
     stop_speed_threshold_mps: float = STOP_SPEED_THRESHOLD_MPS,
     rest_dwell_s: float = REST_DWELL_S,
+    start_selection: str = "peak_speed",
+    motion_start_speed_threshold_mps: float = 0.05,
 ) -> dict[str, Any]:
     ordered = sorted(
         [sample for sample in samples if _sample_t(sample) is not None and _sample_xy(sample) is not None],
@@ -233,7 +235,7 @@ def summarize_roll_samples(
             continue
         if current_xy[0] < ground_start_x_m:
             continue
-        speed_rows.append({"sample": current, "speed_mps": speed})
+        speed_rows.append({"sample": current, "previous_sample": previous, "speed_mps": speed})
 
     if not speed_rows:
         return {
@@ -248,8 +250,20 @@ def summarize_roll_samples(
             "effective_decel_mps2": 0.0,
         }
 
-    peak_row = max(speed_rows, key=lambda item: float(item["speed_mps"]))
-    start_sample = peak_row["sample"]
+    start_threshold = max(float(motion_start_speed_threshold_mps), 0.0)
+    if start_selection == "first_motion":
+        start_row = next((row for row in speed_rows if float(row["speed_mps"]) >= start_threshold), speed_rows[0])
+        previous_sample = start_row.get("previous_sample")
+        previous_xy = _sample_xy(previous_sample) if isinstance(previous_sample, dict) else None
+        if isinstance(previous_sample, dict) and previous_xy is not None and previous_xy[0] >= ground_start_x_m:
+            start_sample = previous_sample
+        else:
+            start_sample = start_row["sample"]
+    elif start_selection == "peak_speed":
+        peak_row = max(speed_rows, key=lambda item: float(item["speed_mps"]))
+        start_sample = peak_row["sample"]
+    else:
+        raise ValueError(f"unsupported start_selection: {start_selection}")
     start_xy = _sample_xy(start_sample) or (0.0, 0.0)
     start_t = float(_sample_t(start_sample) or 0.0)
     candidate_samples = [
@@ -263,6 +277,8 @@ def summarize_roll_samples(
     roll_distance = math.hypot(end_xy[0] - start_xy[0], end_xy[1] - start_xy[1])
     lateral_drift = abs(end_xy[1] - start_xy[1])
     lateral_ratio = lateral_drift / max(abs(end_xy[0] - start_xy[0]), 1e-6)
+    peak_rows_after_start = [row for row in speed_rows if float(_sample_t(row["sample"]) or 0.0) >= start_t]
+    peak_row = max(peak_rows_after_start or speed_rows, key=lambda item: float(item["speed_mps"]))
     peak_speed = float(peak_row["speed_mps"])
 
     stopped_since: float | None = None
@@ -287,6 +303,8 @@ def summarize_roll_samples(
         "observed": True,
         "sample_count": len(ordered),
         "stopped": bool(stopped),
+        "start_selection": start_selection,
+        "motion_start_speed_threshold_mps": round(start_threshold, 6),
         "start_pose": {
             "x": round(start_xy[0], 6),
             "y": round(start_xy[1], 6),
@@ -323,8 +341,9 @@ def classify_roll_result(
     if not bool(metrics.get("observed", False)):
         return {"pass": False, "reason": "no_roll_observed"}
     peak_speed = float(metrics.get("peak_speed_mps", 0.0) or 0.0)
+    classification_speed = float(metrics.get("reference_initial_speed_mps", peak_speed) or 0.0)
     roll_distance = float(metrics.get("roll_distance_m", 0.0) or 0.0)
-    if peak_speed < min_peak_speed_mps:
+    if max(peak_speed, classification_speed) < min_peak_speed_mps:
         return {
             "pass": False,
             "reason": "insufficient_initial_speed",
@@ -332,13 +351,14 @@ def classify_roll_result(
             "expected_stop_distance_max_m": 0.0,
         }
     min_distance, max_distance = expected_stop_distance_band_m(
-        initial_speed_mps=peak_speed,
+        initial_speed_mps=classification_speed,
         reference_band=reference_band,
     )
     if not bool(metrics.get("stopped", False)):
         return {
             "pass": False,
             "reason": "ball_did_not_stop",
+            "classification_speed_mps": round(classification_speed, 6),
             "expected_stop_distance_min_m": round(min_distance, 6),
             "expected_stop_distance_max_m": round(max_distance, 6),
         }
@@ -346,6 +366,7 @@ def classify_roll_result(
         return {
             "pass": False,
             "reason": "excessive_lateral_drift",
+            "classification_speed_mps": round(classification_speed, 6),
             "expected_stop_distance_min_m": round(min_distance, 6),
             "expected_stop_distance_max_m": round(max_distance, 6),
         }
@@ -361,6 +382,7 @@ def classify_roll_result(
     return {
         "pass": bool(pass_flag),
         "reason": reason,
+        "classification_speed_mps": round(classification_speed, 6),
         "expected_stop_distance_min_m": round(min_distance, 6),
         "expected_stop_distance_max_m": round(max_distance, 6),
     }

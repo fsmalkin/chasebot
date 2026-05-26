@@ -254,11 +254,17 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
     controller.lifecycle_lock = threading.Lock()
     controller.lifecycle_thread = None
     controller.lifecycle_cancel = threading.Event()
+    controller.idle_shutdown_enabled = True
+    controller.idle_shutdown_after_s = dashboard_service.DEFAULT_IDLE_SHUTDOWN_AFTER_S
+    controller.idle_shutdown_poll_s = dashboard_service.IDLE_SHUTDOWN_WATCHDOG_POLL_S
+    controller.idle_shutdown_thread = None
+    controller.idle_shutdown_cancel = threading.Event()
     controller.world_stream_restart_lock = threading.Lock()
     controller._world_stream_stale_since_monotonic = 0.0
     controller._world_stream_last_restart_monotonic = 0.0
     controller.active_env_proc = None
     controller.active_scenario_proc = None
+    controller.active_intent_proc = None
     controller.scenario_thread = None
     controller.intent_thread = None
     controller.sim_gate_container_id = "sim-gate"
@@ -357,6 +363,19 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
         "world_stream_restart_in_progress": False,
         "world_stream_restart_cooldown_s": dashboard_service.WORLD_STREAM_RESTART_COOLDOWN_S,
         "world_stream_restart_max_attempts": dashboard_service.WORLD_STREAM_RESTART_MAX_ATTEMPTS,
+        "idle_shutdown_enabled": True,
+        "idle_shutdown_after_s": dashboard_service.DEFAULT_IDLE_SHUTDOWN_AFTER_S,
+        "idle_shutdown_poll_s": dashboard_service.IDLE_SHUTDOWN_WATCHDOG_POLL_S,
+        "idle_shutdown_state": "watching",
+        "idle_shutdown_blocker": "",
+        "idle_shutdown_idle_since_utc": "",
+        "idle_shutdown_deadline_utc": "",
+        "idle_shutdown_remaining_s": None,
+        "idle_shutdown_triggered_utc": "",
+        "idle_shutdown_last_checked_utc": "",
+        "idle_shutdown_last_error": "",
+        "last_operator_activity_utc": "2026-03-18T00:00:00Z",
+        "last_operator_activity_reason": "test_setup",
         "startup_retry_count": 0,
         "startup_cleanup_count": 0,
         "startup_last_cleanup_projects": [],
@@ -401,6 +420,111 @@ def _serve_dashboard_path(path: str, tmp_path: Path) -> list[tuple[Path, str, bo
     handler._json_response = lambda status, payload: (_ for _ in ()).throw(AssertionError(f"unexpected json response: {status} {payload}"))
     dashboard_service.DashboardRequestHandler.do_GET(handler)
     return served
+
+
+def test_idle_shutdown_operator_activity_resets_idle_timer(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["idle_shutdown_idle_since_utc"] = "2026-05-22T12:00:00+00:00"
+    controller.state["idle_shutdown_deadline_utc"] = "2026-05-22T12:30:00+00:00"
+    controller.state["idle_shutdown_remaining_s"] = 1200.0
+    monkeypatch.setattr(dashboard_service, "utc_now", lambda: "2026-05-22T12:10:00+00:00")
+
+    controller._mark_operator_activity("intent_preview")
+
+    assert controller.state["last_operator_activity_utc"] == "2026-05-22T12:10:00+00:00"
+    assert controller.state["last_operator_activity_reason"] == "intent_preview"
+    assert controller.state["idle_shutdown_idle_since_utc"] == ""
+    assert controller.state["idle_shutdown_deadline_utc"] == ""
+    assert controller.state["idle_shutdown_remaining_s"] is None
+
+
+def test_idle_shutdown_queues_environment_stop_after_ready_idle_timeout(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.idle_shutdown_after_s = 10.0
+    controller.state["idle_shutdown_after_s"] = 10.0
+    controller.state["idle_shutdown_idle_since_utc"] = "2026-05-22T12:00:00+00:00"
+    monkeypatch.setattr(dashboard_service, "utc_now", lambda: "2026-05-22T12:00:11+00:00")
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            self._alive = False
+            started.append(self)
+
+        def start(self) -> None:
+            self._alive = True
+
+        def is_alive(self) -> bool:
+            return self._alive
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    controller._evaluate_idle_shutdown()
+
+    assert started
+    assert started[0].target == controller._stop_environment_worker
+    assert started[0].name == "dashboard-idle-stop"
+    assert controller.state["idle_shutdown_state"] == "queued"
+    assert controller.state["idle_shutdown_triggered_utc"] == "2026-05-22T12:00:11+00:00"
+    assert controller.state["environment_message"] == "idle shutdown queued"
+
+
+def test_idle_shutdown_does_not_stop_while_scenario_running(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.idle_shutdown_after_s = 10.0
+    controller.state["idle_shutdown_idle_since_utc"] = "2026-05-22T12:00:00+00:00"
+    controller.state["scenario_state"] = "running"
+    monkeypatch.setattr(dashboard_service, "utc_now", lambda: "2026-05-22T12:00:30+00:00")
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            started.append(self)
+
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    controller._evaluate_idle_shutdown()
+
+    assert started == []
+    assert controller.state["idle_shutdown_state"] == "busy"
+    assert controller.state["idle_shutdown_blocker"] == "scenario_running"
+    assert controller.state["idle_shutdown_idle_since_utc"] == ""
+
+
+def test_idle_shutdown_does_not_stop_while_mission_runtime_running(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.idle_shutdown_after_s = 10.0
+    controller.state["idle_shutdown_idle_since_utc"] = "2026-05-22T12:00:00+00:00"
+    controller._visit_mission_runtime_state = lambda: {"running": True}
+    monkeypatch.setattr(dashboard_service, "utc_now", lambda: "2026-05-22T12:00:30+00:00")
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            started.append(self)
+
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    controller._evaluate_idle_shutdown()
+
+    assert started == []
+    assert controller.state["idle_shutdown_state"] == "busy"
+    assert controller.state["idle_shutdown_blocker"] == "visit_runtime_running"
 
 
 def test_make_session_id_uses_subsecond_precision():
@@ -1196,16 +1320,19 @@ def test_beta_dashboard_default_route_stays_inert_before_viewer_ready(tmp_path):
     assert state["operator_view_url"] == ""
 
 
-def test_beta_dashboard_includes_corral_menu_and_stage_mapping():
+def test_beta_dashboard_includes_primary_golf_fetch_cta_and_stage_mapping():
     html_path = REPO_ROOT / "runtime/dashboard/beta_dashboard.html"
     html = html_path.read_text(encoding="utf-8")
 
     assert "pickScenario('corral_single_ball_place')" in html
     assert "pickScenario('gather_three_ball_zone')" in html
-    assert "runObjectCentricZero()" in html
-    assert "Run Object-Centric Zero" in html
+    assert "pickScenario('golf_ball_circle_delivery_uat')" in html
+    assert "runLatestGolfFetch()" in html
+    assert "Run Golf-Ball Circle Delivery" in html
+    assert "const LATEST_GOLF_FETCH_SCENARIO_ID = 'golf_ball_circle_delivery_uat';" in html
     assert "const OBJECT_CENTRIC_ZERO_SCENARIO_ID = 'object_centric_zero_saved_layout';" in html
     assert "const CORRAL_STAGE_LABELS = ['Init','Visit','Capture','Place','Done'];" in html
+    assert "const FETCH_STAGE_LABELS = ['Init','Visit','Capture','Deliver','Done'];" in html
     assert "Acquiring the ball" in html
     assert "Controlling the ball" in html
     assert "Placing ball into the zone" in html
@@ -1213,19 +1340,22 @@ def test_beta_dashboard_includes_corral_menu_and_stage_mapping():
     assert "final_three_ball_corral_pass" in html
 
 
-def test_browser_dashboard_promotes_single_ball_corral_as_featured_demo():
+def test_browser_dashboard_promotes_golf_fetch_as_featured_demo():
     js_path = REPO_ROOT / "runtime/dashboard/browser_dashboard.js"
     js = js_path.read_text(encoding="utf-8")
 
+    golf_demo = "{ id: 'golf_ball_circle_delivery_uat', label: 'Golf-Ball Circle Delivery' }"
+    corral_demo = "{ id: 'corral_single_ball_place', label: 'Single-Ball Corral' }"
+    gather_demo = "{ id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' }"
+    route_demo = "{ id: 'visit_route_planning', label: 'LLM Route Planning' }"
+
+    assert golf_demo in js
     assert "{ id: 'corral_single_ball_place', label: 'Single-Ball Corral' }" in js
     assert "{ id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' }" in js
     assert "{ id: 'visit_route_planning', label: 'LLM Route Planning' }" in js
-    assert js.index("{ id: 'corral_single_ball_place', label: 'Single-Ball Corral' }") < js.index(
-        "{ id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' }"
-    )
-    assert js.index("{ id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' }") < js.index(
-        "{ id: 'visit_route_planning', label: 'LLM Route Planning' }"
-    )
+    assert js.index(golf_demo) < js.index(corral_demo)
+    assert js.index(corral_demo) < js.index(gather_demo)
+    assert js.index(gather_demo) < js.index(route_demo)
     assert "renderMissionSnapshot(state);" in js
     assert "final_three_ball_corral_pass" in js
 

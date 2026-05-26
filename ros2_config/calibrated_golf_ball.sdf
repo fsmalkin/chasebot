@@ -68,5 +68,11 @@
         </material>
       </visual>
     </link>
+    <plugin filename="/root/ros2_ws/install/chasebot_description/lib/libchasecar_golf_ball_rolling_resistance_system.so" name="chasecar::GolfBallRollingResistance">
+      <link_name>link</link_name>
+      <linear_decel_mps2>0.72</linear_decel_mps2>
+      <ball_radius_m>0.021336</ball_radius_m>
+      <stop_speed_threshold_mps>0.03</stop_speed_threshold_mps>
+    </plugin>
   </model>
 </sdf>

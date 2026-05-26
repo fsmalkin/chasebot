@@ -5,21 +5,25 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
 from typing import Any
 
 from passive_ball_roll_calibration_helpers import GOLF_SHORT_TURF_ROLL_BAND
+from passive_ball_roll_calibration_helpers import G_ACCEL_MPS2
 from passive_ball_roll_calibration_helpers import ROLL_BANDS_BY_SURFACE
 from passive_ball_roll_calibration_helpers import build_scorecard_markdown
 from passive_ball_roll_calibration_helpers import classify_roll_result
+from passive_ball_roll_calibration_helpers import deceleration_from_stop
 from passive_ball_roll_calibration_helpers import parse_ball_sdf_profile
 from passive_ball_roll_calibration_helpers import summarize_campaign
 from passive_ball_roll_calibration_helpers import summarize_roll_samples
@@ -33,6 +37,226 @@ DEFAULT_SURFACE_PROFILE = "calibrated_golf_turf"
 DEFAULT_BALL_SDF = REPO_ROOT / "ros2_config" / "calibrated_golf_ball.sdf"
 DEFAULT_RAMP_SDF = REPO_ROOT / "ros2_config" / "ball_roll_ramp_fixture.sdf"
 DEFAULT_ARTIFACT_ROOT = REPO_ROOT / "artifacts" / "session"
+
+
+INITIAL_LINK_VELOCITY_PLUGIN_SOURCE = r"""
+#include <memory>
+#include <string>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <fstream>
+#include <gz/math/Vector3.hh>
+#include <gz/plugin/Register.hh>
+#include <gz/sim/Entity.hh>
+#include <gz/sim/EntityComponentManager.hh>
+#include <gz/sim/EventManager.hh>
+#include <gz/sim/Link.hh>
+#include <gz/sim/Model.hh>
+#include <gz/sim/System.hh>
+#include <gz/sim/Types.hh>
+#include <sdf/Element.hh>
+
+namespace chasecar
+{
+class InitialLinkVelocity:
+  public gz::sim::System,
+  public gz::sim::ISystemConfigure,
+  public gz::sim::ISystemPreUpdate,
+  public gz::sim::ISystemPostUpdate
+{
+  public: void Configure(
+    const gz::sim::Entity &_entity,
+    const std::shared_ptr<const sdf::Element> &_sdf,
+    gz::sim::EntityComponentManager &,
+    gz::sim::EventManager &) override
+  {
+    this->modelEntity = _entity;
+    if (_sdf->HasElement("link_name"))
+      this->linkName = _sdf->Get<std::string>("link_name");
+    if (_sdf->HasElement("linear_velocity"))
+      this->linearVelocity = _sdf->Get<gz::math::Vector3d>("linear_velocity");
+    if (_sdf->HasElement("angular_velocity"))
+      this->angularVelocity = _sdf->Get<gz::math::Vector3d>("angular_velocity");
+    if (_sdf->HasElement("delay_s"))
+      this->delayS = _sdf->Get<double>("delay_s");
+    if (_sdf->HasElement("rolling_resistance_decel_mps2"))
+      this->rollingResistanceDecelMps2 = _sdf->Get<double>("rolling_resistance_decel_mps2");
+    if (_sdf->HasElement("rolling_resistance_mass_kg"))
+      this->rollingResistanceMassKg = _sdf->Get<double>("rolling_resistance_mass_kg");
+    if (_sdf->HasElement("rolling_resistance_ball_radius_m"))
+      this->rollingResistanceBallRadiusM = _sdf->Get<double>("rolling_resistance_ball_radius_m");
+    if (_sdf->HasElement("rolling_resistance_stop_speed_threshold_mps"))
+      this->rollingResistanceStopSpeedThresholdMps = _sdf->Get<double>("rolling_resistance_stop_speed_threshold_mps");
+    if (_sdf->HasElement("debug_log_path"))
+      this->debugLogPath = _sdf->Get<std::string>("debug_log_path");
+    this->DebugLog("configure");
+  }
+
+  public: void PreUpdate(
+    const gz::sim::UpdateInfo &_info,
+    gz::sim::EntityComponentManager &_ecm) override
+  {
+    gz::sim::Model model(this->modelEntity);
+    const auto linkEntity = model.LinkByName(_ecm, this->linkName);
+    if (linkEntity == gz::sim::kNullEntity)
+      return;
+
+    gz::sim::Link link(linkEntity);
+    if (this->applied)
+    {
+      this->ApplyRollingResistance(_info, _ecm, link);
+      return;
+    }
+    if (!this->firstUpdateSeen)
+    {
+      this->firstUpdateSeen = true;
+      this->firstUpdateSimTime = _info.simTime;
+    }
+    const auto elapsed = std::chrono::duration<double>(_info.simTime - this->firstUpdateSimTime).count();
+    if (elapsed < this->delayS)
+      return;
+
+    link.SetLinearVelocity(_ecm, this->linearVelocity);
+    link.SetAngularVelocity(_ecm, this->angularVelocity);
+    link.EnableVelocityChecks(_ecm, true);
+    this->applied = true;
+    this->DebugLog("initial_velocity_applied");
+  }
+
+  public: void PostUpdate(
+    const gz::sim::UpdateInfo &_info,
+    const gz::sim::EntityComponentManager &_ecm) override
+  {
+    gz::sim::Model model(this->modelEntity);
+    const auto linkEntity = model.LinkByName(_ecm, this->linkName);
+    if (linkEntity == gz::sim::kNullEntity)
+      return;
+
+    gz::sim::Link link(linkEntity);
+    const auto pose = link.WorldPose(_ecm);
+    if (!pose)
+      return;
+
+    if (this->lastPostPoseSeen)
+    {
+      const double dt = std::chrono::duration<double>(_info.simTime - this->lastPostPoseSimTime).count();
+      if (dt > 0.0)
+      {
+        this->observedVelocityVx = (pose->Pos().X() - this->lastPostPoseX) / dt;
+        this->observedVelocityVy = (pose->Pos().Y() - this->lastPostPoseY) / dt;
+        this->observedVelocityDt = dt;
+        this->observedVelocitySeen = true;
+      }
+    }
+
+    this->lastPostPoseSeen = true;
+    this->lastPostPoseSimTime = _info.simTime;
+    this->lastPostPoseX = pose->Pos().X();
+    this->lastPostPoseY = pose->Pos().Y();
+    this->lastPostPose = *pose;
+    this->lastPostPoseRot = pose->Rot();
+  }
+
+  private: void ApplyRollingResistance(
+    const gz::sim::UpdateInfo &_info,
+    gz::sim::EntityComponentManager &_ecm,
+    const gz::sim::Link &_link)
+  {
+    if (_info.paused || this->rollingResistanceDecelMps2 <= 0.0 || this->rollingResistanceMassKg <= 0.0)
+      return;
+    if (!this->observedVelocitySeen || this->observedVelocityDt <= 0.0)
+    {
+      if (!this->debugNoObservedVelocityLogged)
+      {
+        this->DebugLog("rolling_resistance_waiting_for_observed_velocity");
+        this->debugNoObservedVelocityLogged = true;
+      }
+      return;
+    }
+
+    const double vx = this->observedVelocityVx;
+    const double vy = this->observedVelocityVy;
+
+    const double planarSpeed = std::sqrt(vx * vx + vy * vy);
+    if (!this->debugResistanceActiveLogged)
+    {
+      this->DebugLog("rolling_resistance_active speed=" + std::to_string(planarSpeed) + " dt=" + std::to_string(this->observedVelocityDt));
+      this->debugResistanceActiveLogged = true;
+    }
+    if (planarSpeed <= this->rollingResistanceStopSpeedThresholdMps)
+    {
+      _link.SetLinearVelocity(_ecm, gz::math::Vector3d(0, 0, 0));
+      _link.SetAngularVelocity(_ecm, gz::math::Vector3d(0, 0, 0));
+      return;
+    }
+
+    const double nextSpeed = std::max(0.0, planarSpeed - this->rollingResistanceDecelMps2 * this->observedVelocityDt);
+    if (nextSpeed <= this->rollingResistanceStopSpeedThresholdMps)
+    {
+      _link.SetLinearVelocity(_ecm, gz::math::Vector3d(0, 0, 0));
+      _link.SetAngularVelocity(_ecm, gz::math::Vector3d(0, 0, 0));
+      return;
+    }
+
+    const double scale = nextSpeed / planarSpeed;
+    const gz::math::Vector3d worldLinear(scale * vx, scale * vy, 0);
+    const auto localLinear = this->lastPostPoseRot.Inverse().RotateVector(worldLinear);
+    _link.SetLinearVelocity(_ecm, localLinear);
+
+    const double radius = std::max(this->rollingResistanceBallRadiusM, 1e-9);
+    const gz::math::Vector3d worldAngular(-worldLinear.Y() / radius, worldLinear.X() / radius, 0);
+    const auto localAngular = this->lastPostPoseRot.Inverse().RotateVector(worldAngular);
+    _link.SetAngularVelocity(_ecm, localAngular);
+  }
+
+  private: gz::sim::Entity modelEntity{gz::sim::kNullEntity};
+  private: void DebugLog(const std::string &_message) const
+  {
+    if (this->debugLogPath.empty())
+      return;
+    std::ofstream out(this->debugLogPath, std::ios::app);
+    out << _message << std::endl;
+  }
+  private: std::string linkName{"link"};
+  private: gz::math::Vector3d linearVelocity{0, 0, 0};
+  private: gz::math::Vector3d angularVelocity{0, 0, 0};
+  private: double delayS{0.0};
+  private: double rollingResistanceDecelMps2{0.0};
+  private: double rollingResistanceMassKg{0.04593};
+  private: double rollingResistanceBallRadiusM{0.021336};
+  private: double rollingResistanceStopSpeedThresholdMps{0.03};
+  private: bool firstUpdateSeen{false};
+  private: std::chrono::steady_clock::duration firstUpdateSimTime{std::chrono::steady_clock::duration::zero()};
+  private: bool lastPostPoseSeen{false};
+  private: std::chrono::steady_clock::duration lastPostPoseSimTime{std::chrono::steady_clock::duration::zero()};
+  private: double lastPostPoseX{0.0};
+  private: double lastPostPoseY{0.0};
+  private: gz::math::Pose3d lastPostPose{0, 0, 0, 0, 0, 0};
+  private: gz::math::Quaterniond lastPostPoseRot{1, 0, 0, 0};
+  private: bool observedVelocitySeen{false};
+  private: double observedVelocityVx{0.0};
+  private: double observedVelocityVy{0.0};
+  private: double observedVelocityDt{0.0};
+  private: std::string debugLogPath{""};
+  private: bool debugNoObservedVelocityLogged{false};
+  private: bool debugResistanceActiveLogged{false};
+  private: bool applied{false};
+};
+}
+
+GZ_ADD_PLUGIN(
+  chasecar::InitialLinkVelocity,
+  gz::sim::System,
+  chasecar::InitialLinkVelocity::ISystemConfigure,
+  chasecar::InitialLinkVelocity::ISystemPreUpdate,
+  chasecar::InitialLinkVelocity::ISystemPostUpdate)
+
+GZ_ADD_PLUGIN_ALIAS(
+  chasecar::InitialLinkVelocity,
+  "chasecar::InitialLinkVelocity")
+"""
 
 
 def utc_now() -> str:
@@ -108,6 +332,179 @@ def docker_exec(compose_project: str, script: str, *, timeout_s: float = 60.0) -
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
 
+def _vector_text(vector: dict[str, float]) -> str:
+    return " ".join(f"{_clean_float(float(vector[key])):.9f}" for key in ("x", "y", "z"))
+
+
+def _clean_float(value: float, *, epsilon: float = 1e-12) -> float:
+    return 0.0 if abs(float(value)) < epsilon else float(value)
+
+
+def direct_velocity_components(
+    *,
+    initial_speed_mps: float,
+    heading_deg: float,
+    ball_radius_m: float,
+    rolling_angular_velocity: bool = True,
+) -> dict[str, Any]:
+    speed = max(float(initial_speed_mps), 0.0)
+    heading_rad = math.radians(float(heading_deg))
+    radius = max(float(ball_radius_m), 1e-9)
+    linear = {
+        "x": speed * math.cos(heading_rad),
+        "y": speed * math.sin(heading_rad),
+        "z": 0.0,
+    }
+    angular = {"x": 0.0, "y": 0.0, "z": 0.0}
+    if rolling_angular_velocity and speed > 0.0:
+        angular = {
+            "x": -linear["y"] / radius,
+            "y": linear["x"] / radius,
+            "z": 0.0,
+        }
+    return {
+        "requested_initial_speed_mps": round(speed, 6),
+        "requested_heading_deg": round(float(heading_deg), 6),
+        "rolling_angular_velocity": bool(rolling_angular_velocity),
+        "linear_velocity_mps": {key: _clean_float(round(value, 9)) for key, value in linear.items()},
+        "angular_velocity_radps": {key: _clean_float(round(value, 9)) for key, value in angular.items()},
+        "ball_radius_m": round(radius, 9),
+    }
+
+
+def compile_initial_velocity_plugin(*, compose_project: str, plugin_dir: Path) -> dict[str, Any]:
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    source_path = plugin_dir / "initial_link_velocity_system.cc"
+    library_path = plugin_dir / "libchasecar_initial_link_velocity_system.so"
+    source_path.write_text(INITIAL_LINK_VELOCITY_PLUGIN_SOURCE.lstrip(), encoding="utf-8")
+
+    script = f"""
+set -eo pipefail
+SRC={json.dumps(to_container_repo_path(source_path))}
+OUT={json.dumps(to_container_repo_path(library_path))}
+g++ -std=c++17 -shared -fPIC "$SRC" -o "$OUT" \
+  -I/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_sim_vendor/include/gz/sim9 \
+  -I/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_plugin_vendor/include/gz/plugin3 \
+  -I/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_math_vendor/include/gz/math8 \
+  -I/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_msgs_vendor/include/gz/msgs11 \
+  -I/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_transport_vendor/include/gz/transport14 \
+  -I/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_utils_vendor/include/gz/utils3 \
+  -I/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_common_vendor/include/gz/common6 \
+  -I/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/sdformat_vendor/include/gz/sdformat15 \
+  -L/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_sim_vendor/lib \
+  -L/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_plugin_vendor/lib \
+  -L/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_math_vendor/lib \
+  -L/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_msgs_vendor/lib \
+  -L/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_transport_vendor/lib \
+  -L/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/gz_common_vendor/lib \
+  -L/opt/ros/${{CORE_ROS_DISTRO:-kilted}}/opt/sdformat_vendor/lib \
+  -lgz-sim9 -lgz-plugin3 -lgz-math8 -lgz-msgs11 -lgz-transport14 -lgz-transport14-parameters -lgz-common6 -lsdformat15
+test -s "$OUT"
+"""
+    rc, output = docker_exec(compose_project, script, timeout_s=60.0)
+    return {
+        "source_path": str(source_path),
+        "library_path": str(library_path),
+        "library_path_container": to_container_repo_path(library_path),
+        "returncode": rc,
+        "output": output,
+        "pass": rc == 0,
+    }
+
+
+def write_direct_velocity_ball_sdf(
+    *,
+    base_ball_sdf: Path,
+    output_sdf: Path,
+    plugin_library_container_path: str,
+    link_name: str,
+    velocity_request: dict[str, Any],
+    delay_s: float,
+    rolling_resistance_decel_mps2: float = 0.0,
+    rolling_resistance_mass_kg: float = 0.04593,
+    rolling_resistance_ball_radius_m: float = 0.021336,
+    rolling_resistance_stop_speed_threshold_mps: float = 0.03,
+    debug_log_path_container: str = "",
+) -> None:
+    tree = ET.parse(base_ball_sdf)
+    root = tree.getroot()
+    model = root.find("model")
+    if model is None:
+        raise ValueError(f"{base_ball_sdf} does not contain an SDF model")
+    plugin = ET.SubElement(
+        model,
+        "plugin",
+        {
+            "filename": plugin_library_container_path,
+            "name": "chasecar::InitialLinkVelocity",
+        },
+    )
+    ET.SubElement(plugin, "link_name").text = str(link_name)
+    ET.SubElement(plugin, "linear_velocity").text = _vector_text(velocity_request["linear_velocity_mps"])
+    ET.SubElement(plugin, "angular_velocity").text = _vector_text(velocity_request["angular_velocity_radps"])
+    ET.SubElement(plugin, "delay_s").text = f"{max(0.0, float(delay_s)):.6f}"
+    if debug_log_path_container:
+        ET.SubElement(plugin, "debug_log_path").text = debug_log_path_container
+    if float(rolling_resistance_decel_mps2) > 0.0:
+        ET.SubElement(plugin, "rolling_resistance_mass_kg").text = f"{float(rolling_resistance_mass_kg):.9f}"
+        ET.SubElement(plugin, "rolling_resistance_ball_radius_m").text = f"{float(rolling_resistance_ball_radius_m):.9f}"
+        ET.SubElement(plugin, "rolling_resistance_decel_mps2").text = f"{float(rolling_resistance_decel_mps2):.9f}"
+        ET.SubElement(plugin, "rolling_resistance_stop_speed_threshold_mps").text = f"{float(rolling_resistance_stop_speed_threshold_mps):.9f}"
+    output_sdf.parent.mkdir(parents=True, exist_ok=True)
+    tree.write(output_sdf, encoding="utf-8", xml_declaration=True)
+
+
+def prepare_direct_velocity_ball_model(
+    args: argparse.Namespace,
+    *,
+    run_index: int,
+    artifact_dir: Path,
+    ball_radius_m: float,
+    ball_mass_kg: float,
+) -> dict[str, Any]:
+    velocity_request = direct_velocity_components(
+        initial_speed_mps=args.initial_speed_mps,
+        heading_deg=args.initial_heading_deg,
+        ball_radius_m=ball_radius_m,
+        rolling_angular_velocity=not bool(args.no_rolling_angular_velocity),
+    )
+    plugin = compile_initial_velocity_plugin(
+        compose_project=args.compose_project,
+        plugin_dir=artifact_dir / "direct_velocity_plugin",
+    )
+    prepared_sdf = artifact_dir / f"run_{run_index:02d}_direct_velocity_ball.sdf"
+    debug_log_path = artifact_dir / f"run_{run_index:02d}_physics_plugin.log"
+    if plugin["pass"]:
+        write_direct_velocity_ball_sdf(
+            base_ball_sdf=Path(args.ball_model_sdf),
+            output_sdf=prepared_sdf,
+            plugin_library_container_path=str(plugin["library_path_container"]),
+            link_name=args.initial_velocity_link_name,
+            velocity_request=velocity_request,
+            delay_s=args.initial_velocity_delay_s,
+            rolling_resistance_decel_mps2=args.rolling_resistance_decel_mps2,
+            rolling_resistance_mass_kg=ball_mass_kg,
+            rolling_resistance_ball_radius_m=ball_radius_m,
+            rolling_resistance_stop_speed_threshold_mps=args.rolling_resistance_stop_speed_threshold_mps,
+            debug_log_path_container=to_container_repo_path(debug_log_path),
+        )
+    return {
+        "method": "direct_velocity",
+        "pass": bool(plugin["pass"] and prepared_sdf.exists()),
+        "prepared_model_sdf": str(prepared_sdf),
+        "initial_velocity_link_name": args.initial_velocity_link_name,
+        "initial_velocity_delay_s": round(max(0.0, float(args.initial_velocity_delay_s)), 6),
+        "rolling_resistance_decel_mps2": round(max(0.0, float(args.rolling_resistance_decel_mps2)), 6),
+        "rolling_resistance_stop_speed_threshold_mps": round(
+            max(0.0, float(args.rolling_resistance_stop_speed_threshold_mps)),
+            6,
+        ),
+        "debug_log_path": str(debug_log_path),
+        "velocity_request": velocity_request,
+        "plugin": plugin,
+    }
+
+
 def spawn_model(
     *,
     compose_project: str,
@@ -118,6 +515,7 @@ def spawn_model(
     y: float,
     z: float,
     yaw: float = 0.0,
+    set_pose_after_spawn: bool = True,
 ) -> dict[str, Any]:
     model_file = to_container_repo_path(model_sdf)
     script = f"""
@@ -132,6 +530,7 @@ MODEL_X={json.dumps(f"{x:.6f}")}
 MODEL_Y={json.dumps(f"{y:.6f}")}
 MODEL_Z={json.dumps(f"{z:.6f}")}
 MODEL_YAW={json.dumps(f"{yaw:.6f}")}
+SET_POSE_AFTER_SPAWN={json.dumps("true" if set_pose_after_spawn else "false")}
 gz service -s "/world/$WORLD_NAME/remove/blocking" --reqtype gz.msgs.Entity --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"$MODEL_NAME\\" type: 2" >/dev/null 2>&1 || true
 spawn_create() {{
   local include_world="$1"
@@ -149,7 +548,7 @@ if [[ "$rc" -ne 0 ]] && grep -Eq 'Waiting for service \\[/world/.*/create\\] to 
   spawn_create false >> /tmp/chasecar_passive_roll_spawn.log 2>&1
   rc=$?
 fi
-if [[ "$rc" -eq 0 ]]; then
+if [[ "$rc" -eq 0 && "$SET_POSE_AFTER_SPAWN" == "true" ]]; then
   gz service -s "/world/$WORLD_NAME/set_pose/blocking" --reqtype gz.msgs.Pose --reptype gz.msgs.Boolean --timeout 2000 --req "name: \\"$MODEL_NAME\\" position {{ x: $MODEL_X y: $MODEL_Y z: $MODEL_Z }} orientation {{ x: 0 y: 0 z: 0 w: 1 }}" >> /tmp/chasecar_passive_roll_spawn.log 2>&1
   setpose_rc=$?
   if [[ "$setpose_rc" -ne 0 ]]; then
@@ -164,6 +563,7 @@ exit "$rc"
         "model_name": model_name,
         "model_sdf": str(model_sdf),
         "pose": {"x": x, "y": y, "z": z, "yaw": yaw},
+        "set_pose_after_spawn": bool(set_pose_after_spawn),
         "returncode": rc,
         "output": output,
         "pass": rc == 0,
@@ -322,7 +722,14 @@ PY
     return samples
 
 
-def run_one(args: argparse.Namespace, *, run_index: int, artifact_dir: Path, reference_band: Any) -> dict[str, Any]:
+def run_one(
+    args: argparse.Namespace,
+    *,
+    run_index: int,
+    artifact_dir: Path,
+    reference_band: Any,
+    ball_profile: Any,
+) -> dict[str, Any]:
     spawn_log_path = artifact_dir / f"run_{run_index:02d}_spawn.json"
     trace_path = artifact_dir / f"run_{run_index:02d}_trace.jsonl"
     summary_path = artifact_dir / f"run_{run_index:02d}_summary.json"
@@ -339,17 +746,33 @@ def run_one(args: argparse.Namespace, *, run_index: int, artifact_dir: Path, ref
             z=0.0,
             yaw=0.0,
         )
+    launch_payload: dict[str, Any] = {}
+    ball_model_sdf = Path(args.ball_model_sdf)
+    set_pose_after_spawn = True
+    if args.launch_method == "direct_velocity":
+        launch_payload = prepare_direct_velocity_ball_model(
+            args,
+            run_index=run_index,
+            artifact_dir=artifact_dir,
+            ball_radius_m=float(ball_profile.radius_m),
+            ball_mass_kg=float(ball_profile.mass_kg),
+        )
+        if not bool(launch_payload.get("pass", False)):
+            write_json(spawn_log_path, {"ramp": ramp_spawn, "ball": {}, "launch": launch_payload})
+            raise RuntimeError(f"launch impulse failed; see {spawn_log_path}")
+        ball_model_sdf = Path(str(launch_payload.get("prepared_model_sdf", args.ball_model_sdf)))
+        set_pose_after_spawn = False
     ball_spawn = spawn_model(
         compose_project=args.compose_project,
         world_name=args.world_name,
-        model_sdf=Path(args.ball_model_sdf),
+        model_sdf=ball_model_sdf,
         model_name=args.ball_model_name,
         x=args.ball_start_x,
         y=args.ball_start_y,
         z=args.ball_start_z,
         yaw=0.0,
+        set_pose_after_spawn=set_pose_after_spawn,
     )
-    launch_payload: dict[str, Any] = {}
     if args.launch_method == "gravity_impulse" and ball_spawn["pass"]:
         launch_payload = apply_gravity_impulse(args)
     write_json(spawn_log_path, {"ramp": ramp_spawn, "ball": ball_spawn, "launch": launch_payload})
@@ -368,12 +791,41 @@ def run_one(args: argparse.Namespace, *, run_index: int, artifact_dir: Path, ref
     for sample in samples:
         append_jsonl(trace_path, sample)
 
+    if args.roll_start_selection == "auto":
+        roll_start_selection = "first_motion" if args.launch_method == "direct_velocity" else "peak_speed"
+    else:
+        roll_start_selection = args.roll_start_selection
     metrics = summarize_roll_samples(
         samples,
         ground_start_x_m=args.ground_start_x,
         stop_speed_threshold_mps=reference_band.stop_speed_threshold_mps,
         rest_dwell_s=reference_band.rest_dwell_s,
+        start_selection=roll_start_selection,
+        motion_start_speed_threshold_mps=args.motion_start_speed_threshold_mps,
     )
+    if args.launch_method == "direct_velocity" and metrics.get("observed"):
+        end_pose = metrics.get("end_pose", {}) if isinstance(metrics.get("end_pose"), dict) else {}
+        end_x = float(end_pose.get("x", args.ball_start_x) or args.ball_start_x)
+        end_y = float(end_pose.get("y", args.ball_start_y) or args.ball_start_y)
+        roll_distance = math.hypot(end_x - float(args.ball_start_x), end_y - float(args.ball_start_y))
+        lateral_drift = abs(end_y - float(args.ball_start_y))
+        effective_decel = deceleration_from_stop(args.initial_speed_mps, roll_distance) if roll_distance > 0.0 else 0.0
+        metrics.update(
+            {
+                "start_selection": "configured_launch_pose",
+                "reference_initial_speed_mps": round(max(0.0, float(args.initial_speed_mps)), 6),
+                "start_pose": {
+                    "x": round(float(args.ball_start_x), 6),
+                    "y": round(float(args.ball_start_y), 6),
+                    "t_s": 0.0,
+                },
+                "roll_distance_m": round(roll_distance, 6),
+                "lateral_drift_m": round(lateral_drift, 6),
+                "lateral_drift_ratio": round(lateral_drift / max(abs(end_x - float(args.ball_start_x)), 1e-6), 6),
+                "effective_decel_mps2": round(effective_decel, 6),
+                "effective_mu": round(effective_decel / G_ACCEL_MPS2, 6) if effective_decel > 0.0 else 0.0,
+            }
+        )
     classification = classify_roll_result(
         metrics,
         reference_band=reference_band,
@@ -406,7 +858,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sample-duration-s", type=float, default=12.0)
     parser.add_argument("--poll-period-s", type=float, default=0.12)
     parser.add_argument("--min-peak-speed-mps", type=float, default=0.35)
-    parser.add_argument("--launch-method", choices=("gravity_impulse", "ramp"), default="gravity_impulse")
+    parser.add_argument("--launch-method", choices=("direct_velocity", "gravity_impulse", "ramp"), default="direct_velocity")
+    parser.add_argument("--initial-speed-mps", type=float, default=1.0)
+    parser.add_argument("--initial-heading-deg", type=float, default=0.0)
+    parser.add_argument("--initial-velocity-link-name", default="link")
+    parser.add_argument("--initial-velocity-delay-s", type=float, default=0.0)
+    parser.add_argument("--no-rolling-angular-velocity", action="store_true")
+    parser.add_argument("--rolling-resistance-decel-mps2", type=float, default=0.0)
+    parser.add_argument("--rolling-resistance-stop-speed-threshold-mps", type=float, default=0.03)
+    parser.add_argument("--roll-start-selection", choices=("auto", "peak_speed", "first_motion"), default="auto")
+    parser.add_argument("--motion-start-speed-threshold-mps", type=float, default=0.05)
     parser.add_argument("--impulse-gravity-x-mps2", type=float, default=2.2)
     parser.add_argument("--impulse-duration-s", type=float, default=0.55)
     parser.add_argument("--ground-start-x", type=float, default=-2.0)
@@ -436,7 +897,13 @@ def main() -> int:
     run_results: list[dict[str, Any]] = []
     try:
         for run_index in range(1, max(1, int(args.runs)) + 1):
-            result = run_one(args, run_index=run_index, artifact_dir=artifact_dir, reference_band=reference_band)
+            result = run_one(
+                args,
+                run_index=run_index,
+                artifact_dir=artifact_dir,
+                reference_band=reference_band,
+                ball_profile=ball_profile,
+            )
             run_results.append(result)
             print(
                 "PASSIVE_ROLL_RUN="

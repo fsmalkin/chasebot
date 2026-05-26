@@ -10,6 +10,12 @@ small-robot golf-ball `fetch_to_pose` demo into a visible delivery circle;
 `fetch_to_person` comes later after target pose delivery is repeatable and
 instrumented.
 
+Latest physics status: Live Gate 0 is green on May 26, 2026. The production
+`calibrated_golf_ball.sdf` now carries a built Gazebo rolling-resistance system
+with `linear_decel_mps2=0.72`; a 3-run direct-velocity passive roll gate stopped
+at `0.679778m` from a configured `1.0m/s` launch in all runs, inside the
+`0.45-0.90m` calibrated turf band.
+
 The previous gather/place objective remains useful as negative baseline
 evidence, but success is no longer final stop in the corral. Success is
 trajectory intersection with a delivery radius around the requested target pose.
@@ -58,6 +64,28 @@ Approach-quality evidence must record:
 Promotion rule: a run can pass the delivery circle and still be classified as
 control-quality suspect when approach telemetry shows lateral knock-away,
 pre-contact oscillation, or high first-contact yaw/lateral error.
+
+## Trajectory Limiter Direction
+
+Avoid actuated ball-handling hardware until the software/contact lane has been
+exhausted. The first limiter should be a measured-state policy envelope, not a
+target-seeking trick:
+
+- pre-contact gate: do not enter push mode unless robot lateral error, yaw error,
+  and yaw-error sign changes are inside thresholds
+- energy gate: cap push speed, push duration, and angular command; release/coast
+  as soon as the measured ball trajectory is projected to intersect the delivery
+  circle
+- corridor guard: define a ball-target-line corridor and stop forward pushing if
+  the ball exits it; recover by re-aiming instead of chasing laterally while in
+  contact
+- escape guard: if ball speed, lateral displacement, or predicted miss exceeds
+  bounds, cut contact effort and classify the run before tuning
+
+This keeps the ball from escaping by limiting injected energy and lateral error
+at the contact layer. Passive fixed geometry, such as a wider non-actuated guide
+or funnel, remains an allowed robustness option, but promotion evidence must
+still show stable approach telemetry without relying on hidden mechanical rescue.
 
 ## Thesis
 
@@ -141,11 +169,21 @@ Current surfaces:
   `contact_trace.jsonl`, and `approach_metrics.json`.
 - `scripts/passive_ball_roll_calibration_helpers.py` and
   `scripts/passive_ball_roll_calibration_runner.py`: passive roll calibration
-  scaffolding. The current live sim does not expose a reliable ball impulse or
-  wrench service, and ramp-start probes showed fixture artifacts, so this lane
-  is instrumentation scaffolding until the excitation method is repaired.
+  scaffolding. The calibration lane now has a `direct_velocity` launch method
+  that spawns a temporary ball SDF with a one-shot initial-velocity system:
+  requested linear velocity plus matching rolling angular velocity
+  (`omega = v / r`). Ramp and gravity-impulse modes remain debug fallbacks, not
+  the promotional friction gate. Optional temporary rolling-resistance injection
+  remains available for parameter sweeps, but promotional evidence now uses the
+  built plugin carried by `ros2_config/calibrated_golf_ball.sdf`.
+- `src/golf_ball_rolling_resistance_system.cc`: Gazebo system plugin for the
+  calibrated golf-ball SDF. It observes post-update ball motion and passively
+  reduces planar speed along the current motion direction; it does not steer
+  toward the target.
 - `ros2_config/calibrated_golf_ball.sdf`: canonical golf-ball dimensions and
-  mass for the small-robot lane.
+  mass for the small-robot lane, plus the built rolling-resistance plugin.
+  Calibrated-golf UAT requires `chasebot_description` to be built in
+  `/root/ros2_ws` so the SDF can load the installed plugin library.
 - `ros2_config/worlds/yolo_test_world_v6_calibrated_golf_turf.world`: calibrated
   golf-turf UAT world.
 - `ros2_config/golf_ball_delivery_zone_marker.sdf`: visible delivery-circle
@@ -246,8 +284,9 @@ Current calibration contract:
 - Surface tuning must make robot-scale golf-ball roll distance believable before
   the autonomous policy is promoted.
 - Passive roll gates should be repaired into a repeatable excitation method, but
-  the first green UAT evidence is the dashboard-owned real-contact circle
-  delivery demo.
+  the promotional path is now direct initial velocity, not robot contact, ramp,
+  or gravity fixture acceleration. The first green UAT evidence is still the
+  dashboard-owned real-contact circle delivery demo.
 
 ## Milestone 3: Structured Fetch Baseline
 
@@ -322,10 +361,19 @@ the same bounded budgets.
 
 ## Live Gates
 
-0. Passive physics calibration scaffolding:
-   - status: instrumented, not promotional yet
-   - repair or replace the excitation method so measured stop distance is a
-     property of the ball/surface model rather than the fixture
+0. Passive physics calibration:
+   - status: green on May 26, 2026
+   - artifact:
+     `artifacts/session/live_passive_golf_roll_built_resistance_repeatability_20260526/passive_ball_roll_calibration/campaign_summary.json`
+   - result: `pass=true`, `pass_count=3`, `fail_count=0`,
+     `avg_roll_distance_m=0.679778`,
+     `avg_effective_decel_mps2=0.735534`
+   - launch with `--launch-method direct_velocity`
+   - seed a calibrated golf ball at `1.0m/s` plus rolling angular velocity
+   - require stop distance to land inside the standards-derived
+     `calibrated_golf_turf` band (`0.45-0.90m` at `1.0m/s`) before treating the
+     world as physics-locked
+   - reject ramp/gravity fixture artifacts as promotional evidence
 1. Golf-ball circle-delivery dashboard UAT:
    - status: green on May 22, 2026
    - artifact:

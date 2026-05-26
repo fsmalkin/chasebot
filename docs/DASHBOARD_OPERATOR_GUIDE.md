@@ -19,6 +19,24 @@ The dashboard shows the same layered architecture described in [LLM_CONTROL_ARCH
 
 If warm services are still coming up, the dashboard will load first and controls will enable once the control plane is ready.
 
+## Idle Shutdown
+
+The dashboard automatically stops the environment after 30 minutes of idle
+time. Idle means the environment is ready, no lifecycle operation is active, no
+scenario or intent is running, and the visit/gather/proof runtime is not marked
+running.
+
+The idle timer resets on mutating dashboard actions: start, stop, refresh, sim
+reset, scenario run/stop, intent preview, intent dispatch, and quick intent
+buttons. Passive state polling, visual frame updates, world-stream heartbeats,
+and operator-view liveness do not reset the timer.
+
+Configuration:
+
+- `CHASECAR_DASHBOARD_IDLE_SHUTDOWN_ENABLED=false` disables the watchdog.
+- `CHASECAR_DASHBOARD_IDLE_SHUTDOWN_S=1800` sets the timeout in seconds.
+- `CHASECAR_DASHBOARD_IDLE_SHUTDOWN_POLL_S=15` sets the watchdog poll interval.
+
 ## Dashboard Tabs
 
 ### Watch (default)
