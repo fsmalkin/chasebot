@@ -18,7 +18,9 @@
 
 ### Planning and Research
 - [ROADMAP_2026_H2.md](ROADMAP_2026_H2.md) — H2 2026 roadmap
-- [OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md](OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md) — Current gather research pivot from MPPI tuning to object-centric ball manipulation
+- [OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md) - Active calibrated golf-ball fetch-to-pose plan
+- [FETCH_BRANCH_STRATEGY.md](FETCH_BRANCH_STRATEGY.md) - Branch-role and architecture-revisit decisions for calibrated golf fetch
+- [OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md](OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md) - Historical gather/place context superseded by the fetch pivot
 - [LLM_BROWSER_UAT_PLAN.md](LLM_BROWSER_UAT_PLAN.md) — LLM integration UAT planning
 - [LLM_RESEARCH_NOTES.md](LLM_RESEARCH_NOTES.md) — Research notes on LLM integration
 - [CURRENT_EXPERIMENTS_REFERENCE.md](CURRENT_EXPERIMENTS_REFERENCE.md) — Active experiments reference

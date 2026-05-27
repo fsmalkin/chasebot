@@ -482,12 +482,15 @@ a useful launch/roll primitive. The detailed plan lives in
 [OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md).
 The previous gather/place plan remains as historical context in
 [OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md](OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md).
+Branch-role decisions for this work live in
+[FETCH_BRANCH_STRATEGY.md](FETCH_BRANCH_STRATEGY.md).
 
 Commands:
 
 1. historical gather evaluator: `python scripts/gather_object_centric_policy_evaluator.py --campaign-id <id> --artifact mppi=<summary> --artifact object_policy=<summary>`
 2. historical gather runtime family: `powershell -ExecutionPolicy Bypass -File scripts/run_gather_goal_side_matrix.ps1 -GatherControlFamily object_centric_gather_policy_v1 -RunsPerCase 1 -MaxRetriesPerTarget 0`
-3. fetch runtime command: not implemented yet; first implementation should add a `fetch_to_pose` phase to the existing gather mission runner rather than creating a new runner
+3. calibrated fetch UAT gate: `python scripts/calibrated_golf_fetch_gate.py --suite all --campaign-id <id> --off-axis-runs 3`
+4. direct calibrated fetch runner surface: `python scripts/gather_mission_repeatability_runner.py --execution-mode direct --mission-objective fetch_to_pose --target-layout-json ros2_config/target_layouts/golf_ball_circle_delivery_zero.json --fetch-delivery-radius-m 0.300 --gather-control-family object_centric_gather_policy_v1 --max-retries-per-target 0 --runs 3`
 
 Research contract:
 
@@ -501,11 +504,12 @@ Research contract:
 8. capture shot-outcome, surface-calibration, failure-replay, and counterfactual-prediction data before tuning launch behavior
 9. use learned residuals only after structured fetch and calibration failure modes are measured
 10. keep direct high-frequency LLM motor control out of scope
+11. keep `physics-calibrated-golf-fetch-v1` as the stable demo/UAT integration branch; use short-lived `spike/...` branches for targeted requalification and archive blocked architecture branches as evidence only
 
 Implementation contract:
 
-1. add the first `fetch_to_pose` phase inside `scripts/gather_mission_runner.py` after successful capture/setup and before legacy place/release behavior
-2. extend `scripts/gather_object_centric_policy_helpers.py` with `phase="fetch_to_pose"` while preserving the existing `object_centric_policy` diagnostics shape
+1. preserve the first-class `fetch_to_pose` phase inside `scripts/gather_mission_runner.py` after successful capture/setup and before legacy place/release behavior
+2. preserve `scripts/gather_object_centric_policy_helpers.py` `phase="fetch_to_pose"` diagnostics shape when tuning approach, first contact, or bounded trajectory limiting
 3. keep detailed shot rows in `state_history.jsonl`; use `gather_sequence.jsonl` only for milestones and result events
 4. propagate fetch verdict and shot-outcome summaries through `mission_verdict.json`, repeatability campaign summaries, and the evaluator before adding dashboard-specific live visualization
 
@@ -518,13 +522,28 @@ Historical evaluator contract:
 
 Live gates:
 
-1. fetch outcome schema/offline replay exists before tuning
-2. calibration smoke: straight target pose, one launch, one run, with shot outcome evidence
-3. fetch-to-pose smoke: saved-layout `zero`, one run, bounded recovery
-4. fetch-to-pose smoke: saved-layout `plus45`, one run, bounded recovery
-5. recovery smoke: one allowed recovery cycle and explicit give-up when the second shot cannot be made safely
-6. repeatability: saved-layout `zero --runs 3` and `plus45 --runs 3`, bounded recovery
-7. person target prototype only after pose-target gates are green
+1. passive calibrated physics gate:
+   - `artifacts/session/live_passive_golf_roll_built_resistance_repeatability_20260526/passive_ball_roll_calibration/campaign_summary.json`
+2. dashboard contact UAT:
+   - `golf_ball_circle_delivery_uat`
+   - `0.300m` delivery radius
+3. formal calibrated fetch repeatability:
+   - `python scripts/calibrated_golf_fetch_gate.py --suite all --campaign-id <id> --off-axis-runs 3`
+   - dashboard CTA centerline `3/3`
+   - saved-layout `zero`, `left05`, and `right05` policy runs `3/3` each
+   - no retries and every `shot_outcome.closest_approach_distance_m <= 0.300`
+4. latest demo-readiness reference:
+   - `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`
+5. targeted alternative-architecture requalification:
+   - same calibrated ball, turf world, delivery radius, saved layouts, no retries, approach telemetry, and deterministic guards as the May 27 gate
+   - classify any closest-approach, first-contact-alignment, pre-contact-oscillation, lateral-knock-away, or goal-side regression before changing policy code
+6. person target prototype only after pose-target gates are green
+
+Branch hygiene:
+
+1. do not revive blocked gather-control branches, including `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, `pre_stage_reacquire_fsm_v1`, `pre_stage_path_tracker_v1`, `pre_stage_trajectory_owner_v1`, `nav2_follow_path_reacquire_v1`, or `nav2_mppi_follow_path_reacquire_v1`, without fresh saved-layout `zero` and `plus45` pre-stage handoff proof
+2. keep `nav2_mppi_follow_path_reacquire_v1` as evidence for long-range/pre-stage behavior, not as the primary calibrated golf fetch architecture
+3. snapshot green demo releases from `physics-calibrated-golf-fetch-v1` as `release/golf-fetch-uat-YYYYMMDD`
 
 ## Gather Pre-Stage Command Authority Audit (Offline Analyzer)
 
@@ -1124,11 +1143,12 @@ Milestone 3 pass criteria include:
    - `artifacts/session/<campaign_id>/gather_object_centric_policy_evaluator/object_centric_policy_summary.json`
    - `artifacts/session/<campaign_id>/gather_object_centric_policy_evaluator/scorecard.md`
    - object-centric policy outputs are analyzer-only evidence; they compare MPPI baseline and object-policy traces on pre-stage handoff, contact/capture, zone entry, safety, and command smoothness without promoting a branch or changing runtime control
-29. Object-centric fetch policy evidence (planned):
-   - `artifacts/session/<campaign_id>/fetch_to_pose/shot_outcomes.jsonl`
-   - `artifacts/session/<campaign_id>/fetch_to_pose/fetch_policy_summary.json`
-   - `artifacts/session/<campaign_id>/fetch_to_pose/scorecard.md`
-   - first implementation may emit these fields through existing gather mission artifacts before a dedicated fetch analyzer exists; detailed per-tick shot evidence belongs in `state_history.jsonl`, while milestone/result events belong in `gather_sequence.jsonl`
+29. Object-centric fetch policy evidence:
+   - current gate summary: `artifacts/session/<campaign_id>/calibrated_golf_fetch_gate/gate_summary.json`
+   - per-run repeatability summaries: `artifacts/session/<campaign_id>_policy_<layout>/gather_mission_repeatability/campaign_run_summary.json`
+   - dashboard run verdicts: `artifacts/session/<session_id>/golf_ball_circle_delivery/<run_id>/mission_verdict.json`
+   - direct policy verdicts: `artifacts/session/<session_id>/gather_mission_calibrated_golf_policy_probe/<run_id>/mission_verdict.json`
+   - detailed per-tick shot evidence belongs in `state_history.jsonl`, while milestone/result events belong in `gather_sequence.jsonl`
 30. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/scorecard.md`

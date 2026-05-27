@@ -16,6 +16,14 @@ corral. The emergent roll/launch behavior is now the core primitive. Near-term
 work should prove `fetch_to_pose` first, then add user/person detection once the
 pose-delivery loop is measurable and repeatable.
 
+Architecture revisit conclusion: the calibrated golf-ball/turf physics lane and
+object-centric fetch architecture are the UAT baseline after the May 27, 2026
+demo-readiness gate:
+`artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`.
+Historical pre-stage-only branches remain blocked. Any alternative architecture
+must requalify through that calibrated `fetch_to_pose` gate instead of reopening
+the old gather/place promotion path.
+
 ## Historical Thesis
 
 Use Nav2/MPPI for long-range repositioning and obstacle-aware path following.
@@ -53,9 +61,12 @@ Useful references:
 
 Freeze the MPPI branch as a comparison baseline:
 
-- `nav2_mppi_follow_path_reacquire_v1` stays blocked and out of portfolio/stress ingestion.
-- Keep terminal-geometry evidence as proof that Nav2 MPPI can recover primary pre-stage handoff.
-- Keep capture-entry/capture failures as the negative baseline for contact behavior.
+- `nav2_mppi_follow_path_reacquire_v1` is recovered for primary pre-stage
+  handoff but remains blocked downstream and out of portfolio/stress ingestion.
+- Keep terminal-geometry evidence as proof that Nav2 MPPI can recover primary
+  pre-stage handoff.
+- Keep capture-entry/capture/first-contact/release failures as the
+  contact-contaminated negative baseline for downstream behavior.
 - Do not continue broad MPPI critic/threshold tuning unless it is needed to maintain long-range repositioning infrastructure for the object-centric branch.
 
 Baseline artifacts:
@@ -63,6 +74,21 @@ Baseline artifacts:
 - `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_terminal_geometry_live_audit_20260503/gather_follow_path_research_analyzer/follow_path_research_summary.json`
 - `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_terminal_geometry_zero_3run_20260503/gather_mission_repeatability/campaign_run_summary.json`
 - `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_terminal_geometry_plus45_3run_20260503/gather_mission_repeatability/campaign_run_summary.json`
+
+## Requalification Boundary
+
+This plan is historical context, not a new pivot request. Candidate alternative
+architectures for calibrated fetch-to-pose must:
+
+- use the same calibrated golf ball, calibrated turf world, `0.300m` delivery
+  radius, saved layouts, no-retry policy runs, approach telemetry, and
+  deterministic guards as the May 27 gate
+- pass the dashboard CTA centerline and policy `zero`, `left05`, and `right05`
+  gates before promotion discussion
+- report closest approach, first-contact alignment, pre-contact yaw sign
+  changes, lateral knock-away, and goal-side entry against the May 27 baseline
+- avoid using old pre-stage-only smokes or MPPI downstream contact failures as
+  evidence that the fetch architecture should be broadly replaced
 
 ## Historical Milestone 1: Offline Evaluation Harness
 

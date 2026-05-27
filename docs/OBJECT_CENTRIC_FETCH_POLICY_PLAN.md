@@ -76,14 +76,34 @@ Latest green UAT:
   first-contact alignment as a watch item rather than a reason for a policy
   change on this green gate.
 
+## Architecture Revisit Conclusion
+
+Preserve the calibrated golf-ball/turf lane and object-centric fetch architecture
+as the UAT baseline. The May 27, 2026 demo-readiness gate is the current
+comparison package:
+`artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`.
+
+This is not a broad pivot away from object-centric fetch. Alternative
+architectures may be evaluated only through a targeted calibrated
+`fetch_to_pose` requalification gate that keeps the same ball model, turf world,
+delivery radius, saved layouts, no-retry policy runs, approach telemetry, and
+deterministic guards. The requalification must compare directly against the May
+27 gate and explain any regression in closest approach, first-contact alignment,
+or lateral/goal-side behavior.
+
+Historical pre-stage-only branches remain blocked and out of portfolio/stress
+promotion unless they produce fresh calibrated fetch-to-pose evidence. MPPI
+FollowPath is classified separately: May 3 terminal-geometry evidence recovered
+primary pre-stage handoff, but downstream capture/contact behavior remained
+contaminated, so it is retained as baseline evidence rather than a fetch
+architecture candidate.
+
 ## Current Control Pivot
 
-The next fetch-control work is approach-stability first, not harder contact
-tuning. Operator observation from the May 22 dashboard demo suggests the robot
-may visually appear to move laterally into the ball and over-rotate before
-correcting. The latest artifact did not preserve enough robot pose/yaw history
-to prove or reject that observation from telemetry, so the next gate must make
-approach quality explicit.
+The next fetch-control work remains approach-stability and recovery first, not
+harder contact tuning. The May 27 gate added enough approach telemetry to keep
+lateral knock-away, pre-contact oscillation, and first-contact alignment as
+explicit watch items before any policy or architecture change.
 
 Control order:
 
@@ -180,8 +200,15 @@ not change the fetch policy's core success metric.
 
 Keep these as evidence branches, not active promotion targets:
 
-- `nav2_mppi_follow_path_reacquire_v1`: baseline for long-range/pre-stage
-  geometry and failure modes in contact-rich capture.
+- `nav2_mppi_follow_path_reacquire_v1`: recovered pre-stage / downstream
+  contact-contaminated baseline evidence. The May 3 terminal-geometry package
+  recovered saved-layout `zero` and `plus45` pre-stage handoff, while full
+  missions still failed downstream around capture-entry, first contact, or
+  release:
+  `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_terminal_geometry_live_audit_20260503/gather_follow_path_research_analyzer/follow_path_research_summary.json`.
+- April pre-stage-only experimental branches remain blocked unless refreshed
+  through the calibrated fetch-to-pose gate; do not reuse old pre-stage smokes
+  as architecture evidence.
 - `object_centric_gather_policy_v1`: frozen gather/place concept superseded by
   fetch-to-pose.
 
@@ -476,7 +503,17 @@ the same bounded budgets.
    - approach telemetry showed no lateral knock-away and no pre-contact
      oscillation regression; keep first-contact alignment under observation
      because one green centerline run reached `12.826061deg`
-7. Person target prototype:
+7. Targeted alternative-architecture requalification:
+   - compare only against the calibrated May 27, 2026 demo-readiness package:
+     `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`
+   - same calibrated golf ball, calibrated turf world, `0.300m` delivery radius,
+     saved layouts, no retries, approach telemetry, and deterministic guards
+   - pass the same dashboard CTA centerline and policy `zero`, `left05`, and
+     `right05` gates before discussing promotion
+   - classify regressions in closest approach, first-contact alignment,
+     pre-contact yaw sign changes, lateral knock-away, or goal-side entry before
+     any broader architecture pivot
+8. Person target prototype:
    - only after pose-target gates are green
 
 ## Non-Goals
@@ -489,6 +526,8 @@ the same bounded budgets.
 - Do not allow unbounded re-aim or retry loops.
 - Do not hide failed contact attempts; every miss needs replayable evidence.
 - Do not let learned components bypass deterministic guards.
+- Do not reopen old pre-stage-only branches or MPPI contact tuning as broad
+  replacements for the calibrated fetch-to-pose baseline.
 
 ## Stop Criteria
 

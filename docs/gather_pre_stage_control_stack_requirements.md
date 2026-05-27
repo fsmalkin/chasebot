@@ -1,17 +1,25 @@
 # Gather Pre-Stage Control Stack Requirements
 
+## Current Status
+
+This document is historical gather/place architecture context. The active
+control baseline is calibrated golf-ball `fetch_to_pose`, documented in
+[OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md) and
+[FETCH_BRANCH_STRATEGY.md](FETCH_BRANCH_STRATEGY.md). Do not use this document
+to reopen a blocked pre-stage branch without fresh calibrated fetch evidence.
+
 ## Context
 
 The blocked gather-control candidates originally shared the same first-attempt blocker: fresh `zero` and `plus45` live matrix attempts did not reliably reach behind-ball pre-stage handoff. The latest helper-layer owners failed safely with no pre-stage ball motion/contact. The first lower-stack DWB FollowPath probe accepted `/follow_path` goals but aborted immediately before measured robot progress, while the MPPI FollowPath probe accepted goals and moved the robot without moving the ball. The May 3, 2026 terminal-geometry repair recovered saved-layout `zero` and `plus45` MPPI pre-stage handoff, but full missions remained blocked downstream at capture-entry/capture.
 
-The assumption peel-back is complete enough to stop treating path-following convergence as the main research problem. MPPI is useful baseline evidence for safe pre-stage movement, but contact-rich ball capture and placement need an object-centric manipulation policy. The next work is `object_centric_gather_policy_v1`, beginning with an offline evaluator and structured object-servo baseline.
+The assumption peel-back is complete enough to stop treating path-following convergence as the main research problem. MPPI is useful baseline evidence for safe pre-stage movement, but contact-rich ball capture and placement need an object-centric manipulation policy. That thread became the object-centric fetch pivot: keep `object_centric_gather_policy_v1` as historical gather/place context, and use `object_centric_fetch_policy_v1` as the active calibrated manipulation lane.
 
 ## Next Branch Steps
 
 - Treat `nav2_mppi_follow_path_reacquire_v1` as blocked baseline evidence rather than the primary promotion path.
-- Create `object_centric_gather_policy_v1` as the next experimental family.
-- Build an offline evaluator over existing MPPI artifacts before adding runtime behavior.
-- Implement a structured object-servo baseline before any learned residual or direct policy.
+- Keep `object_centric_gather_policy_v1` frozen as historical gather/place context.
+- Use `physics-calibrated-golf-fetch-v1` for active calibrated fetch work.
+- Run any alternative architecture as a short-lived calibrated fetch spike, not by reviving a blocked branch in place.
 - Keep the current `zero` / `plus45` gates, measured pre-stage handoff acceptance, `/odom`, and frozen contracts unchanged.
 
 ## Requirements
