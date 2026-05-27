@@ -1329,6 +1329,9 @@ def test_beta_dashboard_includes_primary_golf_fetch_cta_and_stage_mapping():
     assert "pickScenario('golf_ball_circle_delivery_uat')" in html
     assert "runLatestGolfFetch()" in html
     assert "Run Golf-Ball Circle Delivery" in html
+    assert '<link rel="icon" href="data:,">' in html
+    assert 'onload="if (window.operatorFrameLoaded)' in html
+    assert "window.__operatorFrameLoadedPending = true" in html
     assert "const LATEST_GOLF_FETCH_SCENARIO_ID = 'golf_ball_circle_delivery_uat';" in html
     assert "const OBJECT_CENTRIC_ZERO_SCENARIO_ID = 'object_centric_zero_saved_layout';" in html
     assert "const CORRAL_STAGE_LABELS = ['Init','Visit','Capture','Place','Done'];" in html

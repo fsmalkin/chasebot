@@ -26,8 +26,8 @@ Latest green UAT:
 - World: `yolo_test_world_v6_calibrated_golf_turf.world`
 - Ball model: `ros2_config/calibrated_golf_ball.sdf`
 - Delivery marker: `ros2_config/golf_ball_delivery_zone_marker.sdf`
-- Checkpoint branch/commit:
-  `physics-calibrated-golf-fetch-v1` / `3db1013`
+- Latest evidence branch/input commit:
+  `physics-calibrated-golf-fetch-v1` / `904c265`
 - Dashboard session:
   `artifacts/session/20260526T175235537805Z/golf_ball_circle_delivery/20260526T175246191783Z`
 - Verdict: `mission_completed_pass=true`, `fetch_to_pose_pass=true`,
@@ -57,6 +57,24 @@ Latest green UAT:
   passed both gates. The dashboard CTA passed `3/3` with worst closest approach
   `0.194764m`; the actual object-centric policy passed `3/3` with worst closest
   approach `0.292869m` and max first-contact push alignment `0.835258deg`.
+- Demo-readiness saved-layout gate:
+  `live_calibrated_golf_fetch_uat_readiness_rerun_20260527` passed all four
+  sub-gates with no retries and a `0.300m` delivery radius. The dashboard CTA
+  centerline passed `3/3` with worst closest approach `0.235981m`. The actual
+  object-centric policy passed saved-layout `zero` `3/3` with worst closest
+  approach `0.280497m`, `left05` `3/3` with worst closest approach `0.287996m`,
+  and `right05` `3/3` with worst closest approach `0.293705m`. Every run has
+  `mission_completed_pass=true` and `fetch_to_pose_pass=true`.
+- Approach readout for the demo-readiness gate: every policy run has
+  `fresh_attempt_approach.pass=true`, `approach_side_pass=true`, no
+  `approach_failure_reason`, no goal-side entry before capture, and no
+  pre-contact yaw-error sign changes in the sampled state histories. Off-axis
+  final ball lateral magnitude moved toward the target line on all six runs,
+  so there is no lateral knock-away evidence. The tightest margin remains
+  `right05` run 2 at `0.293705m`; centerline run 2 also showed a larger
+  `first_contact_push_alignment_deg=12.826061` while still passing, so treat
+  first-contact alignment as a watch item rather than a reason for a policy
+  change on this green gate.
 
 ## Current Control Pivot
 
@@ -419,10 +437,11 @@ the same bounded budgets.
    - require `fetch_to_pose_pass_count=3`, `fetch_to_pose_fail_count=0`, and
      every `shot_outcome.closest_approach_distance_m <= 0.300`
 4. Autonomous fetch-to-pose smoke on calibrated golf turf:
-   - status: centerline clean-start policy smoke `2/2` green, and off-axis
-     `left05/right05` smoke `2/2` green on May 27, 2026. Two passes are
-     borderline (`0.298832m` centerline and `0.299554m` right05), so continue
-     evidence gathering before redesign.
+   - status: superseded by the May 27, 2026 demo-readiness saved-layout gate.
+     Earlier centerline clean-start policy smoke was `2/2` green, and off-axis
+     `left05/right05` smoke was `2/2` green. Two passes were borderline
+     (`0.298832m` centerline and `0.299554m` right05), which led to the
+     no-retry repeatability gate below rather than a policy redesign.
    - artifact:
      `artifacts/session/live_calibrated_golf_fetch_off_axis_smoke_20260527/calibrated_golf_fetch_gate/gate_summary.json`
    - saved-layout `golf_ball_circle_delivery_zero`, 3 runs, no retries
@@ -436,9 +455,27 @@ the same bounded budgets.
    - one allowed recovery cycle
    - explicit give-up when the second contact cannot be made safely
 6. Autonomous repeatability:
-   - saved-layout `golf_ball_circle_delivery_zero --runs 3`, bounded recovery
-   - saved-layout `golf_ball_circle_delivery_left05 --runs 3`, bounded recovery
-   - saved-layout `golf_ball_circle_delivery_right05 --runs 3`, bounded recovery
+   - status: green on May 27, 2026 for no-retry demo readiness
+   - artifact:
+     `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`
+   - dashboard CTA centerline:
+     `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527_cta_centerline/gather_mission_repeatability/campaign_run_summary.json`,
+     `3/3`, worst closest approach `0.235981m`
+   - saved-layout `golf_ball_circle_delivery_zero`:
+     `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527_policy_centerline/gather_mission_repeatability/campaign_run_summary.json`,
+     `3/3`, worst closest approach `0.280497m`
+   - saved-layout `golf_ball_circle_delivery_left05`:
+     `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527_policy_left05/gather_mission_repeatability/campaign_run_summary.json`,
+     `3/3`, worst closest approach `0.287996m`
+   - saved-layout `golf_ball_circle_delivery_right05`:
+     `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527_policy_right05/gather_mission_repeatability/campaign_run_summary.json`,
+     `3/3`, worst closest approach `0.293705m`
+   - all runs used `--max-retries-per-target 0`, `mission_completed_pass=true`,
+     `fetch_to_pose_pass=true`, and
+     `shot_outcome.closest_approach_distance_m <= 0.300`
+   - approach telemetry showed no lateral knock-away and no pre-contact
+     oscillation regression; keep first-contact alignment under observation
+     because one green centerline run reached `12.826061deg`
 7. Person target prototype:
    - only after pose-target gates are green
 
