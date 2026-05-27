@@ -265,6 +265,20 @@ def test_prepare_direct_environment_resets_ready_session_with_profile(monkeypatc
     )
 
 
+def test_latest_mission_verdict_path_maps_container_repo_path(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(repeatability_runner, "REPO_ROOT", tmp_path)
+
+    path = repeatability_runner._latest_mission_verdict_path(
+        {
+            "latest_artifacts": {
+                "mission_verdict": "/workspaces/chasecar/artifacts/session/s1/golf/mission_verdict.json",
+            }
+        }
+    )
+
+    assert path == str(tmp_path / "artifacts" / "session" / "s1" / "golf" / "mission_verdict.json")
+
+
 def test_prepare_direct_environment_starts_stopped_session_with_profile(monkeypatch):
     responses = iter(
         [
@@ -1263,6 +1277,12 @@ def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
             "0",
             "--gather-control-family",
             family,
+            "--target-model-sdf",
+            "ros2_config/calibrated_golf_ball.sdf",
+            "--zone-model-sdf",
+            "ros2_config/golf_ball_delivery_zone_marker.sdf",
+            "--artifact-kind",
+            "gather_mission_calibrated_golf_policy_probe",
         ],
     )
 
@@ -1276,3 +1296,12 @@ def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
     assert "--gather-control-family" in subprocess_calls[0]
     family_index = subprocess_calls[0].index("--gather-control-family")
     assert subprocess_calls[0][family_index + 1] == family
+    assert "--target-model-sdf" in subprocess_calls[0]
+    target_sdf_index = subprocess_calls[0].index("--target-model-sdf")
+    assert subprocess_calls[0][target_sdf_index + 1] == "ros2_config/calibrated_golf_ball.sdf"
+    assert "--zone-model-sdf" in subprocess_calls[0]
+    zone_sdf_index = subprocess_calls[0].index("--zone-model-sdf")
+    assert subprocess_calls[0][zone_sdf_index + 1] == "ros2_config/golf_ball_delivery_zone_marker.sdf"
+    assert "--artifact-kind" in subprocess_calls[0]
+    artifact_kind_index = subprocess_calls[0].index("--artifact-kind")
+    assert subprocess_calls[0][artifact_kind_index + 1] == "gather_mission_calibrated_golf_policy_probe"

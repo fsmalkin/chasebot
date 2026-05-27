@@ -255,6 +255,15 @@ def final_three_ball_corral_pass(run: dict[str, Any]) -> bool:
 def gather_run_pass(run: dict[str, Any]) -> bool:
     if not isinstance(run, dict):
         return False
+    mission_objective = str(run.get("mission_objective", "") or "").strip()
+    if not mission_objective:
+        verdict = run.get("mission_verdict", {}) if isinstance(run.get("mission_verdict"), dict) else {}
+        summary = run.get("summary", {}) if isinstance(run.get("summary"), dict) else {}
+        mission_objective = str(verdict.get("mission_objective", "") or summary.get("mission_objective", "") or "").strip()
+    if mission_objective == "fetch_to_pose":
+        return bool(run.get("mission_completed_pass", run.get("pass", False))) and bool(
+            run.get("fetch_to_pose_pass", run.get("fetch_to_pose_reached", False))
+        )
     scenario_id = str(run.get("scenario_id", "") or "").strip()
     if scenario_id == "gather_three_ball_zone" or "final_three_ball_corral_pass" in run:
         return final_three_ball_corral_pass(run)

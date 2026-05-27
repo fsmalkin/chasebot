@@ -78,6 +78,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gather-runtime-json", default=os.environ.get("CHASECAR_GATHER_RUNTIME_PATH", ""))
     parser.add_argument("--world-file", default=os.environ.get("WORLD_FILE", ""))
     parser.add_argument("--surface-profile", default=os.environ.get("CHASECAR_SURFACE_PROFILE", ""))
+    parser.add_argument("--target-model-name", default="")
+    parser.add_argument("--target-model-sdf", default="")
+    parser.add_argument("--zone-model-name", default="")
+    parser.add_argument("--zone-model-sdf", default="")
+    parser.add_argument("--artifact-kind", default="")
     parser.add_argument("--target-layout-json", default="", help="Test-only target layout override for direct-mode gather runs.")
     parser.add_argument("--execution-mode", choices=("dashboard_scenario", "direct"), default="dashboard_scenario")
     parser.add_argument("--promotion-gate-mode", choices=("strict", "pass_only"), default="pass_only")
@@ -862,7 +867,17 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
 
 def _latest_mission_verdict_path(state: dict[str, object]) -> str:
     artifacts = state.get("latest_artifacts", {}) if isinstance(state.get("latest_artifacts"), dict) else {}
-    return str(artifacts.get("mission_verdict", "") or "")
+    return _host_repo_path(str(artifacts.get("mission_verdict", "") or ""))
+
+
+def _host_repo_path(raw_path: str) -> str:
+    cleaned = str(raw_path or "").strip()
+    prefix = "/workspaces/chasecar/"
+    if cleaned == "/workspaces/chasecar":
+        return str(REPO_ROOT)
+    if cleaned.startswith(prefix):
+        return str(REPO_ROOT / cleaned[len(prefix) :])
+    return cleaned
 
 
 def _fresh_dashboard_result_available(
@@ -1096,6 +1111,16 @@ def main() -> int:
                 command.extend(["--world-file", args.world_file.strip()])
             if args.surface_profile.strip():
                 command.extend(["--surface-profile", args.surface_profile.strip()])
+            for attr_name, option_name in (
+                ("target_model_name", "--target-model-name"),
+                ("target_model_sdf", "--target-model-sdf"),
+                ("zone_model_name", "--zone-model-name"),
+                ("zone_model_sdf", "--zone-model-sdf"),
+                ("artifact_kind", "--artifact-kind"),
+            ):
+                raw_value = str(getattr(args, attr_name, "") or "").strip()
+                if raw_value:
+                    command.extend([option_name, raw_value])
             if args.visit_runtime_json.strip():
                 command.extend(["--visit-runtime-json", args.visit_runtime_json.strip()])
             if args.gather_runtime_json.strip():

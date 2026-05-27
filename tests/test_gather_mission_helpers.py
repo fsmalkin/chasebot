@@ -1367,6 +1367,29 @@ def test_final_three_ball_corral_pass_requires_all_targets_inside_stopped_and_no
     assert gather_run_pass({**run, "post_visit_revisit_count": 1}) is False
 
 
+def test_fetch_to_pose_run_pass_uses_fetch_objective_instead_of_corral_stop():
+    run = {
+        "scenario_id": "corral_single_ball_place",
+        "mission_objective": "fetch_to_pose",
+        "pass": True,
+        "mission_completed_pass": True,
+        "fetch_to_pose_pass": True,
+        "fetch_to_pose_reached": True,
+        "final_inside_retrieval_corral": False,
+        "ball_stopped_in_corral": False,
+        "rolled_away_after_release": False,
+        "post_visit_revisit_count": 0,
+    }
+
+    assert gather_run_pass(run) is True
+    assert gather_run_pass({**run, "fetch_to_pose_pass": False}) is False
+
+    summary = summarize_runs([run])
+
+    assert summary["pass_count"] == 1
+    assert summary["settled_in_corral_pass_count"] == 0
+
+
 def test_summarize_runs_and_scorecard_include_multi_ball_final_audit_fields():
     runs = [
         {

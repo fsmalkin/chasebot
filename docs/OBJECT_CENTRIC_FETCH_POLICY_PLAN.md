@@ -26,14 +26,37 @@ Latest green UAT:
 - World: `yolo_test_world_v6_calibrated_golf_turf.world`
 - Ball model: `ros2_config/calibrated_golf_ball.sdf`
 - Delivery marker: `ros2_config/golf_ball_delivery_zone_marker.sdf`
-- Session: `artifacts/session/20260522T130431721734Z/golf_ball_circle_delivery/20260522T130442256465Z`
+- Checkpoint branch/commit:
+  `physics-calibrated-golf-fetch-v1` / `3db1013`
+- Dashboard session:
+  `artifacts/session/20260526T175235537805Z/golf_ball_circle_delivery/20260526T175246191783Z`
 - Verdict: `mission_completed_pass=true`, `fetch_to_pose_pass=true`,
   `fetch_to_pose_pass_count=1`, `fetch_to_pose_fail_count=0`
-- Closest approach: `0.049893m` inside a `0.300m` delivery radius
+- Closest approach: `0.183896m` inside a `0.300m` delivery radius
 - Approach telemetry: `stable_contact_approach_pass=true`,
   `robot_yaw_error_sign_changes_pre_contact=0`,
   `max_abs_robot_lateral_error_pre_contact_m=0.0`,
   `max_abs_robot_yaw_error_pre_contact_deg=0.000003`
+- Direct demo repeatability: `3/3` pass under
+  `artifacts/session/20260526T175235537805Z/golf_ball_circle_delivery_checkpoint_repeatability`,
+  with worst closest approach `0.167477m` and stable approach in all runs.
+- Actual object-centric policy clean-start probes: `2/2` pass at
+  `artifacts/session/20260526T180015557889Z/gather_mission_calibrated_golf_policy_probe/20260526T180039Z`
+  and
+  `artifacts/session/20260526T180402943809Z/gather_mission_calibrated_golf_policy_probe/20260526T180439Z`.
+  The second probe was borderline at `0.298832m` inside the `0.300m`
+  delivery radius, so the next move is pressure testing rather than path
+  redesign.
+- Off-axis smoke: `live_calibrated_golf_fetch_off_axis_smoke_20260527`
+  passed `left05` and `right05` one-run policy probes with no retries. The
+  `left05` closest approach was `0.270262m`; the `right05` closest approach was
+  `0.299554m`, so off-axis behavior is green but still near the threshold on
+  the right side.
+- Formal centerline repeatability:
+  `live_calibrated_golf_fetch_centerline_repeatability_rerun_20260527`
+  passed both gates. The dashboard CTA passed `3/3` with worst closest approach
+  `0.194764m`; the actual object-centric policy passed `3/3` with worst closest
+  approach `0.292869m` and max first-contact push alignment `0.835258deg`.
 
 ## Current Control Pivot
 
@@ -375,32 +398,47 @@ the same bounded budgets.
      world as physics-locked
    - reject ramp/gravity fixture artifacts as promotional evidence
 1. Golf-ball circle-delivery dashboard UAT:
-   - status: green on May 22, 2026
+   - status: green on May 26, 2026
    - artifact:
-     `artifacts/session/20260522T055454253626Z/golf_ball_circle_delivery/20260522T055504453763Z/mission_verdict.json`
+     `artifacts/session/20260526T175235537805Z/golf_ball_circle_delivery/20260526T175246191783Z/mission_verdict.json`
    - acceptance: visible calibrated golf ball enters a `0.300m` delivery circle
      through real robot contact
 2. Approach-stability instrumentation gate:
-   - status: green on May 22, 2026
+   - status: green on May 26, 2026
    - artifact:
-     `artifacts/session/20260522T130431721734Z/golf_ball_circle_delivery/20260522T130442256465Z/approach_metrics.json`
+     `artifacts/session/20260526T175235537805Z/golf_ball_circle_delivery/20260526T175246191783Z/approach_metrics.json`
    - same dashboard scenario
    - require per-tick robot pose/yaw plus ball pose in `contact_trace.jsonl`
    - require `approach_metrics.stable_contact_approach_pass=true`
    - classify lateral knock-away or pre-contact oscillation before tuning
 3. Golf-ball circle-delivery repeatability:
+   - status: formal centerline gate green on May 27, 2026
+   - artifact:
+     `artifacts/session/live_calibrated_golf_fetch_centerline_repeatability_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`
    - same dashboard scenario, at least 3 runs, no code changes during the gate
    - require `fetch_to_pose_pass_count=3`, `fetch_to_pose_fail_count=0`, and
      every `shot_outcome.closest_approach_distance_m <= 0.300`
 4. Autonomous fetch-to-pose smoke on calibrated golf turf:
-   - saved-layout `zero`, one run, no retries
-   - saved-layout `plus45`, one run, no retries
+   - status: centerline clean-start policy smoke `2/2` green, and off-axis
+     `left05/right05` smoke `2/2` green on May 27, 2026. Two passes are
+     borderline (`0.298832m` centerline and `0.299554m` right05), so continue
+     evidence gathering before redesign.
+   - artifact:
+     `artifacts/session/live_calibrated_golf_fetch_off_axis_smoke_20260527/calibrated_golf_fetch_gate/gate_summary.json`
+   - saved-layout `golf_ball_circle_delivery_zero`, 3 runs, no retries
+   - saved-layout `golf_ball_circle_delivery_left05`, one run, no retries
+   - saved-layout `golf_ball_circle_delivery_right05`, one run, no retries
+   - run with:
+     `python scripts/calibrated_golf_fetch_gate.py --suite centerline`
+     followed by
+     `python scripts/calibrated_golf_fetch_gate.py --suite off_axis`
 5. Autonomous recovery smoke:
    - one allowed recovery cycle
    - explicit give-up when the second contact cannot be made safely
 6. Autonomous repeatability:
-   - saved-layout `zero --runs 3`, bounded recovery
-   - saved-layout `plus45 --runs 3`, bounded recovery
+   - saved-layout `golf_ball_circle_delivery_zero --runs 3`, bounded recovery
+   - saved-layout `golf_ball_circle_delivery_left05 --runs 3`, bounded recovery
+   - saved-layout `golf_ball_circle_delivery_right05 --runs 3`, bounded recovery
 7. Person target prototype:
    - only after pose-target gates are green
 
