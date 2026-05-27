@@ -89,6 +89,34 @@ architecture:
 - branch decision: keep MPPI as long-range/pre-stage baseline evidence only; do
   not create a development branch for this alternative
 
+## Wider Architecture Portfolio
+
+Do not treat the runnable legacy `--gather-control-family` list as full
+architecture coverage. Those families mostly vary pre-stage/contact control
+inside the same mission shell. The wider portfolio is tracked in
+[CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md)
+and includes distinct ownership and interaction models:
+
+- contact-aware geometric shooter
+- receding-horizon contact MPC / object servo
+- ROS action-server or behavior-tree last-meter owner
+- Nav2 reposition plus object-centric last-meter handoff
+- passive mechanical guide or funnel
+- learned residual or maneuver proposer behind deterministic guards
+- portfolio supervisor / switcher
+- perception-first target-pose fetch
+
+Branching rule for wide tests:
+
+1. put shared harnesses, analyzers, and docs on `physics-calibrated-golf-fetch-v1`
+2. create `spike/fetch-arch-<family>-YYYYMMDD` for one architecture hypothesis
+3. use accelerated/offline screens only for cheap rejection; never use them as
+   UAT evidence
+4. promote to `candidate/fetch-arch-<family>` only after canonical saved-layout
+   `zero`, `left05`, and `right05` one-run evidence is green and the candidate
+   benefit is written down
+5. require `3/3` saved-layout repeatability before release or demo discussion
+
 ## Decision Rule
 
 Branch decisions live here. A future architecture revisit should start as a

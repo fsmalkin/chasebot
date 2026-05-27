@@ -1,0 +1,123 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <world name="yolo_test_world">
+    <physics name="1ms" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>2.0</real_time_factor>
+    </physics>
+
+    <plugin
+      filename="gz-sim-scene-broadcaster-system"
+      name="gz::sim::systems::SceneBroadcaster">
+    </plugin>
+
+    <plugin filename="libignition-gazebo-sensors-system.so"
+            name="ignition::gazebo::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <scene>
+      <ambient>0.42 0.42 0.40 1</ambient>
+      <background>0.50 0.68 0.92 1</background>
+      <shadows>1</shadows>
+    </scene>
+
+    <light name="sun" type="directional">
+      <cast_shadows>1</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.86 0.84 0.78 1</diffuse>
+      <specular>0.20 0.20 0.18 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>55</mu>
+                <mu2>50</mu2>
+                <slip1>0.0</slip1>
+                <slip2>0.0</slip2>
+              </ode>
+              <torsional>
+                <coefficient>1.6</coefficient>
+                <use_patch_radius>true</use_patch_radius>
+                <patch_radius>0.04</patch_radius>
+                <ode>
+                  <slip>0.0</slip>
+                </ode>
+              </torsional>
+            </friction>
+            <contact>
+              <ode>
+                <kp>420000.0</kp>
+                <kd>42.0</kd>
+                <max_vel>0.02</max_vel>
+                <min_depth>0.0004</min_depth>
+              </ode>
+            </contact>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <cast_shadows>false</cast_shadows>
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.12 0.50 0.19 1</ambient>
+            <diffuse>0.12 0.50 0.19 1</diffuse>
+            <specular>0.05 0.10 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="ground_reference_markers">
+      <static>true</static>
+      <link name="link">
+        <visual name="x_axis">
+          <pose>0 0 0.001 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>5.0 0.03 0.002</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.20 0.24 0.24 1</ambient>
+            <diffuse>0.20 0.24 0.24 1</diffuse>
+          </material>
+        </visual>
+        <visual name="y_axis">
+          <pose>0 0 0.001 0 0 0</pose>
+          <geometry>
+            <box>
+              <size>0.03 5.0 0.002</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.20 0.24 0.24 1</ambient>
+            <diffuse>0.20 0.24 0.24 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+  </world>
+</sdf>

@@ -107,6 +107,28 @@ failed before contact with `nav2_follow_path_path_clearance_guard` /
 `pre_stage_pose_not_reached`; no `shot_outcome.closest_approach_distance_m` was
 produced. Recommendation: do not develop this alternative for calibrated fetch.
 
+Important scope correction: the MPPI revisit and the runnable legacy
+`--gather-control-family` screens are control-family evidence inside the current
+mission shell. They do not exhaust the broader architecture space. The wider
+architecture portfolio and gate ladder now live in
+[CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md).
+That plan explicitly separates control variants from architecture spikes and
+adds coverage for contact-aware geometric shooting, receding-horizon contact
+MPC/object servo, ROS action-server or behavior-tree last-meter ownership,
+Nav2-reposition/object-centric last-meter hybrids, passive mechanical guides,
+learned residuals or maneuver proposers, portfolio switching, and
+perception-first target-pose fetch.
+
+Next architecture exploration should be wide but staged:
+
+1. keep the May 27 object-centric fetch gate as the comparison baseline
+2. use accelerated/offline screens only for cheap negative evidence
+3. rerun any green or surprising screen in the canonical `real_time_factor=1.0`
+   calibrated golf turf world before counting it
+4. promote a new branch only if it passes the saved-layout `zero`, `left05`,
+   and `right05` gates and provides a clear benefit in margin, stability,
+   simplicity, diagnosability, runtime cost, or hardware-transfer path
+
 ## Current Control Pivot
 
 The next fetch-control work remains approach-stability and recovery first, not

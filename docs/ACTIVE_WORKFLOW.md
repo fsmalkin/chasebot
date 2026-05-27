@@ -491,7 +491,9 @@ Commands:
 2. historical gather runtime family: `powershell -ExecutionPolicy Bypass -File scripts/run_gather_goal_side_matrix.ps1 -GatherControlFamily object_centric_gather_policy_v1 -RunsPerCase 1 -MaxRetriesPerTarget 0`
 3. calibrated fetch UAT gate: `python scripts/calibrated_golf_fetch_gate.py --suite all --campaign-id <id> --off-axis-runs 3`
 4. direct calibrated fetch runner surface: `python scripts/gather_mission_repeatability_runner.py --execution-mode direct --mission-objective fetch_to_pose --target-layout-json ros2_config/target_layouts/golf_ball_circle_delivery_zero.json --fetch-delivery-radius-m 0.300 --gather-control-family object_centric_gather_policy_v1 --max-retries-per-target 0 --runs 3`
-5. targeted architecture revisit wrapper: `python scripts/calibrated_fetch_architecture_revisit.py --candidate-family nav2_mppi_follow_path_reacquire_v1 --runs 1 --promote-on-green --promote-runs 3`
+5. runnable control-family screen: `python scripts/calibrated_fetch_architecture_revisit.py --screen-scope runnable_control_family_screen --candidate-family nav2_mppi_follow_path_reacquire_v1 --runs 1 --promote-on-green --promote-runs 3`
+6. accelerated screen for cheap rejection only: `python scripts/calibrated_fetch_architecture_revisit.py --fast-screen --short-circuit-on-failure --screen-scope runnable_control_family_screen --candidate-family <family> --runs 1`
+7. wider architecture portfolio plan: `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
 
 Research contract:
 
@@ -506,6 +508,7 @@ Research contract:
 9. use learned residuals only after structured fetch and calibration failure modes are measured
 10. keep direct high-frequency LLM motor control out of scope
 11. keep `physics-calibrated-golf-fetch-v1` as the stable demo/UAT integration branch; use short-lived `spike/...` branches for targeted requalification and archive blocked architecture branches as evidence only
+12. do not confuse control-family screens with broad architecture coverage; new architecture spikes must change an ownership boundary, prediction model, actuation/contact strategy, or state-machine boundary and must name the expected generalization/product benefit
 
 Implementation contract:
 
@@ -538,12 +541,16 @@ Live gates:
 5. targeted alternative-architecture requalification:
    - same calibrated ball, turf world, delivery radius, saved layouts, no retries, approach telemetry, and deterministic guards as the May 27 gate
    - classify any closest-approach, first-contact-alignment, pre-contact-oscillation, lateral-knock-away, or goal-side regression before changing policy code
+   - use accelerated or offline screens only for cheap negative evidence; any green or surprising result must be rerun in the canonical `yolo_test_world_v6_calibrated_golf_turf.world` lane before it counts
    - latest MPPI revisit artifact:
      `artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`
    - latest MPPI revisit result: `zero`, `left05`, and `right05` all failed
      before contact with `pre_stage_path_clearance_guard`; do not develop this
      alternative
-6. person target prototype only after pose-target gates are green
+6. wider architecture portfolio:
+   - follow `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
+   - required families include contact-aware geometric shooter, receding-horizon contact MPC/object servo, ROS action-server or behavior-tree last-meter owner, Nav2 reposition plus object-centric last-meter handoff, passive mechanical guide/funnel, learned residual or maneuver proposer, portfolio switcher, and perception-first target-pose fetch
+7. person target prototype only after pose-target gates are green
 
 Branch hygiene:
 

@@ -48,6 +48,16 @@ new development branch.
 - Learned or Google/RT-style model path: use only as a bounded short-horizon policy, residual, maneuver proposer, critic, or switch/abstain sidecar behind deterministic safety gates. Direct high-frequency LLM motor control is out of scope.
 - Other architecture families: explicitly search for approaches not represented above before committing to the next runtime branch.
 
+Calibrated fetch now has a wider architecture test plan:
+[CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md).
+Use that plan before naming another implementation branch. In particular,
+separate a runnable control-family screen from a genuine architecture spike:
+different `--gather-control-family` values are useful for evidence hygiene, but
+they are not sufficient proof that the architecture space has been covered.
+New spikes should state which ownership model changes, what generalization or
+product benefit is expected, and why the test cannot be answered by parameter
+tuning inside the current object-centric fetch loop.
+
 ## Next Decision Gate
 
 Stop promotion work on `nav2_follow_path_reacquire_v1` and broad
@@ -56,4 +66,8 @@ lower-stack evidence. The active branch decision is now documented in
 [FETCH_BRANCH_STRATEGY.md](FETCH_BRANCH_STRATEGY.md): preserve
 `physics-calibrated-golf-fetch-v1` as the stable demo/UAT branch, treat blocked
 architecture branches as evidence only, and use short-lived `spike/...`
-branches for any targeted calibrated fetch requalification.
+branches for any targeted calibrated fetch requalification. Wider architecture
+spikes should follow the staged gate ladder in
+`CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`: desk check, offline or accelerated
+screen, canonical one-run probe, saved-layout matrix, repeatability promotion,
+then generalization suite.

@@ -25,6 +25,8 @@ DEFAULT_BASELINE_SUMMARY = (
 )
 DEFAULT_CANDIDATE_FAMILY = "nav2_mppi_follow_path_reacquire_v1"
 DEFAULT_ARTIFACT_KIND = "gather_mission_calibrated_golf_architecture_revisit"
+FAST_SCREEN_WORLD_FILE = "yolo_test_world_v6_calibrated_golf_turf_fast.world"
+DEFAULT_SCREEN_SCOPE = "runnable_control_family_screen"
 
 LAYOUTS = {
     "zero": fetch_gate.DEFAULT_CENTERLINE_LAYOUT,
@@ -53,12 +55,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dashboard-url", default=fetch_gate.DEFAULT_DASHBOARD_URL)
     parser.add_argument("--campaign-id", default="")
     parser.add_argument("--baseline-summary", default=DEFAULT_BASELINE_SUMMARY)
+    parser.add_argument("--screen-scope", default=DEFAULT_SCREEN_SCOPE)
     parser.add_argument("--candidate-family", action="append", default=[])
+    parser.add_argument("--layout", action="append", choices=tuple(LAYOUTS.keys()), default=[])
     parser.add_argument("--runs", type=int, default=1)
     parser.add_argument("--promote-runs", type=int, default=3)
     parser.add_argument("--promote-on-green", action="store_true")
+    parser.add_argument("--short-circuit-on-failure", action="store_true")
     parser.add_argument("--provider", default="local_stub")
     parser.add_argument("--world-file", default=fetch_gate.DEFAULT_WORLD_FILE)
+    parser.add_argument("--fast-screen", action="store_true")
+    parser.add_argument("--fast-world-file", default=FAST_SCREEN_WORLD_FILE)
     parser.add_argument("--surface-profile", default=fetch_gate.DEFAULT_SURFACE_PROFILE)
     parser.add_argument("--fetch-target-x", type=float, default=fetch_gate.DEFAULT_FETCH_TARGET["x"])
     parser.add_argument("--fetch-target-y", type=float, default=fetch_gate.DEFAULT_FETCH_TARGET["y"])
@@ -161,9 +168,11 @@ def build_candidate_specs(
 ) -> list[CandidateSpec]:
     base_campaign_id = str(args.campaign_id).strip() or f"live_calibrated_fetch_architecture_revisit_{current_utc_stamp()}"
     specs: list[CandidateSpec] = []
+    selected_layout_ids = [layout_id for layout_id in LAYOUTS if not args.layout or layout_id in set(args.layout)]
     for family in families:
         family_slug = family.replace("_v1", "").replace("_", "-")
-        for layout_id, layout_path in LAYOUTS.items():
+        for layout_id in selected_layout_ids:
+            layout_path = LAYOUTS[layout_id]
             campaign_id = f"{base_campaign_id}_{family_slug}_{layout_id}_{stage}"
             specs.append(
                 CandidateSpec(
@@ -272,7 +281,8 @@ def _summary_return_code(summary: dict[str, Any]) -> int:
 
 def run_candidate(spec: CandidateSpec, *, logs_root: Path, dry_run: bool, reuse_existing: bool = False) -> dict[str, Any]:
     ensure_dir(logs_root)
-    log_path = logs_root / f"{spec.campaign_id}.log"
+    family_slug = spec.family.replace("_v1", "").replace("_", "-")
+    log_path = logs_root / f"{family_slug}_{spec.layout_id}_{spec.stage}.log"
     payload: dict[str, Any] = {
         "family": spec.family,
         "layout_id": spec.layout_id,
@@ -409,7 +419,12 @@ def _scorecard(summary: dict[str, Any]) -> str:
         "# Calibrated Fetch Architecture Revisit",
         "",
         f"- Campaign: `{summary['campaign_id']}`",
+        f"- Screen scope: `{summary.get('screen_scope', '')}`",
         f"- Baseline: `{summary['baseline_summary_path']}`",
+        f"- Fast screen: `{bool(summary.get('fast_screen', False))}`",
+        f"- Short circuit: `{bool(summary.get('short_circuit_on_failure', False))}`",
+        f"- Layouts: `{', '.join(summary.get('requested_layouts', []))}`",
+        f"- World: `{summary.get('world_file', '')}`",
         f"- Delivery radius: `{summary['fetch_pose_world']['radius_m']:.3f}m`",
         f"- Overall recommendation: `{summary['recommended_next_action']}`",
         "",
@@ -455,6 +470,8 @@ def _scorecard(summary: dict[str, Any]) -> str:
 
 def main() -> int:
     args = parse_args()
+    if bool(args.fast_screen) and str(args.world_file) == str(fetch_gate.DEFAULT_WORLD_FILE):
+        args.world_file = str(args.fast_world_file)
     campaign_id = str(args.campaign_id).strip() or f"live_calibrated_fetch_architecture_revisit_{current_utc_stamp()}"
     args.campaign_id = campaign_id
     root = ensure_dir(REPO_ROOT / "artifacts" / "session" / campaign_id / "calibrated_fetch_architecture_revisit")
@@ -468,15 +485,17 @@ def main() -> int:
     overall_actions: list[str] = []
     for family in families:
         one_run_specs = build_candidate_specs(args, stage="one_run", families=[family], runs=args.runs)
-        one_run_results = [
-            run_candidate(
+        one_run_results: list[dict[str, Any]] = []
+        for spec in one_run_specs:
+            result = run_candidate(
                 spec,
                 logs_root=logs_root,
                 dry_run=bool(args.dry_run),
                 reuse_existing=bool(args.reuse_existing),
             )
-            for spec in one_run_specs
-        ]
+            one_run_results.append(result)
+            if bool(args.short_circuit_on_failure) and not bool(result.get("pass", False)):
+                break
         promotion_results: list[dict[str, Any]] = []
         if args.promote_on_green and all(bool(result.get("pass", False)) for result in one_run_results):
             promotion_specs = build_candidate_specs(args, stage="promotion", families=[family], runs=args.promote_runs)
@@ -521,8 +540,12 @@ def main() -> int:
         "type": "calibrated_fetch_architecture_revisit",
         "campaign_id": campaign_id,
         "dry_run": bool(args.dry_run),
+        "screen_scope": str(args.screen_scope or DEFAULT_SCREEN_SCOPE),
         "baseline_summary_path": str(baseline_summary_path.relative_to(REPO_ROOT) if baseline_summary_path.is_relative_to(REPO_ROOT) else baseline_summary_path),
         "baseline_by_layout": baseline_layouts,
+        "fast_screen": bool(args.fast_screen),
+        "short_circuit_on_failure": bool(args.short_circuit_on_failure),
+        "requested_layouts": list(args.layout or LAYOUTS.keys()),
         "world_file": args.world_file,
         "surface_profile": args.surface_profile,
         "fetch_pose_world": {

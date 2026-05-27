@@ -551,6 +551,22 @@ Current direction update:
    - result: all three one-run calibrated layouts failed before contact with
      `pre_stage_path_clearance_guard`, so the roadmap stays with the current
      object-centric fetch baseline rather than an MPPI alternative branch
+10. architecture exploration should widen, but stay staged:
+   - do not treat the legacy `--gather-control-family` list as exhaustive
+     architecture coverage; it is a runnable control-family screen inside the
+     existing mission shell
+   - use [CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md)
+     for the wider portfolio
+   - include contact-aware geometric shooting, receding-horizon contact
+     MPC/object servo, ROS action-server or behavior-tree last-meter ownership,
+     Nav2 reposition plus object-centric last-meter handoff, passive mechanical
+     guide/funnel, learned residual or maneuver proposer, portfolio switching,
+     and perception-first target-pose fetch
+   - accelerated/offline results can reject a candidate early, but canonical
+     `real_time_factor=1.0` saved-layout evidence is required before promotion
+   - a candidate must offer more than equal pass rate: require better margin,
+     stability, simplicity, diagnosability, runtime cost, or hardware-transfer
+     path before moving it beyond a spike
 
 ### Step 7: Corral Time Optimization
 

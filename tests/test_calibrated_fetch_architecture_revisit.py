@@ -17,12 +17,17 @@ def _args(**overrides):
         "dashboard_url": "http://127.0.0.1:8860",
         "campaign_id": "test_arch_revisit",
         "baseline_summary": revisit.DEFAULT_BASELINE_SUMMARY,
+        "screen_scope": revisit.DEFAULT_SCREEN_SCOPE,
         "candidate_family": [],
+        "layout": [],
         "runs": 1,
         "promote_runs": 3,
         "promote_on_green": False,
+        "short_circuit_on_failure": False,
         "provider": "local_stub",
         "world_file": revisit.fetch_gate.DEFAULT_WORLD_FILE,
+        "fast_screen": False,
+        "fast_world_file": revisit.FAST_SCREEN_WORLD_FILE,
         "surface_profile": revisit.fetch_gate.DEFAULT_SURFACE_PROFILE,
         "fetch_target_x": 0.95,
         "fetch_target_y": 0.0,
@@ -52,6 +57,33 @@ def test_build_candidate_specs_uses_calibrated_layouts_and_candidate_family():
     assert zero_command[zero_command.index("--max-retries-per-target") + 1] == "0"
     assert zero_command[zero_command.index("--fetch-delivery-radius-m") + 1] == "0.300000"
     assert zero_command[zero_command.index("--target-layout-json") + 1] == revisit.LAYOUTS["zero"]
+
+
+def test_fast_screen_default_world_can_select_fast_calibrated_world():
+    args = _args(fast_screen=True)
+
+    if args.fast_screen and args.world_file == revisit.fetch_gate.DEFAULT_WORLD_FILE:
+        args.world_file = args.fast_world_file
+    specs = revisit.build_candidate_specs(
+        args,
+        stage="one_run",
+        families=["region_funnel_v1"],
+        runs=1,
+    )
+
+    zero_command = specs[0].command
+    assert zero_command[zero_command.index("--world-file") + 1] == revisit.FAST_SCREEN_WORLD_FILE
+
+
+def test_layout_filter_limits_candidate_specs():
+    specs = revisit.build_candidate_specs(
+        _args(layout=["zero"]),
+        stage="one_run",
+        families=["region_funnel_v1", "nav2_reacquire_v1"],
+        runs=1,
+    )
+
+    assert [spec.layout_id for spec in specs] == ["zero", "zero"]
 
 
 def test_summarize_repeatability_extracts_fetch_metrics():

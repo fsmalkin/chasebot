@@ -20,6 +20,7 @@
 - [ROADMAP_2026_H2.md](ROADMAP_2026_H2.md) — H2 2026 roadmap
 - [OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md) - Active calibrated golf-ball fetch-to-pose plan
 - [FETCH_BRANCH_STRATEGY.md](FETCH_BRANCH_STRATEGY.md) - Branch-role and architecture-revisit decisions for calibrated golf fetch
+- [CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md) - Wider architecture portfolio and staged evidence gates for calibrated fetch
 - [OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md](OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md) - Historical gather/place context superseded by the fetch pivot
 - [gather_pre_stage_architecture_options_review.md](gather_pre_stage_architecture_options_review.md) - Historical pre-stage architecture review and evidence interpretation
 - [LLM_BROWSER_UAT_PLAN.md](LLM_BROWSER_UAT_PLAN.md) — LLM integration UAT planning
