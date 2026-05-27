@@ -98,6 +98,15 @@ primary pre-stage handoff, but downstream capture/contact behavior remained
 contaminated, so it is retained as baseline evidence rather than a fetch
 architecture candidate.
 
+Latest architecture-revisit spike:
+`artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`.
+The spike reran `nav2_mppi_follow_path_reacquire_v1` as a setup/pre-stage
+candidate under the calibrated golf-ball `fetch_to_pose` objective on saved
+layouts `zero`, `left05`, and `right05`, one run each, no retries. All three
+failed before contact with `nav2_follow_path_path_clearance_guard` /
+`pre_stage_pose_not_reached`; no `shot_outcome.closest_approach_distance_m` was
+produced. Recommendation: do not develop this alternative for calibrated fetch.
+
 ## Current Control Pivot
 
 The next fetch-control work remains approach-stability and recovery first, not
@@ -504,6 +513,12 @@ the same bounded budgets.
      oscillation regression; keep first-contact alignment under observation
      because one green centerline run reached `12.826061deg`
 7. Targeted alternative-architecture requalification:
+   - status: red for the MPPI setup/pre-stage revisit on May 27, 2026
+   - artifact:
+     `artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`
+   - result: `nav2_mppi_follow_path_reacquire_v1` failed `zero`, `left05`, and
+     `right05` one-run probes before contact with
+     `nav2_follow_path_path_clearance_guard`; no promotion rerun was attempted
    - compare only against the calibrated May 27, 2026 demo-readiness package:
      `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`
    - same calibrated golf ball, calibrated turf world, `0.300m` delivery radius,

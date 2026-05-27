@@ -72,6 +72,23 @@ ball contact, so old ball/turf physics does not explain the primary failure.
 | `object_centric_gather_policy_v1` | `docs/OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md` | Superseded gather/place plan | Do not reopen as a gather/place promotion path. |
 | `object_centric_fetch_policy_v1` | `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`; `artifacts/session/live_passive_golf_roll_built_resistance_repeatability_20260526/passive_ball_roll_calibration/campaign_summary.json` | Active calibrated baseline | Organize new alternatives around this gate and telemetry. |
 
+## Latest Revisit Result
+
+The May 27, 2026 targeted MPPI revisit did not justify developing an alternative
+architecture:
+
+- artifact:
+  `artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`
+- command shape:
+  `python scripts/calibrated_fetch_architecture_revisit.py --candidate-family nav2_mppi_follow_path_reacquire_v1 --runs 1 --promote-on-green --promote-runs 3`
+- result: saved-layout `zero`, `left05`, and `right05` each failed one-run
+  calibrated `fetch_to_pose` before contact
+- failure class: `pre_stage_path_clearance_guard`
+- artifact reasons: `nav2_follow_path_path_clearance_guard` and
+  `pre_stage_pose_not_reached`
+- branch decision: keep MPPI as long-range/pre-stage baseline evidence only; do
+  not create a development branch for this alternative
+
 ## Decision Rule
 
 Branch decisions live here. A future architecture revisit should start as a

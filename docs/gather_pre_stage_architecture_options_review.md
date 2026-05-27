@@ -21,6 +21,13 @@ contact-rich downstream ideas should be reconsidered, and only as short-lived
 calibrated fetch spikes that keep the same ball model, turf world, `0.300m`
 delivery radius, saved layouts, no retries, and approach telemetry.
 
+The first such spike reran `nav2_mppi_follow_path_reacquire_v1` under calibrated
+fetch-to-pose on May 27, 2026:
+`artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`.
+It failed `zero`, `left05`, and `right05` before contact with
+`pre_stage_path_clearance_guard`, so MPPI remains evidence-only rather than a
+new development branch.
+
 ## Assumptions To Peel Back
 
 - Command authority: selected `linear_x` / `angular_z` may be too weak, clipped, delayed, or poorly realized even when helper projections look plausible.

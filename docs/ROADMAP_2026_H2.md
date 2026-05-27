@@ -546,6 +546,11 @@ Current direction update:
    - preserve blocked architecture branches, including `nav2_mppi_follow_path_reacquire_v1`, as evidence unless a short-lived requalification spike produces fresh `zero` and `plus45` pre-stage proof
    - use `spike/...` branches for targeted architecture revisits and `release/golf-fetch-uat-YYYYMMDD` snapshots for green demo releases
    - current calibrated comparison package: `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`
+   - latest targeted MPPI revisit:
+     `artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`
+   - result: all three one-run calibrated layouts failed before contact with
+     `pre_stage_path_clearance_guard`, so the roadmap stays with the current
+     object-centric fetch baseline rather than an MPPI alternative branch
 
 ### Step 7: Corral Time Optimization
 

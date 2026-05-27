@@ -491,6 +491,7 @@ Commands:
 2. historical gather runtime family: `powershell -ExecutionPolicy Bypass -File scripts/run_gather_goal_side_matrix.ps1 -GatherControlFamily object_centric_gather_policy_v1 -RunsPerCase 1 -MaxRetriesPerTarget 0`
 3. calibrated fetch UAT gate: `python scripts/calibrated_golf_fetch_gate.py --suite all --campaign-id <id> --off-axis-runs 3`
 4. direct calibrated fetch runner surface: `python scripts/gather_mission_repeatability_runner.py --execution-mode direct --mission-objective fetch_to_pose --target-layout-json ros2_config/target_layouts/golf_ball_circle_delivery_zero.json --fetch-delivery-radius-m 0.300 --gather-control-family object_centric_gather_policy_v1 --max-retries-per-target 0 --runs 3`
+5. targeted architecture revisit wrapper: `python scripts/calibrated_fetch_architecture_revisit.py --candidate-family nav2_mppi_follow_path_reacquire_v1 --runs 1 --promote-on-green --promote-runs 3`
 
 Research contract:
 
@@ -537,6 +538,11 @@ Live gates:
 5. targeted alternative-architecture requalification:
    - same calibrated ball, turf world, delivery radius, saved layouts, no retries, approach telemetry, and deterministic guards as the May 27 gate
    - classify any closest-approach, first-contact-alignment, pre-contact-oscillation, lateral-knock-away, or goal-side regression before changing policy code
+   - latest MPPI revisit artifact:
+     `artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`
+   - latest MPPI revisit result: `zero`, `left05`, and `right05` all failed
+     before contact with `pre_stage_path_clearance_guard`; do not develop this
+     alternative
 6. person target prototype only after pose-target gates are green
 
 Branch hygiene:
@@ -1148,6 +1154,7 @@ Milestone 3 pass criteria include:
    - per-run repeatability summaries: `artifacts/session/<campaign_id>_policy_<layout>/gather_mission_repeatability/campaign_run_summary.json`
    - dashboard run verdicts: `artifacts/session/<session_id>/golf_ball_circle_delivery/<run_id>/mission_verdict.json`
    - direct policy verdicts: `artifacts/session/<session_id>/gather_mission_calibrated_golf_policy_probe/<run_id>/mission_verdict.json`
+   - architecture revisit summaries: `artifacts/session/<campaign_id>/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`
    - detailed per-tick shot evidence belongs in `state_history.jsonl`, while milestone/result events belong in `gather_sequence.jsonl`
 30. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
