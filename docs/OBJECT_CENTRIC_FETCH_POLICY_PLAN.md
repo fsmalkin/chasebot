@@ -550,7 +550,18 @@ the same bounded budgets.
    - classify regressions in closest approach, first-contact alignment,
      pre-contact yaw sign changes, lateral knock-away, or goal-side entry before
      any broader architecture pivot
-8. Person target prototype:
+8. Contact-aware geometric shooter spike:
+   - status: offline screen green, live policy not implemented
+   - artifact:
+     `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`
+   - result: `12/12` offline model passes over the May 27 calibrated CTA/policy
+     traces with no missing trace inputs
+   - model requirement: max delivery-entry speed `0.626061m/s`, max target-center
+     stop speed `0.907718m/s`, minimum aim half-angle `31.621299deg`
+   - interpretation: develop only as a bounded shot-impulse architecture spike
+     and rerun canonical `zero` one-run before any saved-layout matrix; do not
+     count this artifact as UAT evidence
+9. Person target prototype:
    - only after pose-target gates are green
 
 ## Non-Goals

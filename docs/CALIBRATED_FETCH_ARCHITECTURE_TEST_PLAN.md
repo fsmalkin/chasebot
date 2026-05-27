@@ -88,6 +88,14 @@ branch-promotion evidence.
 
 ## Current Evidence Notes
 
+- Contact-aware geometric shooter offline screen:
+  `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`.
+  It read the May 27 calibrated gate traces across CTA centerline and policy
+  `centerline`/`left05`/`right05`, found `12/12` offline model passes, no
+  missing trace inputs, max required delivery-entry speed `0.626061m/s`, max
+  target-center stop speed `0.907718m/s`, and minimum aim half-angle
+  `31.621299deg`. This is `offline_only_not_uat`; recommendation is a
+  canonical `zero` one-run probe after implementing a bounded shot impulse.
 - MPPI FollowPath calibrated revisit:
   `artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`.
   It failed `zero`, `left05`, and `right05` before contact and remains

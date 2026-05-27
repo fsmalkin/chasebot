@@ -493,7 +493,8 @@ Commands:
 4. direct calibrated fetch runner surface: `python scripts/gather_mission_repeatability_runner.py --execution-mode direct --mission-objective fetch_to_pose --target-layout-json ros2_config/target_layouts/golf_ball_circle_delivery_zero.json --fetch-delivery-radius-m 0.300 --gather-control-family object_centric_gather_policy_v1 --max-retries-per-target 0 --runs 3`
 5. runnable control-family screen: `python scripts/calibrated_fetch_architecture_revisit.py --screen-scope runnable_control_family_screen --candidate-family nav2_mppi_follow_path_reacquire_v1 --runs 1 --promote-on-green --promote-runs 3`
 6. accelerated screen for cheap rejection only: `python scripts/calibrated_fetch_architecture_revisit.py --fast-screen --short-circuit-on-failure --screen-scope runnable_control_family_screen --candidate-family <family> --runs 1`
-7. wider architecture portfolio plan: `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
+7. contact-aware geometric-shooter offline screen: `python scripts/fetch_geometric_shooter_screen.py --campaign-id <id> --baseline-gate-summary artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`
+8. wider architecture portfolio plan: `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
 
 Research contract:
 
@@ -550,6 +551,15 @@ Live gates:
 6. wider architecture portfolio:
    - follow `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
    - required families include contact-aware geometric shooter, receding-horizon contact MPC/object servo, ROS action-server or behavior-tree last-meter owner, Nav2 reposition plus object-centric last-meter handoff, passive mechanical guide/funnel, learned residual or maneuver proposer, portfolio switcher, and perception-first target-pose fetch
+   - first contact-aware geometric-shooter offline screen:
+     `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`
+   - result: `12/12` offline model passes on the May 27 CTA/policy traces, max
+     required delivery-entry speed `0.626061m/s`, max target-center stop speed
+     `0.907718m/s`, minimum aim half-angle `31.621299deg`, and no missing trace
+     inputs
+   - interpretation: the architecture is worth a canonical `zero` one-run probe
+     after a bounded shot-impulse implementation, but the artifact remains
+     `offline_only_not_uat`
 7. person target prototype only after pose-target gates are green
 
 Branch hygiene:
@@ -1162,6 +1172,7 @@ Milestone 3 pass criteria include:
    - dashboard run verdicts: `artifacts/session/<session_id>/golf_ball_circle_delivery/<run_id>/mission_verdict.json`
    - direct policy verdicts: `artifacts/session/<session_id>/gather_mission_calibrated_golf_policy_probe/<run_id>/mission_verdict.json`
    - architecture revisit summaries: `artifacts/session/<campaign_id>/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`
+   - geometric-shooter offline screens: `artifacts/session/<campaign_id>/fetch_geometric_shooter_screen/geometric_shooter_summary.json`
    - detailed per-tick shot evidence belongs in `state_history.jsonl`, while milestone/result events belong in `gather_sequence.jsonl`
 30. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
