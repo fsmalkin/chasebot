@@ -498,6 +498,7 @@ Commands:
 9. generalized last-meter fetch dry-run contract: `python scripts/fetch_generalization_gate.py --campaign-id <id> --dry-run --random-cases 6`
 10. generalized last-meter fetch live gate: `python scripts/fetch_generalization_gate.py --campaign-id <id> --random-cases 6 --runs 1`
 11. wider architecture portfolio plan: `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
+12. next-thread generalized last-meter fetch research charter: `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md`
 
 Research contract:
 
@@ -522,6 +523,9 @@ Research contract:
     random failures into named saved layouts before tuning against them
 15. prove generalized last-meter fetch with a reusable seeded gate before
     claiming a robot-owned architecture generalizes beyond saved layouts
+16. when the goal is full architecture research, ground in
+    `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` and return a findings
+    matrix before tuning a single path
 
 Implementation contract:
 
@@ -565,6 +569,8 @@ Live gates:
      alternative
 6. wider architecture portfolio:
    - follow `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
+   - use `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` as the
+     next-thread charter when the task is to research all paths first
    - required families include contact-aware geometric shooter, receding-horizon contact MPC/object servo, ROS action-server or behavior-tree last-meter owner, Nav2 reposition plus object-centric last-meter handoff, passive mechanical guide/funnel, learned residual or maneuver proposer, portfolio switcher, and perception-first target-pose fetch
    - first contact-aware geometric-shooter offline screen:
      `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`

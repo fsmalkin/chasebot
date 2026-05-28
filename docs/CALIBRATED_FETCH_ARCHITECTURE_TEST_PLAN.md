@@ -6,6 +6,11 @@ same control loop under different names. The active UAT baseline remains
 research portfolio should deliberately test wider designs that may generalize
 better, reduce telemetry fragility, or simplify eventual hardware transfer.
 
+The next-thread research charter lives in
+[GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md](GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md).
+Use it when the goal is to compare the full architecture space and return with
+findings before tuning a single path.
+
 ## Coverage Rule
 
 Treat these as different levels of evidence:
@@ -49,6 +54,18 @@ do not by themselves prove target-relative side selection or generalization.
 | Learned residual or maneuver proposer | Learns residual corrections or proposes re-aim/shot parameters behind deterministic gates | Offline replay/shadow evaluation before live control | Does it add measurable margin while abstaining on out-of-distribution states? |
 | Portfolio supervisor/switcher | Chooses push, shoot, re-aim, or give-up from measured uncertainty | Offline counterfactual replay, then live A/B on hard layouts | Does switching reduce tail failures without adding opaque behavior? |
 | Perception-first target-pose fetch | Replaces truth-state assumptions with sensed ball/target pose once pose delivery is stable | Shadow perception parity against truth-state UAT traces | Does it preserve success when truth-state shortcuts are removed? |
+
+## Research Thread Output
+
+Before starting another implementation spike, produce a findings matrix across
+the full portfolio. Each row should state ownership boundary, expected
+generalization benefit, first honest rejection gate, robot-owned evidence gap,
+hardware-transfer risk, diagnosability, likely failure classes, and recommended
+status: immediate, fallback/later, or no-go.
+
+The recommended path should include one focused spike branch and one fallback
+sequence. Runnable experiments stay on spike branches; high-level decisions and
+branch strategy changes are propagated back to `main`.
 
 ## Gate Ladder
 

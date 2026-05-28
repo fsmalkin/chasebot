@@ -128,6 +128,11 @@ Nav2-reposition/object-centric last-meter hybrids, passive mechanical guides,
 learned residuals or maneuver proposers, portfolio switching, and
 perception-first target-pose fetch.
 
+For a fresh high-level research thread, use
+[GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md](GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md).
+That charter asks for a findings matrix across the full architecture portfolio
+before tuning any one path.
+
 Next architecture exploration should be wide but staged:
 
 1. keep the May 27 object-centric fetch gate as the comparison baseline
