@@ -6,6 +6,13 @@ same control loop under different names. The active UAT baseline remains
 research portfolio should deliberately test wider designs that may generalize
 better, reduce telemetry fragility, or simplify eventual hardware transfer.
 
+May 28, 2026 pivot: keep the runtime architecture no-shoot. The preferred path
+is an AI-assisted bounded push-and-coast object servo: robot-owned contact,
+bounded energy, measured coast only after predicted target-radius intersection,
+and recovery/re-aim inside explicit budgets. Contact-aware geometric-shooter
+artifacts remain valuable physics probes, but they are not the preferred runtime
+architecture until they are reframed as robot-owned bounded push/coast evidence.
+
 The next-thread research charter lives in
 [GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md](GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md).
 Use it when the goal is to compare the full architecture space and return with
@@ -46,13 +53,15 @@ do not by themselves prove target-relative side selection or generalization.
 | --- | --- | --- | --- |
 | Current object-centric fetch baseline | Known green UAT lane and reference telemetry | Existing May 27 `3/3` saved-layout gate | Does any new design beat its margin, stability, or simplicity? |
 | Runnable legacy control-family screen | Checks whether old branches become viable under calibrated physics | `scripts/calibrated_fetch_architecture_revisit.py --screen-scope runnable_control_family_screen --fast-screen --short-circuit-on-failure` | Did any old implementation clear `zero` cheaply enough to justify canonical rerun? |
-| Contact-aware geometric shooter | Plans a measured launch/release trajectory instead of pushing until close | Offline shot-model replay, then `zero` one-run canonical probe | Does it improve closest-approach margin or reduce contact duration? |
+| Contact-aware geometric shooter | Physics-probe evidence for roll windows, delivery margins, and feasible coast geometry; not the preferred runtime path | Offline shot-model replay or direct-velocity probe only | Does it teach useful push/coast targets without becoming non-robot-owned control? |
+| AI-assisted bounded push-coast object servo | Uses calibrated physics for controlled pushing, measured coast, and re-aim while keeping robot-owned contact | Saved-anchor plus seeded-random shadow prediction/proposal gate, then canonical `zero` one-run | Does learned prediction/proposal improve generalized side selection, contact stability, and margin without guard violations? |
 | Receding-horizon contact MPC/object servo | Owns robot-ball-target state and optimizes bounded commands directly | Fast screen on `zero`, then canonical `zero`/`left05`/`right05` one-run | Does it avoid lateral knock-away while recovering from small offsets? |
 | ROS action-server or behavior-tree last-meter owner | Moves setup, contact, re-aim, abort, and telemetry out of ad hoc mission-loop phases | Dry-run/action-contract test, then canonical one-run `zero` | Does explicit ownership make failures easier to classify and recover? |
 | Nav2 reposition plus object-centric last meter | Uses Nav2 for long-range approach only, with a clean handoff to object-centric contact | Pre-contact approach telemetry and handoff dwell on varied starts | Does it generalize to farther starts without contaminating contact control? |
 | Passive mechanical guide/funnel | Tests whether a wider physical interaction envelope is simpler than software-only precision | Sim model smoke plus calibrated `zero`/off-axis one-run | Does it improve robustness without hiding unstable approach telemetry? |
-| Learned residual or maneuver proposer | Learns residual corrections or proposes re-aim/shot parameters behind deterministic gates | Offline replay/shadow evaluation before live control | Does it add measurable margin while abstaining on out-of-distribution states? |
-| Portfolio supervisor/switcher | Chooses push, shoot, re-aim, or give-up from measured uncertainty | Offline counterfactual replay, then live A/B on hard layouts | Does switching reduce tail failures without adding opaque behavior? |
+| Learned residual or maneuver proposer | Learns residual corrections or proposes setup pocket, push duration, coast timing, and recovery side behind deterministic gates | Offline replay/shadow evaluation before live control | Does it add measurable margin while abstaining on out-of-distribution states? |
+| LM/VLA high-level supervisor | Uses language or robot-foundation-model reasoning for task mode, failure interpretation, and maneuver choice without owning fast control | Contract/dry-run prompt replay over frozen state digests | Does it improve recover/give-up decisions while leaving local contact to guarded controllers? |
+| Portfolio supervisor/switcher | Chooses push, coast, re-aim, hold, or give-up from measured uncertainty | Offline counterfactual replay, then live A/B on hard layouts | Does switching reduce tail failures without adding opaque behavior? |
 | Perception-first target-pose fetch | Replaces truth-state assumptions with sensed ball/target pose once pose delivery is stable | Shadow perception parity against truth-state UAT traces | Does it preserve success when truth-state shortcuts are removed? |
 
 ## Research Thread Output
@@ -79,6 +88,9 @@ branch strategy changes are propagated back to `main`.
      world for cheap negatives
    - accept accelerated failures as screening evidence
    - never accept accelerated passes as UAT evidence
+   - for AI-assisted lanes, run shadow prediction/proposal first: compare the
+     learned model's predicted trajectory, miss vector, and proposed maneuver
+     against measured outcomes without allowing execution
 3. Canonical one-run probe:
    - `zero`, no retries, `0.300m` delivery radius, canonical calibrated world
    - require `mission_completed_pass=true`, `fetch_to_pose_pass=true`, and
@@ -105,19 +117,25 @@ branch strategy changes are propagated back to `main`.
      tuning
    - compare randomized failures by failure class and geometry, not just pass
      rate, so a single novel case can reveal a missing ownership boundary
-   - the first comparison set must include the current object-centric baseline
-     and the contact-aware geometric shooter, while clearly marking the shooter
-     as a shot primitive until robot-owned contact is implemented
+   - the first no-shoot comparison set should include the current
+     object-centric baseline and any AI-assisted push/coast shadow candidate;
+     geometric-shooter probes may be cited as physics evidence, but should not
+     be treated as the runtime comparison baseline
 7. Promotion package:
    - include saved-layout repeatability, at least one seeded-random
      generalization set, and an explicit explanation of any observed
      novel-layout failure or recovery behavior
+   - include model-card style notes for learned components: training data
+     distribution, holdout geometry, abstention/guard rate, runtime latency, and
+     TensorRT INT8 deployment plan
 
 ## Branching
 
 - Keep `physics-calibrated-golf-fetch-v1` as the UAT integration branch.
 - Put shared harnesses, analyzers, and docs there after review.
 - Use `spike/fetch-arch-<family>-YYYYMMDD` for a single architecture hypothesis.
+- The preferred next spike name is
+  `spike/fetch-arch-ai-push-coast-servo-YYYYMMDD`.
 - Promote to `candidate/fetch-arch-<family>` only after the canonical saved-layout
   matrix is green and the benefit is written down.
 - Do not resurrect blocked gather-control branches in place. If an old idea is
@@ -131,8 +149,9 @@ branch strategy changes are propagated back to `main`.
   `centerline`/`left05`/`right05`, found `12/12` offline model passes, no
   missing trace inputs, max required delivery-entry speed `0.626061m/s`, max
   target-center stop speed `0.907718m/s`, and minimum aim half-angle
-  `31.621299deg`. This is `offline_only_not_uat`; recommendation is a
-  canonical `zero` one-run probe after implementing a bounded shot impulse.
+  `31.621299deg`. This is `offline_only_not_uat`; after the no-shoot pivot,
+  treat it as roll-window and coast-geometry evidence rather than the primary
+  runtime architecture.
 - Contact-aware geometric shooter canonical `zero` probe:
   `artifacts/session/live_fetch_geometric_shooter_probe_zero_20260527/fetch_geometric_shooter_probe/geometric_shooter_probe_summary.json`.
   The bounded direct-velocity shot impulse passed one canonical calibrated
@@ -140,15 +159,22 @@ branch strategy changes are propagated back to `main`.
   `fetch_to_pose_pass=true`, closest/final distance `0.011837m`, and 65 ball
   trace samples. This advances the spike to a saved-layout
   `zero`/`left05`/`right05` one-run matrix, but it is still probe evidence, not
-  repeatability or promotion evidence.
+  repeatability, robot-owned contact, or promotion evidence.
 - Contact-aware geometric shooter saved-layout one-run matrix:
   `zero`, `left05`, and `right05` each passed one bounded direct-velocity probe:
   `live_fetch_geometric_shooter_probe_zero_20260527`,
   `live_fetch_geometric_shooter_probe_left05_20260527`, and
   `live_fetch_geometric_shooter_probe_right05_20260527`. Closest/final
   distances were `0.011837m`, `0.011898m`, and `0.011898m` respectively. This
-  advances the spike to repeatability/recovery design discussion, but still does
-  not prove a robot-owned contact policy or promotion readiness.
+  validates the calibrated roll model enough to inform bounded push/coast
+  targets, but still does not prove a robot-owned contact policy or promotion
+  readiness.
+- AI-assisted push-coast direction:
+  no live model evidence exists yet. The first honest gate is a shadow-mode
+  predictor/proposer over the saved anchors plus seeded random layouts emitted
+  by `scripts/fetch_generalization_gate.py`, followed by a canonical `zero`
+  robot-owned run only after deterministic guards accept the proposed maneuver
+  class.
 - MPPI FollowPath calibrated revisit:
   `artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`.
   It failed `zero`, `left05`, and `right05` before contact and remains

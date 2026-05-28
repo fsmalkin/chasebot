@@ -15,23 +15,48 @@ The target capability is a robot-owned last-meter architecture that can deliver
 the ball to a requested target pose from varied robot, ball, and target geometry,
 not only the current saved layouts.
 
+## May 28, 2026 Direction
+
+The research pass selected an AI-assisted, no-shoot runtime direction. The
+primary architecture is a robot-owned bounded push-and-coast local policy:
+approach the correct side of the ball, make low-error contact, add only bounded
+energy, stop pushing when the measured or predicted trajectory intersects the
+delivery circle, then observe and re-aim within a small budget.
+
+AI is part of the direction, but it is layered:
+
+1. LM or robot-foundation-model supervision may reason over task mode, failure
+   interpretation, and known maneuver choices.
+2. A learned local predictor/proposer should be trained from many calibrated
+   simulations to estimate roll outcome, miss vector, push duration, coast
+   timing, and recovery side.
+3. Deterministic guards remain authoritative over command limits, target
+   freshness, ball drift, retry budget, safe stop, and promotion gates.
+4. Direct high-frequency LM-owned `/cmd_vel` remains out of scope.
+
+Use contact-aware geometric-shooter evidence as a physics and trajectory probe
+only. It is not the preferred runtime architecture because it currently proves a
+direct ball-velocity impulse, not robot-owned bounded pushing.
+
 ## Paths To Research
 
 Evaluate these paths side by side:
 
 1. Current object-centric fetch baseline.
-2. Contact-aware geometric shooter.
+2. Contact-aware geometric shooter as physics-probe evidence only.
 3. Receding-horizon contact MPC or object servo.
 4. ROS action-server or behavior-tree last-meter owner.
 5. Nav2 reposition plus object-centric last meter.
 6. Passive mechanical guide or funnel.
-7. Learned residual or maneuver proposer behind deterministic guards.
+7. Learned local predictor, residual, or maneuver proposer behind deterministic
+   guards.
 8. Portfolio supervisor or switcher.
 9. Perception-first target-pose fetch.
 
 Use the existing object-centric baseline as the comparison reference, not as an
-automatic winner. Use the geometric-shooter evidence as a promising shot
-primitive until robot-owned contact is implemented and measured.
+automatic winner. The preferred next spike is not a shooter spike; it is an
+AI-assisted bounded push-and-coast object-servo lane with shadow-model scoring
+before learned proposals are allowed to execute.
 
 ## Research Questions
 
@@ -51,6 +76,9 @@ For each path, answer:
 6. What is the hardware-transfer story for the Jetbot-sized robot and calibrated
    golf-ball/turf lane?
 7. What makes the path diagnosable when it fails?
+8. If AI is involved, what layer owns it: LM/VLA supervisor, local learned
+   predictor, maneuver proposer, residual controller, perception source, or
+   low-level policy? What deterministic guard can veto it?
 
 ## Evidence Ladder
 
@@ -72,6 +100,13 @@ Promotion evidence must use the canonical calibrated golf-ball/turf world,
 dashboard-observation results may guide research but cannot promote a
 robot-owned architecture.
 
+AI-assisted candidates add two pre-promotion requirements:
+
+1. shadow-mode evaluation against saved anchors and seeded random layouts before
+   learned proposals can execute
+2. an onboard-inference plan compatible with the canonical
+   `tensorrt_int8` backend before hardware-transfer claims
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:
@@ -88,6 +123,8 @@ The research thread is done when it returns a concise findings package that:
    reproducible failures will be used.
 7. Keeps branch strategy and high-level plans propagated to `main`; runnable
    experiments stay on focused spike branches.
+8. Separates no-shoot bounded push/coast control from direct impulse or
+   geometric-shooter probe evidence.
 
 ## Next Thread Prompt
 
@@ -96,10 +133,11 @@ The research thread is done when it returns a concise findings package that:
 
 Research all high-level last-meter fetch architecture paths documented in
 Chasecar and return with findings, evidence gaps, and a recommended path
-sequence. Compare current object-centric fetch, contact-aware geometric shooter,
-receding-horizon contact MPC/object servo, ROS action/BT last-meter owner, Nav2
-reposition plus local fetch, passive guide/funnel, learned residual/maneuver
-proposer, portfolio supervisor/switcher, and perception-first target-pose fetch.
+sequence. Compare current object-centric fetch, contact-aware geometric shooter
+as physics-probe evidence, receding-horizon contact MPC/object servo, ROS
+action/BT last-meter owner, Nav2 reposition plus local fetch, passive
+guide/funnel, learned local predictor/residual/maneuver proposer, portfolio
+supervisor/switcher, and perception-first target-pose fetch.
 
 Do not jump straight into tuning one path. First ground in branch/docs/artifacts,
 then evaluate each path against the calibrated fetch_to_pose contract,

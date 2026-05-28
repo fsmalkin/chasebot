@@ -527,7 +527,9 @@ Current direction update:
    - use Nav2/MPPI for long-range repositioning and obstacle-aware path following only
    - own ball interaction as a short-horizon object-centric manipulation policy over robot pose, ball pose, zone pose, recent robot/ball deltas, previous command, and capture/contact flags
    - start with an offline evaluator over the MPPI evidence set, then a structured object-servo baseline
-   - add learned residuals only after structured servo failure modes are measured
+   - for calibrated fetch, add a learned local predictor/proposer in shadow mode
+     earlier than live learned control; execution still waits for deterministic
+     guard acceptance and saved/seeded evidence
    - keep deterministic safety gates around every command or waypoint proposal
    - prohibit direct high-frequency LLM motor control, `/odom` changes, frozen-contract changes, and handoff-gate loosening
    - first live gate was saved-layout `zero` and `plus45`, one run each, no retries; future alternatives must instead requalify through the calibrated fetch gate
@@ -551,17 +553,35 @@ Current direction update:
    - result: all three one-run calibrated layouts failed before contact with
      `pre_stage_path_clearance_guard`, so the roadmap stays with the current
      object-centric fetch baseline rather than an MPPI alternative branch
-10. architecture exploration should widen, but stay staged:
+10. May 28, 2026 AI-assisted no-shoot pivot:
+   - keep the runtime fetch architecture as robot-owned bounded push-and-coast,
+     not intentional shooting or direct ball impulse
+   - use contact-aware geometric-shooter artifacts as calibrated roll/coast
+     physics probes only
+   - bring AI closer to control through a learned local predictor/proposer first:
+     setup pocket, push duration, coast timing, miss vector, and recovery side
+   - train/prototype from large calibrated simulation batches, then score in
+     shadow mode on saved anchors, seeded random layouts, and frozen failures
+     before learned output can execute
+   - allow LM/VLA-style models to supervise task mode, failure interpretation,
+     and known maneuver choices only through deterministic contracts
+   - keep deterministic guards authoritative over command bounds, target
+     freshness, ball drift, retry budget, safe stop, `/odom`, and frozen
+     contracts
+   - preferred next spike:
+     `spike/fetch-arch-ai-push-coast-servo-YYYYMMDD`
+11. architecture exploration should widen, but stay staged:
    - do not treat the legacy `--gather-control-family` list as exhaustive
      architecture coverage; it is a runnable control-family screen inside the
      existing mission shell
    - use [CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md)
      for the wider portfolio
-   - include contact-aware geometric shooting, receding-horizon contact
+   - include contact-aware geometric shooting as physics-probe evidence,
+     AI-assisted bounded push-coast object servo, receding-horizon contact
      MPC/object servo, ROS action-server or behavior-tree last-meter ownership,
      Nav2 reposition plus object-centric last-meter handoff, passive mechanical
-     guide/funnel, learned residual or maneuver proposer, portfolio switching,
-     and perception-first target-pose fetch
+     guide/funnel, learned residual or maneuver proposer, LM/VLA high-level
+     supervision, portfolio switching, and perception-first target-pose fetch
    - accelerated/offline results can reject a candidate early, but canonical
      `real_time_factor=1.0` saved-layout evidence is required before promotion
    - a candidate must offer more than equal pass rate: require better margin,
