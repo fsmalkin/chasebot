@@ -571,6 +571,7 @@ Live gates:
    - same calibrated ball, turf world, delivery radius, saved layouts, no retries, approach telemetry, and deterministic guards as the May 27 gate
    - classify any closest-approach, first-contact-alignment, pre-contact-oscillation, lateral-knock-away, or goal-side regression before changing policy code
    - use accelerated or offline screens only for cheap negative evidence; any green or surprising result must be rerun in the canonical `yolo_test_world_v6_calibrated_golf_turf.world` lane before it counts
+   - current fast-screen limit is `yolo_test_world_v6_calibrated_golf_turf_fast.world` at `real_time_factor=2.0` and `max_step_size=0.001`; 3.0x/4.0x worlds are experimental speed sweeps only, not promotion evidence
    - latest MPPI revisit artifact:
      `artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`
    - latest MPPI revisit result: `zero`, `left05`, and `right05` all failed

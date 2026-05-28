@@ -113,6 +113,13 @@ Promotion evidence must use the canonical calibrated golf-ball/turf world,
 dashboard-observation results may guide research but cannot promote a
 robot-owned architecture.
 
+Acceleration note: the current calibrated fast-screen lane is
+`real_time_factor=2.0` in
+`yolo_test_world_v6_calibrated_golf_turf_fast.world`. Treat 2.0x as the normal
+cheap-rejection speedup. Treat any 3.0x/4.0x run as an explicitly experimental
+speed sweep, useful for finding obvious instability but not for proving
+contact-rich success.
+
 AI-assisted candidates add two pre-promotion requirements:
 
 1. shadow-mode evaluation against saved anchors and seeded random layouts before
