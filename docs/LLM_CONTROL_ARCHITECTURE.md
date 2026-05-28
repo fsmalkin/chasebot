@@ -27,8 +27,10 @@ That means:
 
 ## Fetch AI Control Stance
 
-The calibrated golf-ball `fetch_to_pose` pivot brings AI closer to control, but
-keeps the layers explicit:
+The calibrated golf-ball `fetch_to_pose` pivot keeps the runtime no-shoot and
+the layers explicit. The immediate next spike is a Nav2 corridor-push test; AI
+remains the next/fallback contact-control lane if Nav2 cannot keep the ball
+stable under calibrated physics:
 
 1. LM or VLA-style models may supervise high-level task mode, failure
    interpretation, and known maneuver choices.
@@ -36,9 +38,17 @@ keeps the layers explicit:
    coast timing, setup pocket, or recovery side.
 3. The fetch state machine and deterministic guards decide whether any proposal
    is legal.
-4. The bounded push-and-coast servo owns robot contact and `/cmd_vel`.
+4. The immediate Nav2 test may let `FollowPath` own real-time robot path
+   tracking through the ball-target corridor while a monitor cancels on success,
+   ball escape, stale state, unsafe drift, timeout, or action abort.
+5. If Nav2 corridor-push is red, the bounded push-and-coast servo owns robot
+   contact and `/cmd_vel` behind the deterministic guards.
 
-The preferred fetch research lane is therefore:
+The immediate fetch research lane is therefore:
+
+`LM/VLA supervisor -> deterministic fetch state machine/guards -> Nav2 FollowPath corridor-push -> ball-escape/success monitor -> robot`
+
+The learned fallback lane remains:
 
 `LM/VLA supervisor -> deterministic fetch state machine/guards -> local learned predictor/proposer -> bounded push-coast servo -> robot`
 
@@ -199,11 +209,12 @@ Planned near-term extension for gather:
   - [gather_motion_bridge.py](../scripts/gather_motion_bridge.py) remains the runtime clamp surface
   - controller and hardware caps remain the low-level safety envelope
 - it must not publish real-time steering directly and must not replace low-level control loops
-- for calibrated fetch, the first learned component should be a shadow-mode
-  local predictor/proposer over bounded push-and-coast maneuvers; it may propose
-  setup pocket, push duration, coast timing, or recovery side only after
-  saved-anchor and seeded-random shadow evidence is green, and deterministic
-  guards still veto unsafe proposals
+- for calibrated fetch, first test `nav2_followpath_corridor_push_v1` as a
+  fresh corridor-push hypothesis; if it is red, the first learned component
+  should be a shadow-mode local predictor/proposer over bounded push-and-coast
+  maneuvers, proposing setup pocket, push duration, coast timing, or recovery
+  side only after saved-anchor and seeded-random shadow evidence is green, with
+  deterministic guards still vetoing unsafe proposals
 
 Not planned for the active gather path:
 

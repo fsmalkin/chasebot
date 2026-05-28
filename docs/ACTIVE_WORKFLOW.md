@@ -503,28 +503,33 @@ Commands:
 Research contract:
 
 1. freeze `nav2_mppi_follow_path_reacquire_v1` as the baseline/evidence branch rather than continuing broad MPPI/capture threshold tuning
-2. reserve Nav2/MPPI for long-range repositioning and obstacle-aware path following
+2. reserve historical Nav2/MPPI branches for long-range/pre-stage evidence, but
+   test the fresh `nav2_followpath_corridor_push_v1` hypothesis before the
+   learned contact controller: Nav2 owns real-time ball-target corridor
+   `FollowPath`, while a fetch monitor cancels on success, ball escape, stale
+   state, unsafe drift, timeout, or action abort
 3. treat `object_centric_gather_policy_v1` as a historical gather/place baseline and source of useful launch/roll behavior
 4. define `fetch_to_pose` first; user/person detection comes later through the same target-pose contract
 5. score fetch success by measured ball-trajectory intersection with a delivery radius, not final stop in a corral
 6. run fetch as bounded `setup -> contact/push -> coast/observe -> recover/re-aim -> done/give_up` cycles with explicit attempt and mission budgets
 7. keep deterministic safety filters around every policy proposal: command bounds, ball drift, clearance, target freshness, timeout, stuck state, and safe-stop fallback
 8. capture shot-outcome, surface-calibration, failure-replay, and counterfactual-prediction data before tuning push/coast behavior
-9. bring AI into the local lane through shadow-mode learned prediction/proposal first: setup pocket, push duration, coast timing, miss vector, and recovery side
+9. keep AI as the next/fallback local lane through shadow-mode learned prediction/proposal first: setup pocket, push duration, coast timing, miss vector, and recovery side
 10. allow LM/VLA-style models to supervise task mode, failure interpretation, and known maneuver choices only through deterministic contracts
 11. keep direct high-frequency LLM motor control out of scope
 12. keep `physics-calibrated-golf-fetch-v1` as the stable demo/UAT integration branch; use short-lived `spike/...` branches for targeted requalification and archive blocked architecture branches as evidence only
-13. do not confuse control-family screens with broad architecture coverage; new architecture spikes must change an ownership boundary, prediction model, actuation/contact strategy, or state-machine boundary and must name the expected generalization/product benefit
-14. treat the May 27 opposite-side dashboard observation as a generalization
+13. preferred immediate spike: `spike/fetch-arch-nav2-corridor-push-20260528`; keep `spike/fetch-arch-ai-push-coast-servo-YYYYMMDD` as the next/fallback contact-control lane if Nav2 corridor-push is red
+14. do not confuse control-family screens with broad architecture coverage; new architecture spikes must change an ownership boundary, prediction model, actuation/contact strategy, or state-machine boundary and must name the expected generalization/product benefit
+15. treat the May 27 opposite-side dashboard observation as a generalization
     signal: saved-layout gates prove the known geometry, while target-relative
     side changes must be covered by seeded random/generalization suites before
     promotion
-15. rerun green or surprising offline/accelerated/novel-layout results in the
+16. rerun green or surprising offline/accelerated/novel-layout results in the
     canonical calibrated world before counting them, and freeze reproducible
     random failures into named saved layouts before tuning against them
-16. prove generalized last-meter fetch with a reusable seeded gate before
+17. prove generalized last-meter fetch with a reusable seeded gate before
     claiming a robot-owned architecture generalizes beyond saved layouts
-17. when the goal is full architecture research, ground in
+18. when the goal is full architecture research, ground in
     `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` and return a findings
     matrix before tuning a single path
 
@@ -576,12 +581,12 @@ Live gates:
    - use `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` as the
      next-thread charter when the task is to research all paths first
    - required families include contact-aware geometric shooter as a physics
-     probe, AI-assisted bounded push-coast object servo, receding-horizon
-     contact MPC/object servo, ROS action-server or behavior-tree last-meter
-     owner, Nav2 reposition plus object-centric last-meter handoff, passive
-     mechanical guide/funnel, learned residual or maneuver proposer, LM/VLA
-     high-level supervisor, portfolio switcher, and perception-first
-     target-pose fetch
+     probe, Nav2 FollowPath corridor-push contact ownership, AI-assisted bounded
+     push-coast object servo, receding-horizon contact MPC/object servo, ROS
+     action-server or behavior-tree last-meter owner, Nav2 reposition plus
+     object-centric last-meter handoff, passive mechanical guide/funnel, learned
+     residual or maneuver proposer, LM/VLA high-level supervisor, portfolio
+     switcher, and perception-first target-pose fetch
    - first contact-aware geometric-shooter offline screen:
      `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`
    - result: `12/12` offline model passes on the May 27 CTA/policy traces, max
@@ -619,13 +624,32 @@ Live gates:
      `pre_contact_reorientation`, `first_contact_alignment`,
      `lateral_knock_away`, `overshoot`, `recovery_failure`, and
      `shot_infeasible`
-8. person target prototype only after pose-target gates are green
+8. Nav2 corridor-push spike contract:
+   - branch: `spike/fetch-arch-nav2-corridor-push-20260528`
+   - architecture: `nav2_followpath_corridor_push_v1`
+   - first gate: contact-ready `zero`, `left05`, and `right05` with Nav2
+     `FollowPath` owning the ball-target corridor and the monitor canceling only
+     on success, ball escape, stale state, unsafe drift, timeout, or action abort
+   - second gate: full saved layouts `zero`, `left05`, and `right05`
+   - generalization gate: seeded random layouts from the reusable
+     `fetch_generalization_gate`
+   - green: `fetch_to_pose_pass=true`, no ball escape, stable action completion
+     or success cancel, and stable command output
+   - yellow: contact-ready passes but full saved layouts fail before contact;
+     repair setup separately
+   - red: ball escape, lateral knock-away, or contact oscillation; continue with
+     the AI local contact-control fallback
+   - hard red: Nav2 action aborts or produces no stable robot motion; classify
+     as controller integration failure, not ball-physics evidence
+9. person target prototype only after pose-target gates are green
 
 Branch hygiene:
 
 1. do not revive blocked gather-control branches, including `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, `pre_stage_reacquire_fsm_v1`, `pre_stage_path_tracker_v1`, `pre_stage_trajectory_owner_v1`, `nav2_follow_path_reacquire_v1`, or `nav2_mppi_follow_path_reacquire_v1`, without fresh saved-layout `zero` and `plus45` pre-stage handoff proof
 2. keep `nav2_mppi_follow_path_reacquire_v1` as evidence for long-range/pre-stage behavior, not as the primary calibrated golf fetch architecture
-3. snapshot green demo releases from `physics-calibrated-golf-fetch-v1` as `release/golf-fetch-uat-YYYYMMDD`
+3. treat `nav2_followpath_corridor_push_v1` as a new hypothesis spike, not a
+   renamed revival of `nav2_mppi_follow_path_reacquire_v1`
+4. snapshot green demo releases from `physics-calibrated-golf-fetch-v1` as `release/golf-fetch-uat-YYYYMMDD`
 
 ## Gather Pre-Stage Command Authority Audit (Offline Analyzer)
 
