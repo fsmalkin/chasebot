@@ -44,6 +44,15 @@ accelerated result must be rerun in the canonical
 `yolo_test_world_v6_calibrated_golf_turf.world` lane before it counts as UAT or
 branch-promotion evidence.
 
+Current acceleration policy: the documented calibrated fast-screen world is
+`yolo_test_world_v6_calibrated_golf_turf_fast.world` at
+`real_time_factor=2.0` with `max_step_size=0.001`. This 2.0x lane is the normal
+cheap-rejection screen. A 3.0x or 4.0x world may be created only as a
+non-authoritative speed sweep after checking `/clock`, Nav2 tracking, contact
+telemetry, and ball escape/success monitor behavior. Do not treat any pass above
+`real_time_factor=1.0` as promotion evidence; higher-than-2.0x contact-rich
+results are especially useful for finding failures, not for proving success.
+
 Novel-layout failures are first-class evidence. The May 27, 2026 opposite-side
 dashboard observation showed that a policy can pass saved centerline/off-axis
 layouts while still failing when robot, target, and ball ordering changes. Use
@@ -90,6 +99,8 @@ branch strategy changes are propagated back to `main`.
 2. Offline or accelerated screen:
    - use recorded traces, dry-run contract tests, or the 2.0x calibrated fast
      world for cheap negatives
+   - keep 2.0x as the default accelerated lane; label 3.0x/4.0x runs as
+     experimental speed sweeps if used
    - accept accelerated failures as screening evidence
    - never accept accelerated passes as UAT evidence
    - for AI-assisted lanes, run shadow prediction/proposal first: compare the

@@ -168,10 +168,13 @@ Next architecture exploration should be wide but staged:
 2. use accelerated/offline screens only for cheap negative evidence
 3. rerun any green or surprising screen in the canonical `real_time_factor=1.0`
    calibrated golf turf world before counting it
-4. require learned local prediction/proposal to pass shadow-mode scoring on the
+4. use the documented 2.0x calibrated fast world as the default accelerated
+   screen; any 3.0x/4.0x run is a non-authoritative speed sweep and must be
+   rerun at 1.0x before it informs promotion
+5. require learned local prediction/proposal to pass shadow-mode scoring on the
    saved anchors and seeded random layouts before allowing learned output to
    execute live
-5. promote a new branch only if it passes the saved-layout `zero`, `left05`,
+6. promote a new branch only if it passes the saved-layout `zero`, `left05`,
    and `right05` gates and provides a clear benefit in margin, stability,
    simplicity, diagnosability, runtime cost, or hardware-transfer path
 
