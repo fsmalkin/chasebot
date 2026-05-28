@@ -70,7 +70,7 @@ Current Chasecar mapping:
 
 ## Patterns We Are Not Adopting Yet
 
-### 1. End-to-end vision-language-action policies
+### 1. End-to-end vision-language-action policies as low-level control
 
 Representative examples:
 
@@ -80,8 +80,19 @@ Representative examples:
 Why not now:
 
 - they imply a different architecture, training story, and deployment burden
-- they are not a good match for the current frozen-intent integration path
-- our immediate goal is trustworthy bounded control, not end-to-end learned action generation
+- they are not a good match for high-frequency contact control on a calibrated
+  golf ball
+- our immediate goal is trustworthy AI-assisted bounded control, not raw
+  end-to-end learned `/cmd_vel`
+
+Current calibrated-fetch mapping:
+
+- LM/VLA-style models may supervise task mode, failure interpretation, and
+  known maneuver selection through deterministic contracts
+- a smaller local learned model may predict or propose bounded push/coast
+  maneuvers after simulation training and shadow scoring
+- deterministic guards still own command limits, target freshness, ball drift,
+  retry budget, and safe stop
 
 ### 2. Code-generation-as-policy
 
@@ -103,11 +114,12 @@ The most relevant near-term pattern family for Chasecar is:
 2. closed-loop re-evaluation over live state
 3. strict tool/function calling
 4. deterministic non-LLM gating and fail-closed behavior
+5. local learned prediction/proposal in shadow mode before live execution
 
 That is a stronger fit for our current stack than either:
 
 - open-ended agentic planning
-- end-to-end VLA control
+- end-to-end VLA low-level control
 - generated policy code
 
 ## What This Means For Current Work
@@ -118,6 +130,8 @@ Near-term implementation should continue to optimize for:
 - one-step decisions instead of multi-step plans
 - strict tool schemas
 - preview and readiness checks outside the model
+- calibrated simulation data for local predictor/proposer training
+- shadow-mode scoring before learned proposals execute
 - headless proof before browser UAT promotion
 
 That keeps the path compatible with both:

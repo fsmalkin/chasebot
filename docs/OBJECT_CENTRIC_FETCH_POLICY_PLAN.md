@@ -20,6 +20,20 @@ The previous gather/place objective remains useful as negative baseline
 evidence, but success is no longer final stop in the corral. Success is
 trajectory intersection with a delivery radius around the requested target pose.
 
+May 28, 2026 pivot: the next research lane should bring AI closer to control
+without turning fetch into a kick/shot primitive. The runtime goal is
+AI-assisted bounded push-and-coast:
+
+- robot-owned contact remains mandatory
+- the robot pushes with bounded energy, then coasts only when the measured or
+  predicted ball trajectory intersects the delivery circle
+- learned local models may predict roll outcome or propose setup/push/coast
+  maneuvers, first in shadow mode and later only inside deterministic guards
+- LM/VLA-style models may supervise task mode, failure interpretation, and
+  known maneuver choices, but not high-frequency `/cmd_vel`
+- contact-aware geometric-shooter artifacts are retained as physics probes, not
+  as the preferred runtime architecture
+
 Latest green UAT:
 
 - Dashboard scenario: `golf_ball_circle_delivery_uat`
@@ -75,6 +89,15 @@ Latest green UAT:
   `first_contact_push_alignment_deg=12.826061` while still passing, so treat
   first-contact alignment as a watch item rather than a reason for a policy
   change on this green gate.
+- Opposite-side dashboard observation, May 27, 2026: placing robot and ball on
+  opposite sides of the delivery target produced qualitatively different
+  behavior from the saved centerline/off-axis gates. The robot could get near
+  the ball, but then turned into a side knock-away / overshoot instead of
+  owning the ball-target line. Treat this as a generalization failure signal,
+  not as a reason to discard the calibrated physics lane. The lesson is that
+  saved-layout success currently proves the known geometry; it does not yet
+  prove target-relative side selection, pre-contact reorientation, or bounded
+  first-contact energy across novel layouts.
 
 ## Architecture Revisit Conclusion
 
@@ -119,13 +142,26 @@ Nav2-reposition/object-centric last-meter hybrids, passive mechanical guides,
 learned residuals or maneuver proposers, portfolio switching, and
 perception-first target-pose fetch.
 
+Research outcome after the May 28 discussion: do not promote a geometric
+shooter runtime. Use its direct-velocity probe data to understand feasible
+roll/coast windows, then focus the next implementation spike on
+`spike/fetch-arch-ai-push-coast-servo-YYYYMMDD`.
+
+For a fresh high-level research thread, use
+[GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md](GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md).
+That charter asks for a findings matrix across the full architecture portfolio
+before tuning any one path.
+
 Next architecture exploration should be wide but staged:
 
 1. keep the May 27 object-centric fetch gate as the comparison baseline
 2. use accelerated/offline screens only for cheap negative evidence
 3. rerun any green or surprising screen in the canonical `real_time_factor=1.0`
    calibrated golf turf world before counting it
-4. promote a new branch only if it passes the saved-layout `zero`, `left05`,
+4. require learned local prediction/proposal to pass shadow-mode scoring on the
+   saved anchors and seeded random layouts before allowing learned output to
+   execute live
+5. promote a new branch only if it passes the saved-layout `zero`, `left05`,
    and `right05` gates and provides a clear benefit in margin, stability,
    simplicity, diagnosability, runtime cost, or hardware-transfer path
 
@@ -136,12 +172,24 @@ harder contact tuning. The May 27 gate added enough approach telemetry to keep
 lateral knock-away, pre-contact oscillation, and first-contact alignment as
 explicit watch items before any policy or architecture change.
 
+Current goal: build a generalized object-centric `fetch_to_pose` policy that
+can start from either side of the target, choose the correct side of the ball,
+settle onto the ball-target line, make low-yaw/low-lateral-error first contact,
+and bound the ball trajectory so it intersects the delivery circle without a
+side knock-away or uncontrolled overshoot. The next branch should pursue this
+as an AI-assisted bounded push-and-coast servo, not as intentional shooting or
+direct ball impulse.
+
 Control order:
 
 1. Stabilize the pre-contact approach on the ball-target line.
 2. Make first contact with low lateral error and low yaw error.
 3. Keep pushing toward the target while applying bounded directional correction.
-4. Use a wider attachment/funnel as an allowed mechanical robustness path, but
+4. Add shadow-mode learned prediction/proposal for setup pocket, push duration,
+   coast timing, miss vector, and recovery side.
+5. Allow learned proposals to execute only after deterministic guards accept the
+   maneuver class and shadow evidence shows benefit.
+6. Use a wider attachment/funnel as an allowed mechanical robustness path, but
    do not let width hide unstable approach telemetry.
 
 Approach-quality evidence must record:
@@ -156,6 +204,34 @@ Approach-quality evidence must record:
 Promotion rule: a run can pass the delivery circle and still be classified as
 control-quality suspect when approach telemetry shows lateral knock-away,
 pre-contact oscillation, or high first-contact yaw/lateral error.
+
+## Experiment Policy
+
+Use deterministic and randomized experiments for different jobs:
+
+1. Saved layouts are regression anchors. Keep `zero`, `left05`, and `right05`
+   as the first comparison gate for every policy or architecture branch because
+   they make margins, traces, and regressions comparable across time.
+2. Novel and randomized layouts are brittleness discovery. After a candidate is
+   green on the saved layouts, sample target-relative start side, robot yaw,
+   lateral offset, ball-target distance, and modest surface variation. Freeze
+   any reproduced failure seed into a named saved layout before tuning against
+   it.
+   The reusable entrypoint is
+   `python scripts/fetch_generalization_gate.py --campaign-id <id> --random-cases 6 --runs 1`;
+   use `--dry-run` first to validate generated layout and command contracts.
+3. Rerun selectively, not blindly. Rerun when the scenario class changes, when
+   physics or contact code changes, when an accelerated/offline result is green
+   or surprising, or before promotion. Do not rerun every obsolete blocked
+   branch unless it has a fresh hypothesis and a calibrated fetch gate.
+4. Count only canonical evidence for promotion. Offline, accelerated, and
+   dashboard-observation results can direct the next experiment, but promotion
+   evidence must come from the canonical calibrated world with fresh runtime
+   traces and the same no-retry delivery-radius contract.
+5. AI-assisted work should be trained and screened with many calibrated
+   simulations, but promotion still depends on the same saved-layout and seeded
+   random gates. Large sim volume is for model learning and hard-case discovery,
+   not for replacing canonical UAT evidence.
 
 ## Trajectory Limiter Direction
 
@@ -178,6 +254,11 @@ This keeps the ball from escaping by limiting injected energy and lateral error
 at the contact layer. Passive fixed geometry, such as a wider non-actuated guide
 or funnel, remains an allowed robustness option, but promotion evidence must
 still show stable approach telemetry without relying on hidden mechanical rescue.
+
+Learned local models may help choose the envelope setting or rank candidate
+short-horizon pushes, but the envelope remains deterministic. A learned proposal
+that asks for excessive speed, long push duration, stale targets, unbounded
+retry, or unsafe lateral/yaw error is rejected before actuation.
 
 ## Thesis
 
@@ -202,6 +283,18 @@ The first policy family is:
 It may emit bounded `linear_x` / `angular_z` commands, short relative waypoints,
 or contact profiles, but every proposal must pass deterministic guards before
 execution.
+
+The first AI-assisted family should be treated as:
+
+`ai_push_coast_servo`
+
+Its learned component starts as a shadow predictor/proposer. It consumes
+measured robot pose, ball pose, target pose, recent motion, and candidate
+bounded maneuvers, then predicts trajectory, closest approach, miss vector, and
+recovery value. Only after shadow scoring is green may it propose a guarded
+setup pocket, push profile, coast timing, or recovery side for live execution.
+On hardware, inference should be sized for the canonical `tensorrt_int8`
+backend.
 
 ## Success Definition
 
@@ -248,6 +341,8 @@ Fetch evidence should compare against:
 - no-contact / setup-only runs
 - single-contact shots without recovery
 - bounded multi-contact attempts with recovery and re-aim
+- direct-velocity geometric-shooter probes as physics/coast evidence only, not
+  robot-owned runtime baselines
 
 ## Implementation Surface
 
@@ -389,7 +484,8 @@ Current calibration contract:
 
 ## Milestone 3: Structured Fetch Baseline
 
-Start with an interpretable object-centric policy, not RL.
+Start with an interpretable object-centric policy and a shadow learned
+predictor/proposer, not end-to-end RL.
 
 Inputs:
 
@@ -411,6 +507,8 @@ Behavior:
 - apply bounded directional correction while pushing, after stable contact
 - observe ball trajectory until success, rest, timeout, or unsafe drift
 - recover and re-aim only when budgets allow
+- record counterfactual learned predictions and proposed maneuvers in shadow
+  mode before allowing learned execution
 
 Guards:
 
@@ -441,6 +539,12 @@ Each contact attempt should record a pre-shot counterfactual prediction:
 After observe, compare prediction to measured outcome and emit a replayable miss
 class. Recovery may use the measured miss vector and calibrated surface bias to
 choose the next setup pocket or contact effort.
+
+AI training belongs here first. Generate many calibrated simulation layouts,
+label pass/fail, miss vector, lateral knock-away, overshoot, first-contact
+alignment, and recovery outcome, then train a local predictor/proposer. The
+model must be evaluated in shadow mode on saved anchors, seeded random cases,
+and frozen failure layouts before any live proposal execution.
 
 ## Milestone 5: Fetch To Person
 
@@ -550,7 +654,43 @@ the same bounded budgets.
    - classify regressions in closest approach, first-contact alignment,
      pre-contact yaw sign changes, lateral knock-away, or goal-side entry before
      any broader architecture pivot
-8. Person target prototype:
+8. Contact-aware geometric shooter physics probe:
+   - status: offline screen green; canonical saved-layout `zero`/`left05`/
+     `right05` one-shot matrix green; retained as physics/coast evidence, not
+     the preferred runtime architecture
+   - artifact:
+     `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`
+   - result: `12/12` offline model passes over the May 27 calibrated CTA/policy
+     traces with no missing trace inputs
+   - model requirement: max delivery-entry speed `0.626061m/s`, max target-center
+     stop speed `0.907718m/s`, minimum aim half-angle `31.621299deg`
+   - canonical `zero` probe:
+     `artifacts/session/live_fetch_geometric_shooter_probe_zero_20260527/fetch_geometric_shooter_probe/geometric_shooter_probe_summary.json`
+   - probe result: bounded direct-velocity shot impulse passed with initial
+     speed `0.90598m/s`, heading `0.0deg`, closest/final distance `0.011837m`,
+     and 65 ball trace samples
+   - saved-layout matrix result:
+     `live_fetch_geometric_shooter_probe_zero_20260527`,
+     `live_fetch_geometric_shooter_probe_left05_20260527`, and
+     `live_fetch_geometric_shooter_probe_right05_20260527` all passed one-run
+     probes with closest/final distances `0.011837m`, `0.011898m`, and
+     `0.011898m`
+   - interpretation: the direct-velocity impulse is physically plausible enough
+     to inform roll/coast windows; do not count the offline screen or one-run
+     impulse matrix as robot-policy UAT evidence
+9. AI-assisted push-coast shadow gate:
+   - status: planned
+   - branch:
+     `spike/fetch-arch-ai-push-coast-servo-YYYYMMDD`
+   - first evidence:
+     saved anchors plus seeded random layouts from
+     `scripts/fetch_generalization_gate.py`, with learned predictions and
+     proposed maneuvers scored against measured outcomes while deterministic
+     object-centric control remains authoritative
+   - promotion precondition:
+     no learned execution until shadow predictions improve margin or failure
+     classification without guard violations
+10. Person target prototype:
    - only after pose-target gates are green
 
 ## Non-Goals
@@ -563,6 +703,9 @@ the same bounded budgets.
 - Do not allow unbounded re-aim or retry loops.
 - Do not hide failed contact attempts; every miss needs replayable evidence.
 - Do not let learned components bypass deterministic guards.
+- Do not make direct impulse shooting the runtime architecture; use geometric
+  shooter outputs only as physics/coast probes unless robot-owned contact is
+  implemented and requalified.
 - Do not reopen old pre-stage-only branches or MPPI contact tuning as broad
   replacements for the calibrated fetch-to-pose baseline.
 

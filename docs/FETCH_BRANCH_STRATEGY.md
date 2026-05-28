@@ -35,10 +35,13 @@ roadmap for priority, `ACTIVE_WORKFLOW.md` for gates and commands, and the
      delete, merge, or archive after the named gate.
    - Naming examples: `spike/fetch-shot-outcome-schema`,
      `spike/fetch-plus45-recovery-requal`,
-     `spike/nav2-mppi-terminal-geometry-revisit`, and
+     `spike/nav2-mppi-terminal-geometry-revisit`,
+     `spike/fetch-arch-ai-push-coast-servo-YYYYMMDD`, and
      `spike/architecture-revisit-object-centric-fetch-2026Q3`.
    - Each spike must state its hypothesis, artifact target, expected gate, and
      expiry condition in its PR or handoff notes.
+   - For AI-assisted fetch spikes, "expected gate" must include shadow-mode
+     prediction/proposal scoring before any learned output is allowed to drive.
 4. Release and PR hygiene:
    - Keep one behavioral theme per PR: implementation, evidence replay, doc-only
      recommendation, or UAT release cleanup.
@@ -71,6 +74,8 @@ ball contact, so old ball/turf physics does not explain the primary failure.
 | legacy corral/place one-ball baseline | `artifacts/session/20260413T054235Z/gather_mission_repeatability/campaign_run_summary.json`; later mixed evidence such as `artifacts/session/20260416T184447Z/gather_mission_repeatability/campaign_run_summary.json` | Old gather/place contact evidence, physics-contaminated | Historical practical baseline, not evidence against calibrated fetch. |
 | `object_centric_gather_policy_v1` | `docs/OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md` | Superseded gather/place plan | Do not reopen as a gather/place promotion path. |
 | `object_centric_fetch_policy_v1` | `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`; `artifacts/session/live_passive_golf_roll_built_resistance_repeatability_20260526/passive_ball_roll_calibration/campaign_summary.json` | Active calibrated baseline | Organize new alternatives around this gate and telemetry. |
+| `contact_aware_geometric_shooter` | `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`; `artifacts/session/live_fetch_geometric_shooter_probe_zero_20260527/fetch_geometric_shooter_probe/geometric_shooter_probe_summary.json` plus `left05` / `right05` one-run probes | Direct-velocity physics probe, not robot-owned runtime evidence | Keep as roll-window/coast-geometry evidence; do not promote as the primary runtime path. |
+| `ai_push_coast_servo` | planned spike only | Preferred next research lane | Train or prototype local predictor/proposer from calibrated simulation, score in shadow mode, then execute only inside deterministic guards. |
 
 ## Latest Revisit Result
 
@@ -97,12 +102,14 @@ inside the same mission shell. The wider portfolio is tracked in
 [CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md)
 and includes distinct ownership and interaction models:
 
-- contact-aware geometric shooter
+- contact-aware geometric shooter as physics-probe evidence
+- AI-assisted bounded push-coast object servo
 - receding-horizon contact MPC / object servo
 - ROS action-server or behavior-tree last-meter owner
 - Nav2 reposition plus object-centric last-meter handoff
 - passive mechanical guide or funnel
 - learned residual or maneuver proposer behind deterministic guards
+- LM/VLA high-level supervisor over known maneuver choices
 - portfolio supervisor / switcher
 - perception-first target-pose fetch
 
@@ -112,10 +119,12 @@ Branching rule for wide tests:
 2. create `spike/fetch-arch-<family>-YYYYMMDD` for one architecture hypothesis
 3. use accelerated/offline screens only for cheap rejection; never use them as
    UAT evidence
-4. promote to `candidate/fetch-arch-<family>` only after canonical saved-layout
+4. require AI-assisted lanes to pass shadow-mode saved-anchor and seeded-random
+   scoring before learned proposals execute live
+5. promote to `candidate/fetch-arch-<family>` only after canonical saved-layout
    `zero`, `left05`, and `right05` one-run evidence is green and the candidate
    benefit is written down
-5. require `3/3` saved-layout repeatability before release or demo discussion
+6. require `3/3` saved-layout repeatability before release or demo discussion
 
 ## Decision Rule
 
@@ -124,3 +133,11 @@ short-lived spike from `physics-calibrated-golf-fetch-v1`, not by promoting a
 blocked branch in place. A blocked branch becomes a candidate again only after
 fresh `zero` and `plus45` pre-stage proof is recorded with artifact paths and an
 explicit update to this document.
+
+Current preferred branch decision: pursue
+`spike/fetch-arch-ai-push-coast-servo-YYYYMMDD` next. The hypothesis is that a
+calibrated-simulation-trained local predictor/proposer can improve generalized
+bounded pushing and coast timing while deterministic guards keep command limits,
+target freshness, retry budget, and safe stop authoritative. LM/VLA components
+may supervise mode choice and failure interpretation, but they must not own
+high-frequency `/cmd_vel`.
