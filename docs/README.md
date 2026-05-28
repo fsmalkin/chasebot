@@ -10,7 +10,7 @@
 - [TELEGRAM_MCP.md](TELEGRAM_MCP.md) — Repo-local Telegram wait bridge and Codex MCP setup
 
 ### Architecture and Design
-- [LLM_CONTROL_ARCHITECTURE.md](LLM_CONTROL_ARCHITECTURE.md) — Layered LLM supervisor design (bounded intent, deterministic gating)
+- [LLM_CONTROL_ARCHITECTURE.md](LLM_CONTROL_ARCHITECTURE.md) - Layered LM/VLA supervisor plus guarded local learned-model control stance
 - [STACK_DECISIONS_2026.md](STACK_DECISIONS_2026.md) — Locked decisions for the 2026 rebuild
 - [ROBOT_HARDWARE_CONTRACT_ORIN_NANO.md](ROBOT_HARDWARE_CONTRACT_ORIN_NANO.md) — Jetson Orin Nano 8GB hardware contract
 - [ROBOT_HARDWARE_CONSTRAINTS.md](ROBOT_HARDWARE_CONSTRAINTS.md) — Hardware constraints and profiles
@@ -18,10 +18,11 @@
 
 ### Planning and Research
 - [ROADMAP_2026_H2.md](ROADMAP_2026_H2.md) — H2 2026 roadmap
-- [OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md) - Active calibrated golf-ball fetch-to-pose plan
+- [OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md) - Active calibrated golf-ball fetch-to-pose and AI-assisted push-coast plan
+- [OBJECT_CENTRIC_FETCH_POLICY_SLIDE_DECK.html](OBJECT_CENTRIC_FETCH_POLICY_SLIDE_DECK.html) - 4th-grade slide deck for the calibrated fetch architecture
 - [FETCH_BRANCH_STRATEGY.md](FETCH_BRANCH_STRATEGY.md) - Branch-role and architecture-revisit decisions for calibrated golf fetch
 - [CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md) - Wider architecture portfolio and staged evidence gates for calibrated fetch
-- [GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md](GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md) - Next-thread research charter for generalized last-meter fetch architecture
+- [GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md](GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md) - Generalized last-meter fetch research charter and May 28 AI-assisted pivot
 - [OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md](OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md) - Historical gather/place context superseded by the fetch pivot
 - [gather_pre_stage_architecture_options_review.md](gather_pre_stage_architecture_options_review.md) - Historical pre-stage architecture review and evidence interpretation
 - [LLM_BROWSER_UAT_PLAN.md](LLM_BROWSER_UAT_PLAN.md) — LLM integration UAT planning

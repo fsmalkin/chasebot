@@ -334,7 +334,13 @@ To keep the demo honest and legible, this phase does not include:
 
 - freeform language control from the browser
 - autonomous environment lifecycle control by the LLM
-- end-to-end VLA control
+- end-to-end VLA low-level control
+
+This does not block the May 28 calibrated-fetch AI direction. For
+`fetch_to_pose`, LM/VLA-style models may supervise task mode, failure
+interpretation, and known maneuver choices through the existing bounded
+contract, while local learned prediction/proposal is trained and scored in
+shadow mode before any guarded push-coast execution.
 
 ## Next Phase: Practical Retrieval Baseline Locked, Generalizable Gather Redesign Next
 

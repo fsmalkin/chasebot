@@ -25,6 +25,29 @@ That means:
 - it may rely on slower deterministic recovery or orchestration loops below it
 - it can escalate to safer or lower-level behaviors, but not replace them
 
+## Fetch AI Control Stance
+
+The calibrated golf-ball `fetch_to_pose` pivot brings AI closer to control, but
+keeps the layers explicit:
+
+1. LM or VLA-style models may supervise high-level task mode, failure
+   interpretation, and known maneuver choices.
+2. A local learned model may predict ball trajectory, miss vector, push duration,
+   coast timing, setup pocket, or recovery side.
+3. The fetch state machine and deterministic guards decide whether any proposal
+   is legal.
+4. The bounded push-and-coast servo owns robot contact and `/cmd_vel`.
+
+The preferred fetch research lane is therefore:
+
+`LM/VLA supervisor -> deterministic fetch state machine/guards -> local learned predictor/proposer -> bounded push-coast servo -> robot`
+
+This is a no-shoot architecture. Contact-aware geometric-shooter artifacts can
+inform roll/coast physics, but direct ball impulses are not a runtime control
+owner. Large calibrated simulation batches may train the local predictor, while
+onboard execution should be inference-only and sized for the canonical
+`tensorrt_int8` backend.
+
 ## Layered Architecture
 
 ```mermaid
@@ -176,6 +199,11 @@ Planned near-term extension for gather:
   - [gather_motion_bridge.py](../scripts/gather_motion_bridge.py) remains the runtime clamp surface
   - controller and hardware caps remain the low-level safety envelope
 - it must not publish real-time steering directly and must not replace low-level control loops
+- for calibrated fetch, the first learned component should be a shadow-mode
+  local predictor/proposer over bounded push-and-coast maneuvers; it may propose
+  setup pocket, push duration, coast timing, or recovery side only after
+  saved-anchor and seeded-random shadow evidence is green, and deterministic
+  guards still veto unsafe proposals
 
 Not planned for the active gather path:
 
