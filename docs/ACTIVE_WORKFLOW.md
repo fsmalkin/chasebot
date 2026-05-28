@@ -493,7 +493,12 @@ Commands:
 4. direct calibrated fetch runner surface: `python scripts/gather_mission_repeatability_runner.py --execution-mode direct --mission-objective fetch_to_pose --target-layout-json ros2_config/target_layouts/golf_ball_circle_delivery_zero.json --fetch-delivery-radius-m 0.300 --gather-control-family object_centric_gather_policy_v1 --max-retries-per-target 0 --runs 3`
 5. runnable control-family screen: `python scripts/calibrated_fetch_architecture_revisit.py --screen-scope runnable_control_family_screen --candidate-family nav2_mppi_follow_path_reacquire_v1 --runs 1 --promote-on-green --promote-runs 3`
 6. accelerated screen for cheap rejection only: `python scripts/calibrated_fetch_architecture_revisit.py --fast-screen --short-circuit-on-failure --screen-scope runnable_control_family_screen --candidate-family <family> --runs 1`
-7. wider architecture portfolio plan: `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
+7. contact-aware geometric-shooter offline screen: `python scripts/fetch_geometric_shooter_screen.py --campaign-id <id> --baseline-gate-summary artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`
+8. contact-aware geometric-shooter canonical probe: `python scripts/fetch_geometric_shooter_probe.py --campaign-id <id> --target-layout-json ros2_config/target_layouts/golf_ball_circle_delivery_zero.json --speed-mode center`
+9. generalized last-meter fetch dry-run contract: `python scripts/fetch_generalization_gate.py --campaign-id <id> --dry-run --random-cases 6`
+10. generalized last-meter fetch live gate: `python scripts/fetch_generalization_gate.py --campaign-id <id> --random-cases 6 --runs 1`
+11. wider architecture portfolio plan: `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
+12. next-thread generalized last-meter fetch research charter: `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md`
 
 Research contract:
 
@@ -509,6 +514,18 @@ Research contract:
 10. keep direct high-frequency LLM motor control out of scope
 11. keep `physics-calibrated-golf-fetch-v1` as the stable demo/UAT integration branch; use short-lived `spike/...` branches for targeted requalification and archive blocked architecture branches as evidence only
 12. do not confuse control-family screens with broad architecture coverage; new architecture spikes must change an ownership boundary, prediction model, actuation/contact strategy, or state-machine boundary and must name the expected generalization/product benefit
+13. treat the May 27 opposite-side dashboard observation as a generalization
+    signal: saved-layout gates prove the known geometry, while target-relative
+    side changes must be covered by seeded random/generalization suites before
+    promotion
+14. rerun green or surprising offline/accelerated/novel-layout results in the
+    canonical calibrated world before counting them, and freeze reproducible
+    random failures into named saved layouts before tuning against them
+15. prove generalized last-meter fetch with a reusable seeded gate before
+    claiming a robot-owned architecture generalizes beyond saved layouts
+16. when the goal is full architecture research, ground in
+    `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` and return a findings
+    matrix before tuning a single path
 
 Implementation contract:
 
@@ -516,6 +533,9 @@ Implementation contract:
 2. preserve `scripts/gather_object_centric_policy_helpers.py` `phase="fetch_to_pose"` diagnostics shape when tuning approach, first contact, or bounded trajectory limiting
 3. keep detailed shot rows in `state_history.jsonl`; use `gather_sequence.jsonl` only for milestones and result events
 4. propagate fetch verdict and shot-outcome summaries through `mission_verdict.json`, repeatability campaign summaries, and the evaluator before adding dashboard-specific live visualization
+5. keep direct `fetch_to_pose` runners able to vary robot start pose, target
+   pose, and target layout so seeded cases cover target-relative side, yaw,
+   lateral offset, ball-target distance, farther starts, and opposite-side starts
 
 Historical evaluator contract:
 
@@ -549,8 +569,45 @@ Live gates:
      alternative
 6. wider architecture portfolio:
    - follow `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
+   - use `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` as the
+     next-thread charter when the task is to research all paths first
    - required families include contact-aware geometric shooter, receding-horizon contact MPC/object servo, ROS action-server or behavior-tree last-meter owner, Nav2 reposition plus object-centric last-meter handoff, passive mechanical guide/funnel, learned residual or maneuver proposer, portfolio switcher, and perception-first target-pose fetch
-7. person target prototype only after pose-target gates are green
+   - first contact-aware geometric-shooter offline screen:
+     `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`
+   - result: `12/12` offline model passes on the May 27 CTA/policy traces, max
+     required delivery-entry speed `0.626061m/s`, max target-center stop speed
+     `0.907718m/s`, minimum aim half-angle `31.621299deg`, and no missing trace
+     inputs
+   - interpretation: the architecture is worth a canonical `zero` one-run probe
+     after a bounded shot-impulse implementation, but the artifact remains
+     `offline_only_not_uat`
+   - first canonical geometric-shooter `zero` probe:
+     `artifacts/session/live_fetch_geometric_shooter_probe_zero_20260527/fetch_geometric_shooter_probe/geometric_shooter_probe_summary.json`
+   - result: bounded direct-velocity shot impulse passed one canonical `zero`
+     run with initial speed `0.90598m/s`, heading `0.0deg`, closest/final
+     distance `0.011837m`, and 65 ball trace samples
+   - saved-layout one-run matrix:
+     `live_fetch_geometric_shooter_probe_zero_20260527`,
+     `live_fetch_geometric_shooter_probe_left05_20260527`, and
+     `live_fetch_geometric_shooter_probe_right05_20260527` all passed with
+     closest/final distances `0.011837m`, `0.011898m`, and `0.011898m`
+   - interpretation: advance to repeatability/recovery design; still not
+     robot-policy UAT, repeatability, or promotion evidence
+7. generalized last-meter fetch gate:
+   - command: `python scripts/fetch_generalization_gate.py --campaign-id <id> --random-cases 6 --runs 1`
+   - dry-run command: `python scripts/fetch_generalization_gate.py --campaign-id <id> --dry-run --random-cases 6`
+   - compares `object_centric_gather_policy_v1` and
+     `contact_aware_geometric_shooter` under the same calibrated
+     `fetch_to_pose` contract
+   - emits seeded layouts under
+     `artifacts/session/<id>/fetch_generalization_gate/layouts`
+   - freezes reproducible random failures under
+     `artifacts/session/<id>/fetch_generalization_gate/frozen_failure_layouts`
+   - reports geometry-aware failure classes: `side_selection`,
+     `pre_contact_reorientation`, `first_contact_alignment`,
+     `lateral_knock_away`, `overshoot`, `recovery_failure`, and
+     `shot_infeasible`
+8. person target prototype only after pose-target gates are green
 
 Branch hygiene:
 
@@ -1162,6 +1219,7 @@ Milestone 3 pass criteria include:
    - dashboard run verdicts: `artifacts/session/<session_id>/golf_ball_circle_delivery/<run_id>/mission_verdict.json`
    - direct policy verdicts: `artifacts/session/<session_id>/gather_mission_calibrated_golf_policy_probe/<run_id>/mission_verdict.json`
    - architecture revisit summaries: `artifacts/session/<campaign_id>/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`
+   - geometric-shooter offline screens: `artifacts/session/<campaign_id>/fetch_geometric_shooter_screen/geometric_shooter_summary.json`
    - detailed per-tick shot evidence belongs in `state_history.jsonl`, while milestone/result events belong in `gather_sequence.jsonl`
 30. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`

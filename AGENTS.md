@@ -50,6 +50,34 @@ Before final handoff:
 5. Authoritative runtime target: `robot_fidelity_orin`.
 6. Canonical inference backend: `tensorrt_int8`.
 
+## Planning And Branch Strategy Discipline
+
+Keep high-level research plans and branch-role decisions on the shared planning
+surface, not stranded on short-lived spike branches.
+
+When a spike changes architecture direction, branch strategy, promotion gates,
+or randomized/generalization requirements:
+
+1. Update the relevant planning docs before continuing implementation:
+   - `docs/FETCH_BRANCH_STRATEGY.md`
+   - `docs/OBJECT_CENTRIC_FETCH_POLICY_PLAN.md`
+   - `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
+   - `docs/ACTIVE_WORKFLOW.md`
+   - `docs/ROADMAP_2026_H2.md` when roadmap commitments change
+2. Propagate those planning updates back to `main` and the active integration
+   branch (`physics-calibrated-golf-fetch-v1` for calibrated fetch work) as soon
+   as safe, even if code and runnable experiments remain on a spike branch.
+3. Keep spikes scoped to one hypothesis, evidence bundle, or harness. A spike
+   must name the hypothesis, target gate, artifact path, and promotion/blocking
+   decision.
+4. Treat saved layouts as regression anchors and seeded randomized layouts as
+   generalization discovery. Freeze any reproducible random failure into a named
+   saved layout before tuning against it.
+5. After branch switches, do a grounding pass before new work: `git status
+   --short --branch`, `git reflog --date=iso --max-count=20`, `git stash list`,
+   and relevant planning-doc diffs. Preserve user/stashed work and do not assume
+   the current branch contains the whole plan.
+
 ## First Steps Per Session
 
 1. Check repo state: `git status --short`.

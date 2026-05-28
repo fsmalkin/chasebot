@@ -172,6 +172,28 @@ def test_parse_args_allows_fetch_to_pose_objective(monkeypatch):
     assert args.fetch_delivery_radius_m == 0.5
 
 
+def test_parse_args_allows_robot_start_pose(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        [
+            "repeatability",
+            "--robot-x",
+            "0.12",
+            "--robot-y",
+            "-0.34",
+            "--robot-yaw",
+            "1.25",
+        ],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.robot_x == 0.12
+    assert args.robot_y == -0.34
+    assert args.robot_yaw == 1.25
+
+
 def test_ensure_environment_ready_noops_when_dashboard_already_ready(monkeypatch):
     calls: list[tuple[str, str]] = []
 

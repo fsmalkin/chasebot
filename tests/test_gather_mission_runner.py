@@ -24,6 +24,11 @@ def _make_args(tmp_path: Path) -> SimpleNamespace:
         scenario_label="Corral Single Ball Place",
         world_file="yolo_test_world_v6_clean_uat_short_turf.world",
         surface_profile="short_turf",
+        mission_objective="gather_here",
+        fetch_delivery_radius_m=0.762,
+        robot_x=None,
+        robot_y=None,
+        robot_yaw=None,
         artifact_kind="gather_mission",
         poll_s=0.01,
         timeout_s=1.0,
@@ -325,6 +330,33 @@ def test_parse_args_allows_fetch_to_pose_objective(monkeypatch):
     assert args.fetch_target_x == 2.8
     assert args.fetch_target_y == -0.2
     assert args.fetch_delivery_radius_m == 0.5
+
+
+def test_target_world_pose_uses_configured_robot_start_pose(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.robot_x = 1.0
+    args.robot_y = -0.5
+    args.robot_yaw = 1.57079632679
+    args.target_layout_json = json.dumps(
+        {
+            "targets": [
+                {
+                    "id": "ball_1",
+                    "forward_m": 0.4,
+                    "lateral_m": 0.1,
+                    "z_m": 0.021336,
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+    pose = runner._target_world_pose(runner.targets[0])
+
+    assert pose["x"] == 0.9
+    assert pose["y"] == -0.1
+    assert pose["z"] == 0.021336
 
 
 def test_nav2_reacquire_goal_generation_covers_zero_plus_minus_and_ready_states():

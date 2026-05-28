@@ -69,6 +69,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fetch-target-y", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Y", "")))
     parser.add_argument("--fetch-target-z", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Z", "")))
     parser.add_argument("--fetch-delivery-radius-m", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_DELIVERY_RADIUS_M", 0.762)))
+    parser.add_argument("--robot-x", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_ROBOT_X", "")))
+    parser.add_argument("--robot-y", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_ROBOT_Y", "")))
+    parser.add_argument("--robot-yaw", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_ROBOT_YAW", "")))
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--campaign-id", default="")
     parser.add_argument("--timeout-s", type=float, default=30.0)
@@ -1103,6 +1106,9 @@ def main() -> int:
                 ("fetch_target_y", "--fetch-target-y"),
                 ("fetch_target_z", "--fetch-target-z"),
                 ("fetch_delivery_radius_m", "--fetch-delivery-radius-m"),
+                ("robot_x", "--robot-x"),
+                ("robot_y", "--robot-y"),
+                ("robot_yaw", "--robot-yaw"),
             ):
                 raw_value = getattr(args, arg_name, "")
                 if raw_value is not None and str(raw_value).strip():
@@ -1165,6 +1171,11 @@ def main() -> int:
             "y": float(args.fetch_target_y) if getattr(args, "fetch_target_y", None) is not None else None,
             "z": float(args.fetch_target_z) if getattr(args, "fetch_target_z", None) is not None else None,
             "radius_m": float(args.fetch_delivery_radius_m) if getattr(args, "fetch_delivery_radius_m", None) is not None else None,
+        },
+        "requested_robot_start_pose": {
+            "x": float(args.robot_x) if getattr(args, "robot_x", None) is not None else None,
+            "y": float(args.robot_y) if getattr(args, "robot_y", None) is not None else None,
+            "yaw": float(args.robot_yaw) if getattr(args, "robot_yaw", None) is not None else None,
         },
         "required_green_runs": max(args.runs, 1),
         "promotion_gate_mode": args.promotion_gate_mode,

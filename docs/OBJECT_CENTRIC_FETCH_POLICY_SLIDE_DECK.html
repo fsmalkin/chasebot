@@ -1,0 +1,1516 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Chasecar - 4th Grade Robot Slide Deck</title>
+  <style>
+    :root {
+      --page: #edf2f7;
+      --slide: #ffffff;
+      --ink: #172033;
+      --muted: #5b677a;
+      --line: #d9e2ec;
+      --soft-blue: #dff0ff;
+      --blue: #276fbf;
+      --soft-green: #e2f6e9;
+      --green: #2f8f55;
+      --soft-coral: #ffe9e3;
+      --coral: #d65b3f;
+      --soft-yellow: #fff3c7;
+      --yellow: #b7791f;
+      --soft-purple: #efe9ff;
+      --purple: #6b4fd3;
+      --dark: #1b263b;
+      --shadow: 0 22px 60px rgba(27, 38, 59, 0.16);
+      --sans: "Segoe UI", Arial, sans-serif;
+      --mono: "Cascadia Code", Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      letter-spacing: 0;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      background: var(--page);
+      color: var(--ink);
+      font-family: var(--sans);
+    }
+
+    body {
+      overflow: hidden;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .deck-shell {
+      display: grid;
+      grid-template-rows: 64px 1fr 70px;
+      min-height: 100vh;
+    }
+
+    .topbar,
+    .bottombar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 0 24px;
+      background: rgba(255, 255, 255, 0.92);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .bottombar {
+      border-top: 1px solid var(--line);
+      border-bottom: 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+      font-weight: 800;
+      color: var(--dark);
+    }
+
+    .brand-mark {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      background:
+        radial-gradient(circle at 27px 11px, #ffffff 0 3px, transparent 4px),
+        linear-gradient(135deg, var(--blue), var(--green));
+      position: relative;
+      flex: 0 0 auto;
+    }
+
+    .brand-mark::before,
+    .brand-mark::after {
+      content: "";
+      position: absolute;
+      bottom: -4px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--dark);
+      border: 2px solid #ffffff;
+    }
+
+    .brand-mark::before {
+      left: 7px;
+    }
+
+    .brand-mark::after {
+      right: 7px;
+    }
+
+    .brand-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 17px;
+    }
+
+    .control-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .icon-button,
+    .notes-button {
+      min-width: 44px;
+      height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--dark);
+      background: #ffffff;
+      cursor: pointer;
+      font-weight: 800;
+      box-shadow: 0 2px 0 rgba(27, 38, 59, 0.08);
+    }
+
+    .icon-button:hover,
+    .notes-button:hover,
+    .icon-button:focus-visible,
+    .notes-button:focus-visible {
+      outline: 3px solid rgba(39, 111, 191, 0.28);
+      border-color: var(--blue);
+    }
+
+    .notes-button {
+      padding: 0 14px;
+      font-size: 14px;
+    }
+
+    .notes-button[aria-pressed="true"] {
+      background: var(--soft-blue);
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+
+    .stage {
+      display: grid;
+      place-items: center;
+      min-height: 0;
+      padding: 22px;
+    }
+
+    .slide {
+      display: none;
+      width: min(1120px, calc(100vw - 44px));
+      height: min(700px, calc(100vh - 178px));
+      min-height: 520px;
+      background: var(--slide);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .slide.active {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .slide-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 22px 34px 0;
+    }
+
+    .slide-label {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--blue);
+      text-transform: uppercase;
+    }
+
+    .real-words {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .word-chip {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 5px 8px;
+      font-size: 12px;
+      font-family: var(--mono);
+      color: var(--muted);
+      background: #f8fafc;
+    }
+
+    .slide-body {
+      display: grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap: 28px;
+      align-items: center;
+      padding: 20px 40px 18px;
+      min-height: 0;
+    }
+
+    .slide-body.wide {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+
+    .copy {
+      min-width: 0;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 8px;
+      padding: 6px 10px;
+      background: var(--soft-yellow);
+      color: var(--yellow);
+      font-weight: 800;
+      font-size: 14px;
+      margin-bottom: 14px;
+    }
+
+    h1,
+    h2 {
+      margin: 0;
+      color: var(--dark);
+      line-height: 1.05;
+    }
+
+    h1 {
+      font-size: 56px;
+    }
+
+    h2 {
+      font-size: 44px;
+    }
+
+    p {
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: 24px;
+      line-height: 1.35;
+    }
+
+    .plain-list {
+      display: grid;
+      gap: 12px;
+      margin: 22px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .plain-list li {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 12px;
+      align-items: center;
+      min-height: 52px;
+      font-size: 22px;
+      color: var(--ink);
+    }
+
+    .number-dot,
+    .mini-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      font-weight: 900;
+      background: var(--blue);
+      flex: 0 0 auto;
+    }
+
+    .mini-icon.green {
+      background: var(--green);
+    }
+
+    .mini-icon.coral {
+      background: var(--coral);
+    }
+
+    .mini-icon.purple {
+      background: var(--purple);
+    }
+
+    .visual {
+      position: relative;
+      min-height: 360px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background:
+        linear-gradient(#ffffff 0 0) padding-box,
+        linear-gradient(135deg, var(--soft-blue), var(--soft-green), var(--soft-coral)) border-box;
+    }
+
+    .visual.no-frame {
+      border: 0;
+      background: transparent;
+      overflow: visible;
+    }
+
+    .robot-scene {
+      background:
+        linear-gradient(90deg, rgba(217, 226, 236, 0.7) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(217, 226, 236, 0.7) 1px, transparent 1px),
+        #f8fbff;
+      background-size: 42px 42px;
+    }
+
+    .robot {
+      position: absolute;
+      width: 160px;
+      height: 98px;
+      left: 46px;
+      bottom: 68px;
+      border-radius: 8px 8px 22px 22px;
+      background: linear-gradient(180deg, #f9fbff, #cfe4ff);
+      border: 4px solid var(--blue);
+      box-shadow: 0 10px 0 rgba(27, 38, 59, 0.1);
+    }
+
+    .robot::before {
+      content: "";
+      position: absolute;
+      width: 76px;
+      height: 42px;
+      left: 38px;
+      top: -46px;
+      border-radius: 8px 8px 0 0;
+      background: var(--dark);
+    }
+
+    .robot::after {
+      content: "";
+      position: absolute;
+      width: 58px;
+      height: 16px;
+      left: 48px;
+      top: -27px;
+      border-radius: 8px;
+      background:
+        radial-gradient(circle at 14px 8px, #ffffff 0 4px, transparent 5px),
+        radial-gradient(circle at 44px 8px, #ffffff 0 4px, transparent 5px),
+        var(--green);
+    }
+
+    .wheel {
+      position: absolute;
+      bottom: -18px;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: var(--dark);
+      border: 7px solid #6c7a90;
+    }
+
+    .wheel.left {
+      left: 22px;
+    }
+
+    .wheel.right {
+      right: 22px;
+    }
+
+    .ball {
+      position: absolute;
+      width: 54px;
+      height: 54px;
+      right: 104px;
+      bottom: 98px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 18px 16px, #ffffff 0 6px, transparent 7px),
+        #f2f7ff;
+      border: 4px solid var(--coral);
+      box-shadow: inset -8px -10px 0 rgba(214, 91, 63, 0.18);
+    }
+
+    .goal-ring {
+      position: absolute;
+      right: 54px;
+      top: 62px;
+      width: 126px;
+      height: 126px;
+      border: 12px solid var(--green);
+      border-radius: 50%;
+      background: rgba(47, 143, 85, 0.08);
+    }
+
+    .path-line {
+      position: absolute;
+      left: 220px;
+      right: 150px;
+      bottom: 125px;
+      height: 8px;
+      border-radius: 8px;
+      background: repeating-linear-gradient(90deg, var(--blue) 0 24px, transparent 24px 38px);
+    }
+
+    .build-blocks,
+    .team-grid,
+    .test-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .build-block,
+    .team-tile,
+    .test-tile {
+      min-height: 116px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      background: #f9fbfd;
+    }
+
+    .build-block strong,
+    .team-tile strong,
+    .test-tile strong {
+      display: block;
+      color: var(--dark);
+      font-size: 21px;
+      margin-bottom: 8px;
+    }
+
+    .build-block span,
+    .team-tile span,
+    .test-tile span {
+      display: block;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.35;
+    }
+
+    .block-blue {
+      background: var(--soft-blue);
+      border-color: #b9daf7;
+    }
+
+    .block-green {
+      background: var(--soft-green);
+      border-color: #bce6c9;
+    }
+
+    .block-coral {
+      background: var(--soft-coral);
+      border-color: #ffc9bc;
+    }
+
+    .block-yellow {
+      background: var(--soft-yellow);
+      border-color: #f6dc89;
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+      margin-top: 8px;
+    }
+
+    .arch-node {
+      min-height: 154px;
+      display: grid;
+      align-content: center;
+      gap: 8px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+      background: #f9fbfd;
+      position: relative;
+    }
+
+    .arch-node::after {
+      content: "";
+      position: absolute;
+      right: -13px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      border-radius: 3px;
+      background: var(--dark);
+      clip-path: polygon(28% 14%, 28% 86%, 86% 50%);
+      z-index: 2;
+    }
+
+    .arch-node:last-child::after {
+      display: none;
+    }
+
+    .arch-node b {
+      color: var(--dark);
+      font-size: 19px;
+    }
+
+    .arch-node span {
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.25;
+    }
+
+    .feedback-band {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 12px;
+      align-items: center;
+      margin-top: 22px;
+      padding: 14px 16px;
+      border-radius: 8px;
+      background: var(--soft-green);
+      border: 1px solid #bce6c9;
+      color: var(--green);
+      font-weight: 800;
+      text-align: center;
+      font-size: 19px;
+    }
+
+    .coach-guard {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .role-card {
+      min-height: 320px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 14px;
+      background: #f9fbfd;
+    }
+
+    .role-symbol {
+      width: 72px;
+      height: 72px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      font-size: 34px;
+      font-weight: 900;
+      background: var(--blue);
+    }
+
+    .role-symbol.guard {
+      background: var(--coral);
+    }
+
+    .role-card h3 {
+      margin: 0;
+      color: var(--dark);
+      font-size: 30px;
+    }
+
+    .role-card ul,
+    .rule-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .role-card li,
+    .rule-list li {
+      color: var(--muted);
+      font-size: 19px;
+      line-height: 1.35;
+      padding-left: 18px;
+      position: relative;
+    }
+
+    .role-card li::before,
+    .rule-list li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 10px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .mission-track {
+      position: relative;
+      min-height: 370px;
+      background:
+        linear-gradient(90deg, rgba(217, 226, 236, 0.7) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(217, 226, 236, 0.7) 1px, transparent 1px),
+        #fbfdff;
+      background-size: 48px 48px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .track-step {
+      position: absolute;
+      width: 162px;
+      min-height: 86px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 12px;
+      box-shadow: 0 8px 20px rgba(27, 38, 59, 0.08);
+    }
+
+    .track-step b {
+      display: block;
+      font-size: 18px;
+      color: var(--dark);
+      margin-bottom: 5px;
+    }
+
+    .track-step span {
+      display: block;
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+
+    .step-1 {
+      left: 34px;
+      top: 38px;
+      border-color: #b9daf7;
+    }
+
+    .step-2 {
+      left: 235px;
+      top: 104px;
+      border-color: #f6dc89;
+    }
+
+    .step-3 {
+      left: 436px;
+      top: 38px;
+      border-color: #bce6c9;
+    }
+
+    .step-4 {
+      right: 34px;
+      top: 104px;
+      border-color: #ffc9bc;
+    }
+
+    .step-5 {
+      left: 235px;
+      bottom: 42px;
+      border-color: #d5c8ff;
+    }
+
+    .step-6 {
+      right: 235px;
+      bottom: 42px;
+      border-color: #bce6c9;
+    }
+
+    .track-path {
+      position: absolute;
+      left: 124px;
+      right: 124px;
+      top: 182px;
+      height: 10px;
+      border-radius: 8px;
+      background: repeating-linear-gradient(90deg, var(--blue) 0 28px, transparent 28px 44px);
+    }
+
+    .rule-board {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .rule-panel {
+      border-radius: 8px;
+      padding: 22px;
+      background: var(--soft-coral);
+      border: 1px solid #ffc9bc;
+    }
+
+    .rule-panel.good {
+      background: var(--soft-green);
+      border-color: #bce6c9;
+    }
+
+    .rule-panel h3 {
+      margin: 0 0 14px;
+      color: var(--dark);
+      font-size: 28px;
+    }
+
+    .fetch-cycle {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .cycle-step {
+      min-height: 236px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #f9fbfd;
+      padding: 14px;
+      display: grid;
+      align-content: start;
+      gap: 12px;
+    }
+
+    .cycle-badge {
+      width: 52px;
+      height: 52px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #ffffff;
+      font-size: 22px;
+      font-weight: 900;
+      background: var(--blue);
+    }
+
+    .cycle-step:nth-child(2) .cycle-badge {
+      background: var(--coral);
+    }
+
+    .cycle-step:nth-child(3) .cycle-badge {
+      background: var(--green);
+    }
+
+    .cycle-step:nth-child(4) .cycle-badge {
+      background: var(--yellow);
+    }
+
+    .cycle-step:nth-child(5) .cycle-badge {
+      background: var(--purple);
+    }
+
+    .cycle-step b {
+      color: var(--dark);
+      font-size: 21px;
+    }
+
+    .cycle-step span {
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.35;
+    }
+
+    .notes {
+      display: none;
+      border-top: 1px solid var(--line);
+      background: #f8fafc;
+      color: var(--muted);
+      padding: 12px 34px 14px;
+      font-size: 16px;
+      line-height: 1.35;
+    }
+
+    .show-notes .notes {
+      display: block;
+    }
+
+    .counter {
+      min-width: 92px;
+      font-weight: 800;
+      color: var(--dark);
+      text-align: center;
+    }
+
+    .progress-wrap {
+      flex: 1 1 auto;
+      height: 10px;
+      max-width: 520px;
+      border-radius: 8px;
+      background: #d9e2ec;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      width: 0%;
+      height: 100%;
+      border-radius: 8px;
+      background: linear-gradient(90deg, var(--blue), var(--green), var(--coral));
+      transition: width 180ms ease;
+    }
+
+    .dots {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      max-width: 520px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid var(--line);
+      background: #ffffff;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .dot[aria-current="true"] {
+      background: var(--blue);
+      border-color: var(--blue);
+    }
+
+    .sources {
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .sources code {
+      font-family: var(--mono);
+      color: var(--dark);
+      background: #eef2f7;
+      padding: 2px 5px;
+      border-radius: 6px;
+    }
+
+    @media (max-width: 900px) {
+      body {
+        overflow: auto;
+      }
+
+      .deck-shell {
+        grid-template-rows: auto 1fr auto;
+      }
+
+      .topbar,
+      .bottombar {
+        padding: 10px 14px;
+        flex-wrap: wrap;
+        min-height: 64px;
+      }
+
+      .stage {
+        padding: 14px;
+      }
+
+      .slide {
+        width: 100%;
+        height: auto;
+        min-height: 0;
+      }
+
+      .slide-body,
+      .slide-body.wide {
+        grid-template-columns: 1fr;
+        padding: 18px 22px 18px;
+      }
+
+      .slide-head {
+        padding: 18px 22px 0;
+        align-items: flex-start;
+      }
+
+      h1 {
+        font-size: 42px;
+      }
+
+      h2 {
+        font-size: 34px;
+      }
+
+      p {
+        font-size: 20px;
+      }
+
+      .visual {
+        min-height: 310px;
+      }
+
+      .architecture,
+      .fetch-cycle {
+        grid-template-columns: 1fr;
+      }
+
+      .arch-node {
+        min-height: 96px;
+      }
+
+      .arch-node::after {
+        content: "";
+        right: auto;
+        left: 50%;
+        top: auto;
+        bottom: -14px;
+        transform: translateX(-50%);
+        clip-path: polygon(14% 28%, 86% 28%, 50% 86%);
+      }
+
+      .coach-guard,
+      .rule-board,
+      .build-blocks,
+      .team-grid,
+      .test-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .mission-track {
+        display: grid;
+        gap: 10px;
+        min-height: 0;
+        padding: 12px;
+      }
+
+      .track-step {
+        position: static;
+        width: auto;
+      }
+
+      .track-path {
+        display: none;
+      }
+
+      .notes {
+        padding: 12px 22px 14px;
+      }
+    }
+
+    @media print {
+      body {
+        overflow: visible;
+        background: #ffffff;
+      }
+
+      .topbar,
+      .bottombar {
+        display: none;
+      }
+
+      .deck-shell {
+        display: block;
+      }
+
+      .stage {
+        display: block;
+        padding: 0;
+      }
+
+      .slide,
+      .slide.active {
+        display: grid;
+        width: 100%;
+        height: auto;
+        min-height: 720px;
+        box-shadow: none;
+        border-radius: 0;
+        border: 0;
+        page-break-after: always;
+      }
+
+      .notes {
+        display: block;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .progress-bar {
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck-shell">
+    <header class="topbar">
+      <div class="brand" aria-label="Chasecar 4th grade robot slide deck">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div class="brand-title">Chasecar Robot Slide Deck</div>
+      </div>
+      <div class="control-row">
+        <button class="icon-button" id="prevButton" type="button" aria-label="Previous slide">&lt;</button>
+        <button class="icon-button" id="nextButton" type="button" aria-label="Next slide">&gt;</button>
+        <button class="notes-button" id="notesButton" type="button" aria-pressed="false">Notes</button>
+      </div>
+    </header>
+
+    <section class="stage" id="stage" aria-live="polite">
+      <article class="slide active" data-title="Meet Chasecar">
+        <div class="slide-head">
+          <div class="slide-label">Meet the robot</div>
+          <div class="real-words">
+            <span class="word-chip">JetBot</span>
+            <span class="word-chip">golf_ball_circle_delivery_uat</span>
+            <span class="word-chip">fetch_to_pose</span>
+          </div>
+        </div>
+        <div class="slide-body">
+          <div class="copy">
+            <span class="eyebrow">A classroom-friendly robot story</span>
+            <h1>Chasecar fetches a ball</h1>
+            <p>We built a small robot that can practice finding a ball, driving to it, and helping it roll into a target circle.</p>
+          </div>
+          <div class="visual robot-scene" aria-label="Robot, ball, and target circle illustration">
+            <div class="goal-ring"></div>
+            <div class="path-line"></div>
+            <div class="robot">
+              <div class="wheel left"></div>
+              <div class="wheel right"></div>
+            </div>
+            <div class="ball"></div>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: Start with the simple mission. Chasecar is like a tiny mini-golf helper: see the ball, line up, touch gently, and measure whether the ball crossed the goal circle.</aside>
+      </article>
+
+      <article class="slide" data-title="The Mission">
+        <div class="slide-head">
+          <div class="slide-label">The mission</div>
+          <div class="real-words">
+            <span class="word-chip">ball</span>
+            <span class="word-chip">target pose</span>
+          </div>
+        </div>
+        <div class="slide-body">
+          <div class="copy">
+            <span class="eyebrow">Easy to say, hard to do</span>
+            <h2>Find it. Aim. Roll it. Check it.</h2>
+            <p>The robot must be careful because a tiny bump can send the ball the wrong way.</p>
+          </div>
+          <div class="visual no-frame">
+            <ul class="plain-list">
+              <li><span class="number-dot">1</span><span>Look for the ball.</span></li>
+              <li><span class="number-dot">2</span><span>Drive behind it.</span></li>
+              <li><span class="number-dot">3</span><span>Push on the ball-target line.</span></li>
+              <li><span class="number-dot">4</span><span>Watch if the ball reaches the circle.</span></li>
+            </ul>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: Ask students why this is harder than it sounds. They may mention slippery floors, aiming, speed, and seeing where the ball is.</aside>
+      </article>
+
+      <article class="slide" data-title="How We Built It">
+        <div class="slide-head">
+          <div class="slide-label">How we built it</div>
+          <div class="real-words">
+            <span class="word-chip">Docker Compose</span>
+            <span class="word-chip">ROS 2 Kilted</span>
+            <span class="word-chip">container_kilted</span>
+          </div>
+        </div>
+        <div class="slide-body">
+          <div class="copy">
+            <span class="eyebrow">Build with layers</span>
+            <h2>We made a robot team, not one giant program</h2>
+            <p>Each layer has one job, so we can test it, fix it, and trust it before adding the next layer.</p>
+          </div>
+          <div class="build-blocks">
+            <div class="build-block block-blue"><strong>Containers</strong><span>Docker keeps the robot software packaged the same way each run.</span></div>
+            <div class="build-block block-green"><strong>Messages</strong><span>ROS 2 lets robot parts talk using clear channels.</span></div>
+            <div class="build-block block-coral"><strong>Simulator</strong><span>Gazebo Jetty is the main practice lane; Isaac is a fidelity check.</span></div>
+            <div class="build-block block-yellow"><strong>Tests</strong><span>Runs write evidence so we know what passed.</span></div>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: Compare this to building with blocks. If one block falls, you can fix that block instead of rebuilding the whole tower.</aside>
+      </article>
+
+      <article class="slide" data-title="Robot Body">
+        <div class="slide-head">
+          <div class="slide-label">The robot body</div>
+          <div class="real-words">
+            <span class="word-chip">Orin Nano</span>
+            <span class="word-chip">cmd_vel</span>
+          </div>
+        </div>
+        <div class="slide-body">
+          <div class="copy">
+            <span class="eyebrow">Wheels plus a computer</span>
+            <h2>The body moves, but the software decides</h2>
+            <p>Chasecar has wheels, motors, sensors, and a small computer that runs the robot programs.</p>
+          </div>
+          <div class="team-grid">
+            <div class="team-tile block-blue"><strong>Wheels</strong><span>Turn commands into motion.</span></div>
+            <div class="team-tile block-green"><strong>Computer</strong><span>Runs the robot brain and helpers.</span></div>
+            <div class="team-tile block-coral"><strong>Sensors</strong><span>Report what the robot can see and where it is.</span></div>
+            <div class="team-tile block-yellow"><strong>Stop system</strong><span>Can stop the robot quickly when needed.</span></div>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: The robot does not think with magic. It is a computer, sensors, and motors working together under limits.</aside>
+      </article>
+
+      <article class="slide" data-title="Robot Eyes">
+        <div class="slide-head">
+          <div class="slide-label">The robot eyes</div>
+          <div class="real-words">
+            <span class="word-chip">YOLO v8</span>
+            <span class="word-chip">3D detection</span>
+            <span class="word-chip">TensorRT</span>
+          </div>
+        </div>
+        <div class="slide-body">
+          <div class="copy">
+            <span class="eyebrow">Seeing is a team job</span>
+            <h2>The camera finds clues</h2>
+            <p>A detector spots the ball in the picture. A 3D step helps estimate where the ball is compared with the robot.</p>
+          </div>
+          <div class="visual robot-scene" aria-label="Camera detection illustration">
+            <div class="goal-ring" style="right: 42px; top: 42px;"></div>
+            <div class="ball" style="right: 88px; bottom: 132px;"></div>
+            <div class="robot" style="left: 54px; bottom: 70px;">
+              <div class="wheel left"></div>
+              <div class="wheel right"></div>
+            </div>
+            <div style="position:absolute; left:210px; top:96px; right:140px; height:118px; border:4px dashed var(--green); border-radius:8px;"></div>
+            <div style="position:absolute; left:218px; top:74px; color:var(--green); font-weight:900; font-size:20px;">Ball found</div>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: The AI vision part is good at saying, "This looks like the ball." It still has to feed measured information to rules and controllers.</aside>
+      </article>
+
+      <article class="slide" data-title="Practice World">
+        <div class="slide-head">
+          <div class="slide-label">The practice world</div>
+          <div class="real-words">
+            <span class="word-chip">sim-gate</span>
+            <span class="word-chip">gate-stack</span>
+            <span class="word-chip">dashboard-control</span>
+          </div>
+        </div>
+        <div class="slide-body">
+          <div class="copy">
+            <span class="eyebrow">Test before real life</span>
+            <h2>The robot trains in a simulator</h2>
+            <p>We use a practice world to repeat missions, measure mistakes, and keep risky ideas away from real hardware until they are ready.</p>
+          </div>
+          <div class="team-grid">
+            <div class="team-tile block-blue"><strong>Gazebo Gate</strong><span>The main pass/fail practice lane.</span></div>
+            <div class="team-tile block-green"><strong>Isaac Fidelity</strong><span>A more detailed check for realism.</span></div>
+            <div class="team-tile block-coral"><strong>Calibrated turf</strong><span>The current world uses a measured golf ball and target circle.</span></div>
+            <div class="team-tile block-yellow"><strong>Artifacts</strong><span>Runs save proof, like a science notebook.</span></div>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: The simulator is the robot's practice field. It lets us repeat the same problem many times, like a lab experiment.</aside>
+      </article>
+
+      <article class="slide" data-title="Message Team">
+        <div class="slide-head">
+          <div class="slide-label">The message team</div>
+          <div class="real-words">
+            <span class="word-chip">ROS topics</span>
+            <span class="word-chip">Nav2</span>
+            <span class="word-chip">/odom</span>
+            <span class="word-chip">/cmd_vel</span>
+          </div>
+        </div>
+        <div class="slide-body">
+          <div class="copy">
+            <span class="eyebrow">Walkie-talkies for code</span>
+            <h2>Robot helpers talk in short messages</h2>
+            <p>One helper reports the ball. Another reports position. Another plans a path. Another sends wheel speed commands.</p>
+          </div>
+          <div class="visual no-frame">
+            <ul class="plain-list">
+              <li><span class="mini-icon">E</span><span>Eyes: "I see the ball here."</span></li>
+              <li><span class="mini-icon green">M</span><span>Map: "The robot is here."</span></li>
+              <li><span class="mini-icon coral">P</span><span>Planner: "Drive this way."</span></li>
+              <li><span class="mini-icon purple">W</span><span>Wheels: "Moving now through /cmd_vel."</span></li>
+            </ul>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: ROS is like a classroom where everyone speaks on assigned channels, so the teacher can hear the right helper at the right time.</aside>
+      </article>
+
+      <article class="slide" data-title="Simple Architecture">
+        <div class="slide-head">
+          <div class="slide-label">Simplified architecture</div>
+          <div class="real-words">
+            <span class="word-chip">dashboard</span>
+            <span class="word-chip">policy</span>
+            <span class="word-chip">executor</span>
+          </div>
+        </div>
+        <div class="slide-body wide">
+          <div class="copy">
+            <span class="eyebrow">The big picture</span>
+            <h2>Six boxes run the mission</h2>
+          </div>
+          <div>
+            <div class="architecture" aria-label="Simplified Chasecar architecture diagram">
+              <div class="arch-node block-blue"><b>Human</b><span>Starts and watches from the browser dashboard.</span></div>
+              <div class="arch-node block-yellow"><b>AI Coach</b><span>Looks at a small state summary and suggests one next move.</span></div>
+              <div class="arch-node block-coral"><b>Rule Guard</b><span>Checks if the move is allowed and safe.</span></div>
+              <div class="arch-node block-green"><b>Executor</b><span>Turns the allowed move into robot actions.</span></div>
+              <div class="arch-node block-blue"><b>ROS Helpers</b><span>Perception, planning, odometry, and wheel commands.</span></div>
+              <div class="arch-node block-green"><b>Robot</b><span>Moves, senses, and reports what happened.</span></div>
+            </div>
+            <div class="feedback-band">
+              <span>Sensors report back</span>
+              <span>&lt;-</span>
+              <span>AI and rules choose again</span>
+            </div>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: Emphasize that information loops around. The robot acts, senses what happened, then the system decides the next safe step.</aside>
+      </article>
+
+      <article class="slide" data-title="AI Coach">
+        <div class="slide-head">
+          <div class="slide-label">AI and rules</div>
+          <div class="real-words">
+            <span class="word-chip">LLM supervisor</span>
+            <span class="word-chip">state digest</span>
+          </div>
+        </div>
+        <div class="slide-body wide">
+          <div class="copy">
+            <span class="eyebrow">AI has a safe job</span>
+            <h2>The AI is the coach, not the driver</h2>
+          </div>
+          <div class="coach-guard">
+            <section class="role-card">
+              <div class="role-symbol">AI</div>
+              <h3>AI Coach</h3>
+              <ul>
+                <li>Reads a short summary of the mission.</li>
+                <li>Chooses one high-level next idea.</li>
+                <li>Can say search, acquire, plan, track, visit, or stop.</li>
+              </ul>
+            </section>
+            <section class="role-card">
+              <div class="role-symbol guard">R</div>
+              <h3>Rule Guard</h3>
+              <ul>
+                <li>Checks if that idea is on the allowed list.</li>
+                <li>Blocks stale, unsafe, or impossible commands.</li>
+                <li>Lets safe ideas continue to the executor.</li>
+              </ul>
+            </section>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: The most important sentence: the AI suggests a play, but the rules decide whether that play can go onto the field.</aside>
+      </article>
+
+      <article class="slide" data-title="Rules Referee">
+        <div class="slide-head">
+          <div class="slide-label">Rules are the referee</div>
+          <div class="real-words">
+            <span class="word-chip">frozen contract</span>
+            <span class="word-chip">safe_stop</span>
+          </div>
+        </div>
+        <div class="slide-body wide">
+          <div class="copy">
+            <span class="eyebrow">Safety comes first</span>
+            <h2>Some ideas get a green light. Some get blocked.</h2>
+          </div>
+          <div class="rule-board">
+            <section class="rule-panel good">
+              <h3>Green light</h3>
+              <ul class="rule-list">
+                <li>The action is on the allowed list.</li>
+                <li>The robot has fresh sensor data.</li>
+                <li>The speed stays under the limit.</li>
+                <li>The mission is ready for that step.</li>
+              </ul>
+            </section>
+            <section class="rule-panel">
+              <h3>Red light</h3>
+              <ul class="rule-list">
+                <li>The AI invents a command.</li>
+                <li>The target data is too old.</li>
+                <li>The robot is not ready.</li>
+                <li>Stopping is safer than moving.</li>
+              </ul>
+            </section>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: This is the crossing-guard idea. The rules are boring on purpose, because boring safety rules are exactly what robots need.</aside>
+      </article>
+
+      <article class="slide" data-title="Fetch Policy">
+        <div class="slide-head">
+          <div class="slide-label">Object-centric fetch</div>
+          <div class="real-words">
+            <span class="word-chip">setup</span>
+            <span class="word-chip">contact</span>
+            <span class="word-chip">observe</span>
+            <span class="word-chip">recover</span>
+            <span class="word-chip">object_centric_fetch_policy_v1</span>
+          </div>
+        </div>
+        <div class="slide-body wide">
+          <div class="copy">
+            <span class="eyebrow">When the ball matters most</span>
+            <h2>The robot thinks about the ball, the target, and itself</h2>
+          </div>
+          <div class="fetch-cycle">
+            <div class="cycle-step"><span class="cycle-badge">1</span><b>Setup</b><span>Get behind the ball on the line to the target.</span></div>
+            <div class="cycle-step"><span class="cycle-badge">2</span><b>Contact</b><span>Use a bounded push, not a wild shove.</span></div>
+            <div class="cycle-step"><span class="cycle-badge">3</span><b>Observe</b><span>Watch where the ball rolls.</span></div>
+            <div class="cycle-step"><span class="cycle-badge">4</span><b>Recover</b><span>Re-aim if there is time and it is safe.</span></div>
+            <div class="cycle-step"><span class="cycle-badge">5</span><b>Done</b><span>Accept when the ball path reaches the circle.</span></div>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: This is the current fetch-to-pose idea. The robot does not only chase the ball; it reasons about the relationship between robot, ball, and target circle.</aside>
+      </article>
+
+      <article class="slide" data-title="Mission Steps">
+        <div class="slide-head">
+          <div class="slide-label">A mission step by step</div>
+          <div class="real-words">
+            <span class="word-chip">search</span>
+            <span class="word-chip">acquire</span>
+            <span class="word-chip">track</span>
+          </div>
+        </div>
+        <div class="slide-body wide">
+          <div class="copy">
+            <span class="eyebrow">One safe step at a time</span>
+            <h2>The robot never needs a mystery command</h2>
+          </div>
+          <div class="mission-track" aria-label="Mission step diagram">
+            <div class="track-path"></div>
+            <div class="track-step step-1"><b>Search</b><span>Turn and look for the ball.</span></div>
+            <div class="track-step step-2"><b>Acquire</b><span>Lock onto the target.</span></div>
+            <div class="track-step step-3"><b>Plan</b><span>Choose a safe approach.</span></div>
+            <div class="track-step step-4"><b>Track</b><span>Keep checking the ball.</span></div>
+            <div class="track-step step-5"><b>Fetch</b><span>Setup, touch, observe, recover.</span></div>
+            <div class="track-step step-6"><b>Stop</b><span>Stop when done or unsafe.</span></div>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: The frozen contract is a menu. The AI can pick from the menu, and the rules check readiness before anything moves.</aside>
+      </article>
+
+      <article class="slide" data-title="Testing">
+        <div class="slide-head">
+          <div class="slide-label">Testing gives confidence</div>
+          <div class="real-words">
+            <span class="word-chip">UAT</span>
+            <span class="word-chip">artifacts</span>
+            <span class="word-chip">3/3</span>
+          </div>
+        </div>
+        <div class="slide-body">
+          <div class="copy">
+            <span class="eyebrow">Robots need report cards</span>
+            <h2>Every run teaches us something</h2>
+            <p>We save what happened, compare it to the goal, and only promote ideas that pass repeatable checks.</p>
+          </div>
+          <div class="test-grid">
+            <div class="test-tile block-blue"><strong>Pass or fail</strong><span>Did the ball path reach the circle?</span></div>
+            <div class="test-tile block-green"><strong>How close?</strong><span>Measure the closest approach to the target.</span></div>
+            <div class="test-tile block-coral"><strong>Was it stable?</strong><span>Check wobble, side drift, and first contact.</span></div>
+            <div class="test-tile block-yellow"><strong>Can it repeat?</strong><span>Run the same layout again and again.</span></div>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: Link this to science class. Good robot work is not just "it worked once"; it is measured, repeated, and written down.</aside>
+      </article>
+
+      <article class="slide" data-title="Big Idea">
+        <div class="slide-head">
+          <div class="slide-label">The big idea</div>
+          <div class="real-words">
+            <span class="word-chip">AI + rules</span>
+            <span class="word-chip">teamwork</span>
+          </div>
+        </div>
+        <div class="slide-body">
+          <div class="copy">
+            <span class="eyebrow">What to remember</span>
+            <h2>Smart robots are teams</h2>
+            <p>AI helps choose. Rules keep it safe. Sensors tell the truth. Controllers move the wheels. Tests prove what happened.</p>
+          </div>
+          <div class="visual no-frame">
+            <ul class="plain-list">
+              <li><span class="mini-icon">1</span><span>Do not let AI drive the wheels directly.</span></li>
+              <li><span class="mini-icon green">2</span><span>Give AI safe choices and clear facts.</span></li>
+              <li><span class="mini-icon coral">3</span><span>Measure the robot like a science experiment.</span></li>
+              <li><span class="mini-icon purple">4</span><span>Improve one layer at a time.</span></li>
+            </ul>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: Close with the core lesson: a safe robot is not one giant brain. It is a careful team where every part has a job.</aside>
+      </article>
+
+      <article class="slide" data-title="Teacher Sources">
+        <div class="slide-head">
+          <div class="slide-label">Teacher source notes</div>
+          <div class="real-words">
+            <span class="word-chip">README</span>
+            <span class="word-chip">docs</span>
+            <span class="word-chip">contract</span>
+          </div>
+        </div>
+        <div class="slide-body">
+          <div class="copy">
+            <span class="eyebrow">Where the deck facts came from</span>
+            <h2>Real project words, kid-sized story</h2>
+            <p>This deck simplifies the actual Chasecar architecture while keeping the important safety boundary intact.</p>
+          </div>
+          <div class="sources">
+            <p><code>README.md</code>: system overview, dashboard, brain, perception, navigation, simulation, validation.</p>
+            <p><code>docs/LLM_CONTROL_ARCHITECTURE.md</code>: AI supervisor, deterministic policy, frozen contract, executor, low-level subsystems.</p>
+            <p><code>runtime/contracts/llm_control_contract.yaml</code>: allowed intents and safety limits.</p>
+            <p><code>docs/OBJECT_CENTRIC_FETCH_POLICY_PLAN.md</code>: current fetch-to-pose mission, calibrated golf-ball world, delivery marker, and setup-contact-observe-recover cycle.</p>
+          </div>
+        </div>
+        <aside class="notes">Speaker note: This slide can be skipped for students and kept for teachers or parents who ask where the project details came from.</aside>
+      </article>
+    </section>
+
+    <footer class="bottombar">
+      <div class="counter" id="counter">1 / 15</div>
+      <div class="progress-wrap" aria-hidden="true"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="dots" id="dots" aria-label="Slide picker"></div>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      const slides = Array.from(document.querySelectorAll(".slide"));
+      const previous = document.getElementById("prevButton");
+      const next = document.getElementById("nextButton");
+      const notes = document.getElementById("notesButton");
+      const counter = document.getElementById("counter");
+      const progress = document.getElementById("progressBar");
+      const dots = document.getElementById("dots");
+      const shell = document.querySelector(".deck-shell");
+      let current = 0;
+
+      function makeDots() {
+        slides.forEach((slide, index) => {
+          const dot = document.createElement("button");
+          dot.className = "dot";
+          dot.type = "button";
+          dot.setAttribute("aria-label", "Go to slide " + (index + 1) + ": " + slide.dataset.title);
+          dot.addEventListener("click", () => goTo(index));
+          dots.appendChild(dot);
+        });
+      }
+
+      function goTo(index) {
+        current = (index + slides.length) % slides.length;
+        slides.forEach((slide, slideIndex) => {
+          slide.classList.toggle("active", slideIndex === current);
+        });
+        const dotButtons = Array.from(dots.querySelectorAll(".dot"));
+        dotButtons.forEach((dot, dotIndex) => {
+          dot.setAttribute("aria-current", dotIndex === current ? "true" : "false");
+        });
+        counter.textContent = (current + 1) + " / " + slides.length;
+        progress.style.width = (((current + 1) / slides.length) * 100) + "%";
+        document.title = "Chasecar - " + slides[current].dataset.title;
+      }
+
+      previous.addEventListener("click", () => goTo(current - 1));
+      next.addEventListener("click", () => goTo(current + 1));
+      notes.addEventListener("click", () => {
+        const showing = shell.classList.toggle("show-notes");
+        notes.setAttribute("aria-pressed", showing ? "true" : "false");
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowLeft" || event.key === "PageUp") {
+          event.preventDefault();
+          goTo(current - 1);
+        }
+        if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") {
+          event.preventDefault();
+          goTo(current + 1);
+        }
+        if (event.key.toLowerCase() === "n") {
+          const showing = shell.classList.toggle("show-notes");
+          notes.setAttribute("aria-pressed", showing ? "true" : "false");
+        }
+      });
+
+      makeDots();
+      goTo(0);
+    })();
+  </script>
+</body>
+</html>

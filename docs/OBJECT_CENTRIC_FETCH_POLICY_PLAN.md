@@ -75,6 +75,15 @@ Latest green UAT:
   `first_contact_push_alignment_deg=12.826061` while still passing, so treat
   first-contact alignment as a watch item rather than a reason for a policy
   change on this green gate.
+- Opposite-side dashboard observation, May 27, 2026: placing robot and ball on
+  opposite sides of the delivery target produced qualitatively different
+  behavior from the saved centerline/off-axis gates. The robot could get near
+  the ball, but then turned into a side knock-away / overshoot instead of
+  owning the ball-target line. Treat this as a generalization failure signal,
+  not as a reason to discard the calibrated physics lane. The lesson is that
+  saved-layout success currently proves the known geometry; it does not yet
+  prove target-relative side selection, pre-contact reorientation, or bounded
+  first-contact energy across novel layouts.
 
 ## Architecture Revisit Conclusion
 
@@ -119,6 +128,11 @@ Nav2-reposition/object-centric last-meter hybrids, passive mechanical guides,
 learned residuals or maneuver proposers, portfolio switching, and
 perception-first target-pose fetch.
 
+For a fresh high-level research thread, use
+[GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md](GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md).
+That charter asks for a findings matrix across the full architecture portfolio
+before tuning any one path.
+
 Next architecture exploration should be wide but staged:
 
 1. keep the May 27 object-centric fetch gate as the comparison baseline
@@ -135,6 +149,13 @@ The next fetch-control work remains approach-stability and recovery first, not
 harder contact tuning. The May 27 gate added enough approach telemetry to keep
 lateral knock-away, pre-contact oscillation, and first-contact alignment as
 explicit watch items before any policy or architecture change.
+
+Current goal: build a generalized object-centric `fetch_to_pose` policy that
+can start from either side of the target, choose the correct side of the ball,
+settle onto the ball-target line, make low-yaw/low-lateral-error first contact,
+and bound the ball trajectory so it intersects the delivery circle without a
+side knock-away or uncontrolled overshoot. This is the goal to pursue before
+user/person targeting or broad Nav2/MPPI contact work.
 
 Control order:
 
@@ -156,6 +177,30 @@ Approach-quality evidence must record:
 Promotion rule: a run can pass the delivery circle and still be classified as
 control-quality suspect when approach telemetry shows lateral knock-away,
 pre-contact oscillation, or high first-contact yaw/lateral error.
+
+## Experiment Policy
+
+Use deterministic and randomized experiments for different jobs:
+
+1. Saved layouts are regression anchors. Keep `zero`, `left05`, and `right05`
+   as the first comparison gate for every policy or architecture branch because
+   they make margins, traces, and regressions comparable across time.
+2. Novel and randomized layouts are brittleness discovery. After a candidate is
+   green on the saved layouts, sample target-relative start side, robot yaw,
+   lateral offset, ball-target distance, and modest surface variation. Freeze
+   any reproduced failure seed into a named saved layout before tuning against
+   it.
+   The reusable entrypoint is
+   `python scripts/fetch_generalization_gate.py --campaign-id <id> --random-cases 6 --runs 1`;
+   use `--dry-run` first to validate generated layout and command contracts.
+3. Rerun selectively, not blindly. Rerun when the scenario class changes, when
+   physics or contact code changes, when an accelerated/offline result is green
+   or surprising, or before promotion. Do not rerun every obsolete blocked
+   branch unless it has a fresh hypothesis and a calibrated fetch gate.
+4. Count only canonical evidence for promotion. Offline, accelerated, and
+   dashboard-observation results can direct the next experiment, but promotion
+   evidence must come from the canonical calibrated world with fresh runtime
+   traces and the same no-retry delivery-radius contract.
 
 ## Trajectory Limiter Direction
 
@@ -550,7 +595,30 @@ the same bounded budgets.
    - classify regressions in closest approach, first-contact alignment,
      pre-contact yaw sign changes, lateral knock-away, or goal-side entry before
      any broader architecture pivot
-8. Person target prototype:
+8. Contact-aware geometric shooter spike:
+   - status: offline screen green; canonical saved-layout `zero`/`left05`/
+     `right05` one-shot matrix green; repeatability/recovery design not yet run
+   - artifact:
+     `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`
+   - result: `12/12` offline model passes over the May 27 calibrated CTA/policy
+     traces with no missing trace inputs
+   - model requirement: max delivery-entry speed `0.626061m/s`, max target-center
+     stop speed `0.907718m/s`, minimum aim half-angle `31.621299deg`
+   - canonical `zero` probe:
+     `artifacts/session/live_fetch_geometric_shooter_probe_zero_20260527/fetch_geometric_shooter_probe/geometric_shooter_probe_summary.json`
+   - probe result: bounded direct-velocity shot impulse passed with initial
+     speed `0.90598m/s`, heading `0.0deg`, closest/final distance `0.011837m`,
+     and 65 ball trace samples
+   - saved-layout matrix result:
+     `live_fetch_geometric_shooter_probe_zero_20260527`,
+     `live_fetch_geometric_shooter_probe_left05_20260527`, and
+     `live_fetch_geometric_shooter_probe_right05_20260527` all passed one-run
+     probes with closest/final distances `0.011837m`, `0.011898m`, and
+     `0.011898m`
+   - interpretation: the shot impulse is physically plausible enough to justify
+     repeatability/recovery design; do not count the offline screen or one-run
+     impulse matrix as robot-policy UAT evidence
+9. Person target prototype:
    - only after pose-target gates are green
 
 ## Non-Goals

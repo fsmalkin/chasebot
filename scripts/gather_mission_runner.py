@@ -2502,10 +2502,21 @@ fi
         safe_id = "".join(ch if ch.isalnum() else "_" for ch in target.id.lower())
         return f"{self.args.target_model_name}_{safe_id}"
 
+    def _mission_start_pose(self) -> dict[str, float]:
+        robot_x = clean_number(getattr(self.args, "robot_x", None))
+        robot_y = clean_number(getattr(self.args, "robot_y", None))
+        robot_yaw = clean_number(getattr(self.args, "robot_yaw", None))
+        return {
+            "x": float(robot_x if robot_x is not None else DEFAULT_MISSION_START_POSE["x"]),
+            "y": float(robot_y if robot_y is not None else DEFAULT_MISSION_START_POSE["y"]),
+            "yaw": float(robot_yaw if robot_yaw is not None else DEFAULT_MISSION_START_POSE["yaw"]),
+        }
+
     def _target_world_pose(self, target: GatherTargetSpec) -> dict[str, float]:
-        anchor_x = float(DEFAULT_MISSION_START_POSE["x"])
-        anchor_y = float(DEFAULT_MISSION_START_POSE["y"])
-        anchor_yaw = float(DEFAULT_MISSION_START_POSE["yaw"])
+        start_pose = self._mission_start_pose()
+        anchor_x = float(start_pose["x"])
+        anchor_y = float(start_pose["y"])
+        anchor_yaw = float(start_pose["yaw"])
         world_x = anchor_x + (math.cos(anchor_yaw) * target.forward_m) - (math.sin(anchor_yaw) * target.lateral_m)
         world_y = anchor_y + (math.sin(anchor_yaw) * target.forward_m) + (math.cos(anchor_yaw) * target.lateral_m)
         return {"x": round(world_x, 6), "y": round(world_y, 6), "z": round(target.z_m, 6)}
@@ -2820,16 +2831,17 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
     def _spawn_mission_models(self, ready_state: dict[str, Any], mission_root: Path) -> None:
         compose_project = clean_text(ready_state.get("compose_project"))
         world_name = clean_text(ready_state.get("world_name"), DEFAULT_WORLD_NAME)
+        start_pose = self._mission_start_pose()
         self._set_robot_pose(
             ready_state,
-            x=float(DEFAULT_MISSION_START_POSE["x"]),
-            y=float(DEFAULT_MISSION_START_POSE["y"]),
-            yaw=float(DEFAULT_MISSION_START_POSE["yaw"]),
+            x=float(start_pose["x"]),
+            y=float(start_pose["y"]),
+            yaw=float(start_pose["yaw"]),
         )
         self._wait_for_robot_pose_near(
-            x=float(DEFAULT_MISSION_START_POSE["x"]),
-            y=float(DEFAULT_MISSION_START_POSE["y"]),
-            yaw=float(DEFAULT_MISSION_START_POSE["yaw"]),
+            x=float(start_pose["x"]),
+            y=float(start_pose["y"]),
+            yaw=float(start_pose["yaw"]),
         )
         self._remove_model(compose_project=compose_project, world_name=world_name, model_name=self.args.zone_model_name)
         self._spawn_model(
@@ -10156,6 +10168,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fetch-target-y", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Y", "")))
     parser.add_argument("--fetch-target-z", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Z", "")))
     parser.add_argument("--fetch-delivery-radius-m", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_DELIVERY_RADIUS_M", DEFAULT_FETCH_DELIVERY_RADIUS_M)))
+    parser.add_argument("--robot-x", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_ROBOT_X", "")))
+    parser.add_argument("--robot-y", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_ROBOT_Y", "")))
+    parser.add_argument("--robot-yaw", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_ROBOT_YAW", "")))
     parser.add_argument("--world-file", default=os.environ.get("WORLD_FILE", ""))
     parser.add_argument("--surface-profile", default=os.environ.get("CHASECAR_SURFACE_PROFILE", "baseline"))
     parser.add_argument("--artifact-kind", default="gather_mission")
