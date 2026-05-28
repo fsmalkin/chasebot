@@ -75,12 +75,13 @@ ball contact, so old ball/turf physics does not explain the primary failure.
 | `object_centric_gather_policy_v1` | `docs/OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md` | Superseded gather/place plan | Do not reopen as a gather/place promotion path. |
 | `object_centric_fetch_policy_v1` | `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`; `artifacts/session/live_passive_golf_roll_built_resistance_repeatability_20260526/passive_ball_roll_calibration/campaign_summary.json` | Active calibrated baseline | Organize new alternatives around this gate and telemetry. |
 | `contact_aware_geometric_shooter` | `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`; `artifacts/session/live_fetch_geometric_shooter_probe_zero_20260527/fetch_geometric_shooter_probe/geometric_shooter_probe_summary.json` plus `left05` / `right05` one-run probes | Direct-velocity physics probe, not robot-owned runtime evidence | Keep as roll-window/coast-geometry evidence; do not promote as the primary runtime path. |
-| `ai_push_coast_servo` | planned spike only | Preferred next research lane | Train or prototype local predictor/proposer from calibrated simulation, score in shadow mode, then execute only inside deterministic guards. |
+| `nav2_followpath_corridor_push_v1` | planned spike only | Preferred immediate research lane | Let Nav2 own real-time FollowPath corridor tracking while a fetch monitor cancels on success, ball escape, stale state, unsafe drift, timeout, or action abort. |
+| `ai_push_coast_servo` | planned spike only | Next/fallback contact-control lane | Train or prototype local predictor/proposer from calibrated simulation, score in shadow mode, then execute only inside deterministic guards if Nav2 corridor-push cannot keep contact stable. |
 
 ## Latest Revisit Result
 
-The May 27, 2026 targeted MPPI revisit did not justify developing an alternative
-architecture:
+The May 27, 2026 targeted MPPI revisit did not justify developing the old
+`nav2_mppi_follow_path_reacquire_v1` alternative:
 
 - artifact:
   `artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`
@@ -93,6 +94,10 @@ architecture:
   `pre_stage_pose_not_reached`
 - branch decision: keep MPPI as long-range/pre-stage baseline evidence only; do
   not create a development branch for this alternative
+
+This does not close the new `nav2_followpath_corridor_push_v1` hypothesis. The
+new spike is a fresh contact-ready/corridor-push test under calibrated physics,
+not a revival of the blocked MPPI pre-stage branch.
 
 ## Wider Architecture Portfolio
 
@@ -135,9 +140,11 @@ fresh `zero` and `plus45` pre-stage proof is recorded with artifact paths and an
 explicit update to this document.
 
 Current preferred branch decision: pursue
-`spike/fetch-arch-ai-push-coast-servo-YYYYMMDD` next. The hypothesis is that a
-calibrated-simulation-trained local predictor/proposer can improve generalized
-bounded pushing and coast timing while deterministic guards keep command limits,
-target freshness, retry budget, and safe stop authoritative. LM/VLA components
-may supervise mode choice and failure interpretation, but they must not own
-high-frequency `/cmd_vel`.
+`spike/fetch-arch-nav2-corridor-push-20260528` next. The hypothesis is that the
+calibrated ball/turf physics may keep contact within Nav2's natural real-time
+path-tracking envelope if Nav2 owns a ball-target corridor path and a fetch
+monitor only cancels on success, ball escape, stale state, unsafe drift,
+timeout, or action abort. If the ball escapes or contact motion is unstable,
+continue with `spike/fetch-arch-ai-push-coast-servo-YYYYMMDD` as the learned
+local contact-control fallback. LM/VLA components may supervise mode choice and
+failure interpretation, but they must not own high-frequency `/cmd_vel`.

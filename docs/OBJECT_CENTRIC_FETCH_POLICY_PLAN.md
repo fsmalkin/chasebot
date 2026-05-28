@@ -20,15 +20,20 @@ The previous gather/place objective remains useful as negative baseline
 evidence, but success is no longer final stop in the corral. Success is
 trajectory intersection with a delivery radius around the requested target pose.
 
-May 28, 2026 pivot: the next research lane should bring AI closer to control
-without turning fetch into a kick/shot primitive. The runtime goal is
-AI-assisted bounded push-and-coast:
+May 28, 2026 pivot: keep fetch no-shoot and robot-owned, then first test whether
+calibrated physics makes a simpler Nav2 corridor-push sufficient before building
+the learned contact controller. The runtime goal remains bounded push-and-coast:
 
 - robot-owned contact remains mandatory
 - the robot pushes with bounded energy, then coasts only when the measured or
   predicted ball trajectory intersects the delivery circle
-- learned local models may predict roll outcome or propose setup/push/coast
-  maneuvers, first in shadow mode and later only inside deterministic guards
+- immediate spike: `nav2_followpath_corridor_push_v1`, where Nav2 owns
+  real-time `FollowPath` tracking through the ball-target corridor and a monitor
+  cancels on success, ball escape, stale state, unsafe drift, timeout, or action
+  abort
+- learned local models remain the next/fallback lane: they may predict roll
+  outcome or propose setup/push/coast maneuvers, first in shadow mode and later
+  only inside deterministic guards
 - LM/VLA-style models may supervise task mode, failure interpretation, and
   known maneuver choices, but not high-frequency `/cmd_vel`
 - contact-aware geometric-shooter artifacts are retained as physics probes, not
@@ -138,14 +143,19 @@ architecture portfolio and gate ladder now live in
 That plan explicitly separates control variants from architecture spikes and
 adds coverage for contact-aware geometric shooting, receding-horizon contact
 MPC/object servo, ROS action-server or behavior-tree last-meter ownership,
-Nav2-reposition/object-centric last-meter hybrids, passive mechanical guides,
-learned residuals or maneuver proposers, portfolio switching, and
+Nav2 FollowPath corridor-push contact ownership, Nav2-reposition/object-centric
+last-meter hybrids, passive mechanical guides, learned residuals or maneuver
+proposers, portfolio switching, and
 perception-first target-pose fetch.
 
 Research outcome after the May 28 discussion: do not promote a geometric
 shooter runtime. Use its direct-velocity probe data to understand feasible
 roll/coast windows, then focus the next implementation spike on
-`spike/fetch-arch-ai-push-coast-servo-YYYYMMDD`.
+`spike/fetch-arch-nav2-corridor-push-20260528`. This tests whether calibrated
+physics keeps the ball within Nav2's natural corridor-tracking envelope. If the
+ball escapes or contact motion is unstable, continue with
+`spike/fetch-arch-ai-push-coast-servo-YYYYMMDD` as the learned local
+contact-control fallback.
 
 For a fresh high-level research thread, use
 [GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md](GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md).
@@ -177,15 +187,17 @@ can start from either side of the target, choose the correct side of the ball,
 settle onto the ball-target line, make low-yaw/low-lateral-error first contact,
 and bound the ball trajectory so it intersects the delivery circle without a
 side knock-away or uncontrolled overshoot. The next branch should pursue this
-as an AI-assisted bounded push-and-coast servo, not as intentional shooting or
-direct ball impulse.
+as a Nav2 FollowPath corridor-push hypothesis first, not as intentional shooting
+or direct ball impulse.
 
 Control order:
 
 1. Stabilize the pre-contact approach on the ball-target line.
 2. Make first contact with low lateral error and low yaw error.
-3. Keep pushing toward the target while applying bounded directional correction.
-4. Add shadow-mode learned prediction/proposal for setup pocket, push duration,
+3. Let Nav2 track a ball-target corridor path while a monitor cancels only on
+   success, ball escape, stale state, unsafe drift, timeout, or action abort.
+4. If Nav2 contact motion is unstable, add shadow-mode learned
+   prediction/proposal for setup pocket, push duration,
    coast timing, miss vector, and recovery side.
 5. Allow learned proposals to execute only after deterministic guards accept the
    maneuver class and shadow evidence shows benefit.
@@ -284,7 +296,16 @@ It may emit bounded `linear_x` / `angular_z` commands, short relative waypoints,
 or contact profiles, but every proposal must pass deterministic guards before
 execution.
 
-The first AI-assisted family should be treated as:
+The immediate Nav2-first hypothesis should be treated as:
+
+`nav2_followpath_corridor_push_v1`
+
+Nav2 owns real-time `FollowPath` tracking through the ball-target corridor. The
+fetch monitor does not steer; it cancels on success, ball escape, stale state,
+unsafe drift, timeout, or action abort. This is distinct from the old
+`nav2_mppi_follow_path_reacquire_v1` pre-stage evidence branch.
+
+The first AI-assisted fallback family should be treated as:
 
 `ai_push_coast_servo`
 
@@ -678,7 +699,21 @@ the same bounded budgets.
    - interpretation: the direct-velocity impulse is physically plausible enough
      to inform roll/coast windows; do not count the offline screen or one-run
      impulse matrix as robot-policy UAT evidence
-9. AI-assisted push-coast shadow gate:
+9. Nav2 FollowPath corridor-push spike:
+   - status: planned immediate spike
+   - branch:
+     `spike/fetch-arch-nav2-corridor-push-20260528`
+   - architecture:
+     `nav2_followpath_corridor_push_v1`
+   - first evidence:
+     contact-ready `zero`, `left05`, and `right05` with Nav2 owning the
+     ball-target corridor path and the monitor canceling only on success, ball
+     escape, stale state, unsafe drift, timeout, or action abort
+   - promotion precondition:
+     no ball escape, stable action/cancel behavior, stable command output, and
+     `fetch_to_pose_pass=true`; if only contact-ready runs pass, repair setup
+     separately before claiming full-layout generalization
+10. AI-assisted push-coast shadow gate:
    - status: planned
    - branch:
      `spike/fetch-arch-ai-push-coast-servo-YYYYMMDD`
@@ -690,7 +725,7 @@ the same bounded budgets.
    - promotion precondition:
      no learned execution until shadow predictions improve margin or failure
      classification without guard violations
-10. Person target prototype:
+11. Person target prototype:
    - only after pose-target gates are green
 
 ## Non-Goals

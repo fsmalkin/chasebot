@@ -553,23 +553,30 @@ Current direction update:
    - result: all three one-run calibrated layouts failed before contact with
      `pre_stage_path_clearance_guard`, so the roadmap stays with the current
      object-centric fetch baseline rather than an MPPI alternative branch
-10. May 28, 2026 AI-assisted no-shoot pivot:
+10. May 28, 2026 Nav2 corridor-push first spike and AI fallback:
    - keep the runtime fetch architecture as robot-owned bounded push-and-coast,
      not intentional shooting or direct ball impulse
    - use contact-aware geometric-shooter artifacts as calibrated roll/coast
      physics probes only
-   - bring AI closer to control through a learned local predictor/proposer first:
-     setup pocket, push duration, coast timing, miss vector, and recovery side
-   - train/prototype from large calibrated simulation batches, then score in
-     shadow mode on saved anchors, seeded random layouts, and frozen failures
-     before learned output can execute
+   - test a physics-first Nav2 hypothesis before building the learned local
+     contact controller: `nav2_followpath_corridor_push_v1` lets Nav2 own
+     real-time `FollowPath` tracking through the ball-target corridor while a
+     fetch monitor cancels only on measured success, ball escape, stale state,
+     unsafe drift, timeout, or action abort
+   - treat the old `nav2_mppi_follow_path_reacquire_v1` calibrated revisit as
+     prior negative pre-stage evidence, not as this new corridor-push contact
+     hypothesis
+   - keep AI as the next/fallback contact lane: train/prototype from large
+     calibrated simulation batches, score in shadow mode on saved anchors,
+     seeded random layouts, and frozen failures, then allow learned output only
+     inside deterministic guards
    - allow LM/VLA-style models to supervise task mode, failure interpretation,
      and known maneuver choices only through deterministic contracts
    - keep deterministic guards authoritative over command bounds, target
      freshness, ball drift, retry budget, safe stop, `/odom`, and frozen
      contracts
    - preferred next spike:
-     `spike/fetch-arch-ai-push-coast-servo-YYYYMMDD`
+     `spike/fetch-arch-nav2-corridor-push-20260528`
 11. architecture exploration should widen, but stay staged:
    - do not treat the legacy `--gather-control-family` list as exhaustive
      architecture coverage; it is a runnable control-family screen inside the
@@ -577,11 +584,12 @@ Current direction update:
    - use [CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md)
      for the wider portfolio
    - include contact-aware geometric shooting as physics-probe evidence,
-     AI-assisted bounded push-coast object servo, receding-horizon contact
-     MPC/object servo, ROS action-server or behavior-tree last-meter ownership,
-     Nav2 reposition plus object-centric last-meter handoff, passive mechanical
-     guide/funnel, learned residual or maneuver proposer, LM/VLA high-level
-     supervision, portfolio switching, and perception-first target-pose fetch
+     Nav2 FollowPath corridor-push contact ownership, AI-assisted bounded
+     push-coast object servo, receding-horizon contact MPC/object servo, ROS
+     action-server or behavior-tree last-meter ownership, Nav2 reposition plus
+     object-centric last-meter handoff, passive mechanical guide/funnel, learned
+     residual or maneuver proposer, LM/VLA high-level supervision, portfolio
+     switching, and perception-first target-pose fetch
    - accelerated/offline results can reject a candidate early, but canonical
      `real_time_factor=1.0` saved-layout evidence is required before promotion
    - a candidate must offer more than equal pass rate: require better margin,

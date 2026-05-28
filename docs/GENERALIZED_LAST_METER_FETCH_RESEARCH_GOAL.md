@@ -17,8 +17,8 @@ not only the current saved layouts.
 
 ## May 28, 2026 Direction
 
-The research pass selected an AI-assisted, no-shoot runtime direction. The
-primary architecture is a robot-owned bounded push-and-coast local policy:
+The research pass selected a no-shoot runtime direction. The target
+architecture is a robot-owned bounded push-and-coast local policy:
 approach the correct side of the ball, make low-error contact, add only bounded
 energy, stop pushing when the measured or predicted trajectory intersects the
 delivery circle, then observe and re-aim within a small budget.
@@ -38,6 +38,16 @@ Use contact-aware geometric-shooter evidence as a physics and trajectory probe
 only. It is not the preferred runtime architecture because it currently proves a
 direct ball-velocity impulse, not robot-owned bounded pushing.
 
+Immediate update: before building the learned contact controller, test whether
+the calibrated world physics keeps the ball inside Nav2's natural operating
+envelope. The next hypothesis spike is `nav2_followpath_corridor_push_v1`:
+Nav2 owns real-time `FollowPath` tracking through the ball-target corridor,
+while a fetch monitor only cancels on measured success, ball escape, stale
+state, unsafe drift, timeout, or action abort. This is distinct from the old
+`nav2_mppi_follow_path_reacquire_v1` pre-stage evidence branch; it is a fresh
+corridor-push test. If the ball escapes or Nav2 contact motion is unstable, the
+AI learned local contact policy remains the next/fallback lane.
+
 ## Paths To Research
 
 Evaluate these paths side by side:
@@ -46,17 +56,20 @@ Evaluate these paths side by side:
 2. Contact-aware geometric shooter as physics-probe evidence only.
 3. Receding-horizon contact MPC or object servo.
 4. ROS action-server or behavior-tree last-meter owner.
-5. Nav2 reposition plus object-centric last meter.
-6. Passive mechanical guide or funnel.
-7. Learned local predictor, residual, or maneuver proposer behind deterministic
+5. Nav2 FollowPath corridor-push contact owner.
+6. Nav2 reposition plus object-centric last meter.
+7. Passive mechanical guide or funnel.
+8. Learned local predictor, residual, or maneuver proposer behind deterministic
    guards.
-8. Portfolio supervisor or switcher.
-9. Perception-first target-pose fetch.
+9. Portfolio supervisor or switcher.
+10. Perception-first target-pose fetch.
 
 Use the existing object-centric baseline as the comparison reference, not as an
-automatic winner. The preferred next spike is not a shooter spike; it is an
-AI-assisted bounded push-and-coast object-servo lane with shadow-model scoring
-before learned proposals are allowed to execute.
+automatic winner. The preferred next spike is not a shooter spike; it is
+`spike/fetch-arch-nav2-corridor-push-20260528`, a physics-first Nav2
+FollowPath corridor-push test with ball-escape monitoring. The AI-assisted
+bounded push-and-coast object-servo lane remains the next/fallback path if Nav2
+cannot keep contact stable under calibrated physics.
 
 ## Research Questions
 
