@@ -185,6 +185,9 @@ Use deterministic and randomized experiments for different jobs:
    lateral offset, ball-target distance, and modest surface variation. Freeze
    any reproduced failure seed into a named saved layout before tuning against
    it.
+   The reusable entrypoint is
+   `python scripts/fetch_generalization_gate.py --campaign-id <id> --random-cases 6 --runs 1`;
+   use `--dry-run` first to validate generated layout and command contracts.
 3. Rerun selectively, not blindly. Rerun when the scenario class changes, when
    physics or contact code changes, when an accelerated/offline result is green
    or surprising, or before promotion. Do not rerun every obsolete blocked

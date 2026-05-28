@@ -80,6 +80,7 @@ do not by themselves prove target-relative side selection or generalization.
    - wider lateral offsets, farther starts, start yaw variation, target-distance
      variation, opposite-side target-relative starts, and at least one
      secondary surface check
+   - first harness: `scripts/fetch_generalization_gate.py`
    - include hard-case layouts only after the candidate clears the saved-layout
      gate, so hard cases do not distract from primary repeatability
    - run seeded random samples after deterministic anchors are green; any
@@ -87,6 +88,9 @@ do not by themselves prove target-relative side selection or generalization.
      tuning
    - compare randomized failures by failure class and geometry, not just pass
      rate, so a single novel case can reveal a missing ownership boundary
+   - the first comparison set must include the current object-centric baseline
+     and the contact-aware geometric shooter, while clearly marking the shooter
+     as a shot primitive until robot-owned contact is implemented
 7. Promotion package:
    - include saved-layout repeatability, at least one seeded-random
      generalization set, and an explicit explanation of any observed

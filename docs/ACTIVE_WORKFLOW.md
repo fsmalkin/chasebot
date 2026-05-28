@@ -495,7 +495,9 @@ Commands:
 6. accelerated screen for cheap rejection only: `python scripts/calibrated_fetch_architecture_revisit.py --fast-screen --short-circuit-on-failure --screen-scope runnable_control_family_screen --candidate-family <family> --runs 1`
 7. contact-aware geometric-shooter offline screen: `python scripts/fetch_geometric_shooter_screen.py --campaign-id <id> --baseline-gate-summary artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`
 8. contact-aware geometric-shooter canonical probe: `python scripts/fetch_geometric_shooter_probe.py --campaign-id <id> --target-layout-json ros2_config/target_layouts/golf_ball_circle_delivery_zero.json --speed-mode center`
-9. wider architecture portfolio plan: `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
+9. generalized last-meter fetch dry-run contract: `python scripts/fetch_generalization_gate.py --campaign-id <id> --dry-run --random-cases 6`
+10. generalized last-meter fetch live gate: `python scripts/fetch_generalization_gate.py --campaign-id <id> --random-cases 6 --runs 1`
+11. wider architecture portfolio plan: `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
 
 Research contract:
 
@@ -518,6 +520,8 @@ Research contract:
 14. rerun green or surprising offline/accelerated/novel-layout results in the
     canonical calibrated world before counting them, and freeze reproducible
     random failures into named saved layouts before tuning against them
+15. prove generalized last-meter fetch with a reusable seeded gate before
+    claiming a robot-owned architecture generalizes beyond saved layouts
 
 Implementation contract:
 
@@ -525,6 +529,9 @@ Implementation contract:
 2. preserve `scripts/gather_object_centric_policy_helpers.py` `phase="fetch_to_pose"` diagnostics shape when tuning approach, first contact, or bounded trajectory limiting
 3. keep detailed shot rows in `state_history.jsonl`; use `gather_sequence.jsonl` only for milestones and result events
 4. propagate fetch verdict and shot-outcome summaries through `mission_verdict.json`, repeatability campaign summaries, and the evaluator before adding dashboard-specific live visualization
+5. keep direct `fetch_to_pose` runners able to vary robot start pose, target
+   pose, and target layout so seeded cases cover target-relative side, yaw,
+   lateral offset, ball-target distance, farther starts, and opposite-side starts
 
 Historical evaluator contract:
 
@@ -580,7 +587,21 @@ Live gates:
      closest/final distances `0.011837m`, `0.011898m`, and `0.011898m`
    - interpretation: advance to repeatability/recovery design; still not
      robot-policy UAT, repeatability, or promotion evidence
-7. person target prototype only after pose-target gates are green
+7. generalized last-meter fetch gate:
+   - command: `python scripts/fetch_generalization_gate.py --campaign-id <id> --random-cases 6 --runs 1`
+   - dry-run command: `python scripts/fetch_generalization_gate.py --campaign-id <id> --dry-run --random-cases 6`
+   - compares `object_centric_gather_policy_v1` and
+     `contact_aware_geometric_shooter` under the same calibrated
+     `fetch_to_pose` contract
+   - emits seeded layouts under
+     `artifacts/session/<id>/fetch_generalization_gate/layouts`
+   - freezes reproducible random failures under
+     `artifacts/session/<id>/fetch_generalization_gate/frozen_failure_layouts`
+   - reports geometry-aware failure classes: `side_selection`,
+     `pre_contact_reorientation`, `first_contact_alignment`,
+     `lateral_knock_away`, `overshoot`, `recovery_failure`, and
+     `shot_infeasible`
+8. person target prototype only after pose-target gates are green
 
 Branch hygiene:
 
