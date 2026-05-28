@@ -353,6 +353,10 @@ DEFAULT_NAV2_FOLLOW_PATH_FEEDBACK_SAMPLE_INTERVAL_S = 0.5
 DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_MAX = 20
 DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_INTERVAL_S = 0.25
 DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_LOG_TAIL = 400
+DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_STALE_S = 2.5
+DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_ESCAPE_LATERAL_M = 0.45
+DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_BACKTRACK_M = 0.25
+DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M = 1.0
 MISSION_OBJECTIVE_GATHER_HERE = "gather_here"
 MISSION_OBJECTIVE_FETCH_TO_POSE = "fetch_to_pose"
 ALLOWED_MISSION_OBJECTIVES = (
@@ -1892,6 +1896,7 @@ PY
         controller_id: str,
         goal_checker_id: str,
         timeout_s: float,
+        monitor: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not path_poses:
             return {
@@ -1925,6 +1930,7 @@ PY
             "diagnostic_sample_interval_s": float(DEFAULT_NAV2_FOLLOW_PATH_DIAGNOSTIC_SAMPLE_INTERVAL_S),
             "cmd_vel_topics": ["/cmd_vel_nav", "/cmd_vel", "/jetbot_base_controller/cmd_vel"],
             "odom_topic": "/jetbot_base_controller/odom",
+            "monitor": dict(monitor) if isinstance(monitor, dict) else {"enabled": False},
         }
         log_since_utc = datetime.now(timezone.utc)
         script = (
@@ -2119,6 +2125,194 @@ def odom_delta_payload():
     }
 
 
+monitor_payload = payload.get("monitor", {}) if isinstance(payload.get("monitor"), dict) else {}
+monitor_enabled = bool(monitor_payload.get("enabled", False))
+monitor_state = {
+    "enabled": bool(monitor_enabled),
+    "last_fresh_elapsed_s": 0.0,
+    "last_sample_count": None,
+    "last_sample": {},
+    "last_error": "",
+    "terminal_reason": "",
+}
+
+
+def truth_pose_xy(value):
+    if not isinstance(value, dict):
+        return None
+    position = value.get("position") if isinstance(value.get("position"), dict) else value
+    if not isinstance(position, dict):
+        return None
+    try:
+        return float(position.get("x")), float(position.get("y"))
+    except (TypeError, ValueError):
+        return None
+
+
+def monitor_basis():
+    start = monitor_payload.get("start_ball_pose", {})
+    delivery = monitor_payload.get("delivery_pose", {})
+    start_xy = truth_pose_xy(start) if isinstance(start, dict) else None
+    delivery_xy = truth_pose_xy(delivery) if isinstance(delivery, dict) else None
+    if start_xy is None or delivery_xy is None:
+        return None
+    dx = delivery_xy[0] - start_xy[0]
+    dy = delivery_xy[1] - start_xy[1]
+    length = math.hypot(dx, dy)
+    if length <= 1.0e-6:
+        return None
+    ux = dx / length
+    uy = dy / length
+    return start_xy, delivery_xy, ux, uy, -uy, ux
+
+
+def read_monitor_sample():
+    truth_state_path = str(monitor_payload.get("truth_state_path") or "")
+    if not truth_state_path:
+        return {"error": "missing_truth_state_path"}
+    try:
+        with open(truth_state_path, "r", encoding="utf-8") as handle:
+            state = json.load(handle)
+    except Exception as exc:
+        return {"error": f"truth_state_unreadable:{exc}"}
+    if not isinstance(state, dict):
+        return {"error": "truth_state_not_object"}
+    target_model_name = str(monitor_payload.get("target_model_name") or "")
+    target_poses = state.get("target_poses_by_name") if isinstance(state.get("target_poses_by_name"), dict) else {}
+    target_pose = target_poses.get(target_model_name) if target_model_name else None
+    if not isinstance(target_pose, dict):
+        target_pose = state.get("true_target_pose") if isinstance(state.get("true_target_pose"), dict) else {}
+    ball_xy = truth_pose_xy(target_pose)
+    robot_xy = truth_pose_xy(state.get("robot_truth_pose") if isinstance(state.get("robot_truth_pose"), dict) else {})
+    try:
+        sample_count = int(state.get("samples"))
+    except (TypeError, ValueError):
+        sample_count = None
+    sample = {
+        "sample_count": sample_count,
+        "target_model_name": target_model_name,
+        "ball_seen": ball_xy is not None,
+        "robot_seen": robot_xy is not None,
+    }
+    if ball_xy is not None:
+        sample["ball_x"] = round(ball_xy[0], 6)
+        sample["ball_y"] = round(ball_xy[1], 6)
+    if robot_xy is not None:
+        sample["robot_x"] = round(robot_xy[0], 6)
+        sample["robot_y"] = round(robot_xy[1], 6)
+    return sample
+
+
+def monitor_summary():
+    return dict(monitor_state)
+
+
+def evaluate_monitor():
+    if not monitor_enabled:
+        return None
+    elapsed_s = round(time.monotonic() - started, 6)
+    sample = read_monitor_sample()
+    monitor_state["last_sample"] = sample
+    if sample.get("error"):
+        monitor_state["last_error"] = str(sample.get("error"))
+    sample_count = sample.get("sample_count")
+    if sample.get("ball_seen") and (
+        sample_count is None or sample_count != monitor_state.get("last_sample_count")
+    ):
+        monitor_state["last_sample_count"] = sample_count
+        monitor_state["last_fresh_elapsed_s"] = elapsed_s
+    stale_timeout_s = max(float(monitor_payload.get("stale_timeout_s") or 0.0), 0.1)
+    stale_elapsed_s = elapsed_s - float(monitor_state.get("last_fresh_elapsed_s") or 0.0)
+    sample["stale_elapsed_s"] = round(stale_elapsed_s, 6)
+    if stale_elapsed_s >= stale_timeout_s:
+        monitor_state["terminal_reason"] = "stale_state"
+        return {
+            "reason": "stale_state",
+            "dispatch_status": "monitor_stale_state",
+            "error": "monitor_stale_state",
+            "sample": sample,
+        }
+    basis = monitor_basis()
+    if basis is None or not sample.get("ball_seen"):
+        return None
+    start_xy, delivery_xy, ux, uy, nx, ny = basis
+    ball_xy = float(sample["ball_x"]), float(sample["ball_y"])
+    from_start_x = ball_xy[0] - start_xy[0]
+    from_start_y = ball_xy[1] - start_xy[1]
+    longitudinal_m = (from_start_x * ux) + (from_start_y * uy)
+    lateral_m = (from_start_x * nx) + (from_start_y * ny)
+    delivery_distance_m = math.hypot(ball_xy[0] - delivery_xy[0], ball_xy[1] - delivery_xy[1])
+    start_displacement_m = math.hypot(from_start_x, from_start_y)
+    robot_ball_distance_m = None
+    if sample.get("robot_seen"):
+        robot_ball_distance_m = math.hypot(float(sample["robot_x"]) - ball_xy[0], float(sample["robot_y"]) - ball_xy[1])
+    sample.update({
+        "longitudinal_progress_m": round(longitudinal_m, 6),
+        "lateral_error_m": round(lateral_m, 6),
+        "delivery_distance_m": round(delivery_distance_m, 6),
+        "start_displacement_m": round(start_displacement_m, 6),
+        "robot_ball_distance_m": None if robot_ball_distance_m is None else round(robot_ball_distance_m, 6),
+    })
+    delivery_radius_m = max(float(monitor_payload.get("delivery_radius_m") or 0.0), 0.0)
+    if delivery_distance_m <= delivery_radius_m:
+        monitor_state["terminal_reason"] = "success"
+        return {
+            "reason": "success",
+            "dispatch_status": "monitor_success",
+            "error": "",
+            "sample": sample,
+        }
+    moved_m = max(float(monitor_payload.get("launch_motion_evidence_m") or 0.03), 0.0)
+    ball_moved = start_displacement_m >= moved_m
+    if ball_moved and abs(lateral_m) > max(float(monitor_payload.get("escape_lateral_m") or 0.0), 0.0):
+        monitor_state["terminal_reason"] = "ball_escape"
+        return {
+            "reason": "ball_escape",
+            "dispatch_status": "monitor_ball_escape",
+            "error": "monitor_ball_escape",
+            "sample": sample,
+        }
+    if ball_moved and longitudinal_m < -max(float(monitor_payload.get("backtrack_m") or 0.0), 0.0):
+        monitor_state["terminal_reason"] = "unsafe_drift"
+        return {
+            "reason": "unsafe_drift",
+            "dispatch_status": "monitor_unsafe_drift",
+            "error": "monitor_unsafe_drift_backtrack",
+            "sample": sample,
+        }
+    max_robot_ball_m = max(float(monitor_payload.get("max_robot_ball_distance_m") or 0.0), 0.0)
+    if ball_moved and robot_ball_distance_m is not None and robot_ball_distance_m > max_robot_ball_m:
+        monitor_state["terminal_reason"] = "unsafe_drift"
+        return {
+            "reason": "unsafe_drift",
+            "dispatch_status": "monitor_unsafe_drift",
+            "error": "monitor_unsafe_drift_robot_separation",
+            "sample": sample,
+        }
+    return None
+
+
+def request_cancel(goal_handle):
+    cancel_started = time.monotonic()
+    cancel_response_received = False
+    cancel_goal_count = 0
+    cancel_error = ""
+    try:
+        cancel_future = goal_handle.cancel_goal_async()
+        cancel_response_received = wait_future(node, cancel_future, timeout_s=1.0)
+        if cancel_response_received and cancel_future.result() is not None:
+            cancel_goal_count = len(getattr(cancel_future.result(), "goals_canceling", []) or [])
+    except Exception as exc:
+        cancel_error = str(exc)
+    return {
+        "cancel_requested": True,
+        "cancel_response_received": bool(cancel_response_received),
+        "cancel_goal_count": int(cancel_goal_count),
+        "cancel_elapsed_s": round(time.monotonic() - cancel_started, 6),
+        "cancel_error": cancel_error,
+    }
+
+
 def result_payload(extra):
     result = dict(extra)
     if "status_text" not in result and result.get("status_code") is not None:
@@ -2140,6 +2334,7 @@ def result_payload(extra):
     result.setdefault("path_progress_samples", path_progress_samples)
     result.setdefault("path_progress_last", path_progress_last)
     result.setdefault("timeout_s", round(float(payload.get("timeout_s") or 0.0), 6))
+    result.setdefault("monitor", monitor_summary())
     return result
 
 
@@ -2289,19 +2484,34 @@ try:
                     }))
                 else:
                     result_future = goal_handle.get_result_async()
-                    if not wait_future(node, result_future, timeout_s=float(payload["timeout_s"])):
-                        cancel_started = time.monotonic()
-                        cancel_response_received = False
-                        cancel_goal_count = 0
-                        try:
-                            cancel_future = goal_handle.cancel_goal_async()
-                            cancel_response_received = wait_future(node, cancel_future, timeout_s=1.0)
-                            if cancel_response_received and cancel_future.result() is not None:
-                                cancel_goal_count = len(getattr(cancel_future.result(), "goals_canceling", []) or [])
-                        except Exception as exc:
-                            cancel_error = str(exc)
-                        else:
-                            cancel_error = ""
+                    monitor_terminal = None
+                    result_deadline = time.monotonic() + float(payload["timeout_s"])
+                    while time.monotonic() < result_deadline and rclpy.ok():
+                        if result_future.done():
+                            break
+                        rclpy.spin_once(node, timeout_sec=0.1)
+                        monitor_terminal = evaluate_monitor()
+                        if monitor_terminal is not None:
+                            break
+                    if monitor_terminal is not None:
+                        cancel_payload = request_cancel(goal_handle)
+                        monitor_reason = str(monitor_terminal.get("reason") or "")
+                        monitor_success = monitor_reason == "success"
+                        emit(result_payload({
+                            "dispatch_status": str(monitor_terminal.get("dispatch_status") or "monitor_cancel"),
+                            "accepted": True,
+                            "success": bool(monitor_success),
+                            "status_code": int(GoalStatus.STATUS_CANCELED),
+                            "status_text": status_text(int(GoalStatus.STATUS_CANCELED)),
+                            "elapsed_s": round(time.monotonic() - started, 6),
+                            "error": str(monitor_terminal.get("error") or ""),
+                            "timed_out": False,
+                            "monitor_cancel_reason": monitor_reason,
+                            "monitor_sample": monitor_terminal.get("sample", {}),
+                            **cancel_payload,
+                        }))
+                    elif not result_future.done():
+                        cancel_payload = request_cancel(goal_handle)
                         emit(result_payload({
                             "dispatch_status": "goal_result_timeout",
                             "accepted": True,
@@ -2311,11 +2521,7 @@ try:
                             "elapsed_s": round(time.monotonic() - started, 6),
                             "error": "goal_result_timeout",
                             "timed_out": True,
-                            "cancel_requested": True,
-                            "cancel_response_received": bool(cancel_response_received),
-                            "cancel_goal_count": int(cancel_goal_count),
-                            "cancel_elapsed_s": round(time.monotonic() - cancel_started, 6),
-                            "cancel_error": cancel_error,
+                            **cancel_payload,
                         }))
                     else:
                         result = result_future.result()
@@ -2371,6 +2577,9 @@ PY
         result.setdefault("path_progress_last", {})
         result.setdefault("timeout_s", payload["timeout_s"])
         result.setdefault("cancel_requested", False)
+        result.setdefault("monitor", {})
+        result.setdefault("monitor_cancel_reason", "")
+        result.setdefault("monitor_sample", {})
         return result
 
     def _robot_pose_components(self, state: dict[str, Any]) -> tuple[float, float, float]:
@@ -8388,8 +8597,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 nav2_corridor_push_diagnostics = {
                     "plan": corridor_plan_dict,
                     "dispatch_status": "not_dispatched",
-                    "monitor_cancel_live": False,
-                    "monitor_cancel_live_reason": "initial_spike_slice_uses_action_timeout_cancel_only",
+                    "monitor_cancel_live": True,
+                    "monitor_cancel_live_reason": "",
                 }
                 append_jsonl(
                     state_history_path,
@@ -8425,6 +8634,19 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     gather_phase="fetch_to_pose",
                     latest_feedback=f"Nav2 corridor-push is fetching {target.label}.",
                 )
+                corridor_monitor = {
+                    "enabled": True,
+                    "truth_state_path": to_container_repo_path(self._truth_state_path(session_id)),
+                    "target_model_name": self._target_model_name(target),
+                    "start_ball_pose": ball_pose,
+                    "delivery_pose": fetch_pose_world,
+                    "delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                    "stale_timeout_s": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_STALE_S), 6),
+                    "escape_lateral_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_ESCAPE_LATERAL_M), 6),
+                    "backtrack_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_BACKTRACK_M), 6),
+                    "max_robot_ball_distance_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M), 6),
+                    "launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                }
                 try:
                     follow_path_result = self._dispatch_nav2_follow_path_reacquire(
                         compose_project=session_id,
@@ -8438,6 +8660,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID,
                         ),
                         timeout_s=follow_path_timeout_s,
+                        monitor=corridor_monitor,
                     )
                 except Exception as exc:
                     follow_path_result = {
@@ -8457,6 +8680,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "elapsed_s": clean_rounded_number(follow_path_result.get("elapsed_s")),
                     "timed_out": bool(follow_path_result.get("timed_out", False)),
                     "cancel_requested": bool(follow_path_result.get("cancel_requested", False)),
+                    "monitor_cancel_reason": clean_text(follow_path_result.get("monitor_cancel_reason")),
+                    "monitor_sample": follow_path_result.get("monitor_sample", {}),
+                    "monitor": follow_path_result.get("monitor", {}),
                     "cmd_vel_counts": follow_path_result.get("cmd_vel_counts", {}),
                     "cmd_vel_last": follow_path_result.get("cmd_vel_last", {}),
                     "odom_delta": follow_path_result.get("odom_delta", {}),
@@ -8483,11 +8709,21 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     },
                 )
                 if not bool(follow_path_result.get("success", False)):
-                    failure_reason = (
-                        "nav2_corridor_push_timeout"
-                        if bool(follow_path_result.get("timed_out", False))
-                        else "nav2_corridor_push_failed"
-                    )
+                    dispatch_status = clean_text(follow_path_result.get("dispatch_status"))
+                    if dispatch_status == "monitor_ball_escape":
+                        failure_reason = "nav2_corridor_push_ball_escape"
+                    elif dispatch_status == "monitor_stale_state":
+                        failure_reason = "nav2_corridor_push_stale_state"
+                    elif dispatch_status == "monitor_unsafe_drift":
+                        failure_reason = "nav2_corridor_push_unsafe_drift"
+                    elif bool(follow_path_result.get("timed_out", False)):
+                        failure_reason = "nav2_corridor_push_timeout"
+                    elif dispatch_status == "goal_finished":
+                        failure_reason = "nav2_corridor_push_action_abort"
+                    else:
+                        failure_reason = "nav2_corridor_push_failed"
+                    previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                    break
                 previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
                 time.sleep(self.args.poll_s)
                 continue

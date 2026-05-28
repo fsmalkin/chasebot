@@ -8548,6 +8548,110 @@ def test_fetch_to_pose_waits_for_launch_window_before_short_stop(tmp_path, monke
     assert all(row["fetch_to_pose"]["ball_moved_since_fetch"] is False for row in rows)
 
 
+def test_nav2_corridor_push_dispatch_uses_live_monitor_payload(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.25
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+    captured_dispatch: dict[str, object] = {}
+    command_log: list[dict[str, object]] = []
+
+    monkeypatch.setattr(runner, "_control_loop_state", lambda session_id, target: ({}, robot_pose, ball_pose))
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {"enabled": enabled, "mode": mode, "rationale": rationale}
+        ),
+    )
+
+    def fake_dispatch(**kwargs):
+        captured_dispatch.update(kwargs)
+        return {
+            "dispatch_status": "monitor_ball_escape",
+            "accepted": True,
+            "success": False,
+            "timed_out": False,
+            "cancel_requested": True,
+            "monitor_cancel_reason": "ball_escape",
+            "monitor_sample": {"lateral_error_m": 0.62},
+        }
+
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-nav2-corridor-monitor",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    monitor = captured_dispatch["monitor"]
+    assert passed is False
+    assert payload["failure_reason"] == "nav2_corridor_push_ball_escape"
+    assert monitor["enabled"] is True
+    assert monitor["target_model_name"] == "visit_mission_target_ball_1"
+    assert monitor["truth_state_path"].endswith(
+        "/artifacts/session/session-nav2-corridor-monitor/visual/truth_state.json"
+    )
+    assert monitor["delivery_radius_m"] == 0.25
+    assert payload["nav2_follow_path_corridor_push"]["monitor_cancel_live"] is True
+    assert payload["nav2_follow_path_corridor_push"]["monitor_cancel_reason"] == "ball_escape"
+    assert any(item["mode"] == "nav2_follow_path_corridor_push" for item in command_log)
+
+
+def test_nav2_corridor_push_monitor_success_observes_delivery_pass(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.25
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_samples = [
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        {"x": float(runner.zone.world_x), "y": float(runner.zone.world_y), "z": 0.05},
+    ]
+
+    def fake_control_loop_state(session_id, target):
+        index = 0 if len(ball_samples) > 1 else 0
+        ball_pose = ball_samples.pop(index) if len(ball_samples) > 1 else ball_samples[0]
+        return {}, robot_pose, ball_pose
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_dispatch_nav2_follow_path_reacquire",
+        lambda **kwargs: {
+            "dispatch_status": "monitor_success",
+            "accepted": True,
+            "success": True,
+            "timed_out": False,
+            "cancel_requested": True,
+            "monitor_cancel_reason": "success",
+            "monitor_sample": {"delivery_distance_m": 0.0},
+        },
+    )
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-nav2-corridor-success",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert payload["failure_reason"] == ""
+    assert payload["settle_exit_reason"] == "trajectory_intersects_delivery_radius"
+    assert payload["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
+    assert payload["nav2_follow_path_corridor_push"]["monitor_cancel_reason"] == "success"
+
+
 def test_run_target_fails_settled_placement_loss_when_ball_leaves_local_correction_range(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.max_retries_per_target = 2
