@@ -123,7 +123,9 @@ Branching rule for wide tests:
 1. put shared harnesses, analyzers, and docs on `physics-calibrated-golf-fetch-v1`
 2. create `spike/fetch-arch-<family>-YYYYMMDD` for one architecture hypothesis
 3. use accelerated/offline screens only for cheap rejection; never use them as
-   UAT evidence
+   UAT evidence. The current calibrated accelerated lane is 2.0x
+   (`yolo_test_world_v6_calibrated_golf_turf_fast.world`); 3.0x/4.0x worlds are
+   experimental speed sweeps and must be labeled that way.
 4. require AI-assisted lanes to pass shadow-mode saved-anchor and seeded-random
    scoring before learned proposals execute live
 5. promote to `candidate/fetch-arch-<family>` only after canonical saved-layout
