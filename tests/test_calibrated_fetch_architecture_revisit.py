@@ -12,6 +12,25 @@ if str(SCRIPTS_DIR) not in sys.path:
 import calibrated_fetch_architecture_revisit as revisit  # noqa: E402
 
 
+def test_default_candidate_family_is_nav2_corridor_push():
+    assert revisit.DEFAULT_CANDIDATE_FAMILY == "nav2_followpath_corridor_push_v1"
+    assert revisit._comparison_scope(revisit.DEFAULT_CANDIDATE_FAMILY) == "nav2_corridor_push_contact_candidate"
+    assert revisit._comparison_scope("nav2_mppi_follow_path_reacquire_v1") == "setup_prestage_candidate_with_fetch_fallback"
+
+
+def test_nav2_corridor_push_decision_requests_live_gate_after_first_screen():
+    decision = revisit._family_decision(
+        family="nav2_followpath_corridor_push_v1",
+        one_run_results=[{"layout_id": "zero", "pass": True, "metrics": {}}],
+        promotion_results=[],
+        baseline_by_layout={},
+        delivery_radius_m=0.3,
+    )
+
+    assert decision["recommended_next_action"] == "run_live_nav2_corridor_push_gate"
+    assert decision["comparison_scope"] == "nav2_corridor_push_contact_candidate"
+
+
 def _args(**overrides):
     values = {
         "dashboard_url": "http://127.0.0.1:8860",

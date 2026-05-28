@@ -23,7 +23,8 @@ DEFAULT_BASELINE_SUMMARY = (
     "artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/"
     "calibrated_golf_fetch_gate/gate_summary.json"
 )
-DEFAULT_CANDIDATE_FAMILY = "nav2_mppi_follow_path_reacquire_v1"
+DEFAULT_CANDIDATE_FAMILY = "nav2_followpath_corridor_push_v1"
+NAV2_MPPI_REVISIT_FAMILY = "nav2_mppi_follow_path_reacquire_v1"
 DEFAULT_ARTIFACT_KIND = "gather_mission_calibrated_golf_architecture_revisit"
 FAST_SCREEN_WORLD_FILE = "yolo_test_world_v6_calibrated_golf_turf_fast.world"
 DEFAULT_SCREEN_SCOPE = "runnable_control_family_screen"
@@ -93,6 +94,8 @@ def _comparison_scope(family: str) -> str:
     if family == "object_centric_gather_policy_v1":
         return "full_fetch_policy_baseline"
     if family == DEFAULT_CANDIDATE_FAMILY:
+        return "nav2_corridor_push_contact_candidate"
+    if family == NAV2_MPPI_REVISIT_FAMILY:
         return "setup_prestage_candidate_with_fetch_fallback"
     return "legacy_setup_candidate_with_fetch_fallback"
 
@@ -388,6 +391,16 @@ def _family_decision(
     if not one_run_green:
         next_action = "do_not_develop_alternative"
         rationale = "At least one one-run calibrated layout failed; classify artifacts before any policy work."
+    elif scope == "nav2_corridor_push_contact_candidate":
+        if promotion_results and not promotion_green:
+            next_action = "do_not_promote_corridor_push"
+            rationale = "Nav2 corridor-push cleared the first screen but failed the three-run promotion gate."
+        elif promotion_green:
+            next_action = "run_seeded_generalization_gate"
+            rationale = "Nav2 corridor-push cleared saved layouts; test seeded random layouts before promotion."
+        else:
+            next_action = "run_live_nav2_corridor_push_gate"
+            rationale = "Nav2 corridor-push is the fresh contact hypothesis; run the live saved-layout gate next."
     elif scope != "full_fetch_policy_baseline":
         next_action = "preserve_as_setup_baseline_evidence"
         rationale = "The candidate requalified setup/fetch-fallback behavior only; it is not a full fetch-contact architecture."

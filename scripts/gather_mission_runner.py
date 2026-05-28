@@ -230,6 +230,9 @@ from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_C
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_GOAL_TIMEOUT_S
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_SERVER_WAIT_S
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_GOAL_TIMEOUT_S
+from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_CORRIDOR_PUSH_OBJECTIVE
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_MPPI_FOLLOW_PATH_CONTROLLER_ID
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_MPPI_FOLLOW_PATH_GOAL_TIMEOUT_S
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_MPPI_FOLLOW_PATH_PRE_STAGE_TIMEOUT_S
@@ -238,6 +241,7 @@ from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_REACQUIRE
 from gather_nav2_follow_path_reacquire_helpers import NAV2_MPPI_FOLLOW_PATH_REACQUIRE_CONTROL_FAMILY
 from gather_nav2_follow_path_reacquire_helpers import NAV2_MPPI_FOLLOW_PATH_REACQUIRE_OBJECTIVE
 from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_RESULT_MARKER
+from gather_nav2_follow_path_reacquire_helpers import build_nav2_follow_path_corridor_push_plan
 from gather_nav2_follow_path_reacquire_helpers import build_nav2_follow_path_reacquire_plan
 from gather_nav2_follow_path_reacquire_helpers import build_nav2_mppi_follow_path_reacquire_plan
 from gather_pre_stage_reacquire_fsm_helpers import PRE_STAGE_REACQUIRE_FSM_CONTROL_FAMILY
@@ -370,6 +374,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "pre_stage_trajectory_owner_v1",
     "nav2_follow_path_reacquire_v1",
     "nav2_mppi_follow_path_reacquire_v1",
+    NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY,
     "object_centric_gather_policy_v1",
 )
 NAV2_REACQUIRE_CONTROL_FAMILY = "nav2_reacquire_v1"
@@ -8238,6 +8243,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         latest_capture: dict[str, Any] = {}
         latest_zone_score: dict[str, Any] = {}
         latest_policy: dict[str, Any] = {}
+        nav2_corridor_push_attempted = False
+        nav2_corridor_push_diagnostics: dict[str, Any] = {}
         closest_distance_m: float | None = None
         closest_pose: dict[str, Any] = {}
         still_started_monotonic: float | None = None
@@ -8332,6 +8339,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         ),
                         "fetch_closest_approach_distance_m": round(float(closest_distance_m), 6),
                         "fetch_closest_pose": closest_pose,
+                        "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
                         "settle_exit_reason": "trajectory_intersects_delivery_radius",
                         "rolled_away_after_release": False,
                     }
@@ -8355,8 +8363,134 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and distance_to_fetch_pose_m is not None
                 and distance_to_fetch_pose_m > float(self.fetch_delivery_radius_m)
             ):
-                failure_reason = "fetch_to_pose_ball_stopped_short"
+                if not failure_reason.startswith("nav2_corridor_push_"):
+                    failure_reason = "fetch_to_pose_ball_stopped_short"
                 break
+
+            if (
+                self.gather_control_family == NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+                and not nav2_corridor_push_attempted
+            ):
+                nav2_corridor_push_attempted = True
+                corridor_plan = build_nav2_follow_path_corridor_push_plan(
+                    robot_pose,
+                    ball_pose,
+                    fetch_pose_world,
+                )
+                corridor_plan_dict = corridor_plan.to_dict()
+                path_poses = [
+                    dict(item)
+                    for item in corridor_plan_dict.get("path_poses", [])
+                    if isinstance(item, dict)
+                ]
+                nav2_corridor_push_diagnostics = {
+                    "plan": corridor_plan_dict,
+                    "dispatch_status": "not_dispatched",
+                    "monitor_cancel_live": False,
+                    "monitor_cancel_live_reason": "initial_spike_slice_uses_action_timeout_cancel_only",
+                }
+                append_jsonl(
+                    state_history_path,
+                    {
+                        "generated_utc": utc_now(),
+                        "event_type": "nav2_follow_path_corridor_push_plan",
+                        "phase": "fetch_to_pose",
+                        "attempt": int(attempt_index),
+                        "attempt_kind": str(attempt_kind),
+                        "target_id": target.id,
+                        "robot_pose": robot_pose,
+                        "ball_pose": ball_pose,
+                        "fetch_pose_world": fetch_pose_world,
+                        "nav2_follow_path_plan": corridor_plan_dict,
+                        "controller_family": self.gather_control_family,
+                    },
+                )
+                if not bool(corridor_plan_dict.get("active", False)):
+                    failure_reason = clean_text(corridor_plan_dict.get("reason"), "nav2_corridor_push_path_unavailable")
+                    break
+                remaining_timeout_s = max(0.1, deadline - time.monotonic())
+                follow_path_timeout_s = min(
+                    float(DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_GOAL_TIMEOUT_S),
+                    remaining_timeout_s,
+                )
+                self._set_manual_drive(
+                    False,
+                    mode="nav2_follow_path_corridor_push",
+                    rationale="Nav2 FollowPath owns the corridor-push contact path.",
+                )
+                self._update_gather_runtime_state(
+                    mission_phase="fetch_to_pose",
+                    gather_phase="fetch_to_pose",
+                    latest_feedback=f"Nav2 corridor-push is fetching {target.label}.",
+                )
+                try:
+                    follow_path_result = self._dispatch_nav2_follow_path_reacquire(
+                        compose_project=session_id,
+                        path_poses=path_poses,
+                        controller_id=clean_text(
+                            corridor_plan_dict.get("controller_id"),
+                            DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_ID,
+                        ),
+                        goal_checker_id=clean_text(
+                            corridor_plan_dict.get("goal_checker_id"),
+                            DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID,
+                        ),
+                        timeout_s=follow_path_timeout_s,
+                    )
+                except Exception as exc:
+                    follow_path_result = {
+                        "dispatch_status": "client_exception",
+                        "accepted": False,
+                        "success": False,
+                        "error": str(exc),
+                    }
+                nav2_corridor_push_diagnostics = {
+                    **nav2_corridor_push_diagnostics,
+                    "dispatch_status": clean_text(follow_path_result.get("dispatch_status"), "unknown"),
+                    "success": bool(follow_path_result.get("success", False)),
+                    "status_code": clean_number(follow_path_result.get("status_code")),
+                    "status_text": clean_text(follow_path_result.get("status_text")),
+                    "error": clean_text(follow_path_result.get("error")),
+                    "timeout_s": clean_rounded_number(follow_path_result.get("timeout_s")),
+                    "elapsed_s": clean_rounded_number(follow_path_result.get("elapsed_s")),
+                    "timed_out": bool(follow_path_result.get("timed_out", False)),
+                    "cancel_requested": bool(follow_path_result.get("cancel_requested", False)),
+                    "cmd_vel_counts": follow_path_result.get("cmd_vel_counts", {}),
+                    "cmd_vel_last": follow_path_result.get("cmd_vel_last", {}),
+                    "odom_delta": follow_path_result.get("odom_delta", {}),
+                    "path_progress_last": follow_path_result.get("path_progress_last", {}),
+                    "result": follow_path_result,
+                }
+                append_jsonl(
+                    state_history_path,
+                    {
+                        "generated_utc": utc_now(),
+                        "event_type": "nav2_follow_path_corridor_push_result",
+                        "phase": "fetch_to_pose",
+                        "attempt": int(attempt_index),
+                        "attempt_kind": str(attempt_kind),
+                        "target_id": target.id,
+                        "nav2_follow_path_plan": corridor_plan_dict,
+                        "nav2_follow_path_result": follow_path_result,
+                        "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                        "controller_family": self.gather_control_family,
+                        "control": self._control_debug_fields(
+                            strategy_name=NAV2_FOLLOW_PATH_CORRIDOR_PUSH_OBJECTIVE,
+                            objective_name="follow_path_corridor_push",
+                        ),
+                    },
+                )
+                if not bool(follow_path_result.get("success", False)):
+                    failure_reason = (
+                        "nav2_corridor_push_timeout"
+                        if bool(follow_path_result.get("timed_out", False))
+                        else "nav2_corridor_push_failed"
+                    )
+                previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                time.sleep(self.args.poll_s)
+                continue
 
             command: PlaceControlCommand | None = None
             raw_command: PlaceControlCommand | None = None
@@ -8384,6 +8518,14 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         strategy_name=str(decision.strategy_name or ""),
                         objective_name=str(decision.objective_name or ""),
                         progress_score=clean_number(decision.progress_score),
+                    ),
+                }
+            elif self.gather_control_family == NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY:
+                policy_fields = {
+                    "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                    **self._control_debug_fields(
+                        strategy_name=NAV2_FOLLOW_PATH_CORRIDOR_PUSH_OBJECTIVE,
+                        objective_name="follow_path_corridor_push_observe",
                     ),
                 }
             elif robot_pose and ball_pose:
@@ -8544,6 +8686,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 else None
             ),
             "fetch_closest_pose": closest_pose,
+            "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
             "settle_exit_reason": failure_reason,
             "rolled_away_after_release": False,
             "allow_full_revisit": False,

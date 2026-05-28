@@ -160,6 +160,16 @@ def test_gather_control_family_allows_nav2_mppi_follow_path_reacquire_v1(tmp_pat
     assert runner.gather_control_family == "nav2_mppi_follow_path_reacquire_v1"
 
 
+def test_gather_control_family_allows_nav2_followpath_corridor_push_v1(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "nav2_followpath_corridor_push_v1"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.gather_control_family == "nav2_followpath_corridor_push_v1"
+
+
 def test_gather_control_family_allows_object_centric_gather_policy_v1(tmp_path, monkeypatch):
     args = _make_args(tmp_path)
     args.gather_control_family = "object_centric_gather_policy_v1"
@@ -288,6 +298,18 @@ def test_parse_args_allows_nav2_mppi_follow_path_reacquire_v1(monkeypatch):
     args = gather_runner.parse_args()
 
     assert args.gather_control_family == "nav2_mppi_follow_path_reacquire_v1"
+
+
+def test_parse_args_allows_nav2_followpath_corridor_push_v1(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        ["gather_mission_runner.py", "--gather-control-family", "nav2_followpath_corridor_push_v1"],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.gather_control_family == "nav2_followpath_corridor_push_v1"
 
 
 def test_parse_args_allows_object_centric_gather_policy_v1(monkeypatch):
