@@ -2,6 +2,45 @@
 
 This file captures repo-specific execution guidance for coding agents.
 
+## Global Agent Policy
+
+Global policy: `D:/dev/canon/docs/ops/agent-guidance/global-working-agreement.md @ 2026-05-04-act-or-wait`.
+
+Runtime mirror: `C:/Users/afutu/.codex/GLOBAL_WORKING_AGREEMENT.md`.
+
+This file is the Chasecar repo overlay. Keep universal agent behavior in the
+global policy; keep runtime, ROS, Docker, UAT, artifact, and safety rules here.
+
+## Act-Or-Wait Discipline
+
+During material work, an agent must always be in one of two states:
+
+- Acting: inspecting, editing, validating, documenting, committing, pushing, or
+  taking the next safe reversible step.
+- Waiting: explicitly waiting on a running command, tool result, Telegram reply,
+  or required human decision, with the reason stated.
+
+Do not idle silently. If a safe next step exists, take it. If a human decision is
+required, ask for it and wait through the available tool when possible.
+
+For Telegram:
+- Send start, material milestone, blocker/input, and completion updates when the
+  Telegram tool is available.
+- Use `timeout_seconds >= 5`.
+- If a Telegram send fails, retry once when safe.
+- If Telegram worked earlier but later fails, try to rediscover or reuse the tool
+  once before final handoff.
+- If Telegram still fails, continue in chat and state the failure in the handoff.
+- When waiting for Fred input, include a recommended default. If the wait times
+  out and the default is safe under repo gates, continue with the default;
+  otherwise stop and state the exact blocker.
+
+Before final handoff:
+- Confirm no needed commands, tool waits, or background sessions are still
+  running.
+- Send a completion Telegram update for material work, or state the failure and
+  retry outcome.
+
 ## Baseline
 
 1. Runtime substrate: Docker-first (`docker compose` profiles).
@@ -10,6 +49,34 @@ This file captures repo-specific execution guidance for coding agents.
 4. Runtime workspace mirror: `~/ros2_ws/src/chasecar_runtime`.
 5. Authoritative runtime target: `robot_fidelity_orin`.
 6. Canonical inference backend: `tensorrt_int8`.
+
+## Planning And Branch Strategy Discipline
+
+Keep high-level research plans and branch-role decisions on the shared planning
+surface, not stranded on short-lived spike branches.
+
+When a spike changes architecture direction, branch strategy, promotion gates,
+or randomized/generalization requirements:
+
+1. Update the relevant planning docs before continuing implementation:
+   - `docs/FETCH_BRANCH_STRATEGY.md`
+   - `docs/OBJECT_CENTRIC_FETCH_POLICY_PLAN.md`
+   - `docs/CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md`
+   - `docs/ACTIVE_WORKFLOW.md`
+   - `docs/ROADMAP_2026_H2.md` when roadmap commitments change
+2. Propagate those planning updates back to `main` and the active integration
+   branch (`physics-calibrated-golf-fetch-v1` for calibrated fetch work) as soon
+   as safe, even if code and runnable experiments remain on a spike branch.
+3. Keep spikes scoped to one hypothesis, evidence bundle, or harness. A spike
+   must name the hypothesis, target gate, artifact path, and promotion/blocking
+   decision.
+4. Treat saved layouts as regression anchors and seeded randomized layouts as
+   generalization discovery. Freeze any reproducible random failure into a named
+   saved layout before tuning against it.
+5. After branch switches, do a grounding pass before new work: `git status
+   --short --branch`, `git reflog --date=iso --max-count=20`, `git stash list`,
+   and relevant planning-doc diffs. Preserve user/stashed work and do not assume
+   the current branch contains the whole plan.
 
 ## First Steps Per Session
 
@@ -49,7 +116,9 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Goal-side matrix | `scripts/run_gather_goal_side_matrix.ps1 -GatherControlFamily baseline -MaxRetriesPerTarget 2` |
 | Gather control portfolio | `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary> --baseline-branch helper` |
 | Gather hard-case stress analyzer | `python scripts/gather_control_stress_analyzer.py --campaign-id <id> --branch helper=<summary> --branch short_horizon_v2=<summary>` |
-| Gather control failure audit | `python scripts/gather_control_failure_audit.py --campaign-id <id> --branch region_funnel_v1=<matrix_summary> --branch nav2_reacquire_v1=<matrix_summary> --branch constrained_local_planner_v1=<matrix_summary> --branch docking_reacquire_v1=<matrix_summary> --branch handoff_yaw_servo_v1=<matrix_summary> --branch pre_stage_reacquire_fsm_v1=<matrix_summary> --branch pre_stage_path_tracker_v1=<matrix_summary> --branch pre_stage_trajectory_owner_v1=<matrix_summary>` |
+| Gather control failure audit | `python scripts/gather_control_failure_audit.py --campaign-id <id> --branch region_funnel_v1=<matrix_summary> --branch nav2_reacquire_v1=<matrix_summary> --branch constrained_local_planner_v1=<matrix_summary> --branch docking_reacquire_v1=<matrix_summary> --branch handoff_yaw_servo_v1=<matrix_summary> --branch pre_stage_reacquire_fsm_v1=<matrix_summary> --branch pre_stage_path_tracker_v1=<matrix_summary> --branch pre_stage_trajectory_owner_v1=<matrix_summary> --branch nav2_follow_path_reacquire_v1=<matrix_summary> --branch nav2_mppi_follow_path_reacquire_v1=<matrix_summary>` |
+| Gather FollowPath research analyzer | `python scripts/gather_follow_path_research_analyzer.py --campaign-id <id> --artifact may2=<summary> --artifact may3=<summary>` |
+| Gather object-centric policy evaluator | `python scripts/gather_object_centric_policy_evaluator.py --campaign-id <id> --artifact mppi=<summary> --artifact object_policy=<summary>` |
 | Gather pre-stage command authority audit | `python scripts/gather_pre_stage_command_authority_audit.py --campaign-id <id> --branch region_funnel_v1=<matrix_summary> --branch nav2_reacquire_v1=<matrix_summary> --branch constrained_local_planner_v1=<matrix_summary> --branch docking_reacquire_v1=<matrix_summary> --branch handoff_yaw_servo_v1=<matrix_summary> --branch pre_stage_reacquire_fsm_v1=<matrix_summary> --branch pre_stage_path_tracker_v1=<matrix_summary> --branch pre_stage_trajectory_owner_v1=<matrix_summary>` |
 | Gather portfolio stress ingestion | `python scripts/gather_control_portfolio.py --campaign-id <id> --branch helper=<summary> --stress helper=artifacts/session/<id>/gather_control_portfolio/helper/stress_summary.json --baseline-branch helper` |
 | Gather escape oracle | `scripts/run_gather_escape_oracle.ps1 -CampaignId <id>` |
@@ -72,6 +141,9 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gather control portfolio analyzer (internal) | `scripts/gather_control_portfolio.py` |
 | Gather hard-case stress analyzer (internal) | `scripts/gather_control_stress_analyzer.py` |
 | Gather control failure audit analyzer (internal) | `scripts/gather_control_failure_audit.py` |
+| Gather FollowPath research analyzer (internal) | `scripts/gather_follow_path_research_analyzer.py` |
+| Gather object-centric policy evaluator (internal) | `scripts/gather_object_centric_policy_evaluator.py` |
+| Gather object-centric policy helper (internal) | `scripts/gather_object_centric_policy_helpers.py` |
 | Gather pre-stage command authority audit analyzer (internal) | `scripts/gather_pre_stage_command_authority_audit.py` |
 | Gather escape oracle helper (internal) | `scripts/gather_escape_oracle.py` |
 | Gather escape sandbox helper (internal) | `scripts/gather_escape_sandbox.py` |
@@ -86,10 +158,8 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Route-planning parallel soak | `scripts/run_route_planning_parallel_soak.ps1 -Workers 2 -RunsPerWorker 1` |
 | Dashboard service | `scripts/run_dashboard_service.ps1` |
 | Dashboard validation | `scripts/run_dashboard_validation.ps1` |
-| Telegram preflight | `scripts/telegram_preflight.ps1 -CheckBot` |
-| Telegram daemon | `scripts/run_telegram_wait_daemon.ps1 -Action up -Build` |
-| Telegram cleanup | `scripts/run_telegram_wait_daemon.ps1 -Action cleanup` |
-| Telegram MCP register | `scripts/register_telegram_mcp.ps1` |
+| Telegram global verify | `D:\services\codex-telegram\scripts\verify-global.ps1` |
+| Telegram global install/repair | `D:\services\codex-telegram\scripts\install-global.ps1` |
 
 ## Compose Profiles
 
@@ -98,7 +168,7 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gate lane | `scripts/run_compose_gate.ps1` |
 | Isaac lane | `scripts/run_compose_isaac.ps1` |
 | UAT orchestrator | `scripts/run_compose_uat.ps1` |
-| Telegram wait bridge | `scripts/run_telegram_wait_daemon.ps1` |
+| Telegram wait bridge | Global bridge at `D:\services\codex-telegram` |
 
 UAT modes: `prepare`, `coordinate`, `snapshot`, `orientation`, `nav2`, `multi_target`, `first_uat`, `full_replay`, `pre_llm`
 
@@ -134,14 +204,18 @@ Lane-specific configs:
 18. `nav2_reacquire_v1` is a blocked experimental ROS-native pre-stage reacquire branch after the April 24, 2026 one-run goal-side smoke; do not add it to portfolio/stress comparison or promotion discussion until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes.
 19. `constrained_local_planner_v1` is a blocked experimental local-planner gather-control branch after the April 25, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 20. `docking_reacquire_v1` is a blocked experimental deterministic docking-style pre-stage reacquire branch after the April 25, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
-21. Gather control failure audit is analyzer-only closeout evidence; it does not promote or refresh portfolio/stress evidence for any blocked branch, including `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, `pre_stage_reacquire_fsm_v1`, `pre_stage_path_tracker_v1`, or `pre_stage_trajectory_owner_v1`.
+21. Gather control failure audit is analyzer-only closeout evidence; it does not promote or refresh portfolio/stress evidence for any blocked branch, including `region_funnel_v1`, `nav2_reacquire_v1`, `constrained_local_planner_v1`, `docking_reacquire_v1`, `handoff_yaw_servo_v1`, `pre_stage_reacquire_fsm_v1`, `pre_stage_path_tracker_v1`, `pre_stage_trajectory_owner_v1`, `nav2_follow_path_reacquire_v1`, or `nav2_mppi_follow_path_reacquire_v1`.
 22. `handoff_yaw_servo_v1` is a blocked experimental last-mile pre-stage yaw-alignment branch after the April 25/26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 23. `pre_stage_reacquire_fsm_v1` is a blocked experimental first-attempt pre-stage reacquire branch after the April 26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a repaired branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 24. `pre_stage_path_tracker_v1` is a blocked experimental first-attempt pre-stage branch after the April 26, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison until a larger repaired control-stack branch shows fresh-attempt `zero` and `plus45` pre-stage handoff passes without pre-stage ball drift/contact.
 25. `pre_stage_trajectory_owner_v1` is a blocked experimental pre-stage trajectory-owner branch after the April 27, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison.
 26. Gather pre-stage command authority audit is analyzer-only assumption-peel-back evidence. It reads existing matrix/state-history artifacts, does not rerun live sim, and does not promote or refresh portfolio/stress evidence for any blocked gather-control branch.
 27. `nav2_follow_path_reacquire_v1` is a blocked experimental one-ball `pre_stage` Nav2 controller-server `FollowPath` / DWB branch after the April 27, 2026 one-run goal-side smoke; keep it out of portfolio/stress comparison.
-28. MPPI/MPC or controller-plugin/config-level work is the next fallback after `nav2_follow_path_reacquire_v1`; do not add another helper/manual-drive overlay before planning that lower-stack change.
+28. `nav2_mppi_follow_path_reacquire_v1` is a blocked lower-stack one-ball `pre_stage` MPPI FollowPath branch. It dispatches `/follow_path` with `controller_id=MppiFollowPath`, sends a start-anchored dense odom-frame path with tangent headings through `escape_clear`, `corridor_approach`, `port`, and `handoff_yaw`, and accepts only measured pre-stage handoff dwell; the May 3, 2026 terminal-geometry patch removed the extra MPPI-only `handoff_align` detour without changing MPPI params, handoff acceptance, capture behavior, `/odom`, or frozen contracts.
+29. Latest May 3, 2026 terminal-geometry evidence recovered primary pre-stage reproducibility: saved-layout `zero` passed measured handoff 1/1 and then 3/3, saved-layout `plus45` passed measured handoff 3/3, all with `STATUS_SUCCEEDED`, `0.0m` pre-stage ball motion, and no `handoff_align` path segment. Live audit: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_terminal_geometry_live_audit_20260503/gather_follow_path_research_analyzer/follow_path_research_summary.json`.
+30. Keep `nav2_mppi_follow_path_reacquire_v1` out of portfolio/stress comparison because the branch is now blocked downstream: `zero` fails at `capture_entry_timeout`, while `plus45` reaches capture-entry and then fails around first-contact/release alignment (`missing_first_contact_alignment` / `release_roll_away`). The current capture-layer repair patch is still pending live requalification; it gives capture-entry bounded extra convergence time/forward authority and prevents far-from-zone generic capture from clamping into `capture_handoff_hold`, without adding another helper/manual-drive overlay or loosening pre-stage handoff.
+31. Continued MPPI/capture threshold tuning is baseline-maintenance only. Treat MPPI FollowPath as baseline evidence for long-range/pre-stage behavior, not as the primary contact-rich manipulation path.
+32. Current research direction has pivoted from gather/place into `object_centric_fetch_policy_v1`: a short-horizon fetch-to-pose policy on calibrated ball/surface physics. Treat earlier emergent launch/roll behavior as hypothesis-only until the physics lane is green; success is measured ball trajectory intersection with a delivery radius around a target pose, not final stop in a corral. The current small-robot UAT lane uses a calibrated golf ball and visible delivery circle before autonomous control promotion. The next control priority is stable pre-contact approach on the ball-target line, then bounded directional correction while pushing; classify lateral knock-away and over-rotation from robot pose/yaw telemetry before tuning. User/person detection comes later after `fetch_to_pose` is repeatable. Keep Nav2 reserved for long-range repositioning and do not change `/odom`, frozen contracts, or measured handoff acceptance.
 
 ## Latest Validated Artifacts
 
@@ -239,6 +313,30 @@ Gather Nav2 FollowPath reacquire experimental branch status:
 - Scope: one-ball `pre_stage` only; builds an explicit odom-frame path through `escape_clear`, `corridor_approach`, `port`, and `handoff_yaw`, dispatches `/follow_path` with DWB, disables manual drive while Nav2 owns the path, and accepts only measured pre-stage handoff dwell.
 - Smoke: `artifacts/session/live_nav2_follow_path_reacquire_v1_matrix_smoke_20260427/gather_goal_side_matrix/campaign_summary.json`
 - Result: blocked. Fresh `zero` and `plus45` both failed pre-stage handoff; `/follow_path` goals were accepted but immediately aborted with `status_code=6`, no pre-stage ball motion/contact, and no measured handoff, so no portfolio/stress refresh was produced for this branch.
+
+Gather Nav2 MPPI FollowPath reacquire experimental branch status:
+- Candidate: `nav2_mppi_follow_path_reacquire_v1`
+- Scope: one-ball `pre_stage` only; dispatches `/follow_path` with the Nav2 MPPI `MppiFollowPath` controller, sends a start-anchored dense odom-frame path with tangent headings through `escape_clear`, `corridor_approach`, `port`, and `handoff_yaw`, disables manual drive while Nav2 owns the path, and accepts only measured pre-stage handoff dwell.
+- Recovery matrix: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_capture_entry_diag_20260502/gather_goal_side_matrix/campaign_summary.json`
+- Recovery audit: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_capture_entry_diag_20260502_failure_audit/gather_control_failure_audit/failure_audit_summary.json`
+- Latest clean rerun: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_capture_diag_rerun_20260503/gather_goal_side_matrix/campaign_summary.json`
+- Latest clean audit: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_capture_diag_rerun_20260503_failure_audit/gather_control_failure_audit/failure_audit_summary.json`
+- Targeted saved-layout `zero` repro: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_prestage_repro_zero_20260503/gather_mission_repeatability/campaign_run_summary.json`
+- Targeted saved-layout `plus45` repro: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_prestage_repro_plus45_20260503/gather_mission_repeatability/campaign_run_summary.json`
+- Research reset summary: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_research_reset_20260503/research_reset_summary.json`
+- Terminal-geometry live audit: `artifacts/session/live_nav2_mppi_follow_path_reacquire_v1_terminal_geometry_live_audit_20260503/gather_follow_path_research_analyzer/follow_path_research_summary.json`
+- Result: blocked downstream after pre-stage recovery and now treated as baseline evidence rather than the primary research path. The May 3 research reset showed both `8dfe93b` and the recovery commit `eafdc59` fail saved-layout `zero`; loaded runtime MPPI params match `nav2_params_simple.yaml`; the first near-goal critic/pruning patch worsened progress and was reverted. The follow-up terminal-geometry patch removed the extra MPPI-only `handoff_align` waypoint and recovered saved-layout primary pre-stage handoff: `zero` passed 1/1 and then 3/3, `plus45` passed 3/3, all with `STATUS_SUCCEEDED`, `0.0m` pre-stage ball motion, and no `handoff_align` path segment. No portfolio/stress refresh was produced because full missions still fail downstream (`zero` at `capture_entry_timeout`; `plus45` after capture-entry around first-contact/release alignment). The next research branch should be `object_centric_gather_policy_v1`, not more broad MPPI/capture threshold tuning.
+
+Object-centric fetch policy research direction:
+- Candidate: `object_centric_fetch_policy_v1`
+- Active planning doc: `docs/OBJECT_CENTRIC_FETCH_POLICY_PLAN.md`
+- Historical gather/place doc: `docs/OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md`
+- Scope: fetch-to-pose first on calibrated ball/surface physics. The current small-robot lane uses a golf ball and visible delivery circle; previous launch-only evidence is non-promotional until the physics lane is documented and repeatable. Overshoot is acceptable when the trajectory intersects the delivery radius.
+- Runtime boundary: Nav2/MPPI remains available for long-range repositioning. The fetch policy owns short-horizon ball interaction and must be wrapped in deterministic guards for command bounds, pre-contact ball drift, clearance, target freshness, timeout, stuck state, recovery budget, and give-up.
+- Current implementation direction: keep `golf_ball_circle_delivery_uat` as the dashboard-visible physics/contact UAT lane, instrument it with per-tick robot pose/yaw plus ball pose, then add autonomous `fetch_to_pose` inside the existing gather mission runner after successful capture/setup and before legacy place/release behavior; extend `scripts/gather_object_centric_policy_helpers.py` with `phase="fetch_to_pose"` while preserving existing diagnostics; propagate shot outcome fields through `state_history.jsonl`, `mission_verdict.json`, repeatability summaries, and evaluator outputs.
+- Data rule: every contact attempt should record setup geometry, command sequence, robot lateral/yaw error to the ball-target line, first-contact state, ball trajectory, closest approach to target, success/intersection status, miss class, surface/friction snapshot, and predicted-vs-actual outcome.
+- Latest physics/contact UAT: dashboard scenario `golf_ball_circle_delivery_uat` passed on May 22, 2026 in `artifacts/session/20260522T130431721734Z/golf_ball_circle_delivery/20260522T130442256465Z/mission_verdict.json` with `fetch_to_pose_pass=true`, `shot_outcome.closest_approach_distance_m=0.049893` inside a `0.300m` delivery radius, and `approach_contact_metrics.stable_contact_approach_pass=true` with zero pre-contact yaw sign changes.
+- Promotion rule: no portfolio/stress ingestion until `fetch_to_pose` has schema evidence, calibrated physics/contact UAT, approach-stability telemetry, repeatability evidence, saved-layout `zero` and `plus45` autonomous pose-delivery smoke, and bounded recovery smoke. User/person detection is explicitly deferred.
 
 ## Testing
 
