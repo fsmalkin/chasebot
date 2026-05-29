@@ -559,14 +559,12 @@ Current direction update:
    - use contact-aware geometric-shooter artifacts as calibrated roll/coast
      physics probes only
    - test a physics-first Nav2 hypothesis before building the learned local
-     contact controller: `nav2_followpath_corridor_push_v1` lets Nav2 own
-     real-time `FollowPath` tracking through the ball-target corridor while a
-     fetch monitor cancels only on measured success, ball escape, stale state,
-     unsafe drift, timeout, or action abort
+     contact controller; the May 29 evidence now answers this as useful but
+     insufficient for standalone promotion
    - treat the old `nav2_mppi_follow_path_reacquire_v1` calibrated revisit as
      prior negative pre-stage evidence, not as this new corridor-push contact
      hypothesis
-   - keep AI as the next/fallback contact lane: train/prototype from large
+   - keep AI as the next contact lane: train/prototype from large
      calibrated simulation batches, score in shadow mode on saved anchors,
      seeded random layouts, and frozen failures, then allow learned output only
      inside deterministic guards
@@ -575,8 +573,26 @@ Current direction update:
    - keep deterministic guards authoritative over command bounds, target
      freshness, ball drift, retry budget, safe stop, `/odom`, and frozen
      contracts
-   - preferred next spike:
+   - previous spike:
      `spike/fetch-arch-nav2-corridor-push-20260528`
+   - May 29, 2026 evidence update:
+     `nav2_followpath_corridor_push_v1` answered the cheap contact-envelope
+     question but did not promote as the sole controller. Contact-ready
+     `zero`/`left05`/`right05` passed, full saved-layout one-run
+     `zero`/`left05`/`right05` passed, and saved-layout `3/3` repeatability
+     passed `zero` and `left05`; `right05` failed one promotion run with
+     `missed_delivery_radius_after_fetch_to_pose_ball_stopped_short` after
+     Nav2 returned `STATUS_SUCCEEDED` (`0.451645m` closest approach, about
+     `0.121m` ball displacement)
+   - seeded random/generalization was not run for Nav2 corridor-push; do not
+     claim generalized behavior from saved anchors
+   - updated next spike:
+     `spike/fetch-arch-ai-push-coast-servo-20260529`
+   - updated interpretation:
+     keep Nav2 as a useful coarse corridor/path owner and data source, but add
+     a shadow-first learned contact-stability layer for contact persistence,
+     terminal correction, asymmetric-offset handling, and bounded re-push/coast
+     decisions before any promotion discussion
 11. architecture exploration should widen, but stay staged:
    - do not treat the legacy `--gather-control-family` list as exhaustive
      architecture coverage; it is a runnable control-family screen inside the
