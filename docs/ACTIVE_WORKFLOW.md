@@ -502,6 +502,11 @@ Commands:
 
 Research contract:
 
+Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
+robot-owned local fetch behavior that combines Nav2 corridor tracking with a
+guarded AI push-coast/contact-stability layer, proven on saved layouts and the
+first seeded random generalization gate.
+
 1. freeze `nav2_mppi_follow_path_reacquire_v1` as the baseline/evidence branch rather than continuing broad MPPI/capture threshold tuning
 2. reserve historical Nav2/MPPI branches for long-range/pre-stage evidence.
    The fresh `nav2_followpath_corridor_push_v1` hypothesis has now been tested:
