@@ -45,6 +45,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "object_centric_gather_policy_v1",
 )
 ALLOWED_MISSION_OBJECTIVES = ("gather_here", "fetch_to_pose")
+ALLOWED_FETCH_GATE_MODES = ("full_mission", "contact_ready")
 
 
 def current_utc_stamp() -> str:
@@ -66,6 +67,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scenario-id", default="corral_single_ball_place")
     parser.add_argument("--scenario-label", default="Corral Single Ball Place")
     parser.add_argument("--mission-objective", choices=ALLOWED_MISSION_OBJECTIVES, default=os.environ.get("CHASECAR_MISSION_OBJECTIVE", "gather_here"))
+    parser.add_argument("--fetch-gate-mode", choices=ALLOWED_FETCH_GATE_MODES, default=os.environ.get("CHASECAR_FETCH_GATE_MODE", "full_mission"))
     parser.add_argument("--fetch-target-x", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_X", "")))
     parser.add_argument("--fetch-target-y", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Y", "")))
     parser.add_argument("--fetch-target-z", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Z", "")))
@@ -1059,6 +1061,7 @@ def main() -> int:
                     "placed_count": 0,
                     "capture_loss_count": 0,
                     "mission_objective": args.mission_objective,
+                    "fetch_gate_mode": args.fetch_gate_mode,
                     "surface_profile": args.surface_profile.strip(),
                     "final_settle_distance_m": 0.0,
                     "max_overshoot_distance_m": 0.0,
@@ -1098,6 +1101,8 @@ def main() -> int:
                 args.scenario_label,
                 "--mission-objective",
                 args.mission_objective,
+                "--fetch-gate-mode",
+                args.fetch_gate_mode,
             ]
             for arg_name, option_name in (
                 ("fetch_target_x", "--fetch-target-x"),
@@ -1157,6 +1162,7 @@ def main() -> int:
         "scenario_id": args.scenario_id,
         "scenario_label": args.scenario_label,
         "mission_objective": args.mission_objective,
+        "fetch_gate_mode": args.fetch_gate_mode,
         "execution_mode": args.execution_mode,
         "requested_world_file": args.world_file.strip(),
         "requested_surface_profile": args.surface_profile.strip(),

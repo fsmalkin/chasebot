@@ -349,6 +349,24 @@ def test_parse_args_allows_fetch_to_pose_objective(monkeypatch):
     assert args.fetch_delivery_radius_m == 0.5
 
 
+def test_parse_args_allows_contact_ready_fetch_gate_mode(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        [
+            "gather_mission_runner.py",
+            "--mission-objective",
+            "fetch_to_pose",
+            "--fetch-gate-mode",
+            "contact_ready",
+        ],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.fetch_gate_mode == "contact_ready"
+
+
 def test_nav2_reacquire_goal_generation_covers_zero_plus_minus_and_ready_states():
     zone = gather_runner.build_zone_spec("corral_single_ball_place")
     zero_ball = {"x": 5.448, "y": 0.0, "z": 0.05}
@@ -8447,6 +8465,125 @@ def test_run_target_fetch_to_pose_accepts_rollthrough_delivery_intersection(tmp_
     assert any(row.get("phase") == "fetch_to_pose" for row in rows)
 
 
+def test_contact_ready_fetch_gate_starts_robot_behind_ball_and_preserves_nav2_monitor_payload(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = "fetch_to_pose"
+    runner.fetch_gate_mode = "contact_ready"
+    runner.gather_control_family = gather_runner.NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+    runner.args.fetch_target_x = 0.95
+    runner.args.fetch_target_y = 0.0
+    runner.args.fetch_target_z = 0.001
+    runner.fetch_delivery_radius_m = 0.30
+    runner.visit_runtime_state = {
+        "visited_targets": [],
+        "remaining_targets": ["ball_1"],
+        "target_positions": {},
+    }
+    runner.gather_runtime_state = {
+        "placed_targets": [],
+        "remaining_targets": ["ball_1"],
+        "manual_drive": {},
+    }
+    state_history_path = tmp_path / "state_history.jsonl"
+    gather_sequence_path = tmp_path / "gather_sequence.jsonl"
+    target = runner.targets_by_id["ball_1"]
+    set_pose_calls: list[dict[str, float]] = []
+    truth_pose_waits: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        gather_runner,
+        "fetch_dashboard_state",
+        lambda dashboard_url, timeout_s=0: {
+            "compose_project": "session-contact-ready",
+            "world_name": "default",
+            "belief": {"latest_robot_pose": {"x": 0.03, "y": 0.0, "yaw": 0.0}},
+        },
+    )
+    monkeypatch.setattr(runner, "_safe_stop", lambda: None)
+    monkeypatch.setattr(runner, "_wait_for_pursuit_quiet", lambda timeout_s: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: runner.gather_runtime_state.update(kwargs))
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: runner.visit_runtime_state.update(kwargs))
+    monkeypatch.setattr(
+        runner,
+        "_ball_truth_pose",
+        lambda session_id, target: {"x": 0.38, "y": 0.0, "z": 0.021336},
+    )
+    monkeypatch.setattr(
+        runner,
+        "_set_robot_pose",
+        lambda state, *, x, y, yaw: set_pose_calls.append({"x": x, "y": y, "yaw": yaw}),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_wait_for_robot_pose_near",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("dashboard pose stale")),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_wait_for_robot_truth_pose_near",
+        lambda **kwargs: truth_pose_waits.append(kwargs) or {},
+    )
+
+    def fake_fetch_to_pose_target(**kwargs):
+        assert kwargs["attempt_kind"] == "contact_ready_gate"
+        return (
+            True,
+            {
+                "failure_reason": "",
+                "failure_stage": "",
+                "final_ball_pose": {"x": 0.95, "y": 0.0, "z": 0.021336},
+                "fetch_elapsed_s": 1.25,
+                "settle_exit_reason": "trajectory_intersects_delivery_radius",
+                "rolled_away_after_release": False,
+                "nav2_follow_path_corridor_push": {
+                    "dispatch_status": "monitor_success",
+                    "monitor_cancel_reason": "success",
+                    "monitor_sample": {
+                        "delivery_distance_m": 0.0,
+                        "lateral_error_m": 0.0,
+                        "robot_ball_distance_m": 0.12,
+                    },
+                    "status_code": 5,
+                },
+            },
+        )
+
+    monkeypatch.setattr(runner, "_fetch_to_pose_target", fake_fetch_to_pose_target)
+
+    result = runner._run_contact_ready_fetch_target(
+        session_id="session-contact-ready",
+        target=target,
+        route_index=1,
+        gather_sequence_path=gather_sequence_path,
+        state_history_path=state_history_path,
+    )
+
+    assert result["pass"] is True
+    assert result["attempt_kind"] == "contact_ready_gate"
+    assert result["pre_stage_pose_reached"] is True
+    assert result["capture_entry_reached"] is True
+    assert set_pose_calls == [{"x": 0.03, "y": 0.0, "yaw": 0.0}]
+    assert truth_pose_waits and truth_pose_waits[0]["session_id"] == "session-contact-ready"
+    assert result["shot_outcome"]["closest_approach_distance_m"] == 0.0
+    assert result["shot_outcome"]["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
+    assert result["shot_outcome"]["nav2_follow_path_corridor_push"]["monitor_sample"]["robot_ball_distance_m"] == 0.12
+    events = [
+        json.loads(line)["event_type"]
+        for line in state_history_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert "nav2_follow_path_corridor_push_contact_ready_gate_start" in events
+    assert "nav2_follow_path_corridor_push_contact_ready_gate_result" in events
+    ready_rows = [
+        json.loads(line)
+        for line in state_history_path.read_text(encoding="utf-8").splitlines()
+        if "nav2_follow_path_corridor_push_contact_ready_gate_ready" in line
+    ]
+    assert ready_rows[0]["pose_confirmation_source"] == "truth_state"
+    assert ready_rows[0]["dashboard_pose_wait_error"] == "dashboard pose stale"
+
+
 def test_fetch_to_pose_outcome_ignores_pre_fetch_ball_samples(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.fetch_delivery_radius_m = 0.25
@@ -8558,7 +8695,15 @@ def test_nav2_corridor_push_dispatch_uses_live_monitor_payload(tmp_path, monkeyp
     captured_dispatch: dict[str, object] = {}
     command_log: list[dict[str, object]] = []
 
-    monkeypatch.setattr(runner, "_control_loop_state", lambda session_id, target: ({}, robot_pose, ball_pose))
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda session_id, target: (
+            {"compose_project": "chasecar_dashboard_contact_ready"},
+            robot_pose,
+            ball_pose,
+        ),
+    )
     monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
     monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
@@ -8593,6 +8738,7 @@ def test_nav2_corridor_push_dispatch_uses_live_monitor_payload(tmp_path, monkeyp
     monitor = captured_dispatch["monitor"]
     assert passed is False
     assert payload["failure_reason"] == "nav2_corridor_push_ball_escape"
+    assert captured_dispatch["compose_project"] == "chasecar_dashboard_contact_ready"
     assert monitor["enabled"] is True
     assert monitor["target_model_name"] == "visit_mission_target_ball_1"
     assert monitor["truth_state_path"].endswith(

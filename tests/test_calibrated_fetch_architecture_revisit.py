@@ -31,6 +31,41 @@ def test_nav2_corridor_push_decision_requests_live_gate_after_first_screen():
     assert decision["comparison_scope"] == "nav2_corridor_push_contact_candidate"
 
 
+def test_nav2_corridor_push_promotion_failure_starts_ai_fallback_lane():
+    passing_result = {
+        "layout_id": "zero",
+        "pass": True,
+        "metrics": {
+            "required_green_runs": 3,
+            "fetch_to_pose_pass_count": 3,
+            "pre_stage_handoff_pass_count": 3,
+            "worst_closest_approach_distance_m": 0.2,
+        },
+    }
+    failing_result = {
+        "layout_id": "right05",
+        "pass": False,
+        "metrics": {
+            "required_green_runs": 3,
+            "fetch_to_pose_pass_count": 2,
+            "pre_stage_handoff_pass_count": 3,
+            "worst_closest_approach_distance_m": 0.45,
+        },
+    }
+
+    decision = revisit._family_decision(
+        family="nav2_followpath_corridor_push_v1",
+        one_run_results=[passing_result],
+        promotion_results=[passing_result, failing_result],
+        baseline_by_layout={},
+        delivery_radius_m=0.3,
+    )
+
+    assert decision["promotion_green"] is False
+    assert decision["recommended_next_action"] == "start_ai_push_coast_fallback_lane"
+    assert revisit._overall_recommended_next_action([decision["recommended_next_action"]]) == "start_ai_push_coast_fallback_lane"
+
+
 def _args(**overrides):
     values = {
         "dashboard_url": "http://127.0.0.1:8860",
@@ -43,6 +78,7 @@ def _args(**overrides):
         "promote_runs": 3,
         "promote_on_green": False,
         "short_circuit_on_failure": False,
+        "fetch_gate_mode": "full_mission",
         "provider": "local_stub",
         "world_file": revisit.fetch_gate.DEFAULT_WORLD_FILE,
         "fast_screen": False,
@@ -72,10 +108,23 @@ def test_build_candidate_specs_uses_calibrated_layouts_and_candidate_family():
     assert [spec.layout_id for spec in specs] == ["zero", "left05", "right05"]
     zero_command = specs[0].command
     assert zero_command[zero_command.index("--mission-objective") + 1] == "fetch_to_pose"
+    assert zero_command[zero_command.index("--fetch-gate-mode") + 1] == "full_mission"
     assert zero_command[zero_command.index("--gather-control-family") + 1] == "nav2_mppi_follow_path_reacquire_v1"
     assert zero_command[zero_command.index("--max-retries-per-target") + 1] == "0"
     assert zero_command[zero_command.index("--fetch-delivery-radius-m") + 1] == "0.300000"
     assert zero_command[zero_command.index("--target-layout-json") + 1] == revisit.LAYOUTS["zero"]
+
+
+def test_build_candidate_specs_can_request_contact_ready_fetch_gate():
+    specs = revisit.build_candidate_specs(
+        _args(fetch_gate_mode="contact_ready", layout=["zero"]),
+        stage="one_run",
+        families=["nav2_followpath_corridor_push_v1"],
+        runs=1,
+    )
+
+    command = specs[0].command
+    assert command[command.index("--fetch-gate-mode") + 1] == "contact_ready"
 
 
 def test_fast_screen_default_world_can_select_fast_calibrated_world():

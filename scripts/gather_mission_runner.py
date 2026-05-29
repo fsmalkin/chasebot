@@ -231,6 +231,7 @@ from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_G
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_GOAL_TIMEOUT_S
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_SERVER_WAIT_S
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_GOAL_TIMEOUT_S
+from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTACT_STANDOFF_M
 from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
 from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_CORRIDOR_PUSH_OBJECTIVE
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_MPPI_FOLLOW_PATH_CONTROLLER_ID
@@ -362,6 +363,12 @@ MISSION_OBJECTIVE_FETCH_TO_POSE = "fetch_to_pose"
 ALLOWED_MISSION_OBJECTIVES = (
     MISSION_OBJECTIVE_GATHER_HERE,
     MISSION_OBJECTIVE_FETCH_TO_POSE,
+)
+FETCH_GATE_MODE_FULL_MISSION = "full_mission"
+FETCH_GATE_MODE_CONTACT_READY = "contact_ready"
+ALLOWED_FETCH_GATE_MODES = (
+    FETCH_GATE_MODE_FULL_MISSION,
+    FETCH_GATE_MODE_CONTACT_READY,
 )
 DEFAULT_FETCH_DELIVERY_RADIUS_M = 0.762
 ALLOWED_GATHER_CONTROL_FAMILIES = (
@@ -784,6 +791,22 @@ def truth_world_xy(pose: dict[str, Any]) -> dict[str, float] | None:
     return payload
 
 
+def truth_world_xyyaw(pose: dict[str, Any]) -> tuple[float, float, float] | None:
+    position = pose.get("position") if isinstance(pose.get("position"), dict) else {}
+    orientation = pose.get("orientation") if isinstance(pose.get("orientation"), dict) else {}
+    x = clean_number(position.get("x"))
+    y = clean_number(position.get("y"))
+    qx = float(clean_number(orientation.get("x")) or 0.0)
+    qy = float(clean_number(orientation.get("y")) or 0.0)
+    qz = float(clean_number(orientation.get("z")) or 0.0)
+    qw = float(clean_number(orientation.get("w")) or 1.0)
+    if x is None or y is None:
+        return None
+    siny_cosp = 2.0 * ((qw * qz) + (qx * qy))
+    cosy_cosp = 1.0 - (2.0 * ((qy * qy) + (qz * qz)))
+    return float(x), float(y), math.atan2(siny_cosp, cosy_cosp)
+
+
 def build_provider(provider_name: str, *, model: str, reasoning_effort: str):
     normalized = str(provider_name or "").strip().lower() or "openai"
     if normalized == "openai":
@@ -859,6 +882,12 @@ class GatherMissionRunner:
         ).lower()
         if self.mission_objective not in ALLOWED_MISSION_OBJECTIVES:
             self.mission_objective = MISSION_OBJECTIVE_GATHER_HERE
+        self.fetch_gate_mode = clean_text(
+            getattr(args, "fetch_gate_mode", FETCH_GATE_MODE_FULL_MISSION),
+            FETCH_GATE_MODE_FULL_MISSION,
+        ).lower()
+        if self.fetch_gate_mode not in ALLOWED_FETCH_GATE_MODES:
+            self.fetch_gate_mode = FETCH_GATE_MODE_FULL_MISSION
         self.fetch_delivery_radius_m = max(
             0.05,
             float(clean_number(getattr(args, "fetch_delivery_radius_m", DEFAULT_FETCH_DELIVERY_RADIUS_M)) or DEFAULT_FETCH_DELIVERY_RADIUS_M),
@@ -922,6 +951,35 @@ class GatherMissionRunner:
             "y": round(fetch_y, 6),
             "z": round(fetch_z, 6),
             "radius_m": round(float(self.fetch_delivery_radius_m), 6),
+        }
+
+    def _contact_ready_pose_world(
+        self,
+        *,
+        ball_pose: dict[str, Any],
+        fetch_pose_world: dict[str, Any],
+    ) -> dict[str, Any]:
+        ball_xyyaw = world_pose_xyyaw(ball_pose)
+        fetch_xyyaw = world_pose_xyyaw(fetch_pose_world)
+        if ball_xyyaw is None or fetch_xyyaw is None:
+            return {}
+        ball_x, ball_y, _ball_yaw = ball_xyyaw
+        fetch_x, fetch_y, _fetch_yaw = fetch_xyyaw
+        dx = float(fetch_x) - float(ball_x)
+        dy = float(fetch_y) - float(ball_y)
+        distance_m = math.hypot(dx, dy)
+        if distance_m <= 1.0e-6:
+            return {}
+        ux = dx / distance_m
+        uy = dy / distance_m
+        standoff_m = max(float(DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTACT_STANDOFF_M), 0.0)
+        yaw = math.atan2(uy, ux)
+        return {
+            "x": round(float(ball_x) - (standoff_m * ux), 6),
+            "y": round(float(ball_y) - (standoff_m * uy), 6),
+            "yaw": round(float(yaw), 6),
+            "standoff_m": round(float(standoff_m), 6),
+            "ball_target_distance_m": round(float(distance_m), 6),
         }
 
     def _state_history_ball_samples(
@@ -1063,6 +1121,9 @@ class GatherMissionRunner:
             ):
                 if key in place_payload:
                     fetch_phase_metrics[key] = place_payload.get(key)
+            corridor_push_payload = place_payload.get("nav2_follow_path_corridor_push")
+            if isinstance(corridor_push_payload, dict):
+                fetch_phase_metrics["nav2_follow_path_corridor_push"] = corridor_push_payload
         if pass_delivery:
             reason = "trajectory_intersects_delivery_radius"
         elif not observed:
@@ -1553,6 +1614,33 @@ class GatherMissionRunner:
                 return last_state
             time.sleep(self.args.poll_s)
         raise RuntimeError(f"Robot pose did not settle near commanded start pose: {last_state}")
+
+    def _wait_for_robot_truth_pose_near(
+        self,
+        *,
+        session_id: str,
+        x: float,
+        y: float,
+        yaw: float,
+        timeout_s: float = 5.0,
+        position_tolerance_m: float = 0.08,
+        yaw_tolerance_rad: float = 0.20,
+    ) -> dict[str, Any]:
+        deadline = time.monotonic() + max(timeout_s, 0.1)
+        last_state: dict[str, Any] = {}
+        while time.monotonic() < deadline:
+            last_state = self._load_truth_state(session_id)
+            truth_pose = last_state.get("robot_truth_pose") if isinstance(last_state.get("robot_truth_pose"), dict) else {}
+            robot_xyyaw = truth_world_xyyaw(truth_pose if isinstance(truth_pose, dict) else {})
+            if robot_xyyaw is None:
+                time.sleep(self.args.poll_s)
+                continue
+            position_error = math.hypot(float(robot_xyyaw[0]) - float(x), float(robot_xyyaw[1]) - float(y))
+            yaw_error = abs(normalize_angle(float(robot_xyyaw[2]) - float(yaw)))
+            if position_error <= position_tolerance_m and yaw_error <= yaw_tolerance_rad:
+                return last_state
+            time.sleep(self.args.poll_s)
+        raise RuntimeError(f"Robot truth pose did not settle near commanded contact-ready pose: {last_state}")
 
     def _wait_for_nav2_ready(self, timeout_s: float = 30.0) -> dict[str, Any]:
         deadline = time.monotonic() + max(timeout_s, 0.1)
@@ -8649,7 +8737,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 }
                 try:
                     follow_path_result = self._dispatch_nav2_follow_path_reacquire(
-                        compose_project=session_id,
+                        compose_project=clean_text(_dashboard_state.get("compose_project"), session_id),
                         path_poses=path_poses,
                         controller_id=clean_text(
                             corridor_plan_dict.get("controller_id"),
@@ -8929,6 +9017,417 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "local_recovery_attempted": False,
         }
 
+    def _contact_ready_approach_progress(
+        self,
+        *,
+        contact_ready_pose: dict[str, Any],
+        elapsed_s: float,
+        passed: bool,
+        reason: str,
+        failure_reason: str = "",
+    ) -> dict[str, Any]:
+        capture_failure_reason = clean_text(failure_reason)
+        if passed:
+            capture_failure_reason = ""
+        return {
+            "pass": bool(passed),
+            "reason": clean_text(reason, "contact_ready_gate"),
+            "pre_stage": {
+                "pose_world": dict(contact_ready_pose),
+                "pose_reached": bool(passed),
+                "time_s": round(float(elapsed_s), 6),
+                "handoff_pass": bool(passed),
+            },
+            "stage": {
+                "pose_reached": bool(passed),
+                "time_s": 0.0,
+            },
+            "capture_entry": {
+                "pass": bool(passed),
+                "reached": bool(passed),
+                "entered_goal_side_before_capture": False,
+                "first_contact_push_alignment_deg": 0.0 if passed else None,
+                "push_direction_yaw_deg": round(math.degrees(float(clean_number(contact_ready_pose.get("yaw")) or 0.0)), 6),
+                "time_s": round(float(elapsed_s), 6),
+                "failure_reason": capture_failure_reason,
+            },
+        }
+
+    def _contact_ready_approach_kwargs(
+        self,
+        *,
+        contact_ready_pose: dict[str, Any],
+        elapsed_s: float,
+        passed: bool,
+        reason: str,
+        failure_reason: str = "",
+    ) -> dict[str, Any]:
+        progress = self._contact_ready_approach_progress(
+            contact_ready_pose=contact_ready_pose,
+            elapsed_s=elapsed_s,
+            passed=passed,
+            reason=reason,
+            failure_reason=failure_reason,
+        )
+        return {
+            "pre_stage_pose_world": dict(contact_ready_pose),
+            "pre_stage_pose_reached": bool(passed),
+            "pre_stage_time_s": round(float(elapsed_s), 6),
+            "pre_stage_handoff_pass": bool(passed),
+            "approach_side_verdict": {
+                "pass": bool(passed),
+                "reason": clean_text(reason, "contact_ready_gate"),
+            },
+            "staging_pose_reached": bool(passed),
+            "entered_goal_side_before_capture": False,
+            "first_contact_push_alignment_deg": 0.0 if passed else None,
+            "push_direction_yaw_deg": round(math.degrees(float(clean_number(contact_ready_pose.get("yaw")) or 0.0)), 6),
+            "stage_time_s": 0.0,
+            "capture_entry_reached": bool(passed),
+            "capture_entry_time_s": round(float(elapsed_s), 6),
+            "approach_failure_reason": "" if passed else clean_text(failure_reason, reason),
+            "latest_approach_progress": dict(progress),
+            "fresh_attempt_approach": dict(progress),
+        }
+
+    def _mark_contact_ready_fetch_complete(
+        self,
+        *,
+        target: GatherTargetSpec,
+        final_ball_pose: dict[str, Any],
+        shot_outcome: dict[str, Any],
+    ) -> None:
+        if final_ball_pose:
+            self._record_target_position(
+                target.id,
+                x=float(final_ball_pose.get("x", 0.0)),
+                y=float(final_ball_pose.get("y", 0.0)),
+                z=float(final_ball_pose.get("z", target.z_m) or target.z_m),
+            )
+        placed_targets = list(self.gather_runtime_state.get("placed_targets", []))
+        if target.id not in placed_targets:
+            placed_targets.append(target.id)
+        fetched_targets = list(self.gather_runtime_state.get("fetched_targets", []))
+        if target.id not in fetched_targets:
+            fetched_targets.append(target.id)
+        visited_targets = list(self.visit_runtime_state.get("visited_targets", []))
+        if target.id not in visited_targets:
+            visited_targets.append(target.id)
+        remaining_targets = [item for item in self.gather_runtime_state.get("remaining_targets", []) if item != target.id]
+        self._update_gather_runtime_state(
+            mission_phase="advance",
+            gather_phase="advance",
+            placed_targets=placed_targets,
+            fetched_targets=fetched_targets,
+            remaining_targets=remaining_targets,
+            latest_feedback=f"{target.label} fetched through the delivery pose from contact-ready gate.",
+            last_fetch_to_pose_result=shot_outcome,
+        )
+        self._update_visit_runtime_state(
+            visited_targets=visited_targets,
+            remaining_targets=remaining_targets,
+            last_visit_result={"target_id": target.id, "pass": True, "mission_objective": self.mission_objective},
+            current_target_prior={},
+            mission_phase="advance",
+            latest_feedback=f"{target.label} fetched through the delivery pose from contact-ready gate.",
+        )
+        self._append_runtime_event(
+            f"{target.label} fetched through the delivery pose from contact-ready gate.",
+            key=f"fetch_to_pose_contact_ready:{target.id}",
+        )
+
+    def _run_contact_ready_fetch_target(
+        self,
+        *,
+        session_id: str,
+        target: GatherTargetSpec,
+        route_index: int,
+        gather_sequence_path: Path,
+        state_history_path: Path,
+    ) -> dict[str, Any]:
+        attempt_index = 1
+        attempt_kind = "contact_ready_gate"
+        gate_started_monotonic = time.monotonic()
+        fetch_pose_world = self._fetch_pose_world()
+        ball_pose = self._ball_truth_pose(session_id, target)
+        if not ball_pose:
+            reason = "contact_ready_missing_ball_truth"
+            append_jsonl(
+                state_history_path,
+                {
+                    "generated_utc": utc_now(),
+                    "event_type": "nav2_follow_path_corridor_push_contact_ready_gate_result",
+                    "phase": "contact_ready_gate",
+                    "attempt": attempt_index,
+                    "attempt_kind": attempt_kind,
+                    "target_id": target.id,
+                    "pass": False,
+                    "failure_reason": reason,
+                    "fetch_pose_world": fetch_pose_world,
+                    "controller_family": self.gather_control_family,
+                },
+            )
+            return self._target_failure_result(
+                target=target,
+                failure_reason=reason,
+                failure_stage="contact_ready_gate",
+                attempts=attempt_index,
+                capture_loss_count=0,
+                route_index=route_index,
+                attempt_kind=attempt_kind,
+                fetch_to_pose_failure_reason=reason,
+                fetch_pose_world=fetch_pose_world,
+                shot_outcome={},
+            )
+
+        contact_ready_pose = self._contact_ready_pose_world(
+            ball_pose=ball_pose,
+            fetch_pose_world=fetch_pose_world,
+        )
+        if not contact_ready_pose:
+            reason = "contact_ready_geometry_unavailable"
+            append_jsonl(
+                state_history_path,
+                {
+                    "generated_utc": utc_now(),
+                    "event_type": "nav2_follow_path_corridor_push_contact_ready_gate_result",
+                    "phase": "contact_ready_gate",
+                    "attempt": attempt_index,
+                    "attempt_kind": attempt_kind,
+                    "target_id": target.id,
+                    "pass": False,
+                    "failure_reason": reason,
+                    "ball_pose": ball_pose,
+                    "fetch_pose_world": fetch_pose_world,
+                    "controller_family": self.gather_control_family,
+                },
+            )
+            return self._target_failure_result(
+                target=target,
+                failure_reason=reason,
+                failure_stage="contact_ready_gate",
+                attempts=attempt_index,
+                capture_loss_count=0,
+                route_index=route_index,
+                attempt_kind=attempt_kind,
+                fetch_to_pose_failure_reason=reason,
+                fetch_pose_world=fetch_pose_world,
+                shot_outcome={},
+            )
+
+        gate_start_event = {
+            "generated_utc": utc_now(),
+            "event_type": "nav2_follow_path_corridor_push_contact_ready_gate_start",
+            "phase": "contact_ready_gate",
+            "attempt": attempt_index,
+            "attempt_kind": attempt_kind,
+            "target_id": target.id,
+            "ball_pose": ball_pose,
+            "fetch_pose_world": fetch_pose_world,
+            "contact_ready_pose_world": contact_ready_pose,
+            "controller_family": self.gather_control_family,
+            "fetch_gate_mode": self.fetch_gate_mode,
+        }
+        append_jsonl(state_history_path, gate_start_event)
+        append_jsonl(gather_sequence_path, gate_start_event)
+        self._update_gather_runtime_state(
+            current_target_id=target.id,
+            mission_phase="contact_ready_gate",
+            gather_phase="contact_ready_gate",
+            latest_feedback=f"{target.label} contact-ready corridor-push gate starting.",
+        )
+        self._update_visit_runtime_state(
+            current_target_id=target.id,
+            mission_phase="contact_ready_gate",
+            latest_feedback=f"{target.label} contact-ready corridor-push gate starting.",
+        )
+
+        pose_reached = False
+        setup_failure_reason = ""
+        pose_confirmation_source = "dashboard_belief"
+        dashboard_pose_wait_error = ""
+        try:
+            state = fetch_dashboard_state(self.dashboard_url, timeout_s=self.args.timeout_s)
+            self._safe_stop()
+            self._set_manual_drive(
+                False,
+                mode="contact_ready_gate_setup",
+                rationale="Contact-ready gate teleports robot behind the ball before Nav2 owns corridor push.",
+            )
+            self._set_robot_pose(
+                state,
+                x=float(contact_ready_pose["x"]),
+                y=float(contact_ready_pose["y"]),
+                yaw=float(contact_ready_pose["yaw"]),
+            )
+            try:
+                self._wait_for_robot_pose_near(
+                    x=float(contact_ready_pose["x"]),
+                    y=float(contact_ready_pose["y"]),
+                    yaw=float(contact_ready_pose["yaw"]),
+                    timeout_s=15.0,
+                    position_tolerance_m=0.08,
+                    yaw_tolerance_rad=0.20,
+                )
+            except RuntimeError as exc:
+                dashboard_pose_wait_error = clean_text(str(exc))
+                self._wait_for_robot_truth_pose_near(
+                    session_id=session_id,
+                    x=float(contact_ready_pose["x"]),
+                    y=float(contact_ready_pose["y"]),
+                    yaw=float(contact_ready_pose["yaw"]),
+                    timeout_s=5.0,
+                    position_tolerance_m=0.08,
+                    yaw_tolerance_rad=0.20,
+                )
+                pose_confirmation_source = "truth_state"
+            self._safe_stop()
+            self._wait_for_pursuit_quiet(self.args.pursuit_settle_timeout_s)
+            pose_reached = True
+        except Exception as exc:
+            setup_failure_reason = clean_text(str(exc), "contact_ready_pose_not_reached")
+
+        setup_elapsed_s = time.monotonic() - gate_started_monotonic
+        ready_event = {
+            "generated_utc": utc_now(),
+            "event_type": "nav2_follow_path_corridor_push_contact_ready_gate_ready",
+            "phase": "contact_ready_gate",
+            "attempt": attempt_index,
+            "attempt_kind": attempt_kind,
+            "target_id": target.id,
+            "pass": bool(pose_reached),
+            "failure_reason": setup_failure_reason,
+            "contact_ready_pose_world": contact_ready_pose,
+            "pose_confirmation_source": pose_confirmation_source if pose_reached else "",
+            "dashboard_pose_wait_error": dashboard_pose_wait_error,
+            "setup_elapsed_s": round(float(setup_elapsed_s), 6),
+            "controller_family": self.gather_control_family,
+        }
+        append_jsonl(state_history_path, ready_event)
+        append_jsonl(gather_sequence_path, ready_event)
+        if not pose_reached:
+            approach_kwargs = self._contact_ready_approach_kwargs(
+                contact_ready_pose=contact_ready_pose,
+                elapsed_s=setup_elapsed_s,
+                passed=False,
+                reason="contact_ready_gate_setup_failed",
+                failure_reason=setup_failure_reason,
+            )
+            return self._target_failure_result(
+                target=target,
+                failure_reason="contact_ready_pose_not_reached",
+                failure_stage="contact_ready_gate",
+                attempts=attempt_index,
+                capture_loss_count=0,
+                route_index=route_index,
+                attempt_kind=attempt_kind,
+                handoff_kind="contact_ready_gate",
+                fetch_to_pose_failure_reason="contact_ready_pose_not_reached",
+                fetch_pose_world=fetch_pose_world,
+                shot_outcome={},
+                **approach_kwargs,
+            )
+
+        fetch_pass, fetch_payload = self._fetch_to_pose_target(
+            session_id=session_id,
+            target=target,
+            state_history_path=state_history_path,
+            attempt_index=attempt_index,
+            attempt_kind=attempt_kind,
+        )
+        fetch_failure_reason = "" if fetch_pass else clean_text(fetch_payload.get("failure_reason"), "fetch_to_pose_failed")
+        final_ball_pose = pose_payload(fetch_payload.get("final_ball_pose"))
+        if not final_ball_pose:
+            final_ball_pose = self._ball_truth_pose(session_id, target) or ball_pose
+        shot_outcome = self._build_fetch_to_pose_outcome(
+            target=target,
+            state_history_path=state_history_path,
+            final_ball_pose=final_ball_pose,
+            place_payload=fetch_payload,
+            place_failure_reason=fetch_failure_reason,
+        )
+        fetch_pose_world = shot_outcome.get("fetch_pose_world", {}) if isinstance(shot_outcome.get("fetch_pose_world"), dict) else fetch_pose_world
+        final_ball_pose = pose_payload(shot_outcome.get("ball_end_pose")) or final_ball_pose
+        fetch_to_pose_reached = bool(shot_outcome.get("pass", False))
+        fetch_failure_reason = "" if fetch_to_pose_reached else clean_text(shot_outcome.get("reason"), fetch_failure_reason)
+        fetch_elapsed_s = clean_number(fetch_payload.get("fetch_elapsed_s"))
+        fetch_time_s = float(fetch_elapsed_s) if fetch_elapsed_s is not None else time.monotonic() - gate_started_monotonic
+        result_event = {
+            "generated_utc": utc_now(),
+            "event_type": "nav2_follow_path_corridor_push_contact_ready_gate_result",
+            "phase": "contact_ready_gate",
+            "attempt": attempt_index,
+            "attempt_kind": attempt_kind,
+            "target_id": target.id,
+            "pass": bool(fetch_to_pose_reached),
+            "failure_reason": fetch_failure_reason,
+            "contact_ready_pose_world": contact_ready_pose,
+            "fetch_to_pose": {
+                "pass": bool(fetch_to_pose_reached),
+                "reached": bool(fetch_to_pose_reached),
+                "time_s": round(float(fetch_time_s), 6),
+                "closest_approach_distance_m": shot_outcome.get("closest_approach_distance_m"),
+                "failure_reason": fetch_failure_reason,
+            },
+            "fetch_pose_world": fetch_pose_world,
+            "shot_outcome": shot_outcome,
+            "controller_family": self.gather_control_family,
+        }
+        append_jsonl(state_history_path, result_event)
+        append_jsonl(gather_sequence_path, result_event)
+        approach_kwargs = self._contact_ready_approach_kwargs(
+            contact_ready_pose=contact_ready_pose,
+            elapsed_s=setup_elapsed_s,
+            passed=True,
+            reason="contact_ready_gate",
+        )
+        fetch_fields = {
+            "fetch_to_pose_reached": fetch_to_pose_reached,
+            "fetch_to_pose_time_s": fetch_time_s,
+            "fetch_to_pose_failure_reason": fetch_failure_reason,
+            "fetch_pose_world": fetch_pose_world,
+            "shot_outcome": shot_outcome,
+        }
+        if fetch_to_pose_reached:
+            self._mark_contact_ready_fetch_complete(
+                target=target,
+                final_ball_pose=final_ball_pose,
+                shot_outcome=shot_outcome,
+            )
+            return self._target_success_result(
+                target=target,
+                attempts=attempt_index,
+                capture_loss_count=0,
+                route_index=route_index,
+                final_ball_pose=final_ball_pose,
+                place_time_s=fetch_time_s,
+                attempt_kind=attempt_kind,
+                handoff_kind="contact_ready_gate",
+                settle_exit_reason=clean_text(fetch_payload.get("settle_exit_reason"), "trajectory_intersects_delivery_radius"),
+                rolled_away_after_release=bool(fetch_payload.get("rolled_away_after_release", False)),
+                **fetch_fields,
+                **approach_kwargs,
+            )
+
+        self._update_visit_runtime_state(
+            proof_state="failed",
+            mission_phase="failed",
+            latest_feedback=f"{target.label} contact-ready fetch-to-pose missed.",
+        )
+        return self._target_failure_result(
+            target=target,
+            failure_reason=fetch_failure_reason,
+            failure_stage="fetch_to_pose",
+            attempts=attempt_index,
+            capture_loss_count=0,
+            route_index=route_index,
+            attempt_kind=attempt_kind,
+            handoff_kind="contact_ready_gate",
+            rolled_away_after_release=bool(fetch_payload.get("rolled_away_after_release", False)),
+            **fetch_fields,
+            **approach_kwargs,
+        )
+
     def _run_target(
         self,
         *,
@@ -8962,6 +9461,18 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         fresh_attempt_index: int | None = None
         fresh_attempt_approach_memory: dict[str, Any] = {}
         fresh_attempt_kinds = {"initial_visit", "retry_visit", "place_loss_revisit"}
+
+        if (
+            self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            and self.fetch_gate_mode == FETCH_GATE_MODE_CONTACT_READY
+        ):
+            return self._run_contact_ready_fetch_target(
+                session_id=session_id,
+                target=target,
+                route_index=route_index,
+                gather_sequence_path=gather_sequence_path,
+                state_history_path=state_history_path,
+            )
 
         def _retention_kwargs(payload: dict[str, Any] | None) -> dict[str, Any]:
             if not isinstance(payload, dict):
@@ -10233,6 +10744,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "pass": bool(objective_pass),
                 "mission_completed_pass": mission_completed_pass,
                 "mission_objective": self.mission_objective,
+                "fetch_gate_mode": self.fetch_gate_mode,
                 "scenario_id": self.args.scenario_id,
                 "scenario_label": self.args.scenario_label,
                 "session_id": session_id,
@@ -10313,6 +10825,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "scenario_id": self.args.scenario_id,
                 "scenario_label": self.args.scenario_label,
                 "mission_objective": self.mission_objective,
+                "fetch_gate_mode": self.fetch_gate_mode,
                 "session_id": session_id,
                 "world_file": self.world_file,
                 "surface_profile": self.surface_profile,
@@ -10531,6 +11044,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scenario-id", default="corral_single_ball_place")
     parser.add_argument("--scenario-label", default="Corral Single Ball Place")
     parser.add_argument("--mission-objective", choices=ALLOWED_MISSION_OBJECTIVES, default=os.environ.get("CHASECAR_MISSION_OBJECTIVE", MISSION_OBJECTIVE_GATHER_HERE))
+    parser.add_argument("--fetch-gate-mode", choices=ALLOWED_FETCH_GATE_MODES, default=os.environ.get("CHASECAR_FETCH_GATE_MODE", FETCH_GATE_MODE_FULL_MISSION))
     parser.add_argument("--fetch-target-x", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_X", "")))
     parser.add_argument("--fetch-target-y", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Y", "")))
     parser.add_argument("--fetch-target-z", type=optional_float_arg, default=optional_float_arg(os.environ.get("CHASECAR_FETCH_TARGET_Z", "")))

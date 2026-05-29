@@ -28,6 +28,9 @@ NAV2_MPPI_REVISIT_FAMILY = "nav2_mppi_follow_path_reacquire_v1"
 DEFAULT_ARTIFACT_KIND = "gather_mission_calibrated_golf_architecture_revisit"
 FAST_SCREEN_WORLD_FILE = "yolo_test_world_v6_calibrated_golf_turf_fast.world"
 DEFAULT_SCREEN_SCOPE = "runnable_control_family_screen"
+DEFAULT_FETCH_GATE_MODE = "full_mission"
+CONTACT_READY_FETCH_GATE_MODE = "contact_ready"
+ALLOWED_FETCH_GATE_MODES = (DEFAULT_FETCH_GATE_MODE, CONTACT_READY_FETCH_GATE_MODE)
 
 LAYOUTS = {
     "zero": fetch_gate.DEFAULT_CENTERLINE_LAYOUT,
@@ -63,6 +66,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--promote-runs", type=int, default=3)
     parser.add_argument("--promote-on-green", action="store_true")
     parser.add_argument("--short-circuit-on-failure", action="store_true")
+    parser.add_argument("--fetch-gate-mode", choices=ALLOWED_FETCH_GATE_MODES, default=DEFAULT_FETCH_GATE_MODE)
     parser.add_argument("--provider", default="local_stub")
     parser.add_argument("--world-file", default=fetch_gate.DEFAULT_WORLD_FILE)
     parser.add_argument("--fast-screen", action="store_true")
@@ -123,6 +127,8 @@ def _build_command(
         label,
         "--mission-objective",
         "fetch_to_pose",
+        "--fetch-gate-mode",
+        args.fetch_gate_mode,
         "--fetch-target-x",
         f"{float(args.fetch_target_x):.6f}",
         "--fetch-target-y",
@@ -393,8 +399,12 @@ def _family_decision(
         rationale = "At least one one-run calibrated layout failed; classify artifacts before any policy work."
     elif scope == "nav2_corridor_push_contact_candidate":
         if promotion_results and not promotion_green:
-            next_action = "do_not_promote_corridor_push"
-            rationale = "Nav2 corridor-push cleared the first screen but failed the three-run promotion gate."
+            next_action = "start_ai_push_coast_fallback_lane"
+            rationale = (
+                "Nav2 corridor-push cleared the first screen but failed the three-run "
+                "promotion gate; freeze the failing evidence and start the learned "
+                "push-coast fallback lane."
+            )
         elif promotion_green:
             next_action = "run_seeded_generalization_gate"
             rationale = "Nav2 corridor-push cleared saved layouts; test seeded random layouts before promotion."
@@ -427,6 +437,20 @@ def _family_decision(
     }
 
 
+def _overall_recommended_next_action(actions: list[str]) -> str:
+    if any(action == "start_ai_push_coast_fallback_lane" for action in actions):
+        return "start_ai_push_coast_fallback_lane"
+    if any(action == "consider_targeted_development" for action in actions):
+        return "consider_targeted_development"
+    if any(action == "preserve_as_setup_baseline_evidence" for action in actions):
+        return "preserve_as_setup_baseline_evidence"
+    if any(action == "do_not_develop_alternative" for action in actions):
+        return "do_not_develop_alternative"
+    if any(action == "do_not_promote_alternative" for action in actions):
+        return "do_not_promote_alternative"
+    return "keep_object_centric_fetch_baseline"
+
+
 def _scorecard(summary: dict[str, Any]) -> str:
     lines = [
         "# Calibrated Fetch Architecture Revisit",
@@ -435,6 +459,7 @@ def _scorecard(summary: dict[str, Any]) -> str:
         f"- Screen scope: `{summary.get('screen_scope', '')}`",
         f"- Baseline: `{summary['baseline_summary_path']}`",
         f"- Fast screen: `{bool(summary.get('fast_screen', False))}`",
+        f"- Fetch gate mode: `{summary.get('fetch_gate_mode', '')}`",
         f"- Short circuit: `{bool(summary.get('short_circuit_on_failure', False))}`",
         f"- Layouts: `{', '.join(summary.get('requested_layouts', []))}`",
         f"- World: `{summary.get('world_file', '')}`",
@@ -539,14 +564,7 @@ def main() -> int:
             }
         )
 
-    if any(action == "consider_targeted_development" for action in overall_actions):
-        recommended_next_action = "consider_targeted_development"
-    elif any(action == "preserve_as_setup_baseline_evidence" for action in overall_actions):
-        recommended_next_action = "preserve_as_setup_baseline_evidence"
-    elif any(action == "do_not_develop_alternative" for action in overall_actions):
-        recommended_next_action = "do_not_develop_alternative"
-    else:
-        recommended_next_action = "keep_object_centric_fetch_baseline"
+    recommended_next_action = _overall_recommended_next_action(overall_actions)
 
     summary = {
         "generated_utc": utc_now(),
@@ -554,6 +572,7 @@ def main() -> int:
         "campaign_id": campaign_id,
         "dry_run": bool(args.dry_run),
         "screen_scope": str(args.screen_scope or DEFAULT_SCREEN_SCOPE),
+        "fetch_gate_mode": str(args.fetch_gate_mode or DEFAULT_FETCH_GATE_MODE),
         "baseline_summary_path": str(baseline_summary_path.relative_to(REPO_ROOT) if baseline_summary_path.is_relative_to(REPO_ROOT) else baseline_summary_path),
         "baseline_by_layout": baseline_layouts,
         "fast_screen": bool(args.fast_screen),

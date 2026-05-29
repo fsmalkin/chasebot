@@ -184,6 +184,24 @@ def test_parse_args_allows_fetch_to_pose_objective(monkeypatch):
     assert args.fetch_delivery_radius_m == 0.5
 
 
+def test_parse_args_allows_contact_ready_fetch_gate_mode(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        [
+            "repeatability",
+            "--mission-objective",
+            "fetch_to_pose",
+            "--fetch-gate-mode",
+            "contact_ready",
+        ],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.fetch_gate_mode == "contact_ready"
+
+
 def test_ensure_environment_ready_noops_when_dashboard_already_ready(monkeypatch):
     calls: list[tuple[str, str]] = []
 
@@ -1290,6 +1308,8 @@ def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
             "0",
             "--gather-control-family",
             family,
+            "--fetch-gate-mode",
+            "contact_ready",
             "--target-model-sdf",
             "ros2_config/calibrated_golf_ball.sdf",
             "--zone-model-sdf",
@@ -1309,6 +1329,9 @@ def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
     assert "--gather-control-family" in subprocess_calls[0]
     family_index = subprocess_calls[0].index("--gather-control-family")
     assert subprocess_calls[0][family_index + 1] == family
+    assert "--fetch-gate-mode" in subprocess_calls[0]
+    gate_index = subprocess_calls[0].index("--fetch-gate-mode")
+    assert subprocess_calls[0][gate_index + 1] == "contact_ready"
     assert "--target-model-sdf" in subprocess_calls[0]
     target_sdf_index = subprocess_calls[0].index("--target-model-sdf")
     assert subprocess_calls[0][target_sdf_index + 1] == "ros2_config/calibrated_golf_ball.sdf"
