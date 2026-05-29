@@ -5,9 +5,10 @@ roadmap for priority, `ACTIVE_WORKFLOW.md` for gates and commands, and the
 `OBJECT_CENTRIC_*` docs for research details.
 
 Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
-robot-owned local fetch behavior that combines Nav2 corridor tracking with a
-guarded AI push-coast/contact-stability layer, proven on saved layouts and the
-first seeded random generalization gate.
+robot-owned local fetch behavior that combines Nav2 stage ownership,
+deterministic homebrew contact routines, and a guarded AI/model handoff and
+maneuver-class proposer, proven on saved layouts and the first seeded random
+generalization gate.
 
 ## Recommended Branch Roles
 
@@ -81,7 +82,7 @@ ball contact, so old ball/turf physics does not explain the primary failure.
 | `object_centric_fetch_policy_v1` | `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`; `artifacts/session/live_passive_golf_roll_built_resistance_repeatability_20260526/passive_ball_roll_calibration/campaign_summary.json` | Active calibrated baseline | Organize new alternatives around this gate and telemetry. |
 | `contact_aware_geometric_shooter` | `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`; `artifacts/session/live_fetch_geometric_shooter_probe_zero_20260527/fetch_geometric_shooter_probe/geometric_shooter_probe_summary.json` plus `left05` / `right05` one-run probes | Direct-velocity physics probe, not robot-owned runtime evidence | Keep as roll-window/coast-geometry evidence; do not promote as the primary runtime path. |
 | `nav2_followpath_corridor_push_v1` | `artifacts/session/live_nav2_corridor_push_contact_ready_rerun3_20260529/calibrated_fetch_architecture_revisit/scorecard.md`; `artifacts/session/live_nav2_corridor_push_full_saved_layout_20260529/calibrated_fetch_architecture_revisit/scorecard.md` | Evidence branch; not standalone promotion candidate | Contact-ready and full saved-layout one-run gates passed, but saved-layout `3/3` failed on `right05` stop-short after Nav2 `STATUS_SUCCEEDED`. Preserve as corridor-tracking baseline and AI training/eval data. |
-| `ai_push_coast_servo` | planned from Nav2 stop-short and object-centric baseline traces | Preferred next contact-control lane | Train or prototype local predictor/proposer from calibrated simulation, score in shadow mode on saved anchors and seeded random layouts, then execute only inside deterministic guards after shadow scoring is green. |
+| `ai_push_coast_servo` | planned from Nav2 stop-short and object-centric baseline traces | Preferred model/proposer inside the hybrid stage-supervisor lane | Train or prototype local handoff/maneuver-class predictor from calibrated simulation, score in shadow mode on saved anchors and seeded random layouts, then allow it to select only deterministic guarded routines after shadow scoring is green. |
 
 ## Latest Revisit Result
 
@@ -125,8 +126,10 @@ evidence, but it does not promote as the standalone contact architecture:
   approach was `0.451645m` against the `0.300m` delivery radius
 - branch decision:
   keep Nav2 corridor-push as a baseline path-tracking/contact-data branch, not
-  a tuning target for standalone promotion. Start the AI push-coast/contact
-  stability spike from this evidence.
+  a tuning target for standalone promotion. Start the hybrid stage-supervisor
+  spike from this evidence: Nav2 owns the stages it handles well, deterministic
+  routines own fine contact and terminal correction, and the model starts as a
+  shadow handoff/maneuver proposer.
 
 Seeded random/generalization was not run for this branch. Do not claim
 generalized behavior until a candidate clears saved-anchor repeatability and
@@ -141,7 +144,7 @@ inside the same mission shell. The wider portfolio is tracked in
 and includes distinct ownership and interaction models:
 
 - contact-aware geometric shooter as physics-probe evidence
-- AI-assisted bounded push-coast object servo
+- hybrid fetch stage supervisor with AI handoff/proposal
 - receding-horizon contact MPC / object servo
 - ROS action-server or behavior-tree last-meter owner
 - Nav2 reposition plus object-centric last-meter handoff
@@ -176,9 +179,13 @@ explicit update to this document.
 
 Current preferred branch decision: continue from the Nav2 evidence into
 `spike/fetch-arch-ai-push-coast-servo-20260529`. The hypothesis is that Nav2 is
-a useful coarse path owner, but generalized `fetch_to_pose` needs an
-object-outcome layer that predicts/contact-corrects stop-short, asymmetric
-offset, and terminal re-push/coast behavior. LM/VLA components may supervise
-mode choice and failure interpretation, but they must not own high-frequency
-`/cmd_vel`; the learned local lane starts shadow-only and executes only through
-deterministic guards after saved-anchor and seeded-random scoring is green.
+a useful stage owner for long-haul, coarse setup, and corridor tracking, but
+generalized `fetch_to_pose` needs deterministic contact routines for fine
+pre-capture, first contact, terminal re-push/coast, and recentering. The
+learned local lane starts as a shadow handoff/maneuver-class proposer over those
+stage owners; it may execute only by selecting deterministic guarded routines
+after saved-anchor and seeded-random scoring is green. LM/VLA components may
+supervise mode choice and failure interpretation, but they must not own
+high-frequency `/cmd_vel`. Large V-JEPA-style world models are offboard teacher
+or research baselines; onboard inference should be smaller and
+`tensorrt_int8`-compatible.

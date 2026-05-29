@@ -18,9 +18,9 @@ not only the current saved layouts.
 ## Next Major Milestone
 
 Deliver Generalized Fetch-To-Pose v1: a no-shoot, robot-owned local fetch
-behavior that combines Nav2 corridor tracking with a guarded AI
-push-coast/contact-stability layer, proven on saved layouts and the first
-seeded random generalization gate.
+behavior that combines Nav2 stage ownership, deterministic homebrew contact
+routines, and a guarded AI/model handoff-and-maneuver proposer, proven on saved
+layouts and the first seeded random generalization gate.
 
 Milestone acceptance:
 
@@ -28,8 +28,9 @@ Milestone acceptance:
    calibrated golf-ball/turf lane with no retries and `0.300m` delivery radius.
 2. The first seeded random `fetch_generalization_gate` set runs; reproducible
    failures are frozen into named saved layouts before tuning.
-3. The AI push-coast/contact-stability layer first passes shadow scoring on
-   saved anchors, Nav2 stop-short evidence, and seeded layouts.
+3. The AI/model layer first passes shadow scoring on saved anchors, Nav2
+   stop-short evidence, and seeded layouts as a handoff and maneuver-class
+   proposer, not as a direct motor controller.
 4. Learned execution, when enabled, remains inside deterministic guards for
    command bounds, target freshness, ball drift, retry budget, safe stop, and
    `/odom`/contract preservation.
@@ -47,8 +48,8 @@ AI is part of the direction, but it is layered:
 1. LM or robot-foundation-model supervision may reason over task mode, failure
    interpretation, and known maneuver choices.
 2. A learned local predictor/proposer should be trained from many calibrated
-   simulations to estimate roll outcome, miss vector, push duration, coast
-   timing, and recovery side.
+   simulations to estimate stage handoffs, roll outcome, miss vector, terminal
+   re-push need, coast timing, and recovery side.
 3. Deterministic guards remain authoritative over command limits, target
    freshness, ball drift, retry budget, safe stop, and promotion gates.
 4. Direct high-frequency LM-owned `/cmd_vel` remains out of scope.
@@ -72,11 +73,24 @@ has not run.
   closest approach was `0.451645m` against the `0.300m` contract.
 
 Interpretation: Nav2 can provide useful real-time corridor tracking and bounded
-contact, but path completion is not the same as object delivery. Do not promote
-`nav2_followpath_corridor_push_v1` as a standalone contact owner. Freeze the
-right05 stop-short artifact and move the next focused lane to the AI-assisted
-push-coast/contact-stability controller around Nav2. This remains distinct from
-the old `nav2_mppi_follow_path_reacquire_v1` pre-stage evidence branch.
+contact, but path completion is not the same as object delivery. The `right05`
+miss is close enough to be a constructive boundary case, not a reason to
+replace Nav2 wholesale. Do not promote `nav2_followpath_corridor_push_v1` as a
+standalone contact owner. Freeze the right05 stop-short artifact and move the
+next focused lane to a hybrid fetch stage supervisor: Nav2 owns long-haul,
+coarse setup, and corridor tracking where it is strong; deterministic homebrew
+routines own fine pre-capture alignment, first contact, terminal re-push/coast,
+and recentering; the AI/model layer starts in shadow mode as the handoff and
+maneuver-class proposer. This remains distinct from the old
+`nav2_mppi_follow_path_reacquire_v1` pre-stage evidence branch.
+
+May 29, 2026 model-planning refinement: V-JEPA-style world models are relevant
+as an architectural pattern for scoring candidate actions against predicted
+physical outcomes, but full video world models are not the onboard control
+target for the Jetbot/Orin lane. Treat large world models as offboard teachers,
+labelers, or research baselines. The onboard path is a smaller structured model
+or distilled predictor compatible with `tensorrt_int8`, operating on robot pose,
+ball pose, target pose, Nav2 progress, and recent contact telemetry.
 
 ## Paths To Research
 
@@ -97,12 +111,13 @@ Evaluate these paths side by side:
 Use the existing object-centric baseline as the comparison reference, not as an
 automatic winner. The preferred next spike is no longer a shooter spike or a
 standalone Nav2 tuning pass. It is
-`spike/fetch-arch-ai-push-coast-servo-20260529`: a shadow-first learned local
-predictor/proposer that uses the Nav2 corridor-push stop-short evidence plus
-object-centric baseline traces to improve contact persistence, terminal
-correction, re-push/coast timing, and asymmetric `right05` stability. Nav2
-remains useful as the coarse real-time path owner; the learned lane should
-operate around it and remain behind deterministic guards.
+`spike/fetch-arch-ai-push-coast-servo-20260529`: a shadow-first hybrid stage
+supervisor spike. It should use the Nav2 corridor-push stop-short evidence plus
+object-centric baseline traces to decide when to stay with Nav2, hand off to a
+deterministic terminal re-push/coast routine, recenter left/right, abort, or
+re-stage. Nav2 remains a first-class stage owner; the learned lane should rank
+handoffs and maneuver classes, remain behind deterministic guards, and avoid
+direct high-frequency `/cmd_vel`.
 
 ## Research Questions
 
