@@ -503,9 +503,10 @@ Acceptance:
 Current direction update:
 
 Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
-robot-owned local fetch behavior that combines Nav2 corridor tracking with a
-guarded AI push-coast/contact-stability layer, proven on saved layouts and the
-first seeded random generalization gate.
+robot-owned local fetch behavior that combines Nav2 stage ownership,
+deterministic homebrew contact routines, and a guarded AI/model handoff and
+maneuver-class proposer, proven on saved layouts and the first seeded random
+generalization gate.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
@@ -532,9 +533,9 @@ first seeded random generalization gate.
    - use Nav2/MPPI for long-range repositioning and obstacle-aware path following only
    - own ball interaction as a short-horizon object-centric manipulation policy over robot pose, ball pose, zone pose, recent robot/ball deltas, previous command, and capture/contact flags
    - start with an offline evaluator over the MPPI evidence set, then a structured object-servo baseline
-   - for calibrated fetch, add a learned local predictor/proposer in shadow mode
-     earlier than live learned control; execution still waits for deterministic
-     guard acceptance and saved/seeded evidence
+   - for calibrated fetch, add a learned local handoff/maneuver proposer in
+     shadow mode earlier than live learned control; execution still waits for
+     deterministic guard acceptance and saved/seeded evidence
    - keep deterministic safety gates around every command or waypoint proposal
    - prohibit direct high-frequency LLM motor control, `/odom` changes, frozen-contract changes, and handoff-gate loosening
    - first live gate was saved-layout `zero` and `plus45`, one run each, no retries; future alternatives must instead requalify through the calibrated fetch gate
@@ -561,9 +562,9 @@ first seeded random generalization gate.
 10. May 28, 2026 Nav2 corridor-push first spike and AI fallback:
    - next major milestone:
      Deliver Generalized Fetch-To-Pose v1, a no-shoot, robot-owned local fetch
-     behavior that combines Nav2 corridor tracking with a guarded AI
-     push-coast/contact-stability layer, proven on saved layouts and the first
-     seeded random generalization gate
+     behavior that combines Nav2 stage ownership, deterministic homebrew contact
+     routines, and a guarded AI/model handoff and maneuver-class proposer,
+     proven on saved layouts and the first seeded random generalization gate
    - keep the runtime fetch architecture as robot-owned bounded push-and-coast,
      not intentional shooting or direct ball impulse
    - use contact-aware geometric-shooter artifacts as calibrated roll/coast
@@ -574,10 +575,13 @@ first seeded random generalization gate.
    - treat the old `nav2_mppi_follow_path_reacquire_v1` calibrated revisit as
      prior negative pre-stage evidence, not as this new corridor-push contact
      hypothesis
-   - keep AI as the next contact lane: train/prototype from large
+   - keep AI as the next handoff/proposal lane: train/prototype from large
      calibrated simulation batches, score in shadow mode on saved anchors,
      seeded random layouts, and frozen failures, then allow learned output only
-     inside deterministic guards
+     to select deterministic guarded routines
+   - treat V-JEPA-style world models as offboard teachers or research baselines
+     for candidate-action scoring; onboard control should use a smaller
+     structured or distilled `tensorrt_int8`-compatible model
    - allow LM/VLA-style models to supervise task mode, failure interpretation,
      and known maneuver choices only through deterministic contracts
    - keep deterministic guards authoritative over command bounds, target
@@ -599,10 +603,10 @@ first seeded random generalization gate.
    - updated next spike:
      `spike/fetch-arch-ai-push-coast-servo-20260529`
    - updated interpretation:
-     keep Nav2 as a useful coarse corridor/path owner and data source, but add
-     a shadow-first learned contact-stability layer for contact persistence,
-     terminal correction, asymmetric-offset handling, and bounded re-push/coast
-     decisions before any promotion discussion
+     keep Nav2 as a useful stage owner and data source, add deterministic
+     contact/terminal routines for the object-outcome stages, and use a
+     shadow-first learned layer for handoff, asymmetric-offset handling, and
+     bounded re-push/coast decisions before any promotion discussion
 11. architecture exploration should widen, but stay staged:
    - do not treat the legacy `--gather-control-family` list as exhaustive
      architecture coverage; it is a runnable control-family screen inside the

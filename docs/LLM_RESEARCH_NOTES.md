@@ -83,8 +83,8 @@ Why not now:
 - they are not a good match for high-frequency contact control on a calibrated
   golf ball
 - the Nav2 corridor-push hypothesis is now evidence-only after the saved
-  `right05` stop-short promotion failure; AI-assisted bounded contact control
-  is the next lane, not raw end-to-end learned `/cmd_vel`
+  `right05` stop-short promotion failure; a hybrid stage supervisor is the next
+  lane, not raw end-to-end learned `/cmd_vel`
 
 Current calibrated-fetch mapping:
 
@@ -94,11 +94,14 @@ Current calibrated-fetch mapping:
   corridor tracking while a monitor only cancels on success, ball escape, stale
   state, unsafe drift, timeout, or action abort, but it did not promote as the
   sole contact controller
-- a smaller local learned model should now predict or propose bounded
-  push/coast/re-push maneuvers after simulation training and shadow scoring,
-  using the Nav2 stop-short artifact as one of the first evaluation cases
+- a smaller local learned model should now predict stage handoffs and bounded
+  maneuver classes after simulation training and shadow scoring, using the Nav2
+  stop-short artifact as one of the first evaluation cases
 - deterministic guards still own command limits, target freshness, ball drift,
   retry budget, and safe stop
+- V-JEPA-style world models are relevant as an offboard teacher/research pattern
+  for scoring candidate actions against predicted physical outcomes, but full
+  video world models are not the Jetbot/Orin onboard control target
 
 ### 2. Code-generation-as-policy
 
@@ -120,7 +123,7 @@ The most relevant near-term pattern family for Chasecar is:
 2. closed-loop re-evaluation over live state
 3. strict tool/function calling
 4. deterministic non-LLM gating and fail-closed behavior
-5. local learned prediction/proposal in shadow mode before live execution
+5. local learned handoff/proposal in shadow mode before live execution
 
 That is a stronger fit for our current stack than either:
 
@@ -136,7 +139,9 @@ Near-term implementation should continue to optimize for:
 - one-step decisions instead of multi-step plans
 - strict tool schemas
 - preview and readiness checks outside the model
-- calibrated simulation data for local predictor/proposer training
+- calibrated simulation data for local handoff/proposer training
+- offboard world-model teacher labels only when they can be distilled into the
+  same bounded action set
 - shadow-mode scoring before learned proposals execute
 - headless proof before browser UAT promotion
 

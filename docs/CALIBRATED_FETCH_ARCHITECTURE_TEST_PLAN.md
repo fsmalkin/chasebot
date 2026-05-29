@@ -7,9 +7,10 @@ research portfolio should deliberately test wider designs that may generalize
 better, reduce telemetry fragility, or simplify eventual hardware transfer.
 
 Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
-robot-owned local fetch behavior that combines Nav2 corridor tracking with a
-guarded AI push-coast/contact-stability layer, proven on saved layouts and the
-first seeded random generalization gate.
+robot-owned local fetch behavior that combines Nav2 stage ownership,
+deterministic homebrew contact routines, and a guarded AI/model handoff and
+maneuver-class proposer, proven on saved layouts and the first seeded random
+generalization gate.
 
 May 29, 2026 update: keep the runtime architecture no-shoot. The
 `nav2_followpath_corridor_push_v1` spike showed Nav2 can own useful real-time
@@ -19,11 +20,14 @@ matrix passed, and `3/3` repeatability passed `zero` and `left05`; `right05`
 failed one promotion run because the ball stopped short after Nav2 returned
 `STATUS_SUCCEEDED` (`0.451645m` closest approach against the `0.300m`
 contract). This was saved-anchor evidence only, not seeded random
-generalization. The next active architecture lane is AI-assisted bounded
-push-and-coast contact control around Nav2, starting in shadow mode. Contact-
-aware geometric-shooter artifacts remain valuable physics probes, but they are
-not the preferred runtime architecture until they are reframed as robot-owned
-bounded push/coast evidence.
+generalization. The next active architecture lane is a hybrid fetch stage
+supervisor: Nav2 remains the stage owner for long-haul, coarse setup, and
+corridor tracking when the ball stays bounded; deterministic homebrew routines
+own fine pre-capture alignment, first contact, terminal re-push/coast, and
+recentering; the AI/model layer starts in shadow mode as the handoff and
+maneuver-class proposer. Contact-aware geometric-shooter artifacts remain
+valuable physics probes, but they are not the preferred runtime architecture
+until they are reframed as robot-owned bounded push/coast evidence.
 
 The next-thread research charter lives in
 [GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md](GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md).
@@ -76,12 +80,12 @@ do not by themselves prove target-relative side selection or generalization.
 | Runnable legacy control-family screen | Checks whether old branches become viable under calibrated physics | `scripts/calibrated_fetch_architecture_revisit.py --screen-scope runnable_control_family_screen --fast-screen --short-circuit-on-failure` | Did any old implementation clear `zero` cheaply enough to justify canonical rerun? |
 | Contact-aware geometric shooter | Physics-probe evidence for roll windows, delivery margins, and feasible coast geometry; not the preferred runtime path | Offline shot-model replay or direct-velocity probe only | Does it teach useful push/coast targets without becoming non-robot-owned control? |
 | Nav2 FollowPath corridor-push | Tests whether calibrated physics keeps the ball inside Nav2's natural real-time path-tracking envelope | Completed contact-ready and saved-layout one-run gates; failed `right05` saved-layout `3/3` promotion short of delivery | Use as corridor-tracking baseline and data source, not as standalone promotion candidate. |
-| AI-assisted bounded push-coast object servo | Uses calibrated physics for controlled pushing, measured coast, terminal correction, and re-aim while keeping robot-owned contact | Shadow prediction/proposal over Nav2 failure traces, saved anchors, and seeded-random layouts, then guarded canonical `zero` one-run | Does learned prediction/proposal improve contact persistence, asymmetric offset stability, terminal correction, and margin without guard violations? |
+| Hybrid fetch stage supervisor with AI handoff/proposal | Keeps Nav2 as owner where it works, uses deterministic contact routines where object outcome matters, and scores handoffs/maneuver classes in shadow first | Shadow prediction/proposal over Nav2 failure traces, saved anchors, and seeded-random layouts, then guarded canonical `zero` one-run | Does the supervisor choose better stage handoffs and terminal correction without guard violations or Nav2 regressions? |
 | Receding-horizon contact MPC/object servo | Owns robot-ball-target state and optimizes bounded commands directly | Fast screen on `zero`, then canonical `zero`/`left05`/`right05` one-run | Does it avoid lateral knock-away while recovering from small offsets? |
 | ROS action-server or behavior-tree last-meter owner | Moves setup, contact, re-aim, abort, and telemetry out of ad hoc mission-loop phases | Dry-run/action-contract test, then canonical one-run `zero` | Does explicit ownership make failures easier to classify and recover? |
 | Nav2 reposition plus object-centric last meter | Uses Nav2 for long-range approach only, with a clean handoff to object-centric contact | Pre-contact approach telemetry and handoff dwell on varied starts | Does it generalize to farther starts without contaminating contact control? |
 | Passive mechanical guide/funnel | Tests whether a wider physical interaction envelope is simpler than software-only precision | Sim model smoke plus calibrated `zero`/off-axis one-run | Does it improve robustness without hiding unstable approach telemetry? |
-| Learned residual or maneuver proposer | Learns residual corrections or proposes setup pocket, push duration, coast timing, and recovery side behind deterministic gates | Offline replay/shadow evaluation before live control | Does it add measurable margin while abstaining on out-of-distribution states? |
+| Learned residual or maneuver proposer | Learns residual corrections or proposes setup pocket, handoff, push duration, coast timing, and recovery side behind deterministic gates | Offline replay/shadow evaluation before live control | Does it add measurable margin while abstaining on out-of-distribution states? |
 | LM/VLA high-level supervisor | Uses language or robot-foundation-model reasoning for task mode, failure interpretation, and maneuver choice without owning fast control | Contract/dry-run prompt replay over frozen state digests | Does it improve recover/give-up decisions while leaving local contact to guarded controllers? |
 | Portfolio supervisor/switcher | Chooses push, coast, re-aim, hold, or give-up from measured uncertainty | Offline counterfactual replay, then live A/B on hard layouts | Does switching reduce tail failures without adding opaque behavior? |
 | Perception-first target-pose fetch | Replaces truth-state assumptions with sensed ball/target pose once pose delivery is stable | Shadow perception parity against truth-state UAT traces | Does it preserve success when truth-state shortcuts are removed? |
@@ -161,11 +165,12 @@ branch strategy changes are propagated back to `main`.
 - The completed Nav2 corridor-push spike remains
   `spike/fetch-arch-nav2-corridor-push-20260528`; do not tune it as a standalone
   contact-promotion candidate after the `right05` stop-short promotion failure.
-- The preferred next spike name is
-  `spike/fetch-arch-ai-push-coast-servo-20260529`.
-- Keep the AI-assisted lane shadow-first: learned outputs may execute only after
-  saved-anchor and seeded-random shadow scoring is green and deterministic
-  guards accept the maneuver class.
+- The preferred next spike name remains
+  `spike/fetch-arch-ai-push-coast-servo-20260529`, but its architecture target
+  is a hybrid fetch stage supervisor rather than an AI replacement for Nav2.
+- Keep the AI-assisted lane shadow-first: learned outputs may select a handoff
+  or guarded maneuver class only after saved-anchor and seeded-random shadow
+  scoring is green and deterministic guards accept the class.
 - Promote to `candidate/fetch-arch-<family>` only after the canonical saved-layout
   matrix is green and the benefit is written down.
 - Do not resurrect blocked gather-control branches in place. If an old idea is
@@ -199,12 +204,14 @@ branch strategy changes are propagated back to `main`.
   validates the calibrated roll model enough to inform bounded push/coast
   targets, but still does not prove a robot-owned contact policy or promotion
   readiness.
-- AI-assisted push-coast direction:
+- AI-assisted hybrid stage-supervisor direction:
   no live model evidence exists yet. The first honest gate is a shadow-mode
-  predictor/proposer over the saved anchors plus seeded random layouts emitted
-  by `scripts/fetch_generalization_gate.py`, followed by a canonical `zero`
-  robot-owned run only after deterministic guards accept the proposed maneuver
-  class.
+  handoff/maneuver proposer over the saved anchors plus seeded random layouts
+  emitted by `scripts/fetch_generalization_gate.py`, followed by a canonical
+  `zero` robot-owned run only after deterministic guards accept the proposed
+  maneuver class. V-JEPA-style world models may inform offboard teacher labels
+  or candidate-action scoring, but onboard inference should be a smaller
+  structured or distilled model compatible with `tensorrt_int8`.
 - MPPI FollowPath calibrated revisit:
   `artifacts/session/live_calibrated_fetch_architecture_revisit_nav2_mppi_20260527/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`.
   It failed `zero`, `left05`, and `right05` before contact and remains

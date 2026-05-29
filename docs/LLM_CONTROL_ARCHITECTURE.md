@@ -29,38 +29,46 @@ That means:
 
 The calibrated golf-ball `fetch_to_pose` pivot keeps the runtime no-shoot and
 the layers explicit. The Nav2 corridor-push spike showed Nav2 can be a useful
-coarse real-time path owner, but the `right05` saved-layout promotion failure
-showed that path completion is not enough for object delivery. AI is now the
-next contact-control lane, starting as a shadow-only local predictor/proposer
-around Nav2:
+stage owner for long-haul, coarse setup, and corridor tracking, but the
+`right05` saved-layout promotion failure showed that path completion is not
+enough for object delivery. AI is now a shadow-only handoff and maneuver-class
+proposer inside a hybrid stage supervisor, not a replacement for Nav2 or
+deterministic contact routines:
 
 1. LM or VLA-style models may supervise high-level task mode, failure
    interpretation, and known maneuver choices.
-2. A local learned model may predict ball trajectory, miss vector, push duration,
-   coast timing, setup pocket, or recovery side.
+2. A local learned model may predict ball trajectory, miss vector, stage handoff,
+   terminal re-push need, coast timing, setup pocket, recenter side, or recovery
+   side.
 3. The fetch state machine and deterministic guards decide whether any proposal
    is legal.
 4. Nav2 `FollowPath` may own coarse robot path tracking through the ball-target
    corridor while a monitor cancels on success, ball escape, stale state, unsafe
    drift, timeout, or action abort.
-5. The learned push-coast lane should predict when Nav2's coarse path is likely
-   to stop short, lose contact persistence, or need a bounded terminal re-push.
-6. Learned outputs remain shadow-only until saved-anchor and seeded-random
-   scoring is green and deterministic guards accept the maneuver class.
+5. Deterministic homebrew routines own fine pre-capture alignment, first-contact
+   stabilization, terminal stop-short correction, bounded re-push/coast, and
+   recentering.
+6. The learned lane should predict when to stay with Nav2 versus hand off to one
+   of those deterministic routines.
+7. Learned outputs remain shadow-only until saved-anchor and seeded-random
+   scoring is green and deterministic guards accept the handoff or maneuver
+   class.
 
 The latest proven Nav2 lane is therefore evidence, not the final architecture:
 
 `LM/VLA supervisor -> deterministic fetch state machine/guards -> Nav2 FollowPath corridor-push -> ball-escape/success monitor -> robot`
 
-The immediate learned lane is:
+The immediate hybrid learned lane is:
 
-`LM/VLA supervisor -> deterministic fetch state machine/guards -> local learned predictor/proposer -> bounded push-coast servo -> robot`
+`LM/VLA supervisor -> deterministic fetch state machine/guards -> Nav2 or deterministic contact routine -> local learned handoff/proposer in shadow -> robot`
 
 This is a no-shoot architecture. Contact-aware geometric-shooter artifacts can
 inform roll/coast physics, but direct ball impulses are not a runtime control
-owner. Large calibrated simulation batches may train the local predictor, while
-onboard execution should be inference-only and sized for the canonical
-`tensorrt_int8` backend.
+owner. Large calibrated simulation batches may train the local predictor.
+V-JEPA-style video world models may be useful as offboard teachers or research
+baselines for candidate-action scoring, but onboard execution should be a small
+structured or distilled inference path sized for the canonical `tensorrt_int8`
+backend.
 
 ## Layered Architecture
 
@@ -213,13 +221,13 @@ Planned near-term extension for gather:
   - [gather_motion_bridge.py](../scripts/gather_motion_bridge.py) remains the runtime clamp surface
   - controller and hardware caps remain the low-level safety envelope
 - it must not publish real-time steering directly and must not replace low-level control loops
-- for calibrated fetch, first test `nav2_followpath_corridor_push_v1` as a
-  fresh corridor-push hypothesis; that spike is now evidence-only after a
-  `right05` stop-short promotion failure, so the first learned component should
-  be a shadow-mode local predictor/proposer over bounded push-and-coast
-  maneuvers, proposing setup pocket, push duration, coast timing, terminal
-  re-push, or recovery side only after saved-anchor and seeded-random shadow
-  evidence is green, with deterministic guards still vetoing unsafe proposals
+- for calibrated fetch, preserve `nav2_followpath_corridor_push_v1` as
+  evidence after the `right05` stop-short promotion failure; the first learned
+  component should be a shadow-mode handoff/maneuver proposer inside a hybrid
+  stage supervisor, proposing stay-with-Nav2, terminal re-push, recenter,
+  abort/re-stage, or recovery side only after saved-anchor and seeded-random
+  shadow evidence is green, with deterministic guards still vetoing unsafe
+  proposals
 
 Not planned for the active gather path:
 
