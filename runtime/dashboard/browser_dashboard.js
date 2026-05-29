@@ -82,7 +82,7 @@ const controls = {
 };
 
 const demoFlow = [
-  { id: 'golf_ball_circle_delivery_uat', label: 'Golf-Ball Circle Delivery' },
+  { id: 'golf_ball_circle_delivery_uat', label: 'Random Golf-Ball Delivery', randomLayout: true },
   { id: 'corral_single_ball_place', label: 'Single-Ball Corral' },
   { id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' },
   { id: 'visit_route_planning', label: 'LLM Route Planning' },
@@ -798,11 +798,12 @@ function renderDemoButtons(state, completed) {
   }).join('');
 
   stateEls.demoList.innerHTML = `
-    <button
-      class="demo-button primary ${featuredRunning ? 'is-running' : ''} ${featuredComplete ? 'is-complete' : ''}"
-      type="button"
-      data-demo-run="${featured.id}"
-      data-testid="btn-demo-${featured.id}"
+      <button
+        class="demo-button primary ${featuredRunning ? 'is-running' : ''} ${featuredComplete ? 'is-complete' : ''}"
+        type="button"
+        data-demo-run="${featured.id}"
+        data-demo-random-layout="${featured.randomLayout ? 'true' : 'false'}"
+        data-testid="btn-demo-${featured.id}"
       ${canRunScenario ? '' : 'disabled'}>
       <span class="demo-name">${featured.label}</span>
       <span class="demo-state">${featuredRunning ? 'running' : (featuredComplete ? 'done' : 'featured')}</span>
@@ -962,11 +963,11 @@ async function postJson(path, body) {
   return payload;
 }
 
-async function runScenarioById(scenarioId) {
+async function runScenarioById(scenarioId, options = {}) {
   if (!scenarioId) {
     throw new Error('Missing scenario id.');
   }
-  await postJson('/api/scenario/run', { scenario_id: scenarioId });
+  await postJson('/api/scenario/run', { scenario_id: scenarioId, ...options });
   await refreshState();
 }
 
@@ -1126,8 +1127,9 @@ stateEls.demoList.addEventListener('click', async (event) => {
     return;
   }
   const scenarioId = target.getAttribute('data-demo-run') || '';
+  const randomLayout = target.getAttribute('data-demo-random-layout') === 'true';
   if (scenarioId) {
-    await runScenarioById(scenarioId);
+    await runScenarioById(scenarioId, randomLayout ? { random_layout: true } : {});
   }
 });
 

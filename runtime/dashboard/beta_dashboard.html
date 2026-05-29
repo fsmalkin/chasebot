@@ -359,7 +359,7 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
         <button class="btn btn-ghost"   id="btn-stop-env" onclick="post('/api/env/stop',{})">Stop env</button>
         <button class="btn btn-ghost"   id="btn-reset"    onclick="post('/api/sim/reset',{})">Reset</button>
         <div class="sep-v"></div>
-        <button class="btn btn-primary" id="btn-llm"      onclick="runLatestGolfFetch()">Run Golf-Ball Circle Delivery</button>
+        <button class="btn btn-primary" id="btn-llm"      onclick="runLatestGolfFetch()">Run Random Golf-Ball Delivery</button>
         <div class="dropdown-wrap" id="sc-wrap">
           <button class="btn btn-default" id="btn-scenarios" onclick="toggleScenarios(event)">Scenarios v</button>
           <div class="dropdown-menu" id="sc-menu">
@@ -525,10 +525,12 @@ async function post(url, body) {
   }
 }
 
-async function runScenario(id) { await post('/api/scenario/run', { scenario_id: id }); }
+async function runScenario(id, options) {
+  await post('/api/scenario/run', { scenario_id: id, ...(options || {}) });
+}
 
 async function runLatestGolfFetch() {
-  await runScenario(LATEST_GOLF_FETCH_SCENARIO_ID);
+  await runScenario(LATEST_GOLF_FETCH_SCENARIO_ID, { random_layout: true });
 }
 
 async function dispatchIntent(intent) {
@@ -1242,7 +1244,7 @@ function renderButtons() {
   setDisabled('btn-scenarios', !canRun);
   setDisabled('btn-stop-sc',   !running);
   if (cta) {
-    cta.textContent = canStartLatestGolfFetch ? 'Start + Run Golf-Ball Circle Delivery' : 'Run Golf-Ball Circle Delivery';
+    cta.textContent = canStartLatestGolfFetch ? 'Start + Run Random Golf-Ball Delivery' : 'Run Random Golf-Ball Delivery';
   }
   document.querySelectorAll('#sc-menu .dm-item').forEach(el => { el.disabled = !canRun; });
 }

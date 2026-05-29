@@ -1,5 +1,7 @@
 import sys
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +14,7 @@ from golf_ball_circle_delivery_demo_runner import build_shot_outcome  # noqa: E4
 from golf_ball_circle_delivery_demo_runner import ball_samples_from_contact_samples  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_approach_contact_metrics  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import parse_args  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import apply_target_layout  # noqa: E402
 
 
 def test_shot_outcome_uses_segment_intersection_for_delivery_circle():
@@ -47,6 +50,40 @@ def test_parse_args_accepts_dashboard_fetch_target_aliases(monkeypatch):
     assert args.fetch_target_x == pytest.approx(1.25)
     assert args.fetch_target_y == pytest.approx(0.10)
     assert args.fetch_target_z == pytest.approx(0.002)
+
+
+def test_apply_target_layout_sets_ball_pose_from_layout(tmp_path):
+    layout_path = tmp_path / "layout.json"
+    layout_path.write_text(
+        json.dumps(
+            {
+                "layout_family": "bounded_random_golf_ball_circle_delivery",
+                "random_draw": {"seed": 123},
+                "targets": [
+                    {
+                        "id": "ball_1",
+                        "forward_m": 0.52,
+                        "lateral_m": -0.11,
+                        "z_m": 0.021336,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = SimpleNamespace(
+        target_layout_json=str(layout_path),
+        ball_x=0.38,
+        ball_y=0.0,
+        ball_z=0.021336,
+    )
+
+    layout = apply_target_layout(args)
+
+    assert args.ball_x == pytest.approx(0.52)
+    assert args.ball_y == pytest.approx(-0.11)
+    assert args.ball_z == pytest.approx(0.021336)
+    assert layout["random_draw"]["seed"] == 123
 
 
 def test_contact_trace_metrics_accept_stable_axial_approach():

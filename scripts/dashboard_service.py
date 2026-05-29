@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import os
+import random
 import re
 import shlex
 import shutil
@@ -118,6 +119,16 @@ OBJECT_CENTRIC_ZERO_TARGET_LAYOUT_JSON = (
 )
 GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID = "golf_ball_circle_delivery_uat"
 GOLF_BALL_CIRCLE_DELIVERY_TARGET_LAYOUT_JSON = "ros2_config/target_layouts/golf_ball_circle_delivery_zero.json"
+GOLF_BALL_CIRCLE_DELIVERY_RANDOM_LAYOUT_ID = "bounded_random_golf_ball_circle_delivery"
+GOLF_BALL_CIRCLE_DELIVERY_RANDOM_BOUNDS = {
+    "forward_min_m": 0.30,
+    "forward_max_m": 0.62,
+    "lateral_min_m": -0.18,
+    "lateral_max_m": 0.18,
+    "min_initial_delivery_margin_m": 0.04,
+}
+GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ROBOT_STANDOFF_M = 0.32
+GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND = "golf_ball_circle_delivery_random"
 
 DOCKER_FALLBACK = Path(r"C:\Program Files\Docker\Docker\resources\bin\docker.exe")
 POWERSHELL_EXE = shutil.which("powershell.exe") or shutil.which("powershell") or "powershell.exe"
@@ -366,6 +377,14 @@ def env_bool(name: str, default: bool) -> bool:
     return default
 
 
+def truthy_value(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "random"}
+
+
 def env_float(name: str, default: float) -> float:
     raw_value = os.environ.get(name, "").strip()
     if not raw_value:
@@ -374,6 +393,64 @@ def env_float(name: str, default: float) -> float:
         return float(raw_value)
     except ValueError:
         return default
+
+
+def bounded_golf_fetch_random_draw(
+    *,
+    seed: int | None = None,
+    fetch_target_x: float = 0.95,
+    fetch_target_y: float = 0.0,
+    fetch_target_z: float = 0.001,
+    delivery_radius_m: float = 0.30,
+) -> Dict[str, Any]:
+    clean_seed = int(seed if seed is not None else (time.time_ns() & 0x7FFFFFFF))
+    rng = random.Random(clean_seed)
+    bounds = dict(GOLF_BALL_CIRCLE_DELIVERY_RANDOM_BOUNDS)
+    forward_min = float(bounds["forward_min_m"])
+    forward_max = float(bounds["forward_max_m"])
+    lateral_min = float(bounds["lateral_min_m"])
+    lateral_max = float(bounds["lateral_max_m"])
+    min_margin = float(bounds["min_initial_delivery_margin_m"])
+    ball_x = forward_min
+    ball_y = 0.0
+    for _attempt in range(64):
+        ball_x = rng.uniform(forward_min, forward_max)
+        ball_y = rng.uniform(lateral_min, lateral_max)
+        initial_distance = math.hypot(float(fetch_target_x) - ball_x, float(fetch_target_y) - ball_y)
+        if initial_distance >= float(delivery_radius_m) + min_margin:
+            break
+    target_dx = float(fetch_target_x) - ball_x
+    target_dy = float(fetch_target_y) - ball_y
+    target_distance = max(math.hypot(target_dx, target_dy), 1.0e-6)
+    push_ux = target_dx / target_distance
+    push_uy = target_dy / target_distance
+    standoff = float(GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ROBOT_STANDOFF_M)
+    robot_x = ball_x - (standoff * push_ux)
+    robot_y = ball_y - (standoff * push_uy)
+    robot_yaw = math.atan2(push_uy, push_ux)
+    return {
+        "layout_id": GOLF_BALL_CIRCLE_DELIVERY_RANDOM_LAYOUT_ID,
+        "seed": clean_seed,
+        "bounds": bounds,
+        "target_pose": {
+            "x": round(float(fetch_target_x), 6),
+            "y": round(float(fetch_target_y), 6),
+            "z": round(float(fetch_target_z), 6),
+            "radius_m": round(float(delivery_radius_m), 6),
+        },
+        "ball_pose": {
+            "x": round(float(ball_x), 6),
+            "y": round(float(ball_y), 6),
+            "z": 0.021336,
+        },
+        "robot_pose": {
+            "x": round(float(robot_x), 6),
+            "y": round(float(robot_y), 6),
+            "yaw": round(float(robot_yaw), 6),
+        },
+        "ball_target_distance_m": round(float(target_distance), 6),
+        "robot_standoff_m": round(float(standoff), 6),
+    }
 
 
 def as_utc_datetime(value: str) -> Optional[datetime]:
@@ -571,7 +648,8 @@ class DashboardController:
         self.world_viewer_container_id = ""
         self.operator_view_container_id = ""
         self.pending_scenario_id = ""
-        self.pending_scenario_overrides: Dict[str, str] = {}
+        self.pending_scenario_overrides: Dict[str, Any] = {}
+        self.active_scenario_overrides: Dict[str, Any] = {}
         self.build_on_next_start = True
         self.world_stream_restart_lock = threading.Lock()
         self._world_stream_stale_since_monotonic = 0.0
@@ -1029,11 +1107,13 @@ class DashboardController:
         pending_scenario_id = str(self.pending_scenario_id or "").strip()
         if not pending_scenario_id:
             return
+        pending_overrides = dict(getattr(self, "pending_scenario_overrides", {}) or {})
         self.pending_scenario_id = ""
         self.pending_scenario_overrides = {}
         scenario = SCENARIOS_BY_ID.get(pending_scenario_id)
         if scenario is None:
             return
+        self.active_scenario_overrides = pending_overrides
         self._record_operator_event(f"{scenario.label} auto-starting after sim reset.", category="scenario")
         self._launch_scenario_thread(scenario)
 
@@ -2186,6 +2266,18 @@ class DashboardController:
             surface_profile = self._normalize_surface_profile(str(overrides.get("surface_profile", "") or ""), default_value=scenario.surface_profile)
         except ValueError as exc:
             return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
+        scenario_overrides: Dict[str, Any] = {
+            "world_file": world_file,
+            "surface_profile": surface_profile,
+        }
+        if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID and truthy_value(overrides.get("random_layout", False)):
+            seed_value = overrides.get("random_seed", overrides.get("seed", ""))
+            if seed_value not in {None, ""}:
+                try:
+                    scenario_overrides["random_seed"] = int(seed_value)
+                except (TypeError, ValueError):
+                    return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": "random_seed must be an integer"}
+            scenario_overrides["random_layout"] = True
         with self.state_lock:
             env_state = self.state["environment_state"]
             scenario_state = self.state["scenario_state"]
@@ -2198,10 +2290,7 @@ class DashboardController:
                 if not self._wait_for_lifecycle_idle(2.0):
                     return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
             self.pending_scenario_id = scenario_id
-            self.pending_scenario_overrides = {
-                "world_file": world_file,
-                "surface_profile": surface_profile,
-            }
+            self.pending_scenario_overrides = dict(scenario_overrides)
             self.lifecycle_cancel.clear()
             self._record_operator_event(f"{scenario.label} queued after environment start.", category="scenario")
             self._update_state(
@@ -2235,10 +2324,7 @@ class DashboardController:
             if self._lifecycle_busy():
                 return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
             self.pending_scenario_id = scenario_id
-            self.pending_scenario_overrides = {
-                "world_file": world_file,
-                "surface_profile": surface_profile,
-            }
+            self.pending_scenario_overrides = dict(scenario_overrides)
             self._record_operator_event(f"{scenario.label} queued after sim reset.", category="scenario")
             self._update_state(
                 scenario_message=f"{scenario.label} queued after sim reset",
@@ -2258,6 +2344,7 @@ class DashboardController:
                 "accepted": False,
                 "error": "scenario world override requires a clean-reset scenario",
             }
+        self.active_scenario_overrides = dict(scenario_overrides)
         self._launch_scenario_thread(scenario)
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": f"scenario {scenario_id} queued"}
 
@@ -3883,6 +3970,7 @@ pkill -f "fluxbox" 2>/dev/null || true
             self._record_operator_event(f"{scenario.label} scenario failed: {exc}", category="error")
         finally:
             self.active_scenario_proc = None
+            self.active_scenario_overrides = {}
             self.scenario_cancel.clear()
             self._update_state(active_scenario="")
             self.scenario_lock.release()
@@ -3919,6 +4007,49 @@ pkill -f "fluxbox" 2>/dev/null || true
             }
         )
         return env
+
+    def _write_random_golf_fetch_layout(
+        self,
+        scenario: ScenarioDefinition,
+        *,
+        overrides: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        seed_value = overrides.get("random_seed")
+        draw = bounded_golf_fetch_random_draw(
+            seed=int(seed_value) if seed_value not in {None, ""} else None,
+            fetch_target_x=float(scenario.fetch_target_x if scenario.fetch_target_x is not None else 0.95),
+            fetch_target_y=float(scenario.fetch_target_y if scenario.fetch_target_y is not None else 0.0),
+            fetch_target_z=float(scenario.fetch_target_z if scenario.fetch_target_z is not None else 0.001),
+            delivery_radius_m=float(scenario.fetch_delivery_radius_m if scenario.fetch_delivery_radius_m is not None else 0.30),
+        )
+        scenario_dir = self._scenarios_dir() or ensure_dir(
+            self._current_validation_dir()
+            or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation")
+        )
+        layout_path = ensure_dir(scenario_dir / "random_layouts") / f"{draw['layout_id']}_{draw['seed']}.json"
+        ball_pose = draw["ball_pose"]
+        write_json(
+            layout_path,
+            {
+                "generated_utc": utc_now(),
+                "scenario_id": scenario.id,
+                "layout_family": draw["layout_id"],
+                "random_draw": draw,
+                "targets": [
+                    {
+                        "id": "ball_1",
+                        "label": "bounded_random_ball",
+                        "start_visible": True,
+                        "forward_m": float(ball_pose["x"]),
+                        "lateral_m": float(ball_pose["y"]),
+                        "z_m": float(ball_pose["z"]),
+                        "visit_tolerance_m": 0.22,
+                        "min_dwell_s": 0.5,
+                    }
+                ],
+            },
+        )
+        return {**draw, "target_layout_json": str(layout_path)}
 
     def _run_uat_stage(self, mode: str, scenario: ScenarioDefinition) -> Dict[str, Any]:
         env = self._scenario_env(scenario)
@@ -4272,6 +4403,14 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         env = self._scenario_env(scenario)
         runner_scenario_id = str(scenario.runner_scenario_id or scenario.id)
         runner_script = "golf_ball_circle_delivery_demo_runner.py" if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID else "gather_mission_runner.py"
+        scenario_overrides = dict(getattr(self, "active_scenario_overrides", {}) or {})
+        random_draw: Dict[str, Any] = {}
+        target_layout_json = scenario.target_layout_json
+        artifact_kind = ""
+        if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID and truthy_value(scenario_overrides.get("random_layout", False)):
+            random_draw = self._write_random_golf_fetch_layout(scenario, overrides=scenario_overrides)
+            target_layout_json = str(random_draw.get("target_layout_json", target_layout_json))
+            artifact_kind = GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
         command = [
             sys.executable,
             str(SCRIPTS_DIR / runner_script),
@@ -4303,8 +4442,15 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             command.extend(["--fetch-delivery-radius-m", f"{float(scenario.fetch_delivery_radius_m):.6f}"])
         if scenario.gather_control_family and runner_script == "gather_mission_runner.py":
             command.extend(["--gather-control-family", scenario.gather_control_family])
-        if scenario.target_layout_json and runner_script == "gather_mission_runner.py":
-            command.extend(["--target-layout-json", scenario.target_layout_json])
+        if target_layout_json:
+            command.extend(["--target-layout-json", target_layout_json])
+        if random_draw and runner_script == "golf_ball_circle_delivery_demo_runner.py":
+            robot_pose = random_draw.get("robot_pose", {}) if isinstance(random_draw.get("robot_pose"), dict) else {}
+            command.extend(["--robot-x", f"{float(robot_pose.get('x', 0.06)):.6f}"])
+            command.extend(["--robot-y", f"{float(robot_pose.get('y', 0.0)):.6f}"])
+            command.extend(["--robot-yaw", f"{float(robot_pose.get('yaw', 0.0)):.6f}"])
+        if artifact_kind:
+            command.extend(["--artifact-kind", artifact_kind])
         if scenario.target_model_sdf:
             command.extend(["--target-model-sdf", scenario.target_model_sdf])
         if scenario.zone_model_sdf:
@@ -4357,7 +4503,9 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "mission_objective": scenario.mission_objective,
             "fetch_delivery_radius_m": scenario.fetch_delivery_radius_m,
             "gather_control_family": scenario.gather_control_family,
-            "target_layout_json": scenario.target_layout_json,
+            "target_layout_json": target_layout_json,
+            "random_layout": bool(random_draw),
+            "random_draw": random_draw,
             "target_model_sdf": scenario.target_model_sdf,
             "zone_model_sdf": scenario.zone_model_sdf,
             "phase": scenario.phase,

@@ -272,6 +272,8 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
     controller.world_viewer_container_id = "world-viewer"
     controller.operator_view_container_id = "operator-view"
     controller.pending_scenario_id = ""
+    controller.pending_scenario_overrides = {}
+    controller.active_scenario_overrides = {}
     controller.scenario_lock = threading.Lock()
     controller.scenario_cancel = threading.Event()
     controller.frozen_intents = {
@@ -898,12 +900,15 @@ def test_start_pending_scenario_if_any_launches_queued_scenario(monkeypatch, tmp
     controller = _make_controller(tmp_path)
     launched: list[str] = []
     controller.pending_scenario_id = "visit_route_planning"
+    controller.pending_scenario_overrides = {"random_layout": True, "random_seed": 456}
     controller._launch_scenario_thread = lambda scenario: launched.append(scenario.id)
 
     controller._start_pending_scenario_if_any()
 
     assert launched == ["visit_route_planning"]
     assert controller.pending_scenario_id == ""
+    assert controller.pending_scenario_overrides == {}
+    assert controller.active_scenario_overrides == {"random_layout": True, "random_seed": 456}
 
 
 def test_get_state_clears_completed_visit_current_target_id(tmp_path):
@@ -1328,7 +1333,10 @@ def test_beta_dashboard_includes_primary_golf_fetch_cta_and_stage_mapping():
     assert "pickScenario('gather_three_ball_zone')" in html
     assert "pickScenario('golf_ball_circle_delivery_uat')" in html
     assert "runLatestGolfFetch()" in html
-    assert "Run Golf-Ball Circle Delivery" in html
+    assert "Run Random Golf-Ball Delivery" in html
+    assert "Start + Run Random Golf-Ball Delivery" in html
+    assert "random_layout: true" in html
+    assert "Run Golf-Ball Circle Delivery" not in html
     assert '<link rel="icon" href="data:,">' in html
     assert 'onload="if (window.operatorFrameLoaded)' in html
     assert "window.__operatorFrameLoadedPending = true" in html
@@ -1347,7 +1355,7 @@ def test_browser_dashboard_promotes_golf_fetch_as_featured_demo():
     js_path = REPO_ROOT / "runtime/dashboard/browser_dashboard.js"
     js = js_path.read_text(encoding="utf-8")
 
-    golf_demo = "{ id: 'golf_ball_circle_delivery_uat', label: 'Golf-Ball Circle Delivery' }"
+    golf_demo = "{ id: 'golf_ball_circle_delivery_uat', label: 'Random Golf-Ball Delivery', randomLayout: true }"
     corral_demo = "{ id: 'corral_single_ball_place', label: 'Single-Ball Corral' }"
     gather_demo = "{ id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' }"
     route_demo = "{ id: 'visit_route_planning', label: 'LLM Route Planning' }"
@@ -1361,6 +1369,8 @@ def test_browser_dashboard_promotes_golf_fetch_as_featured_demo():
     assert js.index(gather_demo) < js.index(route_demo)
     assert "renderMissionSnapshot(state);" in js
     assert "final_three_ball_corral_pass" in js
+    assert "data-demo-random-layout" in js
+    assert "random_layout: true" in js
 
 
 def test_browser_dashboard_includes_multi_ball_mission_snapshot_panel():
@@ -1748,6 +1758,46 @@ def test_request_object_centric_zero_from_stopped_starts_environment_and_queues_
     assert started[0].target == controller._start_environment_worker
 
 
+def test_request_golf_fetch_random_cta_from_stopped_preserves_random_override(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["environment_state"] = "stopped"
+    controller.state["scenario_state"] = "idle"
+    controller._refresh_control_plane_state = lambda force=False: None
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            self._alive = False
+            started.append(self)
+
+        def start(self) -> None:
+            self._alive = True
+
+        def is_alive(self) -> bool:
+            return self._alive
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_scenario_run(
+        dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID,
+        {"random_layout": True, "random_seed": "456"},
+    )
+
+    assert status == 202
+    assert payload["accepted"] is True
+    assert "queued after environment start" in payload["message"]
+    assert controller.pending_scenario_id == dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID
+    assert controller.pending_scenario_overrides["random_layout"] is True
+    assert controller.pending_scenario_overrides["random_seed"] == 456
+    assert controller.pending_scenario_overrides["world_file"] == dashboard_service.CALIBRATED_GOLF_TURF_WORLD_FILE
+    assert controller.pending_scenario_overrides["surface_profile"] == "calibrated_golf_turf"
+    assert started
+    assert started[0].target == controller._start_environment_worker
+
+
 def test_robot_sdf_name_for_startup_defaults_to_baseline(tmp_path):
     controller = _make_controller(tmp_path)
 
@@ -2003,6 +2053,73 @@ def test_run_object_centric_zero_dashboard_scenario_uses_saved_layout_and_policy
     assert result["scenario_id"] == dashboard_service.OBJECT_CENTRIC_ZERO_SCENARIO_ID
     assert result["runner_scenario_id"] == "corral_single_ball_place"
     assert result["gather_control_family"] == "object_centric_gather_policy_v1"
+
+
+def test_run_golf_fetch_cta_random_layout_uses_bounded_generated_layout(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    controller.state["dashboard_url"] = "http://127.0.0.1:8860/"
+    controller._scenarios_dir = lambda: tmp_path / "scenarios"
+    controller._current_validation_dir = lambda: tmp_path / "validation"
+    controller.active_scenario_overrides = {"random_layout": True, "random_seed": 123}
+    controller._visit_mission_runtime_state = lambda: {"proof_state": "completed"}
+    controller._gather_mission_runtime_state = lambda: {
+        "mission_phase": "completed",
+        "mission_status": "completed",
+        "gather_phase": "completed",
+        "surface_profile": "calibrated_golf_turf",
+    }
+    controller._scenario_env = lambda _scenario: {
+        "WORLD_FILE": "yolo_test_world_v6_calibrated_golf_turf.world",
+        "CHASECAR_SURFACE_PROFILE": "calibrated_golf_turf",
+    }
+
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    mission_verdict_path = mission_root / "mission_verdict.json"
+    _write_json(mission_verdict_path, {"pass": True, "type": "gather_mission"})
+    _write_json(mission_root / "summary.json", {"pass": True})
+    _write_json(mission_root / "target_results.json", {"targets": []})
+
+    captured: dict[str, object] = {}
+
+    class _FakeProc:
+        def __init__(self, cmd, stdout_handle) -> None:
+            captured["cmd"] = list(cmd)
+            stdout_handle.write(f"GATHER_MISSION_SUMMARY={mission_verdict_path}\n")
+            stdout_handle.flush()
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(dashboard_service.subprocess, "Popen", lambda command, **kwargs: _FakeProc(command, kwargs["stdout"]))
+
+    scenario = dashboard_service.SCENARIOS_BY_ID[dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID]
+    result = controller._run_gather_mission_scenario(scenario)
+
+    command = captured["cmd"]
+    assert str(command[1]).endswith("golf_ball_circle_delivery_demo_runner.py")
+    assert "--target-layout-json" in command
+    layout_path = Path(command[command.index("--target-layout-json") + 1])
+    layout = json.loads(layout_path.read_text(encoding="utf-8"))
+    target = layout["targets"][0]
+    bounds = layout["random_draw"]["bounds"]
+    assert bounds["forward_min_m"] <= target["forward_m"] <= bounds["forward_max_m"]
+    assert bounds["lateral_min_m"] <= target["lateral_m"] <= bounds["lateral_max_m"]
+    assert layout["random_draw"]["seed"] == 123
+    target_pose = layout["random_draw"]["target_pose"]
+    initial_distance = (
+        (target_pose["x"] - target["forward_m"]) ** 2
+        + (target_pose["y"] - target["lateral_m"]) ** 2
+    ) ** 0.5
+    assert initial_distance >= target_pose["radius_m"] + bounds["min_initial_delivery_margin_m"]
+    assert "--robot-x" in command
+    assert "--robot-y" in command
+    assert "--robot-yaw" in command
+    assert command[command.index("--artifact-kind") + 1] == dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
+    assert result["random_layout"] is True
+    assert result["random_draw"]["seed"] == 123
+    assert result["target_layout_json"] == str(layout_path)
 
 
 def test_run_three_ball_gather_scenario_returns_aggregate_corral_fields(tmp_path, monkeypatch):

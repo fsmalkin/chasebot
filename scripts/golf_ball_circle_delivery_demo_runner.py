@@ -52,6 +52,36 @@ def append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write(json.dumps(row, sort_keys=True) + "\n")
 
 
+def read_json(path: Path) -> dict[str, Any]:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def apply_target_layout(args: argparse.Namespace) -> dict[str, Any]:
+    raw_path = str(getattr(args, "target_layout_json", "") or "").strip()
+    if not raw_path:
+        return {}
+    layout_path = Path(raw_path)
+    if not layout_path.is_absolute():
+        layout_path = REPO_ROOT / layout_path
+    layout = read_json(layout_path)
+    targets = layout.get("targets", []) if isinstance(layout, dict) else []
+    target = targets[0] if targets and isinstance(targets[0], dict) else {}
+    if not target:
+        raise ValueError(f"Target layout has no target entries: {layout_path}")
+    args.ball_x = float(target.get("forward_m", args.ball_x))
+    args.ball_y = float(target.get("lateral_m", args.ball_y))
+    args.ball_z = float(target.get("z_m", args.ball_z))
+    return {
+        "path": str(layout_path),
+        "layout_family": str(layout.get("layout_family", "")),
+        "random_draw": layout.get("random_draw", {}) if isinstance(layout.get("random_draw"), dict) else {},
+        "target": target,
+    }
+
+
 def set_model_pose(
     *,
     compose_project: str,
@@ -566,6 +596,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--robot-model-name", default=DEFAULT_ROBOT_MODEL_NAME)
     parser.add_argument("--target-model-name", default=DEFAULT_BALL_MODEL_NAME)
     parser.add_argument("--zone-model-name", default=DEFAULT_ZONE_MODEL_NAME)
+    parser.add_argument("--target-layout-json", default="")
     parser.add_argument("--visit-runtime-json", default="")
     parser.add_argument("--gather-runtime-json", default="")
     parser.add_argument("--artifact-kind", default="golf_ball_circle_delivery")
@@ -598,6 +629,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    target_layout = apply_target_layout(args)
     if args.fetch_target_x is not None:
         args.zone_x = args.fetch_target_x
     if args.fetch_target_y is not None:
@@ -664,7 +696,15 @@ def main() -> int:
         z=0.0,
         yaw=args.robot_yaw,
     )
-    write_json(artifact_dir / "spawn_summary.json", {"zone": spawn_zone, "ball": spawn_ball, "robot_pose": robot_pose})
+    write_json(
+        artifact_dir / "spawn_summary.json",
+        {
+            "zone": spawn_zone,
+            "ball": spawn_ball,
+            "robot_pose": robot_pose,
+            "target_layout": target_layout,
+        },
+    )
     if not spawn_zone.get("pass") or not spawn_ball.get("pass") or not robot_pose.get("pass"):
         raise RuntimeError(f"Demo spawn failed; see {artifact_dir / 'spawn_summary.json'}")
 
@@ -751,6 +791,8 @@ def main() -> int:
         "fetch_to_pose_pass": pass_flag,
         "fetch_delivery_radius_m": round(float(args.fetch_delivery_radius_m), 6),
         "fetch_pose_world": shot_outcome["fetch_pose_world"],
+        "target_layout_json": str(args.target_layout_json or ""),
+        "target_layout": target_layout,
         "shot_outcome": shot_outcome,
         "approach_contact_metrics": approach_metrics,
         "mission_time_s": round(mission_time_s, 6),
