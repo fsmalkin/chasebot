@@ -503,9 +503,10 @@ Commands:
 Research contract:
 
 Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
-robot-owned local fetch behavior that combines Nav2 corridor tracking with a
-guarded AI push-coast/contact-stability layer, proven on saved layouts and the
-first seeded random generalization gate.
+robot-owned local fetch behavior that combines Nav2 stage ownership,
+deterministic homebrew contact routines, and a guarded AI/model handoff and
+maneuver-class proposer, proven on saved layouts and the first seeded random
+generalization gate.
 
 1. freeze `nav2_mppi_follow_path_reacquire_v1` as the baseline/evidence branch rather than continuing broad MPPI/capture threshold tuning
 2. reserve historical Nav2/MPPI branches for long-range/pre-stage evidence.
@@ -520,15 +521,15 @@ first seeded random generalization gate.
 7. keep deterministic safety filters around every policy proposal: command bounds, ball drift, clearance, target freshness, timeout, stuck state, and safe-stop fallback
 8. capture shot-outcome, surface-calibration, failure-replay, and counterfactual-prediction data before tuning push/coast behavior
 9. keep AI as the next local lane through shadow-mode learned
-   prediction/proposal first: setup pocket, push duration, coast timing, miss
-   vector, terminal re-push, and recovery side
+   handoff/maneuver proposal first: stay with Nav2, terminal re-push,
+   recenter, abort/re-stage, miss vector, coast timing, and recovery side
 10. allow LM/VLA-style models to supervise task mode, failure interpretation, and known maneuver choices only through deterministic contracts
 11. keep direct high-frequency LLM motor control out of scope
 12. keep `physics-calibrated-golf-fetch-v1` as the stable demo/UAT integration branch; use short-lived `spike/...` branches for targeted requalification and archive blocked architecture branches as evidence only
 13. preferred immediate spike:
-    `spike/fetch-arch-ai-push-coast-servo-20260529`; keep
-    `spike/fetch-arch-nav2-corridor-push-20260528` as evidence and data for
-    what Nav2 can handle
+    `spike/fetch-arch-ai-push-coast-servo-20260529`, now framed as a hybrid
+    fetch stage supervisor; keep `spike/fetch-arch-nav2-corridor-push-20260528`
+    as evidence and data for what Nav2 can handle
 14. do not confuse control-family screens with broad architecture coverage; new architecture spikes must change an ownership boundary, prediction model, actuation/contact strategy, or state-machine boundary and must name the expected generalization/product benefit
 15. treat the May 27 opposite-side dashboard observation as a generalization
     signal: saved-layout gates prove the known geometry, while target-relative
@@ -553,8 +554,9 @@ Implementation contract:
    pose, and target layout so seeded cases cover target-relative side, yaw,
    lateral offset, ball-target distance, farther starts, and opposite-side starts
 6. for AI-assisted fetch, preserve shadow outputs alongside deterministic
-   decisions: model input digest, candidate maneuvers, predicted trajectory,
-   predicted closest approach, miss vector, guard decision, and latency
+   decisions: model input digest, current stage owner, candidate handoffs and
+   maneuvers, predicted trajectory, predicted closest approach, miss vector,
+   guard decision, and latency
 
 Historical evaluator contract:
 
@@ -592,8 +594,8 @@ Live gates:
    - use `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` as the
      next-thread charter when the task is to research all paths first
    - required families include contact-aware geometric shooter as a physics
-     probe, Nav2 FollowPath corridor-push contact ownership, AI-assisted bounded
-     push-coast object servo, receding-horizon contact MPC/object servo, ROS
+     probe, Nav2 FollowPath corridor-push contact ownership, hybrid fetch stage
+     supervisor with AI handoff/proposal, receding-horizon contact MPC/object servo, ROS
      action-server or behavior-tree last-meter owner, Nav2 reposition plus
      object-centric last-meter handoff, passive mechanical guide/funnel, learned
      residual or maneuver proposer, LM/VLA high-level supervisor, portfolio
@@ -657,20 +659,27 @@ Live gates:
      generalized behavior
    - interpretation: Nav2 can provide bounded corridor motion and useful
      contact data, but object-outcome feedback/contact persistence must be added
-     around it before promotion
+     around it before promotion; the next lane keeps Nav2 as a stage owner and
+     adds deterministic terminal/contact routines plus a shadow handoff model
    - hard red: Nav2 action aborts or produces no stable robot motion; classify
      as controller integration failure, not ball-physics evidence
-9. AI push-coast/contact-stability spike contract:
+9. Hybrid fetch stage-supervisor / AI push-coast spike contract:
    - branch: `spike/fetch-arch-ai-push-coast-servo-20260529`
-   - first gate: shadow-only prediction/proposal over saved anchors, the Nav2
-     `right05` stop-short artifact, and seeded random layouts generated by
+   - first gate: shadow-only handoff/maneuver prediction over saved anchors, the
+     Nav2 `right05` stop-short artifact, and seeded random layouts generated by
      `scripts/fetch_generalization_gate.py`
-   - required shadow outputs: predicted trajectory, closest approach, miss
-     vector, setup pocket, push duration, coast timing, terminal re-push choice,
-     guard decision, and latency
+   - required shadow outputs: current stage owner, candidate handoffs, predicted
+     trajectory, closest approach, miss vector, setup pocket, push duration,
+     coast timing, terminal re-push choice, recenter side, guard decision, and
+     latency
+   - deterministic routines own fine pre-capture alignment, first-contact
+     stabilization, terminal stop-short correction, bounded re-push/coast, and
+     recentering
    - learned live execution remains blocked until saved-anchor and seeded-random
      shadow scoring shows benefit and deterministic guards accept the proposed
-     maneuver class
+     handoff or maneuver class
+   - V-JEPA-style world models are offboard/teacher research only; onboard
+     inference must be a smaller structured or distilled `tensorrt_int8` path
 10. person target prototype only after pose-target gates are green
 
 Branch hygiene:
