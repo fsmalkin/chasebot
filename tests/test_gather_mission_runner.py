@@ -180,6 +180,18 @@ def test_gather_control_family_allows_object_centric_gather_policy_v1(tmp_path, 
     assert runner.gather_control_family == "object_centric_gather_policy_v1"
 
 
+def test_gather_control_family_allows_ai_push_coast_servo_v1(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.gather_control_family = "ai_push_coast_servo_v1"
+    args.ai_push_coast_mode = "guarded_live"
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.gather_control_family == "ai_push_coast_servo_v1"
+    assert runner.ai_push_coast_mode == "guarded_live"
+
+
 def test_parse_args_allows_region_funnel_v1(monkeypatch):
     monkeypatch.setattr(
         gather_runner.sys,
@@ -322,6 +334,25 @@ def test_parse_args_allows_object_centric_gather_policy_v1(monkeypatch):
     args = gather_runner.parse_args()
 
     assert args.gather_control_family == "object_centric_gather_policy_v1"
+
+
+def test_parse_args_allows_ai_push_coast_servo_v1_guarded_live(monkeypatch):
+    monkeypatch.setattr(
+        gather_runner.sys,
+        "argv",
+        [
+            "gather_mission_runner.py",
+            "--gather-control-family",
+            "ai_push_coast_servo_v1",
+            "--ai-push-coast-mode",
+            "guarded_live",
+        ],
+    )
+
+    args = gather_runner.parse_args()
+
+    assert args.gather_control_family == "ai_push_coast_servo_v1"
+    assert args.ai_push_coast_mode == "guarded_live"
 
 
 def test_parse_args_allows_fetch_to_pose_objective(monkeypatch):
@@ -8621,6 +8652,42 @@ def test_fetch_to_pose_outcome_ignores_pre_fetch_ball_samples(tmp_path, monkeypa
     assert outcome["pass"] is False
     assert outcome["closest_approach_distance_m"] == 0.6
     assert outcome["sample_count"] == 2
+
+
+def test_fetch_to_pose_outcome_preserves_ai_push_coast_fields(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.fetch_delivery_radius_m = 0.25
+    state_history_path = tmp_path / "state_history.jsonl"
+    target = runner.targets_by_id["ball_1"]
+    gather_runner.append_jsonl(
+        state_history_path,
+        {
+            "generated_utc": "2026-05-13T00:00:01Z",
+            "event_type": "fetch_to_pose_tick",
+            "phase": "fetch_to_pose",
+            "target_id": target.id,
+            "ball_pose": {"x": 3.0, "y": 0.0, "z": 0.05},
+        },
+    )
+
+    outcome = runner._build_fetch_to_pose_outcome(
+        target=target,
+        state_history_path=state_history_path,
+        final_ball_pose={"x": 3.0, "y": 0.0, "z": 0.05},
+        place_payload={
+            "ai_push_coast_mode": "shadow",
+            "ai_push_coast_shadow": {"model_id": "heuristic_hybrid_stage_supervisor_v0"},
+            "ai_push_coast_proposal": {"maneuver_class": "terminal_repush"},
+            "ai_push_coast_guard": {"accepted": False, "reasons": ["shadow_mode"]},
+            "ai_push_coast_latency_ms": 0.25,
+        },
+    )
+
+    assert outcome["ai_push_coast_mode"] == "shadow"
+    assert outcome["ai_push_coast_shadow"]["model_id"] == "heuristic_hybrid_stage_supervisor_v0"
+    assert outcome["ai_push_coast_proposal"]["maneuver_class"] == "terminal_repush"
+    assert outcome["ai_push_coast_guard"]["reasons"] == ["shadow_mode"]
+    assert outcome["ai_push_coast_latency_ms"] == 0.25
 
 
 def test_fetch_to_pose_waits_for_launch_window_before_short_stop(tmp_path, monkeypatch):

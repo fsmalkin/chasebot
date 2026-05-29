@@ -43,9 +43,11 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "nav2_mppi_follow_path_reacquire_v1",
     "nav2_followpath_corridor_push_v1",
     "object_centric_gather_policy_v1",
+    "ai_push_coast_servo_v1",
 )
 ALLOWED_MISSION_OBJECTIVES = ("gather_here", "fetch_to_pose")
 ALLOWED_FETCH_GATE_MODES = ("full_mission", "contact_ready")
+ALLOWED_AI_PUSH_COAST_MODES = ("shadow", "guarded_live")
 
 
 def current_utc_stamp() -> str:
@@ -91,6 +93,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--promotion-gate-mode", choices=("strict", "pass_only"), default="pass_only")
     parser.add_argument("--max-retries-per-target", type=int, default=2)
     parser.add_argument("--gather-control-family", choices=ALLOWED_GATHER_CONTROL_FAMILIES, default="baseline")
+    parser.add_argument("--ai-push-coast-mode", choices=ALLOWED_AI_PUSH_COAST_MODES, default=os.environ.get("CHASECAR_AI_PUSH_COAST_MODE", "shadow"))
     return parser.parse_args()
 
 
@@ -1135,6 +1138,7 @@ def main() -> int:
                 command.extend(["--target-layout-json", args.target_layout_json.strip()])
             command.extend(["--max-retries-per-target", str(args.max_retries_per_target)])
             command.extend(["--gather-control-family", str(args.gather_control_family)])
+            command.extend(["--ai-push-coast-mode", str(args.ai_push_coast_mode)])
             proc = subprocess.run(
                 command,
                 cwd=str(REPO_ROOT),
@@ -1167,6 +1171,7 @@ def main() -> int:
         "requested_world_file": args.world_file.strip(),
         "requested_surface_profile": args.surface_profile.strip(),
         "requested_target_layout_json": args.target_layout_json.strip(),
+        "ai_push_coast_mode": str(getattr(args, "ai_push_coast_mode", "shadow")),
         "requested_fetch_pose_world": {
             "x": float(args.fetch_target_x) if getattr(args, "fetch_target_x", None) is not None else None,
             "y": float(args.fetch_target_y) if getattr(args, "fetch_target_y", None) is not None else None,

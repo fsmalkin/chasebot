@@ -159,6 +159,25 @@ def test_parse_args_allows_object_centric_gather_policy_v1(monkeypatch):
     assert args.gather_control_family == "object_centric_gather_policy_v1"
 
 
+def test_parse_args_allows_ai_push_coast_servo_v1_guarded_live(monkeypatch):
+    monkeypatch.setattr(
+        repeatability_runner.sys,
+        "argv",
+        [
+            "repeatability",
+            "--gather-control-family",
+            "ai_push_coast_servo_v1",
+            "--ai-push-coast-mode",
+            "guarded_live",
+        ],
+    )
+
+    args = repeatability_runner.parse_args()
+
+    assert args.gather_control_family == "ai_push_coast_servo_v1"
+    assert args.ai_push_coast_mode == "guarded_live"
+
+
 def test_parse_args_allows_fetch_to_pose_objective(monkeypatch):
     monkeypatch.setattr(
         repeatability_runner.sys,
@@ -1241,6 +1260,7 @@ def test_run_dashboard_scenario_once_ignores_stale_error_result(monkeypatch):
         "nav2_mppi_follow_path_reacquire_v1",
         "nav2_followpath_corridor_push_v1",
         "object_centric_gather_policy_v1",
+        "ai_push_coast_servo_v1",
     ],
 )
 def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
@@ -1308,6 +1328,8 @@ def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
             "0",
             "--gather-control-family",
             family,
+            "--ai-push-coast-mode",
+            "guarded_live",
             "--fetch-gate-mode",
             "contact_ready",
             "--target-model-sdf",
@@ -1329,6 +1351,9 @@ def test_main_passes_retries_and_gather_control_family_to_direct_gather_runner(
     assert "--gather-control-family" in subprocess_calls[0]
     family_index = subprocess_calls[0].index("--gather-control-family")
     assert subprocess_calls[0][family_index + 1] == family
+    assert "--ai-push-coast-mode" in subprocess_calls[0]
+    ai_mode_index = subprocess_calls[0].index("--ai-push-coast-mode")
+    assert subprocess_calls[0][ai_mode_index + 1] == "guarded_live"
     assert "--fetch-gate-mode" in subprocess_calls[0]
     gate_index = subprocess_calls[0].index("--fetch-gate-mode")
     assert subprocess_calls[0][gate_index + 1] == "contact_ready"

@@ -225,6 +225,11 @@ from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_NEAR_WIDE_
 from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_RECOVERY_RECENTER_MAX_LATERAL_M
 from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_RECOVERY_RECENTER_MAX_X_M
 from gather_object_centric_policy_helpers import decide_object_centric_gather_command
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_MODE_GUARDED_LIVE
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_MODE_SHADOW
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+from gather_ai_push_coast_helpers import ALLOWED_AI_PUSH_COAST_MODES
+from gather_ai_push_coast_helpers import decide_ai_push_coast_handoff
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_BALL_MOTION_TOLERANCE_M
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_ID
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID
@@ -303,6 +308,7 @@ DEFAULT_MISSION_START_POSE = {"x": 0.0, "y": 0.0, "yaw": 0.0}
 DEFAULT_PLACE_RECOVERY_SETTLE_S = 0.20
 DEFAULT_PLACE_MARGINAL_CAPTURE_SETTLE_S = 0.25
 DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S = 60.0
+DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S = 8.0
 DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S = 1.25
 DEFAULT_STATIONARY_RECAPTURE_NUDGE_DELAY_S = 1.0
 DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S = 0.25
@@ -387,6 +393,7 @@ ALLOWED_GATHER_CONTROL_FAMILIES = (
     "nav2_mppi_follow_path_reacquire_v1",
     NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY,
     "object_centric_gather_policy_v1",
+    AI_PUSH_COAST_SERVO_CONTROL_FAMILY,
 )
 NAV2_REACQUIRE_CONTROL_FAMILY = "nav2_reacquire_v1"
 DEFAULT_NAV2_REACQUIRE_TRIGGER_DISTANCE_M = 1.20
@@ -876,6 +883,12 @@ class GatherMissionRunner:
         self.gather_control_family = clean_text(getattr(args, "gather_control_family", "baseline"), "baseline").lower()
         if self.gather_control_family not in ALLOWED_GATHER_CONTROL_FAMILIES:
             self.gather_control_family = "baseline"
+        self.ai_push_coast_mode = clean_text(
+            getattr(args, "ai_push_coast_mode", AI_PUSH_COAST_MODE_SHADOW),
+            AI_PUSH_COAST_MODE_SHADOW,
+        ).lower()
+        if self.ai_push_coast_mode not in ALLOWED_AI_PUSH_COAST_MODES:
+            self.ai_push_coast_mode = AI_PUSH_COAST_MODE_SHADOW
         self.mission_objective = clean_text(
             getattr(args, "mission_objective", MISSION_OBJECTIVE_GATHER_HERE),
             MISSION_OBJECTIVE_GATHER_HERE,
@@ -1124,6 +1137,15 @@ class GatherMissionRunner:
             corridor_push_payload = place_payload.get("nav2_follow_path_corridor_push")
             if isinstance(corridor_push_payload, dict):
                 fetch_phase_metrics["nav2_follow_path_corridor_push"] = corridor_push_payload
+            for key in (
+                "ai_push_coast_mode",
+                "ai_push_coast_shadow",
+                "ai_push_coast_proposal",
+                "ai_push_coast_guard",
+                "ai_push_coast_latency_ms",
+            ):
+                if key in place_payload:
+                    fetch_phase_metrics[key] = place_payload.get(key)
         if pass_delivery:
             reason = "trajectory_intersects_delivery_radius"
         elif not observed:
@@ -8527,7 +8549,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         attempt_kind: str = "",
     ) -> tuple[bool, dict[str, Any]]:
         timeout_budget_s = max(self.args.place_timeout_s, 0.1)
-        if self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY:
+        if self.gather_control_family in {OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY, AI_PUSH_COAST_SERVO_CONTROL_FAMILY}:
             timeout_budget_s = max(timeout_budget_s, DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S)
         fetch_started_monotonic = time.monotonic()
         deadline = fetch_started_monotonic + timeout_budget_s
@@ -8540,8 +8562,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         latest_capture: dict[str, Any] = {}
         latest_zone_score: dict[str, Any] = {}
         latest_policy: dict[str, Any] = {}
+        latest_ai_push_coast: dict[str, Any] = {}
         nav2_corridor_push_attempted = False
         nav2_corridor_push_diagnostics: dict[str, Any] = {}
+        ai_terminal_correction_attempted = False
+        ai_terminal_correction_active_until: float | None = None
         closest_distance_m: float | None = None
         closest_pose: dict[str, Any] = {}
         still_started_monotonic: float | None = None
@@ -8561,9 +8586,36 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 return None
             return math.hypot(float(ball_xyyaw[0]) - float(fetch_xyyaw[0]), float(ball_xyyaw[1]) - float(fetch_xyyaw[1]))
 
+        def _ai_push_coast_decision(
+            *,
+            robot_pose: dict[str, Any] | None,
+            ball_pose: dict[str, Any] | None,
+            distance_to_fetch_pose_m: float | None,
+            latest_still_s: float | None,
+            terminal_correction_attempted: bool,
+        ) -> dict[str, Any]:
+            return decide_ai_push_coast_handoff(
+                robot_pose=robot_pose,
+                ball_pose=ball_pose,
+                fetch_pose_world=fetch_pose_world,
+                delivery_radius_m=float(self.fetch_delivery_radius_m),
+                nav2_corridor_push=nav2_corridor_push_diagnostics,
+                nav2_attempted=nav2_corridor_push_attempted,
+                terminal_correction_attempted=terminal_correction_attempted,
+                distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                closest_approach_distance_m=closest_distance_m,
+                latest_still_s=latest_still_s,
+                ball_moved_since_fetch=ball_moved_since_fetch,
+                mode=self.ai_push_coast_mode,
+            )
+
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
             fetch_elapsed_s = max(0.0, now_monotonic - fetch_started_monotonic)
+            ai_terminal_correction_active = (
+                ai_terminal_correction_active_until is not None
+                and now_monotonic < ai_terminal_correction_active_until
+            )
             _dashboard_state, robot_pose, ball_pose = self._control_loop_state(session_id=session_id, target=target)
             capture = capture_snapshot(robot_pose, ball_pose or {}, self.capture_envelope) if robot_pose and ball_pose else None
             zone_score = zone_snapshot(ball_pose or {}, self.zone) if ball_pose else None
@@ -8595,6 +8647,18 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     closest_distance_m = float(distance_to_fetch_pose_m)
                     closest_pose = dict(ball_pose or {})
                 if distance_to_fetch_pose_m <= float(self.fetch_delivery_radius_m):
+                    if (
+                        self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+                        and robot_pose
+                        and ball_pose
+                    ):
+                        latest_ai_push_coast = _ai_push_coast_decision(
+                            robot_pose=robot_pose,
+                            ball_pose=ball_pose,
+                            distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                            latest_still_s=latest_still_s,
+                            terminal_correction_attempted=ai_terminal_correction_attempted,
+                        )
                     self._set_manual_drive(
                         False,
                         mode="fetch_to_pose_complete",
@@ -8637,6 +8701,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "fetch_closest_approach_distance_m": round(float(closest_distance_m), 6),
                         "fetch_closest_pose": closest_pose,
                         "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                        "ai_push_coast_mode": self.ai_push_coast_mode,
+                        **latest_ai_push_coast,
                         "settle_exit_reason": "trajectory_intersects_delivery_radius",
                         "rolled_away_after_release": False,
                     }
@@ -8660,16 +8726,82 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and distance_to_fetch_pose_m is not None
                 and distance_to_fetch_pose_m > float(self.fetch_delivery_radius_m)
             ):
-                if not failure_reason.startswith("nav2_corridor_push_"):
-                    failure_reason = "fetch_to_pose_ball_stopped_short"
-                break
+                if self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY:
+                    latest_ai_push_coast = _ai_push_coast_decision(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                        latest_still_s=latest_still_s,
+                        terminal_correction_attempted=(
+                            ai_terminal_correction_attempted
+                            and not ai_terminal_correction_active
+                        ),
+                    )
+                    guard = latest_ai_push_coast.get("ai_push_coast_guard", {})
+                    if (
+                        self.ai_push_coast_mode == AI_PUSH_COAST_MODE_GUARDED_LIVE
+                        and not ai_terminal_correction_attempted
+                        and not ai_terminal_correction_active
+                        and isinstance(guard, dict)
+                        and bool(guard.get("accepted", False))
+                    ):
+                        ai_terminal_correction_attempted = True
+                        ai_terminal_correction_active_until = min(
+                            deadline,
+                            now_monotonic + DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S,
+                        )
+                        ai_terminal_correction_active = True
+                        still_started_monotonic = None
+                        latest_still_s = None
+                        append_jsonl(
+                            state_history_path,
+                            {
+                                "generated_utc": utc_now(),
+                                "event_type": "ai_push_coast_terminal_correction_start",
+                                "phase": "fetch_to_pose",
+                                "attempt": int(attempt_index),
+                                "attempt_kind": str(attempt_kind),
+                                "target_id": target.id,
+                                "robot_pose": robot_pose,
+                                "ball_pose": ball_pose,
+                                "fetch_pose_world": fetch_pose_world,
+                                "distance_to_fetch_pose_m": round(float(distance_to_fetch_pose_m), 6),
+                                "closest_approach_distance_m": (
+                                    round(float(closest_distance_m), 6)
+                                    if closest_distance_m is not None
+                                    else None
+                                ),
+                                "ai_push_coast_mode": self.ai_push_coast_mode,
+                                "ai_terminal_correction_window_s": round(
+                                    float(DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S),
+                                    6,
+                                ),
+                                **latest_ai_push_coast,
+                            },
+                        )
+                    elif not ai_terminal_correction_active:
+                        if not failure_reason.startswith("nav2_corridor_push_"):
+                            failure_reason = "fetch_to_pose_ball_stopped_short"
+                        break
+                elif not ai_terminal_correction_active:
+                    if not failure_reason.startswith("nav2_corridor_push_"):
+                        failure_reason = "fetch_to_pose_ball_stopped_short"
+                    break
 
             if (
-                self.gather_control_family == NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+                self.gather_control_family in {NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY, AI_PUSH_COAST_SERVO_CONTROL_FAMILY}
                 and robot_pose
                 and ball_pose
                 and not nav2_corridor_push_attempted
             ):
+                if self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY:
+                    latest_ai_push_coast = _ai_push_coast_decision(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                        latest_still_s=latest_still_s,
+                        terminal_correction_attempted=ai_terminal_correction_attempted,
+                    )
                 nav2_corridor_push_attempted = True
                 corridor_plan = build_nav2_follow_path_corridor_push_plan(
                     robot_pose,
@@ -8701,6 +8833,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "ball_pose": ball_pose,
                         "fetch_pose_world": fetch_pose_world,
                         "nav2_follow_path_plan": corridor_plan_dict,
+                        "ai_push_coast_mode": self.ai_push_coast_mode,
+                        **latest_ai_push_coast,
                         "controller_family": self.gather_control_family,
                     },
                 )
@@ -8789,6 +8923,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "nav2_follow_path_plan": corridor_plan_dict,
                         "nav2_follow_path_result": follow_path_result,
                         "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                        "ai_push_coast_mode": self.ai_push_coast_mode,
+                        **latest_ai_push_coast,
                         "controller_family": self.gather_control_family,
                         "control": self._control_debug_fields(
                             strategy_name=NAV2_FOLLOW_PATH_CORRIDOR_PUSH_OBJECTIVE,
@@ -8844,6 +8980,57 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         progress_score=clean_number(decision.progress_score),
                     ),
                 }
+            elif (
+                self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+                and robot_pose
+                and ball_pose
+            ):
+                if not latest_ai_push_coast or not ai_terminal_correction_active:
+                    latest_ai_push_coast = _ai_push_coast_decision(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                        latest_still_s=latest_still_s,
+                        terminal_correction_attempted=(
+                            ai_terminal_correction_attempted
+                            and not ai_terminal_correction_active
+                        ),
+                    )
+                policy_fields = {
+                    "ai_push_coast_mode": self.ai_push_coast_mode,
+                    "ai_terminal_correction_active": bool(ai_terminal_correction_active),
+                    "ai_terminal_correction_attempted": bool(ai_terminal_correction_attempted),
+                    **latest_ai_push_coast,
+                    **self._control_debug_fields(
+                        strategy_name=AI_PUSH_COAST_SERVO_CONTROL_FAMILY,
+                        objective_name="ai_push_coast_shadow"
+                        if not ai_terminal_correction_active
+                        else "guarded_terminal_contact",
+                    ),
+                }
+                if self.ai_push_coast_mode == AI_PUSH_COAST_MODE_GUARDED_LIVE and ai_terminal_correction_active:
+                    decision = decide_object_centric_gather_command(
+                        robot_pose,
+                        ball_pose,
+                        phase="fetch_to_pose",
+                        zone=self.zone,
+                        envelope=self.capture_envelope,
+                        previous_command=previous_command,
+                        previous_ball_pose=previous_ball_pose,
+                    )
+                    command = decision.command
+                    raw_command = decision.raw_command
+                    latest_policy = dict(decision.diagnostics)
+                    policy_fields.update(
+                        {
+                            "object_centric_policy": latest_policy,
+                            **self._control_debug_fields(
+                                strategy_name=str(decision.strategy_name or ""),
+                                objective_name="guarded_terminal_contact",
+                                progress_score=clean_number(decision.progress_score),
+                            ),
+                        }
+                    )
             elif self.gather_control_family == NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY:
                 policy_fields = {
                     "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
@@ -9011,6 +9198,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             ),
             "fetch_closest_pose": closest_pose,
             "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+            "ai_push_coast_mode": self.ai_push_coast_mode,
+            **latest_ai_push_coast,
             "settle_exit_reason": failure_reason,
             "rolled_away_after_release": False,
             "allow_full_revisit": False,
@@ -11061,6 +11250,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--pursuit-settle-timeout-s", type=float, default=8.0)
     parser.add_argument("--max-retries-per-target", type=int, default=2)
     parser.add_argument("--gather-control-family", choices=ALLOWED_GATHER_CONTROL_FAMILIES, default="baseline")
+    parser.add_argument("--ai-push-coast-mode", choices=ALLOWED_AI_PUSH_COAST_MODES, default=os.environ.get("CHASECAR_AI_PUSH_COAST_MODE", AI_PUSH_COAST_MODE_SHADOW))
     parser.add_argument("--max-place-loss-revisits", type=int, default=1)
     parser.add_argument("--target-model-name", default=DEFAULT_TARGET_MODEL_NAME)
     parser.add_argument("--target-model-sdf", default=str(DEFAULT_TARGET_MODEL_SDF))

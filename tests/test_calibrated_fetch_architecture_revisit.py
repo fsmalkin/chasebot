@@ -15,6 +15,7 @@ import calibrated_fetch_architecture_revisit as revisit  # noqa: E402
 def test_default_candidate_family_is_nav2_corridor_push():
     assert revisit.DEFAULT_CANDIDATE_FAMILY == "nav2_followpath_corridor_push_v1"
     assert revisit._comparison_scope(revisit.DEFAULT_CANDIDATE_FAMILY) == "nav2_corridor_push_contact_candidate"
+    assert revisit._comparison_scope("ai_push_coast_servo_v1") == "hybrid_stage_supervisor_candidate"
     assert revisit._comparison_scope("nav2_mppi_follow_path_reacquire_v1") == "setup_prestage_candidate_with_fetch_fallback"
 
 
@@ -66,6 +67,32 @@ def test_nav2_corridor_push_promotion_failure_starts_ai_fallback_lane():
     assert revisit._overall_recommended_next_action([decision["recommended_next_action"]]) == "start_ai_push_coast_fallback_lane"
 
 
+def test_ai_push_coast_first_screen_requests_saved_layout_gate():
+    decision = revisit._family_decision(
+        family="ai_push_coast_servo_v1",
+        one_run_results=[
+            {
+                "layout_id": "right05",
+                "pass": True,
+                "metrics": {
+                    "required_green_runs": 1,
+                    "fetch_to_pose_pass_count": 1,
+                    "pre_stage_handoff_pass_count": 1,
+                    "worst_closest_approach_distance_m": 0.09,
+                },
+            }
+        ],
+        promotion_results=[],
+        baseline_by_layout={},
+        delivery_radius_m=0.3,
+    )
+
+    assert decision["one_run_green"] is True
+    assert decision["comparison_scope"] == "hybrid_stage_supervisor_candidate"
+    assert decision["recommended_next_action"] == "run_saved_layout_ai_push_coast_gate"
+    assert revisit._overall_recommended_next_action([decision["recommended_next_action"]]) == "run_saved_layout_ai_push_coast_gate"
+
+
 def _args(**overrides):
     values = {
         "dashboard_url": "http://127.0.0.1:8860",
@@ -84,6 +111,7 @@ def _args(**overrides):
         "fast_screen": False,
         "fast_world_file": revisit.FAST_SCREEN_WORLD_FILE,
         "surface_profile": revisit.fetch_gate.DEFAULT_SURFACE_PROFILE,
+        "ai_push_coast_mode": "shadow",
         "fetch_target_x": 0.95,
         "fetch_target_y": 0.0,
         "fetch_target_z": 0.001,

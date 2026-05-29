@@ -72,6 +72,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fast-screen", action="store_true")
     parser.add_argument("--fast-world-file", default=FAST_SCREEN_WORLD_FILE)
     parser.add_argument("--surface-profile", default=fetch_gate.DEFAULT_SURFACE_PROFILE)
+    parser.add_argument("--ai-push-coast-mode", choices=("shadow", "guarded_live"), default="shadow")
     parser.add_argument("--fetch-target-x", type=float, default=fetch_gate.DEFAULT_FETCH_TARGET["x"])
     parser.add_argument("--fetch-target-y", type=float, default=fetch_gate.DEFAULT_FETCH_TARGET["y"])
     parser.add_argument("--fetch-target-z", type=float, default=fetch_gate.DEFAULT_FETCH_TARGET["z"])
@@ -99,6 +100,8 @@ def _comparison_scope(family: str) -> str:
         return "full_fetch_policy_baseline"
     if family == DEFAULT_CANDIDATE_FAMILY:
         return "nav2_corridor_push_contact_candidate"
+    if family == "ai_push_coast_servo_v1":
+        return "hybrid_stage_supervisor_candidate"
     if family == NAV2_MPPI_REVISIT_FAMILY:
         return "setup_prestage_candidate_with_fetch_fallback"
     return "legacy_setup_candidate_with_fetch_fallback"
@@ -157,6 +160,8 @@ def _build_command(
         "0",
         "--gather-control-family",
         family,
+        "--ai-push-coast-mode",
+        args.ai_push_coast_mode,
         "--target-model-sdf",
         fetch_gate.DEFAULT_BALL_SDF,
         "--zone-model-sdf",
@@ -411,6 +416,16 @@ def _family_decision(
         else:
             next_action = "run_live_nav2_corridor_push_gate"
             rationale = "Nav2 corridor-push is the fresh contact hypothesis; run the live saved-layout gate next."
+    elif scope == "hybrid_stage_supervisor_candidate":
+        if promotion_results and not promotion_green:
+            next_action = "freeze_ai_push_coast_failures"
+            rationale = "Hybrid stage-supervisor cleared the first screen but failed repeatability; freeze failures before tuning."
+        elif promotion_green:
+            next_action = "run_seeded_generalization_gate"
+            rationale = "Hybrid stage-supervisor cleared saved-layout repeatability; run seeded random generalization next."
+        else:
+            next_action = "run_saved_layout_ai_push_coast_gate"
+            rationale = "Hybrid stage-supervisor cleared the first screen; run the full saved-layout gate next."
     elif scope != "full_fetch_policy_baseline":
         next_action = "preserve_as_setup_baseline_evidence"
         rationale = "The candidate requalified setup/fetch-fallback behavior only; it is not a full fetch-contact architecture."
@@ -440,6 +455,14 @@ def _family_decision(
 def _overall_recommended_next_action(actions: list[str]) -> str:
     if any(action == "start_ai_push_coast_fallback_lane" for action in actions):
         return "start_ai_push_coast_fallback_lane"
+    if any(action == "freeze_ai_push_coast_failures" for action in actions):
+        return "freeze_ai_push_coast_failures"
+    if any(action == "run_seeded_generalization_gate" for action in actions):
+        return "run_seeded_generalization_gate"
+    if any(action == "run_saved_layout_ai_push_coast_gate" for action in actions):
+        return "run_saved_layout_ai_push_coast_gate"
+    if any(action == "run_live_nav2_corridor_push_gate" for action in actions):
+        return "run_live_nav2_corridor_push_gate"
     if any(action == "consider_targeted_development" for action in actions):
         return "consider_targeted_development"
     if any(action == "preserve_as_setup_baseline_evidence" for action in actions):
