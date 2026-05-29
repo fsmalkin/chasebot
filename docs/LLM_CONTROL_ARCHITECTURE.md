@@ -28,9 +28,11 @@ That means:
 ## Fetch AI Control Stance
 
 The calibrated golf-ball `fetch_to_pose` pivot keeps the runtime no-shoot and
-the layers explicit. The immediate next spike is a Nav2 corridor-push test; AI
-remains the next/fallback contact-control lane if Nav2 cannot keep the ball
-stable under calibrated physics:
+the layers explicit. The Nav2 corridor-push spike showed Nav2 can be a useful
+coarse real-time path owner, but the `right05` saved-layout promotion failure
+showed that path completion is not enough for object delivery. AI is now the
+next contact-control lane, starting as a shadow-only local predictor/proposer
+around Nav2:
 
 1. LM or VLA-style models may supervise high-level task mode, failure
    interpretation, and known maneuver choices.
@@ -38,17 +40,19 @@ stable under calibrated physics:
    coast timing, setup pocket, or recovery side.
 3. The fetch state machine and deterministic guards decide whether any proposal
    is legal.
-4. The immediate Nav2 test may let `FollowPath` own real-time robot path
-   tracking through the ball-target corridor while a monitor cancels on success,
-   ball escape, stale state, unsafe drift, timeout, or action abort.
-5. If Nav2 corridor-push is red, the bounded push-and-coast servo owns robot
-   contact and `/cmd_vel` behind the deterministic guards.
+4. Nav2 `FollowPath` may own coarse robot path tracking through the ball-target
+   corridor while a monitor cancels on success, ball escape, stale state, unsafe
+   drift, timeout, or action abort.
+5. The learned push-coast lane should predict when Nav2's coarse path is likely
+   to stop short, lose contact persistence, or need a bounded terminal re-push.
+6. Learned outputs remain shadow-only until saved-anchor and seeded-random
+   scoring is green and deterministic guards accept the maneuver class.
 
-The immediate fetch research lane is therefore:
+The latest proven Nav2 lane is therefore evidence, not the final architecture:
 
 `LM/VLA supervisor -> deterministic fetch state machine/guards -> Nav2 FollowPath corridor-push -> ball-escape/success monitor -> robot`
 
-The learned fallback lane remains:
+The immediate learned lane is:
 
 `LM/VLA supervisor -> deterministic fetch state machine/guards -> local learned predictor/proposer -> bounded push-coast servo -> robot`
 
@@ -210,11 +214,12 @@ Planned near-term extension for gather:
   - controller and hardware caps remain the low-level safety envelope
 - it must not publish real-time steering directly and must not replace low-level control loops
 - for calibrated fetch, first test `nav2_followpath_corridor_push_v1` as a
-  fresh corridor-push hypothesis; if it is red, the first learned component
-  should be a shadow-mode local predictor/proposer over bounded push-and-coast
-  maneuvers, proposing setup pocket, push duration, coast timing, or recovery
-  side only after saved-anchor and seeded-random shadow evidence is green, with
-  deterministic guards still vetoing unsafe proposals
+  fresh corridor-push hypothesis; that spike is now evidence-only after a
+  `right05` stop-short promotion failure, so the first learned component should
+  be a shadow-mode local predictor/proposer over bounded push-and-coast
+  maneuvers, proposing setup pocket, push duration, coast timing, terminal
+  re-push, or recovery side only after saved-anchor and seeded-random shadow
+  evidence is green, with deterministic guards still vetoing unsafe proposals
 
 Not planned for the active gather path:
 

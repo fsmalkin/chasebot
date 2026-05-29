@@ -38,15 +38,26 @@ Use contact-aware geometric-shooter evidence as a physics and trajectory probe
 only. It is not the preferred runtime architecture because it currently proves a
 direct ball-velocity impulse, not robot-owned bounded pushing.
 
-Immediate update: before building the learned contact controller, test whether
-the calibrated world physics keeps the ball inside Nav2's natural operating
-envelope. The next hypothesis spike is `nav2_followpath_corridor_push_v1`:
-Nav2 owns real-time `FollowPath` tracking through the ball-target corridor,
-while a fetch monitor only cancels on measured success, ball escape, stale
-state, unsafe drift, timeout, or action abort. This is distinct from the old
-`nav2_mppi_follow_path_reacquire_v1` pre-stage evidence branch; it is a fresh
-corridor-push test. If the ball escapes or Nav2 contact motion is unstable, the
-AI learned local contact policy remains the next/fallback lane.
+May 29, 2026 evidence update: the Nav2 corridor-push spike answered the cheap
+physics/controller question but did not promote as the sole contact controller.
+The spike was saved-layout evidence only; the seeded random/generalization gate
+has not run.
+
+- Contact-ready `zero`, `left05`, and `right05` all passed with Nav2 owning
+  real-time `FollowPath` tracking through the ball-target corridor.
+- Full saved-layout one-run `zero`, `left05`, and `right05` all passed.
+- Saved-layout `3/3` repeatability passed `zero` and `left05`, but `right05`
+  failed one promotion run with
+  `missed_delivery_radius_after_fetch_to_pose_ball_stopped_short`; Nav2
+  returned `STATUS_SUCCEEDED`, the ball moved only about `0.121m`, and the
+  closest approach was `0.451645m` against the `0.300m` contract.
+
+Interpretation: Nav2 can provide useful real-time corridor tracking and bounded
+contact, but path completion is not the same as object delivery. Do not promote
+`nav2_followpath_corridor_push_v1` as a standalone contact owner. Freeze the
+right05 stop-short artifact and move the next focused lane to the AI-assisted
+push-coast/contact-stability controller around Nav2. This remains distinct from
+the old `nav2_mppi_follow_path_reacquire_v1` pre-stage evidence branch.
 
 ## Paths To Research
 
@@ -65,11 +76,14 @@ Evaluate these paths side by side:
 10. Perception-first target-pose fetch.
 
 Use the existing object-centric baseline as the comparison reference, not as an
-automatic winner. The preferred next spike is not a shooter spike; it is
-`spike/fetch-arch-nav2-corridor-push-20260528`, a physics-first Nav2
-FollowPath corridor-push test with ball-escape monitoring. The AI-assisted
-bounded push-and-coast object-servo lane remains the next/fallback path if Nav2
-cannot keep contact stable under calibrated physics.
+automatic winner. The preferred next spike is no longer a shooter spike or a
+standalone Nav2 tuning pass. It is
+`spike/fetch-arch-ai-push-coast-servo-20260529`: a shadow-first learned local
+predictor/proposer that uses the Nav2 corridor-push stop-short evidence plus
+object-centric baseline traces to improve contact persistence, terminal
+correction, re-push/coast timing, and asymmetric `right05` stability. Nav2
+remains useful as the coarse real-time path owner; the learned lane should
+operate around it and remain behind deterministic guards.
 
 ## Research Questions
 

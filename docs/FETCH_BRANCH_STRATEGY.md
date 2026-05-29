@@ -75,8 +75,8 @@ ball contact, so old ball/turf physics does not explain the primary failure.
 | `object_centric_gather_policy_v1` | `docs/OBJECT_CENTRIC_GATHER_POLICY_RESEARCH_PLAN.md` | Superseded gather/place plan | Do not reopen as a gather/place promotion path. |
 | `object_centric_fetch_policy_v1` | `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`; `artifacts/session/live_passive_golf_roll_built_resistance_repeatability_20260526/passive_ball_roll_calibration/campaign_summary.json` | Active calibrated baseline | Organize new alternatives around this gate and telemetry. |
 | `contact_aware_geometric_shooter` | `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`; `artifacts/session/live_fetch_geometric_shooter_probe_zero_20260527/fetch_geometric_shooter_probe/geometric_shooter_probe_summary.json` plus `left05` / `right05` one-run probes | Direct-velocity physics probe, not robot-owned runtime evidence | Keep as roll-window/coast-geometry evidence; do not promote as the primary runtime path. |
-| `nav2_followpath_corridor_push_v1` | planned spike only | Preferred immediate research lane | Let Nav2 own real-time FollowPath corridor tracking while a fetch monitor cancels on success, ball escape, stale state, unsafe drift, timeout, or action abort. |
-| `ai_push_coast_servo` | planned spike only | Next/fallback contact-control lane | Train or prototype local predictor/proposer from calibrated simulation, score in shadow mode, then execute only inside deterministic guards if Nav2 corridor-push cannot keep contact stable. |
+| `nav2_followpath_corridor_push_v1` | `artifacts/session/live_nav2_corridor_push_contact_ready_rerun3_20260529/calibrated_fetch_architecture_revisit/scorecard.md`; `artifacts/session/live_nav2_corridor_push_full_saved_layout_20260529/calibrated_fetch_architecture_revisit/scorecard.md` | Evidence branch; not standalone promotion candidate | Contact-ready and full saved-layout one-run gates passed, but saved-layout `3/3` failed on `right05` stop-short after Nav2 `STATUS_SUCCEEDED`. Preserve as corridor-tracking baseline and AI training/eval data. |
+| `ai_push_coast_servo` | planned from Nav2 stop-short and object-centric baseline traces | Preferred next contact-control lane | Train or prototype local predictor/proposer from calibrated simulation, score in shadow mode on saved anchors and seeded random layouts, then execute only inside deterministic guards after shadow scoring is green. |
 
 ## Latest Revisit Result
 
@@ -98,6 +98,34 @@ The May 27, 2026 targeted MPPI revisit did not justify developing the old
 This does not close the new `nav2_followpath_corridor_push_v1` hypothesis. The
 new spike is a fresh contact-ready/corridor-push test under calibrated physics,
 not a revival of the blocked MPPI pre-stage branch.
+
+## Latest Nav2 Corridor-Push Result
+
+The May 29, 2026 Nav2 corridor-push spike produced useful bounded-contact
+evidence, but it does not promote as the standalone contact architecture:
+
+- branch: `spike/fetch-arch-nav2-corridor-push-20260528`
+- implementation/evidence commit: `03c0aaf`
+- contact-ready artifact:
+  `artifacts/session/live_nav2_corridor_push_contact_ready_rerun3_20260529/calibrated_fetch_architecture_revisit/scorecard.md`
+- full-layout artifact:
+  `artifacts/session/live_nav2_corridor_push_full_saved_layout_20260529/calibrated_fetch_architecture_revisit/scorecard.md`
+- result:
+  contact-ready `zero`/`left05`/`right05` passed; full saved-layout one-run
+  `zero`/`left05`/`right05` passed; saved-layout repeatability passed `zero`
+  and `left05` `3/3` but failed `right05` `2/3`
+- failing class:
+  `missed_delivery_radius_after_fetch_to_pose_ball_stopped_short`; Nav2
+  returned `STATUS_SUCCEEDED`, the ball moved only about `0.121m`, and closest
+  approach was `0.451645m` against the `0.300m` delivery radius
+- branch decision:
+  keep Nav2 corridor-push as a baseline path-tracking/contact-data branch, not
+  a tuning target for standalone promotion. Start the AI push-coast/contact
+  stability spike from this evidence.
+
+Seeded random/generalization was not run for this branch. Do not claim
+generalized behavior until a candidate clears saved-anchor repeatability and
+then runs the reusable `fetch_generalization_gate`.
 
 ## Wider Architecture Portfolio
 
@@ -141,12 +169,11 @@ blocked branch in place. A blocked branch becomes a candidate again only after
 fresh `zero` and `plus45` pre-stage proof is recorded with artifact paths and an
 explicit update to this document.
 
-Current preferred branch decision: pursue
-`spike/fetch-arch-nav2-corridor-push-20260528` next. The hypothesis is that the
-calibrated ball/turf physics may keep contact within Nav2's natural real-time
-path-tracking envelope if Nav2 owns a ball-target corridor path and a fetch
-monitor only cancels on success, ball escape, stale state, unsafe drift,
-timeout, or action abort. If the ball escapes or contact motion is unstable,
-continue with `spike/fetch-arch-ai-push-coast-servo-YYYYMMDD` as the learned
-local contact-control fallback. LM/VLA components may supervise mode choice and
-failure interpretation, but they must not own high-frequency `/cmd_vel`.
+Current preferred branch decision: continue from the Nav2 evidence into
+`spike/fetch-arch-ai-push-coast-servo-20260529`. The hypothesis is that Nav2 is
+a useful coarse path owner, but generalized `fetch_to_pose` needs an
+object-outcome layer that predicts/contact-corrects stop-short, asymmetric
+offset, and terminal re-push/coast behavior. LM/VLA components may supervise
+mode choice and failure interpretation, but they must not own high-frequency
+`/cmd_vel`; the learned local lane starts shadow-only and executes only through
+deterministic guards after saved-anchor and seeded-random scoring is green.
