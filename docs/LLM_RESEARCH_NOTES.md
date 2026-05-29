@@ -82,20 +82,21 @@ Why not now:
 - they imply a different architecture, training story, and deployment burden
 - they are not a good match for high-frequency contact control on a calibrated
   golf ball
-- our immediate fetch goal is the Nav2 corridor-push hypothesis; AI-assisted
-  bounded contact control is the next/fallback lane, not raw end-to-end learned
-  `/cmd_vel`
+- the Nav2 corridor-push hypothesis is now evidence-only after the saved
+  `right05` stop-short promotion failure; AI-assisted bounded contact control
+  is the next lane, not raw end-to-end learned `/cmd_vel`
 
 Current calibrated-fetch mapping:
 
 - LM/VLA-style models may supervise task mode, failure interpretation, and
   known maneuver selection through deterministic contracts
-- the immediate `nav2_followpath_corridor_push_v1` spike tests whether Nav2 can
-  own real-time corridor tracking while a monitor only cancels on success, ball
-  escape, stale state, unsafe drift, timeout, or action abort
-- a smaller local learned model may predict or propose bounded push/coast
-  maneuvers after simulation training and shadow scoring if the Nav2
-  corridor-push spike is red
+- `nav2_followpath_corridor_push_v1` showed Nav2 can own useful real-time
+  corridor tracking while a monitor only cancels on success, ball escape, stale
+  state, unsafe drift, timeout, or action abort, but it did not promote as the
+  sole contact controller
+- a smaller local learned model should now predict or propose bounded
+  push/coast/re-push maneuvers after simulation training and shadow scoring,
+  using the Nav2 stop-short artifact as one of the first evaluation cases
 - deterministic guards still own command limits, target freshness, ball drift,
   retry budget, and safe stop
 

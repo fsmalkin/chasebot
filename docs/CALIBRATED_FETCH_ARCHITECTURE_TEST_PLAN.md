@@ -6,15 +6,19 @@ same control loop under different names. The active UAT baseline remains
 research portfolio should deliberately test wider designs that may generalize
 better, reduce telemetry fragility, or simplify eventual hardware transfer.
 
-May 28, 2026 pivot: keep the runtime architecture no-shoot. The immediate next
-test is `nav2_followpath_corridor_push_v1`: let Nav2 own real-time `FollowPath`
-tracking through the ball-target corridor and let a fetch monitor cancel only on
-measured success, ball escape, stale state, unsafe drift, timeout, or action
-abort. AI-assisted bounded push-and-coast contact control remains the
-next/fallback lane if Nav2 cannot keep the ball stable under calibrated physics.
-Contact-aware geometric-shooter artifacts remain valuable physics probes, but
-they are not the preferred runtime architecture until they are reframed as
-robot-owned bounded push/coast evidence.
+May 29, 2026 update: keep the runtime architecture no-shoot. The
+`nav2_followpath_corridor_push_v1` spike showed Nav2 can own useful real-time
+`FollowPath` corridor tracking, but not the full contact outcome by itself.
+Contact-ready `zero`/`left05`/`right05` passed, the full saved-layout one-run
+matrix passed, and `3/3` repeatability passed `zero` and `left05`; `right05`
+failed one promotion run because the ball stopped short after Nav2 returned
+`STATUS_SUCCEEDED` (`0.451645m` closest approach against the `0.300m`
+contract). This was saved-anchor evidence only, not seeded random
+generalization. The next active architecture lane is AI-assisted bounded
+push-and-coast contact control around Nav2, starting in shadow mode. Contact-
+aware geometric-shooter artifacts remain valuable physics probes, but they are
+not the preferred runtime architecture until they are reframed as robot-owned
+bounded push/coast evidence.
 
 The next-thread research charter lives in
 [GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md](GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md).
@@ -66,8 +70,8 @@ do not by themselves prove target-relative side selection or generalization.
 | Current object-centric fetch baseline | Known green UAT lane and reference telemetry | Existing May 27 `3/3` saved-layout gate | Does any new design beat its margin, stability, or simplicity? |
 | Runnable legacy control-family screen | Checks whether old branches become viable under calibrated physics | `scripts/calibrated_fetch_architecture_revisit.py --screen-scope runnable_control_family_screen --fast-screen --short-circuit-on-failure` | Did any old implementation clear `zero` cheaply enough to justify canonical rerun? |
 | Contact-aware geometric shooter | Physics-probe evidence for roll windows, delivery margins, and feasible coast geometry; not the preferred runtime path | Offline shot-model replay or direct-velocity probe only | Does it teach useful push/coast targets without becoming non-robot-owned control? |
-| Nav2 FollowPath corridor-push | Tests whether calibrated physics keeps the ball inside Nav2's natural real-time path-tracking envelope | Contact-ready `zero`/`left05`/`right05`, then full saved layouts, then seeded random gate | Can Nav2 own corridor motion while a monitor only checks success, ball escape, stale state, unsafe drift, timeout, or action abort? |
-| AI-assisted bounded push-coast object servo | Uses calibrated physics for controlled pushing, measured coast, and re-aim while keeping robot-owned contact | Saved-anchor plus seeded-random shadow prediction/proposal gate, then canonical `zero` one-run | Does learned prediction/proposal improve generalized side selection, contact stability, and margin without guard violations? |
+| Nav2 FollowPath corridor-push | Tests whether calibrated physics keeps the ball inside Nav2's natural real-time path-tracking envelope | Completed contact-ready and saved-layout one-run gates; failed `right05` saved-layout `3/3` promotion short of delivery | Use as corridor-tracking baseline and data source, not as standalone promotion candidate. |
+| AI-assisted bounded push-coast object servo | Uses calibrated physics for controlled pushing, measured coast, terminal correction, and re-aim while keeping robot-owned contact | Shadow prediction/proposal over Nav2 failure traces, saved anchors, and seeded-random layouts, then guarded canonical `zero` one-run | Does learned prediction/proposal improve contact persistence, asymmetric offset stability, terminal correction, and margin without guard violations? |
 | Receding-horizon contact MPC/object servo | Owns robot-ball-target state and optimizes bounded commands directly | Fast screen on `zero`, then canonical `zero`/`left05`/`right05` one-run | Does it avoid lateral knock-away while recovering from small offsets? |
 | ROS action-server or behavior-tree last-meter owner | Moves setup, contact, re-aim, abort, and telemetry out of ad hoc mission-loop phases | Dry-run/action-contract test, then canonical one-run `zero` | Does explicit ownership make failures easier to classify and recover? |
 | Nav2 reposition plus object-centric last meter | Uses Nav2 for long-range approach only, with a clean handoff to object-centric contact | Pre-contact approach telemetry and handoff dwell on varied starts | Does it generalize to farther starts without contaminating contact control? |
@@ -149,10 +153,14 @@ branch strategy changes are propagated back to `main`.
 - Keep `physics-calibrated-golf-fetch-v1` as the UAT integration branch.
 - Put shared harnesses, analyzers, and docs there after review.
 - Use `spike/fetch-arch-<family>-YYYYMMDD` for a single architecture hypothesis.
+- The completed Nav2 corridor-push spike remains
+  `spike/fetch-arch-nav2-corridor-push-20260528`; do not tune it as a standalone
+  contact-promotion candidate after the `right05` stop-short promotion failure.
 - The preferred next spike name is
-  `spike/fetch-arch-nav2-corridor-push-20260528`.
-- Keep `spike/fetch-arch-ai-push-coast-servo-YYYYMMDD` as the next/fallback lane
-  if Nav2 corridor-push is red.
+  `spike/fetch-arch-ai-push-coast-servo-20260529`.
+- Keep the AI-assisted lane shadow-first: learned outputs may execute only after
+  saved-anchor and seeded-random shadow scoring is green and deterministic
+  guards accept the maneuver class.
 - Promote to `candidate/fetch-arch-<family>` only after the canonical saved-layout
   matrix is green and the benefit is written down.
 - Do not resurrect blocked gather-control branches in place. If an old idea is
@@ -197,11 +205,20 @@ branch strategy changes are propagated back to `main`.
   It failed `zero`, `left05`, and `right05` before contact and remains
   evidence-only. This is not the new `nav2_followpath_corridor_push_v1`
   hypothesis, which starts from a fresh corridor-push contact test.
-- Nav2 corridor-push direction:
-  planned as `spike/fetch-arch-nav2-corridor-push-20260528`. First evidence is
-  contact-ready `zero`, `left05`, and `right05`; green means no ball escape,
-  stable Nav2 action/cancel behavior, stable command output, and
-  `fetch_to_pose_pass=true`.
+- Nav2 corridor-push evidence:
+  `artifacts/session/live_nav2_corridor_push_contact_ready_rerun3_20260529/calibrated_fetch_architecture_revisit/scorecard.md`
+  passed contact-ready `zero`, `left05`, and `right05`.
+  `artifacts/session/live_nav2_corridor_push_full_saved_layout_20260529/calibrated_fetch_architecture_revisit/scorecard.md`
+  passed full saved-layout `zero`/`left05`/`right05` one-run, then failed
+  saved-layout repeatability because `right05` promotion run 1 stopped short:
+  `missed_delivery_radius_after_fetch_to_pose_ball_stopped_short`,
+  `STATUS_SUCCEEDED`, `0.451645m` closest approach, and about `0.121m` ball
+  displacement. Treat this as evidence that Nav2 can keep the ball bounded but
+  cannot be promoted as the sole contact owner.
+- Seeded random/generalization status:
+  not yet run for Nav2 corridor-push. Do not claim generalized behavior until
+  the next candidate clears saved-anchor repeatability and then runs
+  `scripts/fetch_generalization_gate.py`.
 - A partial accelerated control-family screen on May 27, 2026 produced
   `artifacts/session/live_calibrated_fetch_architecture_revisit_legacy_fast_short_screen_20260527_region-funnel_zero_one_run/gather_mission_repeatability/campaign_run_summary.json`.
   `region_funnel_v1` failed `zero` after pre-stage handoff because the ball

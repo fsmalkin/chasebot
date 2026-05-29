@@ -42,10 +42,10 @@ new development branch.
 - True local trajectory tracker: represented by blocked `pre_stage_path_tracker_v1` and `pre_stage_trajectory_owner_v1`; both used measured progress, but neither had enough convergence authority in live `zero` / `plus45`.
 - Nav2 controller-server `FollowPath` / DWB: represented by blocked `nav2_follow_path_reacquire_v1`; it used the lower-stack configured local planner directly on an explicit short pre-stage path instead of black-box `NavigateToPose`, but the action aborted immediately in the primary live cases.
 - MPC/MPPI local planner: represented first by blocked `nav2_mppi_follow_path_reacquire_v1`; it optimizes bounded short-horizon commands against ball clearance, goal-side escape, and handoff geometry through the Nav2 MPPI controller rather than the gather-runner manual-drive loop, and is now retained as a baseline for safe pre-stage movement rather than the primary contact-control architecture.
-- Nav2 FollowPath corridor-push: new calibrated-fetch hypothesis, distinct from the blocked pre-stage branches; Nav2 owns real-time ball-target corridor tracking while a fetch monitor cancels on success, ball escape, stale state, unsafe drift, timeout, or action abort.
+- Nav2 FollowPath corridor-push: calibrated-fetch evidence branch, distinct from the blocked pre-stage branches; Nav2 owns real-time ball-target corridor tracking while a fetch monitor cancels on success, ball escape, stale state, unsafe drift, timeout, or action abort. It passed contact-ready and full saved-layout one-run gates, but failed standalone promotion on a `right05` stop-short run after Nav2 `STATUS_SUCCEEDED`.
 - Object-centric manipulation policy: historical next gather family, represented by `object_centric_gather_policy_v1`; its useful result is now the active `object_centric_fetch_policy_v1` direction, where success is measured by trajectory intersection with a target-pose delivery radius rather than final stop in a corral.
 - Contact-aware manipulation planner: first implement as a structured no-shoot bounded push-and-coast object servo; contact-aware geometric-shooter artifacts are physics probes, not the preferred runtime architecture.
-- AI-assisted local model path: next/fallback lane if Nav2 corridor-push is red; train/prototype a learned predictor/proposer from calibrated simulation to estimate roll outcome, miss vector, setup pocket, push duration, coast timing, and recovery side; score it in shadow mode before learned outputs execute behind deterministic guards.
+- AI-assisted local model path: current next lane after Nav2 corridor-push failed standalone promotion; train/prototype a learned predictor/proposer from calibrated simulation to estimate roll outcome, miss vector, setup pocket, push duration, coast timing, terminal re-push, and recovery side; score it in shadow mode before learned outputs execute behind deterministic guards.
 - Behavior-tree or action-server pre-stage owner: move pre-stage ownership out of the mission loop so progress, holds, aborts, and release conditions are first-class runtime states.
 - Learned or Google/RT-style model path: use LM/VLA-style reasoning for high-level task mode, failure interpretation, and known maneuver choice only; use local learned models for fine-grained prediction/proposal. Direct high-frequency LLM motor control remains out of scope.
 - Other architecture families: explicitly search for approaches not represented above before committing to the next runtime branch.
@@ -61,11 +61,10 @@ product benefit is expected, and why the test cannot be answered by parameter
 tuning inside the current object-centric fetch loop.
 
 The preferred next spike is now
-`spike/fetch-arch-nav2-corridor-push-20260528`: no-shoot robot-owned contact,
-Nav2 `FollowPath` corridor tracking, and monitor-only cancel on success, ball
-escape, stale state, unsafe drift, timeout, or action abort. Keep
-`spike/fetch-arch-ai-push-coast-servo-YYYYMMDD` as the learned local
-contact-control fallback if this Nav2 hypothesis is red.
+`spike/fetch-arch-ai-push-coast-servo-20260529`: no-shoot robot-owned contact
+with a shadow-first local predictor/proposer around Nav2. Keep
+`spike/fetch-arch-nav2-corridor-push-20260528` as evidence for what Nav2 can
+handle and where it stops short, not as the next standalone promotion branch.
 
 ## Next Decision Gate
 
