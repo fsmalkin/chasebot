@@ -637,6 +637,12 @@ Live gates:
      `pre_contact_reorientation`, `first_contact_alignment`,
      `lateral_knock_away`, `overshoot`, `recovery_failure`, and
      `shot_infeasible`
+   - dashboard visual random profiles:
+     - green CTA default: `local_visual_v1`, a wider bounded local UAT draw
+     - diagnostic compatibility profile: `corridor_contact_v1`, the narrow
+       contact-ready draw
+     - treat wide dashboard failures as visual/controller-stage backlog
+       evidence until saved-layout and seeded generalization gates are green
 8. Nav2 corridor-push spike contract:
    - branch: `spike/fetch-arch-nav2-corridor-push-20260528`
    - architecture: `nav2_followpath_corridor_push_v1`

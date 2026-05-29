@@ -120,12 +120,36 @@ OBJECT_CENTRIC_ZERO_TARGET_LAYOUT_JSON = (
 GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID = "golf_ball_circle_delivery_uat"
 GOLF_BALL_CIRCLE_DELIVERY_TARGET_LAYOUT_JSON = "ros2_config/target_layouts/golf_ball_circle_delivery_zero.json"
 GOLF_BALL_CIRCLE_DELIVERY_RANDOM_LAYOUT_ID = "bounded_random_golf_ball_circle_delivery"
+GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT = "corridor_contact_v1"
+GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL = "local_visual_v1"
+GOLF_BALL_RANDOM_PROFILES = {
+    GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT,
+    GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL,
+}
 GOLF_BALL_CIRCLE_DELIVERY_RANDOM_BOUNDS = {
     "forward_min_m": 0.30,
     "forward_max_m": 0.62,
     "lateral_min_m": -0.18,
     "lateral_max_m": 0.18,
     "min_initial_delivery_margin_m": 0.04,
+}
+GOLF_BALL_CIRCLE_DELIVERY_LOCAL_VISUAL_BOUNDS = {
+    "distance_min_m": 0.45,
+    "distance_max_m": 0.75,
+    "angle_min_deg": -35.0,
+    "angle_max_deg": 35.0,
+    "robot_standoff_min_m": 0.26,
+    "robot_standoff_max_m": 0.45,
+    "robot_lateral_min_m": -0.10,
+    "robot_lateral_max_m": 0.10,
+    "robot_yaw_error_min_deg": -15.0,
+    "robot_yaw_error_max_deg": 15.0,
+    "min_initial_delivery_margin_m": 0.04,
+    "min_robot_ball_separation_m": 0.24,
+    "world_x_min_m": -0.15,
+    "world_x_max_m": 1.10,
+    "world_y_min_m": -0.55,
+    "world_y_max_m": 0.55,
 }
 GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ROBOT_STANDOFF_M = 0.32
 GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND = "golf_ball_circle_delivery_random"
@@ -398,38 +422,93 @@ def env_float(name: str, default: float) -> float:
 def bounded_golf_fetch_random_draw(
     *,
     seed: int | None = None,
+    profile: str = GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT,
     fetch_target_x: float = 0.95,
     fetch_target_y: float = 0.0,
     fetch_target_z: float = 0.001,
     delivery_radius_m: float = 0.30,
 ) -> Dict[str, Any]:
     clean_seed = int(seed if seed is not None else (time.time_ns() & 0x7FFFFFFF))
+    clean_profile = str(profile or GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT).strip()
+    if clean_profile not in GOLF_BALL_RANDOM_PROFILES:
+        raise ValueError(f"unknown random_profile: {clean_profile}")
     rng = random.Random(clean_seed)
-    bounds = dict(GOLF_BALL_CIRCLE_DELIVERY_RANDOM_BOUNDS)
-    forward_min = float(bounds["forward_min_m"])
-    forward_max = float(bounds["forward_max_m"])
-    lateral_min = float(bounds["lateral_min_m"])
-    lateral_max = float(bounds["lateral_max_m"])
-    min_margin = float(bounds["min_initial_delivery_margin_m"])
-    ball_x = forward_min
-    ball_y = 0.0
-    for _attempt in range(64):
-        ball_x = rng.uniform(forward_min, forward_max)
-        ball_y = rng.uniform(lateral_min, lateral_max)
-        initial_distance = math.hypot(float(fetch_target_x) - ball_x, float(fetch_target_y) - ball_y)
-        if initial_distance >= float(delivery_radius_m) + min_margin:
+
+    def _in_world_envelope(x_value: float, y_value: float, bounds_payload: Dict[str, Any]) -> bool:
+        if "world_x_min_m" not in bounds_payload:
+            return True
+        return (
+            float(bounds_payload["world_x_min_m"]) <= float(x_value) <= float(bounds_payload["world_x_max_m"])
+            and float(bounds_payload["world_y_min_m"]) <= float(y_value) <= float(bounds_payload["world_y_max_m"])
+        )
+
+    rejection_count = 0
+    robot_lateral_offset_m = 0.0
+    yaw_error_deg = 0.0
+    ball_target_angle_deg = 0.0
+
+    if clean_profile == GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL:
+        bounds = dict(GOLF_BALL_CIRCLE_DELIVERY_LOCAL_VISUAL_BOUNDS)
+        for _attempt in range(128):
+            target_distance = rng.uniform(float(bounds["distance_min_m"]), float(bounds["distance_max_m"]))
+            ball_target_angle_deg = rng.uniform(float(bounds["angle_min_deg"]), float(bounds["angle_max_deg"]))
+            angle_rad = math.radians(ball_target_angle_deg)
+            push_ux = math.cos(angle_rad)
+            push_uy = math.sin(angle_rad)
+            ball_x = float(fetch_target_x) - (target_distance * push_ux)
+            ball_y = float(fetch_target_y) - (target_distance * push_uy)
+            standoff = rng.uniform(float(bounds["robot_standoff_min_m"]), float(bounds["robot_standoff_max_m"]))
+            robot_lateral_offset_m = rng.uniform(float(bounds["robot_lateral_min_m"]), float(bounds["robot_lateral_max_m"]))
+            yaw_error_deg = rng.uniform(float(bounds["robot_yaw_error_min_deg"]), float(bounds["robot_yaw_error_max_deg"]))
+            perp_x = -push_uy
+            perp_y = push_ux
+            robot_x = ball_x - (standoff * push_ux) + (robot_lateral_offset_m * perp_x)
+            robot_y = ball_y - (standoff * push_uy) + (robot_lateral_offset_m * perp_y)
+            robot_yaw = angle_rad + math.radians(yaw_error_deg)
+            robot_ball_separation = math.hypot(robot_x - ball_x, robot_y - ball_y)
+            if target_distance < float(delivery_radius_m) + float(bounds["min_initial_delivery_margin_m"]):
+                rejection_count += 1
+                continue
+            if robot_ball_separation < float(bounds["min_robot_ball_separation_m"]):
+                rejection_count += 1
+                continue
+            if not _in_world_envelope(ball_x, ball_y, bounds) or not _in_world_envelope(robot_x, robot_y, bounds):
+                rejection_count += 1
+                continue
             break
-    target_dx = float(fetch_target_x) - ball_x
-    target_dy = float(fetch_target_y) - ball_y
-    target_distance = max(math.hypot(target_dx, target_dy), 1.0e-6)
-    push_ux = target_dx / target_distance
-    push_uy = target_dy / target_distance
-    standoff = float(GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ROBOT_STANDOFF_M)
-    robot_x = ball_x - (standoff * push_ux)
-    robot_y = ball_y - (standoff * push_uy)
-    robot_yaw = math.atan2(push_uy, push_ux)
+        else:
+            raise RuntimeError("unable to draw bounded local_visual_v1 golf fetch layout")
+    else:
+        bounds = dict(GOLF_BALL_CIRCLE_DELIVERY_RANDOM_BOUNDS)
+        forward_min = float(bounds["forward_min_m"])
+        forward_max = float(bounds["forward_max_m"])
+        lateral_min = float(bounds["lateral_min_m"])
+        lateral_max = float(bounds["lateral_max_m"])
+        min_margin = float(bounds["min_initial_delivery_margin_m"])
+        ball_x = forward_min
+        ball_y = 0.0
+        for _attempt in range(64):
+            ball_x = rng.uniform(forward_min, forward_max)
+            ball_y = rng.uniform(lateral_min, lateral_max)
+            target_distance = math.hypot(float(fetch_target_x) - ball_x, float(fetch_target_y) - ball_y)
+            if target_distance >= float(delivery_radius_m) + min_margin:
+                break
+            rejection_count += 1
+        target_dx = float(fetch_target_x) - ball_x
+        target_dy = float(fetch_target_y) - ball_y
+        target_distance = max(math.hypot(target_dx, target_dy), 1.0e-6)
+        push_ux = target_dx / target_distance
+        push_uy = target_dy / target_distance
+        standoff = float(GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ROBOT_STANDOFF_M)
+        robot_x = ball_x - (standoff * push_ux)
+        robot_y = ball_y - (standoff * push_uy)
+        robot_yaw = math.atan2(push_uy, push_ux)
+        robot_ball_separation = math.hypot(robot_x - ball_x, robot_y - ball_y)
+        ball_target_angle_deg = math.degrees(math.atan2(push_uy, push_ux))
+
     return {
         "layout_id": GOLF_BALL_CIRCLE_DELIVERY_RANDOM_LAYOUT_ID,
+        "random_profile": clean_profile,
         "seed": clean_seed,
         "bounds": bounds,
         "target_pose": {
@@ -449,7 +528,12 @@ def bounded_golf_fetch_random_draw(
             "yaw": round(float(robot_yaw), 6),
         },
         "ball_target_distance_m": round(float(target_distance), 6),
+        "ball_target_angle_deg": round(float(ball_target_angle_deg), 6),
         "robot_standoff_m": round(float(standoff), 6),
+        "robot_lateral_offset_m": round(float(robot_lateral_offset_m), 6),
+        "robot_yaw_error_deg": round(float(yaw_error_deg), 6),
+        "robot_ball_separation_m": round(float(robot_ball_separation), 6),
+        "rejection_count": int(rejection_count),
     }
 
 
@@ -2277,7 +2361,11 @@ class DashboardController:
                     scenario_overrides["random_seed"] = int(seed_value)
                 except (TypeError, ValueError):
                     return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": "random_seed must be an integer"}
+            random_profile = str(overrides.get("random_profile", "") or GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT).strip()
+            if random_profile not in GOLF_BALL_RANDOM_PROFILES:
+                return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown random_profile: {random_profile}"}
             scenario_overrides["random_layout"] = True
+            scenario_overrides["random_profile"] = random_profile
         with self.state_lock:
             env_state = self.state["environment_state"]
             scenario_state = self.state["scenario_state"]
@@ -4015,8 +4103,10 @@ pkill -f "fluxbox" 2>/dev/null || true
         overrides: Dict[str, Any],
     ) -> Dict[str, Any]:
         seed_value = overrides.get("random_seed")
+        random_profile = str(overrides.get("random_profile", "") or GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT).strip()
         draw = bounded_golf_fetch_random_draw(
             seed=int(seed_value) if seed_value not in {None, ""} else None,
+            profile=random_profile,
             fetch_target_x=float(scenario.fetch_target_x if scenario.fetch_target_x is not None else 0.95),
             fetch_target_y=float(scenario.fetch_target_y if scenario.fetch_target_y is not None else 0.0),
             fetch_target_z=float(scenario.fetch_target_z if scenario.fetch_target_z is not None else 0.001),
@@ -4026,7 +4116,7 @@ pkill -f "fluxbox" 2>/dev/null || true
             self._current_validation_dir()
             or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation")
         )
-        layout_path = ensure_dir(scenario_dir / "random_layouts") / f"{draw['layout_id']}_{draw['seed']}.json"
+        layout_path = ensure_dir(scenario_dir / "random_layouts") / f"{draw['layout_id']}_{draw['random_profile']}_{draw['seed']}.json"
         ball_pose = draw["ball_pose"]
         write_json(
             layout_path,
@@ -4034,6 +4124,7 @@ pkill -f "fluxbox" 2>/dev/null || true
                 "generated_utc": utc_now(),
                 "scenario_id": scenario.id,
                 "layout_family": draw["layout_id"],
+                "random_profile": draw["random_profile"],
                 "random_draw": draw,
                 "targets": [
                     {
@@ -4505,6 +4596,7 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "gather_control_family": scenario.gather_control_family,
             "target_layout_json": target_layout_json,
             "random_layout": bool(random_draw),
+            "random_profile": str(random_draw.get("random_profile", "")) if random_draw else "",
             "random_draw": random_draw,
             "target_model_sdf": scenario.target_model_sdf,
             "zone_model_sdf": scenario.zone_model_sdf,

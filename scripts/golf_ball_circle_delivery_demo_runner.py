@@ -74,10 +74,12 @@ def apply_target_layout(args: argparse.Namespace) -> dict[str, Any]:
     args.ball_x = float(target.get("forward_m", args.ball_x))
     args.ball_y = float(target.get("lateral_m", args.ball_y))
     args.ball_z = float(target.get("z_m", args.ball_z))
+    random_draw = layout.get("random_draw", {}) if isinstance(layout.get("random_draw"), dict) else {}
     return {
         "path": str(layout_path),
         "layout_family": str(layout.get("layout_family", "")),
-        "random_draw": layout.get("random_draw", {}) if isinstance(layout.get("random_draw"), dict) else {},
+        "random_profile": str(layout.get("random_profile", "") or random_draw.get("random_profile", "")),
+        "random_draw": random_draw,
         "target": target,
     }
 
@@ -764,6 +766,8 @@ def main() -> int:
     )
     pass_flag = bool(shot_outcome.get("pass", False))
     mission_time_s = max(float(args.sample_duration_s), float(args.drive_duration_s))
+    random_draw = target_layout.get("random_draw", {}) if isinstance(target_layout.get("random_draw"), dict) else {}
+    random_profile = str(target_layout.get("random_profile", "") or random_draw.get("random_profile", ""))
     target_result = {
         "target_id": "ball_1",
         "mission_completed_pass": pass_flag,
@@ -775,6 +779,8 @@ def main() -> int:
         "fetch_to_pose_failure_reason": "" if pass_flag else str(shot_outcome.get("reason", "missed_delivery_radius")),
         "shot_outcome": shot_outcome,
         "approach_contact_metrics": approach_metrics,
+        "random_profile": random_profile,
+        "random_draw": random_draw,
     }
     verdict = {
         "type": "gather_mission",
@@ -793,6 +799,8 @@ def main() -> int:
         "fetch_pose_world": shot_outcome["fetch_pose_world"],
         "target_layout_json": str(args.target_layout_json or ""),
         "target_layout": target_layout,
+        "random_profile": random_profile,
+        "random_draw": random_draw,
         "shot_outcome": shot_outcome,
         "approach_contact_metrics": approach_metrics,
         "mission_time_s": round(mission_time_s, 6),

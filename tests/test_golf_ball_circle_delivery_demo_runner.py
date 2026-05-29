@@ -58,6 +58,7 @@ def test_apply_target_layout_sets_ball_pose_from_layout(tmp_path):
         json.dumps(
             {
                 "layout_family": "bounded_random_golf_ball_circle_delivery",
+                "random_profile": "local_visual_v1",
                 "random_draw": {"seed": 123},
                 "targets": [
                     {
@@ -83,6 +84,7 @@ def test_apply_target_layout_sets_ball_pose_from_layout(tmp_path):
     assert args.ball_x == pytest.approx(0.52)
     assert args.ball_y == pytest.approx(-0.11)
     assert args.ball_z == pytest.approx(0.021336)
+    assert layout["random_profile"] == "local_visual_v1"
     assert layout["random_draw"]["seed"] == 123
 
 

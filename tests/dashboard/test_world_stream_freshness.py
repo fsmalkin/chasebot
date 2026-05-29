@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import socket
 import sys
@@ -19,6 +20,36 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 import dashboard_service  # noqa: E402
+
+
+def test_bounded_golf_fetch_random_draw_profiles_are_seeded_and_bounded():
+    corridor_a = dashboard_service.bounded_golf_fetch_random_draw(seed=123)
+    corridor_b = dashboard_service.bounded_golf_fetch_random_draw(seed=123)
+
+    assert corridor_a == corridor_b
+    assert corridor_a["random_profile"] == dashboard_service.GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT
+    corridor_bounds = corridor_a["bounds"]
+    assert corridor_bounds["forward_min_m"] <= corridor_a["ball_pose"]["x"] <= corridor_bounds["forward_max_m"]
+    assert corridor_bounds["lateral_min_m"] <= corridor_a["ball_pose"]["y"] <= corridor_bounds["lateral_max_m"]
+    assert corridor_a["robot_lateral_offset_m"] == pytest.approx(0.0)
+    assert corridor_a["robot_yaw_error_deg"] == pytest.approx(0.0)
+
+    visual = dashboard_service.bounded_golf_fetch_random_draw(
+        seed=123,
+        profile=dashboard_service.GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL,
+    )
+    visual_bounds = visual["bounds"]
+    assert visual["random_profile"] == dashboard_service.GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL
+    assert visual_bounds["distance_min_m"] <= visual["ball_target_distance_m"] <= visual_bounds["distance_max_m"]
+    assert visual_bounds["angle_min_deg"] <= visual["ball_target_angle_deg"] <= visual_bounds["angle_max_deg"]
+    assert visual_bounds["robot_standoff_min_m"] <= visual["robot_standoff_m"] <= visual_bounds["robot_standoff_max_m"]
+    assert visual_bounds["robot_lateral_min_m"] <= visual["robot_lateral_offset_m"] <= visual_bounds["robot_lateral_max_m"]
+    assert visual_bounds["robot_yaw_error_min_deg"] <= visual["robot_yaw_error_deg"] <= visual_bounds["robot_yaw_error_max_deg"]
+    assert visual["robot_ball_separation_m"] >= visual_bounds["min_robot_ball_separation_m"]
+    for pose_key in ("ball_pose", "robot_pose"):
+        pose = visual[pose_key]
+        assert visual_bounds["world_x_min_m"] <= pose["x"] <= visual_bounds["world_x_max_m"]
+        assert visual_bounds["world_y_min_m"] <= pose["y"] <= visual_bounds["world_y_max_m"]
 
 
 def _install_world_stream_stubs() -> None:
@@ -1336,6 +1367,7 @@ def test_beta_dashboard_includes_primary_golf_fetch_cta_and_stage_mapping():
     assert "Run Random Golf-Ball Delivery" in html
     assert "Start + Run Random Golf-Ball Delivery" in html
     assert "random_layout: true" in html
+    assert "random_profile: 'local_visual_v1'" in html
     assert "Run Golf-Ball Circle Delivery" not in html
     assert '<link rel="icon" href="data:,">' in html
     assert 'onload="if (window.operatorFrameLoaded)' in html
@@ -1355,7 +1387,7 @@ def test_browser_dashboard_promotes_golf_fetch_as_featured_demo():
     js_path = REPO_ROOT / "runtime/dashboard/browser_dashboard.js"
     js = js_path.read_text(encoding="utf-8")
 
-    golf_demo = "{ id: 'golf_ball_circle_delivery_uat', label: 'Random Golf-Ball Delivery', randomLayout: true }"
+    golf_demo = "{ id: 'golf_ball_circle_delivery_uat', label: 'Random Golf-Ball Delivery', randomLayout: true, randomProfile: 'local_visual_v1' }"
     corral_demo = "{ id: 'corral_single_ball_place', label: 'Single-Ball Corral' }"
     gather_demo = "{ id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' }"
     route_demo = "{ id: 'visit_route_planning', label: 'LLM Route Planning' }"
@@ -1370,7 +1402,9 @@ def test_browser_dashboard_promotes_golf_fetch_as_featured_demo():
     assert "renderMissionSnapshot(state);" in js
     assert "final_three_ball_corral_pass" in js
     assert "data-demo-random-layout" in js
+    assert "data-demo-random-profile" in js
     assert "random_layout: true" in js
+    assert "random_profile: randomProfile || 'corridor_contact_v1'" in js
 
 
 def test_browser_dashboard_includes_multi_ball_mission_snapshot_panel():
@@ -1792,10 +1826,61 @@ def test_request_golf_fetch_random_cta_from_stopped_preserves_random_override(mo
     assert controller.pending_scenario_id == dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID
     assert controller.pending_scenario_overrides["random_layout"] is True
     assert controller.pending_scenario_overrides["random_seed"] == 456
+    assert controller.pending_scenario_overrides["random_profile"] == dashboard_service.GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT
     assert controller.pending_scenario_overrides["world_file"] == dashboard_service.CALIBRATED_GOLF_TURF_WORLD_FILE
     assert controller.pending_scenario_overrides["surface_profile"] == "calibrated_golf_turf"
     assert started
     assert started[0].target == controller._start_environment_worker
+
+
+def test_request_golf_fetch_random_cta_accepts_local_visual_profile(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["environment_state"] = "environment_ready"
+    controller.state["scenario_state"] = "ready"
+    controller._refresh_control_plane_state = lambda force=False: None
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            started.append(self)
+
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_scenario_run(
+        dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID,
+        {
+            "random_layout": True,
+            "random_profile": dashboard_service.GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL,
+        },
+    )
+
+    assert status == 202
+    assert payload["accepted"] is True
+    assert controller.pending_scenario_overrides["random_profile"] == dashboard_service.GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL
+    assert started
+    assert started[0].target == controller._reset_environment_worker
+
+
+def test_request_golf_fetch_random_cta_rejects_unknown_profile(tmp_path):
+    controller = _make_controller(tmp_path)
+
+    status, payload = controller.request_scenario_run(
+        dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID,
+        {"random_layout": True, "random_profile": "wide_open_v0"},
+    )
+
+    assert status == 400
+    assert payload["accepted"] is False
+    assert payload["error"] == "unknown random_profile: wide_open_v0"
 
 
 def test_robot_sdf_name_for_startup_defaults_to_baseline(tmp_path):
@@ -2060,7 +2145,11 @@ def test_run_golf_fetch_cta_random_layout_uses_bounded_generated_layout(tmp_path
     controller.state["dashboard_url"] = "http://127.0.0.1:8860/"
     controller._scenarios_dir = lambda: tmp_path / "scenarios"
     controller._current_validation_dir = lambda: tmp_path / "validation"
-    controller.active_scenario_overrides = {"random_layout": True, "random_seed": 123}
+    controller.active_scenario_overrides = {
+        "random_layout": True,
+        "random_profile": dashboard_service.GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL,
+        "random_seed": 123,
+    }
     controller._visit_mission_runtime_state = lambda: {"proof_state": "completed"}
     controller._gather_mission_runtime_state = lambda: {
         "mission_phase": "completed",
@@ -2104,21 +2193,30 @@ def test_run_golf_fetch_cta_random_layout_uses_bounded_generated_layout(tmp_path
     layout = json.loads(layout_path.read_text(encoding="utf-8"))
     target = layout["targets"][0]
     bounds = layout["random_draw"]["bounds"]
-    assert bounds["forward_min_m"] <= target["forward_m"] <= bounds["forward_max_m"]
-    assert bounds["lateral_min_m"] <= target["lateral_m"] <= bounds["lateral_max_m"]
+    assert layout["random_profile"] == dashboard_service.GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL
+    assert layout["random_draw"]["random_profile"] == dashboard_service.GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL
     assert layout["random_draw"]["seed"] == 123
     target_pose = layout["random_draw"]["target_pose"]
-    initial_distance = (
-        (target_pose["x"] - target["forward_m"]) ** 2
-        + (target_pose["y"] - target["lateral_m"]) ** 2
-    ) ** 0.5
+    robot_pose = layout["random_draw"]["robot_pose"]
+    initial_distance = math.hypot(target_pose["x"] - target["forward_m"], target_pose["y"] - target["lateral_m"])
     assert initial_distance >= target_pose["radius_m"] + bounds["min_initial_delivery_margin_m"]
+    assert bounds["distance_min_m"] <= initial_distance <= bounds["distance_max_m"]
+    assert bounds["angle_min_deg"] <= layout["random_draw"]["ball_target_angle_deg"] <= bounds["angle_max_deg"]
+    assert bounds["robot_standoff_min_m"] <= layout["random_draw"]["robot_standoff_m"] <= bounds["robot_standoff_max_m"]
+    assert bounds["robot_lateral_min_m"] <= layout["random_draw"]["robot_lateral_offset_m"] <= bounds["robot_lateral_max_m"]
+    assert bounds["robot_yaw_error_min_deg"] <= layout["random_draw"]["robot_yaw_error_deg"] <= bounds["robot_yaw_error_max_deg"]
+    assert bounds["world_x_min_m"] <= target["forward_m"] <= bounds["world_x_max_m"]
+    assert bounds["world_y_min_m"] <= target["lateral_m"] <= bounds["world_y_max_m"]
+    assert bounds["world_x_min_m"] <= robot_pose["x"] <= bounds["world_x_max_m"]
+    assert bounds["world_y_min_m"] <= robot_pose["y"] <= bounds["world_y_max_m"]
     assert "--robot-x" in command
     assert "--robot-y" in command
     assert "--robot-yaw" in command
     assert command[command.index("--artifact-kind") + 1] == dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
     assert result["random_layout"] is True
+    assert result["random_profile"] == dashboard_service.GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL
     assert result["random_draw"]["seed"] == 123
+    assert result["random_draw"]["robot_ball_separation_m"] >= bounds["min_robot_ball_separation_m"]
     assert result["target_layout_json"] == str(layout_path)
 
 

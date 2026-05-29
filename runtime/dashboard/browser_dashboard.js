@@ -82,7 +82,7 @@ const controls = {
 };
 
 const demoFlow = [
-  { id: 'golf_ball_circle_delivery_uat', label: 'Random Golf-Ball Delivery', randomLayout: true },
+  { id: 'golf_ball_circle_delivery_uat', label: 'Random Golf-Ball Delivery', randomLayout: true, randomProfile: 'local_visual_v1' },
   { id: 'corral_single_ball_place', label: 'Single-Ball Corral' },
   { id: 'gather_three_ball_zone', label: 'Gather 3 Ball Zone' },
   { id: 'visit_route_planning', label: 'LLM Route Planning' },
@@ -803,6 +803,7 @@ function renderDemoButtons(state, completed) {
         type="button"
         data-demo-run="${featured.id}"
         data-demo-random-layout="${featured.randomLayout ? 'true' : 'false'}"
+        data-demo-random-profile="${featured.randomProfile || ''}"
         data-testid="btn-demo-${featured.id}"
       ${canRunScenario ? '' : 'disabled'}>
       <span class="demo-name">${featured.label}</span>
@@ -1128,8 +1129,12 @@ stateEls.demoList.addEventListener('click', async (event) => {
   }
   const scenarioId = target.getAttribute('data-demo-run') || '';
   const randomLayout = target.getAttribute('data-demo-random-layout') === 'true';
+  const randomProfile = target.getAttribute('data-demo-random-profile') || '';
   if (scenarioId) {
-    await runScenarioById(scenarioId, randomLayout ? { random_layout: true } : {});
+    await runScenarioById(
+      scenarioId,
+      randomLayout ? { random_layout: true, random_profile: randomProfile || 'corridor_contact_v1' } : {}
+    );
   }
 });
 

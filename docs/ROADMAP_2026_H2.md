@@ -600,6 +600,10 @@ generalization gate.
      `0.121m` ball displacement)
    - seeded random/generalization was not run for Nav2 corridor-push; do not
      claim generalized behavior from saved anchors
+   - dashboard random visual UAT is now profile-scoped: the green CTA uses
+     `local_visual_v1` for broader bounded visual stress, while
+     `corridor_contact_v1` preserves the narrow contact-ready diagnostic draw;
+     neither replaces the seeded `fetch_generalization_gate`
    - updated next spike:
      `spike/fetch-arch-ai-push-coast-servo-20260529`
    - updated interpretation:

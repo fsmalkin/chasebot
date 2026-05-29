@@ -84,6 +84,15 @@ and recentering; the AI/model layer starts in shadow mode as the handoff and
 maneuver-class proposer. This remains distinct from the old
 `nav2_mppi_follow_path_reacquire_v1` pre-stage evidence branch.
 
+May 29, 2026 dashboard UAT refinement: dashboard random golf-fetch runs now
+separate visual stress from evidence gates. `corridor_contact_v1` preserves the
+narrow contact-ready random draw for contact diagnostics. `local_visual_v1` is
+the green dashboard CTA default and samples a wider bounded ball-target and
+robot setup geometry for visual UAT. These wide CTA failures should be
+classified as controller-stage backlog evidence, not as architecture promotion
+failures. Promotion still requires saved-layout gates and the seeded
+`fetch_generalization_gate`.
+
 May 29, 2026 model-planning refinement: V-JEPA-style world models are relevant
 as an architectural pattern for scoring candidate actions against predicted
 physical outcomes, but full video world models are not the onboard control

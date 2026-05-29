@@ -530,7 +530,7 @@ async function runScenario(id, options) {
 }
 
 async function runLatestGolfFetch() {
-  await runScenario(LATEST_GOLF_FETCH_SCENARIO_ID, { random_layout: true });
+  await runScenario(LATEST_GOLF_FETCH_SCENARIO_ID, { random_layout: true, random_profile: 'local_visual_v1' });
 }
 
 async function dispatchIntent(intent) {
