@@ -15,6 +15,25 @@ The target capability is a robot-owned last-meter architecture that can deliver
 the ball to a requested target pose from varied robot, ball, and target geometry,
 not only the current saved layouts.
 
+## Next Major Milestone
+
+Deliver Generalized Fetch-To-Pose v1: a no-shoot, robot-owned local fetch
+behavior that combines Nav2 corridor tracking with a guarded AI
+push-coast/contact-stability layer, proven on saved layouts and the first
+seeded random generalization gate.
+
+Milestone acceptance:
+
+1. Saved-layout `zero`, `left05`, and `right05` pass `3/3` in the canonical
+   calibrated golf-ball/turf lane with no retries and `0.300m` delivery radius.
+2. The first seeded random `fetch_generalization_gate` set runs; reproducible
+   failures are frozen into named saved layouts before tuning.
+3. The AI push-coast/contact-stability layer first passes shadow scoring on
+   saved anchors, Nav2 stop-short evidence, and seeded layouts.
+4. Learned execution, when enabled, remains inside deterministic guards for
+   command bounds, target freshness, ball drift, retry budget, safe stop, and
+   `/odom`/contract preservation.
+
 ## May 28, 2026 Direction
 
 The research pass selected a no-shoot runtime direction. The target

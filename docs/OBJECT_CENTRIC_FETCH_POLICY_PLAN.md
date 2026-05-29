@@ -20,6 +20,11 @@ The previous gather/place objective remains useful as negative baseline
 evidence, but success is no longer final stop in the corral. Success is
 trajectory intersection with a delivery radius around the requested target pose.
 
+Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
+robot-owned local fetch behavior that combines Nav2 corridor tracking with a
+guarded AI push-coast/contact-stability layer, proven on saved layouts and the
+first seeded random generalization gate.
+
 May 29, 2026 architecture update: keep fetch no-shoot and robot-owned. The
 Nav2 corridor-push spike was worth running because it proved Nav2 can make
 useful bounded corridor contact, but it did not promote as the sole contact

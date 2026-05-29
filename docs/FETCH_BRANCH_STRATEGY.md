@@ -4,6 +4,11 @@ This document owns branch-role decisions for calibrated golf fetch work. Use the
 roadmap for priority, `ACTIVE_WORKFLOW.md` for gates and commands, and the
 `OBJECT_CENTRIC_*` docs for research details.
 
+Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
+robot-owned local fetch behavior that combines Nav2 corridor tracking with a
+guarded AI push-coast/contact-stability layer, proven on saved layouts and the
+first seeded random generalization gate.
+
 ## Recommended Branch Roles
 
 1. Stable demo/UAT branch:

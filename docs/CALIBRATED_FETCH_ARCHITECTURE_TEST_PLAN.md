@@ -6,6 +6,11 @@ same control loop under different names. The active UAT baseline remains
 research portfolio should deliberately test wider designs that may generalize
 better, reduce telemetry fragility, or simplify eventual hardware transfer.
 
+Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
+robot-owned local fetch behavior that combines Nav2 corridor tracking with a
+guarded AI push-coast/contact-stability layer, proven on saved layouts and the
+first seeded random generalization gate.
+
 May 29, 2026 update: keep the runtime architecture no-shoot. The
 `nav2_followpath_corridor_push_v1` spike showed Nav2 can own useful real-time
 `FollowPath` corridor tracking, but not the full contact outcome by itself.

@@ -502,6 +502,11 @@ Acceptance:
 
 Current direction update:
 
+Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
+robot-owned local fetch behavior that combines Nav2 corridor tracking with a
+guarded AI push-coast/contact-stability layer, proven on saved layouts and the
+first seeded random generalization gate.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
@@ -554,6 +559,11 @@ Current direction update:
      `pre_stage_path_clearance_guard`, so the roadmap stays with the current
      object-centric fetch baseline rather than an MPPI alternative branch
 10. May 28, 2026 Nav2 corridor-push first spike and AI fallback:
+   - next major milestone:
+     Deliver Generalized Fetch-To-Pose v1, a no-shoot, robot-owned local fetch
+     behavior that combines Nav2 corridor tracking with a guarded AI
+     push-coast/contact-stability layer, proven on saved layouts and the first
+     seeded random generalization gate
    - keep the runtime fetch architecture as robot-owned bounded push-and-coast,
      not intentional shooting or direct ball impulse
    - use contact-aware geometric-shooter artifacts as calibrated roll/coast
