@@ -10,7 +10,7 @@
 - [TELEGRAM_MCP.md](TELEGRAM_MCP.md) — Repo-local Telegram wait bridge and Codex MCP setup
 
 ### Architecture and Design
-- [LLM_CONTROL_ARCHITECTURE.md](LLM_CONTROL_ARCHITECTURE.md) - Layered LM/VLA supervisor plus guarded local learned-model control stance
+- [LLM_CONTROL_ARCHITECTURE.md](LLM_CONTROL_ARCHITECTURE.md) - Layered LM/VLA supervisor, planner-gated fetch handoff, and guarded local learned-model control stance
 - [STACK_DECISIONS_2026.md](STACK_DECISIONS_2026.md) — Locked decisions for the 2026 rebuild
 - [ROBOT_HARDWARE_CONTRACT_ORIN_NANO.md](ROBOT_HARDWARE_CONTRACT_ORIN_NANO.md) — Jetson Orin Nano 8GB hardware contract
 - [ROBOT_HARDWARE_CONSTRAINTS.md](ROBOT_HARDWARE_CONSTRAINTS.md) — Hardware constraints and profiles
@@ -18,7 +18,7 @@
 
 ### Planning and Research
 - [ROADMAP_2026_H2.md](ROADMAP_2026_H2.md) — H2 2026 roadmap
-- [OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md) - Active Generalized Fetch-To-Pose v1 milestone, Nav2 corridor-push evidence, and guarded AI push-coast plan
+- [OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md) - Active bounded Generalized Fetch-To-Pose v1 subsystem milestone, Nav2 corridor-push evidence, and guarded AI push-coast plan
 - [OBJECT_CENTRIC_FETCH_POLICY_SLIDE_DECK.html](OBJECT_CENTRIC_FETCH_POLICY_SLIDE_DECK.html) - 4th-grade slide deck for the calibrated fetch architecture
 - [FETCH_BRANCH_STRATEGY.md](FETCH_BRANCH_STRATEGY.md) - Branch-role and architecture-revisit decisions for calibrated golf fetch
 - [CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md) - Wider architecture portfolio and staged evidence gates for calibrated fetch

@@ -10,6 +10,13 @@ deterministic homebrew contact routines, and a guarded AI/model handoff and
 maneuver-class proposer, proven on saved layouts and the first seeded random
 generalization gate.
 
+Scope correction: this branch strategy is for the bounded local fetch subsystem.
+Major unknowns and arbitrary random scenes require a planner-handoff lane before
+fetch execution. The LLM/world-state planner should classify scenes as
+`fetch_ready_local`, `nav2_reposition_first`, `scan_or_perceive_first`,
+`recovery_or_reaim`, or `ambiguous_or_unsafe_no_go`; only `fetch_ready_local`
+cases count against the local fetch branch.
+
 ## Recommended Branch Roles
 
 1. Stable demo/UAT branch:

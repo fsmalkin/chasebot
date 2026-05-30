@@ -508,6 +508,15 @@ deterministic homebrew contact routines, and a guarded AI/model handoff and
 maneuver-class proposer, proven on saved layouts and the first seeded random
 generalization gate.
 
+Planner-gating correction: this milestone proves the local fetch skill inside a
+bounded envelope. It should not be used as evidence that the robot can handle
+major unknowns. The broader product objective is Planner-Gated Generalized
+Fetch, where the LLM/world-state planner first decides whether a scene is
+`fetch_ready_local`, needs Nav2 repositioning, needs perception/scan, needs a
+known recovery/re-aim routine, or is ambiguous/unsafe and should no-go. Only
+`fetch_ready_local` cases are handed to the fetch subsystem and scored as local
+fetch evidence.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
@@ -584,6 +593,10 @@ generalization gate.
      structured or distilled `tensorrt_int8`-compatible model
    - allow LM/VLA-style models to supervise task mode, failure interpretation,
      and known maneuver choices only through deterministic contracts
+   - add a planner-handoff gate before any "truly random" claim: mixed scene
+     descriptors must be scored on correct routing (`fetch_ready_local`,
+     `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`,
+     `ambiguous_or_unsafe_no_go`) before subsystem success is judged
    - keep deterministic guards authoritative over command bounds, target
      freshness, ball drift, retry budget, safe stop, `/odom`, and frozen
      contracts
