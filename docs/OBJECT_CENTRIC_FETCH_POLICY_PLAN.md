@@ -768,6 +768,11 @@ the same bounded budgets.
      `scripts/dashboard_random_fetch_uat_analyzer.py`; use contact-quality
      flags as stage labels for `setup`, `first_contact`, `push_coast`, and
      `terminal_arrival` backlog before any guarded-live expansion
+   - seeded evidence bridge:
+     score seeded gate output with
+     `scripts/fetch_seeded_gate_evidence_analyzer.py`; run guarded live only for
+     one terminal re-push/re-aim on near-contract stop-short misses after
+     measured object motion
    - promotion precondition:
      no learned execution until shadow predictions improve margin or failure
      classification without guard violations

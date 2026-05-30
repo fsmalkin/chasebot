@@ -104,6 +104,14 @@ dry-run plus a `6 x 1` shadow/evidence pass with `ai_push_coast_servo_v1`.
 Guarded live execution should start only with one terminal correction for
 stop-short or near-contract misses after shadow scoring is useful.
 
+May 30, 2026 guarded-live refinement: score seeded gates with
+`scripts/fetch_seeded_gate_evidence_analyzer.py` before promotion or tuning.
+The first guarded-live executor remains terminal-only: one deterministic
+re-push/re-aim cycle may run only after Nav2/fetch has produced measured object
+motion and the miss is near-contract. Setup, capture-entry, first-contact,
+push/coast quality, ball-escape, stale-state, broad lateral/yaw, and non-repro
+random failures stay in shadow/watchlist evidence until reproduced.
+
 May 29, 2026 model-planning refinement: V-JEPA-style world models are relevant
 as an architectural pattern for scoring candidate actions against predicted
 physical outcomes, but full video world models are not the onboard control

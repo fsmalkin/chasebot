@@ -103,3 +103,62 @@ def test_shadow_stage_classification_uses_contact_flags_and_terminal_reason():
         "ball_lateral_knock_away",
         "contact_trajectory_angle_error",
     ]
+
+
+def test_guarded_live_rejects_setup_stage_recenter():
+    decision = decide_ai_push_coast_handoff(
+        robot_pose={"x": 0.45, "y": 0.35, "yaw": 0.0},
+        ball_pose={"x": 0.72, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.12, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+        nav2_attempted=True,
+        distance_to_fetch_pose_m=0.4,
+        closest_approach_distance_m=0.4,
+        latest_still_s=0.6,
+        ball_moved_since_fetch=True,
+        mode="guarded_live",
+    )
+
+    assert decision["ai_push_coast_proposal"]["maneuver_class"] == "recenter_right"
+    assert decision["ai_push_coast_guard"]["accepted"] is False
+    assert "maneuver_recenter_right_not_terminal_live" in decision["ai_push_coast_guard"]["reasons"]
+    assert "stage_setup_not_live" in decision["ai_push_coast_guard"]["reasons"]
+
+
+def test_guarded_live_requires_observed_object_motion():
+    decision = decide_ai_push_coast_handoff(
+        robot_pose={"x": 0.45, "y": 0.0, "yaw": 0.0},
+        ball_pose={"x": 0.72, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.12, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+        nav2_attempted=True,
+        distance_to_fetch_pose_m=0.4,
+        closest_approach_distance_m=0.4,
+        latest_still_s=0.6,
+        ball_moved_since_fetch=False,
+        mode="guarded_live",
+    )
+
+    assert decision["ai_push_coast_proposal"]["maneuver_class"] == "terminal_repush"
+    assert decision["ai_push_coast_guard"]["accepted"] is False
+    assert "object_motion_not_observed" in decision["ai_push_coast_guard"]["reasons"]
+
+
+def test_guarded_live_rejects_capture_entry_timeout_stage():
+    decision = decide_ai_push_coast_handoff(
+        robot_pose={"x": 0.45, "y": 0.0, "yaw": 0.0},
+        ball_pose={"x": 0.72, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.12, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+        nav2_attempted=True,
+        distance_to_fetch_pose_m=0.4,
+        closest_approach_distance_m=0.4,
+        latest_still_s=0.6,
+        ball_moved_since_fetch=True,
+        shot_outcome={"reason": "capture_entry_timeout"},
+        mode="guarded_live",
+    )
+
+    assert decision["ai_push_coast_proposal"]["maneuver_class"] == "terminal_repush"
+    assert decision["ai_push_coast_guard"]["accepted"] is False
+    assert "stage_setup_not_live" in decision["ai_push_coast_guard"]["reasons"]

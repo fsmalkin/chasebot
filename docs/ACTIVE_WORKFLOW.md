@@ -625,6 +625,8 @@ Live gates:
    - no-shoot baseline command:
      `python scripts/fetch_generalization_gate.py --campaign-id <id> --random-cases 6 --runs 1 --architecture object_centric_gather_policy_v1`
    - dry-run command: `python scripts/fetch_generalization_gate.py --campaign-id <id> --dry-run --random-cases 6`
+   - evidence analyzer:
+     `python scripts/fetch_seeded_gate_evidence_analyzer.py --campaign-id <id> --gate-summary <gate_summary.json> --local-visual-summary <random_fetch_uat_summary.json> --saved-anchor-summary <architecture_revisit_summary.json> [--saved-anchor-summary ...]`
    - default comparison includes `object_centric_gather_policy_v1` and
      `contact_aware_geometric_shooter`; use explicit `--architecture` for
      no-shoot runtime gates until an AI-assisted push/coast architecture is
@@ -687,6 +689,13 @@ Live gates:
    - deterministic routines own fine pre-capture alignment, first-contact
      stabilization, terminal stop-short correction, bounded re-push/coast, and
      recentering
+   - guarded-live v1 is terminal-only: it may accept one deterministic
+     re-push/re-aim cycle only after measured object motion and a near-contract
+     terminal miss; setup, capture-entry, first-contact, push/coast quality,
+     ball escape, stale state, and broad lateral/yaw failures remain shadow
+     labels/watchlist evidence
+   - if the guarded-live terminal probe fails before a terminal miss, stop the
+     guarded-live ladder and repair the earlier setup/contact stage first
    - learned live execution remains blocked until saved-anchor and seeded-random
      shadow scoring shows benefit and deterministic guards accept the proposed
      handoff or maneuver class

@@ -609,6 +609,11 @@ generalization gate.
      `scripts/dashboard_random_fetch_uat_analyzer.py`; delivery passes with
      contact flags become stage-supervisor backlog/training evidence, not
      milestone promotion evidence
+   - seeded evidence step:
+     score `fetch_generalization_gate` output with
+     `scripts/fetch_seeded_gate_evidence_analyzer.py`; non-repro random
+     failures become watchlist cases, while reproduced failures must be frozen
+     before tuning
    - updated next spike:
      `spike/fetch-arch-ai-push-coast-servo-20260529`
    - updated interpretation:
