@@ -129,6 +129,20 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
 
 /* â”€â”€ log panel â”€â”€ */
 .watch-log{width:240px;flex-shrink:0;border-left:1px solid var(--line);background:var(--surf);display:flex;flex-direction:column;overflow:hidden}
+.fetch-progress{border-bottom:1px solid var(--line);padding:10px 12px;background:var(--card);flex-shrink:0}
+.fp-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+.fp-title{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+.fp-badge{font-size:10px;font-weight:800;padding:2px 7px;border-radius:7px;background:var(--faint);color:var(--bg)}
+.fp-badge.ok{background:var(--ag);color:var(--accent)}
+.fp-badge.warn{background:var(--wg);color:var(--warn)}
+.fp-badge.bad{background:var(--bdg);color:var(--bad)}
+.fp-headline{font-size:11px;color:var(--ink);line-height:1.35;margin-bottom:8px}
+.fp-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.fp-k{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
+.fp-v{font-size:12px;font-family:var(--mono);color:var(--dim)}
+.fp-v.ok{color:var(--accent)}
+.fp-v.warn{color:var(--warn)}
+.fp-next{margin-top:8px;font-size:10px;color:var(--dim);line-height:1.35;word-break:break-word}
 .wl-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--line);flex-shrink:0}
 .wl-title{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
 .wl-count{font-size:10px;color:var(--faint);font-family:var(--mono)}
@@ -342,6 +356,32 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
 
         <!-- Log panel -->
         <div class="watch-log">
+          <div class="fetch-progress" id="fetch-progress-card">
+            <div class="fp-head">
+              <span class="fp-title">Fetch v1 Progress</span>
+              <span class="fp-badge idle" id="fp-status">-</span>
+            </div>
+            <div class="fp-headline" id="fp-headline">Waiting for evidence package.</div>
+            <div class="fp-grid">
+              <div>
+                <div class="fp-k">Saved</div>
+                <div class="fp-v dim" id="fp-saved">-</div>
+              </div>
+              <div>
+                <div class="fp-k">Seeded</div>
+                <div class="fp-v dim" id="fp-seeded">-</div>
+              </div>
+              <div>
+                <div class="fp-k">Probe</div>
+                <div class="fp-v dim" id="fp-probe">-</div>
+              </div>
+              <div>
+                <div class="fp-k">Promotion</div>
+                <div class="fp-v dim" id="fp-promotion">-</div>
+              </div>
+            </div>
+            <div class="fp-next" id="fp-next">Next: run seeded gate evidence.</div>
+          </div>
           <div class="wl-head">
             <span class="wl-title">Events</span>
             <span class="wl-count" id="wl-count"></span>
@@ -971,7 +1011,53 @@ function renderWatch() {
   renderStages();
   renderMetrics();
   renderButtons();
+  renderFetchProgress();
   renderWatchLog();
+}
+
+function renderFetchProgress() {
+  const fp = S.fetch_progress || {};
+  const saved = fp.saved_anchor || {};
+  const seeded = fp.seeded_shadow_gate || {};
+  const probe = fp.latest_guarded_live_probe || {};
+  const status = fp.status || 'idle';
+  const statusClass = status === 'ok' ? 'ok' : status === 'warn' ? 'warn' : status === 'bad' ? 'bad' : 'idle';
+
+  const badge = document.getElementById('fp-status');
+  if (badge) {
+    badge.className = 'fp-badge ' + statusClass;
+    badge.textContent = status === 'ok' ? 'green' : status === 'warn' ? 'watch' : status === 'bad' ? 'blocked' : '-';
+  }
+
+  setText('fp-headline', fp.headline || 'Waiting for evidence package.');
+  setText('fp-saved', ratioText(saved.pass_count, saved.total_count));
+  setClass('fp-saved', saved.green ? 'fp-v ok' : saved.total_count ? 'fp-v warn' : 'fp-v dim');
+  setText('fp-seeded', ratioText(seeded.pass_count, seeded.total_count, seeded.fail_count));
+  setClass('fp-seeded', seeded.fail_count ? 'fp-v warn' : seeded.total_count ? 'fp-v ok' : 'fp-v dim');
+  setText('fp-probe', probe.campaign_id ? (probe.pass ? 'pass' : 'fail') : '-');
+  setClass('fp-probe', probe.campaign_id ? (probe.pass ? 'fp-v ok' : 'fp-v bad') : 'fp-v dim');
+  setText('fp-promotion', fp.promotion_evidence ? 'yes' : 'not yet');
+  setClass('fp-promotion', fp.promotion_evidence ? 'fp-v ok' : 'fp-v warn');
+  setText('fp-next', 'Next: ' + (fp.recommended_next_action || 'run seeded gate evidence'));
+}
+
+function ratioText(passCount, totalCount, failCount) {
+  const p = Number(passCount || 0);
+  const t = Number(totalCount || 0);
+  if (!t) return '-';
+  if (failCount == null) return `${p}/${t}`;
+  const f = Number(failCount || 0);
+  return `${p}/${t}${f ? ` | ${f} fail` : ''}`;
+}
+
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function setClass(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.className = value;
 }
 
 function renderWatchLog() {
@@ -1105,7 +1191,8 @@ function renderImages() {
   const imgY = document.getElementById('img-yolo');
   const phY  = document.getElementById('ph-yolo');
   const bY   = document.getElementById('badge-yolo');
-  if (live.yolo_debug) {
+  const yoloRenderable = Boolean(live.yolo_debug && S.environment_state !== 'stopped' && Number(S.debug_frame_count || 0) > 0);
+  if (yoloRenderable) {
     preloadFeedImage('yolo', live.yolo_debug);
     if (!streamUi.yolo.lastSuccessfulLoadMs && !streamUi.yolo.hadError) {
       imgY.style.display = 'none';
@@ -1119,11 +1206,13 @@ function renderImages() {
       reconnectStream('yolo', live.yolo_debug);
     }
   } else {
+    imgY.removeAttribute('src');
     imgY.style.display = 'none';
     phY.style.display  = '';
+    streamUi.yolo.hadError = false;
     bY.className = 'badge idle';
     bY.title = '';
-    bY.textContent = '-';
+    bY.textContent = S.environment_state === 'stopped' ? 'stopped' : '-';
   }
 }
 

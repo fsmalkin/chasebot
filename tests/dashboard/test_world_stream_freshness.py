@@ -1379,8 +1379,88 @@ def test_beta_dashboard_includes_primary_golf_fetch_cta_and_stage_mapping():
     assert "Acquiring the ball" in html
     assert "Controlling the ball" in html
     assert "Placing ball into the zone" in html
+    assert "Fetch v1 Progress" in html
+    assert 'id="fp-status"' in html
+    assert "renderFetchProgress()" in html
     assert "routeOrderText" in html
     assert "final_three_ball_corral_pass" in html
+
+
+def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path, monkeypatch):
+    session_root = tmp_path / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    controller = _make_controller(tmp_path)
+    controller._fetch_progress_cache = {}
+    controller._fetch_progress_cache_at = 0.0
+
+    evidence_dir = session_root / "fetch_evidence" / "fetch_seeded_gate_evidence_analyzer"
+    _write_json(
+        evidence_dir / "evidence_summary.json",
+        {
+            "type": "fetch_seeded_gate_evidence_analyzer",
+            "campaign_id": "fetch_evidence",
+            "recommended_next_action": "rerun_watchlist_before_guarded_live",
+            "milestone_interpretation": "non_repro_watchlist_before_promotion",
+            "promotion_evidence": False,
+            "saved_anchor_context": {
+                "campaign_id": "saved_anchor_campaign",
+                "candidate_rows": [
+                    {
+                        "family": "ai_push_coast_servo_v1",
+                        "layout_id": "zero",
+                        "pass": True,
+                        "worst_closest_approach_distance_m": 0.21,
+                    },
+                    {
+                        "family": "ai_push_coast_servo_v1",
+                        "layout_id": "left05",
+                        "pass": True,
+                        "worst_closest_approach_distance_m": 0.18,
+                    },
+                    {
+                        "family": "ai_push_coast_servo_v1",
+                        "layout_id": "right05",
+                        "pass": True,
+                        "worst_closest_approach_distance_m": 0.19,
+                    },
+                ],
+            },
+            "seeded_shadow_gate": {
+                "campaign_id": "seeded_gate",
+                "mode": "shadow",
+                "seed": 20260529,
+                "pass_count": 5,
+                "fail_count": 1,
+                "non_repro_failure_count": 1,
+                "reproduced_failure_count": 0,
+                "guarded_live_candidate_count": 1,
+                "interpretation": "non_repro_watchlist_before_promotion",
+            },
+        },
+    )
+    _write_json(
+        session_root / "guarded_probe" / "gather_mission_repeatability" / "campaign_run_summary.json",
+        {
+            "campaign_id": "guarded_probe",
+            "mission_objective": "fetch_to_pose",
+            "ai_push_coast_mode": "guarded_live",
+            "fetch_to_pose_pass_count": 1,
+            "fetch_to_pose_fail_count": 0,
+            "first_contact_push_alignment_max_deg": 18.2,
+            "fetch_to_pose_time_max_s": 8.7,
+        },
+    )
+
+    state = controller.get_state()
+    progress = state["fetch_progress"]
+    assert progress["milestone"] == dashboard_service.FETCH_PROGRESS_MILESTONE
+    assert progress["status"] == "warn"
+    assert progress["saved_anchor"]["green"] is True
+    assert progress["saved_anchor"]["pass_count"] == 3
+    assert progress["seeded_shadow_gate"]["pass_count"] == 5
+    assert progress["seeded_shadow_gate"]["non_repro_failure_count"] == 1
+    assert progress["latest_guarded_live_probe"]["pass"] is True
+    assert progress["recommended_next_action"] == "rerun_watchlist_before_guarded_live"
 
 
 def test_browser_dashboard_promotes_golf_fetch_as_featured_demo():

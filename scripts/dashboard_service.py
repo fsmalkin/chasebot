@@ -91,6 +91,8 @@ WORLD_STREAM_TRANSPORT_MAX_AGE_S = 4.0
 WORLD_STREAM_RENDERABLE_GRACE_S = 10.0
 DEFAULT_IDLE_SHUTDOWN_AFTER_S = 30.0 * 60.0
 IDLE_SHUTDOWN_WATCHDOG_POLL_S = 15.0
+FETCH_PROGRESS_CACHE_TTL_S = 5.0
+FETCH_PROGRESS_MILESTONE = "Generalized Fetch-To-Pose v1"
 GATE_SERVICE_READY_TIMEOUT_S = 25.0
 GATE_SERVICE_POLL_S = 0.5
 DEFAULT_CONTROL_MODE = "host_powershell"
@@ -706,6 +708,8 @@ class DashboardController:
         self.launcher_project = ""
         self.host_repo_mount_source = os.environ.get("HOST_REPO_MOUNT_SOURCE", "").strip()
         self._control_plane_checked_at = 0.0
+        self._fetch_progress_cache_at = 0.0
+        self._fetch_progress_cache: Dict[str, Any] = {}
         self.contract = self._load_contract()
         self.frozen_intents = {intent["name"]: intent for intent in self.contract.get("intents", [])}
         self.state_lock = threading.RLock()
@@ -1810,6 +1814,160 @@ class DashboardController:
             "same_session_partition": same_session_partition,
         }
 
+    def _latest_session_artifact_json(
+        self,
+        relative_parts: tuple[str, ...],
+        *,
+        predicate: Optional[Any] = None,
+    ) -> tuple[Optional[Path], Dict[str, Any]]:
+        if not SESSION_ROOT.is_dir():
+            return None, {}
+        candidates: list[tuple[float, Path]] = []
+        for session_dir in SESSION_ROOT.iterdir():
+            if not session_dir.is_dir():
+                continue
+            path = session_dir.joinpath(*relative_parts)
+            if not path.is_file():
+                continue
+            try:
+                candidates.append((path.stat().st_mtime, path))
+            except OSError:
+                continue
+        for _mtime, path in sorted(candidates, key=lambda item: item[0], reverse=True):
+            payload = read_json(path)
+            if not payload:
+                continue
+            if predicate is not None and not predicate(payload):
+                continue
+            return path, payload
+        return None, {}
+
+    @staticmethod
+    def _artifact_display_path(path: Optional[Path]) -> str:
+        if path is None:
+            return ""
+        try:
+            return str(path.resolve().relative_to(REPO_ROOT))
+        except ValueError:
+            return str(path)
+
+    def _latest_fetch_progress_state(self) -> Dict[str, Any]:
+        now = time.monotonic()
+        cached_at = float(getattr(self, "_fetch_progress_cache_at", 0.0) or 0.0)
+        cached = getattr(self, "_fetch_progress_cache", {})
+        if cached and now - cached_at < FETCH_PROGRESS_CACHE_TTL_S:
+            return json.loads(json.dumps(cached))
+
+        def _is_seeded_gate_evidence(payload: Dict[str, Any]) -> bool:
+            return str(payload.get("type", "") or "") == "fetch_seeded_gate_evidence_analyzer"
+
+        evidence_path, evidence = self._latest_session_artifact_json(
+            ("fetch_seeded_gate_evidence_analyzer", "evidence_summary.json"),
+            predicate=_is_seeded_gate_evidence,
+        )
+        seeded_gate_payload = evidence.get("seeded_shadow_gate", evidence.get("seeded_gate", {}))
+        seeded_gate = seeded_gate_payload if isinstance(seeded_gate_payload, dict) else {}
+        saved_context = evidence.get("saved_anchor_context", {}) if isinstance(evidence.get("saved_anchor_context"), dict) else {}
+
+        saved_layouts: Dict[str, Dict[str, Any]] = {}
+        candidate_rows = saved_context.get("candidate_rows", [])
+        for row in candidate_rows if isinstance(candidate_rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            layout_id = str(row.get("layout_id", "") or "").strip()
+            if not layout_id or layout_id in saved_layouts:
+                continue
+            saved_layouts[layout_id] = {
+                "layout_id": layout_id,
+                "pass": bool(row.get("pass", False)),
+                "closest_m": row.get("worst_closest_approach_distance_m"),
+                "summary_path": str(row.get("summary_path", "") or ""),
+            }
+        saved_total = len(saved_layouts)
+        saved_pass = sum(1 for row in saved_layouts.values() if row.get("pass"))
+        saved_green = saved_total > 0 and saved_pass == saved_total
+
+        def _is_guarded_fetch_probe(payload: Dict[str, Any]) -> bool:
+            return (
+                str(payload.get("mission_objective", "") or "") == "fetch_to_pose"
+                and str(payload.get("ai_push_coast_mode", "") or "") == "guarded_live"
+            )
+
+        probe_path, probe = self._latest_session_artifact_json(
+            ("gather_mission_repeatability", "campaign_run_summary.json"),
+            predicate=_is_guarded_fetch_probe,
+        )
+        probe_pass_count = int(probe.get("fetch_to_pose_pass_count", 0) or 0) if probe else 0
+        probe_fail_count = int(probe.get("fetch_to_pose_fail_count", 0) or 0) if probe else 0
+        probe_pass = bool(probe and probe_pass_count > 0 and probe_fail_count == 0)
+
+        seeded_pass_count = int(seeded_gate.get("pass_count", 0) or 0) if seeded_gate else 0
+        seeded_fail_count = int(seeded_gate.get("fail_count", 0) or 0) if seeded_gate else 0
+        seeded_total = seeded_pass_count + seeded_fail_count
+        non_repro_count = int(seeded_gate.get("non_repro_failure_count", 0) or 0) if seeded_gate else 0
+        reproduced_count = int(seeded_gate.get("reproduced_failure_count", 0) or 0) if seeded_gate else 0
+        guarded_candidates = int(seeded_gate.get("guarded_live_candidate_count", 0) or 0) if seeded_gate else 0
+        promotion_evidence = bool(evidence.get("promotion_evidence", False)) if evidence else False
+        recommended_next_action = str(evidence.get("recommended_next_action", "") or "") if evidence else ""
+        milestone_interpretation = str(evidence.get("milestone_interpretation", "") or "") if evidence else ""
+
+        if not evidence:
+            status = "idle"
+            headline = "No seeded fetch evidence package found yet."
+        elif promotion_evidence:
+            status = "ok"
+            headline = f"Saved anchors green; seeded gate {seeded_pass_count}/{seeded_total} is promotion-grade."
+        elif saved_green and non_repro_count:
+            status = "warn"
+            headline = f"Saved anchors green; seeded shadow {seeded_pass_count}/{seeded_total} has {non_repro_count} non-repro watchlist case."
+        elif saved_green:
+            status = "warn" if seeded_fail_count else "ok"
+            headline = f"Saved anchors green; seeded shadow {seeded_pass_count}/{seeded_total} complete."
+        else:
+            status = "warn" if evidence else "idle"
+            headline = f"Saved anchors {saved_pass}/{saved_total}; seeded shadow {seeded_pass_count}/{seeded_total}."
+
+        payload = {
+            "milestone": FETCH_PROGRESS_MILESTONE,
+            "status": status,
+            "headline": headline,
+            "recommended_next_action": recommended_next_action,
+            "milestone_interpretation": milestone_interpretation,
+            "promotion_evidence": promotion_evidence,
+            "evidence_summary_path": self._artifact_display_path(evidence_path),
+            "saved_anchor": {
+                "campaign_id": str(saved_context.get("campaign_id", "") or ""),
+                "pass_count": saved_pass,
+                "total_count": saved_total,
+                "green": saved_green,
+                "layouts": sorted(saved_layouts.values(), key=lambda item: str(item.get("layout_id", ""))),
+            },
+            "seeded_shadow_gate": {
+                "campaign_id": str(seeded_gate.get("campaign_id", "") or ""),
+                "mode": str(seeded_gate.get("mode", "") or ""),
+                "seed": seeded_gate.get("seed"),
+                "pass_count": seeded_pass_count,
+                "fail_count": seeded_fail_count,
+                "total_count": seeded_total,
+                "non_repro_failure_count": non_repro_count,
+                "reproduced_failure_count": reproduced_count,
+                "guarded_live_candidate_count": guarded_candidates,
+                "interpretation": str(seeded_gate.get("interpretation", "") or ""),
+            },
+            "latest_guarded_live_probe": {
+                "campaign_id": str(probe.get("campaign_id", "") or "") if probe else "",
+                "path": self._artifact_display_path(probe_path),
+                "pass": probe_pass,
+                "fetch_to_pose_pass_count": probe_pass_count,
+                "fetch_to_pose_fail_count": probe_fail_count,
+                "first_contact_push_alignment_max_deg": probe.get("first_contact_push_alignment_max_deg") if probe else None,
+                "fetch_to_pose_time_max_s": probe.get("fetch_to_pose_time_max_s") if probe else None,
+            },
+        }
+        self._fetch_progress_cache = json.loads(json.dumps(payload))
+        self._fetch_progress_cache_at = now
+        return payload
+
     def get_state(self) -> Dict[str, Any]:
         self._refresh_control_plane_state()
         with self.state_lock:
@@ -2011,6 +2169,7 @@ class DashboardController:
         snapshot["policy"] = build_policy_snapshot(snapshot, sim_gate_ready=bool(self.sim_gate_container_id))
         snapshot["demo_story"] = demo_story
         snapshot["llm_supervisor"] = self._llm_supervisor_state()
+        snapshot["fetch_progress"] = self._latest_fetch_progress_state()
 
         proof_runtime = self._llm_proof_runtime_state()
         visit_runtime = self._visit_mission_runtime_state()
