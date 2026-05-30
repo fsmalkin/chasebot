@@ -26,7 +26,14 @@ ALLOWED_AI_PUSH_COAST_MODES = (
 
 AI_PUSH_COAST_MAX_TERMINAL_MISS_M = 0.55
 AI_PUSH_COAST_MAX_LATERAL_ERROR_M = 0.22
+AI_PUSH_COAST_MAX_SETUP_YAW_ERROR_DEG = 18.0
 AI_PUSH_COAST_PREDICTED_TERMINAL_GAIN_M = 0.22
+AI_PUSH_COAST_FLAG_STAGE_LABELS = {
+    "pre_contact_lateral_error": "setup",
+    "pre_contact_yaw_error": "setup",
+    "ball_lateral_knock_away": "first_contact",
+    "contact_trajectory_angle_error": "push_coast",
+}
 
 
 def _finite_float(value: Any) -> float | None:
@@ -105,6 +112,57 @@ def _nav2_status(nav2_corridor_push: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+def classify_ai_push_coast_stage(
+    *,
+    approach_contact_metrics: dict[str, Any] | None = None,
+    shot_outcome: dict[str, Any] | None = None,
+    relative_errors: dict[str, Any] | None = None,
+    distance_to_fetch_pose_m: float | None = None,
+    delivery_radius_m: float = 0.0,
+    nav2_attempted: bool = False,
+    terminal_correction_attempted: bool = False,
+) -> dict[str, Any]:
+    approach = approach_contact_metrics if isinstance(approach_contact_metrics, dict) else {}
+    shot = shot_outcome if isinstance(shot_outcome, dict) else {}
+    flags = [str(flag) for flag in approach.get("flags", []) if str(flag)]
+    labels: list[str] = []
+    for flag in flags:
+        stage = AI_PUSH_COAST_FLAG_STAGE_LABELS.get(flag)
+        if stage and stage not in labels:
+            labels.append(stage)
+    errors = relative_errors if isinstance(relative_errors, dict) else {}
+    lateral_error = _finite_float(errors.get("robot_lateral_error_m"))
+    yaw_error_deg = _finite_float(errors.get("robot_yaw_error_deg"))
+    if lateral_error is not None and lateral_error > AI_PUSH_COAST_MAX_LATERAL_ERROR_M:
+        if "setup" not in labels:
+            labels.append("setup")
+    if yaw_error_deg is not None and abs(float(yaw_error_deg)) > AI_PUSH_COAST_MAX_SETUP_YAW_ERROR_DEG:
+        if "setup" not in labels:
+            labels.append("setup")
+    reason = str(shot.get("reason", "") or "")
+    distance = _finite_float(distance_to_fetch_pose_m)
+    radius = max(float(delivery_radius_m), 0.0)
+    if (
+        "missed_delivery_radius" in reason
+        or "stopped_short" in reason
+        or (bool(nav2_attempted) and distance is not None and distance > radius)
+    ):
+        if "terminal_arrival" not in labels:
+            labels.append("terminal_arrival")
+    if bool(terminal_correction_attempted) and "terminal_correction" not in labels:
+        labels.append("terminal_correction")
+    if not labels and bool(approach.get("stable_contact_approach_pass", False)):
+        labels.append("clean_contact")
+    primary = labels[0] if labels else "unknown"
+    return {
+        "primary_stage": primary,
+        "stage_labels": labels,
+        "contact_quality_flags": flags,
+        "stable_contact_approach_pass": bool(approach.get("stable_contact_approach_pass", False)),
+        "shot_reason": reason,
+    }
+
+
 def decide_ai_push_coast_handoff(
     *,
     robot_pose: dict[str, Any] | None,
@@ -118,6 +176,8 @@ def decide_ai_push_coast_handoff(
     closest_approach_distance_m: float | None = None,
     latest_still_s: float | None = None,
     ball_moved_since_fetch: bool = False,
+    approach_contact_metrics: dict[str, Any] | None = None,
+    shot_outcome: dict[str, Any] | None = None,
     mode: str = AI_PUSH_COAST_MODE_SHADOW,
 ) -> dict[str, Any]:
     started = time.perf_counter()
@@ -129,6 +189,15 @@ def decide_ai_push_coast_handoff(
     radius = max(float(delivery_radius_m), 0.0)
     errors = _relative_errors(robot_pose, ball_pose, fetch_pose_world)
     nav2 = _nav2_status(nav2_corridor_push)
+    stage_classification = classify_ai_push_coast_stage(
+        approach_contact_metrics=approach_contact_metrics,
+        shot_outcome=shot_outcome,
+        relative_errors=errors,
+        distance_to_fetch_pose_m=distance,
+        delivery_radius_m=radius,
+        nav2_attempted=nav2_attempted,
+        terminal_correction_attempted=terminal_correction_attempted,
+    )
     candidate_maneuvers = [
         "stay_with_nav2",
         "coast_accept",
@@ -218,6 +287,7 @@ def decide_ai_push_coast_handoff(
         "miss_vector_m": miss_vector,
         "relative_errors": errors,
         "nav2_status": nav2,
+        "stage_classification": stage_classification,
     }
     guard = {
         "accepted": bool(accepted),
@@ -234,9 +304,12 @@ def decide_ai_push_coast_handoff(
             "terminal_correction_attempted": bool(terminal_correction_attempted),
             "ball_moved_since_fetch": bool(ball_moved_since_fetch),
             "latest_still_s": round(float(latest_still_s), 6) if latest_still_s is not None else None,
+            "stage_labels": list(stage_classification.get("stage_labels", []) or []),
+            "primary_stage": stage_classification.get("primary_stage", "unknown"),
             **trajectory_summary,
         },
         "trajectory": trajectory_summary,
+        "stage_classification": stage_classification,
         "latency_ms": round(float(latency_ms), 6),
     }
     return {

@@ -93,6 +93,17 @@ classified as controller-stage backlog evidence, not as architecture promotion
 failures. Promotion still requires saved-layout gates and the seeded
 `fetch_generalization_gate`.
 
+May 30, 2026 evidence workflow update: close out `local_visual_v1` with a
+scorecard before widening again. Use
+`scripts/dashboard_random_fetch_uat_analyzer.py` to report seed, profile,
+geometry, closest approach, pass/fail reason, contact-quality flags, and stage
+labels. The first three live green-CTA runs passed delivery but carried contact
+quality flags, so they support the hybrid stage-supervisor direction rather
+than standalone promotion. The next ladder step is seeded `fetch_generalization_gate`
+dry-run plus a `6 x 1` shadow/evidence pass with `ai_push_coast_servo_v1`.
+Guarded live execution should start only with one terminal correction for
+stop-short or near-contract misses after shadow scoring is useful.
+
 May 29, 2026 model-planning refinement: V-JEPA-style world models are relevant
 as an architectural pattern for scoring candidate actions against predicted
 physical outcomes, but full video world models are not the onboard control

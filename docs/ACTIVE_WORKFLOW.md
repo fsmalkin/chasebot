@@ -643,6 +643,9 @@ Live gates:
        contact-ready draw
      - treat wide dashboard failures as visual/controller-stage backlog
        evidence until saved-layout and seeded generalization gates are green
+     - close out visual UAT batches with:
+       `python scripts/dashboard_random_fetch_uat_analyzer.py --campaign-id <id> --artifact <mission-root-or-session> [--artifact ...]`
+       before changing `local_visual_v1` bounds again
 8. Nav2 corridor-push spike contract:
    - branch: `spike/fetch-arch-nav2-corridor-push-20260528`
    - architecture: `nav2_followpath_corridor_push_v1`
@@ -678,6 +681,9 @@ Live gates:
      trajectory, closest approach, miss vector, setup pocket, push duration,
      coast timing, terminal re-push choice, recenter side, guard decision, and
      latency
+   - required stage labels: `setup`, `first_contact`, `push_coast`,
+     `terminal_arrival`, and `terminal_correction`, derived from contact flags,
+     miss reasons, and measured geometry
    - deterministic routines own fine pre-capture alignment, first-contact
      stabilization, terminal stop-short correction, bounded re-push/coast, and
      recentering

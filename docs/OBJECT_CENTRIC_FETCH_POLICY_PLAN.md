@@ -763,6 +763,11 @@ the same bounded budgets.
      `scripts/fetch_generalization_gate.py`, with learned predictions and
      proposed maneuvers scored against measured outcomes while deterministic
      object-centric/Nav2 control remains authoritative
+   - dashboard visual UAT bridge:
+     score `local_visual_v1` green-CTA runs with
+     `scripts/dashboard_random_fetch_uat_analyzer.py`; use contact-quality
+     flags as stage labels for `setup`, `first_contact`, `push_coast`, and
+     `terminal_arrival` backlog before any guarded-live expansion
    - promotion precondition:
      no learned execution until shadow predictions improve margin or failure
      classification without guard violations

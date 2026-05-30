@@ -604,6 +604,11 @@ generalization gate.
      `local_visual_v1` for broader bounded visual stress, while
      `corridor_contact_v1` preserves the narrow contact-ready diagnostic draw;
      neither replaces the seeded `fetch_generalization_gate`
+   - May 30 scoring step:
+     close `local_visual_v1` runs with
+     `scripts/dashboard_random_fetch_uat_analyzer.py`; delivery passes with
+     contact flags become stage-supervisor backlog/training evidence, not
+     milestone promotion evidence
    - updated next spike:
      `spike/fetch-arch-ai-push-coast-servo-20260529`
    - updated interpretation:
