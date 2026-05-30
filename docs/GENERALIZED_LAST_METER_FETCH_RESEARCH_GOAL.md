@@ -22,6 +22,14 @@ behavior that combines Nav2 stage ownership, deterministic homebrew contact
 routines, and a guarded AI/model handoff-and-maneuver proposer, proven on saved
 layouts and the first seeded random generalization gate.
 
+Scope correction: this milestone proves the bounded local fetch subsystem, not
+open-world planner competence. The broader product milestone is Planner-Gated
+Generalized Fetch: an LLM/world-state planner first decides whether a scene is
+fetch-ready, requires scan/perception, requires Nav2 repositioning, requires a
+different recovery/subroutine, or should abort/no-go. Only fetch-ready local
+cases should be handed to `fetch_to_pose` and scored as fetch subsystem
+evidence.
+
 Milestone acceptance:
 
 1. Saved-layout `zero`, `left05`, and `right05` pass `3/3` in the canonical
@@ -34,6 +42,10 @@ Milestone acceptance:
 4. Learned execution, when enabled, remains inside deterministic guards for
    command bounds, target freshness, ball drift, retry budget, safe stop, and
    `/odom`/contract preservation.
+5. A separate planner-handoff gate exists before any "truly random" claim:
+   mixed scenarios are scored on correct route selection (`fetch_ready_local`,
+   `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`,
+   `ambiguous_or_unsafe_no_go`) before subsystem execution is judged.
 
 ## May 28, 2026 Direction
 
@@ -111,6 +123,15 @@ re-push/re-aim cycle may run only after Nav2/fetch has produced measured object
 motion and the miss is near-contract. Setup, capture-entry, first-contact,
 push/coast quality, ball-escape, stale-state, broad lateral/yaw, and non-repro
 random failures stay in shadow/watchlist evidence until reproduced.
+
+May 30, 2026 planner-gated randomization refinement: do not interpret arbitrary
+or visually surprising random starts as direct fetch failures unless the scene is
+inside the documented local fetch envelope. "Truly random" testing belongs in a
+planner-handoff suite first. The planner/LLM should classify major unknowns and
+choose a bounded route: scan, reposition, re-aim, recover, abstain/no-go, or
+only then dispatch local `fetch_to_pose`. This keeps subsystem gates honest:
+the fetch gate proves control inside its envelope; the planner gate proves that
+the system can recognize when that envelope does not apply.
 
 May 29, 2026 model-planning refinement: V-JEPA-style world models are relevant
 as an architectural pattern for scoring candidate actions against predicted

@@ -26,6 +26,13 @@ deterministic homebrew contact routines, and a guarded AI/model handoff and
 maneuver-class proposer, proven on saved layouts and the first seeded random
 generalization gate.
 
+Scope correction: this plan covers the bounded local fetch subsystem. It does
+not claim that arbitrary random scenes are executable by fetch. Scenes with
+major unknowns, bad robot-ball-target topology, stale/ambiguous perception, or
+unsafe corridors must first go through an LLM/world-state planner handoff gate.
+Only cases classified as `fetch_ready_local` should dispatch `fetch_to_pose` and
+count against this subsystem.
+
 May 29, 2026 architecture update: keep fetch no-shoot and robot-owned. The
 Nav2 corridor-push spike was worth running because it proved Nav2 can make
 useful bounded corridor contact, but it did not promote as the sole contact
@@ -260,6 +267,8 @@ Use deterministic and randomized experiments for different jobs:
    The reusable entrypoint is
    `python scripts/fetch_generalization_gate.py --campaign-id <id> --random-cases 6 --runs 1`;
    use `--dry-run` first to validate generated layout and command contracts.
+   These samples remain bounded local-fetch cases; they are not an open-world
+   planner test.
 3. Rerun selectively, not blindly. Rerun when the scenario class changes, when
    physics or contact code changes, when an accelerated/offline result is green
    or surprising, or before promotion. Do not rerun every obsolete blocked
@@ -272,6 +281,11 @@ Use deterministic and randomized experiments for different jobs:
    simulations, but promotion still depends on the same saved-layout and seeded
    random gates. Large sim volume is for model learning and hard-case discovery,
    not for replacing canonical UAT evidence.
+6. Planner-gated randomization is a separate experiment. Mixed scenes should
+   include fetch-ready local cases plus out-of-envelope cases requiring Nav2
+   reposition, scan/perception, re-aim/recovery, or no-go. Score those cases on
+   correct subsystem routing and guard agreement before scoring any delivery
+   result.
 
 ## Trajectory Limiter Direction
 

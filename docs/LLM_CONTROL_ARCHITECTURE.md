@@ -54,6 +54,27 @@ deterministic contact routines:
    scoring is green and deterministic guards accept the handoff or maneuver
    class.
 
+The planner handoff is now explicit. The LLM/world-state planner is responsible
+for deciding whether local fetch is applicable before any local subsystem is
+scored:
+
+1. `fetch_ready_local`: scene is inside the documented local fetch envelope;
+   dispatch `fetch_to_pose`.
+2. `nav2_reposition_first`: ball/target are local, but robot pose or topology is
+   not fetch-ready; dispatch a bounded reposition/setup routine first.
+3. `scan_or_perceive_first`: ball, target, delivery pose, or confidence is
+   stale, missing, or ambiguous; scan/perceive before fetch.
+4. `recovery_or_reaim`: scene is near-envelope but needs a known re-aim,
+   recenter, or recovery routine before fetch.
+5. `ambiguous_or_unsafe_no_go`: scene is outside known envelopes, blocked,
+   unsafe, or semantically unclear; do not dispatch fetch.
+
+This means a major-unknown random scene is not automatically a fetch subsystem
+test. A wrong `fetch_ready_local` dispatch is a planner failure. A local fetch
+miss after a correct `fetch_ready_local` dispatch is subsystem evidence. A
+correct scan, reposition, recovery, abstain, or no-go on an out-of-envelope
+scene is a planner success.
+
 The latest proven Nav2 lane is therefore evidence, not the final architecture:
 
 `LM/VLA supervisor -> deterministic fetch state machine/guards -> Nav2 FollowPath corridor-push -> ball-escape/success monitor -> robot`

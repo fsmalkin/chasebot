@@ -508,6 +508,12 @@ deterministic homebrew contact routines, and a guarded AI/model handoff and
 maneuver-class proposer, proven on saved layouts and the first seeded random
 generalization gate.
 
+Scope correction: Generalized Fetch-To-Pose v1 is the bounded local fetch
+subsystem milestone. It does not prove open-world planner competence by itself.
+The broader product path is Planner-Gated Generalized Fetch:
+`LLM/world-state planner -> capability envelope check -> selected subsystem ->
+guarded execution -> monitor/result back to planner`.
+
 1. freeze `nav2_mppi_follow_path_reacquire_v1` as the baseline/evidence branch rather than continuing broad MPPI/capture threshold tuning
 2. reserve historical Nav2/MPPI branches for long-range/pre-stage evidence.
    The fresh `nav2_followpath_corridor_push_v1` hypothesis has now been tested:
@@ -523,7 +529,9 @@ generalization gate.
 9. keep AI as the next local lane through shadow-mode learned
    handoff/maneuver proposal first: stay with Nav2, terminal re-push,
    recenter, abort/re-stage, miss vector, coast timing, and recovery side
-10. allow LM/VLA-style models to supervise task mode, failure interpretation, and known maneuver choices only through deterministic contracts
+10. allow LM/VLA-style models to supervise task mode, failure interpretation,
+    known maneuver choices, and subsystem handoff only through deterministic
+    contracts
 11. keep direct high-frequency LLM motor control out of scope
 12. keep `physics-calibrated-golf-fetch-v1` as the stable demo/UAT integration branch; use short-lived `spike/...` branches for targeted requalification and archive blocked architecture branches as evidence only
 13. preferred immediate spike:
@@ -540,7 +548,12 @@ generalization gate.
     random failures into named saved layouts before tuning against them
 17. prove generalized last-meter fetch with a reusable seeded gate before
     claiming a robot-owned architecture generalizes beyond saved layouts
-18. when the goal is full architecture research, ground in
+18. prove planner handoff separately before claiming the robot handles major
+    unknowns: mixed random scenes must be classified as `fetch_ready_local`,
+    `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`, or
+    `ambiguous_or_unsafe_no_go`; only `fetch_ready_local` cases count against
+    the local fetch subsystem
+19. when the goal is full architecture research, ground in
     `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` and return a findings
     matrix before tuning a single path
 
@@ -648,7 +661,31 @@ Live gates:
      - close out visual UAT batches with:
        `python scripts/dashboard_random_fetch_uat_analyzer.py --campaign-id <id> --artifact <mission-root-or-session> [--artifact ...]`
        before changing `local_visual_v1` bounds again
-8. Nav2 corridor-push spike contract:
+8. planner-gated fetch handoff gate:
+   - purpose: score high-level routing before subsystem execution; do not send
+     major unknowns directly to local fetch and call the result a fetch failure
+   - first implementation target: `scripts/fetch_planner_handoff_gate.py`
+     or equivalent analyzer/runner over frozen scene descriptors
+   - required case classes:
+     - `fetch_ready_local`: inside the documented local fetch envelope; should
+       dispatch `fetch_to_pose`
+     - `nav2_reposition_first`: ball/target geometry is local but robot start
+       is not fetch-ready; should dispatch reposition/setup before fetch
+     - `scan_or_perceive_first`: target, ball, or delivery pose is stale,
+       missing, ambiguous, or low confidence; should scan/perceive before fetch
+     - `recovery_or_reaim`: geometry is near-envelope but needs re-aim,
+       recenter, or known recovery before fetch
+     - `ambiguous_or_unsafe_no_go`: blocked corridor, unsafe drift, unclear
+       target identity, or scene outside known subsystem envelopes; should not
+       dispatch fetch
+   - scoring: correct route/handoff decision, deterministic guard agreement,
+     rationale trace, abstain/no-go when appropriate, and no direct `/cmd_vel`
+     or frozen-contract bypass
+   - evidence meaning: a wrong `fetch_ready_local` dispatch is a planner
+     failure; a local fetch miss after a correct `fetch_ready_local` dispatch is
+     subsystem evidence; a correct abstain/reposition/scan on an out-of-envelope
+     case is a pass
+9. Nav2 corridor-push spike contract:
    - branch: `spike/fetch-arch-nav2-corridor-push-20260528`
    - architecture: `nav2_followpath_corridor_push_v1`
    - evidence status: completed May 29, 2026; not promoted standalone
@@ -674,7 +711,7 @@ Live gates:
      adds deterministic terminal/contact routines plus a shadow handoff model
    - hard red: Nav2 action aborts or produces no stable robot motion; classify
      as controller integration failure, not ball-physics evidence
-9. Hybrid fetch stage-supervisor / AI push-coast spike contract:
+10. Hybrid fetch stage-supervisor / AI push-coast spike contract:
    - branch: `spike/fetch-arch-ai-push-coast-servo-20260529`
    - first gate: shadow-only handoff/maneuver prediction over saved anchors, the
      Nav2 `right05` stop-short artifact, and seeded random layouts generated by
@@ -701,7 +738,7 @@ Live gates:
      handoff or maneuver class
    - V-JEPA-style world models are offboard/teacher research only; onboard
      inference must be a smaller structured or distilled `tensorrt_int8` path
-10. person target prototype only after pose-target gates are green
+11. person target prototype only after pose-target gates are green
 
 Branch hygiene:
 
