@@ -75,6 +75,12 @@ miss after a correct `fetch_ready_local` dispatch is subsystem evidence. A
 correct scan, reposition, recovery, abstain, or no-go on an out-of-envelope
 scene is a planner success.
 
+The first concrete gate for this contract is
+`scripts/fetch_planner_handoff_gate.py`. It can run deterministic scoring or
+`llm_shadow` scoring over frozen mixed-scene descriptors. LLM shadow may record
+provider requests and rationales, but deterministic guard agreement remains the
+promotion condition and no planner output can command `/cmd_vel`.
+
 The latest proven Nav2 lane is therefore evidence, not the final architecture:
 
 `LM/VLA supervisor -> deterministic fetch state machine/guards -> Nav2 FollowPath corridor-push -> ball-escape/success monitor -> robot`

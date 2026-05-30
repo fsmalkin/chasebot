@@ -366,6 +366,7 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
         "remaining_targets": [],
         "last_visit_result": {},
         "mission_verdict": {},
+        "planner_handoff": {},
         "gather_phase": "idle",
         "capture_state": {},
         "zone_pose": {},
@@ -1963,6 +1964,58 @@ def test_request_golf_fetch_random_cta_rejects_unknown_profile(tmp_path):
     assert payload["error"] == "unknown random_profile: wide_open_v0"
 
 
+def test_request_golf_fetch_planner_gated_random_accepts_mode(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["environment_state"] = "environment_ready"
+    controller.state["scenario_state"] = "ready"
+    controller._refresh_control_plane_state = lambda force=False: None
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            started.append(self)
+
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_scenario_run(
+        dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID,
+        {
+            "planner_gated_random": True,
+            "planner_mode": dashboard_service.fetch_planner_gate.PLANNER_MODE_LLM_SHADOW,
+            "random_seed": "456",
+        },
+    )
+
+    assert status == 202
+    assert payload["accepted"] is True
+    assert controller.pending_scenario_overrides["planner_gated_random"] is True
+    assert controller.pending_scenario_overrides["planner_mode"] == dashboard_service.fetch_planner_gate.PLANNER_MODE_LLM_SHADOW
+    assert controller.pending_scenario_overrides["random_seed"] == 456
+    assert started
+
+
+def test_request_golf_fetch_planner_gated_random_rejects_unknown_mode(tmp_path):
+    controller = _make_controller(tmp_path)
+
+    status, payload = controller.request_scenario_run(
+        dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID,
+        {"planner_gated_random": True, "planner_mode": "free_drive"},
+    )
+
+    assert status == 400
+    assert payload["accepted"] is False
+    assert payload["error"] == "unknown planner_mode: free_drive"
+
+
 def test_robot_sdf_name_for_startup_defaults_to_baseline(tmp_path):
     controller = _make_controller(tmp_path)
 
@@ -2298,6 +2351,109 @@ def test_run_golf_fetch_cta_random_layout_uses_bounded_generated_layout(tmp_path
     assert result["random_draw"]["seed"] == 123
     assert result["random_draw"]["robot_ball_separation_m"] >= bounds["min_robot_ball_separation_m"]
     assert result["target_layout_json"] == str(layout_path)
+
+
+def test_run_golf_fetch_planner_gated_non_fetch_route_does_not_dispatch_local_fetch(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    controller.state["dashboard_url"] = "http://127.0.0.1:8860/"
+    controller._scenarios_dir = lambda: tmp_path / "scenarios"
+    controller._current_validation_dir = lambda: tmp_path / "validation"
+    controller.active_scenario_overrides = {
+        "planner_gated_random": True,
+        "planner_mode": dashboard_service.fetch_planner_gate.PLANNER_MODE_DETERMINISTIC,
+        "random_seed": 123,
+    }
+    controller._visit_mission_runtime_state = lambda: {"proof_state": "completed"}
+    controller._gather_mission_runtime_state = lambda: {"surface_profile": "calibrated_golf_turf"}
+    controller._scenario_env = lambda _scenario: {
+        "WORLD_FILE": "yolo_test_world_v6_calibrated_golf_turf.world",
+        "CHASECAR_SURFACE_PROFILE": "calibrated_golf_turf",
+    }
+    scene = next(
+        item for item in dashboard_service.fetch_planner_gate.generate_random_scenes(seed=123, random_cases=10)
+        if item["expected_route_label"] == dashboard_service.fetch_planner_gate.ROUTE_NO_GO
+    )
+    monkeypatch.setattr(dashboard_service.fetch_planner_gate, "generate_dashboard_scene", lambda **_kwargs: scene)
+
+    def _unexpected_popen(*_args, **_kwargs):
+        raise AssertionError("local fetch runner should not start for non-fetch planner routes")
+
+    monkeypatch.setattr(dashboard_service.subprocess, "Popen", _unexpected_popen)
+
+    scenario = dashboard_service.SCENARIOS_BY_ID[dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID]
+    result = controller._run_gather_mission_scenario(scenario)
+
+    decision = result["planner_handoff"]["decision"]
+    assert result["pass"] is True
+    assert result["planner_gated_random"] is True
+    assert result["local_fetch_dispatched"] is False
+    assert decision["route_label"] == dashboard_service.fetch_planner_gate.ROUTE_NO_GO
+    assert result["artifacts"]["planner_decision"]
+    assert Path(result["artifacts"]["planner_decision"]).exists()
+
+
+def test_run_golf_fetch_planner_gated_fetch_ready_route_dispatches_layout(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    controller.state["dashboard_url"] = "http://127.0.0.1:8860/"
+    controller._scenarios_dir = lambda: tmp_path / "scenarios"
+    controller._current_validation_dir = lambda: tmp_path / "validation"
+    controller.active_scenario_overrides = {
+        "planner_gated_random": True,
+        "planner_mode": dashboard_service.fetch_planner_gate.PLANNER_MODE_DETERMINISTIC,
+        "random_seed": 456,
+    }
+    controller._visit_mission_runtime_state = lambda: {"proof_state": "completed"}
+    controller._gather_mission_runtime_state = lambda: {
+        "mission_phase": "completed",
+        "mission_status": "completed",
+        "gather_phase": "completed",
+        "surface_profile": "calibrated_golf_turf",
+    }
+    controller._scenario_env = lambda _scenario: {
+        "WORLD_FILE": "yolo_test_world_v6_calibrated_golf_turf.world",
+        "CHASECAR_SURFACE_PROFILE": "calibrated_golf_turf",
+    }
+    scene = next(
+        item for item in dashboard_service.fetch_planner_gate.generate_random_scenes(seed=456, random_cases=10)
+        if item["expected_route_label"] == dashboard_service.fetch_planner_gate.ROUTE_FETCH_READY
+    )
+    monkeypatch.setattr(dashboard_service.fetch_planner_gate, "generate_dashboard_scene", lambda **_kwargs: scene)
+
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    mission_verdict_path = mission_root / "mission_verdict.json"
+    _write_json(mission_verdict_path, {"pass": True, "type": "gather_mission"})
+    _write_json(mission_root / "summary.json", {"pass": True})
+    _write_json(mission_root / "target_results.json", {"targets": []})
+
+    captured: dict[str, object] = {}
+
+    class _FakeProc:
+        def __init__(self, cmd, stdout_handle) -> None:
+            captured["cmd"] = list(cmd)
+            stdout_handle.write(f"GATHER_MISSION_SUMMARY={mission_verdict_path}\n")
+            stdout_handle.flush()
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(dashboard_service.subprocess, "Popen", lambda command, **kwargs: _FakeProc(command, kwargs["stdout"]))
+
+    scenario = dashboard_service.SCENARIOS_BY_ID[dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID]
+    result = controller._run_gather_mission_scenario(scenario)
+
+    command = captured["cmd"]
+    layout_path = Path(command[command.index("--target-layout-json") + 1])
+    layout = json.loads(layout_path.read_text(encoding="utf-8"))
+    assert result["pass"] is True
+    assert result["planner_gated_random"] is True
+    assert result["local_fetch_dispatched"] is True
+    assert result["random_profile"] == dashboard_service.fetch_planner_gate.PLANNER_MIXED_PROFILE
+    assert layout["layout_family"] == "planner_gated_fetch_ready"
+    assert layout["planner_scene"]["scene_id"] == scene["scene_id"]
+    assert "--robot-x" in command
+    assert command[command.index("--artifact-kind") + 1] == dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
 
 
 def test_run_three_ball_gather_scenario_returns_aggregate_corral_fields(tmp_path, monkeypatch):

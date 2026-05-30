@@ -664,8 +664,15 @@ Live gates:
 8. planner-gated fetch handoff gate:
    - purpose: score high-level routing before subsystem execution; do not send
      major unknowns directly to local fetch and call the result a fetch failure
-   - first implementation target: `scripts/fetch_planner_handoff_gate.py`
-     or equivalent analyzer/runner over frozen scene descriptors
+   - command:
+     `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --dry-run --random-cases 20 --seed 20260530`
+   - LLM shadow command:
+     `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --dry-run --random-cases 20 --seed 20260530 --planner-mode llm_shadow`
+   - dashboard mixed-scene CTA uses `planner_gated_random: true`; if the route
+     is not `fetch_ready_local`, it records planner artifacts and does not
+     dispatch local fetch
+   - first dry-run artifact:
+     `artifacts/session/dev_fetch_planner_handoff_gate_dryrun_20260530_rerun/fetch_planner_handoff_gate/scorecard.md`
    - required case classes:
      - `fetch_ready_local`: inside the documented local fetch envelope; should
        dispatch `fetch_to_pose`

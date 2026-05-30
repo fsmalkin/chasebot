@@ -597,6 +597,10 @@ fetch evidence.
      descriptors must be scored on correct routing (`fetch_ready_local`,
      `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`,
      `ambiguous_or_unsafe_no_go`) before subsystem success is judged
+   - implementation note:
+     `scripts/fetch_planner_handoff_gate.py` is the first planner-handoff
+     evidence surface; dashboard planner-gated random runs skip local fetch
+     unless the route is `fetch_ready_local`
    - keep deterministic guards authoritative over command bounds, target
      freshness, ball drift, retry budget, safe stop, `/odom`, and frozen
      contracts

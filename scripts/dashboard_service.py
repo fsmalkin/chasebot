@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, urlparse
 
 import yaml
 
+import fetch_planner_handoff_gate as fetch_planner_gate
 from brain_supervisor_policy import build_policy_snapshot
 from brain_supervisor_policy import intent_readiness_snapshot
 from llm_supervisor_core import load_supervisor_runtime_state as load_shadow_runtime_state
@@ -124,6 +125,7 @@ GOLF_BALL_CIRCLE_DELIVERY_TARGET_LAYOUT_JSON = "ros2_config/target_layouts/golf_
 GOLF_BALL_CIRCLE_DELIVERY_RANDOM_LAYOUT_ID = "bounded_random_golf_ball_circle_delivery"
 GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT = "corridor_contact_v1"
 GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL = "local_visual_v1"
+GOLF_BALL_PLANNER_GATED_SCENE_SET = fetch_planner_gate.DEFAULT_SCENE_SET
 GOLF_BALL_RANDOM_PROFILES = {
     GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT,
     GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL,
@@ -800,6 +802,7 @@ class DashboardController:
                 "remaining_targets": [],
                 "last_visit_result": {},
                 "mission_verdict": {},
+                "planner_handoff": {},
                 "gather_phase": "idle",
                 "capture_state": {},
                 "zone_pose": {},
@@ -2513,13 +2516,31 @@ class DashboardController:
             "world_file": world_file,
             "surface_profile": surface_profile,
         }
-        if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID and truthy_value(overrides.get("random_layout", False)):
+        planner_gated_random = bool(
+            scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID
+            and truthy_value(overrides.get("planner_gated_random", overrides.get("planner_gate", False)))
+        )
+        golf_random_layout = bool(
+            scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID
+            and truthy_value(overrides.get("random_layout", False))
+        )
+        if planner_gated_random or golf_random_layout:
             seed_value = overrides.get("random_seed", overrides.get("seed", ""))
             if seed_value not in {None, ""}:
                 try:
                     scenario_overrides["random_seed"] = int(seed_value)
                 except (TypeError, ValueError):
                     return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": "random_seed must be an integer"}
+        if planner_gated_random:
+            planner_mode = str(overrides.get("planner_mode", fetch_planner_gate.PLANNER_MODE_DETERMINISTIC) or "").strip()
+            if planner_mode not in {fetch_planner_gate.PLANNER_MODE_DETERMINISTIC, fetch_planner_gate.PLANNER_MODE_LLM_SHADOW}:
+                return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown planner_mode: {planner_mode}"}
+            scenario_overrides["planner_gated_random"] = True
+            scenario_overrides["planner_mode"] = planner_mode
+            scenario_overrides["planner_scene_set"] = str(
+                overrides.get("planner_scene_set", GOLF_BALL_PLANNER_GATED_SCENE_SET) or GOLF_BALL_PLANNER_GATED_SCENE_SET
+            ).strip()
+        if golf_random_layout:
             random_profile = str(overrides.get("random_profile", "") or GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT).strip()
             if random_profile not in GOLF_BALL_RANDOM_PROFILES:
                 return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown random_profile: {random_profile}"}
@@ -4099,6 +4120,7 @@ pkill -f "fluxbox" 2>/dev/null || true
                 remaining_targets=[],
                 last_visit_result={},
                 mission_verdict={},
+                planner_handoff={},
                 gather_phase="setup" if scenario.mode == "gather_mission" else "idle",
                 capture_state={},
                 zone_pose={},
@@ -4144,6 +4166,7 @@ pkill -f "fluxbox" 2>/dev/null || true
                 remaining_targets=result.get("remaining_targets", []),
                 last_visit_result=result.get("last_visit_result", {}),
                 mission_verdict=result.get("mission_verdict", {}),
+                planner_handoff=result.get("planner_handoff", {}),
                 gather_phase=result.get("gather_phase", self.state.get("gather_phase", "idle")),
                 capture_state=result.get("capture_state", self.state.get("capture_state", {})),
                 zone_pose=result.get("zone_pose", self.state.get("zone_pose", {})),
@@ -4182,6 +4205,7 @@ pkill -f "fluxbox" 2>/dev/null || true
                     proof_state="failed" if scenario.mode in {"llm_proof", "visit_mission", "gather_mission"} else self.state.get("proof_state", "waiting"),
                     mission_phase="failed" if scenario.mode in {"visit_mission", "gather_mission"} else self.state.get("mission_phase", "idle"),
                     mission_status="failed" if scenario.mode in {"visit_mission", "gather_mission"} else self.state.get("mission_status", "idle"),
+                    planner_handoff={},
                     search_bias_active=False,
                     gather_phase="failed" if scenario.mode == "gather_mission" else "idle",
                     capture_state={},
@@ -4300,6 +4324,75 @@ pkill -f "fluxbox" 2>/dev/null || true
             },
         )
         return {**draw, "target_layout_json": str(layout_path)}
+
+    def _planner_handoff_root(self, scene_id: str) -> Path:
+        scenario_dir = self._scenarios_dir() or ensure_dir(
+            self._current_validation_dir()
+            or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation")
+        )
+        return ensure_dir(scenario_dir / "planner_handoff_gate" / scene_id)
+
+    def _run_dashboard_planner_handoff(
+        self,
+        *,
+        overrides: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        seed_value = overrides.get("random_seed")
+        scene_set = str(overrides.get("planner_scene_set", GOLF_BALL_PLANNER_GATED_SCENE_SET) or GOLF_BALL_PLANNER_GATED_SCENE_SET)
+        planner_mode = str(overrides.get("planner_mode", fetch_planner_gate.PLANNER_MODE_DETERMINISTIC) or fetch_planner_gate.PLANNER_MODE_DETERMINISTIC)
+        scene = fetch_planner_gate.generate_dashboard_scene(
+            seed=int(seed_value) if seed_value not in {None, ""} else None,
+            scene_set=scene_set,
+        )
+        decision = fetch_planner_gate.decide_scene(
+            scene,
+            planner_mode=planner_mode,
+            openai_api_key=os.environ.get("OPENAI_API_KEY", ""),
+            openai_model=os.environ.get("OPENAI_MODEL", fetch_planner_gate.DEFAULT_OPENAI_MODEL),
+            openai_base_url=os.environ.get("OPENAI_BASE_URL", fetch_planner_gate.DEFAULT_OPENAI_BASE_URL),
+            openai_org_id=os.environ.get("OPENAI_ORG_ID", ""),
+            openai_project_id=os.environ.get("OPENAI_PROJECT_ID", ""),
+            reasoning_effort=os.environ.get("OPENAI_REASONING_EFFORT", fetch_planner_gate.DEFAULT_REASONING_EFFORT),
+        )
+        root = self._planner_handoff_root(str(scene.get("scene_id", "scene") or "scene"))
+        paths = fetch_planner_gate.write_scene_bundle(root, scene, decision)
+        return {
+            "scene": scene,
+            "decision": {key: value for key, value in decision.items() if key not in {"provider_request", "provider_response"}},
+            "paths": paths,
+            "artifact_dir": str(root),
+        }
+
+    def _write_planner_gated_fetch_layout(
+        self,
+        scenario: ScenarioDefinition,
+        *,
+        planner_handoff: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        scene = planner_handoff.get("scene") if isinstance(planner_handoff.get("scene"), dict) else {}
+        scene_id = str(scene.get("scene_id", "planner_scene") or "planner_scene")
+        scenario_dir = self._scenarios_dir() or ensure_dir(
+            self._current_validation_dir()
+            or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation")
+        )
+        layout_path = ensure_dir(scenario_dir / "planner_fetch_layouts") / f"{scene_id}.json"
+        fetch_planner_gate.write_fetch_ready_layout_from_scene(layout_path, scene, scenario_id=scenario.id)
+        geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
+        return {
+            "layout_id": "planner_gated_fetch_ready",
+            "random_profile": fetch_planner_gate.PLANNER_MIXED_PROFILE,
+            "seed": scene.get("seed", ""),
+            "target_pose": scene.get("target_pose", {}),
+            "ball_pose": scene.get("ball_pose", {}),
+            "robot_pose": scene.get("robot_pose", {}),
+            "planner_scene": scene,
+            "ball_target_distance_m": geometry.get("ball_target_distance_m"),
+            "ball_target_angle_deg": geometry.get("ball_target_angle_deg"),
+            "robot_ball_separation_m": geometry.get("robot_ball_distance_m"),
+            "robot_lateral_offset_m": geometry.get("robot_lateral_signed_m"),
+            "robot_yaw_error_deg": geometry.get("robot_yaw_error_deg"),
+            "target_layout_json": str(layout_path),
+        }
 
     def _run_uat_stage(self, mode: str, scenario: ScenarioDefinition) -> Dict[str, Any]:
         env = self._scenario_env(scenario)
@@ -4655,9 +4748,75 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         runner_script = "golf_ball_circle_delivery_demo_runner.py" if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID else "gather_mission_runner.py"
         scenario_overrides = dict(getattr(self, "active_scenario_overrides", {}) or {})
         random_draw: Dict[str, Any] = {}
+        planner_handoff: Dict[str, Any] = {}
+        local_fetch_dispatched = True
         target_layout_json = scenario.target_layout_json
         artifact_kind = ""
-        if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID and truthy_value(scenario_overrides.get("random_layout", False)):
+        if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID and truthy_value(scenario_overrides.get("planner_gated_random", False)):
+            planner_handoff = self._run_dashboard_planner_handoff(overrides=scenario_overrides)
+            decision = planner_handoff.get("decision", {}) if isinstance(planner_handoff.get("decision"), dict) else {}
+            if not bool(decision.get("should_dispatch_fetch_to_pose", False)):
+                local_fetch_dispatched = False
+                pass_flag = bool(decision.get("correct", False))
+                artifacts = {
+                    "planner_handoff_gate": str(planner_handoff.get("artifact_dir", "")),
+                    "planner_scene": str(planner_handoff.get("paths", {}).get("scene_path", "")) if isinstance(planner_handoff.get("paths"), dict) else "",
+                    "planner_decision": str(planner_handoff.get("paths", {}).get("decision_path", "")) if isinstance(planner_handoff.get("paths"), dict) else "",
+                }
+                payload = {
+                    "scenario_id": scenario.id,
+                    "runner_scenario_id": runner_scenario_id,
+                    "mission_objective": scenario.mission_objective,
+                    "fetch_delivery_radius_m": scenario.fetch_delivery_radius_m,
+                    "gather_control_family": scenario.gather_control_family,
+                    "target_layout_json": "",
+                    "random_layout": False,
+                    "random_profile": "",
+                    "random_draw": {},
+                    "planner_gated_random": True,
+                    "planner_scene_set": str(scenario_overrides.get("planner_scene_set", GOLF_BALL_PLANNER_GATED_SCENE_SET) or ""),
+                    "planner_handoff": planner_handoff,
+                    "local_fetch_dispatched": False,
+                    "target_model_sdf": scenario.target_model_sdf,
+                    "zone_model_sdf": scenario.zone_model_sdf,
+                    "phase": scenario.phase,
+                    "pass": pass_flag,
+                    "artifacts": artifacts,
+                    "summary": {},
+                    "mission_verdict": {},
+                    "proof_verdict": {},
+                    "target_results": {},
+                    "message": f"Planner selected {decision.get('route_label', '')}; local fetch not dispatched",
+                    "motion_evidence": False,
+                    "proof_state": "completed" if pass_flag else "failed",
+                    "mission_phase": "planner_handoff",
+                    "mission_status": "completed" if pass_flag else "failed",
+                    "search_bias_active": False,
+                    "current_target_id": "",
+                    "visit_index": 0,
+                    "visited_targets": [],
+                    "remaining_targets": [],
+                    "last_visit_result": {},
+                    "gather_phase": "planner_handoff",
+                    "capture_state": {},
+                    "zone_pose": {},
+                    "zone_score": {},
+                    "final_corral_audit": {},
+                    "placed_targets": [],
+                    "capture_loss_count": 0,
+                    "route_order": [],
+                    "surface_profile": str(env.get("CHASECAR_SURFACE_PROFILE", scenario.surface_profile) or ""),
+                }
+                self._write_scenario_result(scenario.id, payload)
+                return payload
+            random_draw = self._write_planner_gated_fetch_layout(scenario, planner_handoff=planner_handoff)
+            target_layout_json = str(random_draw.get("target_layout_json", target_layout_json))
+            artifact_kind = GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
+        if (
+            scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID
+            and not planner_handoff
+            and truthy_value(scenario_overrides.get("random_layout", False))
+        ):
             random_draw = self._write_random_golf_fetch_layout(scenario, overrides=scenario_overrides)
             target_layout_json = str(random_draw.get("target_layout_json", target_layout_json))
             artifact_kind = GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
@@ -4757,6 +4916,10 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "random_layout": bool(random_draw),
             "random_profile": str(random_draw.get("random_profile", "")) if random_draw else "",
             "random_draw": random_draw,
+            "planner_gated_random": bool(planner_handoff),
+            "planner_scene_set": str(scenario_overrides.get("planner_scene_set", "")) if planner_handoff else "",
+            "planner_handoff": planner_handoff,
+            "local_fetch_dispatched": bool(local_fetch_dispatched),
             "target_model_sdf": scenario.target_model_sdf,
             "zone_model_sdf": scenario.zone_model_sdf,
             "phase": scenario.phase,
