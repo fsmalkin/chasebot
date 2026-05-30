@@ -22,6 +22,14 @@ behavior that combines Nav2 stage ownership, deterministic homebrew contact
 routines, and a guarded AI/model handoff-and-maneuver proposer, proven on saved
 layouts and the first seeded random generalization gate.
 
+Scope correction: this milestone proves the bounded local fetch subsystem, not
+open-world planner competence. The broader product milestone is Planner-Gated
+Generalized Fetch: an LLM/world-state planner first decides whether a scene is
+fetch-ready, requires scan/perception, requires Nav2 repositioning, requires a
+different recovery/subroutine, or should abort/no-go. Only fetch-ready local
+cases should be handed to `fetch_to_pose` and scored as fetch subsystem
+evidence.
+
 Milestone acceptance:
 
 1. Saved-layout `zero`, `left05`, and `right05` pass `3/3` in the canonical
@@ -34,6 +42,10 @@ Milestone acceptance:
 4. Learned execution, when enabled, remains inside deterministic guards for
    command bounds, target freshness, ball drift, retry budget, safe stop, and
    `/odom`/contract preservation.
+5. A separate planner-handoff gate exists before any "truly random" claim:
+   mixed scenarios are scored on correct route selection (`fetch_ready_local`,
+   `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`,
+   `ambiguous_or_unsafe_no_go`) before subsystem execution is judged.
 
 ## May 28, 2026 Direction
 
@@ -83,6 +95,43 @@ routines own fine pre-capture alignment, first contact, terminal re-push/coast,
 and recentering; the AI/model layer starts in shadow mode as the handoff and
 maneuver-class proposer. This remains distinct from the old
 `nav2_mppi_follow_path_reacquire_v1` pre-stage evidence branch.
+
+May 29, 2026 dashboard UAT refinement: dashboard random golf-fetch runs now
+separate visual stress from evidence gates. `corridor_contact_v1` preserves the
+narrow contact-ready random draw for contact diagnostics. `local_visual_v1` is
+the green dashboard CTA default and samples a wider bounded ball-target and
+robot setup geometry for visual UAT. These wide CTA failures should be
+classified as controller-stage backlog evidence, not as architecture promotion
+failures. Promotion still requires saved-layout gates and the seeded
+`fetch_generalization_gate`.
+
+May 30, 2026 evidence workflow update: close out `local_visual_v1` with a
+scorecard before widening again. Use
+`scripts/dashboard_random_fetch_uat_analyzer.py` to report seed, profile,
+geometry, closest approach, pass/fail reason, contact-quality flags, and stage
+labels. The first three live green-CTA runs passed delivery but carried contact
+quality flags, so they support the hybrid stage-supervisor direction rather
+than standalone promotion. The next ladder step is seeded `fetch_generalization_gate`
+dry-run plus a `6 x 1` shadow/evidence pass with `ai_push_coast_servo_v1`.
+Guarded live execution should start only with one terminal correction for
+stop-short or near-contract misses after shadow scoring is useful.
+
+May 30, 2026 guarded-live refinement: score seeded gates with
+`scripts/fetch_seeded_gate_evidence_analyzer.py` before promotion or tuning.
+The first guarded-live executor remains terminal-only: one deterministic
+re-push/re-aim cycle may run only after Nav2/fetch has produced measured object
+motion and the miss is near-contract. Setup, capture-entry, first-contact,
+push/coast quality, ball-escape, stale-state, broad lateral/yaw, and non-repro
+random failures stay in shadow/watchlist evidence until reproduced.
+
+May 30, 2026 planner-gated randomization refinement: do not interpret arbitrary
+or visually surprising random starts as direct fetch failures unless the scene is
+inside the documented local fetch envelope. "Truly random" testing belongs in a
+planner-handoff suite first. The planner/LLM should classify major unknowns and
+choose a bounded route: scan, reposition, re-aim, recover, abstain/no-go, or
+only then dispatch local `fetch_to_pose`. This keeps subsystem gates honest:
+the fetch gate proves control inside its envelope; the planner gate proves that
+the system can recognize when that envelope does not apply.
 
 May 29, 2026 model-planning refinement: V-JEPA-style world models are relevant
 as an architectural pattern for scoring candidate actions against predicted

@@ -72,6 +72,15 @@ layouts while still failing when robot, target, and ball ordering changes. Use
 that as a reminder that saved-layout gates measure regression stability; they
 do not by themselves prove target-relative side selection or generalization.
 
+Planner handoff is a separate evidence layer. Random scenes that are outside the
+local fetch envelope should not be handed directly to `fetch_to_pose` and scored
+as subsystem failures. The planner layer must first classify each scene as one
+of: `fetch_ready_local`, `nav2_reposition_first`, `scan_or_perceive_first`,
+`recovery_or_reaim`, or `ambiguous_or_unsafe_no_go`. A local fetch failure is
+only subsystem evidence after a correct `fetch_ready_local` handoff. A correct
+abstain, scan, reposition, or no-go on an out-of-envelope scene is planner
+success, not missing fetch capability.
+
 ## Architecture Portfolio
 
 | Family | Why test it | First evidence gate | Promotion question |
@@ -87,6 +96,7 @@ do not by themselves prove target-relative side selection or generalization.
 | Passive mechanical guide/funnel | Tests whether a wider physical interaction envelope is simpler than software-only precision | Sim model smoke plus calibrated `zero`/off-axis one-run | Does it improve robustness without hiding unstable approach telemetry? |
 | Learned residual or maneuver proposer | Learns residual corrections or proposes setup pocket, handoff, push duration, coast timing, and recovery side behind deterministic gates | Offline replay/shadow evaluation before live control | Does it add measurable margin while abstaining on out-of-distribution states? |
 | LM/VLA high-level supervisor | Uses language or robot-foundation-model reasoning for task mode, failure interpretation, and maneuver choice without owning fast control | Contract/dry-run prompt replay over frozen state digests | Does it improve recover/give-up decisions while leaving local contact to guarded controllers? |
+| Planner-gated fetch handoff | Tests whether the LLM/world-state planner recognizes when local fetch is applicable versus when to scan, reposition, recover, or no-go | Mixed-scene dry-run over frozen scene descriptors with expected route labels | Does it avoid dispatching local fetch outside its envelope while still choosing fetch on valid local cases? |
 | Portfolio supervisor/switcher | Chooses push, coast, re-aim, hold, or give-up from measured uncertainty | Offline counterfactual replay, then live A/B on hard layouts | Does switching reduce tail failures without adding opaque behavior? |
 | Perception-first target-pose fetch | Replaces truth-state assumptions with sensed ball/target pose once pose delivery is stable | Shadow perception parity against truth-state UAT traces | Does it preserve success when truth-state shortcuts are removed? |
 
@@ -138,6 +148,8 @@ branch strategy changes are propagated back to `main`.
      variation, opposite-side target-relative starts, and at least one
      secondary surface check
    - first harness: `scripts/fetch_generalization_gate.py`
+   - keep this suite inside the local fetch envelope; out-of-envelope random
+     scenes belong in the planner-handoff gate instead
    - include hard-case layouts only after the candidate clears the saved-layout
      gate, so hard cases do not distract from primary repeatability
    - run seeded random samples after deterministic anchors are green; any
@@ -153,6 +165,8 @@ branch strategy changes are propagated back to `main`.
    - include saved-layout repeatability, at least one seeded-random
      generalization set, and an explicit explanation of any observed
      novel-layout failure or recovery behavior
+   - include planner-handoff evidence before making claims about major unknowns
+     or truly random scenes
    - include model-card style notes for learned components: training data
      distribution, holdout geometry, abstention/guard rate, runtime latency, and
      TensorRT INT8 deployment plan
