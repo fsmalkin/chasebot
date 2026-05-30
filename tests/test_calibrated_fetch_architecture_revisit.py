@@ -182,6 +182,11 @@ def test_layout_filter_limits_candidate_specs():
     assert [spec.layout_id for spec in specs] == ["zero", "zero"]
 
 
+def test_runs_matching_promote_runs_count_as_promotion_gate():
+    assert revisit._runs_are_promotion_gate(_args(runs=3, promote_runs=3)) is True
+    assert revisit._runs_are_promotion_gate(_args(runs=2, promote_runs=3)) is False
+
+
 def test_summarize_repeatability_extracts_fetch_metrics():
     summary = {
         "promotion_gate_pass": True,

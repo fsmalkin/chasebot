@@ -293,6 +293,18 @@ def _summary_return_code(summary: dict[str, Any]) -> int:
     return max(codes, default=0)
 
 
+def _runs_are_promotion_gate(args: argparse.Namespace) -> bool:
+    try:
+        runs = max(int(getattr(args, "runs", 1)), 1)
+    except (TypeError, ValueError):
+        runs = 1
+    try:
+        promote_runs = max(int(getattr(args, "promote_runs", 3)), 1)
+    except (TypeError, ValueError):
+        promote_runs = 3
+    return runs >= promote_runs
+
+
 def run_candidate(spec: CandidateSpec, *, logs_root: Path, dry_run: bool, reuse_existing: bool = False) -> dict[str, Any]:
     ensure_dir(logs_root)
     family_slug = spec.family.replace("_v1", "").replace("_", "-")
@@ -508,7 +520,19 @@ def _scorecard(summary: dict[str, Any]) -> str:
                 "| --- | --- | --- | --- | --- | --- |",
             ]
         )
+        display_results: list[dict[str, Any]] = []
+        seen_results: set[tuple[str, str, str]] = set()
         for result in family.get("one_run_results", []) + family.get("promotion_results", []):
+            key = (
+                str(result.get("layout_id", "")),
+                str(result.get("stage", "")),
+                str(result.get("summary_path", "")),
+            )
+            if key in seen_results:
+                continue
+            seen_results.add(key)
+            display_results.append(result)
+        for result in display_results:
             metrics = result.get("metrics", {}) if isinstance(result.get("metrics"), dict) else {}
             classification = _classify_layout_result(result, delivery_radius_m=float(summary["fetch_pose_world"]["radius_m"]))
             lines.append(
@@ -569,6 +593,8 @@ def main() -> int:
                 )
                 for spec in promotion_specs
             ]
+        elif _runs_are_promotion_gate(args):
+            promotion_results = list(one_run_results)
         decision = _family_decision(
             family=family,
             one_run_results=one_run_results,

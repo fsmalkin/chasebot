@@ -8919,6 +8919,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 if still_started_monotonic is not None
                 else None
             )
+            corridor_push_family = self.gather_control_family in {
+                NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY,
+                AI_PUSH_COAST_SERVO_CONTROL_FAMILY,
+            }
             if (
                 still_started_monotonic is not None
                 and latest_still_s is not None
@@ -8930,6 +8934,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and distance_to_fetch_pose_m is not None
                 and distance_to_fetch_pose_m > float(self.fetch_delivery_radius_m)
                 and not ai_first_contact_confirmation_servo_active
+                and (not corridor_push_family or nav2_corridor_push_attempted)
             ):
                 if self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY:
                     latest_ai_push_coast = _ai_push_coast_decision(
