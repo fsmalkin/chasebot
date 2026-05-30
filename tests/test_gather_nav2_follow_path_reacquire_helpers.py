@@ -97,6 +97,22 @@ def test_nav2_follow_path_corridor_push_allows_lateral_start_but_tracks_ball_tar
     assert [pose["y"] for pose in corridor_points] == [0.0, 0.0]
 
 
+def test_nav2_follow_path_corridor_push_arrives_contact_ready_on_push_yaw():
+    plan = follow_path.build_nav2_follow_path_corridor_push_plan(
+        {"x": -0.65, "y": 0.25, "yaw": 0.0},
+        {"x": 0.0, "y": 0.0, "z": 0.05},
+        {"x": 1.0, "y": 0.0, "z": 0.001, "radius_m": 0.3},
+        max_path_spacing_m=0.12,
+    )
+    payload = plan.to_dict()
+
+    contact_ready = next(pose for pose in payload["path_poses"] if pose["kind"] == "corridor_contact_ready")
+    contact = next(pose for pose in payload["path_poses"] if pose["kind"] == "corridor_contact")
+    assert contact_ready["yaw_deg"] == 0.0
+    assert contact["yaw_deg"] == 0.0
+    assert payload["path_poses"][1]["yaw_deg"] == 0.0
+
+
 def test_nav2_follow_path_corridor_push_reports_missing_geometry():
     plan = follow_path.build_nav2_follow_path_corridor_push_plan(
         {"x": -0.65, "y": 0.0, "yaw": 0.0},

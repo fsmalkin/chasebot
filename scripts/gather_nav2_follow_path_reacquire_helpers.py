@@ -270,6 +270,11 @@ def _densify_path(
                     path_yaw = target.yaw
                 else:
                     path_yaw = segment_yaw
+            elif yaw_mode == "corridor_push":
+                if target.kind == FOLLOW_PATH_CORRIDOR_CONTACT_READY:
+                    path_yaw = _interpolate_yaw(previous_yaw, target.yaw, ratio)
+                else:
+                    path_yaw = target.yaw
             densified.append(
                 _pose(
                     kind,
@@ -572,7 +577,7 @@ def build_nav2_follow_path_corridor_push_plan(
         frame_id=frame_id,
         max_spacing_m=max_path_spacing_m,
         include_start_pose=include_start_pose,
-        yaw_mode="tangent",
+        yaw_mode="corridor_push",
     )
     clearances = _path_segment_clearances(robot_pose, path_poses, ball_pose)
     min_clearance = min(clearances) if clearances else None

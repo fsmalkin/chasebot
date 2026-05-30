@@ -309,6 +309,7 @@ DEFAULT_PLACE_RECOVERY_SETTLE_S = 0.20
 DEFAULT_PLACE_MARGINAL_CAPTURE_SETTLE_S = 0.25
 DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S = 60.0
 DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S = 8.0
+DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M = 0.35
 DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S = 1.25
 DEFAULT_STATIONARY_RECAPTURE_NUDGE_DELAY_S = 1.0
 DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S = 0.25
@@ -8803,10 +8804,18 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         terminal_correction_attempted=ai_terminal_correction_attempted,
                     )
                 nav2_corridor_push_attempted = True
+                corridor_push_through_m = None
+                if self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY:
+                    corridor_push_through_m = DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M
                 corridor_plan = build_nav2_follow_path_corridor_push_plan(
                     robot_pose,
                     ball_pose,
                     fetch_pose_world,
+                    **(
+                        {"push_through_m": corridor_push_through_m}
+                        if corridor_push_through_m is not None
+                        else {}
+                    ),
                 )
                 corridor_plan_dict = corridor_plan.to_dict()
                 path_poses = [
