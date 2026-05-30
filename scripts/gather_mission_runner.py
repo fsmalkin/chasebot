@@ -247,6 +247,7 @@ from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_REACQUIRE
 from gather_nav2_follow_path_reacquire_helpers import NAV2_MPPI_FOLLOW_PATH_REACQUIRE_CONTROL_FAMILY
 from gather_nav2_follow_path_reacquire_helpers import NAV2_MPPI_FOLLOW_PATH_REACQUIRE_OBJECTIVE
 from gather_nav2_follow_path_reacquire_helpers import NAV2_FOLLOW_PATH_RESULT_MARKER
+from gather_nav2_follow_path_reacquire_helpers import build_nav2_follow_path_corridor_contact_probe_plan
 from gather_nav2_follow_path_reacquire_helpers import build_nav2_follow_path_corridor_push_plan
 from gather_nav2_follow_path_reacquire_helpers import build_nav2_follow_path_reacquire_plan
 from gather_nav2_follow_path_reacquire_helpers import build_nav2_mppi_follow_path_reacquire_plan
@@ -310,6 +311,8 @@ DEFAULT_PLACE_MARGINAL_CAPTURE_SETTLE_S = 0.25
 DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S = 60.0
 DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S = 8.0
 DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M = 0.25
+DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_TIMEOUT_S = 12.0
+DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S = 4.0
 DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S = 1.25
 DEFAULT_STATIONARY_RECAPTURE_NUDGE_DELAY_S = 1.0
 DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S = 0.25
@@ -606,6 +609,45 @@ def clean_rounded_number(value: Any, digits: int = 6) -> float | None:
     if numeric is None:
         return None
     return round(float(numeric), int(digits))
+
+
+def nav2_follow_path_monitor_last_sample(payload: dict[str, Any] | None) -> dict[str, Any]:
+    source = payload if isinstance(payload, dict) else {}
+    sample = source.get("monitor_sample")
+    if isinstance(sample, dict) and sample:
+        return dict(sample)
+    monitor = source.get("monitor") if isinstance(source.get("monitor"), dict) else {}
+    monitor_sample = monitor.get("last_sample") if isinstance(monitor.get("last_sample"), dict) else {}
+    return dict(monitor_sample or {})
+
+
+def nav2_follow_path_object_motion_observed(
+    payload: dict[str, Any] | None,
+    *,
+    threshold_m: float | None = None,
+) -> bool:
+    sample = nav2_follow_path_monitor_last_sample(payload)
+    start_displacement_m = clean_number(sample.get("start_displacement_m"))
+    if start_displacement_m is None:
+        return False
+    threshold = DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M if threshold_m is None else max(float(threshold_m), 0.0)
+    return float(start_displacement_m) >= float(threshold)
+
+
+def nav2_follow_path_no_object_motion_result(
+    payload: dict[str, Any] | None,
+    *,
+    threshold_m: float | None = None,
+) -> dict[str, Any]:
+    source = payload if isinstance(payload, dict) else {}
+    sample = nav2_follow_path_monitor_last_sample(source)
+    start_displacement_m = clean_number(sample.get("start_displacement_m"))
+    threshold = DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M if threshold_m is None else max(float(threshold_m), 0.0)
+    return {
+        "object_motion_observed": nav2_follow_path_object_motion_observed(source, threshold_m=threshold),
+        "start_displacement_m": clean_rounded_number(start_displacement_m),
+        "required_motion_m": round(float(threshold), 6),
+    }
 
 
 def pose_payload(value: Any) -> dict[str, Any]:
@@ -1137,8 +1179,17 @@ class GatherMissionRunner:
                     fetch_phase_metrics[key] = place_payload.get(key)
             corridor_push_payload = place_payload.get("nav2_follow_path_corridor_push")
             if isinstance(corridor_push_payload, dict):
-                fetch_phase_metrics["nav2_follow_path_corridor_push"] = corridor_push_payload
+                corridor_payload = dict(corridor_push_payload)
+                first_contact_payload = place_payload.get("ai_first_contact_confirmation")
+                if (
+                    isinstance(first_contact_payload, dict)
+                    and first_contact_payload
+                    and "first_contact_confirmation" not in corridor_payload
+                ):
+                    corridor_payload["first_contact_confirmation"] = first_contact_payload
+                fetch_phase_metrics["nav2_follow_path_corridor_push"] = corridor_payload
             for key in (
+                "ai_first_contact_confirmation",
                 "ai_push_coast_mode",
                 "ai_push_coast_shadow",
                 "ai_push_coast_proposal",
@@ -2400,6 +2451,15 @@ def evaluate_monitor():
             "error": "monitor_unsafe_drift_robot_separation",
             "sample": sample,
         }
+    success_on_motion_m = max(float(monitor_payload.get("success_on_motion_m") or 0.0), 0.0)
+    if success_on_motion_m > 0.0 and start_displacement_m >= success_on_motion_m:
+        monitor_state["terminal_reason"] = "first_contact_confirmed"
+        return {
+            "reason": "first_contact_confirmed",
+            "dispatch_status": "monitor_first_contact_confirmed",
+            "error": "",
+            "sample": sample,
+        }
     return None
 
 
@@ -2607,7 +2667,7 @@ try:
                     if monitor_terminal is not None:
                         cancel_payload = request_cancel(goal_handle)
                         monitor_reason = str(monitor_terminal.get("reason") or "")
-                        monitor_success = monitor_reason == "success"
+                        monitor_success = monitor_reason in {"success", "first_contact_confirmed"}
                         emit(result_payload({
                             "dispatch_status": str(monitor_terminal.get("dispatch_status") or "monitor_cancel"),
                             "accepted": True,
@@ -2638,18 +2698,37 @@ try:
                         result = result_future.result()
                         status_code = int(result.status) if result is not None else int(GoalStatus.STATUS_UNKNOWN)
                         success = status_code == int(GoalStatus.STATUS_SUCCEEDED)
-                        emit(result_payload({
-                            "dispatch_status": "goal_succeeded" if success else "goal_finished",
-                            "accepted": True,
-                            "success": bool(success),
-                            "status_code": status_code,
-                            "status_text": status_text(status_code),
-                            "action_result": ros_to_plain(getattr(result, "result", None)),
-                            "elapsed_s": round(time.monotonic() - started, 6),
-                            "error": "" if success else f"goal_status_{status_code}",
-                            "timed_out": False,
-                            "cancel_requested": False,
-                        }))
+                        final_monitor_terminal = evaluate_monitor()
+                        if final_monitor_terminal is not None:
+                            monitor_reason = str(final_monitor_terminal.get("reason") or "")
+                            monitor_success = monitor_reason in {"success", "first_contact_confirmed"}
+                            emit(result_payload({
+                                "dispatch_status": str(final_monitor_terminal.get("dispatch_status") or "monitor_finished"),
+                                "accepted": True,
+                                "success": bool(monitor_success),
+                                "status_code": status_code,
+                                "status_text": status_text(status_code),
+                                "action_result": ros_to_plain(getattr(result, "result", None)),
+                                "elapsed_s": round(time.monotonic() - started, 6),
+                                "error": str(final_monitor_terminal.get("error") or ""),
+                                "timed_out": False,
+                                "monitor_cancel_reason": monitor_reason,
+                                "monitor_sample": final_monitor_terminal.get("sample", {}),
+                                "cancel_requested": False,
+                            }))
+                        else:
+                            emit(result_payload({
+                                "dispatch_status": "goal_succeeded" if success else "goal_finished",
+                                "accepted": True,
+                                "success": bool(success),
+                                "status_code": status_code,
+                                "status_text": status_text(status_code),
+                                "action_result": ros_to_plain(getattr(result, "result", None)),
+                                "elapsed_s": round(time.monotonic() - started, 6),
+                                "error": "" if success else f"goal_status_{status_code}",
+                                "timed_out": False,
+                                "cancel_requested": False,
+                            }))
 finally:
     node.destroy_node()
     if rclpy.ok():
@@ -8566,6 +8645,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         latest_ai_push_coast: dict[str, Any] = {}
         nav2_corridor_push_attempted = False
         nav2_corridor_push_diagnostics: dict[str, Any] = {}
+        ai_first_contact_confirmation_attempted = False
+        ai_first_contact_confirmation_confirmed = False
+        ai_first_contact_confirmation_diagnostics: dict[str, Any] = {}
+        ai_first_contact_confirmation_servo_attempted = False
+        ai_first_contact_confirmation_servo_active_until: float | None = None
         ai_terminal_correction_attempted = False
         ai_terminal_correction_active_until: float | None = None
         closest_distance_m: float | None = None
@@ -8610,12 +8694,64 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 mode=self.ai_push_coast_mode,
             )
 
+        def _nav2_corridor_push_failure_reason(follow_path_result: dict[str, Any]) -> str:
+            dispatch_status = clean_text(follow_path_result.get("dispatch_status"))
+            if dispatch_status == "monitor_ball_escape":
+                return "nav2_corridor_push_ball_escape"
+            if dispatch_status == "monitor_stale_state":
+                return "nav2_corridor_push_stale_state"
+            if dispatch_status == "monitor_unsafe_drift":
+                return "nav2_corridor_push_unsafe_drift"
+            if bool(follow_path_result.get("timed_out", False)):
+                return "nav2_corridor_push_timeout"
+            if dispatch_status == "goal_finished":
+                return "nav2_corridor_push_action_abort"
+            return "nav2_corridor_push_failed"
+
+        def _corridor_push_dispatch_diagnostics(
+            *,
+            plan_dict: dict[str, Any],
+            follow_path_result: dict[str, Any],
+            base: dict[str, Any] | None = None,
+        ) -> dict[str, Any]:
+            object_motion = nav2_follow_path_no_object_motion_result(follow_path_result)
+            return {
+                **(base or {}),
+                "plan": plan_dict,
+                "dispatch_status": clean_text(follow_path_result.get("dispatch_status"), "unknown"),
+                "success": bool(follow_path_result.get("success", False)),
+                "status_code": clean_number(follow_path_result.get("status_code")),
+                "status_text": clean_text(follow_path_result.get("status_text")),
+                "error": clean_text(follow_path_result.get("error")),
+                "timeout_s": clean_rounded_number(follow_path_result.get("timeout_s")),
+                "elapsed_s": clean_rounded_number(follow_path_result.get("elapsed_s")),
+                "timed_out": bool(follow_path_result.get("timed_out", False)),
+                "cancel_requested": bool(follow_path_result.get("cancel_requested", False)),
+                "monitor_cancel_reason": clean_text(follow_path_result.get("monitor_cancel_reason")),
+                "monitor_sample": follow_path_result.get("monitor_sample", {}),
+                "monitor": follow_path_result.get("monitor", {}),
+                "first_contact_confirmed": bool(object_motion.get("object_motion_observed", False)),
+                "first_contact_no_object_motion": not bool(object_motion.get("object_motion_observed", False)),
+                "first_contact_start_displacement_m": object_motion.get("start_displacement_m"),
+                "first_contact_required_motion_m": object_motion.get("required_motion_m"),
+                "cmd_vel_counts": follow_path_result.get("cmd_vel_counts", {}),
+                "cmd_vel_last": follow_path_result.get("cmd_vel_last", {}),
+                "odom_delta": follow_path_result.get("odom_delta", {}),
+                "path_progress_last": follow_path_result.get("path_progress_last", {}),
+                "result": follow_path_result,
+            }
+
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
             fetch_elapsed_s = max(0.0, now_monotonic - fetch_started_monotonic)
             ai_terminal_correction_active = (
                 ai_terminal_correction_active_until is not None
                 and now_monotonic < ai_terminal_correction_active_until
+            )
+            ai_first_contact_confirmation_servo_active = (
+                ai_first_contact_confirmation_servo_active_until is not None
+                and now_monotonic < ai_first_contact_confirmation_servo_active_until
+                and not ball_moved_since_fetch
             )
             _dashboard_state, robot_pose, ball_pose = self._control_loop_state(session_id=session_id, target=target)
             capture = capture_snapshot(robot_pose, ball_pose or {}, self.capture_envelope) if robot_pose and ball_pose else None
@@ -8636,6 +8772,47 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 )
             ):
                 ball_moved_since_fetch = True
+                if (
+                    ai_first_contact_confirmation_servo_attempted
+                    and not ai_first_contact_confirmation_confirmed
+                ):
+                    ai_first_contact_confirmation_confirmed = True
+                    ai_first_contact_confirmation_servo_active_until = None
+                    ai_first_contact_confirmation_servo_active = False
+                    ai_first_contact_confirmation_diagnostics = {
+                        **ai_first_contact_confirmation_diagnostics,
+                        "confirmed": True,
+                        "first_contact_confirmed": True,
+                        "first_contact_no_object_motion": False,
+                        "first_contact_confirmation_source": "deterministic_servo",
+                        "first_contact_start_displacement_m": (
+                            round(float(latest_ball_displacement_m), 6)
+                            if latest_ball_displacement_m is not None
+                            else None
+                        ),
+                        "deterministic_servo_attempted": True,
+                        "deterministic_servo_confirmed": True,
+                    }
+                    nav2_corridor_push_diagnostics = {
+                        **nav2_corridor_push_diagnostics,
+                        "first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                    }
+                    append_jsonl(
+                        state_history_path,
+                        {
+                            "generated_utc": utc_now(),
+                            "event_type": "ai_push_coast_first_contact_confirmation_servo_confirmed",
+                            "phase": "fetch_to_pose",
+                            "attempt": int(attempt_index),
+                            "attempt_kind": str(attempt_kind),
+                            "target_id": target.id,
+                            "robot_pose": robot_pose,
+                            "ball_pose": ball_pose,
+                            "fetch_pose_world": fetch_pose_world,
+                            "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                            "controller_family": self.gather_control_family,
+                        },
+                    )
             distance_to_fetch_pose_m = _distance_to_fetch_pose(ball_pose)
             if ball_pose:
                 latest_ball_pose = dict(ball_pose)
@@ -8643,6 +8820,31 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             latest_capture = capture.to_dict() if capture else {}
             latest_zone_score = zone_score.to_dict() if zone_score else {}
             observe_count += 1
+            if (
+                self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+                and ai_first_contact_confirmation_servo_active_until is not None
+                and not ball_moved_since_fetch
+                and now_monotonic >= ai_first_contact_confirmation_servo_active_until
+            ):
+                ai_first_contact_confirmation_diagnostics = {
+                    **ai_first_contact_confirmation_diagnostics,
+                    "confirmed": False,
+                    "first_contact_confirmed": False,
+                    "first_contact_no_object_motion": True,
+                    "first_contact_confirmation_source": "deterministic_servo",
+                    "deterministic_servo_attempted": True,
+                    "deterministic_servo_confirmed": False,
+                    "deterministic_servo_timeout_s": round(
+                        float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S),
+                        6,
+                    ),
+                }
+                nav2_corridor_push_diagnostics = {
+                    **nav2_corridor_push_diagnostics,
+                    "first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                }
+                failure_reason = "nav2_corridor_push_first_contact_no_object_motion"
+                break
             if distance_to_fetch_pose_m is not None:
                 if closest_distance_m is None or distance_to_fetch_pose_m < closest_distance_m:
                     closest_distance_m = float(distance_to_fetch_pose_m)
@@ -8701,6 +8903,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         ),
                         "fetch_closest_approach_distance_m": round(float(closest_distance_m), 6),
                         "fetch_closest_pose": closest_pose,
+                        "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
                         "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
                         "ai_push_coast_mode": self.ai_push_coast_mode,
                         **latest_ai_push_coast,
@@ -8726,6 +8929,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 )
                 and distance_to_fetch_pose_m is not None
                 and distance_to_fetch_pose_m > float(self.fetch_delivery_radius_m)
+                and not ai_first_contact_confirmation_servo_active
             ):
                 if self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY:
                     latest_ai_push_coast = _ai_push_coast_decision(
@@ -8794,6 +8998,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and robot_pose
                 and ball_pose
                 and not nav2_corridor_push_attempted
+                and not ai_first_contact_confirmation_servo_active
             ):
                 if self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY:
                     latest_ai_push_coast = _ai_push_coast_decision(
@@ -8803,6 +9008,210 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         latest_still_s=latest_still_s,
                         terminal_correction_attempted=ai_terminal_correction_attempted,
                     )
+                    if (
+                        not ai_first_contact_confirmation_attempted
+                        and not ball_moved_since_fetch
+                    ):
+                        ai_first_contact_confirmation_attempted = True
+                        probe_plan = build_nav2_follow_path_corridor_contact_probe_plan(
+                            robot_pose,
+                            ball_pose,
+                            fetch_pose_world,
+                        )
+                        probe_plan_dict = probe_plan.to_dict()
+                        ai_first_contact_confirmation_diagnostics = {
+                            "plan": probe_plan_dict,
+                            "attempted": True,
+                            "confirmed": False,
+                            "dispatch_status": "not_dispatched",
+                            "monitor_cancel_live": True,
+                            "monitor_cancel_live_reason": "first_contact_motion_evidence",
+                            "success_on_motion_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                        }
+                        nav2_corridor_push_diagnostics = {
+                            **nav2_corridor_push_diagnostics,
+                            "first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                        }
+                        append_jsonl(
+                            state_history_path,
+                            {
+                                "generated_utc": utc_now(),
+                                "event_type": "ai_push_coast_first_contact_confirmation_plan",
+                                "phase": "fetch_to_pose",
+                                "attempt": int(attempt_index),
+                                "attempt_kind": str(attempt_kind),
+                                "target_id": target.id,
+                                "robot_pose": robot_pose,
+                                "ball_pose": ball_pose,
+                                "fetch_pose_world": fetch_pose_world,
+                                "nav2_follow_path_plan": probe_plan_dict,
+                                "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                                "ai_push_coast_mode": self.ai_push_coast_mode,
+                                **latest_ai_push_coast,
+                                "controller_family": self.gather_control_family,
+                            },
+                        )
+                        if not bool(probe_plan_dict.get("active", False)):
+                            failure_reason = clean_text(
+                                probe_plan_dict.get("reason"),
+                                "nav2_corridor_push_first_contact_probe_unavailable",
+                            )
+                            break
+                        probe_path_poses = [
+                            dict(item)
+                            for item in probe_plan_dict.get("path_poses", [])
+                            if isinstance(item, dict)
+                        ]
+                        remaining_timeout_s = max(0.1, deadline - time.monotonic())
+                        probe_timeout_s = min(
+                            float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_TIMEOUT_S),
+                            remaining_timeout_s,
+                        )
+                        self._set_manual_drive(
+                            False,
+                            mode="ai_push_coast_first_contact_confirmation",
+                            rationale="Nav2 FollowPath probes for measured ball contact before the corridor push.",
+                        )
+                        self._update_gather_runtime_state(
+                            mission_phase="fetch_to_pose",
+                            gather_phase="fetch_to_pose",
+                            latest_feedback=f"Confirming first contact on {target.label}.",
+                        )
+                        probe_monitor = {
+                            "enabled": True,
+                            "truth_state_path": to_container_repo_path(self._truth_state_path(session_id)),
+                            "target_model_name": self._target_model_name(target),
+                            "start_ball_pose": ball_pose,
+                            "delivery_pose": fetch_pose_world,
+                            "delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                            "stale_timeout_s": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_STALE_S), 6),
+                            "escape_lateral_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_ESCAPE_LATERAL_M), 6),
+                            "backtrack_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_BACKTRACK_M), 6),
+                            "max_robot_ball_distance_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M), 6),
+                            "launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                            "success_on_motion_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                        }
+                        try:
+                            probe_result = self._dispatch_nav2_follow_path_reacquire(
+                                compose_project=clean_text(_dashboard_state.get("compose_project"), session_id),
+                                path_poses=probe_path_poses,
+                                controller_id=clean_text(
+                                    probe_plan_dict.get("controller_id"),
+                                    DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_ID,
+                                ),
+                                goal_checker_id=clean_text(
+                                    probe_plan_dict.get("goal_checker_id"),
+                                    DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID,
+                                ),
+                                timeout_s=probe_timeout_s,
+                                monitor=probe_monitor,
+                            )
+                        except Exception as exc:
+                            probe_result = {
+                                "dispatch_status": "client_exception",
+                                "accepted": False,
+                                "success": False,
+                                "error": str(exc),
+                            }
+                        ai_first_contact_confirmation_diagnostics = _corridor_push_dispatch_diagnostics(
+                            plan_dict=probe_plan_dict,
+                            follow_path_result=probe_result,
+                            base={
+                                "attempted": True,
+                                "monitor_cancel_live": True,
+                                "monitor_cancel_live_reason": "first_contact_motion_evidence",
+                                "success_on_motion_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                            },
+                        )
+                        ai_first_contact_confirmation_confirmed = bool(
+                            ai_first_contact_confirmation_diagnostics.get("first_contact_confirmed", False)
+                        )
+                        ai_first_contact_confirmation_diagnostics["confirmed"] = bool(
+                            ai_first_contact_confirmation_confirmed
+                        )
+                        nav2_corridor_push_diagnostics = {
+                            **nav2_corridor_push_diagnostics,
+                            "first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                        }
+                        append_jsonl(
+                            state_history_path,
+                            {
+                                "generated_utc": utc_now(),
+                                "event_type": "ai_push_coast_first_contact_confirmation_result",
+                                "phase": "fetch_to_pose",
+                                "attempt": int(attempt_index),
+                                "attempt_kind": str(attempt_kind),
+                                "target_id": target.id,
+                                "nav2_follow_path_plan": probe_plan_dict,
+                                "nav2_follow_path_result": probe_result,
+                                "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                                "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                                "ai_push_coast_mode": self.ai_push_coast_mode,
+                                **latest_ai_push_coast,
+                                "controller_family": self.gather_control_family,
+                                "control": self._control_debug_fields(
+                                    strategy_name=AI_PUSH_COAST_SERVO_CONTROL_FAMILY,
+                                    objective_name="first_contact_confirmation",
+                                ),
+                            },
+                        )
+                        if bool(probe_result.get("success", False)) and ai_first_contact_confirmation_confirmed:
+                            ball_moved_since_fetch = True
+                            previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                            time.sleep(self.args.poll_s)
+                            continue
+                        if bool(probe_result.get("success", False)):
+                            ai_first_contact_confirmation_servo_attempted = True
+                            ai_first_contact_confirmation_servo_active_until = min(
+                                deadline,
+                                time.monotonic() + DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S,
+                            )
+                            ai_first_contact_confirmation_diagnostics = {
+                                **ai_first_contact_confirmation_diagnostics,
+                                "confirmed": False,
+                                "first_contact_confirmation_source": "deterministic_servo",
+                                "nav2_probe_no_object_motion": True,
+                                "deterministic_servo_attempted": True,
+                                "deterministic_servo_active": True,
+                                "deterministic_servo_window_s": round(
+                                    float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S),
+                                    6,
+                                ),
+                            }
+                            nav2_corridor_push_diagnostics = {
+                                **nav2_corridor_push_diagnostics,
+                                "first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                            }
+                            append_jsonl(
+                                state_history_path,
+                                {
+                                    "generated_utc": utc_now(),
+                                    "event_type": "ai_push_coast_first_contact_confirmation_servo_start",
+                                    "phase": "fetch_to_pose",
+                                    "attempt": int(attempt_index),
+                                    "attempt_kind": str(attempt_kind),
+                                    "target_id": target.id,
+                                    "robot_pose": robot_pose,
+                                    "ball_pose": ball_pose,
+                                    "fetch_pose_world": fetch_pose_world,
+                                    "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                                    "controller_family": self.gather_control_family,
+                                    "control": self._control_debug_fields(
+                                        strategy_name=AI_PUSH_COAST_SERVO_CONTROL_FAMILY,
+                                        objective_name="first_contact_confirmation_servo",
+                                    ),
+                                },
+                            )
+                            previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                            time.sleep(self.args.poll_s)
+                            continue
+                        else:
+                            mapped_reason = _nav2_corridor_push_failure_reason(probe_result)
+                            if mapped_reason == "nav2_corridor_push_failed":
+                                mapped_reason = "nav2_corridor_push_first_contact_failed"
+                            failure_reason = mapped_reason
+                        previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                        break
                 nav2_corridor_push_attempted = True
                 corridor_push_through_m = None
                 if self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY:
@@ -8900,26 +9309,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "success": False,
                         "error": str(exc),
                     }
-                nav2_corridor_push_diagnostics = {
-                    **nav2_corridor_push_diagnostics,
-                    "dispatch_status": clean_text(follow_path_result.get("dispatch_status"), "unknown"),
-                    "success": bool(follow_path_result.get("success", False)),
-                    "status_code": clean_number(follow_path_result.get("status_code")),
-                    "status_text": clean_text(follow_path_result.get("status_text")),
-                    "error": clean_text(follow_path_result.get("error")),
-                    "timeout_s": clean_rounded_number(follow_path_result.get("timeout_s")),
-                    "elapsed_s": clean_rounded_number(follow_path_result.get("elapsed_s")),
-                    "timed_out": bool(follow_path_result.get("timed_out", False)),
-                    "cancel_requested": bool(follow_path_result.get("cancel_requested", False)),
-                    "monitor_cancel_reason": clean_text(follow_path_result.get("monitor_cancel_reason")),
-                    "monitor_sample": follow_path_result.get("monitor_sample", {}),
-                    "monitor": follow_path_result.get("monitor", {}),
-                    "cmd_vel_counts": follow_path_result.get("cmd_vel_counts", {}),
-                    "cmd_vel_last": follow_path_result.get("cmd_vel_last", {}),
-                    "odom_delta": follow_path_result.get("odom_delta", {}),
-                    "path_progress_last": follow_path_result.get("path_progress_last", {}),
-                    "result": follow_path_result,
-                }
+                nav2_corridor_push_diagnostics = _corridor_push_dispatch_diagnostics(
+                    plan_dict=corridor_plan_dict,
+                    follow_path_result=follow_path_result,
+                    base=nav2_corridor_push_diagnostics,
+                )
                 append_jsonl(
                     state_history_path,
                     {
@@ -8942,19 +9336,15 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     },
                 )
                 if not bool(follow_path_result.get("success", False)):
-                    dispatch_status = clean_text(follow_path_result.get("dispatch_status"))
-                    if dispatch_status == "monitor_ball_escape":
-                        failure_reason = "nav2_corridor_push_ball_escape"
-                    elif dispatch_status == "monitor_stale_state":
-                        failure_reason = "nav2_corridor_push_stale_state"
-                    elif dispatch_status == "monitor_unsafe_drift":
-                        failure_reason = "nav2_corridor_push_unsafe_drift"
-                    elif bool(follow_path_result.get("timed_out", False)):
-                        failure_reason = "nav2_corridor_push_timeout"
-                    elif dispatch_status == "goal_finished":
-                        failure_reason = "nav2_corridor_push_action_abort"
-                    else:
-                        failure_reason = "nav2_corridor_push_failed"
+                    failure_reason = _nav2_corridor_push_failure_reason(follow_path_result)
+                    previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                    break
+                if (
+                    self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+                    and not ball_moved_since_fetch
+                    and not bool(nav2_corridor_push_diagnostics.get("first_contact_confirmed", False))
+                ):
+                    failure_reason = "nav2_corridor_push_first_contact_no_object_motion"
                     previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
                     break
                 previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
@@ -9007,6 +9397,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     )
                 policy_fields = {
                     "ai_push_coast_mode": self.ai_push_coast_mode,
+                    "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
+                    "ai_first_contact_confirmation_servo_active": bool(ai_first_contact_confirmation_servo_active),
                     "ai_terminal_correction_active": bool(ai_terminal_correction_active),
                     "ai_terminal_correction_attempted": bool(ai_terminal_correction_attempted),
                     **latest_ai_push_coast,
@@ -9017,7 +9409,30 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         else "guarded_terminal_contact",
                     ),
                 }
-                if self.ai_push_coast_mode == AI_PUSH_COAST_MODE_GUARDED_LIVE and ai_terminal_correction_active:
+                if ai_first_contact_confirmation_servo_active:
+                    decision = decide_object_centric_gather_command(
+                        robot_pose,
+                        ball_pose,
+                        phase="fetch_to_pose",
+                        zone=self.zone,
+                        envelope=self.capture_envelope,
+                        previous_command=previous_command,
+                        previous_ball_pose=previous_ball_pose,
+                    )
+                    command = decision.command
+                    raw_command = decision.raw_command
+                    latest_policy = dict(decision.diagnostics)
+                    policy_fields.update(
+                        {
+                            "object_centric_policy": latest_policy,
+                            **self._control_debug_fields(
+                                strategy_name=str(decision.strategy_name or ""),
+                                objective_name="first_contact_confirmation_servo",
+                                progress_score=clean_number(decision.progress_score),
+                            ),
+                        }
+                    )
+                elif self.ai_push_coast_mode == AI_PUSH_COAST_MODE_GUARDED_LIVE and ai_terminal_correction_active:
                     decision = decide_object_centric_gather_command(
                         robot_pose,
                         ball_pose,
@@ -9206,6 +9621,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 else None
             ),
             "fetch_closest_pose": closest_pose,
+            "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
             "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
             "ai_push_coast_mode": self.ai_push_coast_mode,
             **latest_ai_push_coast,

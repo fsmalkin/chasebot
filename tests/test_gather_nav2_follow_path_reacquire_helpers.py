@@ -113,6 +113,28 @@ def test_nav2_follow_path_corridor_push_arrives_contact_ready_on_push_yaw():
     assert payload["path_poses"][1]["yaw_deg"] == 0.0
 
 
+def test_nav2_follow_path_corridor_contact_probe_stops_after_motion_confirm_point():
+    plan = follow_path.build_nav2_follow_path_corridor_contact_probe_plan(
+        {"x": -0.65, "y": 0.0, "yaw": 0.0},
+        {"x": 0.0, "y": 0.0, "z": 0.05},
+        {"x": 1.0, "y": 0.0, "z": 0.001, "radius_m": 0.3},
+        max_path_spacing_m=0.0,
+    )
+    payload = plan.to_dict()
+
+    assert payload["active"] is True
+    assert payload["reason"] == "follow_path_corridor_contact_probe"
+    assert payload["path_kinds"] == [
+        "start",
+        "corridor_contact_ready",
+        "corridor_contact",
+        "corridor_contact_confirm",
+    ]
+    assert payload["path_poses"][-1]["x"] == 0.08
+    assert payload["trigger"]["contact_confirm_m"] == 0.08
+    assert "corridor_delivery_intersection" not in payload["path_kinds"]
+
+
 def test_nav2_follow_path_corridor_push_reports_missing_geometry():
     plan = follow_path.build_nav2_follow_path_corridor_push_plan(
         {"x": -0.65, "y": 0.0, "yaw": 0.0},

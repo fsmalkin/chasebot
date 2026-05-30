@@ -8675,6 +8675,8 @@ def test_fetch_to_pose_outcome_preserves_ai_push_coast_fields(tmp_path, monkeypa
         state_history_path=state_history_path,
         final_ball_pose={"x": 3.0, "y": 0.0, "z": 0.05},
         place_payload={
+            "ai_first_contact_confirmation": {"confirmed": True, "first_contact_start_displacement_m": 0.031},
+            "nav2_follow_path_corridor_push": {"dispatch_status": "monitor_success"},
             "ai_push_coast_mode": "shadow",
             "ai_push_coast_shadow": {"model_id": "heuristic_hybrid_stage_supervisor_v0"},
             "ai_push_coast_proposal": {"maneuver_class": "terminal_repush"},
@@ -8684,6 +8686,8 @@ def test_fetch_to_pose_outcome_preserves_ai_push_coast_fields(tmp_path, monkeypa
     )
 
     assert outcome["ai_push_coast_mode"] == "shadow"
+    assert outcome["ai_first_contact_confirmation"]["confirmed"] is True
+    assert outcome["nav2_follow_path_corridor_push"]["first_contact_confirmation"]["first_contact_start_displacement_m"] == 0.031
     assert outcome["ai_push_coast_shadow"]["model_id"] == "heuristic_hybrid_stage_supervisor_v0"
     assert outcome["ai_push_coast_proposal"]["maneuver_class"] == "terminal_repush"
     assert outcome["ai_push_coast_guard"]["reasons"] == ["shadow_mode"]
@@ -8874,9 +8878,11 @@ def test_ai_push_coast_corridor_push_uses_bounded_push_through(tmp_path, monkeyp
     robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
     ball_samples = [
         {"x": 1.0, "y": 0.0, "z": 0.05},
+        {"x": 1.04, "y": 0.0, "z": 0.05},
         {"x": float(runner.zone.world_x), "y": float(runner.zone.world_y), "z": 0.05},
     ]
     captured_build: dict[str, object] = {}
+    dispatch_calls: list[dict[str, object]] = []
 
     def fake_control_loop_state(session_id, target):
         ball_pose = ball_samples.pop(0) if len(ball_samples) > 1 else ball_samples[0]
@@ -8906,19 +8912,30 @@ def test_ai_push_coast_corridor_push_uses_bounded_push_through(tmp_path, monkeyp
     monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
     monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
     monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_push_plan", fake_build_plan)
-    monkeypatch.setattr(
-        runner,
-        "_dispatch_nav2_follow_path_reacquire",
-        lambda **kwargs: {
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(kwargs)
+        if kwargs.get("monitor", {}).get("success_on_motion_m") is not None:
+            return {
+                "dispatch_status": "monitor_first_contact_confirmed",
+                "accepted": True,
+                "success": True,
+                "timed_out": False,
+                "cancel_requested": True,
+                "monitor_cancel_reason": "first_contact_confirmed",
+                "monitor_sample": {"start_displacement_m": 0.031, "delivery_distance_m": 0.8},
+            }
+        return {
             "dispatch_status": "monitor_success",
             "accepted": True,
             "success": True,
             "timed_out": False,
             "cancel_requested": True,
             "monitor_cancel_reason": "success",
-            "monitor_sample": {"delivery_distance_m": 0.0},
-        },
-    )
+            "monitor_sample": {"start_displacement_m": 0.75, "delivery_distance_m": 0.0},
+        }
+
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
 
     passed, payload = runner._fetch_to_pose_target(
         session_id="session-ai-corridor-push-cap",
@@ -8928,7 +8945,165 @@ def test_ai_push_coast_corridor_push_uses_bounded_push_through(tmp_path, monkeyp
 
     assert passed is True
     assert captured_build["push_through_m"] == gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M
+    assert len(dispatch_calls) == 2
+    assert dispatch_calls[0]["monitor"]["success_on_motion_m"] == gather_runner.DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M
+    assert payload["ai_first_contact_confirmation"]["confirmed"] is True
     assert payload["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
+
+
+def test_ai_push_coast_first_contact_probe_fails_closed_when_nav2_finishes_without_ball_motion(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_SHADOW
+    runner.fetch_delivery_radius_m = 0.25
+    runner.args.poll_s = 0.5
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+    dispatch_calls: list[dict[str, object]] = []
+    clock = {"now": 0.0}
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(gather_runner.time, "sleep", lambda seconds: clock.__setitem__("now", clock["now"] + seconds))
+    monkeypatch.setattr(gather_runner, "DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S", 1.0)
+
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda session_id, target: (
+            {"compose_project": "chasecar_dashboard_contact_ready"},
+            robot_pose,
+            ball_pose,
+        ),
+    )
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(kwargs)
+        return {
+            "dispatch_status": "goal_succeeded",
+            "accepted": True,
+            "success": True,
+            "timed_out": False,
+            "cancel_requested": False,
+            "monitor": {"last_sample": {"start_displacement_m": 0.0, "delivery_distance_m": 0.55}},
+        }
+
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-first-contact-no-motion",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "nav2_corridor_push_first_contact_no_object_motion"
+    assert len(dispatch_calls) == 1
+    assert dispatch_calls[0]["monitor"]["success_on_motion_m"] == gather_runner.DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M
+    assert payload["ai_first_contact_confirmation"]["confirmed"] is False
+    assert payload["ai_first_contact_confirmation"]["deterministic_servo_attempted"] is True
+    assert payload["ai_first_contact_confirmation"]["deterministic_servo_confirmed"] is False
+    assert payload["ai_first_contact_confirmation"]["first_contact_no_object_motion"] is True
+    assert payload["ai_first_contact_confirmation"]["first_contact_start_displacement_m"] == 0.0
+
+
+def test_ai_push_coast_first_contact_servo_can_confirm_then_dispatch_corridor_push(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_SHADOW
+    runner.fetch_delivery_radius_m = 0.25
+    runner.args.poll_s = 0.5
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_samples = [
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        {"x": 1.0, "y": 0.0, "z": 0.05},
+        {"x": 1.04, "y": 0.0, "z": 0.05},
+        {"x": float(runner.zone.world_x), "y": float(runner.zone.world_y), "z": 0.05},
+    ]
+    dispatch_calls: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+    captured_build: dict[str, object] = {}
+    clock = {"now": 0.0}
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(gather_runner.time, "sleep", lambda seconds: clock.__setitem__("now", clock["now"] + seconds))
+    monkeypatch.setattr(gather_runner, "DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S", 2.0)
+
+    def fake_control_loop_state(session_id, target):
+        ball_pose = ball_samples.pop(0) if len(ball_samples) > 1 else ball_samples[0]
+        return {"compose_project": "chasecar_dashboard_contact_ready"}, robot_pose, ball_pose
+
+    class FakePlan:
+        def to_dict(self):
+            return {
+                "active": True,
+                "reason": "follow_path_corridor_push",
+                "controller_id": "FollowPath",
+                "goal_checker_id": "general_goal_checker",
+                "path_poses": [
+                    {"kind": "start", "frame_id": "odom", "x": 0.45, "y": 0.0, "yaw": 0.0},
+                    {"kind": "corridor_push_through", "frame_id": "odom", "x": 1.25, "y": 0.0, "yaw": 0.0},
+                ],
+                "trigger": {"push_through_m": gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M},
+            }
+
+    def fake_build_plan(robot_pose_arg, ball_pose_arg, delivery_pose_arg, **kwargs):
+        captured_build.update(kwargs)
+        return FakePlan()
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(kwargs)
+        if kwargs.get("monitor", {}).get("success_on_motion_m") is not None:
+            return {
+                "dispatch_status": "goal_succeeded",
+                "accepted": True,
+                "success": True,
+                "timed_out": False,
+                "cancel_requested": False,
+                "monitor": {"last_sample": {"start_displacement_m": 0.0, "delivery_distance_m": 0.55}},
+            }
+        return {
+            "dispatch_status": "monitor_success",
+            "accepted": True,
+            "success": True,
+            "timed_out": False,
+            "cancel_requested": True,
+            "monitor_cancel_reason": "success",
+            "monitor_sample": {"start_displacement_m": 0.75, "delivery_distance_m": 0.0},
+        }
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {"enabled": enabled, "linear_x": linear_x, "angular_z": angular_z, "mode": mode}
+        ),
+    )
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_push_plan", fake_build_plan)
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-first-contact-servo-confirms",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is True
+    assert len(dispatch_calls) == 2
+    assert captured_build["push_through_m"] == gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M
+    assert any(item["enabled"] and item["mode"].startswith("object_fetch_to_pose") for item in command_log)
+    assert payload["ai_first_contact_confirmation"]["deterministic_servo_attempted"] is True
+    assert payload["ai_first_contact_confirmation"]["deterministic_servo_confirmed"] is True
+    assert payload["ai_first_contact_confirmation"]["first_contact_confirmation_source"] == "deterministic_servo"
 
 
 def test_run_target_fails_settled_placement_loss_when_ball_leaves_local_correction_range(tmp_path, monkeypatch):

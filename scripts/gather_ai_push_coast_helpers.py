@@ -109,6 +109,8 @@ def _nav2_status(nav2_corridor_push: dict[str, Any] | None) -> dict[str, Any]:
         "status_text": str(payload.get("status_text", "") or ""),
         "monitor_cancel_reason": str(payload.get("monitor_cancel_reason", "") or ""),
         "monitor_sample": dict(monitor_sample or {}),
+        "first_contact_no_object_motion": bool(payload.get("first_contact_no_object_motion", False)),
+        "first_contact_confirmed": bool(payload.get("first_contact_confirmed", False)),
     }
 
 
@@ -140,6 +142,13 @@ def classify_ai_push_coast_stage(
         if "setup" not in labels:
             labels.append("setup")
     reason = str(shot.get("reason", "") or "")
+    if (
+        "first_contact_no_object_motion" in reason
+        or "missing_first_contact_motion" in reason
+        or "no_object_motion" in reason
+    ):
+        if "first_contact" not in labels:
+            labels.append("first_contact")
     if "capture_entry_timeout" in reason:
         if "setup" not in labels:
             labels.append("setup")
@@ -201,6 +210,15 @@ def decide_ai_push_coast_handoff(
         nav2_attempted=nav2_attempted,
         terminal_correction_attempted=terminal_correction_attempted,
     )
+    if bool(nav2.get("first_contact_no_object_motion", False)):
+        labels = list(stage_classification.get("stage_labels", []) or [])
+        if "first_contact" not in labels:
+            labels.append("first_contact")
+        stage_classification = {
+            **stage_classification,
+            "primary_stage": labels[0] if labels else "first_contact",
+            "stage_labels": labels,
+        }
     candidate_maneuvers = [
         "stay_with_nav2",
         "coast_accept",

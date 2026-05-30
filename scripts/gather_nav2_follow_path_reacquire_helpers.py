@@ -32,6 +32,7 @@ FOLLOW_PATH_HANDOFF_ALIGN = "handoff_align"
 FOLLOW_PATH_HANDOFF_YAW = "handoff_yaw"
 FOLLOW_PATH_CORRIDOR_CONTACT_READY = "corridor_contact_ready"
 FOLLOW_PATH_CORRIDOR_CONTACT = "corridor_contact"
+FOLLOW_PATH_CORRIDOR_CONTACT_CONFIRM = "corridor_contact_confirm"
 FOLLOW_PATH_CORRIDOR_DELIVERY_INTERSECTION = "corridor_delivery_intersection"
 FOLLOW_PATH_CORRIDOR_PUSH_THROUGH = "corridor_push_through"
 
@@ -49,6 +50,7 @@ DEFAULT_NAV2_FOLLOW_PATH_MIN_BALL_CLEARANCE_M = 0.50
 DEFAULT_NAV2_MPPI_FOLLOW_PATH_MAX_SPACING_M = 0.25
 DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_MAX_SPACING_M = 0.12
 DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTACT_STANDOFF_M = 0.35
+DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_CONTACT_CONFIRM_M = 0.08
 DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_THROUGH_M = 0.45
 
 DEFAULT_FOLLOW_PATH_ESCAPE_LATERAL_M = 1.45
@@ -584,6 +586,92 @@ def build_nav2_follow_path_corridor_push_plan(
     return Nav2FollowPathReacquirePlan(
         active=True,
         reason="follow_path_corridor_push",
+        path_poses=path_poses,
+        controller_id=controller_id,
+        goal_checker_id=goal_checker_id,
+        frame_id=frame_id,
+        trigger=trigger,
+        pre_stage_at_plan={},
+        side_sign=None,
+        min_path_ball_clearance_m=round(float(min_clearance), 6) if min_clearance is not None else None,
+        segment_ball_clearances_m=tuple(round(float(value), 6) for value in clearances),
+    )
+
+
+def build_nav2_follow_path_corridor_contact_probe_plan(
+    robot_pose: dict[str, Any],
+    ball_pose: dict[str, Any],
+    delivery_pose: dict[str, Any],
+    *,
+    frame_id: str = DEFAULT_NAV2_FOLLOW_PATH_FRAME_ID,
+    controller_id: str = DEFAULT_NAV2_FOLLOW_PATH_CONTROLLER_ID,
+    goal_checker_id: str = DEFAULT_NAV2_FOLLOW_PATH_GOAL_CHECKER_ID,
+    contact_standoff_m: float = DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTACT_STANDOFF_M,
+    contact_confirm_m: float = DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_CONTACT_CONFIRM_M,
+    max_path_spacing_m: float = DEFAULT_NAV2_FOLLOW_PATH_CORRIDOR_PUSH_MAX_SPACING_M,
+    include_start_pose: bool = True,
+) -> Nav2FollowPathReacquirePlan:
+    basis = _target_basis(ball_pose, delivery_pose)
+    robot_xyyaw = world_pose_xyyaw(robot_pose)
+    ball_xy = point_xy(ball_pose)
+    delivery_xy = point_xy(delivery_pose)
+    trigger: dict[str, Any] = {}
+    if basis is not None and robot_xyyaw is not None and ball_xy is not None and delivery_xy is not None:
+        push_ux, push_uy, normal_x, normal_y, push_yaw_rad = basis
+        robot_x, robot_y, robot_yaw = robot_xyyaw
+        robot_from_ball_x = robot_x - ball_xy[0]
+        robot_from_ball_y = robot_y - ball_xy[1]
+        trigger = {
+            "robot_longitudinal_projection_m": round((robot_from_ball_x * push_ux) + (robot_from_ball_y * push_uy), 6),
+            "robot_lateral_signed_m": round((robot_from_ball_x * normal_x) + (robot_from_ball_y * normal_y), 6),
+            "yaw_error_deg": round(math.degrees(normalize_angle(robot_yaw - push_yaw_rad)), 6),
+            "ball_target_distance_m": round(math.hypot(delivery_xy[0] - ball_xy[0], delivery_xy[1] - ball_xy[1]), 6),
+            "contact_standoff_m": round(max(float(contact_standoff_m), 0.0), 6),
+            "contact_confirm_m": round(max(float(contact_confirm_m), 0.0), 6),
+        }
+    if basis is None or ball_xy is None or delivery_xy is None:
+        return Nav2FollowPathReacquirePlan(
+            active=False,
+            reason="missing_corridor_contact_probe_geometry",
+            controller_id=controller_id,
+            goal_checker_id=goal_checker_id,
+            frame_id=frame_id,
+            trigger=trigger,
+        )
+
+    push_ux, push_uy, _normal_x, _normal_y, push_yaw_rad = basis
+    contact_standoff = max(float(contact_standoff_m), 0.0)
+    contact_confirm = max(float(contact_confirm_m), 0.0)
+    path_poses = (
+        _pose(
+            FOLLOW_PATH_CORRIDOR_CONTACT_READY,
+            frame_id,
+            ball_xy[0] - (contact_standoff * push_ux),
+            ball_xy[1] - (contact_standoff * push_uy),
+            push_yaw_rad,
+        ),
+        _pose(FOLLOW_PATH_CORRIDOR_CONTACT, frame_id, ball_xy[0], ball_xy[1], push_yaw_rad),
+        _pose(
+            FOLLOW_PATH_CORRIDOR_CONTACT_CONFIRM,
+            frame_id,
+            ball_xy[0] + (contact_confirm * push_ux),
+            ball_xy[1] + (contact_confirm * push_uy),
+            push_yaw_rad,
+        ),
+    )
+    path_poses = _densify_path(
+        robot_pose,
+        path_poses,
+        frame_id=frame_id,
+        max_spacing_m=max_path_spacing_m,
+        include_start_pose=include_start_pose,
+        yaw_mode="corridor_push",
+    )
+    clearances = _path_segment_clearances(robot_pose, path_poses, ball_pose)
+    min_clearance = min(clearances) if clearances else None
+    return Nav2FollowPathReacquirePlan(
+        active=True,
+        reason="follow_path_corridor_contact_probe",
         path_poses=path_poses,
         controller_id=controller_id,
         goal_checker_id=goal_checker_id,
