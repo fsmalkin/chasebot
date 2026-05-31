@@ -20,11 +20,11 @@ The previous gather/place objective remains useful as negative baseline
 evidence, but success is no longer final stop in the corral. Success is
 trajectory intersection with a delivery radius around the requested target pose.
 
-Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
-robot-owned local fetch behavior that combines Nav2 stage ownership,
-deterministic homebrew contact routines, and a guarded AI/model handoff and
-maneuver-class proposer, proven on saved layouts and the first seeded random
-generalization gate.
+Next major milestone: Deliver Planner-Gated Generalized Fetch-To-Pose v1, a
+no-shoot, robot-owned fetch behavior where an LLM/world-state planner selects
+the route class, Nav2 owns as much real-time robot motion as corrected evidence
+supports, and a thin fetch adapter monitors delivery geometry, object progress,
+escape, stale state, and replanning triggers.
 
 Scope correction: this plan covers the bounded local fetch subsystem. It does
 not claim that arbitrary random scenes are executable by fetch. Scenes with
@@ -33,10 +33,36 @@ unsafe corridors must first go through an LLM/world-state planner handoff gate.
 Only cases classified as `fetch_ready_local` should dispatch `fetch_to_pose` and
 count against this subsystem.
 
-May 29, 2026 architecture update: keep fetch no-shoot and robot-owned. The
-Nav2 corridor-push spike was worth running because it proved Nav2 can make
-useful bounded corridor contact, but it did not promote as the sole contact
-controller. The runtime goal remains bounded push-and-coast:
+May 31, 2026 evidence and architecture reset: the delivery-marker geometry
+issue means pre-fix fetch pass/fail claims are diagnostic unless the artifact
+records `geometry_consistency.pass=true`, the visible delivery marker matches
+`fetch_pose_world`, and same-session browser-watchable onboard plus context
+video exists. The corrected reference run is
+`artifacts/session/20260531T204154158382Z/gather_mission/20260531T204255Z/mission_verdict.json`;
+the corrected visual UAT package is
+`artifacts/session/uat_fetch_visual_package_postfix_20260531/fetch_visual_uat_package/scorecard.md`;
+the corrected geometry audit is
+`artifacts/session/fetch_geometry_evidence_audit_postfix_20260531/fetch_geometry_evidence_audit/scorecard.md`.
+
+The immediate architecture direction is Nav2/LLM-first:
+
+- the LLM/world-state planner chooses `fetch_ready_local`,
+  `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`, or
+  `ambiguous_or_unsafe_no_go`
+- Nav2 owns long-haul navigation, repositioning, corridor approach, and bounded
+  push paths wherever corrected evidence shows the ball remains inside the
+  local envelope
+- the fetch adapter translates local fetch intents, monitors corrected
+  ball/target geometry, and cancels or replans on success, escape, stale state,
+  unsafe drift, timeout, or action abort
+- learned local models become fallback handoff and maneuver-class proposers
+  after corrected Nav2-first evidence exposes reproducible stage gaps
+
+May 29, 2026 architecture update, reinterpreted after the evidence reset: keep
+fetch no-shoot and robot-owned. The Nav2 corridor-push spike proved Nav2 can
+make useful bounded corridor contact. Sole-contact promotion remains blocked by
+repeatability, and its data now feeds the corrected Nav2-first baseline and the
+fallback AI/contact backlog:
 
 - robot-owned contact remains mandatory
 - the robot pushes with bounded energy, then coasts only when the measured or
@@ -45,10 +71,10 @@ controller. The runtime goal remains bounded push-and-coast:
   `zero`/`left05`/`right05` passed, full saved-layout one-run passed, but
   `right05` failed the `3/3` promotion gate by stopping short after Nav2
   reported `STATUS_SUCCEEDED`
-- learned local models are now the next focused lane as handoff and
-  maneuver-class proposers: they may predict roll outcome or propose
-  stay-with-Nav2, terminal re-push, recenter, abort, or re-stage decisions,
-  first in shadow mode and later only inside deterministic guards
+- learned local models are now a fallback lane as handoff and maneuver-class
+  proposers: they may predict roll outcome or propose stay-with-Nav2, terminal
+  re-push, recenter, abort, or re-stage decisions, first in shadow mode and
+  later only inside deterministic guards
 - deterministic homebrew routines, not a large model, should execute fine
   pre-capture alignment, first-contact stabilization, terminal stop-short
   correction, and bounded recenter/re-push/coast
@@ -61,7 +87,7 @@ controller. The runtime goal remains bounded push-and-coast:
 - contact-aware geometric-shooter artifacts are retained as physics probes, not
   as the preferred runtime architecture
 
-Latest green UAT:
+Historical pre-reset green UAT:
 
 - Dashboard scenario: `golf_ball_circle_delivery_uat`
 - World: `yolo_test_world_v6_calibrated_golf_turf.world`
@@ -125,6 +151,23 @@ Latest green UAT:
   saved-layout success currently proves the known geometry; it does not yet
   prove target-relative side selection, pre-contact reorientation, or bounded
   first-contact energy across novel layouts.
+
+Post-reset corrected UAT reference:
+
+- Dashboard scenario: `golf_ball_circle_delivery_uat`
+- Session:
+  `artifacts/session/20260531T204154158382Z/gather_mission/20260531T204255Z`
+- Visual package:
+  `artifacts/session/uat_fetch_visual_package_postfix_20260531/fetch_visual_uat_package/scorecard.md`
+- Verdict: `mission_completed_pass=true`, `fetch_to_pose_pass=true`,
+  `geometry_consistency.pass=true`
+- Delivery marker: center `(0.95, 0.0)`, radius `0.300m`, matched to
+  `fetch_pose_world`
+- Truth telemetry: ball reached about `0.158m` from target center, inside the
+  `0.300m` contract
+- Interpretation: this is the first post-fix visual UAT reference for the
+  corrected metric path. Rerun `zero`, `left05`, and `right05` before using
+  saved-layout claims for architecture promotion.
 
 ## Architecture Revisit Conclusion
 
@@ -208,18 +251,16 @@ Next architecture exploration should be wide but staged:
 
 ## Current Control Pivot
 
-The next fetch-control work remains approach-stability and recovery first, not
-harder contact tuning. The May 27 gate added enough approach telemetry to keep
-lateral knock-away, pre-contact oscillation, and first-contact alignment as
-explicit watch items before any policy or architecture change.
+The next fetch-control work is corrected Nav2/LLM-first requalification before
+broader contact tuning. The May 31 fix made the evidence floor stricter; use
+the corrected metric, planner routing, and same-session video before deciding
+which custom stages deserve work.
 
-Current goal: build a generalized object-centric `fetch_to_pose` policy that
-can start from either side of the target, choose the correct side of the ball,
-settle onto the ball-target line, make low-yaw/low-lateral-error first contact,
-and bound the ball trajectory so it intersects the delivery circle without a
-side knock-away or uncontrolled overshoot. The next branch should pursue this
-as a hybrid stage supervisor over Nav2 and deterministic contact routines, not
-as intentional shooting or direct ball impulse.
+Current goal: build a generalized `fetch_to_pose` system that first uses the
+planner and Nav2 to reach the cheapest valid route, then uses the smallest
+fetch adapter or deterministic contact routine needed to make the ball
+trajectory intersect the delivery circle. AI push-coast remains a shadow-first
+fallback for reproducible setup, contact, terminal, or re-aim gaps.
 
 Control order:
 
@@ -228,12 +269,13 @@ Control order:
 3. Let Nav2 track a ball-target corridor path where useful, while a monitor
    cancels only on success, ball escape, stale state, unsafe drift, timeout, or
    action abort.
-4. Add deterministic homebrew routines for the contact-rich stages Nav2 does
-   not own cleanly: fine pre-capture alignment, first-contact stabilization,
-   terminal stop-short correction, bounded re-push/coast, and recenter.
+4. Add deterministic homebrew routines only for contact-rich stages outside the
+   corrected Nav2/adapter baseline's reliable envelope: fine pre-capture
+   alignment, first-contact stabilization, terminal stop-short correction,
+   bounded re-push/coast, and recenter.
 5. Add shadow-mode learned prediction/proposal for stage handoff, miss vector,
-   terminal re-push need, recenter side, and recovery side, specifically
-   targeting the stop-short and asymmetric-offset cases Nav2 alone exposed.
+   terminal re-push need, recenter side, and recovery side after corrected
+   failures show those labels are reproducible.
 6. Allow learned proposals to select a guarded maneuver class only after
    deterministic guards accept the class and shadow evidence shows benefit.
 7. Use a wider attachment/funnel as an allowed mechanical robustness path, but
@@ -769,11 +811,12 @@ the same bounded budgets.
      Nav2 can keep the ball bounded and provide useful corridor tracking, but
      it needs an object-outcome/contact-stability layer before promotion
 10. AI-assisted push-coast shadow gate:
-   - status: preferred next spike
+   - status: fallback/proposer lane after corrected Nav2/LLM-first
+     requalification
    - branch:
      `spike/fetch-arch-ai-push-coast-servo-20260529`
    - first evidence:
-     saved anchors plus seeded random layouts from
+     corrected saved anchors plus seeded random layouts from
      `scripts/fetch_generalization_gate.py`, with learned predictions and
      proposed maneuvers scored against measured outcomes while deterministic
      object-centric/Nav2 control remains authoritative

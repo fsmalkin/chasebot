@@ -60,11 +60,13 @@ New spikes should state which ownership model changes, what generalization or
 product benefit is expected, and why the test cannot be answered by parameter
 tuning inside the current object-centric fetch loop.
 
-The preferred next spike is now
-`spike/fetch-arch-ai-push-coast-servo-20260529`: no-shoot robot-owned contact
-with a shadow-first local predictor/proposer around Nav2. Keep
+The preferred immediate requalification is now corrected Nav2/LLM-first fetch:
+planner route selection, Nav2-owned motion where feasible, corrected marker
+geometry, and same-session visual evidence before custom contact expansion.
+Keep `spike/fetch-arch-ai-push-coast-servo-20260529` as the fallback
+predictor/proposer and guard lane. Keep
 `spike/fetch-arch-nav2-corridor-push-20260528` as evidence for what Nav2 can
-handle and where it stops short, not as the next standalone promotion branch.
+handle and where it stops short.
 
 ## Next Decision Gate
 

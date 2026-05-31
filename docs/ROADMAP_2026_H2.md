@@ -502,20 +502,35 @@ Acceptance:
 
 Current direction update:
 
-Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
-robot-owned local fetch behavior that combines Nav2 stage ownership,
-deterministic homebrew contact routines, and a guarded AI/model handoff and
-maneuver-class proposer, proven on saved layouts and the first seeded random
-generalization gate.
+Next major milestone: Deliver Planner-Gated Generalized Fetch-To-Pose v1, a
+no-shoot, robot-owned fetch behavior where an LLM/world-state planner selects
+the correct route class, Nav2 owns as much real-time robot motion as the
+corrected evidence supports, and a thin fetch adapter monitors delivery
+geometry, object progress, escape, stale state, and replanning triggers.
+Custom contact routines and AI/model proposal layers remain fallback lanes that
+earn live authority only from corrected, reproducible stage-gap evidence.
 
-Planner-gating correction: this milestone proves the local fetch skill inside a
-bounded envelope. It should not be used as evidence that the robot can handle
-major unknowns. The broader product objective is Planner-Gated Generalized
-Fetch, where the LLM/world-state planner first decides whether a scene is
-`fetch_ready_local`, needs Nav2 repositioning, needs perception/scan, needs a
-known recovery/re-aim routine, or is ambiguous/unsafe and should no-go. Only
-`fetch_ready_local` cases are handed to the fetch subsystem and scored as local
-fetch evidence.
+Planner-gating correction: this milestone proves the planner-to-subsystem
+handoff plus the bounded local fetch skill. The planner first classifies each
+scene as `fetch_ready_local`, `nav2_reposition_first`,
+`scan_or_perceive_first`, `recovery_or_reaim`, or
+`ambiguous_or_unsafe_no_go`. Only `fetch_ready_local` cases are handed to the
+fetch subsystem and scored as local fetch evidence.
+
+May 31, 2026 evidence reset: the delivery-marker geometry issue means prior
+fetch pass/fail claims require reclassification unless the artifact proves
+`geometry_consistency.pass=true`, the visible delivery marker matches
+`fetch_pose_world`, and the run has same-session browser-watchable onboard plus
+context video. The corrected reference run is
+`artifacts/session/20260531T204154158382Z/gather_mission/20260531T204255Z/mission_verdict.json`;
+the corrected visual package is
+`artifacts/session/uat_fetch_visual_package_postfix_20260531/fetch_visual_uat_package/scorecard.md`;
+the corrected geometry audit is
+`artifacts/session/fetch_geometry_evidence_audit_postfix_20260531/fetch_geometry_evidence_audit/scorecard.md`.
+That run passed `fetch_to_pose` with matched marker geometry and truth telemetry
+showing the ball reached about `0.158m` from the target center inside the
+`0.300m` contract. Treat it as the first valid post-fix UAT reference. Broad
+generalization still requires saved-layout repeatability and the seeded gate.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
@@ -568,12 +583,12 @@ fetch evidence.
    - result: all three one-run calibrated layouts failed before contact with
      `pre_stage_path_clearance_guard`, so the roadmap stays with the current
      object-centric fetch baseline rather than an MPPI alternative branch
-10. May 28, 2026 Nav2 corridor-push first spike and AI fallback:
+10. May 28-31, 2026 Nav2 corridor-push, evidence reset, and AI fallback:
    - next major milestone:
-     Deliver Generalized Fetch-To-Pose v1, a no-shoot, robot-owned local fetch
-     behavior that combines Nav2 stage ownership, deterministic homebrew contact
-     routines, and a guarded AI/model handoff and maneuver-class proposer,
-     proven on saved layouts and the first seeded random generalization gate
+     Deliver Planner-Gated Generalized Fetch-To-Pose v1 with LLM/world-state
+     route selection, Nav2-first execution where feasible, corrected
+     geometry/video evidence, saved-layout proof, and the first seeded random
+     gate inside the local fetch envelope
    - keep the runtime fetch architecture as robot-owned bounded push-and-coast,
      not intentional shooting or direct ball impulse
    - use contact-aware geometric-shooter artifacts as calibrated roll/coast
@@ -584,10 +599,10 @@ fetch evidence.
    - treat the old `nav2_mppi_follow_path_reacquire_v1` calibrated revisit as
      prior negative pre-stage evidence, not as this new corridor-push contact
      hypothesis
-   - keep AI as the next handoff/proposal lane: train/prototype from large
-     calibrated simulation batches, score in shadow mode on saved anchors,
-     seeded random layouts, and frozen failures, then allow learned output only
-     to select deterministic guarded routines
+   - keep AI as a fallback handoff/proposal lane: train/prototype from large
+     calibrated simulation batches, score in shadow mode on corrected Nav2-first
+     saved anchors, seeded random layouts, and frozen failures, then allow
+     learned output only to select deterministic guarded routines
    - treat V-JEPA-style world models as offboard teachers or research baselines
      for candidate-action scoring; onboard control should use a smaller
      structured or distilled `tensorrt_int8`-compatible model
@@ -634,12 +649,13 @@ fetch evidence.
      failures become watchlist cases, while reproduced failures must be frozen
      before tuning
    - updated next spike:
-     `spike/fetch-arch-ai-push-coast-servo-20260529`
+     corrected Nav2/LLM-first requalification on the current fetch spike, with
+     `spike/fetch-arch-ai-push-coast-servo-20260529` retained for fallback
+     analyzers, guards, and AI shadow scoring
    - updated interpretation:
-     keep Nav2 as a useful stage owner and data source, add deterministic
-     contact/terminal routines for the object-outcome stages, and use a
-     shadow-first learned layer for handoff, asymmetric-offset handling, and
-     bounded re-push/coast decisions before any promotion discussion
+     prefer Nav2 and planner-owned reuse before custom control. Add
+     deterministic contact/terminal routines or learned proposal layers only
+     when corrected post-fix evidence shows a reproducible object-outcome gap.
 11. architecture exploration should widen, but stay staged:
    - do not treat the legacy `--gather-control-family` list as exhaustive
      architecture coverage; it is a runnable control-family screen inside the
