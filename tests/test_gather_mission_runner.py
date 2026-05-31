@@ -499,6 +499,98 @@ def test_init_runtime_state_seeds_dashboard_friendly_fields(tmp_path, monkeypatc
     assert runner.gather_runtime_state["artifact_dir"] == str(mission_root)
 
 
+def test_fetch_runtime_state_uses_fetch_pose_as_visible_marker(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = "fetch_to_pose"
+    runner.args.fetch_target_x = 0.95
+    runner.args.fetch_target_y = 0.0
+    runner.args.fetch_target_z = 0.001
+    runner.fetch_delivery_radius_m = 0.30
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    assert runner.gather_runtime_state["zone_pose"]["x"] == 0.95
+    assert runner.gather_runtime_state["zone_pose"]["radius_m"] == 0.30
+    assert runner.gather_runtime_state["visible_delivery_marker_pose"]["x"] == 0.95
+    assert runner.gather_runtime_state["legacy_corral_zone_pose"]["x"] == 2.4
+    assert runner.gather_runtime_state["geometry_consistency"]["pass"] is True
+
+
+def test_fetch_runtime_state_detects_visible_marker_sdf_radius_mismatch(tmp_path, monkeypatch):
+    zone_sdf = tmp_path / "zone.sdf"
+    zone_sdf.write_text(
+        """<?xml version="1.0"?>
+<sdf version="1.9"><model name="zone"><link name="link"><visual name="disc"><geometry><cylinder><radius>0.762</radius><length>0.002</length></cylinder></geometry></visual></link></model></sdf>
+""",
+        encoding="utf-8",
+    )
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = "fetch_to_pose"
+    runner.args.fetch_target_x = 0.95
+    runner.args.fetch_target_y = 0.0
+    runner.args.fetch_target_z = 0.001
+    runner.args.zone_model_sdf = str(zone_sdf)
+    runner.fetch_delivery_radius_m = 0.30
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+
+    runner._init_runtime_state(session_id="session-1", mission_root=mission_root)
+
+    assert runner.gather_runtime_state["zone_pose"]["x"] == 0.95
+    assert runner.gather_runtime_state["zone_pose"]["radius_m"] == 0.762
+    assert runner.gather_runtime_state["geometry_consistency"]["pass"] is False
+    assert runner.gather_runtime_state["geometry_consistency"]["reason"] == "radius_mismatch"
+
+
+def test_fetch_spawn_uses_fetch_pose_for_visible_marker(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = "fetch_to_pose"
+    runner.args.fetch_target_x = 0.95
+    runner.args.fetch_target_y = 0.0
+    runner.args.fetch_target_z = 0.001
+    runner.fetch_delivery_radius_m = 0.30
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir()
+    spawn_calls: list[dict[str, float | str]] = []
+
+    monkeypatch.setattr(runner, "_set_robot_pose", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_wait_for_robot_pose_near", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_remove_model", lambda **kwargs: None)
+    monkeypatch.setattr(
+        runner,
+        "_spawn_model",
+        lambda **kwargs: spawn_calls.append(
+            {
+                "model_name": kwargs["model_name"],
+                "x": kwargs["x"],
+                "y": kwargs["y"],
+                "z": kwargs["z"],
+            }
+        ),
+    )
+    monkeypatch.setattr(runner, "_record_target_position", lambda *args, **kwargs: None)
+
+    runner._spawn_mission_models({"compose_project": "proj", "world_name": "world"}, mission_root)
+
+    zone_call = next(item for item in spawn_calls if item["model_name"] == runner.args.zone_model_name)
+    assert zone_call["x"] == 0.95
+    assert zone_call["y"] == 0.0
+    assert zone_call["z"] == 0.001
+
+
+def test_fetch_geometry_consistency_detects_old_corral_marker_mismatch():
+    result = gather_runner.fetch_geometry_consistency(
+        fetch_pose_world={"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.3},
+        visible_delivery_marker_pose={"x": 2.4, "y": 0.0, "z": 0.001, "radius_m": 0.762},
+    )
+
+    assert result["pass"] is False
+    assert result["reason"] == "center_mismatch"
+    assert result["center_delta_m"] == 1.45
+
+
 def test_inter_target_quiet_timeout_is_shorter_for_three_ball(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     three_ball_runner = _make_three_ball_runner(tmp_path, monkeypatch)

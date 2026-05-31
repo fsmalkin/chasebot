@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
@@ -90,6 +91,65 @@ def artifact_url(path: Path) -> str:
     return "/artifacts/session/" + rel.as_posix()
 
 
+def finite_float(value: Any) -> float | None:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(numeric):
+        return None
+    return numeric
+
+
+def geometry_pose(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    x_value = finite_float(value.get("x"))
+    y_value = finite_float(value.get("y"))
+    if x_value is None or y_value is None:
+        return {}
+    payload: dict[str, Any] = {"x": round(x_value, 6), "y": round(y_value, 6)}
+    z_value = finite_float(value.get("z"))
+    radius_value = finite_float(value.get("radius_m", value.get("radius")))
+    if z_value is not None:
+        payload["z"] = round(z_value, 6)
+    if radius_value is not None:
+        payload["radius_m"] = round(radius_value, 6)
+    return payload
+
+
+def infer_geometry_consistency(source: dict[str, Any]) -> dict[str, Any]:
+    existing = source.get("geometry_consistency") if isinstance(source.get("geometry_consistency"), dict) else {}
+    if existing:
+        return dict(existing)
+    fetch_pose = geometry_pose(source.get("fetch_pose_world", {}))
+    marker_pose = geometry_pose(source.get("visible_delivery_marker_pose", source.get("zone_pose", {})))
+    if not fetch_pose and isinstance(source.get("requested_fetch_pose_world"), dict):
+        fetch_pose = geometry_pose(source.get("requested_fetch_pose_world", {}))
+    if not fetch_pose or not marker_pose:
+        return {}
+    center_delta_m = math.hypot(float(fetch_pose["x"]) - float(marker_pose["x"]), float(fetch_pose["y"]) - float(marker_pose["y"]))
+    fetch_radius = finite_float(fetch_pose.get("radius_m"))
+    marker_radius = finite_float(marker_pose.get("radius_m"))
+    radius_delta_m = abs(float(fetch_radius) - float(marker_radius)) if fetch_radius is not None and marker_radius is not None else None
+    reason = "matched"
+    if center_delta_m > 0.02:
+        reason = "center_mismatch"
+    elif radius_delta_m is None:
+        reason = "missing_radius"
+    elif radius_delta_m > 0.01:
+        reason = "radius_mismatch"
+    return {
+        "pass": reason == "matched",
+        "reason": reason,
+        "center_delta_m": round(center_delta_m, 6),
+        "radius_delta_m": round(float(radius_delta_m), 6) if radius_delta_m is not None else None,
+        "fetch_pose_world": fetch_pose,
+        "visible_delivery_marker_pose": marker_pose,
+        "source": "fetch_visual_uat_package",
+    }
+
+
 def session_id_for_path(path: Path) -> str:
     try:
         rel = path.resolve().relative_to(SESSION_ROOT.resolve())
@@ -146,29 +206,39 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     mission_verdict = payload.get("mission_verdict", {}) if isinstance(payload.get("mission_verdict"), dict) else {}
     if not mission_verdict and isinstance(first_run.get("mission_verdict"), dict):
         mission_verdict = first_run.get("mission_verdict", {})
+    geometry_source: dict[str, Any] = {}
+    for candidate in (payload, mission_verdict, first_run):
+        if isinstance(candidate, dict):
+            geometry_source.update(candidate)
+    geometry_consistency = infer_geometry_consistency(geometry_source)
+    geometry_ok = not geometry_consistency or bool(geometry_consistency.get("pass", False))
     pass_flag = bool(
         payload.get("pass", payload.get("promotion_gate_pass", mission_verdict.get("pass", first_run.get("mission_completed_pass", False))))
     )
-    fetch_pass = bool(
+    raw_fetch_pass = bool(
         payload.get("fetch_to_pose_pass_count", 0)
         or payload.get("fetch_to_pose_pass", False)
         or mission_verdict.get("fetch_to_pose_pass", False)
         or first_run.get("fetch_to_pose_pass", False)
     )
+    fetch_pass = bool(raw_fetch_pass and geometry_ok)
     return {
         "campaign_id": str(payload.get("campaign_id", "") or ""),
         "session_id": session_id_for_path(path),
         "path": artifact_display_path(path),
-        "pass": pass_flag,
+        "pass": bool(pass_flag and geometry_ok),
         "fetch_to_pose_pass": fetch_pass,
-        "fetch_to_pose_pass_count": int(payload.get("fetch_to_pose_pass_count", 1 if fetch_pass else 0) or 0),
-        "fetch_to_pose_fail_count": int(payload.get("fetch_to_pose_fail_count", 0 if fetch_pass else 1) or 0),
+        "raw_fetch_to_pose_pass": raw_fetch_pass,
+        "fetch_to_pose_pass_count": int(payload.get("fetch_to_pose_pass_count", 1 if fetch_pass else 0) or 0) if fetch_pass else 0,
+        "fetch_to_pose_fail_count": int(payload.get("fetch_to_pose_fail_count", 0 if fetch_pass else 1) or 0) if fetch_pass else 1,
         "ai_push_coast_mode": str(payload.get("ai_push_coast_mode", mission_verdict.get("ai_push_coast_mode", "")) or ""),
         "mission_objective": str(payload.get("mission_objective", mission_verdict.get("mission_objective", "")) or ""),
         "scenario_label": str(payload.get("scenario_label", mission_verdict.get("scenario_label", "")) or ""),
         "target_layout_json": str(payload.get("requested_target_layout_json", mission_verdict.get("target_layout_json", "")) or ""),
         "closest_approach_distance_m": payload.get("closest_approach_distance_m", mission_verdict.get("closest_approach_distance_m")),
         "failure_reasons": payload.get("fetch_to_pose_failure_reasons", mission_verdict.get("failure_reasons", [])),
+        "geometry_consistency": geometry_consistency,
+        "geometry_consistent": geometry_ok,
     }
 
 
@@ -242,6 +312,12 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     planner_ok = bool(planner_gates) and all(
         gate.get("pass") and int(gate.get("wrong_fetch_dispatch_count", 0) or 0) == 0 for gate in planner_gates
     )
+    raw_local_fetch_seen = any(mission.get("raw_fetch_to_pose_pass", mission.get("fetch_to_pose_pass")) for mission in missions)
+    geometry_mismatch_seen = any(
+        mission.get("raw_fetch_to_pose_pass", mission.get("fetch_to_pose_pass"))
+        and not bool(mission.get("geometry_consistent", True))
+        for mission in missions
+    )
     local_fetch_seen = any(mission.get("fetch_to_pose_pass") for mission in missions)
     visual_confirmation_seen = any(item.get("visual_confirmation_pass") for item in visual_summaries)
     local_fetch_visual_confirmed = any(
@@ -262,6 +338,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         warnings.append("planner_gate_not_green")
     if not local_fetch_seen:
         warnings.append("no_local_fetch_pass_seen")
+    if geometry_mismatch_seen:
+        warnings.append("fetch_marker_geometry_mismatch")
     if not video_ok:
         warnings.append("missing_or_tiny_required_mobile_video")
     if not onboard_camera_ok:
@@ -282,6 +360,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "local_fetch_visual_confirmed": local_fetch_visual_confirmed,
         "planner_gate_green": planner_ok,
         "local_fetch_pass_seen": local_fetch_seen,
+        "raw_local_fetch_pass_seen": raw_local_fetch_seen,
+        "fetch_marker_geometry_mismatch_seen": geometry_mismatch_seen,
         "promotion_evidence": False,
         "milestone_interpretation": (
             "mobile_visual_uat_ready_not_promotion" if pass_flag else "mobile_visual_uat_incomplete"
@@ -308,6 +388,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- local_fetch_visual_confirmed: `{summary.get('local_fetch_visual_confirmed', False)}`",
         f"- planner_gate_green: `{summary.get('planner_gate_green', False)}`",
         f"- local_fetch_pass_seen: `{summary.get('local_fetch_pass_seen', False)}`",
+        f"- raw_local_fetch_pass_seen: `{summary.get('raw_local_fetch_pass_seen', False)}`",
+        f"- fetch_marker_geometry_mismatch_seen: `{summary.get('fetch_marker_geometry_mismatch_seen', False)}`",
         f"- promotion_evidence: `{summary.get('promotion_evidence', False)}`",
         f"- interpretation: `{summary.get('milestone_interpretation', '')}`",
         "",
@@ -352,9 +434,13 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         )
     lines.extend(["", "## Missions"])
     for mission in summary.get("missions", []) if isinstance(summary.get("missions"), list) else []:
+        geometry = mission.get("geometry_consistency", {}) if isinstance(mission.get("geometry_consistency"), dict) else {}
         lines.append(
             f"- `{mission.get('campaign_id', '') or mission.get('scenario_label', '')}` "
             f"fetch_to_pose=`{mission.get('fetch_to_pose_pass', False)}` "
+            f"raw_fetch_to_pose=`{mission.get('raw_fetch_to_pose_pass', mission.get('fetch_to_pose_pass', False))}` "
+            f"geometry=`{geometry.get('pass', 'unknown')}` "
+            f"geometry_reason=`{geometry.get('reason', '')}` "
             f"ai_mode=`{mission.get('ai_push_coast_mode', '')}`"
         )
     lines.extend(["", "## Visual Evidence"])

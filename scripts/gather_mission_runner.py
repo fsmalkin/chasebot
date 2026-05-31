@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -368,6 +369,8 @@ DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_STALE_S = 2.5
 DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_ESCAPE_LATERAL_M = 0.45
 DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_BACKTRACK_M = 0.25
 DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M = 1.0
+DEFAULT_FETCH_GEOMETRY_CENTER_TOLERANCE_M = 0.02
+DEFAULT_FETCH_GEOMETRY_RADIUS_TOLERANCE_M = 0.01
 MISSION_OBJECTIVE_GATHER_HERE = "gather_here"
 MISSION_OBJECTIVE_FETCH_TO_POSE = "fetch_to_pose"
 ALLOWED_MISSION_OBJECTIVES = (
@@ -671,6 +674,71 @@ def pose_payload(value: Any) -> dict[str, Any]:
     if yaw_deg_value is not None:
         payload["yaw_deg"] = round(float(yaw_deg_value), 6)
     return payload
+
+
+def delivery_marker_pose_payload(value: Any) -> dict[str, Any]:
+    payload = pose_payload(value)
+    if not isinstance(value, dict):
+        return payload
+    radius_value = clean_number(value.get("radius_m", value.get("radius")))
+    if radius_value is not None:
+        payload["radius_m"] = round(float(radius_value), 6)
+    control_radius_value = clean_number(value.get("control_radius_m"))
+    if control_radius_value is not None:
+        payload["control_radius_m"] = round(float(control_radius_value), 6)
+    dwell_value = clean_number(value.get("dwell_s"))
+    if dwell_value is not None:
+        payload["dwell_s"] = round(float(dwell_value), 6)
+    source = clean_text(value.get("source"))
+    if source:
+        payload["source"] = source
+    return payload
+
+
+def fetch_geometry_consistency(
+    *,
+    fetch_pose_world: dict[str, Any] | None,
+    visible_delivery_marker_pose: dict[str, Any] | None,
+    center_tolerance_m: float = DEFAULT_FETCH_GEOMETRY_CENTER_TOLERANCE_M,
+    radius_tolerance_m: float = DEFAULT_FETCH_GEOMETRY_RADIUS_TOLERANCE_M,
+    source: str = "",
+) -> dict[str, Any]:
+    fetch_pose = delivery_marker_pose_payload(fetch_pose_world or {})
+    marker_pose = delivery_marker_pose_payload(visible_delivery_marker_pose or {})
+    fetch_xy = world_pose_xyyaw(fetch_pose)
+    marker_xy = world_pose_xyyaw(marker_pose)
+    fetch_radius = clean_number(fetch_pose.get("radius_m"))
+    marker_radius = clean_number(marker_pose.get("radius_m"))
+    center_delta_m: float | None = None
+    radius_delta_m: float | None = None
+    reason = "matched"
+    if fetch_xy is None:
+        reason = "missing_fetch_pose"
+    elif marker_xy is None:
+        reason = "missing_visible_delivery_marker_pose"
+    else:
+        center_delta_m = math.hypot(float(fetch_xy[0]) - float(marker_xy[0]), float(fetch_xy[1]) - float(marker_xy[1]))
+        if center_delta_m > float(center_tolerance_m):
+            reason = "center_mismatch"
+        elif fetch_radius is None:
+            reason = "missing_fetch_radius"
+        elif marker_radius is None:
+            reason = "missing_visible_marker_radius"
+        else:
+            radius_delta_m = abs(float(fetch_radius) - float(marker_radius))
+            if radius_delta_m > float(radius_tolerance_m):
+                reason = "radius_mismatch"
+    return {
+        "pass": reason == "matched",
+        "reason": reason,
+        "center_delta_m": round(float(center_delta_m), 6) if center_delta_m is not None else None,
+        "radius_delta_m": round(float(radius_delta_m), 6) if radius_delta_m is not None else None,
+        "center_tolerance_m": round(float(center_tolerance_m), 6),
+        "radius_tolerance_m": round(float(radius_tolerance_m), 6),
+        "fetch_pose_world": fetch_pose,
+        "visible_delivery_marker_pose": marker_pose,
+        "source": clean_text(source, "unspecified"),
+    }
 
 
 def _ball_pose_from_state_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -1009,6 +1077,58 @@ class GatherMissionRunner:
             "radius_m": round(float(self.fetch_delivery_radius_m), 6),
         }
 
+    def _legacy_corral_zone_pose(self) -> dict[str, Any]:
+        return {
+            "x": round(float(self.zone.world_x), 6),
+            "y": round(float(self.zone.world_y), 6),
+            "z": round(float(self.zone.z_m), 6),
+            "radius_m": round(float(self.zone.retrieval_radius_m), 6),
+            "control_radius_m": round(float(self.zone.control_radius_m), 6),
+            "dwell_s": round(float(self.zone.dwell_s), 6),
+            "source": "legacy_corral_zone",
+        }
+
+    def _zone_model_sdf_radius_m(self) -> float | None:
+        raw_path = clean_text(getattr(self.args, "zone_model_sdf", ""))
+        if not raw_path:
+            return None
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = REPO_ROOT / path
+        try:
+            root = ET.parse(path).getroot()
+        except Exception:
+            return None
+        for radius in root.findall(".//visual/geometry/cylinder/radius"):
+            numeric = clean_number(radius.text)
+            if numeric is not None:
+                return round(float(numeric), 6)
+        return None
+
+    def _visible_delivery_marker_pose(self) -> dict[str, Any]:
+        if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+            fetch_pose = self._fetch_pose_world()
+            marker_radius_m = self._zone_model_sdf_radius_m()
+            return {
+                "x": float(fetch_pose["x"]),
+                "y": float(fetch_pose["y"]),
+                "z": float(fetch_pose["z"]),
+                "radius_m": float(marker_radius_m if marker_radius_m is not None else fetch_pose["radius_m"]),
+                "source": "fetch_pose_world",
+            }
+        return self._legacy_corral_zone_pose()
+
+    def _fetch_geometry_consistency(
+        self,
+        fetch_pose_world: dict[str, Any] | None = None,
+        visible_delivery_marker_pose: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return fetch_geometry_consistency(
+            fetch_pose_world=fetch_pose_world or self._fetch_pose_world(),
+            visible_delivery_marker_pose=visible_delivery_marker_pose or self._visible_delivery_marker_pose(),
+            source="gather_mission_runner",
+        )
+
     def _contact_ready_pose_world(
         self,
         *,
@@ -1107,11 +1227,18 @@ class GatherMissionRunner:
                 }
             )
         if fetch_xy is None:
+            visible_marker_pose = self._visible_delivery_marker_pose()
+            geometry_consistency = self._fetch_geometry_consistency(
+                fetch_pose_world=fetch_pose,
+                visible_delivery_marker_pose=visible_marker_pose,
+            )
             return {
                 "observed": bool(samples),
                 "pass": False,
                 "reason": "missing_fetch_pose",
                 "fetch_pose_world": fetch_pose,
+                "visible_delivery_marker_pose": visible_marker_pose,
+                "geometry_consistency": geometry_consistency,
                 "delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
                 "sample_count": len(samples),
                 "ball_start_pose": {},
@@ -1123,6 +1250,11 @@ class GatherMissionRunner:
             }
 
         radius_m = max(float(self.fetch_delivery_radius_m), 0.0)
+        visible_marker_pose = self._visible_delivery_marker_pose()
+        geometry_consistency = self._fetch_geometry_consistency(
+            fetch_pose_world=fetch_pose,
+            visible_delivery_marker_pose=visible_marker_pose,
+        )
         closest_distance: float | None = None
         closest_pose: dict[str, Any] = {}
         previous_xy: tuple[float, float] | None = None
@@ -1147,7 +1279,8 @@ class GatherMissionRunner:
             previous_pose = dict(pose)
 
         observed = closest_distance is not None
-        pass_delivery = bool(observed and closest_distance is not None and closest_distance <= radius_m)
+        trajectory_intersects_delivery = bool(observed and closest_distance is not None and closest_distance <= radius_m)
+        pass_delivery = bool(trajectory_intersects_delivery and geometry_consistency.get("pass", False))
         ball_start_pose = dict(samples[0]["ball_pose"]) if samples else {}
         ball_end_pose = dict(samples[-1]["ball_pose"]) if samples else {}
         end_xyyaw = world_pose_xyyaw(ball_end_pose)
@@ -1200,6 +1333,8 @@ class GatherMissionRunner:
                     fetch_phase_metrics[key] = place_payload.get(key)
         if pass_delivery:
             reason = "trajectory_intersects_delivery_radius"
+        elif trajectory_intersects_delivery and not bool(geometry_consistency.get("pass", False)):
+            reason = "fetch_marker_geometry_mismatch"
         elif not observed:
             reason = "no_ball_samples"
         else:
@@ -1211,6 +1346,8 @@ class GatherMissionRunner:
             "pass": bool(pass_delivery),
             "reason": reason,
             "fetch_pose_world": fetch_pose,
+            "visible_delivery_marker_pose": visible_marker_pose,
+            "geometry_consistency": geometry_consistency,
             "delivery_radius_m": round(float(radius_m), 6),
             "sample_count": len(samples),
             "ball_start_pose": ball_start_pose,
@@ -1361,6 +1498,15 @@ class GatherMissionRunner:
                 rolled_away_after_release=bool(rolled_away_after_release),
             ),
         )
+        visible_marker_pose = self._visible_delivery_marker_pose()
+        geometry_consistency = (
+            self._fetch_geometry_consistency(
+                fetch_pose_world=fetch_pose_world,
+                visible_delivery_marker_pose=visible_marker_pose,
+            )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            else {}
+        )
         payload = {
             "target_id": target.id,
             "label": target.label,
@@ -1381,6 +1527,8 @@ class GatherMissionRunner:
             "fetch_to_pose_failure_reason": clean_text(fetch_to_pose_failure_reason, clean_text(failure_reason)),
             "fetch_pose_world": dict(fetch_pose_world) if isinstance(fetch_pose_world, dict) else {},
             "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+            "visible_delivery_marker_pose": visible_marker_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
+            "geometry_consistency": geometry_consistency,
             "shot_outcome": dict(shot_outcome) if isinstance(shot_outcome, dict) else {},
             "handoff_kind": clean_text(handoff_kind, "unspecified"),
             "zone_edge_correction_count": int(zone_edge_correction_count),
@@ -1529,7 +1677,20 @@ class GatherMissionRunner:
             if practical_retrieval_pass is None
             else bool(practical_retrieval_pass)
         )
-        fetch_pass = bool(fetch_to_pose_reached)
+        visible_marker_pose = self._visible_delivery_marker_pose()
+        geometry_consistency = (
+            self._fetch_geometry_consistency(
+                fetch_pose_world=fetch_pose_world,
+                visible_delivery_marker_pose=visible_marker_pose,
+            )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            else {}
+        )
+        geometry_ok = bool(geometry_consistency.get("pass", True))
+        fetch_failure_reason = clean_text(fetch_to_pose_failure_reason)
+        if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE and fetch_to_pose_reached and not geometry_ok:
+            fetch_failure_reason = "fetch_marker_geometry_mismatch"
+        fetch_pass = bool(fetch_to_pose_reached and geometry_ok)
         if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
             target_pass = fetch_pass
         else:
@@ -1560,11 +1721,13 @@ class GatherMissionRunner:
             "route_index": int(route_index),
             "placed": bool(target_pass),
             "fetched": bool(fetch_pass),
-            "fetch_to_pose_reached": bool(fetch_pass),
+            "fetch_to_pose_reached": bool(fetch_to_pose_reached),
             "fetch_to_pose_time_s": round(float(fetch_to_pose_time_s), 6),
-            "fetch_to_pose_failure_reason": clean_text(fetch_to_pose_failure_reason),
+            "fetch_to_pose_failure_reason": fetch_failure_reason,
             "fetch_pose_world": dict(fetch_pose_world) if isinstance(fetch_pose_world, dict) else {},
             "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+            "visible_delivery_marker_pose": visible_marker_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
+            "geometry_consistency": geometry_consistency,
             "shot_outcome": dict(shot_outcome) if isinstance(shot_outcome, dict) else {},
             "final_ball_pose": final_ball_pose,
             "place_time_s": round(float(place_time_s), 6),
@@ -3153,6 +3316,17 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             target.id: self._target_world_pose(target)
             for target in self.targets
         }
+        active_zone_pose = self._visible_delivery_marker_pose()
+        legacy_zone_pose = self._legacy_corral_zone_pose()
+        fetch_pose_world = self._fetch_pose_world() if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {}
+        geometry_consistency = (
+            self._fetch_geometry_consistency(
+                fetch_pose_world=fetch_pose_world,
+                visible_delivery_marker_pose=active_zone_pose,
+            )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            else {}
+        )
         self.visit_runtime_state = {
             "running": True,
             "scenario_id": str(self.args.scenario_id),
@@ -3192,13 +3366,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "route_order": [],
             "capture_state": {},
             "capture_loss_count": 0,
-            "zone_pose": {
-                "x": round(self.zone.world_x, 6),
-                "y": round(self.zone.world_y, 6),
-                "radius_m": round(self.zone.retrieval_radius_m, 6),
-                "control_radius_m": round(self.zone.control_radius_m, 6),
-                "dwell_s": round(self.zone.dwell_s, 6),
-            },
+            "zone_pose": active_zone_pose,
+            "visible_delivery_marker_pose": active_zone_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
+            "legacy_corral_zone_pose": legacy_zone_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
+            "fetch_pose_world": fetch_pose_world,
+            "geometry_consistency": geometry_consistency,
             "zone_score": {},
             "final_corral_audit": {},
             "settle_metrics": {},
@@ -3235,15 +3407,16 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             y=float(DEFAULT_MISSION_START_POSE["y"]),
             yaw=float(DEFAULT_MISSION_START_POSE["yaw"]),
         )
+        active_zone_pose = self._visible_delivery_marker_pose()
         self._remove_model(compose_project=compose_project, world_name=world_name, model_name=self.args.zone_model_name)
         self._spawn_model(
             compose_project=compose_project,
             world_name=world_name,
             model_sdf_host=Path(self.args.zone_model_sdf).resolve(),
             model_name=self.args.zone_model_name,
-            x=float(self.zone.world_x),
-            y=float(self.zone.world_y),
-            z=float(self.zone.z_m),
+            x=float(active_zone_pose.get("x", self.zone.world_x)),
+            y=float(active_zone_pose.get("y", self.zone.world_y)),
+            z=float(active_zone_pose.get("z", self.zone.z_m)),
             yaw=0.0,
             log_path=mission_root / "zone_spawn.log",
         )
@@ -11306,7 +11479,40 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 if isinstance(final_result.get("shot_outcome"), dict)
                 else {}
             )
-            fetch_to_pose_pass = bool(mission_completed_pass and fetch_to_pose_reached)
+            visible_delivery_marker_pose = (
+                final_result.get("visible_delivery_marker_pose", {})
+                if isinstance(final_result.get("visible_delivery_marker_pose"), dict)
+                else {}
+            )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE and not visible_delivery_marker_pose:
+                visible_delivery_marker_pose = self._visible_delivery_marker_pose()
+            legacy_corral_zone_pose = self._legacy_corral_zone_pose()
+            geometry_consistency = (
+                final_result.get("geometry_consistency", {})
+                if isinstance(final_result.get("geometry_consistency"), dict)
+                else {}
+            )
+            if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+                geometry_consistency = self._fetch_geometry_consistency(
+                    fetch_pose_world=fetch_pose_world,
+                    visible_delivery_marker_pose=visible_delivery_marker_pose,
+                )
+            fetch_to_pose_pass = bool(
+                mission_completed_pass
+                and fetch_to_pose_reached
+                and (
+                    self.mission_objective != MISSION_OBJECTIVE_FETCH_TO_POSE
+                    or bool(geometry_consistency.get("pass", False))
+                )
+            )
+            if (
+                self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+                and mission_completed_pass
+                and fetch_to_pose_reached
+                and not bool(geometry_consistency.get("pass", False))
+                and not fetch_to_pose_failure_reason
+            ):
+                fetch_to_pose_failure_reason = "fetch_marker_geometry_mismatch"
             final_corral_audit: dict[str, Any] = {}
             final_all_targets_inside_retrieval_corral = False
             final_all_targets_stopped = False
@@ -11413,6 +11619,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "fetch_to_pose_failure_reason": fetch_to_pose_failure_reason,
                 "fetch_pose_world": fetch_pose_world,
                 "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                "visible_delivery_marker_pose": visible_delivery_marker_pose,
+                "geometry_consistency": geometry_consistency,
                 "shot_outcome": shot_outcome,
                 "final_corral_audit": final_corral_audit,
                 "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
@@ -11424,13 +11632,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "settle_time_s": round(settle_time_s, 6),
                 "release_recontact_count": release_recontact_count,
                 "mission_time_s": mission_time_s,
-                "zone_pose": {
-                    "x": round(self.zone.world_x, 6),
-                    "y": round(self.zone.world_y, 6),
-                    "radius_m": round(self.zone.retrieval_radius_m, 6),
-                    "control_radius_m": round(self.zone.control_radius_m, 6),
-                    "dwell_s": round(self.zone.dwell_s, 6),
-                },
+                "zone_pose": visible_delivery_marker_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else legacy_corral_zone_pose,
+                "legacy_corral_zone_pose": legacy_corral_zone_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
                 "mission_error": final_mission_error,
                 "mission_root": str(mission_root),
             }
@@ -11492,6 +11695,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "fetch_to_pose_failure_reason": fetch_to_pose_failure_reason,
                 "fetch_pose_world": fetch_pose_world,
                 "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
+                "visible_delivery_marker_pose": visible_delivery_marker_pose,
+                "geometry_consistency": geometry_consistency,
                 "shot_outcome": shot_outcome,
                 "final_corral_audit": final_corral_audit,
                 "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
@@ -11513,10 +11718,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 summary={
                     "pass_count": 1 if summary["pass"] else 0,
                     "promotion_gate_pass": summary["pass"],
+                    "mission_objective": self.mission_objective,
                     "settled_in_corral_pass_count": 1 if settled_in_corral_pass else 0,
                     "settled_in_corral_fail_count": 0 if settled_in_corral_pass else 1,
                     "fetch_to_pose_pass_count": 1 if fetch_to_pose_pass else 0,
                     "fetch_to_pose_fail_count": 0 if fetch_to_pose_pass else 1,
+                    "geometry_consistency_pass_count": 1 if bool(geometry_consistency.get("pass", False)) else 0,
+                    "geometry_consistency_fail_count": 0 if bool(geometry_consistency.get("pass", False)) else 1,
                     "final_inside_retrieval_corral_count": 1 if final_inside_retrieval_corral else 0,
                     "final_center_inside_zone_count": 1 if final_center_inside_zone else 0,
                     "ball_stopped_in_corral_count": 1 if ball_stopped_in_corral else 0,
@@ -11566,6 +11774,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     {
                         "run_index": 1,
                         "pass": summary["pass"],
+                        "mission_objective": self.mission_objective,
                         "surface_profile": self.surface_profile,
                         "handoff_kind": handoff_kind,
                         "settle_exit_reason": settle_exit_reason,
@@ -11600,6 +11809,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "ball_stopped_in_corral": ball_stopped_in_corral,
                         "rolled_away_after_release": rolled_away_after_release,
                         "settled_in_corral_pass": settled_in_corral_pass,
+                        "fetch_to_pose_pass": fetch_to_pose_pass,
+                        "fetch_to_pose_reached": fetch_to_pose_reached,
+                        "fetch_pose_world": fetch_pose_world,
+                        "visible_delivery_marker_pose": visible_delivery_marker_pose,
+                        "geometry_consistency": geometry_consistency,
                         "final_corral_audit": final_corral_audit,
                         "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
                         "final_all_targets_stopped": final_all_targets_stopped,

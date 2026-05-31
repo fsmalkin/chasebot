@@ -5079,6 +5079,19 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         summary = read_json(summary_path.with_name("summary.json")) if summary_path and summary_path.exists() else {}
         verdict = read_json(summary_path) if summary_path and summary_path.exists() else {}
         pass_flag = bool(verdict.get("pass")) if verdict else bool(summary.get("pass"))
+        geometry_consistency = (
+            verdict.get("geometry_consistency", {})
+            if isinstance(verdict.get("geometry_consistency"), dict)
+            else summary.get("geometry_consistency", {})
+            if isinstance(summary.get("geometry_consistency"), dict)
+            else {}
+        )
+        if (
+            scenario.mission_objective == "fetch_to_pose"
+            and geometry_consistency
+            and not bool(geometry_consistency.get("pass", False))
+        ):
+            pass_flag = False
         mission_root = summary_path.parent if summary_path and summary_path.exists() else None
         target_results = read_json(mission_root / "target_results.json") if mission_root is not None else {}
         visit_runtime = self._visit_mission_runtime_state()
@@ -5120,6 +5133,14 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "mission_verdict": verdict,
             "proof_verdict": verdict,
             "target_results": target_results,
+            "geometry_consistency": geometry_consistency,
+            "visible_delivery_marker_pose": (
+                verdict.get("visible_delivery_marker_pose", {})
+                if isinstance(verdict.get("visible_delivery_marker_pose"), dict)
+                else summary.get("visible_delivery_marker_pose", {})
+                if isinstance(summary.get("visible_delivery_marker_pose"), dict)
+                else {}
+            ),
             "message": "Gather mission passed" if pass_flag else "Gather mission failed",
             "motion_evidence": bool(pass_flag or gather_runtime.get("latest_control_command")),
             "proof_state": str(visit_runtime.get("proof_state", "completed" if pass_flag else "failed") or ("completed" if pass_flag else "failed")),

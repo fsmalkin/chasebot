@@ -1655,11 +1655,20 @@ def summarize_runs(runs: list[dict[str, Any]]) -> dict[str, Any]:
 
 def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], runs: list[dict[str, Any]]) -> str:
     surface_profiles = list(summary.get("surface_profiles", [])) if isinstance(summary.get("surface_profiles"), list) else []
+    fetch_objective = str(summary.get("mission_objective", "") or "").strip() == "fetch_to_pose" or any(
+        str(item.get("mission_objective", "") or "").strip() == "fetch_to_pose"
+        or "fetch_to_pose_reached" in item
+        for item in runs
+    )
     multi_ball = bool(
         summary.get("final_three_ball_corral_pass_count")
         or summary.get("final_three_ball_corral_fail_count")
         or any("final_three_ball_corral_pass" in item for item in runs)
     )
+    placement_label = "Delivery marker pass/fail" if fetch_objective else "Settled placement pass/fail"
+    inside_label = "Legacy corral inside" if fetch_objective else "Final inside retrieval corral"
+    center_label = "Legacy corral center inside" if fetch_objective else "Final center inside zone"
+    stopped_label = "Legacy corral stopped" if fetch_objective else "Ball stopped in corral"
     lines = [
         f"# {scenario_label} Scorecard",
         "",
@@ -1680,10 +1689,10 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         f"- Release gate blocks: `{', '.join(summary.get('release_gate_blocked_reasons', [])) if summary.get('release_gate_blocked_reasons') else 'none'}`",
         f"- Pass rate: `{summary.get('pass_count', 0)}/{max(len(runs), 1)}`",
         f"- Promotion gate: `{'PASS' if summary.get('promotion_gate_pass') else 'FAIL'}`",
-        f"- Settled placement pass/fail: `{summary.get('settled_in_corral_pass_count', 0)}/{summary.get('settled_in_corral_fail_count', 0)}`",
-        f"- Final inside retrieval corral: `{summary.get('final_inside_retrieval_corral_count', 0)}/{max(len(runs), 1)}`",
-        f"- Final center inside zone: `{summary.get('final_center_inside_zone_count', 0)}/{max(len(runs), 1)}`",
-        f"- Ball stopped in corral: `{summary.get('ball_stopped_in_corral_count', 0)}/{max(len(runs), 1)}`",
+        f"- {placement_label}: `{summary.get('fetch_to_pose_pass_count', summary.get('settled_in_corral_pass_count', 0)) if fetch_objective else summary.get('settled_in_corral_pass_count', 0)}/{summary.get('fetch_to_pose_fail_count', summary.get('settled_in_corral_fail_count', 0)) if fetch_objective else summary.get('settled_in_corral_fail_count', 0)}`",
+        f"- {inside_label}: `{summary.get('final_inside_retrieval_corral_count', 0)}/{max(len(runs), 1)}`",
+        f"- {center_label}: `{summary.get('final_center_inside_zone_count', 0)}/{max(len(runs), 1)}`",
+        f"- {stopped_label}: `{summary.get('ball_stopped_in_corral_count', 0)}/{max(len(runs), 1)}`",
         f"- Rolled away after release: `{summary.get('rolled_away_after_release_count', 0)}`",
         f"- Clean retention pass/fail: `{summary.get('clean_retention_pass_count', 0)}/{summary.get('clean_retention_fail_count', 0)}`",
         f"- Mission time avg/min/max: `{summary.get('mission_time_avg_s', 0.0):.3f}s / {summary.get('mission_time_min_s', 0.0):.3f}s / {summary.get('mission_time_max_s', 0.0):.3f}s`",
@@ -1712,6 +1721,9 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
         settled_ok = settled_in_corral_pass(item)
         run_pass = gather_run_pass(item)
         retention_ok = clean_retention_pass(item)
+        geometry = item.get("geometry_consistency", {}) if isinstance(item.get("geometry_consistency"), dict) else {}
+        delivery_label = "delivery_marker" if fetch_objective else "retrieved"
+        delivery_value = bool(item.get("fetch_to_pose_pass", item.get("fetch_to_pose_reached", False))) if fetch_objective else bool(item.get("final_inside_retrieval_corral", False))
         approach_verdict = item.get("approach_side_verdict", {}) if isinstance(item.get("approach_side_verdict"), dict) else {}
         approach_reason = str(
             approach_verdict.get("reason", "")
@@ -1734,7 +1746,9 @@ def build_scorecard_markdown(*, scenario_label: str, summary: dict[str, Any], ru
             f"release_gate=`{str(item.get('release_gate_blocked_reason', '') or 'none')}` "
             f"surface=`{str(item.get('surface_profile', '') or 'unspecified')}` "
             f"placed=`{int(item.get('placed_count', 0) or 0)}` "
-            f"retrieved=`{bool(item.get('final_inside_retrieval_corral', False))}` "
+            f"{delivery_label}=`{delivery_value}` "
+            f"geometry=`{geometry.get('pass', 'unknown') if fetch_objective else 'n/a'}` "
+            f"geometry_reason=`{geometry.get('reason', '') if fetch_objective else ''}` "
             f"center_inside=`{bool(item.get('final_center_inside_zone', False))}` "
             f"stopped=`{bool(item.get('ball_stopped_in_corral', False))}` "
             f"rolled_away=`{bool(item.get('rolled_away_after_release', False))}` "
