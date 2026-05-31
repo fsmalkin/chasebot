@@ -95,6 +95,7 @@ IDLE_SHUTDOWN_WATCHDOG_POLL_S = 15.0
 FETCH_PROGRESS_CACHE_TTL_S = 5.0
 FETCH_PROGRESS_MILESTONE = "Generalized Fetch-To-Pose v1"
 VISUAL_UAT_PACKAGE_KIND = "fetch_visual_uat_package"
+STAGE_QUALITY_AUDIT_KIND = "fetch_saved_anchor_setup_contact_audit"
 GATE_SERVICE_READY_TIMEOUT_S = 25.0
 GATE_SERVICE_POLL_S = 0.5
 DEFAULT_CONTROL_MODE = "host_powershell"
@@ -1939,6 +1940,9 @@ class DashboardController:
             "local_fetch_pass_seen": bool(package.get("local_fetch_pass_seen", False)),
             "promotion_evidence": bool(package.get("promotion_evidence", False)),
             "milestone_interpretation": str(package.get("milestone_interpretation", "") or ""),
+            "stage_quality_green": bool(package.get("stage_quality_green", False)),
+            "stage_quality_status": str(package.get("stage_quality_status", "") or ""),
+            "stage_quality_audits": list(package.get("stage_quality_audits", [])) if isinstance(package.get("stage_quality_audits"), list) else [],
             "warnings": list(package.get("warnings", [])) if isinstance(package.get("warnings"), list) else [],
             "planner_gates": list(package.get("planner_gates", [])) if isinstance(package.get("planner_gates"), list) else [],
             "seeded_evidence": list(package.get("seeded_evidence", [])) if isinstance(package.get("seeded_evidence"), list) else [],
@@ -2010,6 +2014,30 @@ class DashboardController:
         planner_wrong_fetch_dispatch_count = int(planner.get("wrong_fetch_dispatch_count", 0) or 0) if planner else 0
         planner_fetch_dispatch_count = int(planner.get("fetch_dispatch_count", 0) or 0) if planner else 0
 
+        def _is_stage_quality_audit(payload: Dict[str, Any]) -> bool:
+            return (
+                str(payload.get("type", "") or "") == STAGE_QUALITY_AUDIT_KIND
+                or str(payload.get("analyzer", "") or "") == STAGE_QUALITY_AUDIT_KIND
+            )
+
+        stage_quality_path, stage_quality_payload = self._latest_session_artifact_json(
+            (STAGE_QUALITY_AUDIT_KIND, "audit_summary.json"),
+            predicate=_is_stage_quality_audit,
+        )
+        stage_quality_rows = (
+            stage_quality_payload.get("saved_anchors", [])
+            if isinstance(stage_quality_payload.get("saved_anchors"), list)
+            else []
+        )
+        stage_quality_total = int(stage_quality_payload.get("saved_anchor_count", len(stage_quality_rows)) or 0) if stage_quality_payload else 0
+        stage_quality_pass_count = int(
+            stage_quality_payload.get("stage_quality_pass_count", stage_quality_payload.get("pass_count", 0)) or 0
+        ) if stage_quality_payload else 0
+        stage_quality_blockers = int(stage_quality_payload.get("setup_contact_blocker_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_watch = int(stage_quality_payload.get("saved_anchor_pass_with_contact_watch_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_green = bool(stage_quality_payload.get("stage_quality_green", False)) if stage_quality_payload else False
+        stage_quality_overall = str(stage_quality_payload.get("overall_interpretation", "") or "") if stage_quality_payload else ""
+
         seeded_pass_count = int(seeded_gate.get("pass_count", 0) or 0) if seeded_gate else 0
         seeded_fail_count = int(seeded_gate.get("fail_count", 0) or 0) if seeded_gate else 0
         seeded_total = seeded_pass_count + seeded_fail_count
@@ -2020,9 +2048,15 @@ class DashboardController:
         recommended_next_action = str(evidence.get("recommended_next_action", "") or "") if evidence else ""
         milestone_interpretation = str(evidence.get("milestone_interpretation", "") or "") if evidence else ""
 
-        if planner and planner_wrong_fetch_dispatch_count:
+        if stage_quality_payload and stage_quality_blockers:
+            status = "bad"
+            headline = f"Stage-quality audit has {stage_quality_blockers} setup/contact blocker; repair capture-entry before seeded random."
+        elif planner and planner_wrong_fetch_dispatch_count:
             status = "bad"
             headline = f"Planner gate has {planner_wrong_fetch_dispatch_count} wrong fetch-ready dispatch; do not score broad random as local fetch."
+        elif stage_quality_payload and stage_quality_green and stage_quality_watch:
+            status = "warn"
+            headline = f"Saved anchors stage-quality pass {stage_quality_pass_count}/{stage_quality_total} with {stage_quality_watch} capture-quality watch item."
         elif not evidence:
             status = "idle"
             headline = "No seeded fetch evidence package found yet."
@@ -2079,6 +2113,33 @@ class DashboardController:
                 "fetch_dispatch_count": planner_fetch_dispatch_count,
                 "wrong_fetch_dispatch_count": planner_wrong_fetch_dispatch_count,
                 "route_counts": planner.get("route_counts", {}) if planner and isinstance(planner.get("route_counts"), dict) else {},
+            },
+            "stage_quality_audit": {
+                "campaign_id": str(stage_quality_payload.get("campaign_id", "") or "") if stage_quality_payload else "",
+                "path": self._artifact_display_path(stage_quality_path),
+                "overall_interpretation": stage_quality_overall,
+                "green": stage_quality_green,
+                "pass_count": stage_quality_pass_count,
+                "total_count": stage_quality_total,
+                "setup_contact_blocker_count": stage_quality_blockers,
+                "setup_capture_blocker_count": int(stage_quality_payload.get("setup_capture_blocker_count", 0) or 0) if stage_quality_payload else 0,
+                "first_contact_blocker_count": int(stage_quality_payload.get("first_contact_blocker_count", 0) or 0) if stage_quality_payload else 0,
+                "invalid_geometry_count": int(stage_quality_payload.get("invalid_geometry_count", 0) or 0) if stage_quality_payload else 0,
+                "watch_count": stage_quality_watch,
+                "saved_anchors": [
+                    {
+                        "layout": str(row.get("layout", "") or ""),
+                        "pass": bool(row.get("pass", False)),
+                        "delivery_pass": bool(row.get("delivery_pass", False)),
+                        "quality_classification": str(row.get("quality_classification", "") or ""),
+                        "quality_flags": list(row.get("quality_flags", [])) if isinstance(row.get("quality_flags"), list) else [],
+                        "pre_stage_yaw_travel_max_deg": row.get("pre_stage_yaw_travel_max_deg"),
+                        "capture_entry_time_max_s": row.get("capture_entry_time_max_s"),
+                        "closest_approach_distance_m": row.get("closest_approach_distance_m"),
+                    }
+                    for row in stage_quality_rows
+                    if isinstance(row, dict)
+                ],
             },
             "latest_guarded_live_probe": {
                 "campaign_id": str(probe.get("campaign_id", "") or "") if probe else "",

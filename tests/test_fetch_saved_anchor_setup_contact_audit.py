@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import math
 import sys
 from pathlib import Path
 
@@ -79,6 +81,14 @@ def _summary(
             }
         ],
     }
+
+
+def _write_state_history(mission_root: Path, rows: list[dict]) -> None:
+    mission_root.mkdir(parents=True)
+    (mission_root / "state_history.jsonl").write_text(
+        "\n".join(json.dumps(row) for row in rows) + "\n",
+        encoding="utf-8",
+    )
 
 
 def test_saved_anchor_audit_classifies_setup_contact_blocker(tmp_path):
@@ -168,6 +178,76 @@ def test_saved_anchor_audit_keeps_passing_contact_watch_on_repeatability_ladder(
     assert summary["overall_interpretation"] == "saved_anchor_repeatability_ready_with_contact_watch"
     assert row["interpretation"] == "saved_anchor_pass_with_contact_watch"
     assert row["recommended_next_action"] == "run_repeatability_ladder_with_contact_watch"
+
+
+def test_saved_anchor_audit_flags_pre_stage_yaw_watch_from_state_history(tmp_path):
+    path = tmp_path / "zero_summary.json"
+    mission_root = tmp_path / "mission"
+    _write_state_history(
+        mission_root,
+        [
+            {
+                "phase": "pre_stage",
+                "generated_utc": "2026-05-31T00:00:00+00:00",
+                "robot_pose": {"yaw": 0.0},
+                "ball_pose": {"x": 0.38, "y": 0.0},
+                "selected_command": {"mode": "object_pre_stage_turn_to_behind"},
+            },
+            {
+                "phase": "pre_stage",
+                "generated_utc": "2026-05-31T00:00:01+00:00",
+                "robot_pose": {"yaw": math.radians(170.0)},
+                "ball_pose": {"x": 0.38, "y": 0.0},
+                "selected_command": {"mode": "object_pre_stage_turn_to_behind"},
+            },
+            {
+                "phase": "pre_stage",
+                "generated_utc": "2026-05-31T00:00:02+00:00",
+                "robot_pose": {"yaw": math.radians(-170.0)},
+                "ball_pose": {"x": 0.38, "y": 0.0},
+                "selected_command": {"mode": "object_pre_stage_close_yaw_settle"},
+            },
+            {
+                "phase": "pre_stage",
+                "generated_utc": "2026-05-31T00:00:03+00:00",
+                "robot_pose": {"yaw": math.radians(20.0)},
+                "ball_pose": {"x": 0.38, "y": 0.0},
+                "selected_command": {"mode": "pre_stage_ready"},
+            },
+        ],
+    )
+    payload = _summary(campaign_id="zero", layout="zero", passed=True, closest=0.25)
+    payload["runs"][0]["mission_root"] = str(mission_root)
+    payload["runs"][0]["fresh_attempt_approach"] = {
+        "pre_stage": {"handoff_pass": True, "pose_reached": True, "time_s": 12.0},
+        "capture_entry": {"pass": True, "reached": True, "time_s": 2.0, "failure_reason": ""},
+    }
+    write_json(path, payload)
+
+    summary = audit.analyze([str(path)])
+
+    row = summary["saved_anchors"][0]
+    assert row["pass"] is True
+    assert row["quality_classification"] == "pass_with_capture_quality_watch"
+    assert "pre_stage_yaw_watch" in row["quality_flags"]
+    assert row["pre_stage_yaw_travel_max_deg"] == 360.0
+
+
+def test_saved_anchor_audit_rejects_geometry_mismatch_even_when_fetch_passes(tmp_path):
+    path = tmp_path / "zero_summary.json"
+    payload = _summary(campaign_id="zero", layout="zero", passed=True, closest=0.12)
+    payload["runs"][0]["mission_verdict"] = {
+        "geometry_consistency": {"pass": False, "reason": "center_mismatch"},
+        "fetch_to_pose_pass": True,
+    }
+    write_json(path, payload)
+
+    summary = audit.analyze([str(path)])
+
+    row = summary["saved_anchors"][0]
+    assert row["pass"] is False
+    assert row["quality_classification"] == "invalid_geometry"
+    assert summary["invalid_geometry_count"] == 1
 
 
 def test_saved_anchor_audit_treats_no_object_motion_as_first_contact_blocker(tmp_path):

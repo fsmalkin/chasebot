@@ -199,6 +199,38 @@ def summarize_seeded_evidence(path: Path) -> dict[str, Any]:
     }
 
 
+def summarize_stage_quality(path: Path) -> dict[str, Any]:
+    payload = read_json(path)
+    rows = payload.get("saved_anchors", []) if isinstance(payload.get("saved_anchors"), list) else []
+    return {
+        "campaign_id": str(payload.get("campaign_id", "") or ""),
+        "session_id": session_id_for_path(path),
+        "path": artifact_display_path(path),
+        "green": bool(payload.get("stage_quality_green", False)),
+        "overall_interpretation": str(payload.get("overall_interpretation", "") or ""),
+        "pass_count": int(payload.get("stage_quality_pass_count", payload.get("pass_count", 0)) or 0),
+        "total_count": int(payload.get("saved_anchor_count", len(rows)) or 0),
+        "setup_contact_blocker_count": int(payload.get("setup_contact_blocker_count", 0) or 0),
+        "setup_capture_blocker_count": int(payload.get("setup_capture_blocker_count", 0) or 0),
+        "first_contact_blocker_count": int(payload.get("first_contact_blocker_count", 0) or 0),
+        "invalid_geometry_count": int(payload.get("invalid_geometry_count", 0) or 0),
+        "watch_count": int(payload.get("saved_anchor_pass_with_contact_watch_count", 0) or 0),
+        "saved_anchors": [
+            {
+                "layout": str(row.get("layout", "") or ""),
+                "pass": bool(row.get("pass", False)),
+                "delivery_pass": bool(row.get("delivery_pass", False)),
+                "quality_classification": str(row.get("quality_classification", "") or ""),
+                "quality_flags": row.get("quality_flags", []) if isinstance(row.get("quality_flags"), list) else [],
+                "pre_stage_yaw_travel_max_deg": row.get("pre_stage_yaw_travel_max_deg"),
+                "capture_entry_time_max_s": row.get("capture_entry_time_max_s"),
+            }
+            for row in rows
+            if isinstance(row, dict)
+        ],
+    }
+
+
 def summarize_mission(path: Path) -> dict[str, Any]:
     payload = read_json(path)
     runs = payload.get("runs", []) if isinstance(payload.get("runs"), list) else []
@@ -298,6 +330,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     planner_gates = [item for item in planner_gates if item]
     seeded_evidence = [summarize_seeded_evidence(resolve_path(path)) for path in args.seeded_evidence_summary]
     seeded_evidence = [item for item in seeded_evidence if item]
+    stage_quality_audits = [summarize_stage_quality(resolve_path(path)) for path in getattr(args, "stage_quality_summary", [])]
+    stage_quality_audits = [item for item in stage_quality_audits if item]
     missions = [summarize_mission(resolve_path(path)) for path in args.mission_summary]
     missions = [item for item in missions if item]
     visual_dirs = [resolve_path(path) for path in args.visual_dir]
@@ -348,6 +382,17 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         warnings.append("no_healthy_visual_confirmation")
     if local_fetch_seen and not local_fetch_visual_confirmed:
         warnings.append("passing_local_fetch_lacks_same_session_visual_confirmation")
+    stage_quality_green = bool(stage_quality_audits and all(item.get("green", False) for item in stage_quality_audits))
+    stage_quality_blocker_seen = any(
+        int(item.get("setup_contact_blocker_count", 0) or 0) > 0
+        or int(item.get("invalid_geometry_count", 0) or 0) > 0
+        for item in stage_quality_audits
+    )
+    stage_quality_watch_seen = any(int(item.get("watch_count", 0) or 0) > 0 for item in stage_quality_audits)
+    if stage_quality_blocker_seen:
+        warnings.append("stage_quality_blocker")
+    elif stage_quality_watch_seen:
+        warnings.append("stage_quality_watch")
 
     return {
         "type": PACKAGE_KIND,
@@ -362,6 +407,10 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "local_fetch_pass_seen": local_fetch_seen,
         "raw_local_fetch_pass_seen": raw_local_fetch_seen,
         "fetch_marker_geometry_mismatch_seen": geometry_mismatch_seen,
+        "stage_quality_green": stage_quality_green,
+        "stage_quality_status": (
+            "blocker" if stage_quality_blocker_seen else "watch" if stage_quality_watch_seen else "green" if stage_quality_green else ""
+        ),
         "promotion_evidence": False,
         "milestone_interpretation": (
             "mobile_visual_uat_ready_not_promotion" if pass_flag else "mobile_visual_uat_incomplete"
@@ -369,6 +418,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "warnings": warnings,
         "planner_gates": planner_gates,
         "seeded_evidence": seeded_evidence,
+        "stage_quality_audits": stage_quality_audits,
         "missions": missions,
         "visual_summaries": visual_summaries,
         "videos": videos,
@@ -390,6 +440,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- local_fetch_pass_seen: `{summary.get('local_fetch_pass_seen', False)}`",
         f"- raw_local_fetch_pass_seen: `{summary.get('raw_local_fetch_pass_seen', False)}`",
         f"- fetch_marker_geometry_mismatch_seen: `{summary.get('fetch_marker_geometry_mismatch_seen', False)}`",
+        f"- stage_quality_green: `{summary.get('stage_quality_green', False)}`",
+        f"- stage_quality_status: `{summary.get('stage_quality_status', '')}`",
         f"- promotion_evidence: `{summary.get('promotion_evidence', False)}`",
         f"- interpretation: `{summary.get('milestone_interpretation', '')}`",
         "",
@@ -432,6 +484,19 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"routes=`{gate.get('pass_count', 0)}/{gate.get('total_count', 0)}` "
             f"wrong_fetch=`{gate.get('wrong_fetch_dispatch_count', 0)}`"
         )
+    lines.extend(["", "## Stage Quality"])
+    stage_audits = summary.get("stage_quality_audits", []) if isinstance(summary.get("stage_quality_audits"), list) else []
+    if stage_audits:
+        for audit in stage_audits:
+            lines.append(
+                f"- `{audit.get('campaign_id', '')}` green=`{audit.get('green', False)}` "
+                f"pass=`{audit.get('pass_count', 0)}/{audit.get('total_count', 0)}` "
+                f"blockers=`{audit.get('setup_contact_blocker_count', 0)}` "
+                f"watch=`{audit.get('watch_count', 0)}` "
+                f"interpretation=`{audit.get('overall_interpretation', '')}`"
+            )
+    else:
+        lines.append("- none")
     lines.extend(["", "## Missions"])
     for mission in summary.get("missions", []) if isinstance(summary.get("missions"), list) else []:
         geometry = mission.get("geometry_consistency", {}) if isinstance(mission.get("geometry_consistency"), dict) else {}
@@ -464,6 +529,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--campaign-id", default=f"live_fetch_visual_uat_package_{current_utc_stamp()}")
     parser.add_argument("--planner-summary", action="append", default=[])
     parser.add_argument("--seeded-evidence-summary", action="append", default=[])
+    parser.add_argument("--stage-quality-summary", action="append", default=[])
     parser.add_argument("--mission-summary", action="append", default=[])
     parser.add_argument("--visual-dir", action="append", default=[])
     return parser.parse_args()

@@ -65,6 +65,29 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
             "telemetry_frame_count": 20,
         },
     )
+    stage_quality = session_root / "stage" / "fetch_saved_anchor_setup_contact_audit" / "audit_summary.json"
+    _write_json(
+        stage_quality,
+        {
+            "type": "fetch_saved_anchor_setup_contact_audit",
+            "campaign_id": "stage",
+            "stage_quality_green": False,
+            "overall_interpretation": "saved_anchor_repeatability_ready_with_contact_watch",
+            "saved_anchor_count": 3,
+            "stage_quality_pass_count": 3,
+            "setup_contact_blocker_count": 0,
+            "saved_anchor_pass_with_contact_watch_count": 1,
+            "saved_anchors": [
+                {
+                    "layout": "zero",
+                    "pass": True,
+                    "delivery_pass": True,
+                    "quality_classification": "pass_with_capture_quality_watch",
+                    "quality_flags": ["pre_stage_yaw_watch"],
+                }
+            ],
+        },
+    )
 
     args = type(
         "Args",
@@ -73,6 +96,7 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
             "campaign_id": "uat",
             "planner_summary": [str(planner)],
             "seeded_evidence_summary": [],
+            "stage_quality_summary": [str(stage_quality)],
             "mission_summary": [str(mission)],
             "visual_dir": [str(visual)],
         },
@@ -87,6 +111,9 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
     assert summary["local_fetch_visual_confirmed"] is True
     assert summary["planner_gate_green"] is True
     assert summary["local_fetch_pass_seen"] is True
+    assert summary["stage_quality_status"] == "watch"
+    assert summary["stage_quality_audits"][0]["watch_count"] == 1
+    assert "stage_quality_watch" in summary["warnings"]
     assert summary["fetch_marker_geometry_mismatch_seen"] is False
     assert {video["name"] for video in summary["videos"]} == {
         "world_stream.mp4",
