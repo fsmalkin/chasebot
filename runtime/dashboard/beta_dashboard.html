@@ -143,6 +143,24 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
 .fp-v.ok{color:var(--accent)}
 .fp-v.warn{color:var(--warn)}
 .fp-next{margin-top:8px;font-size:10px;color:var(--dim);line-height:1.35;word-break:break-word}
+.uat-package{border-bottom:1px solid var(--line);padding:10px 12px;background:var(--surf);flex-shrink:0;max-height:46vh;overflow-y:auto}
+.uat-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px}
+.uat-title{font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+.uat-badge{font-size:10px;font-weight:800;padding:2px 7px;border-radius:7px;background:var(--faint);color:var(--bg)}
+.uat-badge.ok{background:var(--ag);color:var(--accent)}
+.uat-badge.warn{background:var(--wg);color:var(--warn)}
+.uat-badge.bad{background:var(--bdg);color:var(--bad)}
+.uat-headline{font-size:11px;color:var(--ink);line-height:1.35;margin-bottom:8px}
+.uat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.uat-k{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
+.uat-v{font-size:12px;font-family:var(--mono);color:var(--dim)}
+.uat-v.ok{color:var(--accent)}
+.uat-v.warn{color:var(--warn)}
+.uat-v.bad{color:var(--bad)}
+.uat-video{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--card);margin-top:7px}
+.uat-video video{display:block;width:100%;max-height:140px;background:#080c0a}
+.uat-video-name{padding:5px 7px;font-size:10px;font-weight:700;font-family:var(--mono);color:var(--dim);word-break:break-all}
+.uat-empty{font-size:10px;color:var(--dim);line-height:1.35}
 .wl-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--line);flex-shrink:0}
 .wl-title{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
 .wl-count{font-size:10px;color:var(--faint);font-family:var(--mono)}
@@ -271,6 +289,20 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
 /* â”€â”€ pulse â”€â”€ */
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .pulsing{animation:pulse 1.6s infinite}
+@media (max-width: 820px) {
+  html,body{overflow:auto}
+  .shell{min-height:100vh;height:auto}
+  .body{position:static;overflow:visible}
+  .pane.on{position:static;min-height:calc(100vh - 52px)}
+  .watch-main{flex-direction:column;overflow:visible}
+  .watch-feeds-col{min-height:60vh}
+  .w-feeds{grid-template-columns:1fr;min-height:46vh}
+  .watch-log{width:100%;height:auto;max-height:none;border-left:0;border-top:1px solid var(--line)}
+  .uat-package{max-height:none}
+  .watch-actions{position:sticky;bottom:0;z-index:60;flex-wrap:wrap}
+  .proof-bar{flex-direction:column;align-items:stretch;gap:10px}
+  .proof-meta{justify-content:space-between}
+}
 </style>
 </head>
 <body>
@@ -385,6 +417,32 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
               </div>
             </div>
             <div class="fp-next" id="fp-next">Next: run seeded gate evidence.</div>
+          </div>
+          <div class="uat-package" id="uat-package-card">
+            <div class="uat-head">
+              <span class="uat-title">Mobile UAT Package</span>
+              <span class="uat-badge idle" id="uat-status">-</span>
+            </div>
+            <div class="uat-headline" id="uat-headline">No package yet.</div>
+            <div class="uat-grid">
+              <div>
+                <div class="uat-k">Planner</div>
+                <div class="uat-v dim" id="uat-planner">-</div>
+              </div>
+              <div>
+                <div class="uat-k">Fetch</div>
+                <div class="uat-v dim" id="uat-fetch">-</div>
+              </div>
+              <div>
+                <div class="uat-k">Videos</div>
+                <div class="uat-v dim" id="uat-videos">-</div>
+              </div>
+              <div>
+                <div class="uat-k">Promotion</div>
+                <div class="uat-v warn" id="uat-promotion">not yet</div>
+              </div>
+            </div>
+            <div id="uat-video-list" class="uat-empty">Build a visual UAT package to show recorded demos here.</div>
           </div>
           <div class="wl-head">
             <span class="wl-title">Events</span>
@@ -579,7 +637,12 @@ async function runLatestGolfFetch() {
 }
 
 async function runPlannerGatedGolfFetch() {
-  await runScenario(LATEST_GOLF_FETCH_SCENARIO_ID, { planner_gated_random: true, planner_mode: 'deterministic' });
+  await runScenario(LATEST_GOLF_FETCH_SCENARIO_ID, {
+    planner_gated_random: true,
+    planner_mode: 'deterministic',
+    gather_control_family: 'ai_push_coast_servo_v1',
+    ai_push_coast_mode: 'guarded_live'
+  });
 }
 
 async function dispatchIntent(intent) {
@@ -1021,6 +1084,7 @@ function renderWatch() {
   renderMetrics();
   renderButtons();
   renderFetchProgress();
+  renderVisualUatPackage();
   renderWatchLog();
 }
 
@@ -1058,6 +1122,65 @@ function renderFetchProgress() {
   setText('fp-next', 'Next: ' + (fp.recommended_next_action || 'run seeded gate evidence'));
 }
 
+function renderVisualUatPackage() {
+  const pkg = S.visual_uat_package || {};
+  const hasPackage = Boolean(pkg.campaign_id);
+  const pass = Boolean(pkg.pass);
+  const mobile = Boolean(pkg.mobile_watchable);
+  const badge = document.getElementById('uat-status');
+  if (badge) {
+    const cls = !hasPackage ? 'idle' : pass ? 'ok' : mobile ? 'warn' : 'bad';
+    badge.className = 'uat-badge ' + cls;
+    badge.textContent = !hasPackage ? '-' : pass ? 'ready' : mobile ? 'watch' : 'incomplete';
+  }
+  if (!hasPackage) {
+    setText('uat-headline', 'No package yet.');
+    setText('uat-planner', '-');
+    setClass('uat-planner', 'uat-v dim');
+    setText('uat-fetch', '-');
+    setClass('uat-fetch', 'uat-v dim');
+    setText('uat-videos', '-');
+    setClass('uat-videos', 'uat-v dim');
+    setText('uat-promotion', 'not yet');
+    setClass('uat-promotion', 'uat-v warn');
+    const list = document.getElementById('uat-video-list');
+    if (list) {
+      list.className = 'uat-empty';
+      list.textContent = 'Build a visual UAT package to show recorded demos here.';
+    }
+    return;
+  }
+
+  setText('uat-headline', pkg.milestone_interpretation || 'Visual UAT package available.');
+  setText('uat-planner', pkg.planner_gate_green ? 'green' : 'check');
+  setClass('uat-planner', pkg.planner_gate_green ? 'uat-v ok' : 'uat-v warn');
+  setText('uat-fetch', pkg.local_fetch_pass_seen ? 'seen' : 'missing');
+  setClass('uat-fetch', pkg.local_fetch_pass_seen ? 'uat-v ok' : 'uat-v warn');
+  const videos = Array.isArray(pkg.videos) ? pkg.videos : [];
+  setText('uat-videos', videos.length ? String(videos.length) : 'none');
+  setClass('uat-videos', mobile ? 'uat-v ok' : videos.length ? 'uat-v warn' : 'uat-v bad');
+  setText('uat-promotion', pkg.promotion_evidence ? 'yes' : 'not yet');
+  setClass('uat-promotion', pkg.promotion_evidence ? 'uat-v ok' : 'uat-v warn');
+
+  const list = document.getElementById('uat-video-list');
+  if (!list) return;
+  if (!videos.length) {
+    list.className = 'uat-empty';
+    list.textContent = 'No recorded videos found in this package.';
+    return;
+  }
+  list.className = '';
+  list.innerHTML = videos.map(video => {
+    const url = String(video.url || '');
+    const name = String(video.name || 'demo.mp4');
+    if (!url) return '';
+    return `<div class="uat-video">
+      <video controls playsinline preload="metadata" src="${escapeHtml(url)}"></video>
+      <div class="uat-video-name">${escapeHtml(name)}</div>
+    </div>`;
+  }).join('');
+}
+
 function ratioText(passCount, totalCount, failCount) {
   const p = Number(passCount || 0);
   const t = Number(totalCount || 0);
@@ -1075,6 +1198,15 @@ function setText(id, value) {
 function setClass(id, value) {
   const el = document.getElementById(id);
   if (el) el.className = value;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function renderWatchLog() {

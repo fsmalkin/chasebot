@@ -28,12 +28,16 @@ surprising random scenes must pass planner routing before local fetch is judged.
 4. Run local fetch evidence only for planner-approved `fetch_ready_local` scenes.
 5. Keep guarded-live execution terminal-only until saved-anchor and seeded-random
    shadow scoring are green.
-6. Freeze reproduced seeded/random failures into named layouts before tuning.
+6. Build a mobile visual UAT package before asking for operator signoff:
+   `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
+7. Freeze reproduced seeded/random failures into named layouts before tuning.
 
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches
   local fetch.
+- Mobile visual UAT passes only when the package has planner-green evidence, a
+  local fetch pass, and playable `world_stream.mp4` plus `topdown_telemetry.mp4`.
 - Saved-layout gate requires `zero`, `left05`, and `right05` one-run, then `3/3`.
 - Seeded gate uses `scripts/fetch_generalization_gate.py` and
   `scripts/fetch_seeded_gate_evidence_analyzer.py`.

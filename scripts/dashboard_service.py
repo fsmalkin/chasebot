@@ -22,7 +22,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Optional
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import yaml
 
@@ -94,6 +94,7 @@ DEFAULT_IDLE_SHUTDOWN_AFTER_S = 30.0 * 60.0
 IDLE_SHUTDOWN_WATCHDOG_POLL_S = 15.0
 FETCH_PROGRESS_CACHE_TTL_S = 5.0
 FETCH_PROGRESS_MILESTONE = "Generalized Fetch-To-Pose v1"
+VISUAL_UAT_PACKAGE_KIND = "fetch_visual_uat_package"
 GATE_SERVICE_READY_TIMEOUT_S = 25.0
 GATE_SERVICE_POLL_S = 0.5
 DEFAULT_CONTROL_MODE = "host_powershell"
@@ -129,6 +130,19 @@ GOLF_BALL_PLANNER_GATED_SCENE_SET = fetch_planner_gate.DEFAULT_SCENE_SET
 GOLF_BALL_RANDOM_PROFILES = {
     GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT,
     GOLF_BALL_RANDOM_PROFILE_LOCAL_VISUAL,
+}
+ALLOWED_DASHBOARD_GATHER_CONTROL_OVERRIDES = {
+    "object_centric_gather_policy_v1",
+    "ai_push_coast_servo_v1",
+}
+ALLOWED_DASHBOARD_AI_PUSH_COAST_MODES = {"shadow", "guarded_live"}
+ARTIFACT_MEDIA_TYPES = {
+    ".json": "application/json; charset=utf-8",
+    ".md": "text/markdown; charset=utf-8",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".mp4": "video/mp4",
 }
 GOLF_BALL_CIRCLE_DELIVERY_RANDOM_BOUNDS = {
     "forward_min_m": 0.30,
@@ -1854,6 +1868,84 @@ class DashboardController:
         except ValueError:
             return str(path)
 
+    @staticmethod
+    def _artifact_url(path: Optional[Path]) -> str:
+        if path is None:
+            return ""
+        try:
+            relative = path.resolve().relative_to(SESSION_ROOT.resolve())
+        except ValueError:
+            return ""
+        return "/artifacts/session/" + relative.as_posix()
+
+    def _resolve_repo_json_path(self, raw_path: str, *, field_name: str) -> str:
+        text = str(raw_path or "").strip()
+        if not text:
+            return ""
+        path = Path(text)
+        if not path.is_absolute():
+            path = REPO_ROOT / path
+        resolved = path.resolve()
+        try:
+            resolved.relative_to(REPO_ROOT.resolve())
+        except ValueError as exc:
+            raise ValueError(f"{field_name} must stay under repo root") from exc
+        if resolved.suffix.lower() != ".json":
+            raise ValueError(f"{field_name} must point to a json file")
+        if not resolved.is_file():
+            raise ValueError(f"{field_name} does not exist: {text}")
+        return self._artifact_display_path(resolved)
+
+    def resolve_session_artifact_path(self, url_suffix: str) -> Optional[Path]:
+        relative = unquote(str(url_suffix or "")).lstrip("/")
+        if not relative:
+            return None
+        candidate = (SESSION_ROOT / relative).resolve()
+        try:
+            candidate.relative_to(SESSION_ROOT.resolve())
+        except ValueError:
+            return None
+        if not candidate.is_file():
+            return None
+        if candidate.suffix.lower() not in ARTIFACT_MEDIA_TYPES:
+            return None
+        return candidate
+
+    def _latest_visual_uat_package_state(self) -> Dict[str, Any]:
+        def _is_visual_uat_package(payload: Dict[str, Any]) -> bool:
+            return str(payload.get("type", "") or "") == VISUAL_UAT_PACKAGE_KIND
+
+        package_path, package = self._latest_session_artifact_json(
+            (VISUAL_UAT_PACKAGE_KIND, "package_summary.json"),
+            predicate=_is_visual_uat_package,
+        )
+        if not package:
+            return {}
+        videos = []
+        for video in package.get("videos", []) if isinstance(package.get("videos"), list) else []:
+            if not isinstance(video, dict):
+                continue
+            item = dict(video)
+            if not item.get("url") and item.get("path"):
+                item["url"] = self._artifact_url(REPO_ROOT / str(item.get("path", "")))
+            videos.append(item)
+        return {
+            "campaign_id": str(package.get("campaign_id", "") or ""),
+            "path": self._artifact_display_path(package_path),
+            "scorecard_path": str(package.get("scorecard_path", "") or ""),
+            "pass": bool(package.get("pass", False)),
+            "mobile_watchable": bool(package.get("mobile_watchable", False)),
+            "planner_gate_green": bool(package.get("planner_gate_green", False)),
+            "local_fetch_pass_seen": bool(package.get("local_fetch_pass_seen", False)),
+            "promotion_evidence": bool(package.get("promotion_evidence", False)),
+            "milestone_interpretation": str(package.get("milestone_interpretation", "") or ""),
+            "warnings": list(package.get("warnings", [])) if isinstance(package.get("warnings"), list) else [],
+            "planner_gates": list(package.get("planner_gates", [])) if isinstance(package.get("planner_gates"), list) else [],
+            "seeded_evidence": list(package.get("seeded_evidence", [])) if isinstance(package.get("seeded_evidence"), list) else [],
+            "missions": list(package.get("missions", [])) if isinstance(package.get("missions"), list) else [],
+            "videos": videos,
+        }
+
     def _latest_fetch_progress_state(self) -> Dict[str, Any]:
         now = time.monotonic()
         cached_at = float(getattr(self, "_fetch_progress_cache_at", 0.0) or 0.0)
@@ -2352,6 +2444,7 @@ class DashboardController:
             "can_dispatch_intent": controls_enabled and snapshot["environment_state"] == "environment_ready",
         }
         snapshot["available_intents"] = sorted(self.frozen_intents.keys())
+        snapshot["visual_uat_package"] = self._latest_visual_uat_package_state()
         return snapshot
 
     def _llm_supervisor_state(self) -> Dict[str, Any]:
@@ -2571,12 +2664,42 @@ class DashboardController:
             scenario_overrides["planner_scene_set"] = str(
                 overrides.get("planner_scene_set", GOLF_BALL_PLANNER_GATED_SCENE_SET) or GOLF_BALL_PLANNER_GATED_SCENE_SET
             ).strip()
+            if str(overrides.get("planner_scene_json", "") or "").strip():
+                try:
+                    scenario_overrides["planner_scene_json"] = self._resolve_repo_json_path(
+                        str(overrides.get("planner_scene_json", "") or ""),
+                        field_name="planner_scene_json",
+                    )
+                except ValueError as exc:
+                    return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
+            if str(overrides.get("planner_scene_id", "") or "").strip():
+                scenario_overrides["planner_scene_id"] = str(overrides.get("planner_scene_id", "") or "").strip()
         if golf_random_layout:
             random_profile = str(overrides.get("random_profile", "") or GOLF_BALL_RANDOM_PROFILE_CORRIDOR_CONTACT).strip()
             if random_profile not in GOLF_BALL_RANDOM_PROFILES:
                 return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown random_profile: {random_profile}"}
             scenario_overrides["random_layout"] = True
             scenario_overrides["random_profile"] = random_profile
+        if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID:
+            if str(overrides.get("target_layout_json", "") or "").strip():
+                try:
+                    scenario_overrides["target_layout_json"] = self._resolve_repo_json_path(
+                        str(overrides.get("target_layout_json", "") or ""),
+                        field_name="target_layout_json",
+                    )
+                except ValueError as exc:
+                    return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": str(exc)}
+            if str(overrides.get("gather_control_family", "") or "").strip():
+                control_family = str(overrides.get("gather_control_family", "") or "").strip().lower()
+                if control_family not in ALLOWED_DASHBOARD_GATHER_CONTROL_OVERRIDES:
+                    return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown gather_control_family: {control_family}"}
+                scenario_overrides["gather_control_family"] = control_family
+            if str(overrides.get("ai_push_coast_mode", "") or "").strip():
+                ai_mode = str(overrides.get("ai_push_coast_mode", "") or "").strip()
+                if ai_mode not in ALLOWED_DASHBOARD_AI_PUSH_COAST_MODES:
+                    return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown ai_push_coast_mode: {ai_mode}"}
+                scenario_overrides["ai_push_coast_mode"] = ai_mode
+                scenario_overrides.setdefault("gather_control_family", "ai_push_coast_servo_v1")
         with self.state_lock:
             env_state = self.state["environment_state"]
             scenario_state = self.state["scenario_state"]
@@ -4371,10 +4494,28 @@ pkill -f "fluxbox" 2>/dev/null || true
         seed_value = overrides.get("random_seed")
         scene_set = str(overrides.get("planner_scene_set", GOLF_BALL_PLANNER_GATED_SCENE_SET) or GOLF_BALL_PLANNER_GATED_SCENE_SET)
         planner_mode = str(overrides.get("planner_mode", fetch_planner_gate.PLANNER_MODE_DETERMINISTIC) or fetch_planner_gate.PLANNER_MODE_DETERMINISTIC)
-        scene = fetch_planner_gate.generate_dashboard_scene(
-            seed=int(seed_value) if seed_value not in {None, ""} else None,
-            scene_set=scene_set,
-        )
+        scene_json = str(overrides.get("planner_scene_json", "") or "").strip()
+        scene_id = str(overrides.get("planner_scene_id", "") or "").strip()
+        scene: Dict[str, Any] = {}
+        if scene_json:
+            frozen_scenes = fetch_planner_gate.load_frozen_scenes(
+                scene_descriptor_json=[scene_json],
+                scene_dir="",
+                scene_set=scene_set,
+            )
+            if scene_id:
+                scene = next((item for item in frozen_scenes if str(item.get("scene_id", "") or "") == scene_id), {})
+                if not scene:
+                    raise RuntimeError(f"planner_scene_id not found in planner_scene_json: {scene_id}")
+            elif frozen_scenes:
+                scene = frozen_scenes[0]
+            if not scene:
+                raise RuntimeError(f"planner_scene_json had no scene descriptors: {scene_json}")
+        else:
+            scene = fetch_planner_gate.generate_dashboard_scene(
+                seed=int(seed_value) if seed_value not in {None, ""} else None,
+                scene_set=scene_set,
+            )
         decision = fetch_planner_gate.decide_scene(
             scene,
             planner_mode=planner_mode,
@@ -4776,12 +4917,27 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         log_path = ensure_dir(scenario_dir) / f"{scenario.id}.log"
         env = self._scenario_env(scenario)
         runner_scenario_id = str(scenario.runner_scenario_id or scenario.id)
-        runner_script = "golf_ball_circle_delivery_demo_runner.py" if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID else "gather_mission_runner.py"
         scenario_overrides = dict(getattr(self, "active_scenario_overrides", {}) or {})
+        effective_gather_control_family = str(
+            scenario_overrides.get("gather_control_family", scenario.gather_control_family) or ""
+        ).strip()
+        effective_ai_push_coast_mode = str(scenario_overrides.get("ai_push_coast_mode", "") or "").strip()
+        use_gather_runner_for_golf = bool(
+            scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID
+            and (
+                effective_gather_control_family != scenario.gather_control_family
+                or effective_ai_push_coast_mode
+            )
+        )
+        runner_script = (
+            "golf_ball_circle_delivery_demo_runner.py"
+            if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID and not use_gather_runner_for_golf
+            else "gather_mission_runner.py"
+        )
         random_draw: Dict[str, Any] = {}
         planner_handoff: Dict[str, Any] = {}
         local_fetch_dispatched = True
-        target_layout_json = scenario.target_layout_json
+        target_layout_json = str(scenario_overrides.get("target_layout_json", scenario.target_layout_json) or "")
         artifact_kind = ""
         if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID and truthy_value(scenario_overrides.get("planner_gated_random", False)):
             planner_handoff = self._run_dashboard_planner_handoff(overrides=scenario_overrides)
@@ -4799,7 +4955,8 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
                     "runner_scenario_id": runner_scenario_id,
                     "mission_objective": scenario.mission_objective,
                     "fetch_delivery_radius_m": scenario.fetch_delivery_radius_m,
-                    "gather_control_family": scenario.gather_control_family,
+                    "gather_control_family": effective_gather_control_family,
+                    "ai_push_coast_mode": effective_ai_push_coast_mode,
                     "target_layout_json": "",
                     "random_layout": False,
                     "random_profile": "",
@@ -4880,8 +5037,10 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             command.extend(["--fetch-target-z", f"{float(scenario.fetch_target_z):.6f}"])
         if scenario.fetch_delivery_radius_m is not None:
             command.extend(["--fetch-delivery-radius-m", f"{float(scenario.fetch_delivery_radius_m):.6f}"])
-        if scenario.gather_control_family and runner_script == "gather_mission_runner.py":
-            command.extend(["--gather-control-family", scenario.gather_control_family])
+        if effective_gather_control_family and runner_script == "gather_mission_runner.py":
+            command.extend(["--gather-control-family", effective_gather_control_family])
+        if effective_ai_push_coast_mode and runner_script == "gather_mission_runner.py":
+            command.extend(["--ai-push-coast-mode", effective_ai_push_coast_mode])
         if target_layout_json:
             command.extend(["--target-layout-json", target_layout_json])
         if random_draw and runner_script == "golf_ball_circle_delivery_demo_runner.py":
@@ -4942,7 +5101,8 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "runner_scenario_id": runner_scenario_id,
             "mission_objective": scenario.mission_objective,
             "fetch_delivery_radius_m": scenario.fetch_delivery_radius_m,
-            "gather_control_family": scenario.gather_control_family,
+            "gather_control_family": effective_gather_control_family,
+            "ai_push_coast_mode": effective_ai_push_coast_mode,
             "target_layout_json": target_layout_json,
             "random_layout": bool(random_draw),
             "random_profile": str(random_draw.get("random_profile", "")) if random_draw else "",
@@ -5195,6 +5355,61 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_artifact_file(self, path: Path) -> None:
+        content_type = ARTIFACT_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
+        file_size = path.stat().st_size
+        range_header = str(self.headers.get("Range", "") or "").strip()
+
+        start = 0
+        end = file_size - 1
+        partial = False
+        if path.suffix.lower() == ".mp4" and range_header.startswith("bytes="):
+            match = re.match(r"bytes=(\d*)-(\d*)$", range_header)
+            if not match:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+            raw_start, raw_end = match.groups()
+            if raw_start == "" and raw_end == "":
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+            if raw_start == "":
+                suffix_len = int(raw_end)
+                start = max(file_size - suffix_len, 0)
+            else:
+                start = int(raw_start)
+            if raw_end:
+                end = int(raw_end)
+            end = min(end, file_size - 1)
+            if start > end or start >= file_size:
+                self.send_response(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
+            partial = True
+
+        length = max(end - start + 1, 0)
+        self.send_response(HTTPStatus.PARTIAL_CONTENT if partial else HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(length))
+        if path.suffix.lower() == ".mp4":
+            self.send_header("Accept-Ranges", "bytes")
+        if partial:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
+        self.end_headers()
+        with path.open("rb") as handle:
+            handle.seek(start)
+            remaining = length
+            while remaining > 0:
+                chunk = handle.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                remaining -= len(chunk)
+
     def _read_json_body(self) -> Dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
@@ -5228,6 +5443,11 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return self._json_response(HTTPStatus.OK, controller.list_llm_supervisor_history(limit))
         if path == "/api/scenarios":
             return self._json_response(HTTPStatus.OK, controller.list_scenarios())
+        if path.startswith("/artifacts/session/"):
+            artifact_path = controller.resolve_session_artifact_path(path[len("/artifacts/session/") :])
+            if artifact_path is None:
+                return self._json_response(HTTPStatus.NOT_FOUND, {"error": "artifact not found"})
+            return self._serve_artifact_file(artifact_path)
         if path.startswith("/live/"):
             live_name = path[len("/") :]
             live_path = controller.read_live_file(live_name)
@@ -5384,6 +5604,26 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def tailscale_ipv4() -> str:
+    try:
+        completed = subprocess.run(
+            ["tailscale", "ip", "-4"],
+            capture_output=True,
+            text=True,
+            timeout=3.0,
+            check=False,
+        )
+    except Exception:
+        return ""
+    if completed.returncode != 0:
+        return ""
+    for line in (completed.stdout or "").splitlines():
+        text = line.strip()
+        if text:
+            return text
+    return ""
+
+
 def main() -> int:
     args = parse_args()
     _kill_stale_dashboard_on_port(args.port)
@@ -5400,6 +5640,10 @@ def main() -> int:
     controller._update_state(dashboard_url=f"http://{client_host}:{args.port}/")
     server = DashboardHttpServer((args.host, args.port), controller)
     print(f"DASHBOARD_URL=http://{client_host}:{args.port}/")
+    if args.host in ("0.0.0.0", "::"):
+        ts_ip = tailscale_ipv4()
+        if ts_ip:
+            print(f"DASHBOARD_TAILSCALE_URL=http://{ts_ip}:{args.port}/")
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:

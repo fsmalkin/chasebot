@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import io
 import math
 import re
 import socket
@@ -454,6 +455,68 @@ def _serve_dashboard_path(path: str, tmp_path: Path) -> list[tuple[Path, str, bo
     handler._json_response = lambda status, payload: (_ for _ in ()).throw(AssertionError(f"unexpected json response: {status} {payload}"))
     dashboard_service.DashboardRequestHandler.do_GET(handler)
     return served
+
+
+def test_artifact_media_route_serves_mp4_ranges(monkeypatch, tmp_path):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    video_path = session_root / "uat" / "visual" / "world_stream.mp4"
+    video_path.parent.mkdir(parents=True, exist_ok=True)
+    video_path.write_bytes(b"0123456789")
+
+    handler = dashboard_service.DashboardRequestHandler.__new__(dashboard_service.DashboardRequestHandler)
+    handler.headers = {"Range": "bytes=2-5"}
+    handler.wfile = io.BytesIO()
+    responses: list[int] = []
+    headers: list[tuple[str, str]] = []
+    handler.send_response = lambda status: responses.append(int(status))
+    handler.send_header = lambda key, value: headers.append((str(key), str(value)))
+    handler.end_headers = lambda: None
+
+    handler._serve_artifact_file(video_path)
+
+    assert responses == [206]
+    assert ("Content-Range", "bytes 2-5/10") in headers
+    assert ("Accept-Ranges", "bytes") in headers
+    assert handler.wfile.getvalue() == b"2345"
+
+
+def test_artifact_media_route_rejects_path_traversal(monkeypatch, tmp_path):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    controller = _make_controller(tmp_path)
+
+    assert controller.resolve_session_artifact_path("../outside.mp4") is None
+
+
+def test_get_state_includes_latest_visual_uat_package(monkeypatch, tmp_path):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    controller = _make_controller(tmp_path)
+    _write_json(
+        session_root / "uat" / "fetch_visual_uat_package" / "package_summary.json",
+        {
+            "type": "fetch_visual_uat_package",
+            "campaign_id": "uat",
+            "pass": True,
+            "mobile_watchable": True,
+            "planner_gate_green": True,
+            "local_fetch_pass_seen": True,
+            "videos": [
+                {
+                    "name": "world_stream.mp4",
+                    "path": "artifacts/session/uat/visual/world_stream.mp4",
+                    "url": "/artifacts/session/uat/visual/world_stream.mp4",
+                }
+            ],
+        },
+    )
+
+    state = controller.get_state()
+
+    assert state["visual_uat_package"]["campaign_id"] == "uat"
+    assert state["visual_uat_package"]["pass"] is True
+    assert state["visual_uat_package"]["videos"][0]["url"] == "/artifacts/session/uat/visual/world_stream.mp4"
 
 
 def test_idle_shutdown_operator_activity_resets_idle_timer(monkeypatch, tmp_path):
@@ -1384,6 +1447,11 @@ def test_beta_dashboard_includes_primary_golf_fetch_cta_and_stage_mapping():
     assert 'id="fp-status"' in html
     assert 'id="fp-planner"' in html
     assert "Planner-Gated Random" in html
+    assert "Mobile UAT Package" in html
+    assert 'id="uat-video-list"' in html
+    assert "playsinline" in html
+    assert "renderVisualUatPackage()" in html
+    assert "ai_push_coast_mode: 'guarded_live'" in html
     assert "renderFetchProgress()" in html
     assert "routeOrderText" in html
     assert "final_three_ball_corral_pass" in html
@@ -2029,6 +2097,83 @@ def test_request_golf_fetch_planner_gated_random_accepts_mode(monkeypatch, tmp_p
     assert controller.pending_scenario_overrides["planner_mode"] == dashboard_service.fetch_planner_gate.PLANNER_MODE_LLM_SHADOW
     assert controller.pending_scenario_overrides["random_seed"] == 456
     assert started
+
+
+def test_request_golf_fetch_accepts_guarded_live_overrides(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["environment_state"] = "environment_ready"
+    controller.state["scenario_state"] = "ready"
+    controller._refresh_control_plane_state = lambda force=False: None
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            started.append(self)
+
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_scenario_run(
+        dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID,
+        {
+            "planner_gated_random": True,
+            "planner_scene_json": "ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json",
+            "planner_scene_id": "frozen_fetch_ready_local_01",
+            "target_layout_json": "ros2_config/target_layouts/golf_ball_circle_delivery_zero.json",
+            "gather_control_family": "ai_push_coast_servo_v1",
+            "ai_push_coast_mode": "guarded_live",
+        },
+    )
+
+    assert status == 202
+    assert payload["accepted"] is True
+    assert controller.pending_scenario_overrides["planner_scene_id"] == "frozen_fetch_ready_local_01"
+    assert (
+        controller.pending_scenario_overrides["target_layout_json"].replace("\\", "/")
+        == "ros2_config/target_layouts/golf_ball_circle_delivery_zero.json"
+    )
+    assert controller.pending_scenario_overrides["gather_control_family"] == "ai_push_coast_servo_v1"
+    assert controller.pending_scenario_overrides["ai_push_coast_mode"] == "guarded_live"
+    assert started
+
+
+def test_request_golf_fetch_rejects_unknown_ai_mode(tmp_path):
+    controller = _make_controller(tmp_path)
+
+    status, payload = controller.request_scenario_run(
+        dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID,
+        {"ai_push_coast_mode": "free_drive"},
+    )
+
+    assert status == 400
+    assert payload["accepted"] is False
+    assert payload["error"] == "unknown ai_push_coast_mode: free_drive"
+
+
+def test_dashboard_planner_handoff_replays_requested_frozen_scene(monkeypatch, tmp_path):
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", tmp_path / "session")
+    controller = _make_controller(tmp_path)
+
+    result = controller._run_dashboard_planner_handoff(
+        overrides={
+            "planner_scene_json": "ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json",
+            "planner_scene_id": "frozen_fetch_ready_local_01",
+            "planner_scene_set": "mixed_fetch_planner_v1",
+            "planner_mode": dashboard_service.fetch_planner_gate.PLANNER_MODE_DETERMINISTIC,
+        }
+    )
+
+    assert result["scene"]["scene_id"] == "frozen_fetch_ready_local_01"
+    assert result["decision"]["route_label"] == dashboard_service.fetch_planner_gate.ROUTE_FETCH_READY
+    assert result["decision"]["should_dispatch_fetch_to_pose"] is True
 
 
 def test_request_golf_fetch_planner_gated_random_rejects_unknown_mode(tmp_path):
