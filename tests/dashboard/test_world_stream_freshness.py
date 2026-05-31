@@ -3251,6 +3251,8 @@ def _make_world_stream_observer(tmp_path: Path) -> world_stream_controller.World
     observer.live_dir.mkdir(parents=True, exist_ok=True)
     observer.logs_dir = observer.output_dir / "logs"
     observer.logs_dir.mkdir(parents=True, exist_ok=True)
+    observer.frame_spool_dir = observer.output_dir / "world_stream_frames"
+    observer.frame_spool_dir.mkdir(parents=True, exist_ok=True)
     observer.screenshot_path = observer.live_dir / "world_stream.jpg"
     observer.video_path = observer.output_dir / "world_stream.mp4"
     observer.state_path = observer.output_dir / "world_stream_state.json"
@@ -3258,6 +3260,9 @@ def _make_world_stream_observer(tmp_path: Path) -> world_stream_controller.World
     observer.placeholder = SimpleNamespace(copy=lambda: observer.placeholder)
     observer.writer = SimpleNamespace(write=lambda _frame: None, release=lambda: None)
     observer.writer_size = None
+    observer.video_writer_open = True
+    observer.video_writer_error = ""
+    observer.spool_frame_count = 0
     observer._ensure_writer = lambda _frame: None
     return observer
 
@@ -3329,6 +3334,32 @@ def test_world_stream_observer_counts_only_fresh_callbacks(tmp_path, monkeypatch
     assert state3["world_stream_transport_healthy"] is False
     assert state3["world_stream_degraded"] is True
     assert state3["failure_class"] == "world_stream_receive_rate_low"
+
+
+def test_world_stream_finalize_rebuilds_tiny_opencv_video_from_spool(tmp_path, monkeypatch):
+    observer = _make_world_stream_observer(tmp_path)
+    observer.video_path.write_bytes(b"tiny")
+    observer.spool_frame_count = 2
+    (observer.frame_spool_dir / "000001.jpg").write_bytes(b"frame1")
+    (observer.frame_spool_dir / "000002.jpg").write_bytes(b"frame2")
+
+    def _fake_run(command, **_kwargs):
+        assert command[0] == "ffmpeg"
+        assert str(observer.frame_spool_dir / "%06d.jpg") in command
+        Path(command[-1]).write_bytes(b"x" * world_stream_controller.WORLD_STREAM_VIDEO_MIN_BYTES)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(world_stream_controller.subprocess, "run", _fake_run)
+
+    observer.finalize({"world_stream_ready": True})
+
+    summary = json.loads(observer.summary_path.read_text(encoding="utf-8"))
+    assert summary["pass"] is True
+    assert summary["video_ok"] is True
+    assert summary["opencv_video_ok"] is False
+    assert summary["ffmpeg_fallback_attempted"] is True
+    assert summary["ffmpeg_fallback_ok"] is True
+    assert summary["world_stream_spool_frame_count"] == 2
 
 
 def test_world_stream_observer_marks_rendered_and_received_separately(tmp_path, monkeypatch):

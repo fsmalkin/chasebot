@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
 from collections import deque
@@ -25,6 +26,7 @@ WORLD_STREAM_RECENT_WINDOW_S = 5.0
 WORLD_STREAM_TRANSPORT_MIN_FRAMES = 3
 WORLD_STREAM_TRANSPORT_MAX_AGE_S = 4.0
 WORLD_STREAM_RENDERABLE_MAX_AGE_S = 10.0
+WORLD_STREAM_VIDEO_MIN_BYTES = 1024
 
 
 def parse_args() -> argparse.Namespace:
@@ -191,6 +193,8 @@ class WorldStreamObserver(Node):
         self.live_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir = self.output_dir / "logs"
         self.logs_dir.mkdir(parents=True, exist_ok=True)
+        self.frame_spool_dir = self.output_dir / "world_stream_frames"
+        self.frame_spool_dir.mkdir(parents=True, exist_ok=True)
         self.screenshot_path = self.live_dir / "world_stream.jpg"
         self.video_path = self.output_dir / "world_stream.mp4"
         self.state_path = self.output_dir / "world_stream_state.json"
@@ -199,6 +203,9 @@ class WorldStreamObserver(Node):
         cv2.imwrite(str(self.screenshot_path), self.placeholder)
         self.writer: Optional[cv2.VideoWriter] = None
         self.writer_size: Optional[tuple[int, int]] = None
+        self.video_writer_open = False
+        self.video_writer_error = ""
+        self.spool_frame_count = 0
 
         qos = QoSPresetProfiles.SENSOR_DATA.value
         self.create_subscription(Image, args.image_topic, self._on_image, qos)
@@ -241,12 +248,19 @@ class WorldStreamObserver(Node):
         return len(self.recent_frame_wall_times)
 
     def _ensure_writer(self, frame: np.ndarray) -> None:
-        if self.writer is not None:
+        if self.writer_size is not None:
             return
         size = (frame.shape[1], frame.shape[0])
         self.writer_size = size
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        self.writer = cv2.VideoWriter(str(self.video_path), fourcc, max(self.args.fps, 1.0), size)
+        self.writer = None
+        self.video_writer_open = False
+        self.video_writer_error = "ffmpeg_spool_only"
+
+    def _spool_frame(self, frame: np.ndarray) -> None:
+        self.spool_frame_count += 1
+        frame_path = self.frame_spool_dir / f"{self.spool_frame_count:06d}.jpg"
+        jpeg_quality_flag = int(getattr(cv2, "IMWRITE_JPEG_QUALITY", 1))
+        cv2.imwrite(str(frame_path), frame, [jpeg_quality_flag, 85])
 
     def update(self) -> dict[str, object]:
         now = time.time()
@@ -281,9 +295,10 @@ class WorldStreamObserver(Node):
         if new_frame_ready:
             self.rendered_frame_count += 1
             self._ensure_writer(frame)
-            if self.writer is not None:
+            if self.writer is not None and self.video_writer_open:
                 self.writer.write(frame)
             cv2.imwrite(str(self.screenshot_path), frame)
+            self._spool_frame(frame)
             self.last_rendered_frame_seq = self.latest_received_frame_seq
 
         min_frames = 3
@@ -392,14 +407,65 @@ class WorldStreamObserver(Node):
             "truth_target_seen": truth_target_seen,
             "screenshot_path": str(self.screenshot_path),
             "video_path": str(self.video_path),
+            "world_stream_frame_spool_dir": str(self.frame_spool_dir),
+            "world_stream_spool_frame_count": self.spool_frame_count,
+            "world_stream_video_writer_open": self.video_writer_open,
+            "world_stream_video_writer_error": self.video_writer_error,
         }
         self.state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
         return state
 
+    def _video_file_ok(self, path: Optional[Path] = None) -> bool:
+        target = path or self.video_path
+        return target.exists() and target.stat().st_size >= WORLD_STREAM_VIDEO_MIN_BYTES
+
+    def _build_video_from_spool(self) -> tuple[bool, str]:
+        frame_count = len(list(self.frame_spool_dir.glob("*.jpg")))
+        if frame_count <= 0:
+            return False, "no_spooled_world_stream_frames"
+        temp_video_path = self.video_path.with_name(f"{self.video_path.stem}_ffmpeg{self.video_path.suffix}")
+        if temp_video_path.exists():
+            temp_video_path.unlink()
+        command = [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-framerate",
+            f"{max(self.args.fps, 1.0):.3f}",
+            "-start_number",
+            "1",
+            "-i",
+            str(self.frame_spool_dir / "%06d.jpg"),
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(temp_video_path),
+        ]
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=90.0, check=False)
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()
+            return False, detail or f"ffmpeg_exit_{completed.returncode}"
+        if not self._video_file_ok(temp_video_path):
+            size = temp_video_path.stat().st_size if temp_video_path.exists() else 0
+            return False, f"ffmpeg_video_too_small:{size}"
+        temp_video_path.replace(self.video_path)
+        return True, ""
+
     def finalize(self, last_state: dict[str, object]) -> None:
         if self.writer is not None:
             self.writer.release()
-        video_ok = self.video_path.exists() and self.video_path.stat().st_size > 0
+            self.writer = None
+        opencv_video_ok = self._video_file_ok()
+        ffmpeg_fallback_attempted = self.spool_frame_count > 0
+        ffmpeg_fallback_ok = False
+        ffmpeg_fallback_error = ""
+        if ffmpeg_fallback_attempted:
+            ffmpeg_fallback_attempted = True
+            ffmpeg_fallback_ok, ffmpeg_fallback_error = self._build_video_from_spool()
+        video_ok = self._video_file_ok()
         summary = dict(last_state)
         summary.update(
             {
@@ -408,6 +474,13 @@ class WorldStreamObserver(Node):
                 "summary_path": str(self.summary_path),
                 "state_path": str(self.state_path),
                 "video_ok": video_ok,
+                "opencv_video_ok": opencv_video_ok,
+                "ffmpeg_fallback_attempted": ffmpeg_fallback_attempted,
+                "ffmpeg_fallback_ok": ffmpeg_fallback_ok,
+                "ffmpeg_fallback_error": ffmpeg_fallback_error,
+                "video_size_bytes": self.video_path.stat().st_size if self.video_path.exists() else 0,
+                "world_stream_frame_spool_dir": str(self.frame_spool_dir),
+                "world_stream_spool_frame_count": self.spool_frame_count,
             }
         )
         self.summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
