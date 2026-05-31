@@ -48,8 +48,8 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
     visual = session_root / "mission" / "visual"
     visual.mkdir(parents=True)
     (visual / "world_stream.mp4").write_bytes(b"w" * package.VIDEO_MIN_BYTES)
-    (visual / "topdown_telemetry.mp4").write_bytes(b"t" * package.VIDEO_MIN_BYTES)
-    (visual / "raw_camera.mp4").write_bytes(b"r" * package.VIDEO_MIN_BYTES)
+    (visual / "topdown_telemetry_browser.mp4").write_bytes(b"t" * package.VIDEO_MIN_BYTES)
+    (visual / "raw_camera_browser.mp4").write_bytes(b"r" * package.VIDEO_MIN_BYTES)
 
     args = type(
         "Args",
@@ -72,10 +72,12 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
     assert summary["local_fetch_pass_seen"] is True
     assert {video["name"] for video in summary["videos"]} == {
         "world_stream.mp4",
-        "topdown_telemetry.mp4",
-        "raw_camera.mp4",
+        "topdown_telemetry_browser.mp4",
+        "raw_camera_browser.mp4",
     }
-    assert next(video for video in summary["videos"] if video["name"] == "raw_camera.mp4")["role"] == "onboard_camera"
+    raw_video = next(video for video in summary["videos"] if video["name"] == "raw_camera_browser.mp4")
+    assert raw_video["role"] == "onboard_camera"
+    assert raw_video["browser_compatible"] is True
     assert summary["videos"][0]["url"].startswith("/artifacts/session/")
 
 

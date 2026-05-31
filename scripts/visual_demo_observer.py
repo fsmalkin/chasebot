@@ -8,6 +8,7 @@ import json
 import math
 import os
 import signal
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -331,6 +332,9 @@ class VisualDemoObserver(Node):
         self.raw_video_path = visual_dir / "raw_camera.mp4"
         self.debug_video_path = visual_dir / "yolo_debug.mp4"
         self.topdown_video_path = visual_dir / "topdown_telemetry.mp4"
+        self.raw_browser_video_path = visual_dir / "raw_camera_browser.mp4"
+        self.debug_browser_video_path = visual_dir / "yolo_debug_browser.mp4"
+        self.topdown_browser_video_path = visual_dir / "topdown_telemetry_browser.mp4"
         self.timeline_path = visual_dir / "timeline.json"
         self.timeline_events_path = visual_dir / "timeline_events.jsonl"
         self.summary_path = visual_dir / "visual_demo_summary.json"
@@ -548,6 +552,53 @@ class VisualDemoObserver(Node):
     def _write_image(self, path: Path, frame: np.ndarray) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         cv2.imwrite(str(path), frame)
+
+    def _transcode_browser_video(self, source_path: Path, output_path: Path) -> dict[str, object]:
+        result: dict[str, object] = {
+            "source": str(source_path),
+            "path": str(output_path),
+            "ok": False,
+            "error": "",
+        }
+        if not source_path.is_file() or source_path.stat().st_size <= 0:
+            result["error"] = "source_video_missing_or_empty"
+            return result
+        command = [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(source_path),
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+        try:
+            completed = subprocess.run(command, capture_output=True, text=True, timeout=120, check=False)
+        except FileNotFoundError:
+            result["error"] = "ffmpeg_not_found"
+            return result
+        except subprocess.TimeoutExpired:
+            result["error"] = "ffmpeg_timeout"
+            return result
+        if completed.returncode != 0:
+            result["error"] = (completed.stderr or completed.stdout or f"ffmpeg_exit_{completed.returncode}").strip()
+            return result
+        result["ok"] = output_path.is_file() and output_path.stat().st_size > 0
+        if not result["ok"]:
+            result["error"] = "browser_video_missing_or_empty"
+        return result
 
     def _render_topdown(self) -> np.ndarray:
         width, height = self.topdown_size
@@ -1071,6 +1122,12 @@ class VisualDemoObserver(Node):
             if writer is not None:
                 writer.release()
 
+        browser_videos = {
+            "raw_camera": self._transcode_browser_video(self.raw_video_path, self.raw_browser_video_path),
+            "yolo_debug": self._transcode_browser_video(self.debug_video_path, self.debug_browser_video_path),
+            "topdown_telemetry": self._transcode_browser_video(self.topdown_video_path, self.topdown_browser_video_path),
+        }
+
         self._write_timeline_json()
 
         target_visible_ratio = float(self.target_visible_count / max(self.raw_frame_count, 1))
@@ -1137,6 +1194,10 @@ class VisualDemoObserver(Node):
             "raw_video": str(self.raw_video_path),
             "debug_video": str(self.debug_video_path),
             "topdown_video": str(self.topdown_video_path),
+            "raw_browser_video": str(self.raw_browser_video_path),
+            "debug_browser_video": str(self.debug_browser_video_path),
+            "topdown_browser_video": str(self.topdown_browser_video_path),
+            "browser_video_transcodes": browser_videos,
             "keyframes_dir": str(self.keyframes_dir),
             "timeline_path": str(self.timeline_path),
             "state_path": str(self.state_path),

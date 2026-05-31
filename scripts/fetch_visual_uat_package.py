@@ -16,19 +16,30 @@ SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 PACKAGE_KIND = "fetch_visual_uat_package"
 VIDEO_MIN_BYTES = 1024
 VIDEO_NAMES = (
+    "raw_camera_browser.mp4",
+    "yolo_debug_browser.mp4",
+    "topdown_telemetry_browser.mp4",
     "world_stream.mp4",
-    "topdown_telemetry.mp4",
-    "raw_camera.mp4",
     "yolo_debug.mp4",
+    "raw_camera.mp4",
+    "topdown_telemetry.mp4",
 )
 REQUIRED_MOBILE_VIDEO_NAMES = frozenset(
     {
-        "raw_camera.mp4",
+        "raw_camera_browser.mp4",
         "world_stream.mp4",
-        "topdown_telemetry.mp4",
+        "topdown_telemetry_browser.mp4",
     }
 )
-ONBOARD_VIDEO_NAMES = frozenset({"raw_camera.mp4", "yolo_debug.mp4"})
+ONBOARD_VIDEO_NAMES = frozenset({"raw_camera_browser.mp4", "raw_camera.mp4", "yolo_debug_browser.mp4", "yolo_debug.mp4"})
+BROWSER_COMPATIBLE_VIDEO_NAMES = frozenset(
+    {
+        "raw_camera_browser.mp4",
+        "yolo_debug_browser.mp4",
+        "topdown_telemetry_browser.mp4",
+        "world_stream.mp4",
+    }
+)
 
 
 def utc_now() -> str:
@@ -165,6 +176,7 @@ def discover_videos(visual_dirs: list[Path]) -> list[dict[str, Any]]:
                 {
                     "name": name,
                     "role": "onboard_camera" if name in ONBOARD_VIDEO_NAMES else "external_context",
+                    "browser_compatible": name in BROWSER_COMPATIBLE_VIDEO_NAMES,
                     "path": artifact_display_path(path),
                     "url": artifact_url(path),
                     "size_bytes": int(path.stat().st_size),
@@ -188,8 +200,12 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         gate.get("pass") and int(gate.get("wrong_fetch_dispatch_count", 0) or 0) == 0 for gate in planner_gates
     )
     local_fetch_seen = any(mission.get("fetch_to_pose_pass") for mission in missions)
-    playable_core = {video["name"] for video in videos if video.get("url") and video.get("playable_candidate")}
-    onboard_camera_ok = "raw_camera.mp4" in playable_core
+    playable_core = {
+        video["name"]
+        for video in videos
+        if video.get("url") and video.get("playable_candidate") and video.get("browser_compatible")
+    }
+    onboard_camera_ok = "raw_camera_browser.mp4" in playable_core
     video_ok = REQUIRED_MOBILE_VIDEO_NAMES.issubset(playable_core)
     pass_flag = bool(planner_ok and local_fetch_seen and video_ok)
     warnings: list[str] = []
@@ -241,16 +257,24 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
     ]
     videos = summary.get("videos", []) if isinstance(summary.get("videos"), list) else []
     if videos:
-        onboard = [video for video in videos if video.get("role") == "onboard_camera"]
-        external = [video for video in videos if video.get("role") != "onboard_camera"]
+        onboard = [
+            video
+            for video in videos
+            if video.get("role") == "onboard_camera" and video.get("browser_compatible")
+        ]
+        external = [
+            video
+            for video in videos
+            if video.get("role") != "onboard_camera" and video.get("browser_compatible")
+        ]
         if onboard:
             lines.append("")
-            lines.append("### Onboard Camera")
+            lines.append("### Browser-Safe Onboard Camera")
             for video in onboard:
                 lines.append(f"- `{video.get('name', '')}`: `{video.get('url', '')}`")
         if external:
             lines.append("")
-            lines.append("### Context Views")
+            lines.append("### Browser-Safe Context Views")
             for video in external:
                 lines.append(f"- `{video.get('name', '')}`: `{video.get('url', '')}`")
     else:
