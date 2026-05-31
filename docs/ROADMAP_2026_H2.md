@@ -599,8 +599,10 @@ fetch evidence.
      `ambiguous_or_unsafe_no_go`) before subsystem success is judged
    - implementation note:
      `scripts/fetch_planner_handoff_gate.py` is the first planner-handoff
-     evidence surface; dashboard planner-gated random runs skip local fetch
-     unless the route is `fetch_ready_local`
+     evidence surface; it can replay
+     `ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json`, and
+     dashboard planner-gated random runs skip local fetch unless the route is
+     `fetch_ready_local`
    - keep deterministic guards authoritative over command bounds, target
      freshness, ball drift, retry budget, safe stop, `/odom`, and frozen
      contracts

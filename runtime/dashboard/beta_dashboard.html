@@ -1029,6 +1029,7 @@ function renderFetchProgress() {
   const saved = fp.saved_anchor || {};
   const seeded = fp.seeded_shadow_gate || {};
   const probe = fp.latest_guarded_live_probe || {};
+  const plannerGate = fp.planner_handoff_gate || {};
   const planner = S.planner_handoff || {};
   const plannerDecision = planner.decision || {};
   const status = fp.status || 'idle';
@@ -1047,8 +1048,11 @@ function renderFetchProgress() {
   setClass('fp-seeded', seeded.fail_count ? 'fp-v warn' : seeded.total_count ? 'fp-v ok' : 'fp-v dim');
   setText('fp-probe', probe.campaign_id ? (probe.pass ? 'pass' : 'fail') : '-');
   setClass('fp-probe', probe.campaign_id ? (probe.pass ? 'fp-v ok' : 'fp-v bad') : 'fp-v dim');
-  setText('fp-planner', plannerDecision.route_label || '-');
-  setClass('fp-planner', plannerDecision.route_label ? (plannerDecision.correct === false ? 'fp-v bad' : 'fp-v ok') : 'fp-v dim');
+  const plannerText = plannerDecision.route_label || (plannerGate.total_count ? ratioText(plannerGate.pass_count, plannerGate.total_count, plannerGate.fail_count) : '-');
+  const plannerBad = plannerDecision.correct === false || Number(plannerGate.wrong_fetch_dispatch_count || 0) > 0;
+  const plannerOk = plannerDecision.route_label || plannerGate.pass === true;
+  setText('fp-planner', plannerText);
+  setClass('fp-planner', plannerOk ? (plannerBad ? 'fp-v bad' : 'fp-v ok') : 'fp-v dim');
   setText('fp-promotion', fp.promotion_evidence ? 'yes' : 'not yet');
   setClass('fp-promotion', fp.promotion_evidence ? 'fp-v ok' : 'fp-v warn');
   setText('fp-next', 'Next: ' + (fp.recommended_next_action || 'run seeded gate evidence'));

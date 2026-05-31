@@ -18,6 +18,8 @@ def test_planner_gate_dry_run_scores_all_route_classes(tmp_path, monkeypatch):
     args = SimpleNamespace(
         campaign_id="planner_gate_dry",
         scene_set=gate.DEFAULT_SCENE_SET,
+        scene_descriptor_json=[],
+        scene_dir="",
         random_cases=10,
         seed=123,
         planner_mode=gate.PLANNER_MODE_DETERMINISTIC,
@@ -42,6 +44,38 @@ def test_planner_gate_dry_run_scores_all_route_classes(tmp_path, monkeypatch):
     assert summary_path.exists()
     scorecard_path = summary_path.with_name("scorecard.md")
     assert scorecard_path.exists()
+
+
+def test_planner_gate_replays_frozen_scene_set(tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+    frozen_path = tmp_path / "scene_set.json"
+    scenes = gate.generate_random_scenes(seed=321, random_cases=5)
+    gate.write_json(frozen_path, {"scenes": scenes})
+    args = SimpleNamespace(
+        campaign_id="planner_gate_frozen",
+        scene_set=gate.DEFAULT_SCENE_SET,
+        scene_descriptor_json=[str(frozen_path)],
+        scene_dir="",
+        random_cases=99,
+        seed=123,
+        planner_mode=gate.PLANNER_MODE_DETERMINISTIC,
+        dry_run=True,
+        openai_model=gate.DEFAULT_OPENAI_MODEL,
+        openai_api_key="",
+        openai_base_url=gate.DEFAULT_OPENAI_BASE_URL,
+        openai_org_id="",
+        openai_project_id="",
+        reasoning_effort=gate.DEFAULT_REASONING_EFFORT,
+        timeout_s=30.0,
+    )
+
+    summary = gate.run_gate(args)
+
+    assert summary["pass"] is True
+    assert summary["scene_source"] == "frozen"
+    assert summary["random_cases"] == 5
+    assert summary["wrong_fetch_dispatch_count"] == 0
+    assert {result["scene_id"] for result in summary["results"]} == {scene["scene_id"] for scene in scenes}
 
 
 def test_deterministic_classifier_separates_reposition_recovery_and_fetch_ready():

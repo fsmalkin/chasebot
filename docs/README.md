@@ -18,6 +18,7 @@
 
 ### Planning and Research
 - [ROADMAP_2026_H2.md](ROADMAP_2026_H2.md) — H2 2026 roadmap
+- [GENERALIZED_FETCH_TO_POSE_AUTONOMOUS_EXECUTION_PLAN.md](GENERALIZED_FETCH_TO_POSE_AUTONOMOUS_EXECUTION_PLAN.md) - Default long-running execution ladder for generalized fetch-to-pose and planner-gated randomization
 - [OBJECT_CENTRIC_FETCH_POLICY_PLAN.md](OBJECT_CENTRIC_FETCH_POLICY_PLAN.md) - Active bounded Generalized Fetch-To-Pose v1 subsystem milestone, Nav2 corridor-push evidence, and guarded AI push-coast plan
 - [OBJECT_CENTRIC_FETCH_POLICY_SLIDE_DECK.html](OBJECT_CENTRIC_FETCH_POLICY_SLIDE_DECK.html) - 4th-grade slide deck for the calibrated fetch architecture
 - [FETCH_BRANCH_STRATEGY.md](FETCH_BRANCH_STRATEGY.md) - Branch-role and architecture-revisit decisions for calibrated golf fetch

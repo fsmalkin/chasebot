@@ -133,12 +133,14 @@ only then dispatch local `fetch_to_pose`. This keeps subsystem gates honest:
 the fetch gate proves control inside its envelope; the planner gate proves that
 the system can recognize when that envelope does not apply.
 
-Implementation update: `scripts/fetch_planner_handoff_gate.py` now generates
-mixed scene descriptors and scores route labels before local fetch dispatch.
+Implementation update: `scripts/fetch_planner_handoff_gate.py` now replays the
+frozen `ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json` scene
+set or generates mixed scene descriptors and scores route labels before local
+fetch dispatch.
 The dashboard has a planner-gated random path that writes planner artifacts and
 skips local fetch for non-`fetch_ready_local` scenes. The initial deterministic
 dry-run artifact is
-`artifacts/session/dev_fetch_planner_handoff_gate_dryrun_20260530_rerun/fetch_planner_handoff_gate/scorecard.md`.
+`artifacts/session/dev_fetch_planner_handoff_gate_frozen_replay_20260531/fetch_planner_handoff_gate/scorecard.md`.
 
 May 29, 2026 model-planning refinement: V-JEPA-style world models are relevant
 as an architectural pattern for scoring candidate actions against predicted

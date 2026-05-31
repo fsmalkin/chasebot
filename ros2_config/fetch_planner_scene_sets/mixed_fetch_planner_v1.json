@@ -1,0 +1,137 @@
+{
+  "generated_utc": "2026-05-31T00:00:00+00:00",
+  "scene_set": "mixed_fetch_planner_v1",
+  "type": "fetch_planner_scene_set",
+  "scenes": [
+    {
+      "ball_pose": {"x": 0.380616, "y": 0.209985, "yaw": 0.0, "z": 0.021336},
+      "corridor": {"blocked": false, "clearance_m": 0.35, "unsafe_drift_m": 0.0},
+      "expected_route_label": "fetch_ready_local",
+      "geometry": {
+        "ball_target_angle_deg": -20.243595,
+        "ball_target_distance_m": 0.60687,
+        "robot_ball_distance_m": 0.440072,
+        "robot_lateral_error_m": 0.048614,
+        "robot_lateral_signed_m": -0.048614,
+        "robot_yaw_error_deg": 10.29802
+      },
+      "local_fetch_envelope": {
+        "delivery_radius_m": 0.3,
+        "eligible": true,
+        "no_direct_ball_impulse": true,
+        "requires_robot_owned_contact": true
+      },
+      "perception": {"ball_confidence": 0.98, "state_age_s": 0.15, "target_confidence": 0.99},
+      "robot_pose": {"x": -0.046567, "y": 0.315711, "yaw": -0.173583, "z": 0.0},
+      "scene_id": "frozen_fetch_ready_local_01",
+      "scene_set": "mixed_fetch_planner_v1",
+      "seed": 20260530,
+      "target_pose": {"radius_m": 0.3, "x": 0.95, "y": 0.0, "z": 0.001},
+      "type": "fetch_planner_scene_descriptor"
+    },
+    {
+      "ball_pose": {"x": 0.4457, "y": 0.212988, "yaw": 0.0, "z": 0.021336},
+      "corridor": {"blocked": false, "clearance_m": 0.35, "unsafe_drift_m": 0.0},
+      "expected_route_label": "nav2_reposition_first",
+      "geometry": {
+        "ball_target_angle_deg": -22.896419,
+        "ball_target_distance_m": 0.547433,
+        "robot_ball_distance_m": 0.948659,
+        "robot_lateral_error_m": 0.088998,
+        "robot_lateral_signed_m": 0.088998,
+        "robot_yaw_error_deg": -9.907185
+      },
+      "local_fetch_envelope": {
+        "delivery_radius_m": 0.3,
+        "eligible": false,
+        "no_direct_ball_impulse": true,
+        "requires_robot_owned_contact": true
+      },
+      "perception": {"ball_confidence": 0.98, "state_age_s": 0.15, "target_confidence": 0.99},
+      "robot_pose": {"x": -0.389734, "y": 0.662437, "yaw": -0.572531, "z": 0.0},
+      "scene_id": "frozen_nav2_reposition_first_01",
+      "scene_set": "mixed_fetch_planner_v1",
+      "seed": 20260530,
+      "target_pose": {"radius_m": 0.3, "x": 0.95, "y": 0.0, "z": 0.001},
+      "type": "fetch_planner_scene_descriptor"
+    },
+    {
+      "ball_pose": {"x": 0.315822, "y": 0.133285, "yaw": 0.0, "z": 0.021336},
+      "corridor": {"blocked": false, "clearance_m": 0.35, "unsafe_drift_m": 0.0},
+      "expected_route_label": "scan_or_perceive_first",
+      "geometry": {
+        "ball_target_angle_deg": -11.869114,
+        "ball_target_distance_m": 0.648033,
+        "robot_ball_distance_m": 0.36046,
+        "robot_lateral_error_m": 0.039803,
+        "robot_lateral_signed_m": 0.039803,
+        "robot_yaw_error_deg": -7.902236
+      },
+      "local_fetch_envelope": {
+        "delivery_radius_m": 0.3,
+        "eligible": false,
+        "no_direct_ball_impulse": true,
+        "requires_robot_owned_contact": true
+      },
+      "perception": {"ball_confidence": 0.35, "state_age_s": 0.2, "target_confidence": 0.99},
+      "robot_pose": {"x": -0.026588, "y": 0.245922, "yaw": -0.345075, "z": 0.0},
+      "scene_id": "frozen_scan_or_perceive_first_01",
+      "scene_set": "mixed_fetch_planner_v1",
+      "seed": 20260530,
+      "target_pose": {"radius_m": 0.3, "x": 0.95, "y": 0.0, "z": 0.001},
+      "type": "fetch_planner_scene_descriptor"
+    },
+    {
+      "ball_pose": {"x": 0.409505, "y": 0.129528, "yaw": 0.0, "z": 0.021336},
+      "corridor": {"blocked": false, "clearance_m": 0.35, "unsafe_drift_m": 0.0},
+      "expected_route_label": "recovery_or_reaim",
+      "geometry": {
+        "ball_target_angle_deg": -13.476646,
+        "ball_target_distance_m": 0.555799,
+        "robot_ball_distance_m": 0.511051,
+        "robot_lateral_error_m": 0.219597,
+        "robot_lateral_signed_m": 0.219597,
+        "robot_yaw_error_deg": 6.690529
+      },
+      "local_fetch_envelope": {
+        "delivery_radius_m": 0.3,
+        "eligible": false,
+        "no_direct_ball_impulse": true,
+        "requires_robot_owned_contact": true
+      },
+      "perception": {"ball_confidence": 0.98, "state_age_s": 0.15, "target_confidence": 0.99},
+      "robot_pose": {"x": 0.011922, "y": 0.450623, "yaw": -0.11844, "z": 0.0},
+      "scene_id": "frozen_recovery_or_reaim_01",
+      "scene_set": "mixed_fetch_planner_v1",
+      "seed": 20260530,
+      "target_pose": {"radius_m": 0.3, "x": 0.95, "y": 0.0, "z": 0.001},
+      "type": "fetch_planner_scene_descriptor"
+    },
+    {
+      "ball_pose": {"x": -0.558905, "y": -0.179051, "yaw": 0.0, "z": 0.021336},
+      "corridor": {"blocked": false, "clearance_m": 0.068552, "unsafe_drift_m": 0.236765},
+      "expected_route_label": "ambiguous_or_unsafe_no_go",
+      "geometry": {
+        "ball_target_angle_deg": 6.767243,
+        "ball_target_distance_m": 1.519491,
+        "robot_ball_distance_m": 0.33855,
+        "robot_lateral_error_m": 0.056482,
+        "robot_lateral_signed_m": -0.056482,
+        "robot_yaw_error_deg": -11.209459
+      },
+      "local_fetch_envelope": {
+        "delivery_radius_m": 0.3,
+        "eligible": false,
+        "no_direct_ball_impulse": true,
+        "requires_robot_owned_contact": true
+      },
+      "perception": {"ball_confidence": 0.98, "state_age_s": 0.15, "target_confidence": 0.99},
+      "robot_pose": {"x": -0.883728, "y": -0.274474, "yaw": -0.077531, "z": 0.0},
+      "scene_id": "frozen_ambiguous_or_unsafe_no_go_01",
+      "scene_set": "mixed_fetch_planner_v1",
+      "seed": 20260530,
+      "target_pose": {"radius_m": 0.3, "x": 0.95, "y": 0.0, "z": 0.001},
+      "type": "fetch_planner_scene_descriptor"
+    }
+  ]
+}

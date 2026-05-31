@@ -665,14 +665,14 @@ Live gates:
    - purpose: score high-level routing before subsystem execution; do not send
      major unknowns directly to local fetch and call the result a fetch failure
    - command:
-     `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --dry-run --random-cases 20 --seed 20260530`
+     `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --scene-descriptor-json ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json --dry-run`
    - LLM shadow command:
-     `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --dry-run --random-cases 20 --seed 20260530 --planner-mode llm_shadow`
+     `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --scene-descriptor-json ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json --dry-run --planner-mode llm_shadow`
    - dashboard mixed-scene CTA uses `planner_gated_random: true`; if the route
      is not `fetch_ready_local`, it records planner artifacts and does not
      dispatch local fetch
    - first dry-run artifact:
-     `artifacts/session/dev_fetch_planner_handoff_gate_dryrun_20260530_rerun/fetch_planner_handoff_gate/scorecard.md`
+     `artifacts/session/dev_fetch_planner_handoff_gate_frozen_replay_20260531/fetch_planner_handoff_gate/scorecard.md`
    - required case classes:
      - `fetch_ready_local`: inside the documented local fetch envelope; should
        dispatch `fetch_to_pose`

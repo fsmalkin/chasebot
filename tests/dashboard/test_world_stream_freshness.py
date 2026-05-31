@@ -1382,6 +1382,8 @@ def test_beta_dashboard_includes_primary_golf_fetch_cta_and_stage_mapping():
     assert "Placing ball into the zone" in html
     assert "Fetch v1 Progress" in html
     assert 'id="fp-status"' in html
+    assert 'id="fp-planner"' in html
+    assert "Planner-Gated Random" in html
     assert "renderFetchProgress()" in html
     assert "routeOrderText" in html
     assert "final_three_ball_corral_pass" in html
@@ -1451,6 +1453,29 @@ def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path,
             "fetch_to_pose_time_max_s": 8.7,
         },
     )
+    _write_json(
+        session_root / "planner_gate" / "fetch_planner_handoff_gate" / "gate_summary.json",
+        {
+            "type": "fetch_planner_handoff_gate",
+            "campaign_id": "planner_gate",
+            "scene_set": "mixed_fetch_planner_v1",
+            "scene_source": "frozen",
+            "planner_mode": "deterministic",
+            "pass": True,
+            "pass_count": 20,
+            "fail_count": 0,
+            "random_cases": 20,
+            "fetch_dispatch_count": 5,
+            "wrong_fetch_dispatch_count": 0,
+            "route_counts": {
+                "fetch_ready_local": 5,
+                "nav2_reposition_first": 4,
+                "scan_or_perceive_first": 4,
+                "recovery_or_reaim": 4,
+                "ambiguous_or_unsafe_no_go": 3,
+            },
+        },
+    )
 
     state = controller.get_state()
     progress = state["fetch_progress"]
@@ -1460,6 +1485,9 @@ def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path,
     assert progress["saved_anchor"]["pass_count"] == 3
     assert progress["seeded_shadow_gate"]["pass_count"] == 5
     assert progress["seeded_shadow_gate"]["non_repro_failure_count"] == 1
+    assert progress["planner_handoff_gate"]["pass"] is True
+    assert progress["planner_handoff_gate"]["scene_source"] == "frozen"
+    assert progress["planner_handoff_gate"]["wrong_fetch_dispatch_count"] == 0
     assert progress["latest_guarded_live_probe"]["pass"] is True
     assert progress["recommended_next_action"] == "rerun_watchlist_before_guarded_live"
 

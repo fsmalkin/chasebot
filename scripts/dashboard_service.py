@@ -1904,6 +1904,20 @@ class DashboardController:
         probe_fail_count = int(probe.get("fetch_to_pose_fail_count", 0) or 0) if probe else 0
         probe_pass = bool(probe and probe_pass_count > 0 and probe_fail_count == 0)
 
+        def _is_planner_handoff_gate(payload: Dict[str, Any]) -> bool:
+            return str(payload.get("type", "") or "") == "fetch_planner_handoff_gate"
+
+        planner_path, planner = self._latest_session_artifact_json(
+            ("fetch_planner_handoff_gate", "gate_summary.json"),
+            predicate=_is_planner_handoff_gate,
+        )
+        planner_pass = bool(planner.get("pass", False)) if planner else False
+        planner_total = int(planner.get("random_cases", 0) or 0) if planner else 0
+        planner_pass_count = int(planner.get("pass_count", 0) or 0) if planner else 0
+        planner_fail_count = int(planner.get("fail_count", 0) or 0) if planner else 0
+        planner_wrong_fetch_dispatch_count = int(planner.get("wrong_fetch_dispatch_count", 0) or 0) if planner else 0
+        planner_fetch_dispatch_count = int(planner.get("fetch_dispatch_count", 0) or 0) if planner else 0
+
         seeded_pass_count = int(seeded_gate.get("pass_count", 0) or 0) if seeded_gate else 0
         seeded_fail_count = int(seeded_gate.get("fail_count", 0) or 0) if seeded_gate else 0
         seeded_total = seeded_pass_count + seeded_fail_count
@@ -1914,7 +1928,10 @@ class DashboardController:
         recommended_next_action = str(evidence.get("recommended_next_action", "") or "") if evidence else ""
         milestone_interpretation = str(evidence.get("milestone_interpretation", "") or "") if evidence else ""
 
-        if not evidence:
+        if planner and planner_wrong_fetch_dispatch_count:
+            status = "bad"
+            headline = f"Planner gate has {planner_wrong_fetch_dispatch_count} wrong fetch-ready dispatch; do not score broad random as local fetch."
+        elif not evidence:
             status = "idle"
             headline = "No seeded fetch evidence package found yet."
         elif promotion_evidence:
@@ -1956,6 +1973,20 @@ class DashboardController:
                 "reproduced_failure_count": reproduced_count,
                 "guarded_live_candidate_count": guarded_candidates,
                 "interpretation": str(seeded_gate.get("interpretation", "") or ""),
+            },
+            "planner_handoff_gate": {
+                "campaign_id": str(planner.get("campaign_id", "") or "") if planner else "",
+                "path": self._artifact_display_path(planner_path),
+                "scene_set": str(planner.get("scene_set", "") or "") if planner else "",
+                "scene_source": str(planner.get("scene_source", "") or "") if planner else "",
+                "planner_mode": str(planner.get("planner_mode", "") or "") if planner else "",
+                "pass": planner_pass,
+                "pass_count": planner_pass_count,
+                "fail_count": planner_fail_count,
+                "total_count": planner_total,
+                "fetch_dispatch_count": planner_fetch_dispatch_count,
+                "wrong_fetch_dispatch_count": planner_wrong_fetch_dispatch_count,
+                "route_counts": planner.get("route_counts", {}) if planner and isinstance(planner.get("route_counts"), dict) else {},
             },
             "latest_guarded_live_probe": {
                 "campaign_id": str(probe.get("campaign_id", "") or "") if probe else "",

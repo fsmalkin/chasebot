@@ -77,9 +77,10 @@ scene is a planner success.
 
 The first concrete gate for this contract is
 `scripts/fetch_planner_handoff_gate.py`. It can run deterministic scoring or
-`llm_shadow` scoring over frozen mixed-scene descriptors. LLM shadow may record
-provider requests and rationales, but deterministic guard agreement remains the
-promotion condition and no planner output can command `/cmd_vel`.
+`llm_shadow` scoring over frozen mixed-scene descriptors, starting with
+`ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json`. LLM shadow
+may record provider requests and rationales, but deterministic guard agreement
+remains the promotion condition and no planner output can command `/cmd_vel`.
 
 The latest proven Nav2 lane is therefore evidence, not the final architecture:
 

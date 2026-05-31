@@ -24,6 +24,7 @@ from llm_supervisor_core import DEFAULT_REASONING_EFFORT
 from llm_supervisor_core import REPO_ROOT
 from llm_supervisor_core import ensure_dir
 from llm_supervisor_core import normalize_openai_base_url
+from llm_supervisor_core import read_json
 from llm_supervisor_core import utc_now
 from llm_supervisor_core import write_json
 
@@ -59,6 +60,17 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run planner-gated fetch handoff scoring.")
     parser.add_argument("--campaign-id", default="")
     parser.add_argument("--scene-set", default=DEFAULT_SCENE_SET)
+    parser.add_argument(
+        "--scene-descriptor-json",
+        action="append",
+        default=[],
+        help="Frozen scene descriptor JSON file. Accepts one scene or {'scenes': [...]}. May be repeated.",
+    )
+    parser.add_argument(
+        "--scene-dir",
+        default="",
+        help="Directory containing frozen scene descriptor JSON files.",
+    )
     parser.add_argument("--random-cases", type=int, default=DEFAULT_RANDOM_CASES)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument(
@@ -79,6 +91,13 @@ def parse_args() -> argparse.Namespace:
 
 def _campaign_root(campaign_id: str) -> Path:
     return REPO_ROOT / "artifacts" / "session" / campaign_id / PLANNER_GATE_KIND
+
+
+def _resolve_path(raw_path: str) -> Path:
+    path = Path(str(raw_path or "").strip())
+    if not path.is_absolute():
+        path = (REPO_ROOT / path).resolve()
+    return path
 
 
 def _round_pose(x: float, y: float, yaw: float = 0.0, z: float = 0.0) -> dict[str, float]:
@@ -283,6 +302,47 @@ def generate_random_scenes(
         scene["scene_set"] = scene_set
         _refresh_local_fetch_envelope(scene)
         scenes.append(scene)
+    return scenes
+
+
+def _scene_payloads_from_file(path: Path) -> list[dict[str, Any]]:
+    payload = read_json(path)
+    if not payload:
+        return []
+    if isinstance(payload.get("scenes"), list):
+        candidates = payload.get("scenes", [])
+    elif isinstance(payload.get("scene"), dict):
+        candidates = [payload.get("scene", {})]
+    else:
+        candidates = [payload]
+    scenes: list[dict[str, Any]] = []
+    for item in candidates:
+        if isinstance(item, dict) and item:
+            scenes.append(dict(item))
+    return scenes
+
+
+def load_frozen_scenes(
+    *,
+    scene_descriptor_json: list[str] | None = None,
+    scene_dir: str = "",
+    scene_set: str = DEFAULT_SCENE_SET,
+) -> list[dict[str, Any]]:
+    paths: list[Path] = []
+    for raw_path in list(scene_descriptor_json or []):
+        if str(raw_path or "").strip():
+            paths.append(_resolve_path(raw_path))
+    if str(scene_dir or "").strip():
+        directory = _resolve_path(scene_dir)
+        if directory.is_dir():
+            paths.extend(sorted(path for path in directory.glob("*.json") if path.is_file()))
+    scenes: list[dict[str, Any]] = []
+    for path in paths:
+        for scene in _scene_payloads_from_file(path):
+            scene.setdefault("scene_set", scene_set)
+            scene.setdefault("source_scene_path", str(path))
+            _refresh_local_fetch_envelope(scene)
+            scenes.append(scene)
     return scenes
 
 
@@ -537,14 +597,23 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     campaign_id = str(args.campaign_id or "").strip() or f"live_fetch_planner_handoff_gate_{current_utc_stamp()}"
     gate_root = _campaign_root(campaign_id)
     ensure_dir(gate_root)
-    scenes = generate_random_scenes(
-        seed=int(args.seed),
-        random_cases=max(int(args.random_cases), 1),
-        scene_set=str(args.scene_set or DEFAULT_SCENE_SET),
+    scene_set = str(args.scene_set or DEFAULT_SCENE_SET)
+    scenes = load_frozen_scenes(
+        scene_descriptor_json=list(args.scene_descriptor_json or []),
+        scene_dir=str(args.scene_dir or ""),
+        scene_set=scene_set,
     )
+    scene_source = "frozen"
+    if not scenes:
+        scenes = generate_random_scenes(
+            seed=int(args.seed),
+            random_cases=max(int(args.random_cases), 1),
+            scene_set=scene_set,
+        )
+        scene_source = "generated"
     results: list[dict[str, Any]] = []
     for scene in scenes:
-        scene["seed"] = int(args.seed)
+        scene.setdefault("seed", int(args.seed))
         decision = decide_scene(
             scene,
             planner_mode=str(args.planner_mode),
@@ -579,7 +648,8 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "type": PLANNER_GATE_KIND,
         "campaign_id": campaign_id,
         "dry_run": bool(args.dry_run),
-        "scene_set": str(args.scene_set or DEFAULT_SCENE_SET),
+        "scene_set": scene_set,
+        "scene_source": scene_source,
         "seed": int(args.seed),
         "random_cases": len(scenes),
         "planner_mode": str(args.planner_mode),
@@ -604,6 +674,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         "",
         f"- campaign_id: `{summary.get('campaign_id', '')}`",
         f"- scene_set: `{summary.get('scene_set', '')}`",
+        f"- scene_source: `{summary.get('scene_source', '')}`",
         f"- planner_mode: `{summary.get('planner_mode', '')}`",
         f"- seed: `{summary.get('seed', '')}`",
         f"- pass: `{bool(summary.get('pass', False))}`",
