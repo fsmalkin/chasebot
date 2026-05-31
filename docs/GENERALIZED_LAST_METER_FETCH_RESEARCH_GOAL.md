@@ -17,43 +17,92 @@ not only the current saved layouts.
 
 ## Next Major Milestone
 
-Deliver Generalized Fetch-To-Pose v1: a no-shoot, robot-owned local fetch
-behavior that combines Nav2 stage ownership, deterministic homebrew contact
-routines, and a guarded AI/model handoff-and-maneuver proposer, proven on saved
-layouts and the first seeded random generalization gate.
+Deliver Planner-Gated Generalized Fetch-To-Pose v1: a no-shoot, robot-owned
+fetch behavior where an LLM/world-state planner chooses the right bounded route,
+Nav2 owns as much real-time robot motion as it can safely own, and a thin
+fetch adapter monitors corrected ball/target geometry, success, escape, stale
+state, and replanning triggers. Custom contact routines and AI push-coast
+prediction remain fallback lanes that earn live authority only after corrected
+Nav2-first evidence exposes a reproducible stage gap.
 
-Scope correction: this milestone proves the bounded local fetch subsystem, not
-open-world planner competence. The broader product milestone is Planner-Gated
-Generalized Fetch: an LLM/world-state planner first decides whether a scene is
-fetch-ready, requires scan/perception, requires Nav2 repositioning, requires a
-different recovery/subroutine, or should abort/no-go. Only fetch-ready local
-cases should be handed to `fetch_to_pose` and scored as fetch subsystem
-evidence.
+Scope correction: this milestone proves the planner-to-subsystem handoff plus
+the bounded local fetch skill. The planner first classifies scenes as
+`fetch_ready_local`, `nav2_reposition_first`, `scan_or_perceive_first`,
+`recovery_or_reaim`, or `ambiguous_or_unsafe_no_go`. Only planner-approved
+`fetch_ready_local` cases should be handed to `fetch_to_pose` and scored as
+local fetch evidence.
 
 Milestone acceptance:
 
-1. Saved-layout `zero`, `left05`, and `right05` pass `3/3` in the canonical
-   calibrated golf-ball/turf lane with no retries and `0.300m` delivery radius.
-2. The first seeded random `fetch_generalization_gate` set runs; reproducible
-   failures are frozen into named saved layouts before tuning.
-3. The AI/model layer first passes shadow scoring on saved anchors, Nav2
-   stop-short evidence, and seeded layouts as a handoff and maneuver-class
-   proposer, not as a direct motor controller.
-4. Learned execution, when enabled, remains inside deterministic guards for
-   command bounds, target freshness, ball drift, retry budget, safe stop, and
-   `/odom`/contract preservation.
-5. A separate planner-handoff gate exists before any "truly random" claim:
-   mixed scenarios are scored on correct route selection (`fetch_ready_local`,
+1. Evidence is valid only when `geometry_consistency.pass=true`, the visible
+   delivery marker matches `fetch_pose_world`, and the run has same-session
+   browser-watchable onboard plus context video.
+2. Pre-fix or marker-mismatched fetch passes are reclassified as diagnostic
+   implementation evidence. Architecture and promotion claims require the
+   corrected marker and video floor.
+3. The planner-handoff gate passes before broad random UAT: mixed scenarios are
+   scored on correct route selection (`fetch_ready_local`,
    `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`,
    `ambiguous_or_unsafe_no_go`) before subsystem execution is judged.
+4. Saved-layout `zero`, `left05`, and `right05` pass `3/3` in the canonical
+   calibrated golf-ball/turf lane with no retries and `0.300m` delivery radius.
+5. The first seeded random `fetch_generalization_gate` set runs; reproducible
+   failures are frozen into named saved layouts before tuning.
+6. Custom contact routines and AI/model proposals are added only where the
+   corrected Nav2/adapter baseline shows a reproducible stage gap. AI starts in
+   shadow mode and may execute only by selecting deterministic guarded routines.
+
+## May 31, 2026 Evidence And Architecture Reset
+
+The delivery-marker geometry issue invalidated a meaningful share of recent
+fetch-result interpretation. Preserve the code, dashboards, analyzers, videos,
+and guardrails that exposed the issue. Reclassify pre-fix result claims unless
+the artifact proves corrected marker geometry and same-session visual evidence.
+
+Fresh corrected evidence:
+
+- Geometry fix commit: `7bb2719 Fix fetch delivery marker geometry validation`.
+- Invalidated-evidence audit:
+  `artifacts/session/fetch_geometry_evidence_audit_20260531/fetch_geometry_evidence_audit/scorecard.md`.
+- Corrected UAT run:
+  `artifacts/session/20260531T204154158382Z/gather_mission/20260531T204255Z/mission_verdict.json`.
+- Corrected visual UAT package:
+  `artifacts/session/uat_fetch_visual_package_postfix_20260531/fetch_visual_uat_package/scorecard.md`.
+- Corrected geometry audit:
+  `artifacts/session/fetch_geometry_evidence_audit_postfix_20260531/fetch_geometry_evidence_audit/scorecard.md`.
+
+The corrected saved-zero run proves the metric path: `fetch_to_pose_pass=true`,
+`geometry_consistency.pass=true`, marker center `(0.95, 0.0)`, marker radius
+`0.300m`, and truth telemetry showing the ball reached about `0.158m` from the
+target center. This is valid local fetch evidence and a visual UAT reference.
+Broad-generalization claims still require saved-layout repeatability and the
+seeded gate.
+
+Architecture reset:
+
+1. Default to `LLM/world-state planner -> Nav2/BT action owner -> thin fetch
+   adapter and geometry monitor -> robot`.
+2. Let Nav2 own long-haul navigation, repositioning, corridor approach, and
+   bounded push paths whenever corrected evidence shows the ball remains inside
+   the local envelope.
+3. Keep the custom fetch adapter focused on intent translation, corrected
+   geometry monitoring, escape/stale/success classification, and replanning or
+   cancellation.
+4. Keep AI push-coast/contact-stability as the fallback lane for reproducible
+   gaps such as setup instability, first-contact drift, terminal stop-short, or
+   re-aim selection.
+5. Keep large world-model or VLA ideas as high-level planning, teacher-label,
+   or offboard scoring tools until a smaller `tensorrt_int8`-compatible onboard
+   predictor has shadow evidence.
 
 ## May 28, 2026 Direction
 
-The research pass selected a no-shoot runtime direction. The target
-architecture is a robot-owned bounded push-and-coast local policy:
-approach the correct side of the ball, make low-error contact, add only bounded
-energy, stop pushing when the measured or predicted trajectory intersects the
-delivery circle, then observe and re-aim within a small budget.
+The research pass selected a no-shoot runtime direction. After the May 31
+evidence reset, the preferred runtime shape is planner-gated and Nav2-first:
+the planner chooses the route class, Nav2 owns robot motion where it has a
+clear contract, and the fetch adapter verifies object outcome against corrected
+geometry. Bounded push-and-coast routines remain available for contact-rich
+subroutines outside Nav2's clean local-control contract.
 
 AI is part of the direction, but it is layered:
 
@@ -71,9 +120,9 @@ only. It is not the preferred runtime architecture because it currently proves a
 direct ball-velocity impulse, not robot-owned bounded pushing.
 
 May 29, 2026 evidence update: the Nav2 corridor-push spike answered the cheap
-physics/controller question but did not promote as the sole contact controller.
-The spike was saved-layout evidence only; the seeded random/generalization gate
-has not run.
+physics/controller question and left sole-contact promotion blocked by
+repeatability. The spike was saved-layout evidence only; the seeded
+random/generalization gate remains pending.
 
 - Contact-ready `zero`, `left05`, and `right05` all passed with Nav2 owning
   real-time `FollowPath` tracking through the ball-target corridor.
@@ -157,16 +206,23 @@ Evaluate these paths side by side:
 9. Portfolio supervisor or switcher.
 10. Perception-first target-pose fetch.
 
-Use the existing object-centric baseline as the comparison reference, not as an
-automatic winner. The preferred next spike is no longer a shooter spike or a
-standalone Nav2 tuning pass. It is
-`spike/fetch-arch-ai-push-coast-servo-20260529`: a shadow-first hybrid stage
-supervisor spike. It should use the Nav2 corridor-push stop-short evidence plus
-object-centric baseline traces to decide when to stay with Nav2, hand off to a
-deterministic terminal re-push/coast routine, recenter left/right, abort, or
-re-stage. Nav2 remains a first-class stage owner; the learned lane should rank
-handoffs and maneuver classes, remain behind deterministic guards, and avoid
-direct high-frequency `/cmd_vel`.
+Use the existing object-centric and AI push-coast work as implementation
+infrastructure, with the corrected Nav2/LLM-first baseline as the immediate
+center of gravity:
+
+1. rerun saved-layout `zero`, `left05`, and `right05` under the corrected
+   geometry/video evidence floor
+2. run the planner-handoff gate before broad random or visually surprising
+   scenarios
+3. dispatch local `fetch_to_pose` only for planner-approved
+   `fetch_ready_local` scenes
+4. let the AI push-coast lane score stage gaps in shadow mode from corrected
+   Nav2-first failures
+
+The current `spike/fetch-arch-ai-push-coast-servo-20260529` branch remains a
+valid place to preserve the analyzer, guard, and fallback code. Its live-control
+authority should stay narrow until corrected Nav2-first evidence proves the
+specific subroutine that needs custom or learned help.
 
 ## Research Questions
 
@@ -196,19 +252,22 @@ Use the ladder in
 [CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md)
 as the common comparison frame:
 
+0. Evidence validity check: corrected delivery marker geometry plus same-session
+   browser-watchable onboard and context video.
 1. Desk check.
 2. Offline or accelerated screen.
-3. Canonical saved-layout `zero` one-run probe.
-4. Canonical saved-layout matrix: `zero`, `left05`, `right05`.
-5. `3/3` repeatability on each saved layout.
-6. Seeded random/generalization suite.
-7. Promotion package with explicit failure interpretation.
+3. Planner-handoff gate for mixed or broad random scenes.
+4. Canonical saved-layout `zero` one-run probe.
+5. Canonical saved-layout matrix: `zero`, `left05`, `right05`.
+6. `3/3` repeatability on each saved layout.
+7. Seeded random/generalization suite inside the local fetch envelope.
+8. Promotion package with explicit failure interpretation.
 
 Promotion evidence must use the canonical calibrated golf-ball/turf world,
-`0.300m` delivery radius, no retries, fresh runtime traces, and the same
-`fetch_to_pose` success contract. Offline, accelerated, direct-ball, or
-dashboard-observation results may guide research but cannot promote a
-robot-owned architecture.
+`0.300m` delivery radius, no retries, fresh runtime traces, corrected
+`fetch_to_pose` marker geometry, same-session visual confirmation, and the same
+success contract. Offline, accelerated, direct-ball, pre-fix marker-mismatched,
+or dashboard-observation results may guide research only.
 
 Acceleration note: the current calibrated fast-screen lane is
 `real_time_factor=2.0` in
@@ -250,16 +309,21 @@ The research thread is done when it returns a concise findings package that:
 
 Research all high-level last-meter fetch architecture paths documented in
 Chasecar and return with findings, evidence gaps, and a recommended path
-sequence. Compare current object-centric fetch, contact-aware geometric shooter
-as physics-probe evidence, receding-horizon contact MPC/object servo, ROS
-action/BT last-meter owner, Nav2 reposition plus local fetch, passive
-guide/funnel, learned local predictor/residual/maneuver proposer, portfolio
-supervisor/switcher, and perception-first target-pose fetch.
+sequence. Start from the May 31 corrected evidence floor: geometry-consistent
+delivery marker, same-session onboard/topdown/world-stream video, no retries,
+and `0.300m` delivery radius. Compare corrected Nav2/LLM-first fetch, current
+object-centric fetch, contact-aware geometric shooter as physics-probe
+evidence, receding-horizon contact MPC/object servo, ROS action/BT last-meter
+owner, Nav2 reposition plus local fetch, passive guide/funnel, learned local
+predictor/residual/maneuver proposer, portfolio supervisor/switcher, and
+perception-first target-pose fetch.
 
 Do not jump straight into tuning one path. First ground in branch/docs/artifacts,
-then evaluate each path against the calibrated fetch_to_pose contract,
-saved-layout anchors, seeded random/generalization gate, robot-owned contact
-requirement, hardware-transfer path, diagnosability, and implementation cost.
-Come back with a findings matrix, a recommended primary path, fallback paths,
-no-go paths, and the next focused spike/gate plan.
+then evaluate each path against the corrected calibrated fetch_to_pose contract,
+planner-handoff route labels, saved-layout anchors, seeded random/generalization
+gate, robot-owned contact requirement, hardware-transfer path, diagnosability,
+and implementation cost. Prefer Nav2 and LLM-planner reuse before custom
+contact development; make AI push-coast a fallback only when corrected evidence
+proves a reproducible stage gap. Come back with a findings matrix, a recommended
+primary path, fallback paths, no-go paths, and the next focused spike/gate plan.
 ```

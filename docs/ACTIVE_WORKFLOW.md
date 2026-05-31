@@ -340,6 +340,57 @@ Worker rules:
 4. each worker launches a separate compose project/session and tears it down at the end
 5. promotion evidence comes from `route_planning_parallel_soak/campaign_summary.json`, not from dashboard clicks
 
+## Calibrated Fetch Evidence Floor
+
+Use this floor for every golf-ball `fetch_to_pose` UAT, architecture
+comparison, and operator demo after the May 31, 2026 geometry reset.
+
+Evidence counts as UAT only when all conditions hold:
+
+1. `geometry_consistency.pass=true`
+2. the visible delivery marker matches `fetch_pose_world`
+3. the run uses the canonical calibrated golf turf world for promotion evidence
+4. the delivery radius is `0.300m`
+5. the run uses no retries for promotion gates
+6. same-session browser-watchable onboard and context videos are present
+
+Reference artifacts for the corrected metric path:
+
+1. corrected mission:
+   - `artifacts/session/20260531T204154158382Z/gather_mission/20260531T204255Z/mission_verdict.json`
+2. corrected visual UAT package:
+   - `artifacts/session/uat_fetch_visual_package_postfix_20260531/fetch_visual_uat_package/scorecard.md`
+3. corrected geometry audit:
+   - `artifacts/session/fetch_geometry_evidence_audit_postfix_20260531/fetch_geometry_evidence_audit/scorecard.md`
+
+Post-run package commands:
+
+1. geometry audit:
+   - `python scripts/fetch_geometry_evidence_audit.py --campaign-id <id> --mission-verdict <mission_verdict.json>`
+2. visual UAT package:
+   - `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <scenario_or_campaign_summary.json> --visual-dir <session>/visual`
+
+Classify pre-fix or marker-mismatched fetch passes as diagnostic evidence for
+implementation debugging. Architecture, generalization, and UAT readiness
+claims require the corrected evidence floor.
+
+Default architecture path after the reset:
+
+1. planner classifies scene route:
+   - `fetch_ready_local`
+   - `nav2_reposition_first`
+   - `scan_or_perceive_first`
+   - `recovery_or_reaim`
+   - `ambiguous_or_unsafe_no_go`
+2. Nav2 owns long-haul navigation, repositioning, corridor approach, and
+   bounded push paths where corrected evidence shows the ball remains in the
+   local envelope.
+3. The fetch adapter translates intent, monitors corrected geometry, and
+   cancels or replans on success, escape, stale state, unsafe drift, timeout, or
+   action abort.
+4. Custom contact routines and AI push-coast proposals are fallback lanes for
+   reproducible stage gaps found after corrected Nav2/LLM-first evidence.
+
 ## Corral Surface Calibration
 
 Use this to compare one-ball corral behavior across the three surface lanes without changing the operator-facing dashboard flow.
@@ -502,15 +553,14 @@ Commands:
 
 Research contract:
 
-Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
-robot-owned local fetch behavior that combines Nav2 stage ownership,
-deterministic homebrew contact routines, and a guarded AI/model handoff and
-maneuver-class proposer, proven on saved layouts and the first seeded random
-generalization gate.
+Next major milestone: Deliver Planner-Gated Generalized Fetch-To-Pose v1, a
+no-shoot, robot-owned fetch behavior where an LLM/world-state planner selects
+the route class, Nav2 owns as much real-time robot motion as corrected evidence
+supports, and a thin fetch adapter monitors delivery geometry, object progress,
+escape, stale state, and replanning triggers.
 
-Scope correction: Generalized Fetch-To-Pose v1 is the bounded local fetch
-subsystem milestone. It does not prove open-world planner competence by itself.
-The broader product path is Planner-Gated Generalized Fetch:
+Scope correction: Generalized Fetch-To-Pose v1 proves planner handoff plus the
+bounded local fetch subsystem. The broader product path is:
 `LLM/world-state planner -> capability envelope check -> selected subsystem ->
 guarded execution -> monitor/result back to planner`.
 
@@ -526,7 +576,7 @@ guarded execution -> monitor/result back to planner`.
 6. run fetch as bounded `setup -> contact/push -> coast/observe -> recover/re-aim -> done/give_up` cycles with explicit attempt and mission budgets
 7. keep deterministic safety filters around every policy proposal: command bounds, ball drift, clearance, target freshness, timeout, stuck state, and safe-stop fallback
 8. capture shot-outcome, surface-calibration, failure-replay, and counterfactual-prediction data before tuning push/coast behavior
-9. keep AI as the next local lane through shadow-mode learned
+9. keep AI as a fallback local lane through shadow-mode learned
    handoff/maneuver proposal first: stay with Nav2, terminal re-push,
    recenter, abort/re-stage, miss vector, coast timing, and recovery side
 10. allow LM/VLA-style models to supervise task mode, failure interpretation,
@@ -534,10 +584,11 @@ guarded execution -> monitor/result back to planner`.
     contracts
 11. keep direct high-frequency LLM motor control out of scope
 12. keep `physics-calibrated-golf-fetch-v1` as the stable demo/UAT integration branch; use short-lived `spike/...` branches for targeted requalification and archive blocked architecture branches as evidence only
-13. preferred immediate spike:
-    `spike/fetch-arch-ai-push-coast-servo-20260529`, now framed as a hybrid
-    fetch stage supervisor; keep `spike/fetch-arch-nav2-corridor-push-20260528`
-    as evidence and data for what Nav2 can handle
+13. preferred immediate requalification:
+    corrected Nav2/LLM-first saved-layout and planner-approved local random
+    evidence with same-session video and corrected marker geometry; keep
+    `spike/fetch-arch-ai-push-coast-servo-20260529` for fallback analyzers,
+    guards, shadow scoring, and narrow guarded-live routines
 14. do not confuse control-family screens with broad architecture coverage; new architecture spikes must change an ownership boundary, prediction model, actuation/contact strategy, or state-machine boundary and must name the expected generalization/product benefit
 15. treat the May 27 opposite-side dashboard observation as a generalization
     signal: saved-layout gates prove the known geometry, while target-relative
@@ -553,7 +604,10 @@ guarded execution -> monitor/result back to planner`.
     `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`, or
     `ambiguous_or_unsafe_no_go`; only `fetch_ready_local` cases count against
     the local fetch subsystem
-19. when the goal is full architecture research, ground in
+19. require `geometry_consistency.pass=true`, corrected visible delivery marker,
+    and same-session browser-watchable onboard plus context videos before
+    counting any fetch result as UAT or architecture evidence
+20. when the goal is full architecture research, ground in
     `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` and return a findings
     matrix before tuning a single path
 
@@ -1341,6 +1395,14 @@ Milestone 3 pass criteria include:
    - direct policy verdicts: `artifacts/session/<session_id>/gather_mission_calibrated_golf_policy_probe/<run_id>/mission_verdict.json`
    - architecture revisit summaries: `artifacts/session/<campaign_id>/calibrated_fetch_architecture_revisit/architecture_revisit_summary.json`
    - geometric-shooter offline screens: `artifacts/session/<campaign_id>/fetch_geometric_shooter_screen/geometric_shooter_summary.json`
+   - corrected geometry audits: `artifacts/session/<campaign_id>/fetch_geometry_evidence_audit/audit_summary.json`
+   - visual UAT packages: `artifacts/session/<campaign_id>/fetch_visual_uat_package/package_summary.json`
+   - browser-watchable videos:
+     - `artifacts/session/<session_id>/visual/raw_camera_browser.mp4`
+     - `artifacts/session/<session_id>/visual/topdown_telemetry_browser.mp4`
+     - `artifacts/session/<session_id>/visual/world_stream.mp4`
+   - promotion evidence requires corrected marker geometry and same-session
+     visual confirmation
    - detailed per-tick shot evidence belongs in `state_history.jsonl`, while milestone/result events belong in `gather_sequence.jsonl`
 30. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
