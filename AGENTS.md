@@ -41,6 +41,18 @@ Before final handoff:
 - Send a completion Telegram update for material work, or state the failure and
   retry outcome.
 
+## Operator Video Link Preference
+
+When handing off UAT/demo evidence, prefer browser-watchable video links over
+raw filesystem paths. If the dashboard is reachable over Tailscale, include the
+Mobile UAT Package link and direct `/artifacts/session/.../*.mp4` links for key
+videos such as `world_stream.mp4` and `topdown_telemetry.mp4`. Keep raw artifact
+paths as secondary evidence for audit/replay.
+
+If no Tailscale dashboard URL is already known, start or point the operator to a
+dashboard bind that prints `DASHBOARD_TAILSCALE_URL`:
+`powershell -ExecutionPolicy Bypass -File scripts/run_dashboard_service.ps1 -BindHost 0.0.0.0 -Port 8860`.
+
 ## Baseline
 
 1. Runtime substrate: Docker-first (`docker compose` profiles).
