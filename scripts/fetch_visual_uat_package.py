@@ -21,6 +21,14 @@ VIDEO_NAMES = (
     "raw_camera.mp4",
     "yolo_debug.mp4",
 )
+REQUIRED_MOBILE_VIDEO_NAMES = frozenset(
+    {
+        "raw_camera.mp4",
+        "world_stream.mp4",
+        "topdown_telemetry.mp4",
+    }
+)
+ONBOARD_VIDEO_NAMES = frozenset({"raw_camera.mp4", "yolo_debug.mp4"})
 
 
 def utc_now() -> str:
@@ -156,6 +164,7 @@ def discover_videos(visual_dirs: list[Path]) -> list[dict[str, Any]]:
             videos.append(
                 {
                     "name": name,
+                    "role": "onboard_camera" if name in ONBOARD_VIDEO_NAMES else "external_context",
                     "path": artifact_display_path(path),
                     "url": artifact_url(path),
                     "size_bytes": int(path.stat().st_size),
@@ -180,7 +189,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     )
     local_fetch_seen = any(mission.get("fetch_to_pose_pass") for mission in missions)
     playable_core = {video["name"] for video in videos if video.get("url") and video.get("playable_candidate")}
-    video_ok = {"world_stream.mp4", "topdown_telemetry.mp4"}.issubset(playable_core)
+    onboard_camera_ok = "raw_camera.mp4" in playable_core
+    video_ok = REQUIRED_MOBILE_VIDEO_NAMES.issubset(playable_core)
     pass_flag = bool(planner_ok and local_fetch_seen and video_ok)
     warnings: list[str] = []
     if not planner_ok:
@@ -188,7 +198,9 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     if not local_fetch_seen:
         warnings.append("no_local_fetch_pass_seen")
     if not video_ok:
-        warnings.append("missing_or_tiny_world_or_topdown_video")
+        warnings.append("missing_or_tiny_required_mobile_video")
+    if not onboard_camera_ok:
+        warnings.append("missing_or_tiny_onboard_raw_camera_video")
 
     return {
         "type": PACKAGE_KIND,
@@ -196,6 +208,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "generated_utc": utc_now(),
         "pass": pass_flag,
         "mobile_watchable": video_ok,
+        "onboard_camera_watchable": onboard_camera_ok,
         "planner_gate_green": planner_ok,
         "local_fetch_pass_seen": local_fetch_seen,
         "promotion_evidence": False,
@@ -218,6 +231,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- campaign_id: `{summary.get('campaign_id', '')}`",
         f"- pass: `{summary.get('pass', False)}`",
         f"- mobile_watchable: `{summary.get('mobile_watchable', False)}`",
+        f"- onboard_camera_watchable: `{summary.get('onboard_camera_watchable', False)}`",
         f"- planner_gate_green: `{summary.get('planner_gate_green', False)}`",
         f"- local_fetch_pass_seen: `{summary.get('local_fetch_pass_seen', False)}`",
         f"- promotion_evidence: `{summary.get('promotion_evidence', False)}`",
@@ -226,6 +240,22 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         "## Videos",
     ]
     videos = summary.get("videos", []) if isinstance(summary.get("videos"), list) else []
+    if videos:
+        onboard = [video for video in videos if video.get("role") == "onboard_camera"]
+        external = [video for video in videos if video.get("role") != "onboard_camera"]
+        if onboard:
+            lines.append("")
+            lines.append("### Onboard Camera")
+            for video in onboard:
+                lines.append(f"- `{video.get('name', '')}`: `{video.get('url', '')}`")
+        if external:
+            lines.append("")
+            lines.append("### Context Views")
+            for video in external:
+                lines.append(f"- `{video.get('name', '')}`: `{video.get('url', '')}`")
+    else:
+        lines.append("- none")
+    lines.extend(["", "## All Video Artifacts"])
     if videos:
         for video in videos:
             lines.append(f"- `{video.get('name', '')}`: `{video.get('url', '')}`")

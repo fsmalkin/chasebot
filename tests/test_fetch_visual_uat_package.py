@@ -49,6 +49,7 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
     visual.mkdir(parents=True)
     (visual / "world_stream.mp4").write_bytes(b"w" * package.VIDEO_MIN_BYTES)
     (visual / "topdown_telemetry.mp4").write_bytes(b"t" * package.VIDEO_MIN_BYTES)
+    (visual / "raw_camera.mp4").write_bytes(b"r" * package.VIDEO_MIN_BYTES)
 
     args = type(
         "Args",
@@ -66,9 +67,15 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
 
     assert summary["pass"] is True
     assert summary["mobile_watchable"] is True
+    assert summary["onboard_camera_watchable"] is True
     assert summary["planner_gate_green"] is True
     assert summary["local_fetch_pass_seen"] is True
-    assert {video["name"] for video in summary["videos"]} == {"world_stream.mp4", "topdown_telemetry.mp4"}
+    assert {video["name"] for video in summary["videos"]} == {
+        "world_stream.mp4",
+        "topdown_telemetry.mp4",
+        "raw_camera.mp4",
+    }
+    assert next(video for video in summary["videos"] if video["name"] == "raw_camera.mp4")["role"] == "onboard_camera"
     assert summary["videos"][0]["url"].startswith("/artifacts/session/")
 
 
@@ -110,4 +117,5 @@ def test_visual_uat_package_warns_when_core_video_missing(tmp_path, monkeypatch)
 
     assert summary["pass"] is False
     assert summary["mobile_watchable"] is False
-    assert "missing_or_tiny_world_or_topdown_video" in summary["warnings"]
+    assert "missing_or_tiny_required_mobile_video" in summary["warnings"]
+    assert "missing_or_tiny_onboard_raw_camera_video" in summary["warnings"]

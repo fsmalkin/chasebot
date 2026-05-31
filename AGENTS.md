@@ -46,8 +46,9 @@ Before final handoff:
 When handing off UAT/demo evidence, prefer browser-watchable video links over
 raw filesystem paths. If the dashboard is reachable over Tailscale, include the
 Mobile UAT Package link and direct `/artifacts/session/.../*.mp4` links for key
-videos such as `world_stream.mp4` and `topdown_telemetry.mp4`. Keep raw artifact
-paths as secondary evidence for audit/replay.
+videos. Lead with the onboard camera video, `raw_camera.mp4`, then include
+`yolo_debug.mp4`, `topdown_telemetry.mp4`, and `world_stream.mp4` when present.
+Keep raw artifact paths as secondary evidence for audit/replay.
 
 If no Tailscale dashboard URL is already known, start or point the operator to a
 dashboard bind that prints `DASHBOARD_TAILSCALE_URL`:
