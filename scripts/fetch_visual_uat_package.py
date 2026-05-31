@@ -90,12 +90,21 @@ def artifact_url(path: Path) -> str:
     return "/artifacts/session/" + rel.as_posix()
 
 
+def session_id_for_path(path: Path) -> str:
+    try:
+        rel = path.resolve().relative_to(SESSION_ROOT.resolve())
+    except ValueError:
+        return ""
+    return rel.parts[0] if rel.parts else ""
+
+
 def summarize_planner_gate(path: Path) -> dict[str, Any]:
     payload = read_json(path)
     if not payload:
         return {}
     return {
         "campaign_id": str(payload.get("campaign_id", "") or ""),
+        "session_id": session_id_for_path(path),
         "path": artifact_display_path(path),
         "pass": bool(payload.get("pass", False)),
         "planner_mode": str(payload.get("planner_mode", "") or ""),
@@ -116,6 +125,7 @@ def summarize_seeded_evidence(path: Path) -> dict[str, Any]:
     seeded = seeded if isinstance(seeded, dict) else {}
     return {
         "campaign_id": str(payload.get("campaign_id", "") or ""),
+        "session_id": session_id_for_path(path),
         "path": artifact_display_path(path),
         "promotion_evidence": bool(payload.get("promotion_evidence", False)),
         "milestone_interpretation": str(payload.get("milestone_interpretation", "") or ""),
@@ -147,6 +157,7 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     )
     return {
         "campaign_id": str(payload.get("campaign_id", "") or ""),
+        "session_id": session_id_for_path(path),
         "path": artifact_display_path(path),
         "pass": pass_flag,
         "fetch_to_pose_pass": fetch_pass,
@@ -158,6 +169,32 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         "target_layout_json": str(payload.get("requested_target_layout_json", mission_verdict.get("target_layout_json", "")) or ""),
         "closest_approach_distance_m": payload.get("closest_approach_distance_m", mission_verdict.get("closest_approach_distance_m")),
         "failure_reasons": payload.get("fetch_to_pose_failure_reasons", mission_verdict.get("failure_reasons", [])),
+    }
+
+
+def summarize_visual_dir(path: Path) -> dict[str, Any]:
+    visual_summary = read_json(path / "visual_demo_summary.json")
+    world_summary = read_json(path / "world_stream_summary.json")
+    visual_pass = bool(visual_summary.get("pass", False))
+    world_pass = bool(world_summary.get("pass", False))
+    return {
+        "session_id": session_id_for_path(path),
+        "path": artifact_display_path(path),
+        "visual_demo_pass": visual_pass,
+        "world_stream_pass": world_pass,
+        "visual_confirmation_pass": bool(visual_pass or world_pass),
+        "raw_nonblank": bool(visual_summary.get("raw_nonblank", False)),
+        "debug_nonblank": bool(visual_summary.get("debug_nonblank", False)),
+        "target_persistence_ok": bool(visual_summary.get("target_persistence_ok", False)),
+        "motion_progress_ok": bool(visual_summary.get("motion_progress_ok", False)),
+        "target_visible_ratio": visual_summary.get("target_visible_ratio"),
+        "raw_frame_count": int(visual_summary.get("raw_frame_count", 0) or 0),
+        "telemetry_frame_count": int(visual_summary.get("telemetry_frame_count", 0) or 0),
+        "world_stream_degraded": bool(world_summary.get("world_stream_degraded", False)),
+        "world_stream_transport_healthy": bool(world_summary.get("world_stream_transport_healthy", False)),
+        "world_stream_failure_class": str(world_summary.get("failure_class", "") or ""),
+        "world_stream_frame_coverage_ratio": world_summary.get("frame_coverage_ratio"),
+        "world_stream_frame_count": int(world_summary.get("frame_count", 0) or 0),
     }
 
 
@@ -194,12 +231,24 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     missions = [summarize_mission(resolve_path(path)) for path in args.mission_summary]
     missions = [item for item in missions if item]
     visual_dirs = [resolve_path(path) for path in args.visual_dir]
+    visual_summaries = [summarize_visual_dir(path) for path in visual_dirs if path.is_dir()]
     videos = discover_videos(visual_dirs)
+    visual_by_session = {
+        str(item.get("session_id", "") or ""): item
+        for item in visual_summaries
+        if str(item.get("session_id", "") or "")
+    }
 
     planner_ok = bool(planner_gates) and all(
         gate.get("pass") and int(gate.get("wrong_fetch_dispatch_count", 0) or 0) == 0 for gate in planner_gates
     )
     local_fetch_seen = any(mission.get("fetch_to_pose_pass") for mission in missions)
+    visual_confirmation_seen = any(item.get("visual_confirmation_pass") for item in visual_summaries)
+    local_fetch_visual_confirmed = any(
+        mission.get("fetch_to_pose_pass")
+        and visual_by_session.get(str(mission.get("session_id", "") or ""), {}).get("visual_confirmation_pass")
+        for mission in missions
+    )
     playable_core = {
         video["name"]
         for video in videos
@@ -207,7 +256,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     }
     onboard_camera_ok = "raw_camera_browser.mp4" in playable_core
     video_ok = REQUIRED_MOBILE_VIDEO_NAMES.issubset(playable_core)
-    pass_flag = bool(planner_ok and local_fetch_seen and video_ok)
+    pass_flag = bool(planner_ok and local_fetch_seen and video_ok and local_fetch_visual_confirmed)
     warnings: list[str] = []
     if not planner_ok:
         warnings.append("planner_gate_not_green")
@@ -217,6 +266,10 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         warnings.append("missing_or_tiny_required_mobile_video")
     if not onboard_camera_ok:
         warnings.append("missing_or_tiny_onboard_raw_camera_video")
+    if not visual_confirmation_seen:
+        warnings.append("no_healthy_visual_confirmation")
+    if local_fetch_seen and not local_fetch_visual_confirmed:
+        warnings.append("passing_local_fetch_lacks_same_session_visual_confirmation")
 
     return {
         "type": PACKAGE_KIND,
@@ -225,6 +278,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "pass": pass_flag,
         "mobile_watchable": video_ok,
         "onboard_camera_watchable": onboard_camera_ok,
+        "visual_confirmation_seen": visual_confirmation_seen,
+        "local_fetch_visual_confirmed": local_fetch_visual_confirmed,
         "planner_gate_green": planner_ok,
         "local_fetch_pass_seen": local_fetch_seen,
         "promotion_evidence": False,
@@ -235,6 +290,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "planner_gates": planner_gates,
         "seeded_evidence": seeded_evidence,
         "missions": missions,
+        "visual_summaries": visual_summaries,
         "videos": videos,
         "scorecard_path": "",
     }
@@ -248,6 +304,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- pass: `{summary.get('pass', False)}`",
         f"- mobile_watchable: `{summary.get('mobile_watchable', False)}`",
         f"- onboard_camera_watchable: `{summary.get('onboard_camera_watchable', False)}`",
+        f"- visual_confirmation_seen: `{summary.get('visual_confirmation_seen', False)}`",
+        f"- local_fetch_visual_confirmed: `{summary.get('local_fetch_visual_confirmed', False)}`",
         f"- planner_gate_green: `{summary.get('planner_gate_green', False)}`",
         f"- local_fetch_pass_seen: `{summary.get('local_fetch_pass_seen', False)}`",
         f"- promotion_evidence: `{summary.get('promotion_evidence', False)}`",
@@ -298,6 +356,16 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"- `{mission.get('campaign_id', '') or mission.get('scenario_label', '')}` "
             f"fetch_to_pose=`{mission.get('fetch_to_pose_pass', False)}` "
             f"ai_mode=`{mission.get('ai_push_coast_mode', '')}`"
+        )
+    lines.extend(["", "## Visual Evidence"])
+    for visual in summary.get("visual_summaries", []) if isinstance(summary.get("visual_summaries"), list) else []:
+        lines.append(
+            f"- `{visual.get('path', '')}` confirmation=`{visual.get('visual_confirmation_pass', False)}` "
+            f"visual_demo=`{visual.get('visual_demo_pass', False)}` "
+            f"world_stream=`{visual.get('world_stream_pass', False)}` "
+            f"target_persistence=`{visual.get('target_persistence_ok', False)}` "
+            f"world_degraded=`{visual.get('world_stream_degraded', False)}` "
+            f"world_failure=`{visual.get('world_stream_failure_class', '')}`"
         )
     warnings = summary.get("warnings", []) if isinstance(summary.get("warnings"), list) else []
     lines.extend(["", "## Warnings"])
