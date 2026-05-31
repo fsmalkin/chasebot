@@ -336,11 +336,19 @@ To keep the demo honest and legible, this phase does not include:
 - autonomous environment lifecycle control by the LLM
 - end-to-end VLA low-level control
 
-This does not block the May 28 calibrated-fetch AI direction. For
-`fetch_to_pose`, LM/VLA-style models may supervise task mode, failure
-interpretation, and known maneuver choices through the existing bounded
-contract, while local learned prediction/proposal is trained and scored in
-shadow mode before any guarded push-coast execution.
+Planner-gated fetch is now the calibrated-fetch default. For `fetch_to_pose`,
+the LLM/world-state planner classifies each scene as `fetch_ready_local`,
+`nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`, or
+`ambiguous_or_unsafe_no_go` before local fetch is judged. Nav2 owns as much
+real-time robot motion as corrected evidence supports. Local learned
+prediction/proposal stays in shadow mode until corrected saved-layout and
+seeded-random evidence proves a reproducible subroutine gap.
+
+The May 31, 2026 geometry reset adds a visual evidence floor for browser UAT:
+`geometry_consistency.pass=true`, delivery marker matched to `fetch_pose_world`,
+and same-session browser-watchable onboard plus context videos. Use
+`artifacts/session/uat_fetch_visual_package_postfix_20260531/fetch_visual_uat_package/scorecard.md`
+as the corrected fetch UAT reference package.
 
 ## Next Phase: Practical Retrieval Baseline Locked, Generalizable Gather Redesign Next
 

@@ -4,18 +4,21 @@ This document owns branch-role decisions for calibrated golf fetch work. Use the
 roadmap for priority, `ACTIVE_WORKFLOW.md` for gates and commands, and the
 `OBJECT_CENTRIC_*` docs for research details.
 
-Next major milestone: Deliver Generalized Fetch-To-Pose v1, a no-shoot,
-robot-owned local fetch behavior that combines Nav2 stage ownership,
-deterministic homebrew contact routines, and a guarded AI/model handoff and
-maneuver-class proposer, proven on saved layouts and the first seeded random
-generalization gate.
+Next major milestone: Deliver Planner-Gated Generalized Fetch-To-Pose v1, a
+no-shoot, robot-owned fetch behavior where an LLM/world-state planner selects
+the route class, Nav2 owns as much real-time robot motion as the corrected
+evidence supports, and a thin fetch adapter monitors delivery geometry, object
+progress, escape, stale state, and replanning triggers.
 
-Scope correction: this branch strategy is for the bounded local fetch subsystem.
-Major unknowns and arbitrary random scenes require a planner-handoff lane before
-fetch execution. The LLM/world-state planner should classify scenes as
-`fetch_ready_local`, `nav2_reposition_first`, `scan_or_perceive_first`,
-`recovery_or_reaim`, or `ambiguous_or_unsafe_no_go`; only `fetch_ready_local`
-cases count against the local fetch branch.
+Scope correction: this branch strategy covers both the planner handoff lane and
+the bounded local fetch subsystem. Major unknowns and arbitrary random scenes
+require planner classification before fetch execution. The LLM/world-state
+planner should classify scenes as `fetch_ready_local`, `nav2_reposition_first`,
+`scan_or_perceive_first`, `recovery_or_reaim`, or
+`ambiguous_or_unsafe_no_go`; only `fetch_ready_local` cases count against the
+local fetch branch. Custom contact routines and AI push-coast proposals remain
+fallback lanes that earn live authority only from corrected reproducible
+stage-gap evidence.
 
 ## Recommended Branch Roles
 
@@ -71,6 +74,16 @@ Use this table when deciding whether better calibrated physics justifies
 reopening an older architecture. Most blocked branches failed before intended
 ball contact, so old ball/turf physics does not explain the primary failure.
 
+Evidence reset rule after May 31, 2026: any fetch pass/fail claim is promotion
+eligible only when the artifact records `geometry_consistency.pass=true`, the
+visible delivery marker matches `fetch_pose_world`, and same-session
+browser-watchable onboard plus context video exists. Pre-fix or
+marker-mismatched fetch passes become diagnostic implementation evidence. The
+post-fix reference package is
+`artifacts/session/uat_fetch_visual_package_postfix_20260531/fetch_visual_uat_package/scorecard.md`,
+and the post-fix geometry audit is
+`artifacts/session/fetch_geometry_evidence_audit_postfix_20260531/fetch_geometry_evidence_audit/scorecard.md`.
+
 | Candidate | Key evidence | Classification | Branch decision |
 | --- | --- | --- | --- |
 | `helper` / `short_horizon_v2` manual-drive lane | `artifacts/session/live_plus45_helper_turn_authority_contract_audit_20260420/gather_helper_turn_authority_contract_audit/helper_turn_authority_contract_summary.json`; `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260421_provenance_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json` | Physics-independent pre-stage / command-authority evidence | Baseline evidence only. |
@@ -89,7 +102,8 @@ ball contact, so old ball/turf physics does not explain the primary failure.
 | `object_centric_fetch_policy_v1` | `artifacts/session/live_calibrated_golf_fetch_uat_readiness_rerun_20260527/calibrated_golf_fetch_gate/gate_summary.json`; `artifacts/session/live_passive_golf_roll_built_resistance_repeatability_20260526/passive_ball_roll_calibration/campaign_summary.json` | Active calibrated baseline | Organize new alternatives around this gate and telemetry. |
 | `contact_aware_geometric_shooter` | `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`; `artifacts/session/live_fetch_geometric_shooter_probe_zero_20260527/fetch_geometric_shooter_probe/geometric_shooter_probe_summary.json` plus `left05` / `right05` one-run probes | Direct-velocity physics probe, not robot-owned runtime evidence | Keep as roll-window/coast-geometry evidence; do not promote as the primary runtime path. |
 | `nav2_followpath_corridor_push_v1` | `artifacts/session/live_nav2_corridor_push_contact_ready_rerun3_20260529/calibrated_fetch_architecture_revisit/scorecard.md`; `artifacts/session/live_nav2_corridor_push_full_saved_layout_20260529/calibrated_fetch_architecture_revisit/scorecard.md` | Evidence branch; not standalone promotion candidate | Contact-ready and full saved-layout one-run gates passed, but saved-layout `3/3` failed on `right05` stop-short after Nav2 `STATUS_SUCCEEDED`. Preserve as corridor-tracking baseline and AI training/eval data. |
-| `ai_push_coast_servo` | planned from Nav2 stop-short and object-centric baseline traces | Preferred model/proposer inside the hybrid stage-supervisor lane | Train or prototype local handoff/maneuver-class predictor from calibrated simulation, score in shadow mode on saved anchors and seeded random layouts, then allow it to select only deterministic guarded routines after shadow scoring is green. |
+| corrected Nav2/LLM-first baseline | `artifacts/session/20260531T204154158382Z/gather_mission/20260531T204255Z/mission_verdict.json`; `artifacts/session/uat_fetch_visual_package_postfix_20260531/fetch_visual_uat_package/scorecard.md` | Preferred immediate requalification lane | Rerun saved layouts and planner-approved local random cases with corrected geometry and same-session video before expanding custom contact or learned control. |
+| `ai_push_coast_servo` | planned from corrected Nav2-first gaps plus saved/random traces | Fallback model/proposer lane | Train or prototype local handoff/maneuver-class predictor from calibrated simulation, score in shadow mode on saved anchors and seeded random layouts, then allow it to select only deterministic guarded routines after shadow scoring proves a benefit. |
 
 ## Latest Revisit Result
 
@@ -132,21 +146,20 @@ evidence, but it does not promote as the standalone contact architecture:
   returned `STATUS_SUCCEEDED`, the ball moved only about `0.121m`, and closest
   approach was `0.451645m` against the `0.300m` delivery radius
 - branch decision:
-  keep Nav2 corridor-push as a baseline path-tracking/contact-data branch, not
-  a tuning target for standalone promotion. Start the hybrid stage-supervisor
-  spike from this evidence: Nav2 owns the stages it handles well, deterministic
-  routines own fine contact and terminal correction, and the model starts as a
-  shadow handoff/maneuver proposer.
+  preserve Nav2 corridor-push as a baseline path-tracking/contact-data branch.
+  Standalone promotion requires corrected repeatability evidence. Start the
+  hybrid stage-supervisor spike from this evidence: Nav2 owns the stages it
+  handles well, deterministic routines own fine contact and terminal
+  correction, and the model starts as a shadow handoff/maneuver proposer.
 
-Seeded random/generalization was not run for this branch. Do not claim
-generalized behavior until a candidate clears saved-anchor repeatability and
-then runs the reusable `fetch_generalization_gate`.
+Seeded random/generalization remains pending for this branch.
+Generalized-behavior claims require saved-anchor repeatability followed by the
+reusable `fetch_generalization_gate`.
 
 ## Wider Architecture Portfolio
 
-Do not treat the runnable legacy `--gather-control-family` list as full
-architecture coverage. Those families mostly vary pre-stage/contact control
-inside the same mission shell. The wider portfolio is tracked in
+Treat the runnable legacy `--gather-control-family` list as a control-family
+screen inside one mission shell. The wider architecture portfolio is tracked in
 [CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md](CALIBRATED_FETCH_ARCHITECTURE_TEST_PLAN.md)
 and includes distinct ownership and interaction models:
 
@@ -184,15 +197,19 @@ blocked branch in place. A blocked branch becomes a candidate again only after
 fresh `zero` and `plus45` pre-stage proof is recorded with artifact paths and an
 explicit update to this document.
 
-Current preferred branch decision: continue from the Nav2 evidence into
-`spike/fetch-arch-ai-push-coast-servo-20260529`. The hypothesis is that Nav2 is
-a useful stage owner for long-haul, coarse setup, and corridor tracking, but
-generalized `fetch_to_pose` needs deterministic contact routines for fine
-pre-capture, first contact, terminal re-push/coast, and recentering. The
-learned local lane starts as a shadow handoff/maneuver-class proposer over those
-stage owners; it may execute only by selecting deterministic guarded routines
-after saved-anchor and seeded-random scoring is green. LM/VLA components may
-supervise mode choice and failure interpretation, but they must not own
-high-frequency `/cmd_vel`. Large V-JEPA-style world models are offboard teacher
-or research baselines; onboard inference should be smaller and
+Current preferred branch decision: use the current fetch spike to complete a
+corrected Nav2/LLM-first requalification before adding broader live custom
+control. The immediate hypothesis is that improved physics plus corrected
+metrics may keep more of the operation inside Nav2 and planner-owned
+subsystems than recent pre-fix evidence implied. The next runnable branch work
+should rerun saved layouts and planner-approved local random cases with
+corrected geometry, same-session video, and planner route labels.
+
+Keep `spike/fetch-arch-ai-push-coast-servo-20260529` available for analyzers,
+guards, shadow scoring, and narrow fallback routines. Learned local output may
+execute only by selecting deterministic guarded routines after corrected
+saved-anchor and seeded-random scoring proves a reproducible gap and a measured
+benefit. LM/VLA components may supervise mode choice and failure interpretation
+through deterministic contracts. Large V-JEPA-style world models remain
+offboard teacher or research baselines; onboard inference should be smaller and
 `tensorrt_int8`-compatible.
