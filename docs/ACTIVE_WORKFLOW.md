@@ -141,6 +141,28 @@ June 1, 2026 corrected saved-anchor one-run rebuild:
   repeatability or seeded promotion work. The dashboard package is
   `artifacts/session/uat_corrected_fetch_saved_anchor_one_run_blocked_20260601/fetch_visual_uat_package/scorecard.md`.
 
+June 1, 2026 stage-boundary update:
+
+- Fix commit: `7c2b244 Guard fetch contact handoff geometry`
+- Full saved-layout gate:
+  `artifacts/session/live_ai_push_coast_forward_contact_guard_saved_layout_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`
+- Stage audit:
+  `artifacts/session/audit_ai_push_coast_forward_contact_guard_saved_layout_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+- Visual UAT package:
+  `artifacts/session/uat_ai_push_coast_forward_contact_guard_saved_layout_one_run_20260601/fetch_visual_uat_package/scorecard.md`
+- Result: `zero` passed with `0.230116m` closest approach. `left05` failed on
+  `capture_entry_timeout`. `right05` failed as a setup/contact blocker with
+  `0.557965m` closest approach.
+- Targeted `right05` diagnostic:
+  `artifacts/session/live_ai_push_coast_forward_contact_guard_right05_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`
+  passed with `0.196206m` closest approach after first-contact confirmation
+  required forward corridor progress.
+- Interpretation: the next engineering task is simplifying the stage boundary.
+  The robot must prove push-readiness before Nav2 corridor push dispatch.
+  Failed setup, capture-entry, or first-contact quality returns to setup or
+  reacquire; terminal correction resumes after `zero`, `left05`, and `right05`
+  prove clean push-readiness.
+
 ## UAT Orchestrator Modes
 
 Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:
@@ -621,9 +643,9 @@ guarded execution -> monitor/result back to planner`.
 3. treat `object_centric_gather_policy_v1` as a historical gather/place baseline and source of useful launch/roll behavior
 4. define `fetch_to_pose` first; user/person detection comes later through the same target-pose contract
 5. score fetch success by measured ball-trajectory intersection with a delivery radius, not final stop in a corral
-6. run fetch as bounded `setup -> contact/push -> coast/observe -> recover/re-aim -> done/give_up` cycles with explicit attempt and mission budgets
+6. run fetch as bounded `plan -> setup -> push-readiness gate -> Nav2 corridor push -> observe -> recover/reacquire -> done/give_up` cycles with explicit attempt and mission budgets
 7. keep deterministic safety filters around every policy proposal: command bounds, ball drift, clearance, target freshness, timeout, stuck state, and safe-stop fallback
-8. capture shot-outcome, surface-calibration, failure-replay, and counterfactual-prediction data before tuning push/coast behavior
+8. capture shot-outcome, push-readiness, surface-calibration, failure-replay, and counterfactual-prediction data before tuning push/coast behavior
 9. keep AI as a fallback local lane through shadow-mode learned
    handoff/maneuver proposal first: stay with Nav2, terminal re-push,
    recenter, abort/re-stage, miss vector, coast timing, and recovery side
@@ -655,10 +677,12 @@ guarded execution -> monitor/result back to planner`.
 19. require `geometry_consistency.pass=true`, corrected visible delivery marker,
     and same-session browser-watchable onboard plus context videos before
     counting any fetch result as UAT or architecture evidence
-20. use the June 1 contact-buffer handoff as the current staged local fetch
-    baseline: planner-approved local case -> Nav2 corridor approach -> monitored
-    contact-buffer handoff -> deterministic first-contact servo -> Nav2
-    corridor push -> delivery monitor
+20. use the June 1 stage-boundary invariant as the current local fetch baseline:
+    planner-approved local case -> setup/reacquire to measured push-ready pose ->
+    push-readiness gate -> Nav2 corridor push -> delivery monitor. A
+    contact-buffer handoff and deterministic first-contact servo may appear
+    inside setup/contact confirmation. The measured push-readiness gate remains
+    the required dispatch condition.
 21. when the goal is full architecture research, ground in
     `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` and return a findings
     matrix before tuning a single path

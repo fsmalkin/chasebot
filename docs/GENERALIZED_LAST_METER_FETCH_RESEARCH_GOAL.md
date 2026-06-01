@@ -20,15 +20,15 @@ not only the current saved layouts.
 Deliver Planner-Gated Generalized Fetch-To-Pose v1: a no-shoot, robot-owned
 fetch behavior where an LLM/world-state planner chooses the right bounded route,
 the local fetch subsystem computes the intended ball path and capture geometry,
-Nav2 owns the robot path whenever the handoff geometry is valid, and a thin
+Nav2 owns the corridor push after measured push-readiness is proven, and a thin
 fetch adapter monitors corrected ball/target geometry, success, escape, stale
-state, and replanning triggers. The runtime sequence is:
-planner route classification, ball-target delivery line, capture-pose setup,
-geometry-gated handoff, Nav2 corridor push, monitor classification, and one
-bounded correction only from a clean near-contract terminal miss. Custom contact
-routines and AI push-coast prediction remain fallback lanes that earn live
-authority only after corrected Nav2-first evidence exposes a reproducible stage
-gap.
+state, and replanning triggers. The runtime sequence is: planner route
+classification, ball-target delivery line, capture-pose setup, push-readiness
+gate, Nav2 corridor push, monitor classification, and route-back-to-setup on
+setup or contact failure. One bounded terminal correction remains available only
+from a clean near-contract terminal miss. Custom contact routines and AI
+push-coast prediction remain fallback lanes that earn live authority only after
+corrected Nav2-first evidence exposes a reproducible stage gap.
 
 Scope correction: this milestone proves the planner-to-subsystem handoff plus
 the bounded local fetch skill. The planner first classifies scenes as
@@ -59,6 +59,11 @@ Milestone acceptance:
 6. Custom contact routines and AI/model proposals are added only where the
    corrected Nav2/adapter baseline shows a reproducible stage gap. AI starts in
    shadow mode and may execute only by selecting deterministic guarded routines.
+7. The push-readiness gate is the core invariant: the robot must be behind the
+   ball on the intended ball-target line, inside standoff, lateral-error, yaw,
+   freshness, and corridor-validity bounds before Nav2 is allowed to push.
+   Failures before that gate return to setup/reacquire rather than terminal
+   correction.
 
 ## May 31, 2026 Evidence And Architecture Reset
 
@@ -282,6 +287,49 @@ Current algorithm:
 Next engineering focus: implement and prove the setup/capture path as a first
 class stage. Terminal correction remains useful, but it follows clean capture
 geometry in the sequence.
+
+## June 1, 2026 Simplified Stage-Boundary Update
+
+The latest `ai_push_coast_servo_v1` full saved-layout one-run gate confirms the
+architecture issue is stage ownership. Terminal correction follows clean setup;
+an unstable push handoff routes back to setup/reacquire.
+The correct high-level algorithm is straightforward:
+
+1. The planner selects a feasible ball-target corridor or routes the scene to
+   reposition, perceive, recover, or no-go.
+2. The setup owner reaches a measured push-ready pose behind the ball.
+3. The push-readiness gate proves standoff, lateral error, yaw error, target
+   freshness, and corridor validity.
+4. Nav2 owns the real-time corridor push.
+5. The monitor classifies delivery, escape, stale state, unsafe drift, timeout,
+   or action abort and reports the result back to the planner.
+
+The missing invariant is push-readiness before contact. The current code became
+too complex because it allowed unstable setup/capture states to leak into
+contact and push logic, then added guards around downstream symptoms. The next
+implementation step should reduce that complexity by routing every failed
+push-readiness check back to setup/reacquire.
+
+Latest evidence:
+
+- Fix commit: `7c2b244 Guard fetch contact handoff geometry`.
+- Full saved-layout gate:
+  `artifacts/session/live_ai_push_coast_forward_contact_guard_saved_layout_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Stage audit:
+  `artifacts/session/audit_ai_push_coast_forward_contact_guard_saved_layout_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+- Visual package:
+  `artifacts/session/uat_ai_push_coast_forward_contact_guard_saved_layout_one_run_20260601/fetch_visual_uat_package/scorecard.md`.
+- Result: `zero` passed with `0.230116m` closest approach. `left05` failed on
+  `capture_entry_timeout`. `right05` failed as a setup/contact blocker with
+  `0.557965m` closest approach, large capture yaw travel, and first-contact
+  alignment watch flags.
+- Targeted `right05` diagnostic:
+  `artifacts/session/live_ai_push_coast_forward_contact_guard_right05_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`
+  passed with `0.196206m` closest approach after forward-contact validation.
+
+Evidence meaning: the guard fixes are useful, but the saved-anchor gate remains
+blocked by setup/capture repeatability. Terminal correction resumes after
+push-readiness is clean across `zero`, `left05`, and `right05`.
 
 ## May 28, 2026 Direction
 

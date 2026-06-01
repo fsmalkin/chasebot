@@ -55,7 +55,8 @@ fields are diagnostic and must be rerun before they support saved-layout,
 seeded, architecture, or promotion claims. Use
 `scripts/fetch_model_provenance_audit.py` to inventory prior artifacts.
 
-The immediate architecture direction is Nav2/LLM-first:
+The immediate architecture direction is planner-gated, Nav2-first, and
+stage-boundary strict:
 
 - the LLM/world-state planner chooses `fetch_ready_local`,
   `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`, or
@@ -63,9 +64,13 @@ The immediate architecture direction is Nav2/LLM-first:
 - the local fetch planner computes the ball-target delivery line, the desired
   capture pose behind the ball, and the geometry gate for standoff, lateral
   error, yaw error, target freshness, and corridor validity
-- Nav2 owns long-haul navigation, repositioning, setup motion, corridor
-  approach, and bounded push paths wherever corrected evidence shows the ball
-  remains inside the local envelope
+- the setup owner uses Nav2 or a bounded deterministic routine to reach a
+  measured push-ready pose behind the ball
+- the push-readiness gate must pass before the robot enters contact or push:
+  measured standoff, lateral error, yaw error, target freshness, and corridor
+  validity define the handoff
+- Nav2 owns long-haul navigation, repositioning, and the real-time corridor push
+  after the handoff geometry is valid
 - the fetch adapter translates local fetch intents, monitors corrected
   ball/target geometry, and cancels or replans on success, escape, stale state,
   unsafe drift, timeout, or action abort
@@ -335,16 +340,17 @@ Next architecture exploration should be wide but staged:
 
 ## Current Control Pivot
 
-The next fetch-control work is corrected Nav2/LLM-first requalification before
-broader contact tuning. The May 31 fix made the evidence floor stricter; use
-the corrected metric, planner routing, and same-session video before deciding
-which custom stages deserve work.
+The next fetch-control work is stage-boundary simplification before broader
+contact tuning. The May 31 and June 1 evidence resets made the floor stricter:
+use corrected geometry, calibrated model provenance, planner routing, and
+same-session video before changing control behavior.
 
 Current goal: build a generalized `fetch_to_pose` system that first uses the
-planner and Nav2 to reach the cheapest valid route, then uses the smallest
-fetch adapter or deterministic contact routine needed to make the ball
-trajectory intersect the delivery circle. AI push-coast remains a shadow-first
-fallback for reproducible setup, contact, terminal, or re-aim gaps.
+planner to select a feasible corridor, then proves push-readiness, then lets
+Nav2 push. The smallest fetch adapter or deterministic contact routine should
+preserve that sequence. Unstable setup routes back to setup/reacquire before
+the robot enters push. AI push-coast remains a shadow-first fallback for
+reproducible setup, contact, terminal, or re-aim gaps.
 
 Control order:
 
@@ -354,20 +360,20 @@ Control order:
 3. Use Nav2 or a bounded deterministic setup routine to reach the capture pose.
 4. Gate the handoff before contact: target fresh, corridor valid, robot behind
    ball, standoff in range, lateral error low, yaw error low.
-5. Let Nav2 track a ball-target corridor path where useful, while a monitor
-   cancels only on success, ball escape, stale state, unsafe drift, timeout, or
-   action abort.
-6. Add deterministic homebrew routines only for contact-rich stages outside the
-   corrected Nav2/adapter baseline's reliable envelope: fine pre-capture
-   alignment, first-contact stabilization, terminal stop-short correction,
-   bounded re-push/coast, and recenter.
-7. Add shadow-mode learned prediction/proposal for stage handoff, miss vector,
+5. Dispatch Nav2 corridor push only after the gate is clean.
+6. Monitor success, ball escape, stale state, unsafe drift, timeout, and action
+   abort; setup/contact failures return to setup/reacquire.
+7. Add deterministic homebrew routines only where the corrected Nav2/adapter
+   baseline shows a reproducible gap: fine pre-capture alignment,
+   first-contact stabilization, terminal stop-short correction, bounded
+   re-push/coast, and recenter.
+8. Add shadow-mode learned prediction/proposal for stage handoff, miss vector,
    terminal re-push need, recenter side, and recovery side after corrected
    failures show those labels are reproducible.
-8. Allow learned proposals to select a guarded maneuver class only after
+9. Allow learned proposals to select a guarded maneuver class only after
    deterministic guards accept the class and shadow evidence shows benefit.
-9. Use a wider attachment/funnel as an allowed mechanical robustness path, but
-   do not let width hide unstable approach telemetry.
+10. Use a wider attachment/funnel as an allowed mechanical robustness path, and
+    keep unstable approach telemetry visible in the evidence package.
 
 Latest clip-review interpretation: the June 1 `ai_push_coast_servo_v1`
 saved-anchor rebuild is `1/3` under corrected geometry and model provenance.
@@ -375,6 +381,25 @@ saved-anchor rebuild is `1/3` under corrected geometry and model provenance.
 show off-axis capture/handoff instability. The next implementation work is the
 setup/capture stage above; terminal correction resumes after clean capture
 geometry is proven across `zero`, `left05`, and `right05`.
+
+Latest stage-boundary evidence after commit
+`7c2b244 Guard fetch contact handoff geometry`:
+
+- Full saved-layout gate:
+  `artifacts/session/live_ai_push_coast_forward_contact_guard_saved_layout_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Audit:
+  `artifacts/session/audit_ai_push_coast_forward_contact_guard_saved_layout_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+- Result: `zero` passed with `0.230116m` closest approach; `left05` failed on
+  `capture_entry_timeout`; `right05` failed as a setup/contact blocker with
+  `0.557965m` closest approach.
+- Targeted `right05` diagnostic:
+  `artifacts/session/live_ai_push_coast_forward_contact_guard_right05_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`
+  passed with `0.196206m` closest approach after the first-contact monitor
+  required forward corridor progress.
+
+Interpretation: the guard fixes corrected false handoffs, but saved-layout
+promotion is still blocked by setup/capture repeatability. The plan is now to
+make push-readiness the dispatch invariant, then rerun the saved-anchor ladder.
 
 Approach-quality evidence must record:
 
@@ -455,17 +480,20 @@ retry, or unsafe lateral/yaw error is rejected before actuation.
 
 Use long-range navigation only to set up the robot and ball. The object-centric
 fetch policy owns short-horizon ball interaction as bounded
-setup-contact-observe-recover cycles:
+stage-boundary cycles:
 
-1. `setup`: reach a measured contact pocket behind the ball for the requested
+1. `plan`: classify the scene and choose a feasible ball-target corridor.
+2. `setup`: reach a measured push-ready pocket behind the ball for the requested
    target pose.
-2. `contact`: apply a bounded command sequence intended to roll the ball through
-   the delivery radius.
-3. `observe`: track ball trajectory, speed decay, target intersection, and miss
+3. `gate`: prove standoff, lateral error, yaw error, target freshness, and
+   corridor validity before contact.
+4. `push`: let Nav2 track the corridor path while the monitor watches the ball.
+5. `observe`: track ball trajectory, speed decay, target intersection, and miss
    vector.
-4. `recover`: re-aim from the new ball state when budgets allow.
-5. `done`: accept once the ball trajectory intersects the delivery radius.
-6. `give_up`: stop with an explicit failure reason when budgets are exhausted.
+6. `recover`: return to setup/reacquire from any failed push-readiness or
+   contact-quality check when budgets allow.
+7. `done`: accept once the ball trajectory intersects the delivery radius.
+8. `give_up`: stop with an explicit failure reason when budgets are exhausted.
 
 The first policy family is:
 
