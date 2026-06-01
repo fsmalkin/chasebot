@@ -237,24 +237,37 @@ def _fetch_to_pose_rollup(runs: list[dict[str, object]]) -> dict[str, object]:
 
 
 def _run_model_provenance(run: dict[str, object]) -> dict[str, object]:
-    provenance = run.get("model_provenance", {})
-    if isinstance(provenance, dict) and provenance:
-        return dict(provenance)
-    payload: dict[str, object] = {}
-    for key in (
-        "target_model_sdf",
-        "zone_model_sdf",
-        "target_model_radius_m",
-        "target_model_classification",
-        "zone_model_radius_m",
-        "zone_model_classification",
-        "model_provenance_valid",
-        "model_provenance_reason",
-        "model_provenance_required",
-    ):
-        if key in run:
-            payload[key] = run.get(key)
-    return payload
+    candidates: list[dict[str, object]] = [run]
+    mission_verdict = run.get("mission_verdict", {})
+    if isinstance(mission_verdict, dict):
+        candidates.append(mission_verdict)
+        mission_shot = mission_verdict.get("shot_outcome", {})
+        if isinstance(mission_shot, dict):
+            candidates.append(mission_shot)
+    shot_outcome = run.get("shot_outcome", {})
+    if isinstance(shot_outcome, dict):
+        candidates.append(shot_outcome)
+    for candidate in candidates:
+        provenance = candidate.get("model_provenance", {})
+        if isinstance(provenance, dict) and provenance:
+            return dict(provenance)
+        payload: dict[str, object] = {}
+        for key in (
+            "target_model_sdf",
+            "zone_model_sdf",
+            "target_model_radius_m",
+            "target_model_classification",
+            "zone_model_radius_m",
+            "zone_model_classification",
+            "model_provenance_valid",
+            "model_provenance_reason",
+            "model_provenance_required",
+        ):
+            if key in candidate:
+                payload[key] = candidate.get(key)
+        if payload:
+            return payload
+    return {}
 
 
 def _model_provenance_rollup(runs: list[dict[str, object]]) -> dict[str, object]:

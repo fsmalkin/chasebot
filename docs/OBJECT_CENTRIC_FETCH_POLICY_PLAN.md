@@ -193,6 +193,22 @@ Post-provenance corrected direct reference:
   video are the current browser-UAT reference. The saved-layout ladder still
   needs a corrected `zero`/`left05`/`right05` rebuild before promotion.
 
+Corrected saved-anchor rebuild, June 1, 2026:
+
+- Campaigns: `live_corrected_fetch_saved_anchor_one_run_zero_v2_20260601`,
+  `live_corrected_fetch_saved_anchor_one_run_left05_20260601`, and
+  `live_corrected_fetch_saved_anchor_one_run_right05_20260601`
+- Audit:
+  `artifacts/session/live_corrected_fetch_saved_anchor_one_run_audit_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+- Result: `right05` passed with calibrated model provenance, corrected marker
+  geometry, and `0.143206m` closest approach. `zero` failed on first-contact
+  no-object-motion. `left05` failed on `capture_entry_timeout`.
+- Interpretation: the provenance and marker path is now functioning. The next
+  engineering blocker is setup/contact reliability before saved-layout `3/3`,
+  seeded gate, or guarded-live promotion work.
+- Browser UAT package:
+  `artifacts/session/uat_corrected_fetch_saved_anchor_one_run_blocked_20260601/fetch_visual_uat_package/scorecard.md`
+
 ## Architecture Revisit Conclusion
 
 Preserve the calibrated golf-ball/turf lane and object-centric fetch architecture

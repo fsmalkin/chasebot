@@ -34,11 +34,20 @@ def _summary(
         "campaign_id": campaign_id,
         "requested_target_layout_json": f"ros2_config/target_layouts/golf_ball_circle_delivery_{layout}.json",
         "requested_fetch_pose_world": {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.3},
+        "model_provenance_valid": True,
+        "model_provenance_reason": "calibrated_fetch_models",
+        "target_model_classification": "calibrated_golf_ball",
+        "zone_model_classification": "golf_ball_delivery_zone_marker",
+        "target_model_radius_m": 0.021336,
         "fetch_to_pose_pass_count": 1 if passed else 0,
         "fetch_to_pose_failure_reasons": [] if not failure_reason else [failure_reason],
         "runs": [
             {
                 "fetch_to_pose_pass": passed,
+                    "model_provenance_valid": True,
+                    "model_provenance_reason": "calibrated_fetch_models",
+                    "target_model_classification": "calibrated_golf_ball",
+                    "zone_model_classification": "golf_ball_delivery_zone_marker",
                     "fetch_to_pose_failure_reason": failure_reason,
                     "fetch_delivery_radius_m": 0.3,
                     "first_contact_push_alignment_deg": alignment_deg,
@@ -186,6 +195,31 @@ def test_saved_anchor_audit_marks_clean_pass_for_ladder(tmp_path):
     assert summary["overall_interpretation"] == "saved_anchor_ladder_ready"
     assert row["interpretation"] == "saved_anchor_pass"
     assert row["recommended_next_action"] == "continue_saved_anchor_ladder"
+
+
+def test_saved_anchor_audit_blocks_missing_model_provenance(tmp_path):
+    path = tmp_path / "zero_summary.json"
+    payload = _summary(campaign_id="zero", layout="zero", passed=True, closest=0.0)
+    for key in (
+        "model_provenance_valid",
+        "model_provenance_reason",
+        "target_model_classification",
+        "zone_model_classification",
+        "target_model_radius_m",
+    ):
+        payload.pop(key, None)
+        payload["runs"][0].pop(key, None)
+    write_json(path, payload)
+
+    summary = audit.analyze([str(path)])
+
+    row = summary["saved_anchors"][0]
+    assert summary["overall_interpretation"] == "rebuild_model_provenance_before_gate"
+    assert summary["stage_quality_green"] is False
+    assert summary["invalid_model_provenance_count"] == 1
+    assert row["quality_classification"] == "invalid_model_provenance"
+    assert row["interpretation"] == "invalid_model_provenance"
+    assert row["recommended_next_action"] == "rerun_with_calibrated_model_provenance"
 
 
 def test_saved_anchor_audit_keeps_passing_contact_watch_on_repeatability_ladder(tmp_path):

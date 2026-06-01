@@ -542,6 +542,15 @@ and marker model `golf_ball_delivery_zone_marker` are diagnostic. Rebuild the
 evidence ladder from corrected direct runs: saved `zero`/`left05`/`right05`
 one-run, saved `3/3`, seeded `6 x 1`, then browser-watchable visual UAT.
 
+June 1, 2026 corrected saved-anchor one-run rebuild: the provenance and marker
+path is functioning, and the current blocker is setup/contact reliability.
+`right05` passed with `0.143206m` closest approach, `zero` failed on
+first-contact no-object-motion, and `left05` failed on `capture_entry_timeout`.
+The stage audit is
+`artifacts/session/live_corrected_fetch_saved_anchor_one_run_audit_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+The next milestone step is repair setup/contact behavior before saved-layout
+`3/3`, seeded gate, or guarded-live promotion.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

@@ -16,6 +16,11 @@ from llm_supervisor_core import write_json  # noqa: E402
 def _summary_with_ai(*, passed: bool, reason: str = "", stage_labels: list[str] | None = None) -> dict:
     return {
         "promotion_gate_pass": passed,
+        "model_provenance_valid": True,
+        "model_provenance_reason": "calibrated_fetch_models",
+        "target_model_classification": "calibrated_golf_ball",
+        "zone_model_classification": "golf_ball_delivery_zone_marker",
+        "target_model_radius_m": 0.021336,
         "fetch_to_pose_failure_reasons": [reason] if reason else [],
         "runs": [
             {
@@ -118,6 +123,39 @@ def test_seeded_gate_analyzer_classifies_pass_non_repro_and_reproduced_failure(t
     output_path = tmp_path / "artifacts" / "session" / "evidence" / analyzer.ANALYZER_KIND / "evidence_summary.json"
     assert read_json(output_path)["seeded_gate"]["cases"][1]["stage_labels"] == ["setup"]
     assert output_path.with_name("scorecard.md").exists()
+
+
+def test_seeded_gate_analyzer_blocks_missing_model_provenance(tmp_path, monkeypatch):
+    monkeypatch.setattr(analyzer, "REPO_ROOT", tmp_path)
+    gate_path = tmp_path / "gate_summary.json"
+    gate_summary = {
+        "campaign_id": "seeded_gate",
+        "seed": 20260529,
+        "ai_push_coast_mode": "shadow",
+        "fetch_delivery_radius_m": 0.3,
+        "pass": True,
+        "pass_count": 1,
+        "fail_count": 0,
+        "results": [
+            {
+                "architecture": "ai_push_coast_servo_v1",
+                "case_id": "case01",
+                "layout_path": "layout01.json",
+                "summary_path": "summary01.json",
+                "pass": True,
+                "return_code": 0,
+                "summary": {"promotion_gate_pass": True, "runs": [{"fetch_to_pose_pass": True}]},
+            }
+        ],
+    }
+    write_json(gate_path, gate_summary)
+
+    summary = analyzer.summarize_evidence(campaign_id="evidence", gate_summary_path=str(gate_path))
+
+    assert summary["seeded_gate"]["model_provenance_valid"] is False
+    assert summary["seeded_gate"]["model_provenance_invalid_count"] == 1
+    assert summary["seeded_gate"]["cases"][0]["interpretation"] == "rebuild_required_model_provenance"
+    assert summary["recommended_next_action"] == "rerun_seeded_gate_with_calibrated_model_provenance"
 
 
 def test_seeded_gate_analyzer_builds_milestone_context(tmp_path, monkeypatch):

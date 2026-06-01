@@ -30,10 +30,22 @@ FIRST_CONTACT_ALIGNMENT_LIMIT_DEG = 30.0
 PRE_CONTACT_PHASES = {"pre_stage", "stage", "capture_entry"}
 BLOCKING_QUALITY_CLASSIFICATIONS = {
     "invalid_geometry",
+    "invalid_model_provenance",
     "setup_capture_blocker",
     "first_contact_blocker",
     "push_coast_blocker",
 }
+MODEL_PROVENANCE_FIELDS = (
+    "target_model_sdf",
+    "zone_model_sdf",
+    "target_model_radius_m",
+    "target_model_classification",
+    "zone_model_radius_m",
+    "zone_model_classification",
+    "model_provenance_valid",
+    "model_provenance_reason",
+    "model_provenance_required",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -339,6 +351,44 @@ def _geometry_consistency(run: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def _model_provenance_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    nested = _dict(payload.get("model_provenance"))
+    if nested:
+        result.update(nested)
+    for key in MODEL_PROVENANCE_FIELDS:
+        if key in payload:
+            result[key] = payload.get(key)
+    if not result:
+        return {}
+    if "model_provenance_valid" not in result:
+        result["model_provenance_valid"] = bool(
+            str(result.get("target_model_classification", "") or "") == "calibrated_golf_ball"
+            and str(result.get("zone_model_classification", "") or "") == "golf_ball_delivery_zone_marker"
+        )
+    if not str(result.get("model_provenance_reason", "") or ""):
+        result["model_provenance_reason"] = (
+            "calibrated_fetch_models"
+            if bool(result.get("model_provenance_valid", False))
+            else "invalid_or_missing_model_provenance"
+        )
+    return result
+
+
+def _model_provenance(summary: dict[str, Any], run: dict[str, Any]) -> dict[str, Any]:
+    candidates = [summary]
+    candidates.extend(_payload_candidates(run))
+    for payload in candidates:
+        provenance = _model_provenance_from_payload(payload)
+        if provenance:
+            return provenance
+    return {
+        "model_provenance_valid": False,
+        "model_provenance_reason": "missing_model_provenance",
+        "model_provenance_required": True,
+    }
+
+
 def _run_approach(run: dict[str, Any]) -> dict[str, Any]:
     for key in ("fresh_attempt_approach", "latest_approach_progress"):
         payload = _dict(run.get(key)) or _dict(_dict(run.get("mission_verdict")).get(key))
@@ -424,6 +474,8 @@ def _quality_flags(metrics: dict[str, Any], failure_reasons: list[str]) -> list[
 
     if not bool(metrics.get("geometry_consistency_pass", True)):
         add("invalid_geometry")
+    if metrics.get("model_provenance_valid") is False:
+        add("invalid_model_provenance")
     failure_text = " ".join(reason.lower() for reason in failure_reasons)
     if "capture_entry_timeout" in failure_text or "pre_stage" in failure_text or "handoff" in failure_text:
         add("setup_capture_blocker")
@@ -461,6 +513,8 @@ def _quality_classification(
 ) -> str:
     if "invalid_geometry" in flags:
         return "invalid_geometry"
+    if "invalid_model_provenance" in flags:
+        return "invalid_model_provenance"
     if "setup_capture_blocker" in flags or "pre_contact_ball_motion_blocker" in flags:
         return "setup_capture_blocker"
     if "first_contact_blocker" in flags:
@@ -559,6 +613,8 @@ def _interpretation(
 ) -> tuple[str, str]:
     if quality_classification == "invalid_geometry":
         return "invalid_geometry", "repair_geometry_evidence_before_gate"
+    if quality_classification == "invalid_model_provenance":
+        return "invalid_model_provenance", "rerun_with_calibrated_model_provenance"
     if quality_classification in {"setup_capture_blocker", "first_contact_blocker"}:
         return "setup_contact_blocker", "repair_setup_contact_before_guarded_live"
     if quality_classification == "push_coast_blocker":
@@ -588,6 +644,8 @@ def analyze_summary(path: Path, summary: dict[str, Any]) -> dict[str, Any]:
     run = _representative_run(summary)
     ai_fields = _ai_payload(run)
     failure_reasons = _failure_reasons(summary, run)
+    model_provenance = _model_provenance(summary, run)
+    model_valid = bool(model_provenance.get("model_provenance_valid", False))
     delivery_radius_m = float(
         _finite_float(_first_payload_value(run, "delivery_radius_m"))
         or _finite_float(_first_payload_value(run, "fetch_delivery_radius_m"))
@@ -616,6 +674,9 @@ def analyze_summary(path: Path, summary: dict[str, Any]) -> dict[str, Any]:
                 labels.append(label)
         candidate_failure_reasons = _failure_reasons({}, candidate_run)
         candidate_metrics = _run_stage_metrics(candidate_run)
+        candidate_provenance = _model_provenance(summary, candidate_run)
+        candidate_metrics["model_provenance_valid"] = bool(candidate_provenance.get("model_provenance_valid", False))
+        candidate_metrics["model_provenance_reason"] = _clean_text(candidate_provenance.get("model_provenance_reason"))
         candidate_delivery_pass = bool(candidate_run.get("fetch_to_pose_pass", False))
         for flag in _quality_flags(candidate_metrics, candidate_failure_reasons):
             if flag in {"setup_capture_blocker", "pre_contact_ball_motion_blocker"} and "setup" not in labels:
@@ -643,6 +704,8 @@ def analyze_summary(path: Path, summary: dict[str, Any]) -> dict[str, Any]:
         for flag in _quality_flags(_dict(row.get("metrics")), _list(row.get("failure_reasons"))):
             if flag not in all_flags:
                 all_flags.append(flag)
+    if not model_valid and "invalid_model_provenance" not in all_flags:
+        all_flags.append("invalid_model_provenance")
     quality_classification = _quality_classification(
         delivery_pass=delivery_passed,
         flags=all_flags,
@@ -722,6 +785,14 @@ def analyze_summary(path: Path, summary: dict[str, Any]) -> dict[str, Any]:
         "capture_entry_final_ball_y_m": representative_metrics.get("capture_entry_final_ball_y_m"),
         "geometry_consistency_pass": bool(representative_metrics.get("geometry_consistency_pass", True)),
         "geometry_consistency_reason": _clean_text(representative_metrics.get("geometry_consistency_reason")),
+        "model_provenance": model_provenance,
+        "model_provenance_valid": model_valid,
+        "model_provenance_reason": _clean_text(model_provenance.get("model_provenance_reason")),
+        "target_model_sdf": _clean_text(model_provenance.get("target_model_sdf")),
+        "zone_model_sdf": _clean_text(model_provenance.get("zone_model_sdf")),
+        "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+        "target_model_classification": _clean_text(model_provenance.get("target_model_classification")),
+        "zone_model_classification": _clean_text(model_provenance.get("zone_model_classification")),
         "push_direction_yaw_deg": _round_or_none(summary.get("push_direction_yaw_avg_deg")),
         "nav2_dispatch_status": _clean_text(nav2.get("dispatch_status")),
         "nav2_monitor_cancel_reason": _clean_text(nav2.get("monitor_cancel_reason")),
@@ -744,15 +815,22 @@ def analyze(saved_anchor_summaries: list[str]) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise SystemExit(f"saved anchor summary is not a JSON object: {path}")
         rows.append(analyze_summary(path, payload))
-    blocker_count = sum(1 for row in rows if row.get("interpretation") in {"setup_contact_blocker", "invalid_geometry"})
+    blocker_count = sum(
+        1
+        for row in rows
+        if row.get("interpretation") in {"setup_contact_blocker", "invalid_geometry", "invalid_model_provenance"}
+    )
     setup_capture_blocker_count = sum(1 for row in rows if row.get("quality_classification") == "setup_capture_blocker")
     first_contact_blocker_count = sum(1 for row in rows if row.get("quality_classification") == "first_contact_blocker")
     push_coast_blocker_count = sum(1 for row in rows if row.get("quality_classification") == "push_coast_blocker")
     invalid_geometry_count = sum(1 for row in rows if row.get("quality_classification") == "invalid_geometry")
+    invalid_model_provenance_count = sum(1 for row in rows if row.get("quality_classification") == "invalid_model_provenance")
     terminal_candidate_count = sum(1 for row in rows if row.get("interpretation") == "guarded_live_terminal_candidate")
     contact_watch_count = sum(1 for row in rows if row.get("interpretation") == "saved_anchor_pass_with_contact_watch")
     pass_count = sum(1 for row in rows if bool(row.get("pass", False)))
-    if blocker_count:
+    if invalid_model_provenance_count:
+        overall = "rebuild_model_provenance_before_gate"
+    elif blocker_count:
         overall = "repair_setup_contact_before_guarded_live"
     elif terminal_candidate_count:
         overall = "guarded_live_terminal_probe_ready"
@@ -774,9 +852,10 @@ def analyze(saved_anchor_summaries: list[str]) -> dict[str, Any]:
         "first_contact_blocker_count": first_contact_blocker_count,
         "push_coast_blocker_count": push_coast_blocker_count,
         "invalid_geometry_count": invalid_geometry_count,
+        "invalid_model_provenance_count": invalid_model_provenance_count,
         "saved_anchor_pass_with_contact_watch_count": contact_watch_count,
         "guarded_live_terminal_candidate_count": terminal_candidate_count,
-        "stage_quality_green": bool(rows and pass_count == len(rows) and blocker_count == 0),
+        "stage_quality_green": bool(rows and pass_count == len(rows) and blocker_count == 0 and invalid_model_provenance_count == 0),
         "overall_interpretation": overall,
         "saved_anchors": rows,
     }
@@ -796,10 +875,11 @@ def write_scorecard(summary: dict[str, Any], path: Path) -> None:
         f"- First-contact blockers: `{summary.get('first_contact_blocker_count', 0)}`",
         f"- Push/coast blockers: `{summary.get('push_coast_blocker_count', 0)}`",
         f"- Invalid geometry: `{summary.get('invalid_geometry_count', 0)}`",
+        f"- Invalid model provenance: `{summary.get('invalid_model_provenance_count', 0)}`",
         f"- Guarded-live terminal candidates: `{summary.get('guarded_live_terminal_candidate_count')}`",
         "",
-        "| layout | stage pass | delivery | quality | flags | closest | yaw travel | capture-entry | interpretation | next action |",
-        "|---|---:|---:|---|---|---:|---:|---:|---|---|",
+        "| layout | stage pass | delivery | model | quality | flags | closest | yaw travel | capture-entry | interpretation | next action |",
+        "|---|---:|---:|---:|---|---|---:|---:|---:|---|---|",
     ]
     for row in _list(summary.get("saved_anchors")):
         lines.append(
@@ -809,6 +889,7 @@ def write_scorecard(summary: dict[str, Any], path: Path) -> None:
                     _clean_text(row.get("layout")),
                     "`true`" if row.get("pass") else "`false`",
                     "`true`" if row.get("delivery_pass") else "`false`",
+                    "`true`" if row.get("model_provenance_valid") else "`false`",
                     _clean_text(row.get("quality_classification")) or "-",
                     ", ".join(_list(row.get("quality_flags"))) or "-",
                     str(row.get("closest_approach_distance_m")),

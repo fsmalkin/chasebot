@@ -839,6 +839,31 @@ def test_model_provenance_rollup_counts_missing_and_valid():
     assert rollup["target_model_classification"] == "calibrated_golf_ball"
 
 
+def test_model_provenance_rollup_reads_nested_mission_verdict():
+    rollup = repeatability_runner._model_provenance_rollup(
+        [
+            {
+                "mission_objective": "fetch_to_pose",
+                "mission_verdict": {
+                    "model_provenance": {
+                        "model_provenance_valid": True,
+                        "target_model_sdf": "ros2_config/calibrated_golf_ball.sdf",
+                        "zone_model_sdf": "ros2_config/golf_ball_delivery_zone_marker.sdf",
+                        "target_model_radius_m": 0.021336,
+                        "target_model_classification": "calibrated_golf_ball",
+                        "zone_model_classification": "golf_ball_delivery_zone_marker",
+                    },
+                },
+            },
+        ]
+    )
+
+    assert rollup["model_provenance_valid"] is True
+    assert rollup["model_provenance_valid_count"] == 1
+    assert rollup["model_provenance_missing_count"] == 0
+    assert rollup["target_model_classification"] == "calibrated_golf_ball"
+
+
 def test_summarize_gather_artifacts_preserves_fresh_attempt_approach_across_release_failure(tmp_path: Path):
     mission_root = tmp_path / "mission"
     mission_root.mkdir(parents=True, exist_ok=True)

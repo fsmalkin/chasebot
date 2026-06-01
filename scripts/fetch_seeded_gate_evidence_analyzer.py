@@ -22,6 +22,17 @@ NON_FAILURE_REASONS = {
     "trajectory_intersects_delivery_radius",
     "none",
 }
+MODEL_PROVENANCE_FIELDS = (
+    "target_model_sdf",
+    "zone_model_sdf",
+    "target_model_radius_m",
+    "target_model_classification",
+    "zone_model_radius_m",
+    "zone_model_classification",
+    "model_provenance_valid",
+    "model_provenance_reason",
+    "model_provenance_required",
+)
 
 
 def current_utc_stamp() -> str:
@@ -87,6 +98,49 @@ def _payload_candidates(run: dict[str, Any]) -> list[dict[str, Any]]:
     shot_outcome = _dict(run.get("shot_outcome"))
     mission_shot = _dict(mission_verdict.get("shot_outcome"))
     return [run, mission_verdict, shot_outcome, mission_shot]
+
+
+def _model_provenance_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    nested = _dict(payload.get("model_provenance"))
+    if nested:
+        result.update(nested)
+    for key in MODEL_PROVENANCE_FIELDS:
+        if key in payload:
+            result[key] = payload.get(key)
+    if not result:
+        return {}
+    if "model_provenance_valid" not in result:
+        result["model_provenance_valid"] = bool(
+            str(result.get("target_model_classification", "") or "") == "calibrated_golf_ball"
+            and str(result.get("zone_model_classification", "") or "") == "golf_ball_delivery_zone_marker"
+        )
+    if not str(result.get("model_provenance_reason", "") or ""):
+        result["model_provenance_reason"] = (
+            "calibrated_fetch_models"
+            if bool(result.get("model_provenance_valid", False))
+            else "invalid_or_missing_model_provenance"
+        )
+    return result
+
+
+def _model_provenance(summary: dict[str, Any]) -> dict[str, Any]:
+    for candidate in [summary]:
+        provenance = _model_provenance_from_payload(candidate)
+        if provenance:
+            return provenance
+    for run in _list(summary.get("runs")):
+        if not isinstance(run, dict):
+            continue
+        for payload in _payload_candidates(run):
+            provenance = _model_provenance_from_payload(payload)
+            if provenance:
+                return provenance
+    return {
+        "model_provenance_valid": False,
+        "model_provenance_reason": "missing_model_provenance",
+        "model_provenance_required": True,
+    }
 
 
 def _latest_ai_fields(summary: dict[str, Any]) -> dict[str, Any]:
@@ -191,6 +245,7 @@ def _stage_labels(*, summary: dict[str, Any], ai_fields: dict[str, Any], passed:
 
 def _case_interpretation(
     *,
+    model_provenance_valid: bool,
     passed: bool,
     reproduced_failure: bool,
     stage_labels: list[str],
@@ -198,6 +253,8 @@ def _case_interpretation(
     closest_approach_m: float | None,
     delivery_radius_m: float,
 ) -> str:
+    if not model_provenance_valid:
+        return "rebuild_required_model_provenance"
     if passed:
         return "shadow_pass"
     if reproduced_failure:
@@ -218,6 +275,8 @@ def analyze_gate(gate_summary: dict[str, Any]) -> dict[str, Any]:
             continue
         summary = _summary_for_result(result)
         ai_fields = _latest_ai_fields(summary)
+        model_provenance = _model_provenance(summary)
+        model_valid = bool(model_provenance.get("model_provenance_valid", False))
         passed = bool(result.get("pass", False))
         reproduced_failure = bool(result.get("reproduced_failure", False))
         failure_reasons = _failure_reasons(summary)
@@ -247,7 +306,13 @@ def analyze_gate(gate_summary: dict[str, Any]) -> dict[str, Any]:
                 "distance_to_fetch_pose_m": round(float(distance_to_fetch_pose_m), 6) if distance_to_fetch_pose_m is not None else None,
                 "ai_push_coast_proposal": _dict(ai_fields.get("ai_push_coast_proposal")),
                 "ai_push_coast_guard": _dict(ai_fields.get("ai_push_coast_guard")),
+                "model_provenance": model_provenance,
+                "model_provenance_valid": model_valid,
+                "model_provenance_reason": _clean_text(model_provenance.get("model_provenance_reason")),
+                "target_model_classification": _clean_text(model_provenance.get("target_model_classification")),
+                "zone_model_classification": _clean_text(model_provenance.get("zone_model_classification")),
                 "interpretation": _case_interpretation(
+                    model_provenance_valid=model_valid,
                     passed=passed,
                     reproduced_failure=reproduced_failure,
                     stage_labels=labels,
@@ -257,10 +322,25 @@ def analyze_gate(gate_summary: dict[str, Any]) -> dict[str, Any]:
                 ),
             }
         )
-    reproduced_count = sum(1 for case in cases if bool(case.get("reproduced_failure", False)))
-    non_repro_count = sum(1 for case in cases if not case.get("pass") and not case.get("reproduced_failure"))
-    guarded_candidate_count = sum(1 for case in cases if case.get("interpretation") == "guarded_live_terminal_candidate")
-    if reproduced_count:
+    invalid_model_count = sum(1 for case in cases if not bool(case.get("model_provenance_valid", False)))
+    reproduced_count = sum(
+        1
+        for case in cases
+        if bool(case.get("model_provenance_valid", False)) and bool(case.get("reproduced_failure", False))
+    )
+    non_repro_count = sum(
+        1
+        for case in cases
+        if bool(case.get("model_provenance_valid", False)) and not case.get("pass") and not case.get("reproduced_failure")
+    )
+    guarded_candidate_count = sum(
+        1
+        for case in cases
+        if bool(case.get("model_provenance_valid", False)) and case.get("interpretation") == "guarded_live_terminal_candidate"
+    )
+    if invalid_model_count:
+        interpretation = "rebuild_required_model_provenance"
+    elif reproduced_count:
         interpretation = "promotion_blocker_freeze_reproduced_failures"
     elif non_repro_count:
         interpretation = "non_repro_watchlist_before_promotion"
@@ -278,6 +358,8 @@ def analyze_gate(gate_summary: dict[str, Any]) -> dict[str, Any]:
         "reproduced_failure_count": reproduced_count,
         "non_repro_failure_count": non_repro_count,
         "guarded_live_candidate_count": guarded_candidate_count,
+        "model_provenance_valid": bool(cases and invalid_model_count == 0),
+        "model_provenance_invalid_count": invalid_model_count,
         "interpretation": interpretation,
         "cases": cases,
     }
@@ -318,6 +400,18 @@ def _saved_anchor_summary(path: str) -> dict[str, Any]:
                 if not isinstance(row, dict):
                     continue
                 metrics = _dict(row.get("metrics"))
+                row_payload: dict[str, Any] = {}
+                row_summary_path = _clean_text(row.get("summary_path"))
+                if row_summary_path:
+                    resolved_row_path = _resolve_path(row_summary_path)
+                    if resolved_row_path.exists():
+                        loaded_row = read_json(resolved_row_path)
+                        if isinstance(loaded_row, dict):
+                            row_payload = loaded_row
+                row_provenance = _model_provenance(row_payload) if row_payload else {
+                    "model_provenance_valid": False,
+                    "model_provenance_reason": "missing_model_provenance",
+                }
                 row_summary = {
                     "family": _clean_text(row.get("family")),
                     "layout_id": _clean_text(row.get("layout_id")),
@@ -325,7 +419,10 @@ def _saved_anchor_summary(path: str) -> dict[str, Any]:
                     "pass": bool(row.get("pass", False)),
                     "worst_closest_approach_distance_m": metrics.get("worst_closest_approach_distance_m"),
                     "failure_reasons": _list(metrics.get("fetch_to_pose_failure_reasons")),
-                    "summary_path": _clean_text(row.get("summary_path")),
+                    "summary_path": row_summary_path,
+                    "model_provenance_valid": bool(row_provenance.get("model_provenance_valid", False)),
+                    "model_provenance_reason": _clean_text(row_provenance.get("model_provenance_reason")),
+                    "target_model_classification": _clean_text(row_provenance.get("target_model_classification")),
                 }
                 candidate_rows.append(row_summary)
                 reasons_text = " ".join(str(reason) for reason in row_summary["failure_reasons"])
@@ -391,7 +488,9 @@ def summarize_evidence(
         "milestone_interpretation": gate_analysis["interpretation"],
         "promotion_evidence": False,
         "recommended_next_action": (
-            "freeze_reproduced_failures_before_tuning"
+            "rerun_seeded_gate_with_calibrated_model_provenance"
+            if gate_analysis["model_provenance_invalid_count"]
+            else "freeze_reproduced_failures_before_tuning"
             if gate_analysis["reproduced_failure_count"]
             else "rerun_watchlist_before_guarded_live"
             if gate_analysis["non_repro_failure_count"]
@@ -431,6 +530,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- pass/fail: `{seeded.get('pass_count', 0)}/{seeded.get('fail_count', 0)}`",
         f"- non-repro/reproduced failures: `{seeded.get('non_repro_failure_count', 0)}/{seeded.get('reproduced_failure_count', 0)}`",
         f"- guarded-live candidates: `{seeded.get('guarded_live_candidate_count', 0)}`",
+        f"- model_provenance_valid: `{seeded.get('model_provenance_valid', False)}`",
+        f"- model_provenance_invalid_count: `{seeded.get('model_provenance_invalid_count', 0)}`",
         "",
         "## Cases",
         "",
@@ -446,6 +547,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"- `{case.get('case_id', '')}` pass=`{bool(case.get('pass', False))}` "
             f"repro_pass=`{case.get('repro_pass', None)}` reproduced=`{bool(case.get('reproduced_failure', False))}` "
             f"stage=`{labels}` closest=`{case.get('closest_approach_distance_m', None)}` "
+            f"model=`{case.get('model_provenance_valid', False)}` "
             f"proposal=`{proposal.get('maneuver_class', '')}` guard=`{bool(guard.get('accepted', False))}` "
             f"interpretation=`{case.get('interpretation', '')}` reasons=`{reasons}`"
         )
@@ -460,6 +562,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         lines.append(
             f"- `{row.get('family', '')}` `{row.get('layout_id', '')}` `{row.get('stage', '')}` "
             f"closest=`{row.get('worst_closest_approach_distance_m', '')}` "
+            f"model=`{row.get('model_provenance_valid', False)}` "
             f"reasons=`{','.join(str(reason) for reason in _list(row.get('failure_reasons')))}` "
             f"summary=`{row.get('summary_path', '')}`"
         )

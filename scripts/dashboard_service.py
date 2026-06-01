@@ -1978,14 +1978,20 @@ class DashboardController:
             layout_id = str(row.get("layout_id", "") or "").strip()
             if not layout_id or layout_id in saved_layouts:
                 continue
+            row_model_valid = bool(row.get("model_provenance_valid", False))
             saved_layouts[layout_id] = {
                 "layout_id": layout_id,
-                "pass": bool(row.get("pass", False)),
+                "pass": bool(row.get("pass", False)) and row_model_valid,
+                "raw_pass": bool(row.get("pass", False)),
                 "closest_m": row.get("worst_closest_approach_distance_m"),
                 "summary_path": str(row.get("summary_path", "") or ""),
+                "model_provenance_valid": row_model_valid,
+                "model_provenance_reason": str(row.get("model_provenance_reason", "") or ""),
+                "target_model_classification": str(row.get("target_model_classification", "") or ""),
             }
         saved_total = len(saved_layouts)
         saved_pass = sum(1 for row in saved_layouts.values() if row.get("pass"))
+        saved_invalid_model_count = sum(1 for row in saved_layouts.values() if not row.get("model_provenance_valid"))
         saved_green = saved_total > 0 and saved_pass == saved_total
 
         def _is_guarded_fetch_probe(payload: Dict[str, Any]) -> bool:
@@ -2042,8 +2048,9 @@ class DashboardController:
         stage_quality_push_coast_blockers = int(stage_quality_payload.get("push_coast_blocker_count", 0) or 0) if stage_quality_payload else 0
         stage_quality_setup_capture_blockers = int(stage_quality_payload.get("setup_capture_blocker_count", 0) or 0) if stage_quality_payload else 0
         stage_quality_first_contact_blockers = int(stage_quality_payload.get("first_contact_blocker_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_invalid_model_count = int(stage_quality_payload.get("invalid_model_provenance_count", 0) or 0) if stage_quality_payload else 0
         stage_quality_watch = int(stage_quality_payload.get("saved_anchor_pass_with_contact_watch_count", 0) or 0) if stage_quality_payload else 0
-        stage_quality_green = bool(stage_quality_payload.get("stage_quality_green", False)) if stage_quality_payload else False
+        stage_quality_green = bool(stage_quality_payload.get("stage_quality_green", False)) and stage_quality_invalid_model_count == 0 if stage_quality_payload else False
         stage_quality_overall = str(stage_quality_payload.get("overall_interpretation", "") or "") if stage_quality_payload else ""
 
         seeded_pass_count = int(seeded_gate.get("pass_count", 0) or 0) if seeded_gate else 0
@@ -2052,13 +2059,26 @@ class DashboardController:
         non_repro_count = int(seeded_gate.get("non_repro_failure_count", 0) or 0) if seeded_gate else 0
         reproduced_count = int(seeded_gate.get("reproduced_failure_count", 0) or 0) if seeded_gate else 0
         guarded_candidates = int(seeded_gate.get("guarded_live_candidate_count", 0) or 0) if seeded_gate else 0
-        promotion_evidence = bool(evidence.get("promotion_evidence", False)) if evidence else False
+        seeded_model_valid = bool(seeded_gate.get("model_provenance_valid", False)) if seeded_gate else False
+        seeded_invalid_model_count = (
+            int(seeded_gate.get("model_provenance_invalid_count", 0) or 0)
+            if "model_provenance_invalid_count" in seeded_gate
+            else seeded_total
+            if seeded_gate
+            else 0
+        )
+        promotion_evidence = (
+            bool(evidence.get("promotion_evidence", False))
+            and seeded_model_valid
+            and saved_invalid_model_count == 0
+            and stage_quality_invalid_model_count == 0
+        ) if evidence else False
         recommended_next_action = str(evidence.get("recommended_next_action", "") or "") if evidence else ""
         milestone_interpretation = str(evidence.get("milestone_interpretation", "") or "") if evidence else ""
 
-        if probe and not probe_model_valid:
+        if stage_quality_payload and stage_quality_invalid_model_count:
             status = "bad"
-            headline = f"Latest guarded fetch probe lacks calibrated model provenance ({probe_model_reason or probe_target_model or 'missing'})."
+            headline = f"Stage-quality audit has {stage_quality_invalid_model_count} saved anchor lacking calibrated model provenance; rerun saved anchors."
         elif stage_quality_payload and stage_quality_blockers:
             status = "bad"
             if stage_quality_push_coast_blockers:
@@ -2069,6 +2089,12 @@ class DashboardController:
                 headline = f"Stage-quality audit has {stage_quality_setup_capture_blockers} setup/capture blocker; repair capture-entry before seeded random."
             else:
                 headline = f"Stage-quality audit has {stage_quality_blockers} setup/contact blocker; repair stage ownership before seeded random."
+        elif evidence and (seeded_invalid_model_count > 0 or saved_invalid_model_count > 0):
+            status = "bad"
+            headline = "Saved/seeded fetch evidence lacks calibrated model provenance; rerun the corrected evidence ladder."
+        elif probe and not probe_model_valid:
+            status = "bad"
+            headline = f"Latest guarded fetch probe lacks calibrated model provenance ({probe_model_reason or probe_target_model or 'missing'})."
         elif planner and planner_wrong_fetch_dispatch_count:
             status = "bad"
             headline = f"Planner gate has {planner_wrong_fetch_dispatch_count} wrong fetch-ready dispatch; do not score broad random as local fetch."
@@ -2104,6 +2130,7 @@ class DashboardController:
                 "pass_count": saved_pass,
                 "total_count": saved_total,
                 "green": saved_green,
+                "invalid_model_provenance_count": saved_invalid_model_count,
                 "layouts": sorted(saved_layouts.values(), key=lambda item: str(item.get("layout_id", ""))),
             },
             "seeded_shadow_gate": {
@@ -2116,6 +2143,8 @@ class DashboardController:
                 "non_repro_failure_count": non_repro_count,
                 "reproduced_failure_count": reproduced_count,
                 "guarded_live_candidate_count": guarded_candidates,
+                "model_provenance_valid": seeded_model_valid,
+                "model_provenance_invalid_count": seeded_invalid_model_count,
                 "interpretation": str(seeded_gate.get("interpretation", "") or ""),
             },
             "planner_handoff_gate": {
@@ -2144,6 +2173,7 @@ class DashboardController:
                 "first_contact_blocker_count": stage_quality_first_contact_blockers,
                 "push_coast_blocker_count": stage_quality_push_coast_blockers,
                 "invalid_geometry_count": int(stage_quality_payload.get("invalid_geometry_count", 0) or 0) if stage_quality_payload else 0,
+                "invalid_model_provenance_count": stage_quality_invalid_model_count,
                 "watch_count": stage_quality_watch,
                 "saved_anchors": [
                     {
@@ -2152,6 +2182,9 @@ class DashboardController:
                         "delivery_pass": bool(row.get("delivery_pass", False)),
                         "quality_classification": str(row.get("quality_classification", "") or ""),
                         "quality_flags": list(row.get("quality_flags", [])) if isinstance(row.get("quality_flags"), list) else [],
+                        "model_provenance_valid": bool(row.get("model_provenance_valid", False)),
+                        "model_provenance_reason": str(row.get("model_provenance_reason", "") or ""),
+                        "target_model_classification": str(row.get("target_model_classification", "") or ""),
                         "pre_stage_yaw_travel_max_deg": row.get("pre_stage_yaw_travel_max_deg"),
                         "capture_entry_time_max_s": row.get("capture_entry_time_max_s"),
                         "closest_approach_distance_m": row.get("closest_approach_distance_m"),

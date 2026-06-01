@@ -1120,9 +1120,11 @@ function renderFetchProgress() {
 
   setText('fp-headline', fp.headline || 'Waiting for evidence package.');
   setText('fp-saved', ratioText(saved.pass_count, saved.total_count));
-  setClass('fp-saved', saved.green ? 'fp-v ok' : saved.total_count ? 'fp-v warn' : 'fp-v dim');
+  const savedModelBlocked = Number(saved.invalid_model_provenance_count || 0) > 0;
+  setClass('fp-saved', savedModelBlocked ? 'fp-v bad' : saved.green ? 'fp-v ok' : saved.total_count ? 'fp-v warn' : 'fp-v dim');
   setText('fp-seeded', ratioText(seeded.pass_count, seeded.total_count, seeded.fail_count));
-  setClass('fp-seeded', seeded.fail_count ? 'fp-v warn' : seeded.total_count ? 'fp-v ok' : 'fp-v dim');
+  const seededModelBlocked = Number(seeded.model_provenance_invalid_count || 0) > 0 || seeded.model_provenance_valid === false && Number(seeded.total_count || 0) > 0;
+  setClass('fp-seeded', seededModelBlocked ? 'fp-v bad' : seeded.fail_count ? 'fp-v warn' : seeded.total_count ? 'fp-v ok' : 'fp-v dim');
   setText('fp-probe', probe.campaign_id ? (probe.pass ? 'pass' : 'fail') : '-');
   setClass('fp-probe', probe.campaign_id ? (probe.pass ? 'fp-v ok' : 'fp-v bad') : 'fp-v dim');
   const plannerText = plannerDecision.route_label || (plannerGate.total_count ? ratioText(plannerGate.pass_count, plannerGate.total_count, plannerGate.fail_count) : '-');
@@ -1131,7 +1133,7 @@ function renderFetchProgress() {
   setText('fp-planner', plannerText);
   setClass('fp-planner', plannerOk ? (plannerBad ? 'fp-v bad' : 'fp-v ok') : 'fp-v dim');
   const stageText = stageAudit.total_count ? ratioText(stageAudit.pass_count, stageAudit.total_count, Number(stageAudit.setup_contact_blocker_count || 0)) : '-';
-  const stageBlocked = Number(stageAudit.setup_contact_blocker_count || 0) > 0 || Number(stageAudit.invalid_geometry_count || 0) > 0;
+  const stageBlocked = Number(stageAudit.setup_contact_blocker_count || 0) > 0 || Number(stageAudit.invalid_geometry_count || 0) > 0 || Number(stageAudit.invalid_model_provenance_count || 0) > 0;
   const stageWatch = Number(stageAudit.watch_count || 0) > 0;
   setText('fp-stage', stageText);
   setClass('fp-stage', stageAudit.total_count ? (stageBlocked ? 'fp-v bad' : stageWatch ? 'fp-v warn' : 'fp-v ok') : 'fp-v dim');
@@ -1184,7 +1186,7 @@ function renderVisualUatPackage() {
   const stageAudits = Array.isArray(pkg.stage_quality_audits) ? pkg.stage_quality_audits : [];
   const latestStage = stageAudits[0] || {};
   const stageGreen = Boolean(pkg.stage_quality_green || latestStage.green);
-  const stageBlocked = Number(latestStage.setup_contact_blocker_count || 0) > 0 || Number(latestStage.invalid_geometry_count || 0) > 0;
+  const stageBlocked = Number(latestStage.setup_contact_blocker_count || 0) > 0 || Number(latestStage.invalid_geometry_count || 0) > 0 || Number(latestStage.invalid_model_provenance_count || 0) > 0;
   const stageWatch = Number(latestStage.watch_count || 0) > 0;
   setText('uat-stage', latestStage.total_count ? ratioText(latestStage.pass_count, latestStage.total_count, latestStage.setup_contact_blocker_count) : '-');
   setClass('uat-stage', latestStage.total_count ? (stageBlocked ? 'uat-v bad' : stageGreen && !stageWatch ? 'uat-v ok' : 'uat-v warn') : 'uat-v dim');

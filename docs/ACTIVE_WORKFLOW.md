@@ -126,6 +126,21 @@ Evidence rebuild ladder:
 3. seeded `fetch_generalization_gate`, `6 x 1`
 4. mobile visual UAT package with browser-watchable videos
 
+June 1, 2026 corrected saved-anchor one-run rebuild:
+
+- Campaigns:
+  - `live_corrected_fetch_saved_anchor_one_run_zero_v2_20260601`
+  - `live_corrected_fetch_saved_anchor_one_run_left05_20260601`
+  - `live_corrected_fetch_saved_anchor_one_run_right05_20260601`
+- Audit:
+  `artifacts/session/live_corrected_fetch_saved_anchor_one_run_audit_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+- Result: `right05` passed with calibrated model provenance, corrected marker
+  geometry, and `0.143206m` closest approach. `zero` failed on first-contact
+  no-object-motion. `left05` failed on `capture_entry_timeout`.
+- Interpretation: saved one-run is blocked by setup/contact behavior before
+  repeatability or seeded promotion work. The dashboard package is
+  `artifacts/session/uat_corrected_fetch_saved_anchor_one_run_blocked_20260601/fetch_visual_uat_package/scorecard.md`.
+
 ## UAT Orchestrator Modes
 
 Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:

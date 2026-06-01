@@ -236,24 +236,29 @@ def summarize_seeded_evidence(path: Path) -> dict[str, Any]:
         "guarded_live_candidate_count": int(seeded.get("guarded_live_candidate_count", 0) or 0),
         "non_repro_failure_count": int(seeded.get("non_repro_failure_count", 0) or 0),
         "reproduced_failure_count": int(seeded.get("reproduced_failure_count", 0) or 0),
+        "model_provenance_valid": bool(seeded.get("model_provenance_valid", False)),
+        "model_provenance_invalid_count": int(seeded.get("model_provenance_invalid_count", 0) or 0),
     }
 
 
 def summarize_stage_quality(path: Path) -> dict[str, Any]:
     payload = read_json(path)
     rows = payload.get("saved_anchors", []) if isinstance(payload.get("saved_anchors"), list) else []
+    invalid_model_count = int(payload.get("invalid_model_provenance_count", 0) or 0)
     return {
         "campaign_id": str(payload.get("campaign_id", "") or ""),
         "session_id": session_id_for_path(path),
         "path": artifact_display_path(path),
-        "green": bool(payload.get("stage_quality_green", False)),
+        "green": bool(payload.get("stage_quality_green", False)) and invalid_model_count == 0,
         "overall_interpretation": str(payload.get("overall_interpretation", "") or ""),
         "pass_count": int(payload.get("stage_quality_pass_count", payload.get("pass_count", 0)) or 0),
         "total_count": int(payload.get("saved_anchor_count", len(rows)) or 0),
         "setup_contact_blocker_count": int(payload.get("setup_contact_blocker_count", 0) or 0),
         "setup_capture_blocker_count": int(payload.get("setup_capture_blocker_count", 0) or 0),
         "first_contact_blocker_count": int(payload.get("first_contact_blocker_count", 0) or 0),
+        "push_coast_blocker_count": int(payload.get("push_coast_blocker_count", 0) or 0),
         "invalid_geometry_count": int(payload.get("invalid_geometry_count", 0) or 0),
+        "invalid_model_provenance_count": invalid_model_count,
         "watch_count": int(payload.get("saved_anchor_pass_with_contact_watch_count", 0) or 0),
         "saved_anchors": [
             {
@@ -262,6 +267,8 @@ def summarize_stage_quality(path: Path) -> dict[str, Any]:
                 "delivery_pass": bool(row.get("delivery_pass", False)),
                 "quality_classification": str(row.get("quality_classification", "") or ""),
                 "quality_flags": row.get("quality_flags", []) if isinstance(row.get("quality_flags"), list) else [],
+                "model_provenance_valid": bool(row.get("model_provenance_valid", False)),
+                "model_provenance_reason": str(row.get("model_provenance_reason", "") or ""),
                 "pre_stage_yaw_travel_max_deg": row.get("pre_stage_yaw_travel_max_deg"),
                 "capture_entry_time_max_s": row.get("capture_entry_time_max_s"),
             }
@@ -430,6 +437,15 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         warnings.append("fetch_marker_geometry_mismatch")
     if model_provenance_invalid_seen:
         warnings.append("fetch_model_provenance_invalid")
+    if any(
+        int(item.get("model_provenance_invalid_count", 0) or 0) > 0
+        or (
+            item.get("model_provenance_valid") is False
+            and int(item.get("seeded_pass_count", 0) or 0) + int(item.get("seeded_fail_count", 0) or 0) > 0
+        )
+        for item in seeded_evidence
+    ):
+        warnings.append("seeded_model_provenance_invalid")
     if not video_ok:
         warnings.append("missing_or_tiny_required_mobile_video")
     if not onboard_camera_ok:
@@ -441,7 +457,11 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     stage_quality_green = bool(stage_quality_audits and all(item.get("green", False) for item in stage_quality_audits))
     stage_quality_blocker_seen = any(
         int(item.get("setup_contact_blocker_count", 0) or 0) > 0
+        or int(item.get("setup_capture_blocker_count", 0) or 0) > 0
+        or int(item.get("first_contact_blocker_count", 0) or 0) > 0
+        or int(item.get("push_coast_blocker_count", 0) or 0) > 0
         or int(item.get("invalid_geometry_count", 0) or 0) > 0
+        or int(item.get("invalid_model_provenance_count", 0) or 0) > 0
         for item in stage_quality_audits
     )
     stage_quality_watch_seen = any(int(item.get("watch_count", 0) or 0) > 0 for item in stage_quality_audits)
@@ -521,18 +541,24 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             lines.append("")
             lines.append("### Browser-Safe Onboard Camera")
             for video in onboard:
-                lines.append(f"- `{video.get('name', '')}`: `{video.get('url', '')}`")
+                name = str(video.get("name", "") or "")
+                url = str(video.get("url", "") or "")
+                lines.append(f"- [{name}]({url})" if url else f"- `{name}`")
         if external:
             lines.append("")
             lines.append("### Browser-Safe Context Views")
             for video in external:
-                lines.append(f"- `{video.get('name', '')}`: `{video.get('url', '')}`")
+                name = str(video.get("name", "") or "")
+                url = str(video.get("url", "") or "")
+                lines.append(f"- [{name}]({url})" if url else f"- `{name}`")
     else:
         lines.append("- none")
     lines.extend(["", "## All Video Artifacts"])
     if videos:
         for video in videos:
-            lines.append(f"- `{video.get('name', '')}`: `{video.get('url', '')}`")
+            name = str(video.get("name", "") or "")
+            url = str(video.get("url", "") or "")
+            lines.append(f"- [{name}]({url})" if url else f"- `{name}`")
     else:
         lines.append("- none")
     lines.extend(["", "## Planner Gates"])
@@ -542,6 +568,19 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"routes=`{gate.get('pass_count', 0)}/{gate.get('total_count', 0)}` "
             f"wrong_fetch=`{gate.get('wrong_fetch_dispatch_count', 0)}`"
         )
+    lines.extend(["", "## Seeded Evidence"])
+    seeded_rows = summary.get("seeded_evidence", []) if isinstance(summary.get("seeded_evidence"), list) else []
+    if seeded_rows:
+        for seeded in seeded_rows:
+            lines.append(
+                f"- `{seeded.get('campaign_id', '')}` "
+                f"pass=`{seeded.get('seeded_pass_count', 0)}/{seeded.get('seeded_fail_count', 0)}` "
+                f"model=`{seeded.get('model_provenance_valid', False)}` "
+                f"invalid_model_provenance=`{seeded.get('model_provenance_invalid_count', 0)}` "
+                f"interpretation=`{seeded.get('milestone_interpretation', '')}`"
+            )
+    else:
+        lines.append("- none")
     lines.extend(["", "## Stage Quality"])
     stage_audits = summary.get("stage_quality_audits", []) if isinstance(summary.get("stage_quality_audits"), list) else []
     if stage_audits:
@@ -550,6 +589,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 f"- `{audit.get('campaign_id', '')}` green=`{audit.get('green', False)}` "
                 f"pass=`{audit.get('pass_count', 0)}/{audit.get('total_count', 0)}` "
                 f"blockers=`{audit.get('setup_contact_blocker_count', 0)}` "
+                f"invalid_model_provenance=`{audit.get('invalid_model_provenance_count', 0)}` "
                 f"watch=`{audit.get('watch_count', 0)}` "
                 f"interpretation=`{audit.get('overall_interpretation', '')}`"
             )

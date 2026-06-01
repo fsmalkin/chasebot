@@ -133,6 +133,11 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
     assert raw_video["role"] == "onboard_camera"
     assert raw_video["browser_compatible"] is True
     assert summary["videos"][0]["url"].startswith("/artifacts/session/")
+    scorecard = tmp_path / "scorecard.md"
+    package.write_scorecard(scorecard, summary)
+    text = scorecard.read_text(encoding="utf-8")
+    assert "[raw_camera_browser.mp4](/artifacts/session/" in text
+    assert "`/artifacts/session/" not in text
 
 
 def test_visual_uat_package_warns_when_core_video_missing(tmp_path, monkeypatch):

@@ -1486,18 +1486,27 @@ def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path,
                         "family": "ai_push_coast_servo_v1",
                         "layout_id": "zero",
                         "pass": True,
+                        "model_provenance_valid": True,
+                        "model_provenance_reason": "calibrated_fetch_models",
+                        "target_model_classification": "calibrated_golf_ball",
                         "worst_closest_approach_distance_m": 0.21,
                     },
                     {
                         "family": "ai_push_coast_servo_v1",
                         "layout_id": "left05",
                         "pass": True,
+                        "model_provenance_valid": True,
+                        "model_provenance_reason": "calibrated_fetch_models",
+                        "target_model_classification": "calibrated_golf_ball",
                         "worst_closest_approach_distance_m": 0.18,
                     },
                     {
                         "family": "ai_push_coast_servo_v1",
                         "layout_id": "right05",
                         "pass": True,
+                        "model_provenance_valid": True,
+                        "model_provenance_reason": "calibrated_fetch_models",
+                        "target_model_classification": "calibrated_golf_ball",
                         "worst_closest_approach_distance_m": 0.19,
                     },
                 ],
@@ -1511,6 +1520,8 @@ def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path,
                 "non_repro_failure_count": 1,
                 "reproduced_failure_count": 0,
                 "guarded_live_candidate_count": 1,
+                "model_provenance_valid": True,
+                "model_provenance_invalid_count": 0,
                 "interpretation": "non_repro_watchlist_before_promotion",
             },
         },
@@ -1568,6 +1579,7 @@ def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path,
             "setup_capture_blocker_count": 1,
             "first_contact_blocker_count": 0,
             "invalid_geometry_count": 0,
+            "invalid_model_provenance_count": 0,
             "saved_anchor_pass_with_contact_watch_count": 2,
             "saved_anchors": [
                 {"layout": "zero", "pass": True, "delivery_pass": True, "quality_classification": "pass_with_capture_quality_watch"},
@@ -1596,6 +1608,50 @@ def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path,
     assert progress["latest_guarded_live_probe"]["pass"] is True
     assert progress["latest_guarded_live_probe"]["model_provenance_valid"] is True
     assert progress["recommended_next_action"] == "rerun_watchlist_before_guarded_live"
+
+
+def test_dashboard_fetch_progress_blocks_stale_model_provenance(tmp_path, monkeypatch):
+    session_root = tmp_path / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    controller = _make_controller(tmp_path)
+    controller._fetch_progress_cache = {}
+    controller._fetch_progress_cache_at = 0.0
+
+    evidence_dir = session_root / "fetch_evidence" / "fetch_seeded_gate_evidence_analyzer"
+    _write_json(
+        evidence_dir / "evidence_summary.json",
+        {
+            "type": "fetch_seeded_gate_evidence_analyzer",
+            "campaign_id": "stale_fetch_evidence",
+            "recommended_next_action": "rerun_watchlist_before_guarded_live",
+            "saved_anchor_context": {
+                "campaign_id": "saved_anchor_campaign",
+                "candidate_rows": [
+                    {
+                        "family": "ai_push_coast_servo_v1",
+                        "layout_id": "zero",
+                        "pass": True,
+                        "worst_closest_approach_distance_m": 0.21,
+                    },
+                ],
+            },
+            "seeded_shadow_gate": {
+                "campaign_id": "seeded_gate",
+                "mode": "shadow",
+                "pass_count": 1,
+                "fail_count": 0,
+            },
+        },
+    )
+
+    progress = controller.get_state()["fetch_progress"]
+
+    assert progress["status"] == "bad"
+    assert "lacks calibrated model provenance" in progress["headline"]
+    assert progress["saved_anchor"]["green"] is False
+    assert progress["saved_anchor"]["invalid_model_provenance_count"] == 1
+    assert progress["seeded_shadow_gate"]["model_provenance_valid"] is False
+    assert progress["seeded_shadow_gate"]["model_provenance_invalid_count"] == 1
 
 
 def test_browser_dashboard_promotes_golf_fetch_as_featured_demo():
