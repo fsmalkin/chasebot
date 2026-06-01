@@ -15,6 +15,18 @@ if str(SCRIPTS_DIR) not in sys.path:
 import gather_mission_repeatability_runner as repeatability_runner  # noqa: E402
 
 
+def test_dashboard_state_timeout_env_extends_default(monkeypatch):
+    monkeypatch.setenv("CHASECAR_DASHBOARD_STATE_TIMEOUT_S", "45")
+
+    assert repeatability_runner.dashboard_state_timeout_s(10.0) == 45.0
+
+
+def test_dashboard_state_timeout_ignores_invalid_env(monkeypatch):
+    monkeypatch.setenv("CHASECAR_DASHBOARD_STATE_TIMEOUT_S", "invalid")
+
+    assert repeatability_runner.dashboard_state_timeout_s(10.0) == 10.0
+
+
 def test_parse_args_allows_region_funnel_v1(monkeypatch):
     monkeypatch.setattr(
         repeatability_runner.sys,

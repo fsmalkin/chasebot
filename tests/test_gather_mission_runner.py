@@ -9423,6 +9423,116 @@ def test_ai_push_coast_nav2_probe_timeout_far_from_ball_fails_closed(tmp_path, m
     assert payload["ai_first_contact_confirmation"].get("deterministic_servo_attempted") is not True
 
 
+def test_ai_push_coast_guarded_terminal_correction_runs_after_nav2_abort(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_GUARDED_LIVE
+    runner.fetch_delivery_radius_m = 0.3
+    runner.args.poll_s = 0.0
+    target = runner.targets_by_id["ball_1"]
+    fetch_x = float(runner.zone.world_x)
+    fetch_y = float(runner.zone.world_y)
+    ball_samples = [
+        {"x": fetch_x - 0.52, "y": fetch_y, "z": 0.05},
+        {"x": fetch_x - 0.52, "y": fetch_y, "z": 0.05},
+        {"x": fetch_x - 0.520765, "y": fetch_y, "z": 0.05},
+        {"x": fetch_x - 0.45, "y": fetch_y, "z": 0.05},
+        {"x": fetch_x - 0.24, "y": fetch_y, "z": 0.05},
+    ]
+    control_calls = {"count": 0}
+    command_log: list[dict[str, object]] = []
+    dispatch_calls: list[dict[str, object]] = []
+
+    class FakePlan:
+        def to_dict(self):
+            return {
+                "active": True,
+                "reason": "follow_path_corridor_push",
+                "controller_id": "FollowPath",
+                "goal_checker_id": "general_goal_checker",
+                "path_poses": [
+                    {"kind": "start", "frame_id": "odom", "x": fetch_x - 0.8, "y": fetch_y, "yaw": 0.0},
+                    {"kind": "corridor_push_through", "frame_id": "odom", "x": fetch_x, "y": fetch_y, "yaw": 0.0},
+                ],
+                "trigger": {"push_through_m": gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M},
+            }
+
+    def fake_control_loop_state(session_id, target):
+        index = min(control_calls["count"], len(ball_samples) - 1)
+        control_calls["count"] += 1
+        ball_pose = ball_samples[index]
+        robot_pose = {"x": float(ball_pose["x"]) - 0.27, "y": fetch_y, "yaw": 0.0}
+        return {"compose_project": "chasecar_dashboard_terminal_correction"}, robot_pose, ball_pose
+
+    def fake_dispatch(**kwargs):
+        dispatch_calls.append(kwargs)
+        if kwargs.get("monitor", {}).get("success_on_motion_m") is not None:
+            return {
+                "dispatch_status": "monitor_success",
+                "accepted": True,
+                "success": True,
+                "timed_out": False,
+                "cancel_requested": True,
+                "monitor_cancel_reason": "success",
+                "monitor_sample": {
+                    "start_displacement_m": gather_runner.DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M,
+                    "delivery_distance_m": 0.52,
+                    "robot_ball_distance_m": 0.14,
+                    "lateral_error_m": 0.0,
+                },
+            }
+        return {
+            "dispatch_status": "goal_finished",
+            "accepted": True,
+            "success": False,
+            "timed_out": False,
+            "status_code": 6,
+            "status_text": "STATUS_ABORTED",
+            "error": "goal_status_6",
+            "monitor_sample": {
+                "start_displacement_m": 0.121,
+                "delivery_distance_m": 0.520765,
+                "robot_ball_distance_m": 0.12,
+                "lateral_error_m": 0.0,
+            },
+        }
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {"enabled": enabled, "linear_x": linear_x, "angular_z": angular_z, "mode": mode}
+        ),
+    )
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_push_plan", lambda *args, **kwargs: FakePlan())
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_contact_probe_plan", lambda *args, **kwargs: FakePlan())
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    state_history_path = tmp_path / "state_history.jsonl"
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-terminal-correction-after-nav2-abort",
+        target=target,
+        state_history_path=state_history_path,
+    )
+
+    history = [json.loads(line) for line in state_history_path.read_text(encoding="utf-8").splitlines()]
+    events = [item["event_type"] for item in history]
+    start_event = next(item for item in history if item["event_type"] == "ai_push_coast_terminal_correction_start")
+    assert passed is True
+    assert len(dispatch_calls) == 2
+    assert "ai_push_coast_terminal_correction_candidate" in events
+    assert "ai_push_coast_terminal_correction_start" in events
+    assert "ai_push_coast_terminal_correction_result" in events
+    assert any(item["enabled"] and item["mode"].startswith("object_fetch_to_pose") for item in command_log)
+    assert start_event["ai_push_coast_guard"]["accepted"] is True
+    assert start_event["ai_push_coast_shadow"]["input_digest"]["terminal_settled_after_nav2"] is True
+    assert payload["fetch_closest_approach_distance_m"] <= runner.fetch_delivery_radius_m
+
+
 def test_ai_push_coast_first_contact_servo_settle_does_not_block_corridor_push(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY

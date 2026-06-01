@@ -50,6 +50,16 @@ ALLOWED_FETCH_GATE_MODES = ("full_mission", "contact_ready")
 ALLOWED_AI_PUSH_COAST_MODES = ("shadow", "guarded_live")
 
 
+def dashboard_state_timeout_s(default_s: float) -> float:
+    raw_value = os.environ.get("CHASECAR_DASHBOARD_STATE_TIMEOUT_S", "").strip()
+    if not raw_value:
+        return max(float(default_s), 0.1)
+    try:
+        return max(float(default_s), float(raw_value), 0.1)
+    except ValueError:
+        return max(float(default_s), 0.1)
+
+
 def current_utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
@@ -101,7 +111,7 @@ def wait_for_dashboard(dashboard_url: str, timeout_s: float) -> None:
     deadline = time.monotonic() + max(timeout_s, 5.0)
     while time.monotonic() < deadline:
         try:
-            status, _ = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=5.0)
+            status, _ = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=dashboard_state_timeout_s(5.0))
             if status == 200:
                 return
         except Exception:
@@ -141,7 +151,7 @@ def wait_for_environment_ready(
     deadline = time.monotonic() + max(timeout_s, 30.0)
     last_state: dict[str, object] = {}
     while time.monotonic() < deadline:
-        status, current_state = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=10.0)
+        status, current_state = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
         if status == 200:
             last_state = current_state
             current_environment_state = str(current_state.get("environment_state", "") or "").strip().lower()
@@ -159,7 +169,7 @@ def wait_for_environment_ready(
 
 def ensure_environment_ready(dashboard_url: str, timeout_s: float, *, startup_payload: dict[str, object] | None = None) -> None:
     base_url = dashboard_url.rstrip("/")
-    status, state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+    status, state = http_json(f"{base_url}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
     if status != 200:
         raise RuntimeError("Unable to fetch dashboard state before gather repeatability run.")
     environment_state = str(state.get("environment_state", "") or "").strip().lower()
@@ -183,7 +193,7 @@ def wait_for_dashboard_slot(dashboard_url: str, timeout_s: float) -> None:
     last_state: dict[str, object] = {}
     while time.monotonic() < deadline:
         ensure_environment_ready(dashboard_url, timeout_s=min(max(timeout_s, 5.0), 30.0))
-        status, current_state = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=10.0)
+        status, current_state = http_json(f"{dashboard_url.rstrip('/')}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
         if status == 200:
             last_state = current_state
             environment_state = str(current_state.get("environment_state", "") or "").strip().lower()
@@ -1008,7 +1018,10 @@ def _fresh_dashboard_result_available(
 
 
 def run_dashboard_scenario_once(args: argparse.Namespace, *, run_index: int) -> tuple[dict[str, object], str]:
-    status, before_state = http_json(f"{args.dashboard_url.rstrip('/')}/api/state", timeout_s=10.0)
+    status, before_state = http_json(
+        f"{args.dashboard_url.rstrip('/')}/api/state",
+        timeout_s=dashboard_state_timeout_s(10.0),
+    )
     if status != 200:
         raise RuntimeError(f"Unable to fetch dashboard state before run {run_index}.")
     previous_session_id = str(before_state.get("session_id", "") or "")
@@ -1043,7 +1056,10 @@ def run_dashboard_scenario_once(args: argparse.Namespace, *, run_index: int) -> 
     deadline = time.monotonic() + max(args.scenario_timeout_s, 30.0)
     last_state: dict[str, object] = {}
     while time.monotonic() < deadline:
-        status, current_state = http_json(f"{args.dashboard_url.rstrip('/')}/api/state", timeout_s=10.0)
+        status, current_state = http_json(
+            f"{args.dashboard_url.rstrip('/')}/api/state",
+            timeout_s=dashboard_state_timeout_s(10.0),
+        )
         if status != 200:
             time.sleep(1.0)
             continue
@@ -1077,7 +1093,7 @@ def run_dashboard_scenario_once(args: argparse.Namespace, *, run_index: int) -> 
 def prepare_direct_environment(args: argparse.Namespace) -> dict[str, object]:
     base_url = args.dashboard_url.rstrip("/")
     payload = _environment_request_payload(args)
-    status, state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+    status, state = http_json(f"{base_url}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
     if status != 200:
         raise RuntimeError("Unable to fetch dashboard state before direct gather run.")
     environment_state = str(state.get("environment_state", "") or "").strip().lower()
@@ -1102,7 +1118,7 @@ def prepare_direct_environment(args: argparse.Namespace) -> dict[str, object]:
             timeout_s=max(args.timeout_s, 120.0),
             startup_payload=payload,
         )
-        status, ready_state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+        status, ready_state = http_json(f"{base_url}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
         if status != 200:
             raise RuntimeError("Unable to fetch dashboard state after direct gather environment start.")
         return ready_state
@@ -1116,14 +1132,14 @@ def prepare_direct_environment(args: argparse.Namespace) -> dict[str, object]:
         raise RuntimeError(f"Dashboard environment stop rejected before direct gather run: {stop_response}")
     deadline = time.monotonic() + 180.0
     while time.monotonic() < deadline:
-        status, current_state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+        status, current_state = http_json(f"{base_url}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
         if status == 200 and str(current_state.get("environment_state", "") or "").strip().lower() == "stopped":
             ensure_environment_ready(
                 args.dashboard_url,
                 timeout_s=max(args.timeout_s, 120.0),
                 startup_payload=payload,
             )
-            status, ready_state = http_json(f"{base_url}/api/state", timeout_s=10.0)
+            status, ready_state = http_json(f"{base_url}/api/state", timeout_s=dashboard_state_timeout_s(10.0))
             if status != 200:
                 raise RuntimeError("Unable to fetch dashboard state after restarting direct gather environment.")
             return ready_state

@@ -252,6 +252,131 @@ def test_visual_uat_package_requires_healthy_visual_confirmation(tmp_path, monke
     assert "no_healthy_visual_confirmation" in summary["warnings"]
 
 
+def test_visual_uat_package_accepts_fresher_world_stream_state(tmp_path, monkeypatch):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(package, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+    _stub_browser_video_probe(monkeypatch)
+
+    planner = session_root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
+    _write_json(
+        planner,
+        {
+            "campaign_id": "planner",
+            "pass": True,
+            "pass_count": 5,
+            "random_cases": 5,
+            "wrong_fetch_dispatch_count": 0,
+        },
+    )
+    mission = session_root / "mission" / "summary.json"
+    _write_json(
+        mission,
+        {
+            "campaign_id": "mission",
+            "fetch_to_pose_pass": True,
+            "pass": True,
+            "model_provenance": {"model_provenance_valid": True},
+        },
+    )
+    visual = session_root / "mission" / "visual"
+    visual.mkdir(parents=True)
+    (visual / "world_stream.mp4").write_bytes(b"w" * package.VIDEO_MIN_BYTES)
+    (visual / "topdown_telemetry_browser.mp4").write_bytes(b"t" * package.VIDEO_MIN_BYTES)
+    (visual / "raw_camera_browser.mp4").write_bytes(b"r" * package.VIDEO_MIN_BYTES)
+    _write_json(
+        visual / "world_stream_summary.json",
+        {"pass": False, "world_stream_degraded": True, "failure_class": "world_stream_no_recent_frames", "frame_count": 12},
+    )
+    _write_json(
+        visual / "world_stream_state.json",
+        {
+            "world_stream_ready": True,
+            "world_stream_renderable": True,
+            "world_stream_degraded": False,
+            "world_stream_transport_healthy": True,
+            "same_session_partition": True,
+            "frame_count": 30,
+            "frame_coverage_ratio": 0.8,
+        },
+    )
+
+    args = type(
+        "Args",
+        (),
+        {
+            "campaign_id": "uat",
+            "planner_summary": [str(planner)],
+            "seeded_evidence_summary": [],
+            "stage_quality_summary": [],
+            "mission_summary": [str(mission)],
+            "visual_dir": [str(visual)],
+        },
+    )()
+
+    summary = package.build_summary(args)
+
+    assert summary["pass"] is True
+    assert summary["visual_confirmation_seen"] is True
+    assert summary["local_fetch_visual_confirmed"] is True
+    assert summary["visual_summaries"][0]["world_stream_pass"] is True
+    assert summary["visual_summaries"][0]["world_stream_frame_count"] == 30
+    assert summary["visual_summaries"][0]["world_stream_failure_class"] == ""
+
+
+def test_visual_uat_package_uses_mission_verdict_session_id_for_visual_match(tmp_path, monkeypatch):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(package, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+    _stub_browser_video_probe(monkeypatch)
+
+    planner = session_root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
+    _write_json(planner, {"campaign_id": "planner", "pass": True, "pass_count": 5, "random_cases": 5})
+    mission = session_root / "campaign" / "gather_mission_repeatability" / "campaign_run_summary.json"
+    _write_json(
+        mission,
+        {
+            "campaign_id": "campaign",
+            "mission_objective": "fetch_to_pose",
+            "promotion_gate_pass": True,
+            "runs": [
+                {
+                    "mission_verdict": {
+                        "session_id": "actual_session",
+                        "fetch_to_pose_pass": True,
+                        "pass": True,
+                        "model_provenance": {"model_provenance_valid": True},
+                    }
+                }
+            ],
+        },
+    )
+    visual = session_root / "actual_session" / "visual"
+    visual.mkdir(parents=True)
+    (visual / "world_stream.mp4").write_bytes(b"w" * package.VIDEO_MIN_BYTES)
+    (visual / "topdown_telemetry_browser.mp4").write_bytes(b"t" * package.VIDEO_MIN_BYTES)
+    (visual / "raw_camera_browser.mp4").write_bytes(b"r" * package.VIDEO_MIN_BYTES)
+    _write_json(visual / "world_stream_summary.json", {"pass": True})
+
+    args = type(
+        "Args",
+        (),
+        {
+            "campaign_id": "uat",
+            "planner_summary": [str(planner)],
+            "seeded_evidence_summary": [],
+            "stage_quality_summary": [],
+            "mission_summary": [str(mission)],
+            "visual_dir": [str(visual)],
+        },
+    )()
+
+    summary = package.build_summary(args)
+
+    assert summary["missions"][0]["session_id"] == "actual_session"
+    assert summary["local_fetch_visual_confirmed"] is True
+
+
 def test_visual_uat_package_requires_same_session_visual_confirmation(tmp_path, monkeypatch):
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)

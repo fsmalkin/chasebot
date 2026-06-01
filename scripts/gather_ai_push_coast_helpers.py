@@ -28,6 +28,7 @@ AI_PUSH_COAST_MAX_TERMINAL_MISS_M = 0.55
 AI_PUSH_COAST_MAX_LATERAL_ERROR_M = 0.22
 AI_PUSH_COAST_MAX_SETUP_YAW_ERROR_DEG = 18.0
 AI_PUSH_COAST_PREDICTED_TERMINAL_GAIN_M = 0.22
+AI_PUSH_COAST_PREDICTED_TERMINAL_TOLERANCE_M = 0.015
 AI_PUSH_COAST_FLAG_STAGE_LABELS = {
     "pre_contact_lateral_error": "setup",
     "pre_contact_yaw_error": "setup",
@@ -187,6 +188,7 @@ def decide_ai_push_coast_handoff(
     distance_to_fetch_pose_m: float | None = None,
     closest_approach_distance_m: float | None = None,
     latest_still_s: float | None = None,
+    terminal_settled_after_nav2: bool = False,
     ball_moved_since_fetch: bool = False,
     approach_contact_metrics: dict[str, Any] | None = None,
     shot_outcome: dict[str, Any] | None = None,
@@ -228,6 +230,9 @@ def decide_ai_push_coast_handoff(
         "recenter_right",
         "abort_reaim",
     ]
+    terminal_settled = bool(terminal_settled_after_nav2) or (
+        latest_still_s is not None and float(latest_still_s) > 0.0
+    )
 
     if distance is None or not robot_pose or not ball_pose:
         maneuver_class = "abort_reaim"
@@ -245,7 +250,7 @@ def decide_ai_push_coast_handoff(
         lateral_signed = float(errors.get("robot_lateral_signed_m", 0.0) or 0.0)
         maneuver_class = "recenter_left" if lateral_signed < 0.0 else "recenter_right"
         abstain_reason = ""
-    elif bool(ball_moved_since_fetch) or (latest_still_s is not None and float(latest_still_s) > 0.0):
+    elif bool(ball_moved_since_fetch) or terminal_settled:
         maneuver_class = "terminal_repush"
         abstain_reason = ""
     else:
@@ -284,7 +289,7 @@ def decide_ai_push_coast_handoff(
         guard_reasons.append("nav2_not_attempted")
     if not bool(ball_moved_since_fetch):
         guard_reasons.append("object_motion_not_observed")
-    if latest_still_s is None or float(latest_still_s) <= 0.0:
+    if not terminal_settled:
         guard_reasons.append("ball_not_settled_for_terminal_correction")
     if "terminal_arrival" not in stage_labels:
         guard_reasons.append("not_terminal_arrival_stage")
@@ -295,7 +300,7 @@ def decide_ai_push_coast_handoff(
         guard_reasons.append("missing_distance_to_fetch_pose")
     elif distance > radius + AI_PUSH_COAST_MAX_TERMINAL_MISS_M:
         guard_reasons.append("terminal_miss_too_large")
-    if predicted_closest is None or predicted_closest > radius:
+    if predicted_closest is None or predicted_closest > radius + AI_PUSH_COAST_PREDICTED_TERMINAL_TOLERANCE_M:
         guard_reasons.append("predicted_terminal_correction_not_sufficient")
     if float(errors.get("robot_lateral_error_m", 0.0) or 0.0) > AI_PUSH_COAST_MAX_LATERAL_ERROR_M:
         guard_reasons.append("robot_lateral_error_too_large")
@@ -332,6 +337,7 @@ def decide_ai_push_coast_handoff(
         "deterministic_routine": "object_centric_fetch_to_pose" if accepted else "",
         "max_terminal_miss_m": round(float(AI_PUSH_COAST_MAX_TERMINAL_MISS_M), 6),
         "max_lateral_error_m": round(float(AI_PUSH_COAST_MAX_LATERAL_ERROR_M), 6),
+        "predicted_terminal_tolerance_m": round(float(AI_PUSH_COAST_PREDICTED_TERMINAL_TOLERANCE_M), 6),
         "terminal_live_only": True,
     }
     shadow = {
@@ -342,6 +348,7 @@ def decide_ai_push_coast_handoff(
             "terminal_correction_attempted": bool(terminal_correction_attempted),
             "ball_moved_since_fetch": bool(ball_moved_since_fetch),
             "latest_still_s": round(float(latest_still_s), 6) if latest_still_s is not None else None,
+            "terminal_settled_after_nav2": bool(terminal_settled_after_nav2),
             "stage_labels": list(stage_classification.get("stage_labels", []) or []),
             "primary_stage": stage_classification.get("primary_stage", "unknown"),
             **trajectory_summary,

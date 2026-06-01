@@ -9138,6 +9138,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         ai_first_contact_confirmation_servo_active_until: float | None = None
         ai_terminal_correction_attempted = False
         ai_terminal_correction_active_until: float | None = None
+        ai_terminal_correction_start_distance_m: float | None = None
+        ai_terminal_correction_result_emitted = False
         closest_distance_m: float | None = None
         closest_pose: dict[str, Any] = {}
         still_started_monotonic: float | None = None
@@ -9164,6 +9166,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             distance_to_fetch_pose_m: float | None,
             latest_still_s: float | None,
             terminal_correction_attempted: bool,
+            terminal_settled_after_nav2: bool = False,
         ) -> dict[str, Any]:
             return decide_ai_push_coast_handoff(
                 robot_pose=robot_pose,
@@ -9176,6 +9179,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 distance_to_fetch_pose_m=distance_to_fetch_pose_m,
                 closest_approach_distance_m=closest_distance_m,
                 latest_still_s=latest_still_s,
+                terminal_settled_after_nav2=terminal_settled_after_nav2,
                 ball_moved_since_fetch=ball_moved_since_fetch,
                 mode=self.ai_push_coast_mode,
             )
@@ -9447,6 +9451,33 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             latest_still_s=latest_still_s,
                             terminal_correction_attempted=ai_terminal_correction_attempted,
                         )
+                    if ai_terminal_correction_attempted and not ai_terminal_correction_result_emitted:
+                        ai_terminal_correction_result_emitted = True
+                        append_jsonl(
+                            state_history_path,
+                            {
+                                "generated_utc": utc_now(),
+                                "event_type": "ai_push_coast_terminal_correction_result",
+                                "phase": "fetch_to_pose",
+                                "attempt": int(attempt_index),
+                                "attempt_kind": str(attempt_kind),
+                                "target_id": target.id,
+                                "result": "success",
+                                "robot_pose": robot_pose,
+                                "ball_pose": ball_pose,
+                                "fetch_pose_world": fetch_pose_world,
+                                "pre_correction_distance_m": (
+                                    round(float(ai_terminal_correction_start_distance_m), 6)
+                                    if ai_terminal_correction_start_distance_m is not None
+                                    else None
+                                ),
+                                "post_correction_distance_m": round(float(distance_to_fetch_pose_m), 6),
+                                "closest_approach_distance_m": round(float(closest_distance_m), 6),
+                                "ai_push_coast_mode": self.ai_push_coast_mode,
+                                **latest_ai_push_coast,
+                                "controller_family": self.gather_control_family,
+                            },
+                        )
                     self._set_manual_drive(
                         False,
                         mode="fetch_to_pose_complete",
@@ -9541,6 +9572,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         and bool(guard.get("accepted", False))
                     ):
                         ai_terminal_correction_attempted = True
+                        ai_terminal_correction_start_distance_m = float(distance_to_fetch_pose_m)
                         ai_terminal_correction_active_until = min(
                             deadline,
                             now_monotonic + DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S,
@@ -9560,6 +9592,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                 "robot_pose": robot_pose,
                                 "ball_pose": ball_pose,
                                 "fetch_pose_world": fetch_pose_world,
+                                "ai_terminal_correction_trigger": "settled_stop_short",
                                 "distance_to_fetch_pose_m": round(float(distance_to_fetch_pose_m), 6),
                                 "closest_approach_distance_m": (
                                     round(float(closest_distance_m), 6)
@@ -9575,7 +9608,41 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             },
                         )
                     elif not ai_terminal_correction_active:
-                        if not failure_reason.startswith("nav2_corridor_push_"):
+                        if ai_terminal_correction_attempted:
+                            failure_reason = "guarded_terminal_correction_missed_delivery_radius"
+                            if not ai_terminal_correction_result_emitted:
+                                ai_terminal_correction_result_emitted = True
+                                append_jsonl(
+                                    state_history_path,
+                                    {
+                                        "generated_utc": utc_now(),
+                                        "event_type": "ai_push_coast_terminal_correction_result",
+                                        "phase": "fetch_to_pose",
+                                        "attempt": int(attempt_index),
+                                        "attempt_kind": str(attempt_kind),
+                                        "target_id": target.id,
+                                        "result": "failed",
+                                        "failure_reason": failure_reason,
+                                        "robot_pose": robot_pose,
+                                        "ball_pose": ball_pose,
+                                        "fetch_pose_world": fetch_pose_world,
+                                        "pre_correction_distance_m": (
+                                            round(float(ai_terminal_correction_start_distance_m), 6)
+                                            if ai_terminal_correction_start_distance_m is not None
+                                            else None
+                                        ),
+                                        "post_correction_distance_m": round(float(distance_to_fetch_pose_m), 6),
+                                        "closest_approach_distance_m": (
+                                            round(float(closest_distance_m), 6)
+                                            if closest_distance_m is not None
+                                            else None
+                                        ),
+                                        "ai_push_coast_mode": self.ai_push_coast_mode,
+                                        **latest_ai_push_coast,
+                                        "controller_family": self.gather_control_family,
+                                    },
+                                )
+                        elif not failure_reason.startswith("nav2_corridor_push_"):
                             failure_reason = "fetch_to_pose_ball_stopped_short"
                         break
                 elif not ai_terminal_correction_active:
@@ -9954,6 +10021,126 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 )
                 if not bool(follow_path_result.get("success", False)):
                     failure_reason = _nav2_corridor_push_failure_reason(follow_path_result)
+                    _post_dashboard_state, post_robot_pose, post_ball_pose = self._control_loop_state(
+                        session_id=session_id,
+                        target=target,
+                    )
+                    if post_robot_pose:
+                        robot_pose = post_robot_pose
+                    if post_ball_pose:
+                        ball_pose = post_ball_pose
+                        latest_ball_pose = dict(post_ball_pose)
+                        self._update_prior_from_ball_pose(target.id, post_ball_pose)
+                        distance_to_fetch_pose_m = _distance_to_fetch_pose(post_ball_pose)
+                        latest_ball_displacement_m = (
+                            pose_delta_m(fetch_start_ball_pose, post_ball_pose)
+                            if fetch_start_ball_pose is not None
+                            else None
+                        )
+                        if latest_ball_displacement_m is not None and (
+                            latest_ball_displacement_m > DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M
+                        ):
+                            ball_moved_since_fetch = True
+                        if distance_to_fetch_pose_m is not None:
+                            if closest_distance_m is None or distance_to_fetch_pose_m < closest_distance_m:
+                                closest_distance_m = float(distance_to_fetch_pose_m)
+                                closest_pose = dict(post_ball_pose)
+                    if nav2_follow_path_object_motion_observed(follow_path_result):
+                        ball_moved_since_fetch = True
+                    monitor_cancel_reason = clean_text(follow_path_result.get("monitor_cancel_reason"))
+                    if not monitor_cancel_reason:
+                        monitor_cancel_reason = clean_text(nav2_corridor_push_diagnostics.get("monitor_cancel_reason"))
+                    terminal_action_abort = clean_text(follow_path_result.get("dispatch_status")) == "goal_finished"
+                    terminal_guard_allowed = (
+                        self.gather_control_family == AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+                        and self.ai_push_coast_mode == AI_PUSH_COAST_MODE_GUARDED_LIVE
+                        and terminal_action_abort
+                        and bool(ball_moved_since_fetch)
+                        and not ai_terminal_correction_attempted
+                        and monitor_cancel_reason not in {"ball_escape", "unsafe_drift", "stale_state"}
+                        and distance_to_fetch_pose_m is not None
+                        and distance_to_fetch_pose_m > float(self.fetch_delivery_radius_m)
+                        and robot_pose
+                        and ball_pose
+                    )
+                    if terminal_guard_allowed:
+                        latest_ai_push_coast = _ai_push_coast_decision(
+                            robot_pose=robot_pose,
+                            ball_pose=ball_pose,
+                            distance_to_fetch_pose_m=distance_to_fetch_pose_m,
+                            latest_still_s=latest_still_s,
+                            terminal_correction_attempted=ai_terminal_correction_attempted,
+                            terminal_settled_after_nav2=True,
+                        )
+                        guard = latest_ai_push_coast.get("ai_push_coast_guard", {})
+                        append_jsonl(
+                            state_history_path,
+                            {
+                                "generated_utc": utc_now(),
+                                "event_type": "ai_push_coast_terminal_correction_candidate",
+                                "phase": "fetch_to_pose",
+                                "attempt": int(attempt_index),
+                                "attempt_kind": str(attempt_kind),
+                                "target_id": target.id,
+                                "robot_pose": robot_pose,
+                                "ball_pose": ball_pose,
+                                "fetch_pose_world": fetch_pose_world,
+                                "distance_to_fetch_pose_m": round(float(distance_to_fetch_pose_m), 6),
+                                "closest_approach_distance_m": (
+                                    round(float(closest_distance_m), 6)
+                                    if closest_distance_m is not None
+                                    else None
+                                ),
+                                "nav2_follow_path_result": follow_path_result,
+                                "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                                "original_failure_reason": failure_reason,
+                                "terminal_settled_after_nav2": True,
+                                "ai_push_coast_mode": self.ai_push_coast_mode,
+                                **latest_ai_push_coast,
+                                "controller_family": self.gather_control_family,
+                            },
+                        )
+                        if isinstance(guard, dict) and bool(guard.get("accepted", False)):
+                            ai_terminal_correction_attempted = True
+                            ai_terminal_correction_start_distance_m = float(distance_to_fetch_pose_m)
+                            ai_terminal_correction_active_until = min(
+                                deadline,
+                                time.monotonic() + DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S,
+                            )
+                            ai_terminal_correction_active = True
+                            still_started_monotonic = None
+                            latest_still_s = None
+                            append_jsonl(
+                                state_history_path,
+                                {
+                                    "generated_utc": utc_now(),
+                                    "event_type": "ai_push_coast_terminal_correction_start",
+                                    "phase": "fetch_to_pose",
+                                    "attempt": int(attempt_index),
+                                    "attempt_kind": str(attempt_kind),
+                                    "target_id": target.id,
+                                    "robot_pose": robot_pose,
+                                    "ball_pose": ball_pose,
+                                    "fetch_pose_world": fetch_pose_world,
+                                    "ai_terminal_correction_trigger": "nav2_action_abort_stop_short",
+                                    "distance_to_fetch_pose_m": round(float(distance_to_fetch_pose_m), 6),
+                                    "closest_approach_distance_m": (
+                                        round(float(closest_distance_m), 6)
+                                        if closest_distance_m is not None
+                                        else None
+                                    ),
+                                    "ai_push_coast_mode": self.ai_push_coast_mode,
+                                    "ai_terminal_correction_window_s": round(
+                                        float(DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S),
+                                        6,
+                                    ),
+                                    **latest_ai_push_coast,
+                                    "controller_family": self.gather_control_family,
+                                },
+                            )
+                            previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                            time.sleep(self.args.poll_s)
+                            continue
                     previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
                     break
                 if (
@@ -10197,6 +10384,43 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
             time.sleep(self.args.poll_s)
 
+        if ai_terminal_correction_attempted and not ai_terminal_correction_result_emitted:
+            if failure_reason == "fetch_to_pose_timeout":
+                failure_reason = "guarded_terminal_correction_missed_delivery_radius"
+            ai_terminal_correction_result_emitted = True
+            append_jsonl(
+                state_history_path,
+                {
+                    "generated_utc": utc_now(),
+                    "event_type": "ai_push_coast_terminal_correction_result",
+                    "phase": "fetch_to_pose",
+                    "attempt": int(attempt_index),
+                    "attempt_kind": str(attempt_kind),
+                    "target_id": target.id,
+                    "result": "failed",
+                    "failure_reason": failure_reason,
+                    "final_ball_pose": latest_ball_pose,
+                    "fetch_pose_world": fetch_pose_world,
+                    "pre_correction_distance_m": (
+                        round(float(ai_terminal_correction_start_distance_m), 6)
+                        if ai_terminal_correction_start_distance_m is not None
+                        else None
+                    ),
+                    "post_correction_distance_m": (
+                        round(float(distance_to_fetch_pose_m), 6)
+                        if distance_to_fetch_pose_m is not None
+                        else None
+                    ),
+                    "closest_approach_distance_m": (
+                        round(float(closest_distance_m), 6)
+                        if closest_distance_m is not None
+                        else None
+                    ),
+                    "ai_push_coast_mode": self.ai_push_coast_mode,
+                    **latest_ai_push_coast,
+                    "controller_family": self.gather_control_family,
+                },
+            )
         self._set_manual_drive(False, mode=failure_reason, rationale="Fetch-to-pose observation budget ended.")
         return False, {
             "failure_reason": failure_reason,

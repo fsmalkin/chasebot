@@ -381,9 +381,12 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         or first_run.get("fetch_to_pose_pass", False)
     )
     fetch_pass = bool(raw_fetch_pass and geometry_ok and provenance_ok)
+    session_id = str(
+        mission_verdict.get("session_id", first_run.get("session_id", payload.get("session_id", session_id_for_path(path)))) or ""
+    )
     return {
         "campaign_id": str(payload.get("campaign_id", "") or ""),
-        "session_id": session_id_for_path(path),
+        "session_id": session_id,
         "path": artifact_display_path(path),
         "pass": bool(pass_flag and geometry_ok and provenance_ok),
         "fetch_to_pose_pass": fetch_pass,
@@ -411,8 +414,19 @@ def summarize_mission(path: Path) -> dict[str, Any]:
 def summarize_visual_dir(path: Path) -> dict[str, Any]:
     visual_summary = read_json(path / "visual_demo_summary.json")
     world_summary = read_json(path / "world_stream_summary.json")
+    world_state = read_json(path / "world_stream_state.json")
     visual_pass = bool(visual_summary.get("pass", False))
-    world_pass = bool(world_summary.get("pass", False))
+    state_frame_count = int(world_state.get("frame_count", 0) or 0)
+    summary_frame_count = int(world_summary.get("frame_count", 0) or 0)
+    state_world_pass = bool(
+        world_state.get("world_stream_ready", False)
+        and world_state.get("world_stream_renderable", False)
+        and world_state.get("same_session_partition", True)
+    )
+    world_source = world_summary
+    if state_world_pass and state_frame_count >= summary_frame_count:
+        world_source = {**world_summary, **world_state, "pass": True, "failure_class": ""}
+    world_pass = bool(world_summary.get("pass", False) or state_world_pass)
     return {
         "session_id": session_id_for_path(path),
         "path": artifact_display_path(path),
@@ -426,11 +440,11 @@ def summarize_visual_dir(path: Path) -> dict[str, Any]:
         "target_visible_ratio": visual_summary.get("target_visible_ratio"),
         "raw_frame_count": int(visual_summary.get("raw_frame_count", 0) or 0),
         "telemetry_frame_count": int(visual_summary.get("telemetry_frame_count", 0) or 0),
-        "world_stream_degraded": bool(world_summary.get("world_stream_degraded", False)),
-        "world_stream_transport_healthy": bool(world_summary.get("world_stream_transport_healthy", False)),
-        "world_stream_failure_class": str(world_summary.get("failure_class", "") or ""),
-        "world_stream_frame_coverage_ratio": world_summary.get("frame_coverage_ratio"),
-        "world_stream_frame_count": int(world_summary.get("frame_count", 0) or 0),
+        "world_stream_degraded": bool(world_source.get("world_stream_degraded", False)),
+        "world_stream_transport_healthy": bool(world_source.get("world_stream_transport_healthy", False)),
+        "world_stream_failure_class": str(world_source.get("failure_class", "") or ""),
+        "world_stream_frame_coverage_ratio": world_source.get("frame_coverage_ratio"),
+        "world_stream_frame_count": int(world_source.get("frame_count", 0) or 0),
     }
 
 

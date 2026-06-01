@@ -53,6 +53,34 @@ def test_guarded_live_terminal_repush_accepts_bounded_stop_short():
     assert "terminal_arrival" in decision["ai_push_coast_shadow"]["input_digest"]["stage_labels"]
 
 
+def test_guarded_live_terminal_repush_accepts_nav2_settled_near_contract_miss():
+    decision = decide_ai_push_coast_handoff(
+        robot_pose={"x": 0.43, "y": 0.0, "yaw": 0.0},
+        ball_pose={"x": 0.599235, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.12, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+        nav2_corridor_push={
+            "dispatch_status": "goal_finished",
+            "success": False,
+            "first_contact_confirmed": True,
+        },
+        nav2_attempted=True,
+        terminal_correction_attempted=False,
+        distance_to_fetch_pose_m=0.520765,
+        closest_approach_distance_m=0.520765,
+        latest_still_s=None,
+        terminal_settled_after_nav2=True,
+        ball_moved_since_fetch=True,
+        mode="guarded_live",
+    )
+
+    assert decision["ai_push_coast_proposal"]["maneuver_class"] == "terminal_repush"
+    assert decision["ai_push_coast_guard"]["accepted"] is True
+    assert "ball_not_settled_for_terminal_correction" not in decision["ai_push_coast_guard"]["reasons"]
+    assert "predicted_terminal_correction_not_sufficient" not in decision["ai_push_coast_guard"]["reasons"]
+    assert decision["ai_push_coast_shadow"]["input_digest"]["terminal_settled_after_nav2"] is True
+
+
 def test_guarded_live_vetoes_second_terminal_correction():
     decision = decide_ai_push_coast_handoff(
         robot_pose={"x": 0.45, "y": 0.0, "yaw": 0.0},
