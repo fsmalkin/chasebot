@@ -509,6 +509,16 @@ def test_get_state_includes_latest_visual_uat_package(monkeypatch, tmp_path):
                     "name": "world_stream.mp4",
                     "path": "artifacts/session/uat/visual/world_stream.mp4",
                     "url": "/artifacts/session/uat/visual/world_stream.mp4",
+                    "browser_compatible": True,
+                    "browser_playable": True,
+                },
+                {
+                    "name": "raw_camera.mp4",
+                    "path": "artifacts/session/uat/visual/raw_camera.mp4",
+                    "url": "",
+                    "browser_compatible": False,
+                    "browser_playable": False,
+                    "validation_error": "moov_atom_not_found",
                 }
             ],
         },
@@ -520,6 +530,7 @@ def test_get_state_includes_latest_visual_uat_package(monkeypatch, tmp_path):
     assert state["visual_uat_package"]["pass"] is True
     assert state["visual_uat_package"]["fetch_model_provenance_invalid_seen"] is False
     assert state["visual_uat_package"]["videos"][0]["url"] == "/artifacts/session/uat/visual/world_stream.mp4"
+    assert state["visual_uat_package"]["videos"][1]["url"] == ""
 
 
 def test_idle_shutdown_operator_activity_resets_idle_timer(monkeypatch, tmp_path):

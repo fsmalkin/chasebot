@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import subprocess
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
@@ -89,6 +90,83 @@ def artifact_url(path: Path) -> str:
     except ValueError:
         return ""
     return "/artifacts/session/" + rel.as_posix()
+
+
+def compact_validation_error(value: Any) -> str:
+    return " ".join(str(value or "").strip().split())[:320]
+
+
+def inspect_video_file(path: Path) -> dict[str, Any]:
+    size_bytes = int(path.stat().st_size) if path.is_file() else 0
+    result: dict[str, Any] = {
+        "size_bytes": size_bytes,
+        "ffprobe_valid": False,
+        "browser_playable": False,
+        "codec_name": "",
+        "pix_fmt": "",
+        "duration_s": 0.0,
+        "validation_error": "",
+    }
+    if size_bytes < VIDEO_MIN_BYTES:
+        result["validation_error"] = "video_missing_or_tiny"
+        return result
+    command = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=codec_name,pix_fmt,width,height",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "json",
+        str(path),
+    ]
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=20, check=False)
+    except FileNotFoundError:
+        result["validation_error"] = "ffprobe_not_found"
+        return result
+    except subprocess.TimeoutExpired:
+        result["validation_error"] = "ffprobe_timeout"
+        return result
+    if completed.returncode != 0:
+        result["validation_error"] = compact_validation_error(
+            completed.stderr or completed.stdout or f"ffprobe_exit_{completed.returncode}"
+        )
+        return result
+    try:
+        payload = json.loads(completed.stdout or "{}")
+    except json.JSONDecodeError:
+        result["validation_error"] = "ffprobe_invalid_json"
+        return result
+    streams = payload.get("streams", [])
+    stream = streams[0] if streams and isinstance(streams[0], dict) else {}
+    if not stream:
+        result["validation_error"] = "ffprobe_no_video_stream"
+        return result
+    codec = str(stream.get("codec_name", "") or "")
+    pix_fmt = str(stream.get("pix_fmt", "") or "")
+    try:
+        duration_s = float((payload.get("format", {}) or {}).get("duration", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        duration_s = 0.0
+    result.update(
+        {
+            "ffprobe_valid": duration_s > 0.0,
+            "browser_playable": bool(codec == "h264" and pix_fmt == "yuv420p" and duration_s > 0.0),
+            "codec_name": codec,
+            "pix_fmt": pix_fmt,
+            "duration_s": round(duration_s, 6),
+        }
+    )
+    if not result["ffprobe_valid"]:
+        result["validation_error"] = "ffprobe_invalid_duration"
+    elif not result["browser_playable"]:
+        result["validation_error"] = f"not_browser_h264_yuv420p:codec={codec}:pix_fmt={pix_fmt}"
+    return result
 
 
 def finite_float(value: Any) -> float | None:
@@ -367,15 +445,24 @@ def discover_videos(visual_dirs: list[Path]) -> list[dict[str, Any]]:
             if path in seen or not path.is_file():
                 continue
             seen.add(path)
+            probe = inspect_video_file(path)
+            browser_compatible = name in BROWSER_COMPATIBLE_VIDEO_NAMES
+            browser_playable = bool(browser_compatible and probe.get("browser_playable", False))
             videos.append(
                 {
                     "name": name,
                     "role": "onboard_camera" if name in ONBOARD_VIDEO_NAMES else "external_context",
-                    "browser_compatible": name in BROWSER_COMPATIBLE_VIDEO_NAMES,
+                    "browser_compatible": browser_compatible,
+                    "browser_playable": browser_playable,
+                    "ffprobe_valid": bool(probe.get("ffprobe_valid", False)),
+                    "codec_name": str(probe.get("codec_name", "") or ""),
+                    "pix_fmt": str(probe.get("pix_fmt", "") or ""),
+                    "duration_s": probe.get("duration_s", 0.0),
+                    "validation_error": str(probe.get("validation_error", "") or ""),
                     "path": artifact_display_path(path),
-                    "url": artifact_url(path),
-                    "size_bytes": int(path.stat().st_size),
-                    "playable_candidate": int(path.stat().st_size) >= VIDEO_MIN_BYTES,
+                    "url": artifact_url(path) if browser_playable else "",
+                    "size_bytes": int(probe.get("size_bytes", path.stat().st_size) or 0),
+                    "playable_candidate": browser_playable,
                 }
             )
     return videos
@@ -423,7 +510,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     playable_core = {
         video["name"]
         for video in videos
-        if video.get("url") and video.get("playable_candidate") and video.get("browser_compatible")
+        if video.get("url") and video.get("playable_candidate") and video.get("browser_compatible") and video.get("browser_playable")
     }
     onboard_camera_ok = "raw_camera_browser.mp4" in playable_core
     video_ok = REQUIRED_MOBILE_VIDEO_NAMES.issubset(playable_core)
@@ -530,12 +617,12 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         onboard = [
             video
             for video in videos
-            if video.get("role") == "onboard_camera" and video.get("browser_compatible")
+            if video.get("role") == "onboard_camera" and video.get("browser_compatible") and video.get("browser_playable")
         ]
         external = [
             video
             for video in videos
-            if video.get("role") != "onboard_camera" and video.get("browser_compatible")
+            if video.get("role") != "onboard_camera" and video.get("browser_compatible") and video.get("browser_playable")
         ]
         if onboard:
             lines.append("")
@@ -558,7 +645,13 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         for video in videos:
             name = str(video.get("name", "") or "")
             url = str(video.get("url", "") or "")
-            lines.append(f"- [{name}]({url})" if url else f"- `{name}`")
+            validation = str(video.get("validation_error", "") or "")
+            if url:
+                lines.append(f"- [{name}]({url})")
+            elif validation:
+                lines.append(f"- `{name}` validation=`{validation}`")
+            else:
+                lines.append(f"- `{name}`")
     else:
         lines.append("- none")
     lines.extend(["", "## Planner Gates"])

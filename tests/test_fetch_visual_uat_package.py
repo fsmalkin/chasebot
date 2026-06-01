@@ -13,10 +13,26 @@ def _write_json(path: Path, payload: dict) -> None:
     package.write_json(path, payload)
 
 
+def _stub_browser_video_probe(monkeypatch):
+    def _probe(path: Path) -> dict:
+        return {
+            "size_bytes": path.stat().st_size if path.exists() else 0,
+            "ffprobe_valid": True,
+            "browser_playable": True,
+            "codec_name": "h264",
+            "pix_fmt": "yuv420p",
+            "duration_s": 1.0,
+            "validation_error": "",
+        }
+
+    monkeypatch.setattr(package, "inspect_video_file", _probe)
+
+
 def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)
     monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+    _stub_browser_video_probe(monkeypatch)
 
     planner = session_root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
     _write_json(
@@ -186,6 +202,7 @@ def test_visual_uat_package_requires_healthy_visual_confirmation(tmp_path, monke
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)
     monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+    _stub_browser_video_probe(monkeypatch)
 
     planner = session_root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
     _write_json(
@@ -239,6 +256,7 @@ def test_visual_uat_package_requires_same_session_visual_confirmation(tmp_path, 
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)
     monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+    _stub_browser_video_probe(monkeypatch)
 
     planner = session_root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
     _write_json(
@@ -302,6 +320,7 @@ def test_visual_uat_package_rejects_fetch_marker_geometry_mismatch(tmp_path, mon
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)
     monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+    _stub_browser_video_probe(monkeypatch)
 
     planner = session_root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
     _write_json(
@@ -358,3 +377,39 @@ def test_visual_uat_package_rejects_fetch_marker_geometry_mismatch(tmp_path, mon
     assert summary["fetch_marker_geometry_mismatch_seen"] is True
     assert "fetch_marker_geometry_mismatch" in summary["warnings"]
     assert summary["missions"][0]["geometry_consistency"]["reason"] == "center_mismatch"
+
+
+def test_visual_uat_package_withholds_invalid_browser_video_links(tmp_path, monkeypatch):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(package, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+
+    def _probe(path: Path) -> dict:
+        valid = path.name == "world_stream.mp4"
+        return {
+            "size_bytes": path.stat().st_size,
+            "ffprobe_valid": valid,
+            "browser_playable": valid,
+            "codec_name": "h264" if valid else "",
+            "pix_fmt": "yuv420p" if valid else "",
+            "duration_s": 1.0 if valid else 0.0,
+            "validation_error": "" if valid else "moov_atom_not_found",
+        }
+
+    monkeypatch.setattr(package, "inspect_video_file", _probe)
+
+    visual = session_root / "mission" / "visual"
+    visual.mkdir(parents=True)
+    (visual / "world_stream.mp4").write_bytes(b"w" * package.VIDEO_MIN_BYTES)
+    (visual / "topdown_telemetry_browser.mp4").write_bytes(b"t" * package.VIDEO_MIN_BYTES)
+    (visual / "raw_camera_browser.mp4").write_bytes(b"r" * package.VIDEO_MIN_BYTES)
+
+    videos = package.discover_videos([visual])
+
+    raw_video = next(video for video in videos if video["name"] == "raw_camera_browser.mp4")
+    world_video = next(video for video in videos if video["name"] == "world_stream.mp4")
+    assert raw_video["browser_playable"] is False
+    assert raw_video["url"] == ""
+    assert raw_video["validation_error"] == "moov_atom_not_found"
+    assert world_video["browser_playable"] is True
+    assert world_video["url"].startswith("/artifacts/session/")

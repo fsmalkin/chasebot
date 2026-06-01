@@ -1927,7 +1927,13 @@ class DashboardController:
             if not isinstance(video, dict):
                 continue
             item = dict(video)
-            if not item.get("url") and item.get("path"):
+            can_publish_video_url = bool(
+                item.get("browser_playable", item.get("playable_candidate", False))
+                and item.get("browser_compatible", False)
+            )
+            if not can_publish_video_url:
+                item["url"] = ""
+            elif not item.get("url") and item.get("path"):
                 item["url"] = self._artifact_url(REPO_ROOT / str(item.get("path", "")))
             videos.append(item)
         return {
