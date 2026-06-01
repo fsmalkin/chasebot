@@ -563,8 +563,9 @@ off at `robot_ball_distance_m=0.195671`, the servo confirmed `0.046811m` ball
 motion, and the corridor push completed with `monitor_success`. The roadmap
 baseline is now staged local fetch: planner-approved local case, Nav2 corridor
 approach, contact-buffer monitor, deterministic first-contact servo, Nav2
-corridor push, delivery monitor. The next milestone step is corrected
-`zero`/`left05`/`right05` one-run, then saved-layout `3/3`.
+corridor push, delivery monitor. The next milestone step is a broad stage-owner
+comparison, then the selected targeted repair and corrected
+`zero`/`left05`/`right05` one-run.
 
 Later June 1 saved-anchor requalification refined that sequence. The planner
 handoff gate
@@ -577,8 +578,12 @@ and
 `artifacts/session/live_contact_buffer_saved_anchor_right05_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`.
 The audit
 `artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
-classifies this as setup/capture, so repeatability, seeded generalization, and
-guarded-live terminal correction wait behind right-offset setup/capture repair.
+classifies this as setup/capture. The roadmap now inserts a broad stage-owner
+comparison before right-offset repair: current staged Nav2/contact-buffer
+behavior, May 27 object-centric fetch, Nav2 corridor-push, corrected direct
+`right05`, and prior acquisition or goal-side setup evidence. Repeatability,
+seeded generalization, and guarded-live terminal correction wait for that
+comparison.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`

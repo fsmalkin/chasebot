@@ -864,8 +864,12 @@ Live gates:
      `zero` and `left05` passed one-run; `right05` failed at
      `capture_entry_timeout`; audit
      `artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
-     classifies the blocker as setup/capture. Next live work is right-offset
-     setup/capture repair before repeatability.
+     classifies the blocker as setup/capture. Next live work is a broad
+     stage-owner comparison before right-offset repair. Score current staged
+     baseline, May 27 object-centric fetch, Nav2 corridor-push, corrected
+     direct `right05`, and prior acquisition or goal-side setup evidence by
+     setup, capture, first contact, push/coast, terminal delivery, and video
+     clarity.
 12. Hybrid fetch stage-supervisor / AI push-coast spike contract:
    - branch: `spike/fetch-arch-ai-push-coast-servo-20260529`
    - first gate: shadow-only handoff/maneuver prediction over saved anchors, the

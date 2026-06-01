@@ -101,13 +101,19 @@ Saved-anchor requalification, later June 1:
    planner-approved local case -> Nav2 corridor approach -> contact-buffer
    monitor -> deterministic first-contact servo -> Nav2 corridor push ->
    delivery monitor.
-7. Treat the June 1 saved-anchor one-run set as blocked by `right05`
-   setup/capture. Repair that stage before saved-layout `3/3`.
-8. Keep guarded-live AI/contact execution terminal-only until corrected
+7. Treat the June 1 saved-anchor one-run set as blocked for promotion and run a
+   broad stage-owner comparison before targeted `right05` repair.
+8. Compare current staged Nav2/contact-buffer behavior, May 27 object-centric
+   fetch, Nav2 corridor-push, corrected direct `right05`, and prior
+   goal-side/acquisition evidence on setup, capture entry, first contact,
+   push/coast, terminal delivery, and visual clarity.
+9. Start code repair after the comparison identifies the stage owner to reuse,
+   restore, or replace.
+10. Keep guarded-live AI/contact execution terminal-only until corrected
    saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
-9. Build a mobile visual UAT package before asking for operator signoff:
+11. Build a mobile visual UAT package before asking for operator signoff:
    `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
-10. Freeze reproduced seeded/random failures into named layouts before tuning.
+12. Freeze reproduced seeded/random failures into named layouts before tuning.
 
 ## Gates
 

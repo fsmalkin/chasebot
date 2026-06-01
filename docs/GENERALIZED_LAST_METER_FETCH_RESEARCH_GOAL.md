@@ -226,10 +226,15 @@ Saved-anchor requalification result, later June 1:
   `artifacts/session/uat_contact_buffer_saved_anchor_right05_one_run_20260601/fetch_visual_uat_package/scorecard.md`.
 
 Evidence meaning: the staged baseline clears centerline and left-offset one-run
-anchors, but the right-offset setup/capture failure blocks saved-layout
-promotion. The next implementation work is setup/capture repair on `right05`;
-saved-layout `3/3`, seeded `6 x 1`, and guarded-live terminal correction wait
-behind that repair.
+anchors, while the right-offset setup/capture failure blocks saved-layout
+promotion. The next milestone step is a broad stage-owner comparison before
+targeted `right05` repair. Compare current staged Nav2/contact-buffer behavior
+against the May 27 object-centric saved-anchor package, the corrected direct
+`right05` reference, Nav2 corridor-push evidence, and prior acquisition or
+goal-side setup evidence. Score setup/pre-capture, capture entry, first
+contact, push/coast stability, terminal delivery, and visual clarity
+separately. A targeted `right05` repair starts after the scorecard identifies
+the lifecycle stage and prior behavior to reuse, restore, or replace.
 
 ## May 28, 2026 Direction
 
@@ -355,13 +360,17 @@ Use the existing object-centric and AI push-coast work as implementation
 infrastructure, with the corrected Nav2/LLM-first baseline as the immediate
 center of gravity:
 
-1. rerun saved-layout `zero`, `left05`, and `right05` under the corrected
-   geometry/video evidence floor
-2. run the planner-handoff gate before broad random or visually surprising
-   scenarios
-3. dispatch local `fetch_to_pose` only for planner-approved
+1. keep the planner-handoff gate green before local fetch scoring
+2. build a stage-owner comparison scorecard across current staged
+   Nav2/contact-buffer behavior, May 27 object-centric fetch, Nav2
+   corridor-push, corrected direct `right05`, and prior acquisition or
+   goal-side setup evidence
+3. run missing canonical one-run probes only to fill comparison gaps
+4. dispatch local `fetch_to_pose` only for planner-approved
    `fetch_ready_local` scenes
-4. let the AI push-coast lane score stage gaps in shadow mode from corrected
+5. select the next targeted fix by stage-owner evidence, then repair the chosen
+   lifecycle stage
+6. let the AI push-coast lane score stage gaps in shadow mode from corrected
    Nav2-first failures
 
 The current `spike/fetch-arch-ai-push-coast-servo-20260529` branch remains a

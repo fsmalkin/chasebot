@@ -246,8 +246,9 @@ Saved-anchor requalification, later June 1, 2026:
   failed at `capture_entry_timeout`.
 - Audit:
   `artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
-  classifies the failure as setup/capture. Repair that stage before
-  repeatability or guarded-live terminal correction.
+  classifies the failure as setup/capture. Run a broad stage-owner comparison
+  before repair so the next code change targets the lifecycle stage with the
+  strongest comparative evidence.
 
 ## Architecture Revisit Conclusion
 

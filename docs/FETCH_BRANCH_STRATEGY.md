@@ -212,9 +212,12 @@ Saved-anchor requalification update, later June 1:
   `artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
   classifies `right05` as `setup_capture_blocker`
 - branch decision:
-  keep the staged Nav2/contact-buffer baseline, repair right-offset
-  setup/capture before repeatability, and keep guarded-live terminal correction
-  behind saved-anchor repair evidence.
+  keep the staged Nav2/contact-buffer baseline as a candidate, insert a broad
+  stage-owner comparison before right-offset repair, and compare current staged
+  behavior against May 27 object-centric saved-anchor evidence, Nav2
+  corridor-push, corrected direct `right05`, and prior acquisition or goal-side
+  setup evidence. Repeatability, seeded gate, and guarded-live terminal
+  correction wait for the comparison result.
 
 ## Wider Architecture Portfolio
 
@@ -257,15 +260,15 @@ blocked branch in place. A blocked branch becomes a candidate again only after
 fresh `zero` and `plus45` pre-stage proof is recorded with artifact paths and an
 explicit update to this document.
 
-Current preferred branch decision: use the current fetch spike to complete a
-corrected Nav2/contact-buffer requalification before adding broader live custom
-control. The immediate hypothesis is now staged rather than Nav2-only:
-planner-approved local cases should use Nav2 for corridor approach, a monitored
-contact-buffer handoff for close/aligned no-object-motion stops, deterministic
-first-contact confirmation, and Nav2 corridor push plus delivery monitoring.
-The next runnable branch work should rerun saved layouts and planner-approved
-local random cases with corrected geometry, same-session video, and planner
-route labels.
+Current preferred branch decision: use the current fetch spike to score a broad
+stage-owner comparison before adding broader live custom control. The immediate
+hypothesis is staged rather than Nav2-only: planner-approved local cases should
+use Nav2 for corridor approach, a monitored contact-buffer handoff for
+close/aligned no-object-motion stops, deterministic first-contact confirmation,
+and Nav2 corridor push plus delivery monitoring. The next runnable branch work
+should compare this staged behavior against the May 27 object-centric package,
+Nav2 corridor-push, corrected direct `right05`, and prior acquisition or
+goal-side setup evidence before selecting a targeted repair.
 
 Keep `spike/fetch-arch-ai-push-coast-servo-20260529` available for analyzers,
 guards, shadow scoring, and narrow fallback routines. Learned local output may

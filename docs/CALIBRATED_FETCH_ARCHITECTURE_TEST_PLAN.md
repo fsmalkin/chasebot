@@ -50,8 +50,11 @@ Later June 1 saved-anchor requalification: planner handoff passed `5/5`, and
 the staged baseline passed `zero` plus `left05` one-run with corrected geometry
 and model provenance. `right05` failed at `capture_entry_timeout`, and
 `artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
-classifies it as a setup/capture blocker. The next evidence gate is right-offset
-setup/capture repair, followed by saved-anchor one-run rerun.
+classifies it as a setup/capture blocker. The next evidence gate is a broad
+stage-owner comparison before targeted repair. The comparison includes current
+staged Nav2/contact-buffer behavior, May 27 object-centric fetch, Nav2
+corridor-push, corrected direct `right05`, and prior acquisition or goal-side
+setup evidence. Score by lifecycle stage before selecting a repair branch.
 
 May 29, 2026 update: keep the runtime architecture no-shoot. The
 `nav2_followpath_corridor_push_v1` spike showed Nav2 can own useful real-time
@@ -132,8 +135,8 @@ success, not missing fetch capability.
 
 | Family | Why test it | First evidence gate | Promotion question |
 | --- | --- | --- | --- |
-| Corrected Nav2/LLM-first fetch baseline | Tests the simplest reusable architecture after the geometry reset: planner route selection, Nav2-first execution, and a thin geometry monitor/adapter | Corrected saved-layout `zero`/`left05`/`right05` one-run, then `3/3`, with same-session video | How much of fetch stays inside Nav2/planner-owned subsystem behavior before custom contact code is justified? |
-| Nav2 contact-buffer handoff baseline | Keeps Nav2 in the stages it can own while giving first contact to a bounded deterministic servo after a monitored close/aligned stop | `zero` one-run is green at `live_contact_buffer_monitor_servo_zero_probe_20260601`; next gate is corrected `zero`/`left05`/`right05` one-run | Does the staged handoff remove the stop-short failure without adding broad custom control or hiding setup/capture failures? |
+| Corrected Nav2/LLM-first fetch baseline | Tests the simplest reusable architecture after the geometry reset: planner route selection, Nav2-first execution, and a thin geometry monitor/adapter | Broad stage-owner comparison, then corrected saved-layout `zero`/`left05`/`right05` one-run with same-session video | How much of fetch stays inside Nav2/planner-owned subsystem behavior before custom contact code is justified? |
+| Nav2 contact-buffer handoff baseline | Keeps Nav2 in the stages it can own while giving first contact to a bounded deterministic servo after a monitored close/aligned stop | `zero` and `left05` one-runs are green; `right05` setup/capture blocks promotion; next gate is the stage-owner comparison | Does the staged handoff remove the stop-short failure without adding broad custom control or hiding setup/capture failures? |
 | Current object-centric fetch baseline | Known implementation and reference telemetry; corrected rerun required for post-reset claims | Rerun against the May 31 evidence floor | Does any new design beat its margin, stability, or simplicity under corrected metrics? |
 | Runnable legacy control-family screen | Checks whether old branches become viable under calibrated physics | `scripts/calibrated_fetch_architecture_revisit.py --screen-scope runnable_control_family_screen --fast-screen --short-circuit-on-failure` | Did any old implementation clear `zero` cheaply enough to justify canonical rerun? |
 | Contact-aware geometric shooter | Physics-probe evidence for roll windows, delivery margins, and feasible coast geometry; not the preferred runtime path | Offline shot-model replay or direct-velocity probe only | Does it teach useful push/coast targets without becoming non-robot-owned control? |
