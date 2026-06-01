@@ -303,7 +303,37 @@ def decide_ai_push_coast_handoff(
     if clean_mode != AI_PUSH_COAST_MODE_GUARDED_LIVE:
         guard_reasons.append("shadow_mode")
     stage_labels = list(stage_classification.get("stage_labels", []) or [])
-    if capture_gate and capture_gate.get("pass") is False:
+    setup_quality_flags = {
+        str(flag)
+        for flag in stage_classification.get("contact_quality_flags", []) or []
+        if AI_PUSH_COAST_FLAG_STAGE_LABELS.get(str(flag)) == "setup"
+    }
+    capture_warning_flags = {
+        "capture_geometry_gate_failed",
+        "capture_yaw_watch",
+        "capture_yaw_sign_crossing_watch",
+    }
+    robot_lateral_error_m = float(errors.get("robot_lateral_error_m", 0.0) or 0.0)
+    robot_yaw_error_deg = abs(float(errors.get("robot_yaw_error_deg", 0.0) or 0.0))
+    current_setup_geometry_bad = (
+        robot_lateral_error_m > AI_PUSH_COAST_MAX_LATERAL_ERROR_M
+        or robot_yaw_error_deg > AI_PUSH_COAST_MAX_SETUP_YAW_ERROR_DEG
+    )
+    terminal_contact_confirmed = bool(
+        bool(nav2_attempted)
+        and bool(ball_moved_since_fetch)
+        and not bool(nav2.get("first_contact_no_object_motion", False))
+        and ("terminal_arrival" in stage_labels or terminal_settled)
+    )
+    capture_warning_only = bool(
+        capture_gate
+        and capture_gate.get("pass") is False
+        and terminal_contact_confirmed
+        and not current_setup_geometry_bad
+        and setup_quality_flags
+        and setup_quality_flags.issubset(capture_warning_flags)
+    )
+    if capture_gate and capture_gate.get("pass") is False and not capture_warning_only:
         guard_reasons.append("capture_geometry_gate_failed")
     if maneuver_class != "terminal_repush":
         guard_reasons.append(f"maneuver_{maneuver_class}_not_terminal_live")
@@ -318,6 +348,8 @@ def decide_ai_push_coast_handoff(
     if "terminal_arrival" not in stage_labels:
         guard_reasons.append("not_terminal_arrival_stage")
     for blocked_stage in ("setup", "first_contact", "push_coast"):
+        if blocked_stage == "setup" and capture_warning_only:
+            continue
         if blocked_stage in stage_labels:
             guard_reasons.append(f"stage_{blocked_stage}_not_live")
     if distance is None:
@@ -326,9 +358,9 @@ def decide_ai_push_coast_handoff(
         guard_reasons.append("terminal_miss_too_large")
     if predicted_closest is None or predicted_closest > radius + AI_PUSH_COAST_PREDICTED_TERMINAL_TOLERANCE_M:
         guard_reasons.append("predicted_terminal_correction_not_sufficient")
-    if float(errors.get("robot_lateral_error_m", 0.0) or 0.0) > AI_PUSH_COAST_MAX_LATERAL_ERROR_M:
+    if robot_lateral_error_m > AI_PUSH_COAST_MAX_LATERAL_ERROR_M:
         guard_reasons.append("robot_lateral_error_too_large")
-    if abs(float(errors.get("robot_yaw_error_deg", 0.0) or 0.0)) > AI_PUSH_COAST_MAX_SETUP_YAW_ERROR_DEG:
+    if robot_yaw_error_deg > AI_PUSH_COAST_MAX_SETUP_YAW_ERROR_DEG:
         guard_reasons.append("robot_yaw_error_too_large")
     if nav2.get("monitor_cancel_reason") in {"ball_escape", "unsafe_drift", "stale_state"}:
         guard_reasons.append(f"nav2_monitor_{nav2.get('monitor_cancel_reason')}")

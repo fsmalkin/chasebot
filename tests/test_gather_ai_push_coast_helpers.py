@@ -192,7 +192,7 @@ def test_guarded_live_rejects_capture_entry_timeout_stage():
     assert "stage_setup_not_live" in decision["ai_push_coast_guard"]["reasons"]
 
 
-def test_guarded_live_rejects_terminal_repush_after_capture_geometry_gate_failure():
+def test_guarded_live_accepts_terminal_repush_after_capture_warning_with_confirmed_motion():
     decision = decide_ai_push_coast_handoff(
         robot_pose={"x": 0.43, "y": 0.0, "yaw": 0.0},
         ball_pose={"x": 0.599235, "y": 0.0, "z": 0.05},
@@ -216,6 +216,45 @@ def test_guarded_live_rejects_terminal_repush_after_capture_geometry_gate_failur
         capture_geometry_gate={
             "pass": False,
             "flags": ["capture_yaw_watch", "capture_yaw_sign_crossing_watch"],
+            "capture_yaw_travel_deg": 81.0,
+            "capture_yaw_span_deg": 45.0,
+            "capture_yaw_sign_crossing_count": 2,
+        },
+        mode="guarded_live",
+    )
+
+    assert decision["ai_push_coast_proposal"]["maneuver_class"] == "terminal_repush"
+    assert decision["ai_push_coast_guard"]["accepted"] is True
+    assert "capture_geometry_gate_failed" not in decision["ai_push_coast_guard"]["reasons"]
+    assert "stage_setup_not_live" not in decision["ai_push_coast_guard"]["reasons"]
+    assert decision["ai_push_coast_shadow"]["stage_classification"]["primary_stage"] == "setup"
+    assert decision["ai_push_coast_shadow"]["input_digest"]["capture_geometry_gate_pass"] is False
+
+
+def test_guarded_live_rejects_terminal_repush_when_setup_flags_are_current_blockers():
+    decision = decide_ai_push_coast_handoff(
+        robot_pose={"x": 0.43, "y": 0.0, "yaw": 0.0},
+        ball_pose={"x": 0.599235, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.12, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+        nav2_corridor_push={
+            "dispatch_status": "goal_finished",
+            "success": False,
+            "first_contact_confirmed": True,
+        },
+        nav2_attempted=True,
+        terminal_correction_attempted=False,
+        distance_to_fetch_pose_m=0.520765,
+        closest_approach_distance_m=0.520765,
+        terminal_settled_after_nav2=True,
+        ball_moved_since_fetch=True,
+        approach_contact_metrics={
+            "stable_contact_approach_pass": False,
+            "flags": ["pre_contact_lateral_error", "capture_yaw_watch"],
+        },
+        capture_geometry_gate={
+            "pass": False,
+            "flags": ["capture_yaw_watch", "capture_yaw_sign_crossing_watch"],
             "capture_yaw_travel_deg": 140.0,
             "capture_yaw_span_deg": 70.0,
             "capture_yaw_sign_crossing_count": 2,
@@ -227,5 +266,3 @@ def test_guarded_live_rejects_terminal_repush_after_capture_geometry_gate_failur
     assert decision["ai_push_coast_guard"]["accepted"] is False
     assert "capture_geometry_gate_failed" in decision["ai_push_coast_guard"]["reasons"]
     assert "stage_setup_not_live" in decision["ai_push_coast_guard"]["reasons"]
-    assert decision["ai_push_coast_shadow"]["stage_classification"]["primary_stage"] == "setup"
-    assert decision["ai_push_coast_shadow"]["input_digest"]["capture_geometry_gate_pass"] is False

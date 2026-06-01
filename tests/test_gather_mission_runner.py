@@ -3753,6 +3753,96 @@ def test_capture_target_capture_entry_timeout_returns_capture_entry_failure(tmp_
     assert "capture" not in phase_entries
 
 
+def test_capture_target_gap_fills_missing_ball_pose_after_stage_handoff(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.args.capture_timeout_s = 10.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    control_calls = {"count": 0}
+    command_ball_poses: list[dict[str, object]] = []
+
+    class _FakeCommand:
+        mode = "capture_entry_gap_fill_close"
+        linear_x = 0.035
+        angular_z = 0.0
+        rationale = "gap fill"
+
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "mode": self.mode,
+                "linear_x": self.linear_x,
+                "angular_z": self.angular_z,
+                "rationale": self.rationale,
+            }
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        control_calls["count"] += 1
+        robot_pose = {"x": 0.0, "y": 0.0, "yaw": 0.0}
+        ball_pose = {"x": 1.0, "y": 0.06, "z": 0.05}
+        if control_calls["count"] >= 5:
+            ball_pose = None
+        return {}, robot_pose, ball_pose
+
+    def fake_compute_capture_entry_command(robot_pose, ball_pose, **kwargs):
+        command_ball_poses.append(dict(ball_pose))
+        return _FakeCommand()
+
+    monkeypatch.setattr(gather_runner, "DEFAULT_CAPTURE_ENTRY_TIMEOUT_S", 1.0)
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(
+        gather_runner,
+        "goal_side_approach_snapshot",
+        lambda *args, **kwargs: {
+            "robot_on_goal_side": False,
+            "staging_pose_reached": True,
+            "push_direction_yaw_deg": 0.0,
+        },
+    )
+    monkeypatch.setattr(gather_runner, "compute_stage_command", lambda *args, **kwargs: _FakeCommand())
+    monkeypatch.setattr(gather_runner, "compute_capture_entry_command", fake_compute_capture_entry_command)
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-capture-entry-gap-fill",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    capture_entry_rows = [row for row in state_rows if row.get("phase") == "capture_entry"]
+    gap_fill_rows = [row for row in capture_entry_rows if row.get("ball_pose_source") == "handoff_gap_fill"]
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "capture_entry"
+    assert command_ball_poses
+    assert command_ball_poses[-1]["x"] == 1.0
+    assert gap_fill_rows
+    assert gap_fill_rows[-1]["capture_entry_gap_fill"]["active"] is True
+    assert gap_fill_rows[-1]["capture_entry_diagnostics"]["gap_fill_active"] is True
+    assert gap_fill_rows[-1]["capture_entry_diagnostics"]["ball_pose_source"] == "handoff_gap_fill"
+    assert gap_fill_rows[-1]["capture_entry_diagnostics"]["selected_command_mode"] == "capture_entry_gap_fill_close"
+
+
 def test_capture_target_late_ready_sample_skips_same_loop_capture_entry_timeout(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.args.capture_timeout_s = 6.0
@@ -9105,6 +9195,10 @@ def test_ai_push_coast_corridor_push_uses_bounded_push_through(tmp_path, monkeyp
     assert captured_build["push_through_m"] == gather_runner.DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M
     assert len(dispatch_calls) == 2
     assert dispatch_calls[0]["monitor"]["success_on_motion_m"] == gather_runner.DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M
+    assert (
+        dispatch_calls[0]["monitor"]["success_on_motion_min_longitudinal_m"]
+        == gather_runner.DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M
+    )
     assert payload["ai_first_contact_confirmation"]["confirmed"] is True
     assert payload["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
 
@@ -9162,6 +9256,10 @@ def test_ai_push_coast_first_contact_probe_fails_closed_when_nav2_finishes_witho
     assert payload["failure_reason"] == "nav2_corridor_push_first_contact_no_object_motion"
     assert len(dispatch_calls) == 1
     assert dispatch_calls[0]["monitor"]["success_on_motion_m"] == gather_runner.DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M
+    assert (
+        dispatch_calls[0]["monitor"]["success_on_motion_min_longitudinal_m"]
+        == gather_runner.DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M
+    )
     assert payload["ai_first_contact_confirmation"]["confirmed"] is False
     assert payload["ai_first_contact_confirmation"]["deterministic_servo_attempted"] is True
     assert payload["ai_first_contact_confirmation"]["deterministic_servo_confirmed"] is False
@@ -9310,6 +9408,12 @@ def test_ai_push_coast_nav2_contact_buffer_stop_hands_off_to_servo(tmp_path, mon
             assert kwargs["monitor"]["contact_buffer_handoff_max_robot_ball_m"] == (
                 gather_runner.DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M
             )
+            assert kwargs["monitor"]["contact_buffer_handoff_max_terminal_yaw_error_deg"] == (
+                gather_runner.DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG
+            )
+            assert kwargs["monitor"]["success_on_motion_min_longitudinal_m"] == (
+                gather_runner.DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M
+            )
             return {
                 "dispatch_status": "monitor_contact_buffer_handoff",
                 "accepted": True,
@@ -9328,6 +9432,7 @@ def test_ai_push_coast_nav2_contact_buffer_stop_hands_off_to_servo(tmp_path, mon
                 "path_progress_last": {
                     "nearest_path_kind": "corridor_contact_approach_2",
                     "terminal_path_distance_m": 0.23,
+                    "terminal_yaw_error_deg": -1.0,
                 },
             }
         return {
@@ -9365,8 +9470,81 @@ def test_ai_push_coast_nav2_contact_buffer_stop_hands_off_to_servo(tmp_path, mon
     assert any(item["enabled"] and item["mode"].startswith("object_fetch_to_pose") for item in command_log)
     assert payload["ai_first_contact_confirmation"]["nav2_probe_contact_buffer_stop"] is True
     assert payload["ai_first_contact_confirmation"]["deterministic_servo_source"] == "nav2_contact_buffer_stop"
+    assert (
+        payload["ai_first_contact_confirmation"]["nav2_probe_contact_buffer_stop_diagnostics"][
+            "terminal_yaw_error_deg"
+        ]
+        == -1.0
+    )
     assert payload["ai_first_contact_confirmation"]["deterministic_servo_confirmed"] is True
     assert payload["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
+
+
+def test_ai_push_coast_nav2_contact_buffer_stop_rejects_yaw_misalignment(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.ai_push_coast_mode = gather_runner.AI_PUSH_COAST_MODE_SHADOW
+    runner.fetch_delivery_radius_m = 0.25
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.0, "yaw": 0.0}
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda session_id, target: (
+            {"compose_project": "chasecar_dashboard_contact_ready"},
+            robot_pose,
+            ball_pose,
+        ),
+    )
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_set_manual_drive", lambda *args, **kwargs: None)
+
+    def fake_dispatch(**kwargs):
+        return {
+            "dispatch_status": "monitor_contact_buffer_handoff",
+            "accepted": True,
+            "success": False,
+            "timed_out": False,
+            "status_text": "STATUS_CANCELED",
+            "monitor_cancel_reason": "contact_buffer_handoff",
+            "monitor": {
+                "terminal_reason": "contact_buffer_handoff",
+                "last_sample": {
+                    "start_displacement_m": 0.0,
+                    "delivery_distance_m": 0.55,
+                    "robot_ball_distance_m": 0.15,
+                    "lateral_error_m": 0.0,
+                },
+            },
+            "path_progress_last": {
+                "nearest_path_kind": "start",
+                "terminal_path_distance_m": 0.23,
+                "terminal_yaw_error_deg": (
+                    gather_runner.DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG
+                    + 5.0
+                ),
+            },
+        }
+
+    monkeypatch.setattr(runner, "_dispatch_nav2_follow_path_reacquire", fake_dispatch)
+
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-ai-contact-buffer-yaw-reject",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+    )
+
+    assert passed is False
+    assert payload["failure_reason"] == "nav2_corridor_push_first_contact_failed"
+    diagnostics = payload["ai_first_contact_confirmation"]["nav2_probe_contact_buffer_stop_diagnostics"]
+    assert diagnostics["eligible"] is False
+    assert "terminal_yaw_error_out_of_bounds" in diagnostics["reason"]
+    assert payload["ai_first_contact_confirmation"]["nav2_probe_contact_buffer_stop"] is False
+    assert payload["ai_first_contact_confirmation"].get("deterministic_servo_attempted") is not True
 
 
 def test_ai_push_coast_nav2_probe_timeout_far_from_ball_fails_closed(tmp_path, monkeypatch):
@@ -9627,7 +9805,7 @@ def test_ai_push_coast_guarded_terminal_correction_rejects_failed_capture_geomet
         approach_payload={
             "capture_geometry_gate": {
                 "pass": False,
-                "flags": ["capture_yaw_watch", "capture_yaw_sign_crossing_watch"],
+                "flags": ["pre_contact_lateral_error", "capture_yaw_watch", "capture_yaw_sign_crossing_watch"],
                 "capture_yaw_travel_deg": 140.0,
                 "capture_yaw_sign_crossing_count": 2,
             }

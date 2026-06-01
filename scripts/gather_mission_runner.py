@@ -324,9 +324,11 @@ DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S = 8.0
 DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M = 0.25
 DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_TIMEOUT_S = 12.0
 DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S = 8.0
+DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M = -0.015
 DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M = 0.20
 DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_LATERAL_ERROR_M = 0.06
 DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M = 0.40
+DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG = 20.0
 DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S = 1.25
 DEFAULT_STATIONARY_RECAPTURE_NUDGE_DELAY_S = 1.0
 DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S = 0.25
@@ -382,6 +384,8 @@ DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_STALE_S = 2.5
 DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_ESCAPE_LATERAL_M = 0.45
 DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_BACKTRACK_M = 0.25
 DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M = 1.0
+DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M = 0.35
+DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S = 5.0
 DEFAULT_FETCH_GEOMETRY_CENTER_TOLERANCE_M = 0.02
 DEFAULT_FETCH_GEOMETRY_RADIUS_TOLERANCE_M = 0.01
 MISSION_OBJECTIVE_GATHER_HERE = "gather_here"
@@ -2885,6 +2889,10 @@ def evaluate_monitor():
         float(monitor_payload.get("contact_buffer_handoff_max_terminal_path_distance_m") or 0.0),
         0.0,
     )
+    contact_buffer_max_terminal_yaw_error_deg = max(
+        float(monitor_payload.get("contact_buffer_handoff_max_terminal_yaw_error_deg") or 0.0),
+        0.0,
+    )
     if (
         not ball_moved
         and contact_buffer_max_robot_ball_m > 0.0
@@ -2894,6 +2902,7 @@ def evaluate_monitor():
         and abs(lateral_m) <= contact_buffer_max_lateral_error_m
     ):
         terminal_path_distance_m = None
+        terminal_yaw_error_deg = None
         nearest_path_kind = ""
         if isinstance(path_progress_last, dict):
             nearest_path_kind = str(path_progress_last.get("nearest_path_kind") or "")
@@ -2901,22 +2910,34 @@ def evaluate_monitor():
                 terminal_path_distance_m = float(path_progress_last.get("terminal_path_distance_m"))
             except (TypeError, ValueError):
                 terminal_path_distance_m = None
+            try:
+                terminal_yaw_error_deg = float(path_progress_last.get("terminal_yaw_error_deg"))
+            except (TypeError, ValueError):
+                terminal_yaw_error_deg = None
         terminal_distance_ok = (
             contact_buffer_max_terminal_path_distance_m <= 0.0
             or terminal_path_distance_m is None
             or terminal_path_distance_m <= contact_buffer_max_terminal_path_distance_m
+        )
+        terminal_yaw_ok = (
+            contact_buffer_max_terminal_yaw_error_deg <= 0.0
+            or terminal_yaw_error_deg is None
+            or abs(terminal_yaw_error_deg) <= contact_buffer_max_terminal_yaw_error_deg
         )
         contact_stage_ok = (
             not nearest_path_kind
             or "corridor_contact" in nearest_path_kind
             or terminal_distance_ok
         )
-        if terminal_distance_ok and contact_stage_ok:
+        if terminal_distance_ok and terminal_yaw_ok and contact_stage_ok:
             monitor_state["terminal_reason"] = "contact_buffer_handoff"
             sample["contact_buffer_handoff"] = True
             sample["nearest_path_kind"] = nearest_path_kind
             sample["terminal_path_distance_m"] = (
                 None if terminal_path_distance_m is None else round(float(terminal_path_distance_m), 6)
+            )
+            sample["terminal_yaw_error_deg"] = (
+                None if terminal_yaw_error_deg is None else round(float(terminal_yaw_error_deg), 6)
             )
             return {
                 "reason": "contact_buffer_handoff",
@@ -2925,7 +2946,16 @@ def evaluate_monitor():
                 "sample": sample,
             }
     success_on_motion_m = max(float(monitor_payload.get("success_on_motion_m") or 0.0), 0.0)
-    if success_on_motion_m > 0.0 and start_displacement_m >= success_on_motion_m:
+    success_on_motion_min_longitudinal_m = float(
+        monitor_payload.get("success_on_motion_min_longitudinal_m")
+        if monitor_payload.get("success_on_motion_min_longitudinal_m") is not None
+        else -float("inf")
+    )
+    if (
+        success_on_motion_m > 0.0
+        and start_displacement_m >= success_on_motion_m
+        and longitudinal_m >= success_on_motion_min_longitudinal_m
+    ):
         monitor_state["terminal_reason"] = "first_contact_confirmed"
         return {
             "reason": "first_contact_confirmed",
@@ -5743,6 +5773,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         latest_pre_capture_command_mode = ""
         handoff_robot_pose: dict[str, Any] | None = None
         handoff_ball_pose: dict[str, Any] | None = None
+        capture_entry_ball_pose_source = ""
+        capture_entry_gap_fill_active = False
+        capture_entry_gap_fill_reason = ""
         last_capture_entry_snapshot: dict[str, Any] = {}
         last_capture_entry_diagnostics: dict[str, Any] = {}
         capture_handoff_robot_pose: dict[str, Any] | None = None
@@ -5817,6 +5850,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "manager_directive": str(manager_directive or ""),
                 "selected_command": selected_command_payload,
                 "selected_command_mode": str(selected_command_payload.get("mode", "") or ""),
+                "ball_pose_source": str(capture_entry_ball_pose_source or ""),
+                "gap_fill_active": bool(capture_entry_gap_fill_active),
+                "gap_fill_reason": str(capture_entry_gap_fill_reason or ""),
+                "gap_fill_max_robot_delta_m": round(float(DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M), 6),
+                "gap_fill_max_elapsed_s": round(float(DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S), 6),
                 "robot_delta_from_handoff_m": clean_rounded_number(robot_delta_m),
                 "ball_delta_from_handoff_m": clean_rounded_number(ball_delta_m),
                 "handoff_robot_pose": dict(handoff_robot_pose or {}),
@@ -6071,6 +6109,38 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 handoff_robot_pose = dict(robot_pose)
             if handoff_ball_pose is None and isinstance(ball_pose, dict):
                 handoff_ball_pose = dict(ball_pose)
+            capture_entry_ball_pose_source = "live" if isinstance(ball_pose, dict) else ""
+            capture_entry_gap_fill_active = False
+            capture_entry_gap_fill_reason = ""
+            if (
+                enable_goal_side_stage
+                and stage_completed
+                and not capture_entry_completed
+                and isinstance(robot_pose, dict)
+                and not isinstance(ball_pose, dict)
+                and isinstance(handoff_ball_pose, dict)
+            ):
+                capture_entry_elapsed_s = (
+                    max(0.0, now_monotonic - float(capture_entry_started_monotonic))
+                    if capture_entry_started_monotonic is not None
+                    else 0.0
+                )
+                robot_delta_from_handoff = (
+                    pose_delta_m(handoff_robot_pose, robot_pose)
+                    if handoff_robot_pose is not None
+                    else 0.0
+                )
+                if (
+                    robot_delta_from_handoff is not None
+                    and float(robot_delta_from_handoff) <= DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M
+                    and capture_entry_elapsed_s <= DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S
+                ):
+                    ball_pose = dict(handoff_ball_pose)
+                    capture_entry_ball_pose_source = "handoff_gap_fill"
+                    capture_entry_gap_fill_active = True
+                    capture_entry_gap_fill_reason = "missing_live_ball_pose_after_stage_handoff"
+                else:
+                    capture_entry_gap_fill_reason = "gap_fill_limit_exceeded"
             capture = capture_snapshot(robot_pose, ball_pose or {}, self.capture_envelope) if robot_pose and ball_pose else None
             zone_score = zone_snapshot(ball_pose or {}, self.zone) if ball_pose else None
             approach_snapshot = (
@@ -6425,6 +6495,13 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "capture_entry_diagnostics": capture_entry_diagnostics_payload,
                         "manager_directive": capture_entry_manager_decision.directive,
                         "selected_command": capture_entry_command.to_dict() if capture_entry_command else {},
+                        "ball_pose_source": capture_entry_ball_pose_source,
+                        "capture_entry_gap_fill": {
+                            "active": bool(capture_entry_gap_fill_active),
+                            "reason": str(capture_entry_gap_fill_reason or ""),
+                            "max_robot_delta_m": round(float(DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M), 6),
+                            "max_elapsed_s": round(float(DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S), 6),
+                        },
                         "object_centric_policy": capture_entry_object_centric_policy,
                         "ball_motion_m": ball_motion_m,
                         **self._control_debug_fields(),
@@ -9344,6 +9421,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             lateral_error_m = clean_number(sample.get("lateral_error_m"))
             start_displacement_m = clean_number(sample.get("start_displacement_m"))
             terminal_path_distance_m = clean_number(path_progress.get("terminal_path_distance_m"))
+            terminal_yaw_error_deg = clean_number(path_progress.get("terminal_yaw_error_deg"))
             nearest_path_kind = clean_text(path_progress.get("nearest_path_kind"))
             no_object_motion = not nav2_follow_path_object_motion_observed(follow_path_result)
             stopped_status = (
@@ -9373,6 +9451,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 or terminal_path_distance_m
                 <= float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M)
             )
+            terminal_yaw_ok = (
+                terminal_yaw_error_deg is None
+                or abs(float(terminal_yaw_error_deg))
+                <= float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG)
+            )
             eligible = all(
                 [
                     not bool(follow_path_result.get("success", False)),
@@ -9382,6 +9465,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     laterally_aligned,
                     contact_stage_ok,
                     terminal_distance_ok,
+                    terminal_yaw_ok,
                 ]
             )
             blockers: list[str] = []
@@ -9399,6 +9483,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 blockers.append("not_at_corridor_contact_stage")
             if not terminal_distance_ok:
                 blockers.append("terminal_path_distance_out_of_bounds")
+            if not terminal_yaw_ok:
+                blockers.append("terminal_yaw_error_out_of_bounds")
             if clean_text(monitor.get("terminal_reason")) in {"ball_escape", "unsafe_drift", "stale_state"}:
                 blockers.append(clean_text(monitor.get("terminal_reason")))
                 eligible = False
@@ -9413,6 +9499,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "start_displacement_m": clean_rounded_number(start_displacement_m),
                 "nearest_path_kind": nearest_path_kind,
                 "terminal_path_distance_m": clean_rounded_number(terminal_path_distance_m),
+                "terminal_yaw_error_deg": clean_rounded_number(terminal_yaw_error_deg),
                 "thresholds": {
                     "max_robot_ball_distance_m": round(
                         float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M),
@@ -9424,6 +9511,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     ),
                     "max_terminal_path_distance_m": round(
                         float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M),
+                        6,
+                    ),
+                    "max_terminal_yaw_error_deg": round(
+                        float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG),
                         6,
                     ),
                 },
@@ -9788,6 +9879,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             "monitor_cancel_live": True,
                             "monitor_cancel_live_reason": "first_contact_motion_evidence",
                             "success_on_motion_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                            "success_on_motion_min_longitudinal_m": round(
+                                float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M),
+                                6,
+                            ),
                         }
                         nav2_corridor_push_diagnostics = {
                             **nav2_corridor_push_diagnostics,
@@ -9852,6 +9947,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             "max_robot_ball_distance_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M), 6),
                             "launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
                             "success_on_motion_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                            "success_on_motion_min_longitudinal_m": round(
+                                float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M),
+                                6,
+                            ),
                             "contact_buffer_handoff_max_robot_ball_m": round(
                                 float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M),
                                 6,
@@ -9862,6 +9961,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             ),
                             "contact_buffer_handoff_max_terminal_path_distance_m": round(
                                 float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M),
+                                6,
+                            ),
+                            "contact_buffer_handoff_max_terminal_yaw_error_deg": round(
+                                float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG),
                                 6,
                             ),
                         }
@@ -9895,6 +9998,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                 "monitor_cancel_live": True,
                                 "monitor_cancel_live_reason": "first_contact_motion_evidence",
                                 "success_on_motion_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                                "success_on_motion_min_longitudinal_m": round(
+                                    float(DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_MIN_LONGITUDINAL_M),
+                                    6,
+                                ),
                             },
                         )
                         nav2_contact_buffer_stop = _nav2_probe_contact_buffer_stop_diagnostics(probe_result)
