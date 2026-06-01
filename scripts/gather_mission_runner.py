@@ -320,7 +320,10 @@ DEFAULT_OBJECT_CENTRIC_PLACE_TIMEOUT_S = 60.0
 DEFAULT_AI_PUSH_COAST_TERMINAL_CORRECTION_WINDOW_S = 8.0
 DEFAULT_AI_PUSH_COAST_CORRIDOR_PUSH_THROUGH_M = 0.25
 DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_TIMEOUT_S = 12.0
-DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S = 4.0
+DEFAULT_AI_PUSH_COAST_FIRST_CONTACT_SERVO_WINDOW_S = 8.0
+DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M = 0.20
+DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_LATERAL_ERROR_M = 0.06
+DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M = 0.40
 DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S = 1.25
 DEFAULT_STATIONARY_RECAPTURE_NUDGE_DELAY_S = 1.0
 DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S = 0.25
@@ -2866,6 +2869,57 @@ def evaluate_monitor():
             "error": "monitor_unsafe_drift_robot_separation",
             "sample": sample,
         }
+    contact_buffer_max_robot_ball_m = max(
+        float(monitor_payload.get("contact_buffer_handoff_max_robot_ball_m") or 0.0),
+        0.0,
+    )
+    contact_buffer_max_lateral_error_m = max(
+        float(monitor_payload.get("contact_buffer_handoff_max_lateral_error_m") or 0.0),
+        0.0,
+    )
+    contact_buffer_max_terminal_path_distance_m = max(
+        float(monitor_payload.get("contact_buffer_handoff_max_terminal_path_distance_m") or 0.0),
+        0.0,
+    )
+    if (
+        not ball_moved
+        and contact_buffer_max_robot_ball_m > 0.0
+        and contact_buffer_max_lateral_error_m > 0.0
+        and robot_ball_distance_m is not None
+        and robot_ball_distance_m <= contact_buffer_max_robot_ball_m
+        and abs(lateral_m) <= contact_buffer_max_lateral_error_m
+    ):
+        terminal_path_distance_m = None
+        nearest_path_kind = ""
+        if isinstance(path_progress_last, dict):
+            nearest_path_kind = str(path_progress_last.get("nearest_path_kind") or "")
+            try:
+                terminal_path_distance_m = float(path_progress_last.get("terminal_path_distance_m"))
+            except (TypeError, ValueError):
+                terminal_path_distance_m = None
+        terminal_distance_ok = (
+            contact_buffer_max_terminal_path_distance_m <= 0.0
+            or terminal_path_distance_m is None
+            or terminal_path_distance_m <= contact_buffer_max_terminal_path_distance_m
+        )
+        contact_stage_ok = (
+            not nearest_path_kind
+            or "corridor_contact" in nearest_path_kind
+            or terminal_distance_ok
+        )
+        if terminal_distance_ok and contact_stage_ok:
+            monitor_state["terminal_reason"] = "contact_buffer_handoff"
+            sample["contact_buffer_handoff"] = True
+            sample["nearest_path_kind"] = nearest_path_kind
+            sample["terminal_path_distance_m"] = (
+                None if terminal_path_distance_m is None else round(float(terminal_path_distance_m), 6)
+            )
+            return {
+                "reason": "contact_buffer_handoff",
+                "dispatch_status": "monitor_contact_buffer_handoff",
+                "error": "",
+                "sample": sample,
+            }
     success_on_motion_m = max(float(monitor_payload.get("success_on_motion_m") or 0.0), 0.0)
     if success_on_motion_m > 0.0 and start_displacement_m >= success_on_motion_m:
         monitor_state["terminal_reason"] = "first_contact_confirmed"
@@ -9173,6 +9227,105 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "result": follow_path_result,
             }
 
+        def _nav2_probe_contact_buffer_stop_diagnostics(follow_path_result: dict[str, Any]) -> dict[str, Any]:
+            sample = nav2_follow_path_monitor_last_sample(follow_path_result)
+            monitor = follow_path_result.get("monitor") if isinstance(follow_path_result.get("monitor"), dict) else {}
+            path_progress = (
+                follow_path_result.get("path_progress_last")
+                if isinstance(follow_path_result.get("path_progress_last"), dict)
+                else {}
+            )
+            dispatch_status = clean_text(follow_path_result.get("dispatch_status"))
+            status_text = clean_text(follow_path_result.get("status_text"))
+            robot_ball_distance_m = clean_number(sample.get("robot_ball_distance_m"))
+            lateral_error_m = clean_number(sample.get("lateral_error_m"))
+            start_displacement_m = clean_number(sample.get("start_displacement_m"))
+            terminal_path_distance_m = clean_number(path_progress.get("terminal_path_distance_m"))
+            nearest_path_kind = clean_text(path_progress.get("nearest_path_kind"))
+            no_object_motion = not nav2_follow_path_object_motion_observed(follow_path_result)
+            stopped_status = (
+                bool(follow_path_result.get("timed_out", False))
+                or dispatch_status in {"goal_result_timeout", "goal_finished", "monitor_contact_buffer_handoff"}
+                or status_text in {"STATUS_ABORTED", "STATUS_CANCELED"}
+            )
+            contact_stage_ok = (
+                not nearest_path_kind
+                or "corridor_contact" in nearest_path_kind
+                or (
+                    terminal_path_distance_m is not None
+                    and terminal_path_distance_m
+                    <= float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M)
+                )
+            )
+            close_enough = (
+                robot_ball_distance_m is not None
+                and robot_ball_distance_m <= float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M)
+            )
+            laterally_aligned = (
+                lateral_error_m is not None
+                and abs(float(lateral_error_m)) <= float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_LATERAL_ERROR_M)
+            )
+            terminal_distance_ok = (
+                terminal_path_distance_m is None
+                or terminal_path_distance_m
+                <= float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M)
+            )
+            eligible = all(
+                [
+                    not bool(follow_path_result.get("success", False)),
+                    stopped_status,
+                    no_object_motion,
+                    close_enough,
+                    laterally_aligned,
+                    contact_stage_ok,
+                    terminal_distance_ok,
+                ]
+            )
+            blockers: list[str] = []
+            if bool(follow_path_result.get("success", False)):
+                blockers.append("nav2_success")
+            if not stopped_status:
+                blockers.append("not_a_stopped_nav2_result")
+            if not no_object_motion:
+                blockers.append("object_motion_observed")
+            if not close_enough:
+                blockers.append("robot_not_at_contact_buffer")
+            if not laterally_aligned:
+                blockers.append("lateral_error_out_of_bounds")
+            if not contact_stage_ok:
+                blockers.append("not_at_corridor_contact_stage")
+            if not terminal_distance_ok:
+                blockers.append("terminal_path_distance_out_of_bounds")
+            if clean_text(monitor.get("terminal_reason")) in {"ball_escape", "unsafe_drift", "stale_state"}:
+                blockers.append(clean_text(monitor.get("terminal_reason")))
+                eligible = False
+            return {
+                "eligible": bool(eligible),
+                "reason": "contact_buffer_stop" if eligible else ",".join(blockers),
+                "dispatch_status": dispatch_status,
+                "status_text": status_text,
+                "timed_out": bool(follow_path_result.get("timed_out", False)),
+                "robot_ball_distance_m": clean_rounded_number(robot_ball_distance_m),
+                "lateral_error_m": clean_rounded_number(lateral_error_m),
+                "start_displacement_m": clean_rounded_number(start_displacement_m),
+                "nearest_path_kind": nearest_path_kind,
+                "terminal_path_distance_m": clean_rounded_number(terminal_path_distance_m),
+                "thresholds": {
+                    "max_robot_ball_distance_m": round(
+                        float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M),
+                        6,
+                    ),
+                    "max_lateral_error_m": round(
+                        float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_LATERAL_ERROR_M),
+                        6,
+                    ),
+                    "max_terminal_path_distance_m": round(
+                        float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M),
+                        6,
+                    ),
+                },
+            }
+
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
             fetch_elapsed_s = max(0.0, now_monotonic - fetch_started_monotonic)
@@ -9527,6 +9680,18 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             "max_robot_ball_distance_m": round(float(DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M), 6),
                             "launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
                             "success_on_motion_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
+                            "contact_buffer_handoff_max_robot_ball_m": round(
+                                float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M),
+                                6,
+                            ),
+                            "contact_buffer_handoff_max_lateral_error_m": round(
+                                float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_LATERAL_ERROR_M),
+                                6,
+                            ),
+                            "contact_buffer_handoff_max_terminal_path_distance_m": round(
+                                float(DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M),
+                                6,
+                            ),
                         }
                         try:
                             probe_result = self._dispatch_nav2_follow_path_reacquire(
@@ -9560,12 +9725,16 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                 "success_on_motion_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
                             },
                         )
+                        nav2_contact_buffer_stop = _nav2_probe_contact_buffer_stop_diagnostics(probe_result)
                         ai_first_contact_confirmation_confirmed = bool(
                             ai_first_contact_confirmation_diagnostics.get("first_contact_confirmed", False)
                         )
-                        ai_first_contact_confirmation_diagnostics["confirmed"] = bool(
-                            ai_first_contact_confirmation_confirmed
-                        )
+                        ai_first_contact_confirmation_diagnostics = {
+                            **ai_first_contact_confirmation_diagnostics,
+                            "confirmed": bool(ai_first_contact_confirmation_confirmed),
+                            "nav2_probe_contact_buffer_stop": bool(nav2_contact_buffer_stop.get("eligible", False)),
+                            "nav2_probe_contact_buffer_stop_diagnostics": nav2_contact_buffer_stop,
+                        }
                         nav2_corridor_push_diagnostics = {
                             **nav2_corridor_push_diagnostics,
                             "first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
@@ -9597,7 +9766,14 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
                             time.sleep(self.args.poll_s)
                             continue
-                        if bool(probe_result.get("success", False)):
+                        if bool(probe_result.get("success", False)) or bool(
+                            nav2_contact_buffer_stop.get("eligible", False)
+                        ):
+                            deterministic_servo_source = (
+                                "nav2_contact_buffer_stop"
+                                if bool(nav2_contact_buffer_stop.get("eligible", False))
+                                else "nav2_probe_no_object_motion"
+                            )
                             ai_first_contact_confirmation_servo_attempted = True
                             ai_first_contact_confirmation_servo_active_until = min(
                                 deadline,
@@ -9607,7 +9783,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                 **ai_first_contact_confirmation_diagnostics,
                                 "confirmed": False,
                                 "first_contact_confirmation_source": "deterministic_servo",
-                                "nav2_probe_no_object_motion": True,
+                                "nav2_probe_no_object_motion": bool(probe_result.get("success", False)),
+                                "nav2_probe_contact_buffer_stop": bool(
+                                    nav2_contact_buffer_stop.get("eligible", False)
+                                ),
+                                "deterministic_servo_source": deterministic_servo_source,
                                 "deterministic_servo_attempted": True,
                                 "deterministic_servo_active": True,
                                 "deterministic_servo_window_s": round(

@@ -54,7 +54,7 @@ def test_nav2_follow_path_corridor_push_builds_contact_path_through_delivery_pos
     assert payload["active"] is True
     assert payload["reason"] == "follow_path_corridor_push"
     assert payload["controller_id"] == "FollowPath"
-    assert payload["goal_checker_id"] == "general_goal_checker"
+    assert payload["goal_checker_id"] == "corridor_push_goal_checker"
     assert payload["path_kinds"][0] == "start"
     semantic_kinds = [
         pose["kind"]
@@ -124,6 +124,7 @@ def test_nav2_follow_path_corridor_contact_probe_stops_after_motion_confirm_poin
 
     assert payload["active"] is True
     assert payload["reason"] == "follow_path_corridor_contact_probe"
+    assert payload["goal_checker_id"] == "corridor_push_goal_checker"
     assert payload["path_kinds"] == [
         "start",
         "corridor_contact_ready",
@@ -133,6 +134,19 @@ def test_nav2_follow_path_corridor_contact_probe_stops_after_motion_confirm_poin
     assert payload["path_poses"][-1]["x"] == 0.08
     assert payload["trigger"]["contact_confirm_m"] == 0.08
     assert "corridor_delivery_intersection" not in payload["path_kinds"]
+
+
+def test_nav2_follow_path_corridor_contact_probe_uses_tight_goal_checker():
+    plan = follow_path.build_nav2_follow_path_corridor_contact_probe_plan(
+        {"x": -0.65, "y": 0.0, "yaw": 0.0},
+        {"x": 0.0, "y": 0.0, "z": 0.05},
+        {"x": 1.0, "y": 0.0, "z": 0.001, "radius_m": 0.3},
+        max_path_spacing_m=0.0,
+    )
+    payload = plan.to_dict()
+
+    assert payload["goal_checker_id"] == follow_path.DEFAULT_NAV2_CORRIDOR_PUSH_GOAL_CHECKER_ID
+    assert payload["trigger"]["contact_confirm_m"] > 0.035
 
 
 def test_nav2_follow_path_corridor_push_reports_missing_geometry():

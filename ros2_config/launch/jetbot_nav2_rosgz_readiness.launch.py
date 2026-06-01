@@ -16,6 +16,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 
 
 def _resolve_default_params_file() -> str:
@@ -59,6 +60,21 @@ def generate_launch_description() -> LaunchDescription:
             'use_composition': 'False',
         }.items(),
     )
+    depth_scan_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='d415_depth_sensor_frame_tf',
+        arguments=[
+            '0.075',
+            '0',
+            '0.10',
+            '0',
+            '0',
+            '0',
+            'base_link',
+            'jetbot/d415_camera_link/d415_depth',
+        ],
+    )
 
     return LaunchDescription(
         [
@@ -77,6 +93,7 @@ def generate_launch_description() -> LaunchDescription:
                 default_value=default_params,
                 description='Nav2 params file',
             ),
+            depth_scan_tf,
             nav2_bringup,
         ]
     )
