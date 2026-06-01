@@ -306,6 +306,7 @@ DEFAULT_TARGET_MODEL_NAME = "visit_mission_target"
 DEFAULT_TARGET_MODEL_SDF = REPO_ROOT / "ros2_config" / "frisbee_target_ball.sdf"
 DEFAULT_ZONE_MODEL_NAME = "corral_zone_marker"
 DEFAULT_ZONE_MODEL_SDF = REPO_ROOT / "ros2_config" / "corral_zone_marker.sdf"
+DEFAULT_FETCH_TARGET_MODEL_SDF = REPO_ROOT / "ros2_config" / "calibrated_golf_ball.sdf"
 DEFAULT_FETCH_ZONE_MODEL_NAME = "golf_ball_delivery_zone_marker"
 DEFAULT_FETCH_ZONE_MODEL_SDF = REPO_ROOT / "ros2_config" / "golf_ball_delivery_zone_marker.sdf"
 DEFAULT_MISSION_START_POSE = {"x": 0.0, "y": 0.0, "yaw": 0.0}
@@ -1022,6 +1023,8 @@ class GatherMissionRunner:
         if self.mission_objective not in ALLOWED_MISSION_OBJECTIVES:
             self.mission_objective = MISSION_OBJECTIVE_GATHER_HERE
         if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+            if _path_matches(getattr(args, "target_model_sdf", ""), DEFAULT_TARGET_MODEL_SDF):
+                self.args.target_model_sdf = str(DEFAULT_FETCH_TARGET_MODEL_SDF)
             if _path_matches(getattr(args, "zone_model_sdf", ""), DEFAULT_ZONE_MODEL_SDF):
                 self.args.zone_model_sdf = str(DEFAULT_FETCH_ZONE_MODEL_SDF)
             zone_model_name = clean_text(getattr(args, "zone_model_name", ""))

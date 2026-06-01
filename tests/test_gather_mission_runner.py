@@ -533,8 +533,22 @@ def test_fetch_objective_defaults_to_delivery_marker_sdf(tmp_path, monkeypatch):
 
     assert runner.args.zone_model_name == gather_runner.DEFAULT_FETCH_ZONE_MODEL_NAME
     assert Path(runner.args.zone_model_sdf).name == "golf_ball_delivery_zone_marker.sdf"
+    assert Path(runner.args.target_model_sdf).name == "ball.sdf"
     assert runner._visible_delivery_marker_pose()["radius_m"] == 0.30
     assert runner._fetch_geometry_consistency()["pass"] is True
+
+
+def test_fetch_objective_defaults_to_calibrated_golf_ball_sdf(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.mission_objective = "fetch_to_pose"
+    args.target_model_sdf = str(gather_runner.DEFAULT_TARGET_MODEL_SDF)
+    args.zone_model_sdf = str(gather_runner.DEFAULT_ZONE_MODEL_SDF)
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert Path(runner.args.target_model_sdf).name == "calibrated_golf_ball.sdf"
+    assert Path(runner.args.zone_model_sdf).name == "golf_ball_delivery_zone_marker.sdf"
 
 
 def test_fetch_runtime_state_detects_visible_marker_sdf_radius_mismatch(tmp_path, monkeypatch):
