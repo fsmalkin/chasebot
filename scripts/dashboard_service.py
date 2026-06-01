@@ -2050,6 +2050,12 @@ class DashboardController:
         stage_quality_first_contact_blockers = int(stage_quality_payload.get("first_contact_blocker_count", 0) or 0) if stage_quality_payload else 0
         stage_quality_invalid_model_count = int(stage_quality_payload.get("invalid_model_provenance_count", 0) or 0) if stage_quality_payload else 0
         stage_quality_watch = int(stage_quality_payload.get("saved_anchor_pass_with_contact_watch_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_terminal_candidates = sum(
+            1
+            for row in stage_quality_rows
+            if isinstance(row, dict)
+            and str(row.get("quality_classification", "") or "") == "terminal_arrival_candidate"
+        )
         stage_quality_green = bool(stage_quality_payload.get("stage_quality_green", False)) and stage_quality_invalid_model_count == 0 if stage_quality_payload else False
         stage_quality_overall = str(stage_quality_payload.get("overall_interpretation", "") or "") if stage_quality_payload else ""
 
@@ -2089,6 +2095,12 @@ class DashboardController:
                 headline = f"Stage-quality audit has {stage_quality_setup_capture_blockers} setup/capture blocker; repair capture-entry before seeded random."
             else:
                 headline = f"Stage-quality audit has {stage_quality_blockers} setup/contact blocker; repair stage ownership before seeded random."
+        elif stage_quality_payload and stage_quality_terminal_candidates:
+            status = "warn"
+            headline = (
+                f"Saved-anchor stage quality passed {stage_quality_pass_count}/{stage_quality_total}; "
+                f"{stage_quality_terminal_candidates} terminal-arrival candidate is ready for a narrow correction probe."
+            )
         elif evidence and (seeded_invalid_model_count > 0 or saved_invalid_model_count > 0):
             status = "bad"
             headline = "Saved/seeded fetch evidence lacks calibrated model provenance; rerun the corrected evidence ladder."
@@ -2172,6 +2184,7 @@ class DashboardController:
                 "setup_capture_blocker_count": stage_quality_setup_capture_blockers,
                 "first_contact_blocker_count": stage_quality_first_contact_blockers,
                 "push_coast_blocker_count": stage_quality_push_coast_blockers,
+                "terminal_arrival_candidate_count": stage_quality_terminal_candidates,
                 "invalid_geometry_count": int(stage_quality_payload.get("invalid_geometry_count", 0) or 0) if stage_quality_payload else 0,
                 "invalid_model_provenance_count": stage_quality_invalid_model_count,
                 "watch_count": stage_quality_watch,

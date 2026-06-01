@@ -227,12 +227,15 @@ def _ready_band_error(sample: dict[str, Any]) -> dict[str, Any]:
 def _run_classification(
     *,
     capture_entry_pass: bool,
+    delivery_pass: bool,
     failure_reason: str,
     samples: list[dict[str, Any]],
     best_ready_error: dict[str, Any],
 ) -> str:
     if capture_entry_pass:
         return "capture_entry_pass"
+    if delivery_pass:
+        return "delivery_pass_capture_entry_watchlist"
     if not samples:
         return "capture_entry_not_exercised"
     timeout = failure_reason == "capture_entry_timeout"
@@ -287,6 +290,7 @@ def analyze_run(summary: dict[str, Any], run: dict[str, Any], run_index: int) ->
     command_counts = Counter(_clean_text(sample.get("selected_command_mode")) for sample in samples if _clean_text(sample.get("selected_command_mode")))
     classification = _run_classification(
         capture_entry_pass=capture_entry_pass,
+        delivery_pass=bool(run.get("fetch_to_pose_pass", False)),
         failure_reason=failure_reason,
         samples=samples,
         best_ready_error=best_ready_error,
@@ -349,6 +353,7 @@ def analyze(saved_anchor_summaries: list[str]) -> dict[str, Any]:
         not in {
             "capture_entry_pass",
             "capture_entry_watchlist",
+            "delivery_pass_capture_entry_watchlist",
         }
     )
     if counts.get("recenter_without_forward_progress", 0):

@@ -94,6 +94,26 @@ Stage-owner comparison, later June 1:
   those stages; May 27 object-centric fetch remains the best terminal-delivery
   comparison, with yellow margin flags near the delivery-radius boundary.
 
+Setup/capture gap-fill probe, later June 1:
+
+- analyzer:
+  `scripts/fetch_setup_capture_gap_fill_probe.py`
+- gap-fill artifact:
+  `artifacts/session/live_fetch_setup_capture_gap_fill_20260601/fetch_setup_capture_gap_fill_probe/scorecard.md`
+- saved-anchor one-run rebuild:
+  `artifacts/session/live_ai_push_coast_saved_anchor_gapfill_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`
+- stage-quality audit:
+  `artifacts/session/audit_ai_push_coast_gapfill_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+- capture-entry diagnostic:
+  `artifacts/session/audit_ai_push_coast_gapfill_saved_anchor_one_run_20260601/fetch_capture_entry_diagnostic_analyzer/scorecard.md`
+- interpretation:
+  setup/capture is requalified on the corrected staged path. The latest
+  saved-anchor one-run set is `2/3`: `zero` passed cleanly, `left05` passed
+  with a first-contact alignment watch, and `right05` reached capture-entry but
+  missed the delivery radius at `0.520765m` after a Nav2 corridor-push action
+  abort. The next focused work is a narrow terminal-arrival correction probe,
+  followed by a saved-anchor one-run rebuild.
+
 ## Default Execution Order
 
 1. Keep `spike/fetch-arch-ai-push-coast-servo-20260529` as the active lane for
@@ -117,13 +137,14 @@ Stage-owner comparison, later June 1:
    planner-approved local case -> Nav2 corridor approach -> contact-buffer
    monitor -> deterministic first-contact servo -> Nav2 corridor push ->
    delivery monitor.
-7. Treat the June 1 saved-anchor one-run set as blocked for promotion and use
-   the stage-owner comparison artifact before targeted `right05` repair.
-8. Run a setup/capture gap-fill probe or port prior setup/capture behavior from
-   the Nav2 corridor-push/direct-reference evidence before changing
-   first-contact, push/coast, or terminal correction code.
-9. Start code repair after the gap-fill evidence identifies the stage owner to
-   reuse, restore, or replace.
+7. Treat the June 1 gap-fill saved-anchor one-run rebuild as blocked for
+   promotion with the blocker now localized to `right05` terminal arrival.
+8. Run a narrow terminal-arrival correction probe for the `right05`
+   stop-short/action-abort case. Terminal-arrival correction is the edit
+   surface. Setup/capture or first-contact edits require corrected evidence
+   that reproduces an earlier-stage blocker.
+9. Rebuild corrected saved-anchor one-run evidence after terminal correction,
+   then advance only green `zero`/`left05`/`right05` evidence to `3/3`.
 10. Keep guarded-live AI/contact execution terminal-only until corrected
    saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
 11. Build a mobile visual UAT package before asking for operator signoff:

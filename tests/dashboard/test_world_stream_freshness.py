@@ -1654,6 +1654,56 @@ def test_dashboard_fetch_progress_blocks_stale_model_provenance(tmp_path, monkey
     assert progress["seeded_shadow_gate"]["model_provenance_invalid_count"] == 1
 
 
+def test_dashboard_fetch_progress_prefers_terminal_stage_audit_over_stale_seeded_context(tmp_path, monkeypatch):
+    session_root = tmp_path / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    controller = _make_controller(tmp_path)
+    controller._fetch_progress_cache = {}
+    controller._fetch_progress_cache_at = 0.0
+
+    _write_json(
+        session_root / "fetch_evidence" / "fetch_seeded_gate_evidence_analyzer" / "evidence_summary.json",
+        {
+            "type": "fetch_seeded_gate_evidence_analyzer",
+            "campaign_id": "stale_fetch_evidence",
+            "saved_anchor_context": {
+                "campaign_id": "saved_anchor_campaign",
+                "candidate_rows": [{"layout_id": "zero", "pass": True}],
+            },
+            "seeded_shadow_gate": {"campaign_id": "seeded_gate", "pass_count": 1, "fail_count": 0},
+        },
+    )
+    _write_json(
+        session_root / "stage_audit" / "fetch_saved_anchor_setup_contact_audit" / "audit_summary.json",
+        {
+            "type": "fetch_saved_anchor_setup_contact_audit",
+            "campaign_id": "fresh_stage_audit",
+            "overall_interpretation": "guarded_live_terminal_probe_ready",
+            "stage_quality_green": False,
+            "saved_anchor_count": 3,
+            "stage_quality_pass_count": 2,
+            "setup_contact_blocker_count": 0,
+            "setup_capture_blocker_count": 0,
+            "first_contact_blocker_count": 0,
+            "push_coast_blocker_count": 0,
+            "invalid_model_provenance_count": 0,
+            "saved_anchor_pass_with_contact_watch_count": 1,
+            "saved_anchors": [
+                {"layout": "zero", "pass": True, "delivery_pass": True, "quality_classification": "clean_pass"},
+                {"layout": "left05", "pass": True, "delivery_pass": True, "quality_classification": "pass_with_capture_quality_watch"},
+                {"layout": "right05", "pass": False, "delivery_pass": False, "quality_classification": "terminal_arrival_candidate"},
+            ],
+        },
+    )
+
+    progress = controller.get_state()["fetch_progress"]
+
+    assert progress["status"] == "warn"
+    assert "terminal-arrival candidate" in progress["headline"]
+    assert progress["stage_quality_audit"]["terminal_arrival_candidate_count"] == 1
+    assert progress["stage_quality_audit"]["invalid_model_provenance_count"] == 0
+
+
 def test_browser_dashboard_promotes_golf_fetch_as_featured_demo():
     js_path = REPO_ROOT / "runtime/dashboard/browser_dashboard.js"
     js = js_path.read_text(encoding="utf-8")

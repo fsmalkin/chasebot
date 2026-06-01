@@ -879,6 +879,21 @@ Live gates:
      and corrected direct `right05` provide reusable setup/capture evidence,
      and May 27 object-centric fetch remains the terminal-delivery comparison
      baseline with margin watch flags.
+   - setup/capture gap-fill probe:
+     `artifacts/session/live_fetch_setup_capture_gap_fill_20260601/fetch_setup_capture_gap_fill_probe/scorecard.md`
+   - gap-fill result:
+     current `ai_push_coast_servo_v1` passed `right05` once with `0.271919m`
+     closest approach; Nav2 corridor-push failed terminal arrival at
+     `0.572189m`; object-centric passed at `0.29623m`. The corrected
+     capture-entry diagnostic over the subsequent saved-anchor rebuild
+     requalified setup/capture with `0` blockers.
+   - saved-anchor rebuild after gap-fill:
+     `artifacts/session/live_ai_push_coast_saved_anchor_gapfill_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`
+   - stage-quality result:
+     `zero` passed cleanly, `left05` passed with a first-contact alignment
+     watch, and `right05` became a terminal-arrival candidate after missing at
+     `0.520765m`. Next live work is one narrow terminal-arrival correction
+     probe before another saved-anchor one-run rebuild.
 12. Hybrid fetch stage-supervisor / AI push-coast spike contract:
    - branch: `spike/fetch-arch-ai-push-coast-servo-20260529`
    - first gate: shadow-only handoff/maneuver prediction over saved anchors, the

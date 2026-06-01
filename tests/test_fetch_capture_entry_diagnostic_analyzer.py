@@ -171,3 +171,32 @@ def test_capture_entry_analyzer_classifies_pass(tmp_path):
 
     assert summary["overall_interpretation"] == "capture_entry_requalified"
     assert summary["runs"][0]["classification"] == "capture_entry_pass"
+
+
+def test_delivery_pass_with_missing_capture_entry_flag_is_watchlist(tmp_path):
+    mission_root = tmp_path / "mission"
+    _write_state_history(
+        mission_root,
+        [
+            _capture_entry_row(
+                ball_x=0.58,
+                ball_y=-0.12,
+                bearing=-0.2,
+                linear_x=0.035,
+                mode="capture_entry_ready",
+                timeout_cause="ready_dwell_not_completed",
+            )
+        ],
+    )
+    summary_path = tmp_path / "summary.json"
+    _summary(summary_path, mission_root, passed=True, failure_reason="")
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    payload["runs"][0]["fresh_attempt_approach"]["capture_entry"]["pass"] = False
+    payload["runs"][0]["fresh_attempt_approach"]["capture_entry"]["reached"] = False
+    write_json(summary_path, payload)
+
+    summary = analyzer.analyze([str(summary_path)])
+
+    assert summary["overall_interpretation"] == "capture_entry_requalified"
+    assert summary["capture_entry_blocker_count"] == 0
+    assert summary["runs"][0]["classification"] == "delivery_pass_capture_entry_watchlist"

@@ -585,6 +585,22 @@ behavior, May 27 object-centric fetch, Nav2 corridor-push, corrected direct
 seeded generalization, and guarded-live terminal correction wait for that
 comparison.
 
+The later June 1 setup/capture gap-fill probe requalified the front half of the
+staged local fetch path. `scripts/fetch_setup_capture_gap_fill_probe.py`
+compared current `ai_push_coast_servo_v1`, Nav2 corridor-push, and
+object-centric behavior on `right05`:
+`artifacts/session/live_fetch_setup_capture_gap_fill_20260601/fetch_setup_capture_gap_fill_probe/scorecard.md`.
+The current staged path passed once at `0.271919m`; object-centric passed once
+at `0.29623m`; Nav2 corridor-push missed terminal arrival at `0.572189m`.
+The follow-on saved-anchor rebuild
+`artifacts/session/live_ai_push_coast_saved_anchor_gapfill_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`
+passed `zero` and `left05`, while `right05` reached capture-entry and failed
+terminal arrival at `0.520765m`. The refreshed stage-quality audit
+`artifacts/session/audit_ai_push_coast_gapfill_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+classifies the current blocker as terminal arrival. The roadmap sequence is now
+narrow terminal-arrival correction, corrected saved-anchor one-run rebuild,
+saved-anchor `3/3`, then seeded random.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
