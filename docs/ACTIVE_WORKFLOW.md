@@ -870,6 +870,15 @@ Live gates:
      direct `right05`, and prior acquisition or goal-side setup evidence by
      setup, capture, first contact, push/coast, terminal delivery, and video
      clarity.
+   - stage-owner comparison artifact:
+     `artifacts/session/live_fetch_stage_owner_comparison_20260601/fetch_stage_owner_comparison/scorecard.md`
+   - comparison result:
+     recommended action is
+     `run_setup_capture_gap_fill_or_port_prior_behavior`; planner handoff is
+     green, current staged `right05` setup/capture is red, Nav2 corridor-push
+     and corrected direct `right05` provide reusable setup/capture evidence,
+     and May 27 object-centric fetch remains the terminal-delivery comparison
+     baseline with margin watch flags.
 12. Hybrid fetch stage-supervisor / AI push-coast spike contract:
    - branch: `spike/fetch-arch-ai-push-coast-servo-20260529`
    - first gate: shadow-only handoff/maneuver prediction over saved anchors, the

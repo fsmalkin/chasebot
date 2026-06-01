@@ -78,6 +78,22 @@ Saved-anchor requalification, later June 1:
   `artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
   classifies the blocker as setup/capture
 
+Stage-owner comparison, later June 1:
+
+- analyzer:
+  `scripts/fetch_stage_owner_comparison.py`
+- artifact:
+  `artifacts/session/live_fetch_stage_owner_comparison_20260601/fetch_stage_owner_comparison/scorecard.md`
+- recommended action:
+  `run_setup_capture_gap_fill_or_port_prior_behavior`
+- interpretation:
+  the planner handoff is green; current staged Nav2/contact-buffer is red on
+  `right05` setup/capture; Nav2 corridor-push and the corrected direct
+  `right05` reference show reusable setup/capture behavior; current staged
+  first-contact and push/coast are yellow because `right05` stopped before
+  those stages; May 27 object-centric fetch remains the best terminal-delivery
+  comparison, with yellow margin flags near the delivery-radius boundary.
+
 ## Default Execution Order
 
 1. Keep `spike/fetch-arch-ai-push-coast-servo-20260529` as the active lane for
@@ -101,14 +117,13 @@ Saved-anchor requalification, later June 1:
    planner-approved local case -> Nav2 corridor approach -> contact-buffer
    monitor -> deterministic first-contact servo -> Nav2 corridor push ->
    delivery monitor.
-7. Treat the June 1 saved-anchor one-run set as blocked for promotion and run a
-   broad stage-owner comparison before targeted `right05` repair.
-8. Compare current staged Nav2/contact-buffer behavior, May 27 object-centric
-   fetch, Nav2 corridor-push, corrected direct `right05`, and prior
-   goal-side/acquisition evidence on setup, capture entry, first contact,
-   push/coast, terminal delivery, and visual clarity.
-9. Start code repair after the comparison identifies the stage owner to reuse,
-   restore, or replace.
+7. Treat the June 1 saved-anchor one-run set as blocked for promotion and use
+   the stage-owner comparison artifact before targeted `right05` repair.
+8. Run a setup/capture gap-fill probe or port prior setup/capture behavior from
+   the Nav2 corridor-push/direct-reference evidence before changing
+   first-contact, push/coast, or terminal correction code.
+9. Start code repair after the gap-fill evidence identifies the stage owner to
+   reuse, restore, or replace.
 10. Keep guarded-live AI/contact execution terminal-only until corrected
    saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
 11. Build a mobile visual UAT package before asking for operator signoff:
