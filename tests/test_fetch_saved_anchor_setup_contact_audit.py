@@ -296,6 +296,52 @@ def test_saved_anchor_audit_flags_pre_stage_yaw_watch_from_state_history(tmp_pat
     assert row["pre_stage_yaw_travel_max_deg"] == 360.0
 
 
+def test_saved_anchor_audit_flags_capture_yaw_watch_from_state_history(tmp_path):
+    path = tmp_path / "right05_summary.json"
+    mission_root = tmp_path / "mission"
+    _write_state_history(
+        mission_root,
+        [
+            {
+                "phase": "capture",
+                "generated_utc": "2026-05-31T00:00:00+00:00",
+                "robot_pose": {"yaw": math.radians(-35.0)},
+                "ball_pose": {"x": 0.38, "y": -0.05},
+            },
+            {
+                "phase": "capture",
+                "generated_utc": "2026-05-31T00:00:01+00:00",
+                "robot_pose": {"yaw": math.radians(35.0)},
+                "ball_pose": {"x": 0.38, "y": -0.05},
+            },
+            {
+                "phase": "capture",
+                "generated_utc": "2026-05-31T00:00:02+00:00",
+                "robot_pose": {"yaw": math.radians(-35.0)},
+                "ball_pose": {"x": 0.38, "y": -0.05},
+            },
+        ],
+    )
+    payload = _summary(campaign_id="right05", layout="right05", passed=True, closest=0.14)
+    payload["runs"][0]["mission_root"] = str(mission_root)
+    payload["runs"][0]["fresh_attempt_approach"] = {
+        "pre_stage": {"handoff_pass": True, "pose_reached": True, "time_s": 2.0},
+        "capture_entry": {"pass": True, "reached": True, "time_s": 2.0, "failure_reason": ""},
+    }
+    write_json(path, payload)
+
+    summary = audit.analyze([str(path)])
+
+    row = summary["saved_anchors"][0]
+    assert row["pass"] is True
+    assert row["quality_classification"] == "pass_with_capture_quality_watch"
+    assert "capture_yaw_watch" in row["quality_flags"]
+    assert "capture_yaw_sign_crossing_watch" in row["quality_flags"]
+    assert row["capture_yaw_travel_max_deg"] == 140.0
+    assert row["capture_yaw_span_max_deg"] == 70.0
+    assert row["capture_yaw_sign_crossing_max"] == 2
+
+
 def test_saved_anchor_audit_rejects_geometry_mismatch_even_when_fetch_passes(tmp_path):
     path = tmp_path / "zero_summary.json"
     payload = _summary(campaign_id="zero", layout="zero", passed=True, closest=0.12)

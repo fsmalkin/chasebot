@@ -108,7 +108,10 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
                     "pass": True,
                     "delivery_pass": True,
                     "quality_classification": "pass_with_capture_quality_watch",
-                    "quality_flags": ["pre_stage_yaw_watch"],
+                    "quality_flags": ["pre_stage_yaw_watch", "capture_yaw_watch"],
+                    "capture_yaw_travel_max_deg": 82.5,
+                    "capture_yaw_span_max_deg": 72.0,
+                    "capture_yaw_sign_crossing_max": 3,
                 }
             ],
         },
@@ -138,6 +141,8 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
     assert summary["local_fetch_pass_seen"] is True
     assert summary["stage_quality_status"] == "watch"
     assert summary["stage_quality_audits"][0]["watch_count"] == 1
+    assert summary["stage_quality_audits"][0]["saved_anchors"][0]["capture_yaw_travel_max_deg"] == 82.5
+    assert summary["stage_quality_audits"][0]["saved_anchors"][0]["capture_yaw_sign_crossing_max"] == 3
     assert "stage_quality_watch" in summary["warnings"]
     assert summary["fetch_marker_geometry_mismatch_seen"] is False
     assert {video["name"] for video in summary["videos"]} == {

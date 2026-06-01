@@ -348,6 +348,9 @@ def summarize_stage_quality(path: Path) -> dict[str, Any]:
                 "model_provenance_valid": bool(row.get("model_provenance_valid", False)),
                 "model_provenance_reason": str(row.get("model_provenance_reason", "") or ""),
                 "pre_stage_yaw_travel_max_deg": row.get("pre_stage_yaw_travel_max_deg"),
+                "capture_yaw_travel_max_deg": row.get("capture_yaw_travel_max_deg"),
+                "capture_yaw_span_max_deg": row.get("capture_yaw_span_max_deg"),
+                "capture_yaw_sign_crossing_max": row.get("capture_yaw_sign_crossing_max"),
                 "capture_entry_time_max_s": row.get("capture_entry_time_max_s"),
             }
             for row in rows

@@ -23,6 +23,9 @@ SETUP_LATERAL_LIMIT_M = 0.22
 SETUP_YAW_LIMIT_DEG = 18.0
 PRE_CONTACT_BALL_MOTION_LIMIT_M = 0.030
 PRE_STAGE_YAW_WATCH_DEG = 270.0
+CAPTURE_YAW_WATCH_DEG = 60.0
+CAPTURE_YAW_SIGN_CROSSING_WATCH_COUNT = 2
+CAPTURE_YAW_SIGN_CROSSING_DEADBAND_DEG = 5.0
 PRE_STAGE_TIME_WATCH_S = 18.0
 CAPTURE_ENTRY_TIME_WATCH_S = 4.0
 FIRST_CONTACT_ALIGNMENT_WATCH_DEG = 12.0
@@ -184,19 +187,53 @@ def _metric_min_abs(values: list[float | None]) -> float | None:
     return min(finite) if finite else None
 
 
+def _yaw_metrics(rows: list[dict[str, Any]], *, deadband_deg: float = CAPTURE_YAW_SIGN_CROSSING_DEADBAND_DEG) -> dict[str, Any]:
+    yaw_values: list[float] = []
+    for row in rows:
+        yaw = _finite_float(_dict(row.get("robot_pose")).get("yaw"))
+        if yaw is not None:
+            yaw_values.append(float(yaw))
+    if not yaw_values:
+        return {
+            "yaw_sample_count": 0,
+            "yaw_travel_deg": 0.0,
+            "yaw_span_deg": 0.0,
+            "yaw_sign_crossing_count": 0,
+        }
+
+    yaw_travel = 0.0
+    unwrapped = [yaw_values[0]]
+    for index in range(1, len(yaw_values)):
+        delta = _angle_delta_rad(yaw_values[index], yaw_values[index - 1])
+        yaw_travel += abs(delta)
+        unwrapped.append(unwrapped[-1] + delta)
+
+    deadband = math.radians(float(deadband_deg))
+    previous_sign = 0
+    sign_crossings = 0
+    for yaw in yaw_values:
+        if abs(yaw) <= deadband:
+            continue
+        current_sign = 1 if yaw > 0.0 else -1
+        if previous_sign and current_sign != previous_sign:
+            sign_crossings += 1
+        previous_sign = current_sign
+
+    return {
+        "yaw_sample_count": len(yaw_values),
+        "yaw_travel_deg": round(math.degrees(yaw_travel), 6),
+        "yaw_span_deg": round(math.degrees(max(unwrapped) - min(unwrapped)), 6),
+        "yaw_sign_crossing_count": sign_crossings,
+    }
+
+
 def _state_history_stage_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     pre_stage_rows = [row for row in rows if _clean_text(row.get("phase")) == "pre_stage"]
     pre_contact_rows = [row for row in rows if _clean_text(row.get("phase")) in PRE_CONTACT_PHASES]
     capture_entry_rows = [row for row in rows if _clean_text(row.get("phase")) == "capture_entry"]
-
-    yaw_values: list[float] = []
-    for row in pre_stage_rows:
-        yaw = _finite_float(_dict(row.get("robot_pose")).get("yaw"))
-        if yaw is not None:
-            yaw_values.append(float(yaw))
-    yaw_delta = 0.0
-    for index in range(1, len(yaw_values)):
-        yaw_delta += abs(_angle_delta_rad(yaw_values[index], yaw_values[index - 1]))
+    capture_rows = [row for row in rows if _clean_text(row.get("phase")) == "capture"]
+    pre_stage_yaw = _yaw_metrics(pre_stage_rows)
+    capture_yaw = _yaw_metrics(capture_rows)
 
     modes: list[str] = []
     for row in pre_stage_rows:
@@ -240,8 +277,13 @@ def _state_history_stage_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "state_history_rows": len(rows),
         "pre_stage_row_count": len(pre_stage_rows),
+        "capture_row_count": len(capture_rows),
         "capture_entry_row_count": len(capture_entry_rows),
-        "pre_stage_yaw_travel_deg": round(math.degrees(yaw_delta), 6),
+        "pre_stage_yaw_travel_deg": pre_stage_yaw["yaw_travel_deg"],
+        "capture_yaw_travel_deg": capture_yaw["yaw_travel_deg"],
+        "capture_yaw_span_deg": capture_yaw["yaw_span_deg"],
+        "capture_yaw_sign_crossing_count": capture_yaw["yaw_sign_crossing_count"],
+        "capture_yaw_sample_count": capture_yaw["yaw_sample_count"],
         "pre_stage_mode_count": len(set(modes)),
         "pre_stage_mode_transition_count": mode_transition_count,
         "pre_stage_command_modes": sorted(set(modes)),
@@ -492,6 +534,12 @@ def _quality_flags(metrics: dict[str, Any], failure_reasons: list[str]) -> list[
     pre_stage_yaw = _finite_float(metrics.get("pre_stage_yaw_travel_deg"))
     if pre_stage_yaw is not None and pre_stage_yaw > PRE_STAGE_YAW_WATCH_DEG:
         add("pre_stage_yaw_watch")
+    capture_yaw = _finite_float(metrics.get("capture_yaw_travel_deg"))
+    if capture_yaw is not None and capture_yaw > CAPTURE_YAW_WATCH_DEG:
+        add("capture_yaw_watch")
+    capture_yaw_crossings = int(_finite_float(metrics.get("capture_yaw_sign_crossing_count")) or 0)
+    if capture_yaw_crossings >= CAPTURE_YAW_SIGN_CROSSING_WATCH_COUNT:
+        add("capture_yaw_sign_crossing_watch")
     pre_stage_time = _finite_float(metrics.get("pre_stage_time_s"))
     if pre_stage_time is not None and pre_stage_time > PRE_STAGE_TIME_WATCH_S:
         add("pre_stage_time_watch")
@@ -756,6 +804,25 @@ def analyze_summary(path: Path, summary: dict[str, Any]) -> dict[str, Any]:
                 for row in run_quality_rows
             ])
         ),
+        "capture_yaw_travel_max_deg": _round_or_none(
+            _metric_max([
+                _finite_float(_dict(row.get("metrics")).get("capture_yaw_travel_deg"))
+                for row in run_quality_rows
+            ])
+        ),
+        "capture_yaw_span_max_deg": _round_or_none(
+            _metric_max([
+                _finite_float(_dict(row.get("metrics")).get("capture_yaw_span_deg"))
+                for row in run_quality_rows
+            ])
+        ),
+        "capture_yaw_sign_crossing_max": int(
+            _metric_max([
+                _finite_float(_dict(row.get("metrics")).get("capture_yaw_sign_crossing_count"))
+                for row in run_quality_rows
+            ])
+            or 0
+        ),
         "pre_stage_mode_transition_max": int(
             _metric_max([
                 _finite_float(_dict(row.get("metrics")).get("pre_stage_mode_transition_count"))
@@ -878,8 +945,8 @@ def write_scorecard(summary: dict[str, Any], path: Path) -> None:
         f"- Invalid model provenance: `{summary.get('invalid_model_provenance_count', 0)}`",
         f"- Guarded-live terminal candidates: `{summary.get('guarded_live_terminal_candidate_count')}`",
         "",
-        "| layout | stage pass | delivery | model | quality | flags | closest | yaw travel | capture-entry | interpretation | next action |",
-        "|---|---:|---:|---:|---|---|---:|---:|---:|---|---|",
+        "| layout | stage pass | delivery | model | quality | flags | closest | pre-stage yaw | capture yaw | capture crossings | capture-entry | interpretation | next action |",
+        "|---|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---|---|",
     ]
     for row in _list(summary.get("saved_anchors")):
         lines.append(
@@ -894,6 +961,8 @@ def write_scorecard(summary: dict[str, Any], path: Path) -> None:
                     ", ".join(_list(row.get("quality_flags"))) or "-",
                     str(row.get("closest_approach_distance_m")),
                     str(row.get("pre_stage_yaw_travel_max_deg")),
+                    str(row.get("capture_yaw_travel_max_deg")),
+                    str(row.get("capture_yaw_sign_crossing_max")),
                     str(row.get("capture_entry_time_max_s")),
                     _clean_text(row.get("interpretation")),
                     _clean_text(row.get("recommended_next_action")),
