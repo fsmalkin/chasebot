@@ -892,8 +892,17 @@ Live gates:
    - stage-quality result:
      `zero` passed cleanly, `left05` passed with a first-contact alignment
      watch, and `right05` became a terminal-arrival candidate after missing at
-     `0.520765m`. Next live work is one narrow terminal-arrival correction
-     probe before another saved-anchor one-run rebuild.
+     `0.520765m`.
+   - clip-review reframe:
+     `artifacts/session/audit_ai_push_coast_capture_yaw_saved_layout_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+     and
+     `artifacts/session/uat_ai_push_coast_capture_yaw_saved_layout_one_run_20260601/fetch_visual_uat_package/scorecard.md`
+     supersede the terminal-correction priority. `zero` shows the desired
+     centerline behavior, while `left05` and `right05` show off-axis
+     setup/capture/handoff instability before terminal correction is a fair
+     target. Next live work is capture-geometry setup: compute the ball-target
+     delivery line, compute the capture pose behind the ball, reach and gate
+     that pose, then hand a clean setup to Nav2 corridor push.
 12. Hybrid fetch stage-supervisor / AI push-coast spike contract:
    - branch: `spike/fetch-arch-ai-push-coast-servo-20260529`
    - first gate: shadow-only handoff/maneuver prediction over saved anchors, the
@@ -906,9 +915,9 @@ Live gates:
    - required stage labels: `setup`, `first_contact`, `push_coast`,
      `terminal_arrival`, and `terminal_correction`, derived from contact flags,
      miss reasons, and measured geometry
-   - deterministic routines own fine pre-capture alignment, first-contact
-     stabilization, terminal stop-short correction, bounded re-push/coast, and
-     recentering
+   - deterministic routines own capture-geometry setup, fine pre-capture
+     alignment, first-contact stabilization, terminal stop-short correction,
+     bounded re-push/coast, and recentering
    - guarded-live v1 is terminal-only: it may accept one deterministic
      re-push/re-aim cycle only after measured object motion and a near-contract
      terminal miss; setup, capture-entry, first-contact, push/coast quality,

@@ -19,11 +19,16 @@ not only the current saved layouts.
 
 Deliver Planner-Gated Generalized Fetch-To-Pose v1: a no-shoot, robot-owned
 fetch behavior where an LLM/world-state planner chooses the right bounded route,
-Nav2 owns as much real-time robot motion as it can safely own, and a thin
+the local fetch subsystem computes the intended ball path and capture geometry,
+Nav2 owns the robot path whenever the handoff geometry is valid, and a thin
 fetch adapter monitors corrected ball/target geometry, success, escape, stale
-state, and replanning triggers. Custom contact routines and AI push-coast
-prediction remain fallback lanes that earn live authority only after corrected
-Nav2-first evidence exposes a reproducible stage gap.
+state, and replanning triggers. The runtime sequence is:
+planner route classification, ball-target delivery line, capture-pose setup,
+geometry-gated handoff, Nav2 corridor push, monitor classification, and one
+bounded correction only from a clean near-contract terminal miss. Custom contact
+routines and AI push-coast prediction remain fallback lanes that earn live
+authority only after corrected Nav2-first evidence exposes a reproducible stage
+gap.
 
 Scope correction: this milestone proves the planner-to-subsystem handoff plus
 the bounded local fetch skill. The planner first classifies scenes as
@@ -85,16 +90,19 @@ Architecture reset:
 
 1. Default to `LLM/world-state planner -> Nav2/BT action owner -> thin fetch
    adapter and geometry monitor -> robot`.
-2. Let Nav2 own long-haul navigation, repositioning, corridor approach, and
+2. Compute the ball-target delivery line and desired capture pose before
+   contact; the robot must be behind the ball, square to the delivery line, and
+   inside standoff, lateral-error, and yaw-error gates before Nav2 pushes.
+3. Let Nav2 own long-haul navigation, repositioning, corridor approach, and
    bounded push paths whenever corrected evidence shows the ball remains inside
    the local envelope.
-3. Keep the custom fetch adapter focused on intent translation, corrected
+4. Keep the custom fetch adapter focused on intent translation, corrected
    geometry monitoring, escape/stale/success classification, and replanning or
    cancellation.
-4. Keep AI push-coast/contact-stability as the fallback lane for reproducible
+5. Keep AI push-coast/contact-stability as the fallback lane for reproducible
    gaps such as setup instability, first-contact drift, terminal stop-short, or
    re-aim selection.
-5. Keep large world-model or VLA ideas as high-level planning, teacher-label,
+6. Keep large world-model or VLA ideas as high-level planning, teacher-label,
    or offboard scoring tools until a smaller `tensorrt_int8`-compatible onboard
    predictor has shadow evidence.
 
@@ -236,6 +244,45 @@ contact, push/coast stability, terminal delivery, and visual clarity
 separately. A targeted `right05` repair starts after the scorecard identifies
 the lifecycle stage and prior behavior to reuse, restore, or replace.
 
+## June 1, 2026 Clip-Review Algorithm Alignment
+
+Operator clip review and telemetry agree on the current boundary. The centerline
+case works because the robot starts with clean capture geometry: the ball stays
+centered, the push line matches the target, and the ball reaches the delivery
+circle. The off-axis `left05` and `right05` clips fail before terminal correction
+is the main problem. Both show capture/handoff instability; `left05` pushes the
+ball laterally out of the corridor, while `right05` under-moves the ball after an
+unstable approach.
+
+Evidence:
+
+- Audit:
+  `artifacts/session/audit_ai_push_coast_capture_yaw_saved_layout_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+- Visual package:
+  `artifacts/session/uat_ai_push_coast_capture_yaw_saved_layout_one_run_20260601/fetch_visual_uat_package/scorecard.md`.
+- Result: `zero` passed with `0.190334m` closest approach; `left05` failed at
+  `0.656077m` with large lateral escape and capture yaw churn; `right05` failed
+  at `0.461005m` with small ball motion and capture yaw churn.
+
+Current algorithm:
+
+1. Planner or LLM classifies whether the scene belongs to local fetch.
+2. The local fetch planner computes the intended ball path: current ball pose to
+   target circle.
+3. The setup stage computes a capture pose behind the ball on that line and
+   gets the robot there with Nav2 or a bounded deterministic local routine.
+4. A geometry gate checks standoff, lateral offset, yaw error, target freshness,
+   and ball-target corridor validity before contact.
+5. Nav2 owns the corridor push after the handoff is clean.
+6. The monitor classifies success, ball escape, stale state, unsafe drift,
+   action abort, timeout, and near-contract terminal miss.
+7. Terminal correction runs only when object motion already happened and the
+   miss is small; setup/capture failures go back to capture planning.
+
+Next engineering focus: implement and prove the setup/capture path as a first
+class stage. Terminal correction remains useful, but it follows clean capture
+geometry in the sequence.
+
 ## May 28, 2026 Direction
 
 The research pass selected a no-shoot runtime direction. After the May 31
@@ -365,12 +412,14 @@ center of gravity:
    Nav2/contact-buffer behavior, May 27 object-centric fetch, Nav2
    corridor-push, corrected direct `right05`, and prior acquisition or
    goal-side setup evidence
-3. run missing canonical one-run probes only to fill comparison gaps
-4. dispatch local `fetch_to_pose` only for planner-approved
+3. make setup/capture geometry explicit: delivery line, capture pose, standoff,
+   lateral error, yaw error, and handoff gate
+4. run missing canonical one-run probes only to fill comparison gaps
+5. dispatch local `fetch_to_pose` only for planner-approved
    `fetch_ready_local` scenes
-5. select the next targeted fix by stage-owner evidence, then repair the chosen
+6. select the next targeted fix by stage-owner evidence, then repair the chosen
    lifecycle stage
-6. let the AI push-coast lane score stage gaps in shadow mode from corrected
+7. let the AI push-coast lane score stage gaps in shadow mode from corrected
    Nav2-first failures
 
 The current `spike/fetch-arch-ai-push-coast-servo-20260529` branch remains a

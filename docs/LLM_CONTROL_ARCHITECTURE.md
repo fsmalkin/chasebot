@@ -37,20 +37,22 @@ deterministic contact routines:
 
 1. LM or VLA-style models may supervise high-level task mode, failure
    interpretation, and known maneuver choices.
-2. A local learned model may predict ball trajectory, miss vector, stage handoff,
+2. The deterministic local fetch planner computes the intended ball path,
+   capture pose, setup route, and handoff gate before Nav2 is asked to push.
+3. A local learned model may predict ball trajectory, miss vector, stage handoff,
    terminal re-push need, coast timing, setup pocket, recenter side, or recovery
    side.
-3. The fetch state machine and deterministic guards decide whether any proposal
+4. The fetch state machine and deterministic guards decide whether any proposal
    is legal.
-4. Nav2 `FollowPath` may own coarse robot path tracking through the ball-target
+5. Nav2 `FollowPath` may own coarse robot path tracking through the ball-target
    corridor while a monitor cancels on success, ball escape, stale state, unsafe
    drift, timeout, or action abort.
-5. Deterministic homebrew routines own fine pre-capture alignment, first-contact
-   stabilization, terminal stop-short correction, bounded re-push/coast, and
-   recentering.
-6. The learned lane should predict when to stay with Nav2 versus hand off to one
+6. Deterministic homebrew routines own capture-geometry setup, fine pre-contact
+   alignment, first-contact stabilization, terminal stop-short correction,
+   bounded re-push/coast, and recentering.
+7. The learned lane should predict when to stay with Nav2 versus hand off to one
    of those deterministic routines.
-7. Learned outputs remain shadow-only until saved-anchor and seeded-random
+8. Learned outputs remain shadow-only until saved-anchor and seeded-random
    scoring is green and deterministic guards accept the handoff or maneuver
    class.
 
@@ -89,6 +91,10 @@ The latest proven Nav2 lane is therefore evidence, not the final architecture:
 The immediate hybrid learned lane is:
 
 `LM/VLA supervisor -> deterministic fetch state machine/guards -> Nav2 or deterministic contact routine -> local learned handoff/proposer in shadow -> robot`
+
+The current preferred local fetch algorithm is:
+
+`planner route label -> ball-target delivery line -> capture pose -> setup motion -> handoff geometry gate -> Nav2 corridor push -> monitor -> bounded correction/replan`
 
 This is a no-shoot architecture. Contact-aware geometric-shooter artifacts can
 inform roll/coast physics, but direct ball impulses are not a runtime control

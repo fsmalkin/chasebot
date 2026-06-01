@@ -60,9 +60,12 @@ The immediate architecture direction is Nav2/LLM-first:
 - the LLM/world-state planner chooses `fetch_ready_local`,
   `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`, or
   `ambiguous_or_unsafe_no_go`
-- Nav2 owns long-haul navigation, repositioning, corridor approach, and bounded
-  push paths wherever corrected evidence shows the ball remains inside the
-  local envelope
+- the local fetch planner computes the ball-target delivery line, the desired
+  capture pose behind the ball, and the geometry gate for standoff, lateral
+  error, yaw error, target freshness, and corridor validity
+- Nav2 owns long-haul navigation, repositioning, setup motion, corridor
+  approach, and bounded push paths wherever corrected evidence shows the ball
+  remains inside the local envelope
 - the fetch adapter translates local fetch intents, monitors corrected
   ball/target geometry, and cancels or replans on success, escape, stale state,
   unsafe drift, timeout, or action abort
@@ -345,22 +348,33 @@ fallback for reproducible setup, contact, terminal, or re-aim gaps.
 
 Control order:
 
-1. Stabilize the pre-contact approach on the ball-target line.
-2. Make first contact with low lateral error and low yaw error.
-3. Let Nav2 track a ball-target corridor path where useful, while a monitor
+1. Compute the intended ball path from current ball pose to the target circle.
+2. Compute the capture pose behind the ball on that line, including standoff,
+   lateral-error, and yaw-error tolerances.
+3. Use Nav2 or a bounded deterministic setup routine to reach the capture pose.
+4. Gate the handoff before contact: target fresh, corridor valid, robot behind
+   ball, standoff in range, lateral error low, yaw error low.
+5. Let Nav2 track a ball-target corridor path where useful, while a monitor
    cancels only on success, ball escape, stale state, unsafe drift, timeout, or
    action abort.
-4. Add deterministic homebrew routines only for contact-rich stages outside the
+6. Add deterministic homebrew routines only for contact-rich stages outside the
    corrected Nav2/adapter baseline's reliable envelope: fine pre-capture
    alignment, first-contact stabilization, terminal stop-short correction,
    bounded re-push/coast, and recenter.
-5. Add shadow-mode learned prediction/proposal for stage handoff, miss vector,
+7. Add shadow-mode learned prediction/proposal for stage handoff, miss vector,
    terminal re-push need, recenter side, and recovery side after corrected
    failures show those labels are reproducible.
-6. Allow learned proposals to select a guarded maneuver class only after
+8. Allow learned proposals to select a guarded maneuver class only after
    deterministic guards accept the class and shadow evidence shows benefit.
-7. Use a wider attachment/funnel as an allowed mechanical robustness path, but
+9. Use a wider attachment/funnel as an allowed mechanical robustness path, but
    do not let width hide unstable approach telemetry.
+
+Latest clip-review interpretation: the June 1 `ai_push_coast_servo_v1`
+saved-anchor rebuild is `1/3` under corrected geometry and model provenance.
+`zero` shows the desired staged behavior, while `left05` and `right05` both
+show off-axis capture/handoff instability. The next implementation work is the
+setup/capture stage above; terminal correction resumes after clean capture
+geometry is proven across `zero`, `left05`, and `right05`.
 
 Approach-quality evidence must record:
 

@@ -597,9 +597,22 @@ The follow-on saved-anchor rebuild
 passed `zero` and `left05`, while `right05` reached capture-entry and failed
 terminal arrival at `0.520765m`. The refreshed stage-quality audit
 `artifacts/session/audit_ai_push_coast_gapfill_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
-classifies the current blocker as terminal arrival. The roadmap sequence is now
-narrow terminal-arrival correction, corrected saved-anchor one-run rebuild,
-saved-anchor `3/3`, then seeded random.
+classified the blocker as terminal arrival at that point and suggested narrow
+terminal-arrival correction before the later clip review refined the priority.
+
+Later operator clip review refined that sequence again. The
+`ai_push_coast_servo_v1` guarded-live saved-anchor clips in
+`artifacts/session/uat_ai_push_coast_capture_yaw_saved_layout_one_run_20260601/fetch_visual_uat_package/scorecard.md`
+and
+`artifacts/session/audit_ai_push_coast_capture_yaw_saved_layout_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+show one clean centerline pass and two off-axis setup/capture/handoff failures:
+`left05` escapes laterally, and `right05` under-moves after unstable capture.
+The roadmap sequence is now capture-geometry setup first, then saved-anchor
+one-run rebuild, then terminal correction only for clean near-contract misses.
+The intended algorithm is straightforward: route classification, ball-target
+delivery line, capture pose behind the ball, geometry-gated setup handoff, Nav2
+corridor push, delivery monitor, and bounded correction only from a clean
+terminal state.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`

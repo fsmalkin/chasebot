@@ -12,6 +12,11 @@ class, Nav2 owns as much real-time robot motion as corrected evidence supports,
 and a thin fetch adapter monitors corrected delivery geometry, object progress,
 escape, stale state, and replanning triggers.
 
+The default control sequence is deliberately simple: classify the route, compute
+the intended ball path, compute the capture pose behind the ball, reach and gate
+that setup, let Nav2 push through the ball-target corridor, then let the monitor
+classify success or the next bounded recovery.
+
 The broader product path is **Planner-Gated Generalized Fetch**. Mixed or
 surprising random scenes must pass planner routing before local fetch is judged.
 Custom contact routines and AI push-coast proposals remain fallback lanes that
@@ -111,8 +116,22 @@ Setup/capture gap-fill probe, later June 1:
   saved-anchor one-run set is `2/3`: `zero` passed cleanly, `left05` passed
   with a first-contact alignment watch, and `right05` reached capture-entry but
   missed the delivery radius at `0.520765m` after a Nav2 corridor-push action
-  abort. The next focused work is a narrow terminal-arrival correction probe,
-  followed by a saved-anchor one-run rebuild.
+  abort. This initially pointed at terminal-arrival correction. The later
+  clip-review reframe below supersedes that sequence.
+
+Clip-review reframe, later June 1:
+
+- audit:
+  `artifacts/session/audit_ai_push_coast_capture_yaw_saved_layout_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+- visual package:
+  `artifacts/session/uat_ai_push_coast_capture_yaw_saved_layout_one_run_20260601/fetch_visual_uat_package/scorecard.md`
+- interpretation:
+  the latest operator-visible clips supersede the terminal-correction priority.
+  `zero` is the desired behavior, but `left05` and `right05` show off-axis
+  setup/capture/handoff instability. `left05` pushes the ball laterally out of
+  the corridor; `right05` under-moves the ball after unstable capture. The next
+  implementation work is a first-class capture-geometry setup stage before
+  another terminal correction probe.
 
 ## Default Execution Order
 
@@ -134,22 +153,28 @@ Setup/capture gap-fill probe, later June 1:
    - `model_provenance_valid=true`
    - same-session visual package
 6. Use the staged local fetch sequence as the current implementation baseline:
-   planner-approved local case -> Nav2 corridor approach -> contact-buffer
-   monitor -> deterministic first-contact servo -> Nav2 corridor push ->
-   delivery monitor.
-7. Treat the June 1 gap-fill saved-anchor one-run rebuild as blocked for
-   promotion with the blocker now localized to `right05` terminal arrival.
-8. Run a narrow terminal-arrival correction probe for the `right05`
-   stop-short/action-abort case. Terminal-arrival correction is the edit
-   surface. Setup/capture or first-contact edits require corrected evidence
-   that reproduces an earlier-stage blocker.
-9. Rebuild corrected saved-anchor one-run evidence after terminal correction,
+   planner-approved local case -> ball-target delivery line -> capture pose ->
+   setup motion -> geometry gate -> Nav2 corridor push -> delivery monitor.
+7. Treat the June 1 clip-reviewed saved-anchor rebuild as blocked for promotion
+   by off-axis setup/capture/handoff instability, even though the centerline
+   case is clean.
+8. Implement the capture-geometry setup stage before another terminal-arrival
+   correction probe:
+   - compute capture pose behind the ball on the ball-target line
+   - reach that pose with Nav2 or a bounded deterministic setup routine
+   - gate standoff, lateral error, yaw error, target freshness, and corridor
+     validity before handoff
+   - record the gate decision in mission verdicts, saved-anchor audits, and
+     visual UAT packages
+9. Rebuild corrected saved-anchor one-run evidence after capture-geometry work,
    then advance only green `zero`/`left05`/`right05` evidence to `3/3`.
-10. Keep guarded-live AI/contact execution terminal-only until corrected
+10. Resume terminal-arrival correction only for clean near-contract misses after
+   the capture-geometry gate passes.
+11. Keep guarded-live AI/contact execution terminal-only until corrected
    saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
-11. Build a mobile visual UAT package before asking for operator signoff:
+12. Build a mobile visual UAT package before asking for operator signoff:
    `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
-12. Freeze reproduced seeded/random failures into named layouts before tuning.
+13. Freeze reproduced seeded/random failures into named layouts before tuning.
 
 ## Gates
 
