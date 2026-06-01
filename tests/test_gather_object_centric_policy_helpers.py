@@ -1618,6 +1618,39 @@ def test_policy_capture_entry_close_does_not_smooth_against_live_lateral_sign():
     assert decision.diagnostics["behind_ball"]["target_distance_m"] <= 0.26
 
 
+def test_policy_capture_entry_recenter_adds_progress_for_right05_timeout_shape():
+    zone = build_zone_spec("corral_single_ball_place")
+    ball_pose = {"x": 0.38, "y": -0.05}
+    robot_pose = {"x": -0.230519, "y": 0.003427, "yaw": -0.169499}
+    previous = PlaceControlCommand(
+        mode="object_capture_entry_lateral_recenter",
+        linear_x=0.0,
+        angular_z=-0.315691,
+        target_speed_scale=0.0,
+        rationale="previous",
+    )
+
+    decision = decide_object_centric_gather_command(
+        robot_pose,
+        ball_pose,
+        phase="capture_entry",
+        zone=zone,
+        previous_command=previous,
+        previous_ball_pose=ball_pose,
+    )
+
+    assert decision.command is not None
+    assert decision.raw_command is not None
+    assert decision.command.mode == "object_capture_entry_recenter_with_progress"
+    assert decision.command.linear_x == 0.025
+    assert decision.command.target_speed_scale == 0.35
+    assert decision.command.angular_z > 0.0
+    assert decision.diagnostics["smoothing_applied"] is False
+    assert decision.diagnostics["capture_snapshot"]["within_recapture_window"] is True
+    assert decision.diagnostics["capture_snapshot"]["ball_x_m"] >= 0.56
+    assert abs(decision.diagnostics["capture_snapshot"]["ball_y_m"]) <= 0.11
+
+
 def test_policy_capture_entry_holds_after_ready_blip_instead_of_reclosing():
     zone = build_zone_spec("corral_single_ball_place")
     ball_pose = {"x": 5.448, "y": 0.0}

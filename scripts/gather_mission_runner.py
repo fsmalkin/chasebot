@@ -306,6 +306,8 @@ DEFAULT_TARGET_MODEL_NAME = "visit_mission_target"
 DEFAULT_TARGET_MODEL_SDF = REPO_ROOT / "ros2_config" / "frisbee_target_ball.sdf"
 DEFAULT_ZONE_MODEL_NAME = "corral_zone_marker"
 DEFAULT_ZONE_MODEL_SDF = REPO_ROOT / "ros2_config" / "corral_zone_marker.sdf"
+DEFAULT_FETCH_ZONE_MODEL_NAME = "golf_ball_delivery_zone_marker"
+DEFAULT_FETCH_ZONE_MODEL_SDF = REPO_ROOT / "ros2_config" / "golf_ball_delivery_zone_marker.sdf"
 DEFAULT_MISSION_START_POSE = {"x": 0.0, "y": 0.0, "yaw": 0.0}
 DEFAULT_PLACE_RECOVERY_SETTLE_S = 0.20
 DEFAULT_PLACE_MARGINAL_CAPTURE_SETTLE_S = 0.25
@@ -980,6 +982,19 @@ def _load_target_layout_override(raw_value: str) -> list[GatherTargetSpec]:
     return targets
 
 
+def _path_matches(path_value: object, expected: Path) -> bool:
+    raw_text = clean_text(path_value)
+    if not raw_text:
+        return False
+    candidate = Path(raw_text)
+    if not candidate.is_absolute():
+        candidate = REPO_ROOT / candidate
+    try:
+        return candidate.resolve() == expected.resolve()
+    except OSError:
+        return candidate == expected
+
+
 class GatherMissionRunner:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
@@ -1006,6 +1021,12 @@ class GatherMissionRunner:
         ).lower()
         if self.mission_objective not in ALLOWED_MISSION_OBJECTIVES:
             self.mission_objective = MISSION_OBJECTIVE_GATHER_HERE
+        if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+            if _path_matches(getattr(args, "zone_model_sdf", ""), DEFAULT_ZONE_MODEL_SDF):
+                self.args.zone_model_sdf = str(DEFAULT_FETCH_ZONE_MODEL_SDF)
+            zone_model_name = clean_text(getattr(args, "zone_model_name", ""))
+            if zone_model_name == DEFAULT_ZONE_MODEL_NAME:
+                self.args.zone_model_name = DEFAULT_FETCH_ZONE_MODEL_NAME
         self.fetch_gate_mode = clean_text(
             getattr(args, "fetch_gate_mode", FETCH_GATE_MODE_FULL_MISSION),
             FETCH_GATE_MODE_FULL_MISSION,

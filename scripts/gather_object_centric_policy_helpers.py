@@ -165,6 +165,11 @@ OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_MAX_X_M = 0.62
 OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_MIN_LATERAL_M = 0.05
 OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_MAX_LATERAL_M = 0.28
 OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_TARGET_DISTANCE_M = 0.38
+OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_PROGRESS_MIN_X_M = 0.56
+OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_PROGRESS_MAX_ABS_Y_M = 0.11
+OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_PROGRESS_MAX_BEARING_RAD = math.radians(10.5)
+OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_PROGRESS_MAX_BALL_MOTION_M = 0.015
+OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_PROGRESS_LINEAR_MPS = 0.025
 OBJECT_CENTRIC_CAPTURE_CLOSE_YAW_SETTLE_MAX_X_M = 0.46
 OBJECT_CENTRIC_CAPTURE_CLOSE_YAW_SETTLE_LATERAL_M = 0.20
 OBJECT_CENTRIC_CAPTURE_CLOSE_YAW_SETTLE_YAW_ERROR_RAD = math.radians(12.0)
@@ -1528,6 +1533,7 @@ OBJECT_CENTRIC_UNSMOOTHED_COMMAND_MODES = {
     "object_stage_close_nudge_to_ready",
     "object_capture_entry_close",
     "object_capture_entry_lateral_recenter",
+    "object_capture_entry_recenter_with_progress",
     "object_capture_entry_ready_hold",
     "object_capture_finish_seat",
     "object_capture_seat",
@@ -2608,6 +2614,25 @@ def _capture_entry_command(geometry: dict[str, Any]) -> PlaceControlCommand:
         angular = clamp((ball_y * 2.8) + (bearing * 0.35), -0.45, 0.45)
         if abs(angular) < 0.18:
             angular = 0.18 if ball_y >= 0.0 else -0.18
+        ball_motion_m = _number(geometry.get("ball_motion_m"))
+        can_add_forward_progress = (
+            bool(capture.get("within_recapture_window", False))
+            and ball_x >= OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_PROGRESS_MIN_X_M
+            and abs(ball_y) <= OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_PROGRESS_MAX_ABS_Y_M
+            and abs(bearing) <= OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_PROGRESS_MAX_BEARING_RAD
+            and (
+                ball_motion_m is None
+                or abs(float(ball_motion_m)) <= OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_PROGRESS_MAX_BALL_MOTION_M
+            )
+        )
+        if can_add_forward_progress:
+            return PlaceControlCommand(
+                mode="object_capture_entry_recenter_with_progress",
+                linear_x=OBJECT_CENTRIC_CAPTURE_ENTRY_RECENTER_PROGRESS_LINEAR_MPS,
+                angular_z=round(angular, 6),
+                target_speed_scale=0.35,
+                rationale="The capture-entry recenter band is stable; add bounded forward progress toward the ready corridor.",
+            )
         return PlaceControlCommand(
             mode="object_capture_entry_lateral_recenter",
             linear_x=0.0,

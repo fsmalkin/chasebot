@@ -147,6 +147,35 @@ def test_saved_anchor_audit_preserves_terminal_candidate(tmp_path):
     assert row["closest_approach_distance_m"] == 0.451645
 
 
+def test_saved_anchor_audit_prioritizes_push_coast_escape_over_terminal_candidate(tmp_path):
+    path = tmp_path / "right05_summary.json"
+    write_json(
+        path,
+        _summary(
+            campaign_id="right05",
+            layout="right05",
+            passed=False,
+            failure_reason="missed_delivery_radius_after_nav2_corridor_push_ball_escape",
+            closest=0.507245,
+            nav2_status="monitor_ball_escape",
+            monitor_reason="ball_escape",
+            lateral_error=-0.481758,
+            alignment_deg=11.450471,
+            maneuver="stay_with_nav2",
+        ),
+    )
+
+    summary = audit.analyze([str(path)])
+
+    row = summary["saved_anchors"][0]
+    assert summary["overall_interpretation"] == "repair_setup_contact_before_guarded_live"
+    assert summary["push_coast_blocker_count"] == 1
+    assert row["quality_classification"] == "push_coast_blocker"
+    assert row["interpretation"] == "setup_contact_blocker"
+    assert row["recommended_next_action"] == "repair_push_coast_before_guarded_live"
+    assert row["stage_labels"] == ["push_coast", "terminal_arrival"]
+
+
 def test_saved_anchor_audit_marks_clean_pass_for_ladder(tmp_path):
     path = tmp_path / "zero_summary.json"
     write_json(path, _summary(campaign_id="zero", layout="zero", passed=True, closest=0.0))

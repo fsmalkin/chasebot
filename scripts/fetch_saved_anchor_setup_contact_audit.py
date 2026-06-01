@@ -28,7 +28,12 @@ CAPTURE_ENTRY_TIME_WATCH_S = 4.0
 FIRST_CONTACT_ALIGNMENT_WATCH_DEG = 12.0
 FIRST_CONTACT_ALIGNMENT_LIMIT_DEG = 30.0
 PRE_CONTACT_PHASES = {"pre_stage", "stage", "capture_entry"}
-BLOCKING_QUALITY_CLASSIFICATIONS = {"invalid_geometry", "setup_capture_blocker", "first_contact_blocker"}
+BLOCKING_QUALITY_CLASSIFICATIONS = {
+    "invalid_geometry",
+    "setup_capture_blocker",
+    "first_contact_blocker",
+    "push_coast_blocker",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -464,6 +469,8 @@ def _quality_classification(
         return "first_contact_blocker"
     if not delivery_pass and "setup" in stage_labels and "terminal_arrival" not in stage_labels:
         return "setup_capture_blocker"
+    if not delivery_pass and "push_coast" in stage_labels:
+        return "push_coast_blocker"
     near_contract = (
         closest_approach_m is not None
         and closest_approach_m <= delivery_radius_m + TERMINAL_LIVE_MAX_EXTRA_M
@@ -554,6 +561,8 @@ def _interpretation(
         return "invalid_geometry", "repair_geometry_evidence_before_gate"
     if quality_classification in {"setup_capture_blocker", "first_contact_blocker"}:
         return "setup_contact_blocker", "repair_setup_contact_before_guarded_live"
+    if quality_classification == "push_coast_blocker":
+        return "setup_contact_blocker", "repair_push_coast_before_guarded_live"
     if quality_classification == "pass_with_capture_quality_watch":
         return "saved_anchor_pass_with_contact_watch", "run_repeatability_ladder_with_contact_watch"
     if quality_classification == "terminal_arrival_candidate":
@@ -738,6 +747,7 @@ def analyze(saved_anchor_summaries: list[str]) -> dict[str, Any]:
     blocker_count = sum(1 for row in rows if row.get("interpretation") in {"setup_contact_blocker", "invalid_geometry"})
     setup_capture_blocker_count = sum(1 for row in rows if row.get("quality_classification") == "setup_capture_blocker")
     first_contact_blocker_count = sum(1 for row in rows if row.get("quality_classification") == "first_contact_blocker")
+    push_coast_blocker_count = sum(1 for row in rows if row.get("quality_classification") == "push_coast_blocker")
     invalid_geometry_count = sum(1 for row in rows if row.get("quality_classification") == "invalid_geometry")
     terminal_candidate_count = sum(1 for row in rows if row.get("interpretation") == "guarded_live_terminal_candidate")
     contact_watch_count = sum(1 for row in rows if row.get("interpretation") == "saved_anchor_pass_with_contact_watch")
@@ -762,6 +772,7 @@ def analyze(saved_anchor_summaries: list[str]) -> dict[str, Any]:
         "setup_contact_blocker_count": blocker_count,
         "setup_capture_blocker_count": setup_capture_blocker_count,
         "first_contact_blocker_count": first_contact_blocker_count,
+        "push_coast_blocker_count": push_coast_blocker_count,
         "invalid_geometry_count": invalid_geometry_count,
         "saved_anchor_pass_with_contact_watch_count": contact_watch_count,
         "guarded_live_terminal_candidate_count": terminal_candidate_count,
@@ -783,6 +794,7 @@ def write_scorecard(summary: dict[str, Any], path: Path) -> None:
         f"- Setup/contact blockers: `{summary.get('setup_contact_blocker_count')}`",
         f"- Setup/capture blockers: `{summary.get('setup_capture_blocker_count', 0)}`",
         f"- First-contact blockers: `{summary.get('first_contact_blocker_count', 0)}`",
+        f"- Push/coast blockers: `{summary.get('push_coast_blocker_count', 0)}`",
         f"- Invalid geometry: `{summary.get('invalid_geometry_count', 0)}`",
         f"- Guarded-live terminal candidates: `{summary.get('guarded_live_terminal_candidate_count')}`",
         "",

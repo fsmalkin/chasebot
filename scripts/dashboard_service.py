@@ -2034,6 +2034,9 @@ class DashboardController:
             stage_quality_payload.get("stage_quality_pass_count", stage_quality_payload.get("pass_count", 0)) or 0
         ) if stage_quality_payload else 0
         stage_quality_blockers = int(stage_quality_payload.get("setup_contact_blocker_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_push_coast_blockers = int(stage_quality_payload.get("push_coast_blocker_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_setup_capture_blockers = int(stage_quality_payload.get("setup_capture_blocker_count", 0) or 0) if stage_quality_payload else 0
+        stage_quality_first_contact_blockers = int(stage_quality_payload.get("first_contact_blocker_count", 0) or 0) if stage_quality_payload else 0
         stage_quality_watch = int(stage_quality_payload.get("saved_anchor_pass_with_contact_watch_count", 0) or 0) if stage_quality_payload else 0
         stage_quality_green = bool(stage_quality_payload.get("stage_quality_green", False)) if stage_quality_payload else False
         stage_quality_overall = str(stage_quality_payload.get("overall_interpretation", "") or "") if stage_quality_payload else ""
@@ -2050,7 +2053,14 @@ class DashboardController:
 
         if stage_quality_payload and stage_quality_blockers:
             status = "bad"
-            headline = f"Stage-quality audit has {stage_quality_blockers} setup/contact blocker; repair capture-entry before seeded random."
+            if stage_quality_push_coast_blockers:
+                headline = f"Stage-quality audit has {stage_quality_push_coast_blockers} push/coast blocker; repair bounded push/coast before terminal live."
+            elif stage_quality_first_contact_blockers:
+                headline = f"Stage-quality audit has {stage_quality_first_contact_blockers} first-contact blocker; repair contact alignment before terminal live."
+            elif stage_quality_setup_capture_blockers:
+                headline = f"Stage-quality audit has {stage_quality_setup_capture_blockers} setup/capture blocker; repair capture-entry before seeded random."
+            else:
+                headline = f"Stage-quality audit has {stage_quality_blockers} setup/contact blocker; repair stage ownership before seeded random."
         elif planner and planner_wrong_fetch_dispatch_count:
             status = "bad"
             headline = f"Planner gate has {planner_wrong_fetch_dispatch_count} wrong fetch-ready dispatch; do not score broad random as local fetch."
@@ -2122,8 +2132,9 @@ class DashboardController:
                 "pass_count": stage_quality_pass_count,
                 "total_count": stage_quality_total,
                 "setup_contact_blocker_count": stage_quality_blockers,
-                "setup_capture_blocker_count": int(stage_quality_payload.get("setup_capture_blocker_count", 0) or 0) if stage_quality_payload else 0,
-                "first_contact_blocker_count": int(stage_quality_payload.get("first_contact_blocker_count", 0) or 0) if stage_quality_payload else 0,
+                "setup_capture_blocker_count": stage_quality_setup_capture_blockers,
+                "first_contact_blocker_count": stage_quality_first_contact_blockers,
+                "push_coast_blocker_count": stage_quality_push_coast_blockers,
                 "invalid_geometry_count": int(stage_quality_payload.get("invalid_geometry_count", 0) or 0) if stage_quality_payload else 0,
                 "watch_count": stage_quality_watch,
                 "saved_anchors": [

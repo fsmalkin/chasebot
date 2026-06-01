@@ -1582,6 +1582,7 @@ def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path,
     assert progress["stage_quality_audit"]["green"] is False
     assert progress["stage_quality_audit"]["pass_count"] == 2
     assert progress["stage_quality_audit"]["setup_capture_blocker_count"] == 1
+    assert progress["stage_quality_audit"]["push_coast_blocker_count"] == 0
     assert progress["stage_quality_audit"]["watch_count"] == 2
     assert progress["latest_guarded_live_probe"]["pass"] is True
     assert progress["recommended_next_action"] == "rerun_watchlist_before_guarded_live"
