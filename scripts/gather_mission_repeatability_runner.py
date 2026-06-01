@@ -236,6 +236,83 @@ def _fetch_to_pose_rollup(runs: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
+def _run_model_provenance(run: dict[str, object]) -> dict[str, object]:
+    provenance = run.get("model_provenance", {})
+    if isinstance(provenance, dict) and provenance:
+        return dict(provenance)
+    payload: dict[str, object] = {}
+    for key in (
+        "target_model_sdf",
+        "zone_model_sdf",
+        "target_model_radius_m",
+        "target_model_classification",
+        "zone_model_radius_m",
+        "zone_model_classification",
+        "model_provenance_valid",
+        "model_provenance_reason",
+        "model_provenance_required",
+    ):
+        if key in run:
+            payload[key] = run.get(key)
+    return payload
+
+
+def _model_provenance_rollup(runs: list[dict[str, object]]) -> dict[str, object]:
+    fetch_runs = [
+        run
+        for run in runs
+        if str(run.get("mission_objective", "") or "") == "fetch_to_pose"
+    ]
+    if not fetch_runs:
+        return {
+            "model_provenance_valid": True,
+            "model_provenance_valid_count": 0,
+            "model_provenance_invalid_count": 0,
+            "model_provenance_missing_count": 0,
+            "target_model_classifications": [],
+            "zone_model_classifications": [],
+        }
+    valid_count = 0
+    invalid_count = 0
+    missing_count = 0
+    target_classes: set[str] = set()
+    zone_classes: set[str] = set()
+    first_payload: dict[str, object] = {}
+    for run in fetch_runs:
+        payload = _run_model_provenance(run)
+        if payload and not first_payload:
+            first_payload = dict(payload)
+        if not payload:
+            missing_count += 1
+            invalid_count += 1
+            continue
+        target_class = str(payload.get("target_model_classification", "") or "").strip()
+        zone_class = str(payload.get("zone_model_classification", "") or "").strip()
+        if target_class:
+            target_classes.add(target_class)
+        if zone_class:
+            zone_classes.add(zone_class)
+        if bool(payload.get("model_provenance_valid", False)):
+            valid_count += 1
+        else:
+            invalid_count += 1
+    return {
+        "model_provenance": first_payload,
+        "model_provenance_valid": bool(fetch_runs and valid_count == len(fetch_runs) and missing_count == 0),
+        "model_provenance_valid_count": valid_count,
+        "model_provenance_invalid_count": invalid_count,
+        "model_provenance_missing_count": missing_count,
+        "target_model_sdf": str(first_payload.get("target_model_sdf", "") or ""),
+        "zone_model_sdf": str(first_payload.get("zone_model_sdf", "") or ""),
+        "target_model_radius_m": first_payload.get("target_model_radius_m"),
+        "target_model_classification": str(first_payload.get("target_model_classification", "") or ""),
+        "zone_model_radius_m": first_payload.get("zone_model_radius_m"),
+        "zone_model_classification": str(first_payload.get("zone_model_classification", "") or ""),
+        "target_model_classifications": sorted(target_classes),
+        "zone_model_classifications": sorted(zone_classes),
+    }
+
+
 def _clean_text(value: object, default: str = "") -> str:
     if value is None:
         return default
@@ -827,6 +904,16 @@ def summarize_gather_artifacts(*, run_index: int, mission_verdict_path: str) -> 
         if isinstance(verdict.get("fetch_pose_world", summary.get("fetch_pose_world", {})), dict)
         else {},
         "fetch_delivery_radius_m": float(verdict.get("fetch_delivery_radius_m", summary.get("fetch_delivery_radius_m", 0.0)) or 0.0),
+        "model_provenance": verdict.get("model_provenance", summary.get("model_provenance", {}))
+        if isinstance(verdict.get("model_provenance", summary.get("model_provenance", {})), dict)
+        else {},
+        "model_provenance_valid": bool(verdict.get("model_provenance_valid", summary.get("model_provenance_valid", False))),
+        "target_model_sdf": str(verdict.get("target_model_sdf", summary.get("target_model_sdf", "")) or ""),
+        "zone_model_sdf": str(verdict.get("zone_model_sdf", summary.get("zone_model_sdf", "")) or ""),
+        "target_model_radius_m": verdict.get("target_model_radius_m", summary.get("target_model_radius_m")),
+        "target_model_classification": str(verdict.get("target_model_classification", summary.get("target_model_classification", "")) or ""),
+        "zone_model_radius_m": verdict.get("zone_model_radius_m", summary.get("zone_model_radius_m")),
+        "zone_model_classification": str(verdict.get("zone_model_classification", summary.get("zone_model_classification", "")) or ""),
         "shot_outcome": verdict.get("shot_outcome", summary.get("shot_outcome", {}))
         if isinstance(verdict.get("shot_outcome", summary.get("shot_outcome", {})), dict)
         else {},
@@ -1158,6 +1245,7 @@ def main() -> int:
     rollup = summarize_runs(runs)
     approach_side_rollup = _approach_side_rollup(runs)
     fetch_to_pose_rollup = _fetch_to_pose_rollup(runs)
+    model_provenance_rollup = _model_provenance_rollup(runs)
     promotion_gate_pass = promotion_gate_pass_for_runs(runs, mode=args.promotion_gate_mode)
     summary = {
         "generated_utc": utc_now(),
@@ -1185,6 +1273,7 @@ def main() -> int:
         "runs": runs,
         **approach_side_rollup,
         **fetch_to_pose_rollup,
+        **model_provenance_rollup,
         **rollup,
     }
     write_json(campaign_root / "campaign_run_summary.json", summary)

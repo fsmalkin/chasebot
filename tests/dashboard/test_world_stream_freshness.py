@@ -502,6 +502,8 @@ def test_get_state_includes_latest_visual_uat_package(monkeypatch, tmp_path):
             "mobile_watchable": True,
             "planner_gate_green": True,
             "local_fetch_pass_seen": True,
+            "raw_local_fetch_pass_seen": True,
+            "fetch_model_provenance_invalid_seen": False,
             "videos": [
                 {
                     "name": "world_stream.mp4",
@@ -516,6 +518,7 @@ def test_get_state_includes_latest_visual_uat_package(monkeypatch, tmp_path):
 
     assert state["visual_uat_package"]["campaign_id"] == "uat"
     assert state["visual_uat_package"]["pass"] is True
+    assert state["visual_uat_package"]["fetch_model_provenance_invalid_seen"] is False
     assert state["visual_uat_package"]["videos"][0]["url"] == "/artifacts/session/uat/visual/world_stream.mp4"
 
 
@@ -1450,6 +1453,7 @@ def test_beta_dashboard_includes_primary_golf_fetch_cta_and_stage_mapping():
     assert "Planner-Gated Random" in html
     assert "Mobile UAT Package" in html
     assert 'id="uat-stage"' in html
+    assert 'id="uat-model"' in html
     assert 'id="uat-video-list"' in html
     assert "playsinline" in html
     assert "renderVisualUatPackage()" in html
@@ -1519,6 +1523,11 @@ def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path,
             "ai_push_coast_mode": "guarded_live",
             "fetch_to_pose_pass_count": 1,
             "fetch_to_pose_fail_count": 0,
+            "model_provenance_valid": True,
+            "model_provenance_reason": "calibrated_fetch_models",
+            "target_model_classification": "calibrated_golf_ball",
+            "target_model_sdf": "ros2_config/calibrated_golf_ball.sdf",
+            "zone_model_sdf": "ros2_config/golf_ball_delivery_zone_marker.sdf",
             "first_contact_push_alignment_max_deg": 18.2,
             "fetch_to_pose_time_max_s": 8.7,
         },
@@ -1585,6 +1594,7 @@ def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path,
     assert progress["stage_quality_audit"]["push_coast_blocker_count"] == 0
     assert progress["stage_quality_audit"]["watch_count"] == 2
     assert progress["latest_guarded_live_probe"]["pass"] is True
+    assert progress["latest_guarded_live_probe"]["model_provenance_valid"] is True
     assert progress["recommended_next_action"] == "rerun_watchlist_before_guarded_live"
 
 

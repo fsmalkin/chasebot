@@ -93,6 +93,39 @@ First-UAT contract:
    - `container_core_ros_distro`
    - `detected_host_ros_distros`
 
+## Calibrated Fetch Evidence Hygiene
+
+Planner-gated generalized fetch evidence must carry three proof surfaces before
+operator or promotion claims:
+
+1. corrected marker geometry:
+   - `geometry_consistency.pass=true`
+   - visible marker center and radius match `fetch_pose_world`
+2. calibrated model provenance:
+   - `model_provenance_valid=true`
+   - target model `calibrated_golf_ball`
+   - target radius `0.021336m`
+   - marker model `golf_ball_delivery_zone_marker`
+3. same-session visual evidence:
+   - browser-watchable onboard camera video
+   - browser-watchable context video
+
+Model-provenance boundary:
+
+- Commit `680e393 Use calibrated ball for fetch direct runs` changed direct
+  `fetch_to_pose` runs to the calibrated golf-ball SDF.
+- Pre-boundary direct fetch repeatability artifacts without explicit calibrated
+  model fields are diagnostic.
+- Run the audit before using older direct fetch summaries:
+  `python scripts/fetch_model_provenance_audit.py --campaign-id fetch_model_provenance_audit_<date>`
+
+Evidence rebuild ladder:
+
+1. saved `zero`/`left05`/`right05`, one run each
+2. saved `zero`/`left05`/`right05`, `3/3`
+3. seeded `fetch_generalization_gate`, `6 x 1`
+4. mobile visual UAT package with browser-watchable videos
+
 ## UAT Orchestrator Modes
 
 Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:

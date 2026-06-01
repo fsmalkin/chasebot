@@ -35,7 +35,10 @@ local fetch evidence.
 Milestone acceptance:
 
 1. Evidence is valid only when `geometry_consistency.pass=true`, the visible
-   delivery marker matches `fetch_pose_world`, and the run has same-session
+   delivery marker matches `fetch_pose_world`,
+   `model_provenance_valid=true`, the target model is
+   `calibrated_golf_ball`, the delivery marker is
+   `golf_ball_delivery_zone_marker`, and the run has same-session
    browser-watchable onboard plus context video.
 2. Pre-fix or marker-mismatched fetch passes are reclassified as diagnostic
    implementation evidence. Architecture and promotion claims require the
@@ -94,6 +97,43 @@ Architecture reset:
 5. Keep large world-model or VLA ideas as high-level planning, teacher-label,
    or offboard scoring tools until a smaller `tensorrt_int8`-compatible onboard
    predictor has shadow evidence.
+
+## June 1, 2026 Calibrated-Ball Provenance Reset
+
+The follow-up video review exposed a second evidence floor issue: some direct
+`fetch_to_pose` runs used the legacy `frisbee_target_ball.sdf` target model.
+That model is a large red sphere with radius `0.05m`; the calibrated golf-ball
+model is `calibrated_golf_ball.sdf` with radius `0.021336m` and the rolling
+resistance plugin. Direct fetch evidence after commit
+`680e393 Use calibrated ball for fetch direct runs` must carry model provenance
+fields before it supports architecture or promotion claims.
+
+Evidence reset rules:
+
+1. Treat pre-`680e393` direct `fetch_to_pose` repeatability evidence as
+   diagnostic unless the artifact explicitly records
+   `model_provenance_valid=true`, target model
+   `calibrated_golf_ball`, and marker model
+   `golf_ball_delivery_zone_marker`.
+2. Keep dashboard CTA evidence separate: runs that used the dedicated golf-ball
+   demo runner remain reviewable when the artifact records calibrated model,
+   corrected marker geometry, and same-session video.
+3. Use `scripts/fetch_model_provenance_audit.py` to inventory old artifacts.
+   Missing provenance means `needs_recheck_missing_model_provenance`; legacy or
+   mismatched model fields mean `quarantine_invalid_model_provenance`.
+4. Rebuild the saved-layout ladder from the corrected runner:
+   `zero`/`left05`/`right05` one-run, then `3/3`, then the seeded
+   `6 x 1` gate, then a visual UAT package with browser-watchable onboard and
+   context videos.
+
+Corrected reference after the model fix:
+
+- Fix commit: `680e393 Use calibrated ball for fetch direct runs`.
+- Reference campaign: `live_calibrated_ball_right05_one_run_20260601`.
+- Reference session: `20260601T000718616964Z`.
+- Result: `fetch_to_pose_pass=true`, `geometry_consistency.pass=true`,
+  `closest_approach_distance_m=0.136176`, and calibrated yellow ball visual
+  evidence.
 
 ## May 28, 2026 Direction
 

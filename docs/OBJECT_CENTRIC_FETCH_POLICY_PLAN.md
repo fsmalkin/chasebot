@@ -44,6 +44,17 @@ the corrected visual UAT package is
 the corrected geometry audit is
 `artifacts/session/fetch_geometry_evidence_audit_postfix_20260531/fetch_geometry_evidence_audit/scorecard.md`.
 
+June 1, 2026 calibrated-ball provenance reset: direct `fetch_to_pose` evidence
+also needs calibrated model provenance. A valid direct fetch artifact records
+`model_provenance_valid=true`, target model `calibrated_golf_ball`, target
+radius `0.021336m`, marker model `golf_ball_delivery_zone_marker`, corrected
+marker geometry, and same-session video. Commit
+`680e393 Use calibrated ball for fetch direct runs` is the provenance boundary.
+Pre-boundary direct repeatability results without explicit calibrated model
+fields are diagnostic and must be rerun before they support saved-layout,
+seeded, architecture, or promotion claims. Use
+`scripts/fetch_model_provenance_audit.py` to inventory prior artifacts.
+
 The immediate architecture direction is Nav2/LLM-first:
 
 - the LLM/world-state planner chooses `fetch_ready_local`,
@@ -168,6 +179,19 @@ Post-reset corrected UAT reference:
 - Interpretation: this is the first post-fix visual UAT reference for the
   corrected metric path. Rerun `zero`, `left05`, and `right05` before using
   saved-layout claims for architecture promotion.
+
+Post-provenance corrected direct reference:
+
+- Campaign: `live_calibrated_ball_right05_one_run_20260601`
+- Session: `20260601T000718616964Z`
+- Fix commit: `680e393 Use calibrated ball for fetch direct runs`
+- Ball model: `ros2_config/calibrated_golf_ball.sdf`, radius `0.021336m`
+- Delivery marker: `ros2_config/golf_ball_delivery_zone_marker.sdf`
+- Verdict: `fetch_to_pose_pass=true`, `geometry_consistency.pass=true`
+- Closest approach: `0.136176m` inside the `0.300m` delivery radius
+- Visual interpretation: the corrected yellow golf ball and centerline onboard
+  video are the current browser-UAT reference. The saved-layout ladder still
+  needs a corrected `zero`/`left05`/`right05` rebuild before promotion.
 
 ## Architecture Revisit Conclusion
 

@@ -26,6 +26,15 @@ with geometry audit
 This reset moves the active comparison back to a corrected Nav2/LLM-first
 baseline before expanding custom contact or AI control.
 
+June 1, 2026 provenance reset: architecture evidence also requires calibrated
+model provenance. Direct `fetch_to_pose` artifacts must record
+`model_provenance_valid=true`, target model `calibrated_golf_ball`, target
+radius `0.021336m`, and marker model `golf_ball_delivery_zone_marker`.
+Commit `680e393 Use calibrated ball for fetch direct runs` is the direct-run
+boundary. Older direct artifacts without explicit model provenance are
+diagnostic until rerun. Use `scripts/fetch_model_provenance_audit.py` before
+carrying prior direct repeatability results into a findings matrix.
+
 May 29, 2026 update: keep the runtime architecture no-shoot. The
 `nav2_followpath_corridor_push_v1` spike showed Nav2 can own useful real-time
 `FollowPath` corridor tracking, but not the full contact outcome by itself.
@@ -54,8 +63,10 @@ Treat these as different levels of evidence:
 
 0. Evidence validity floor:
    - corrected delivery marker geometry matches `fetch_pose_world`
+   - calibrated model provenance records `model_provenance_valid=true`
    - same-session browser-watchable onboard and context video exists
-   - pre-fix or marker-mismatched results are labeled diagnostic
+   - pre-fix, marker-mismatched, legacy-model, or missing-provenance results are
+     labeled diagnostic
 1. Control-family screen:
    - same mission shell and fetch objective, different `--gather-control-family`
      implementation

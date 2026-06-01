@@ -549,6 +549,28 @@ def test_fetch_objective_defaults_to_calibrated_golf_ball_sdf(tmp_path, monkeypa
 
     assert Path(runner.args.target_model_sdf).name == "calibrated_golf_ball.sdf"
     assert Path(runner.args.zone_model_sdf).name == "golf_ball_delivery_zone_marker.sdf"
+    provenance = runner._model_provenance()
+    assert provenance["model_provenance_valid"] is True
+    assert provenance["target_model_classification"] == "calibrated_golf_ball"
+    assert provenance["target_model_radius_m"] == gather_runner.CALIBRATED_GOLF_BALL_RADIUS_M
+
+
+def test_fetch_model_provenance_rejects_legacy_target_ball(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.mission_objective = "fetch_to_pose"
+    args.target_model_sdf = str(gather_runner.DEFAULT_TARGET_MODEL_SDF)
+    args.zone_model_sdf = str(gather_runner.DEFAULT_FETCH_ZONE_MODEL_SDF)
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+    # Re-apply an explicit legacy target after constructor defaults to prove the guard itself.
+    runner.args.target_model_sdf = str(gather_runner.DEFAULT_TARGET_MODEL_SDF)
+
+    provenance = runner._model_provenance()
+
+    assert provenance["model_provenance_valid"] is False
+    assert provenance["model_provenance_reason"] == "invalid_target_model:legacy_frisbee_target_ball"
+    assert provenance["target_model_classification"] == "legacy_frisbee_target_ball"
 
 
 def test_fetch_runtime_state_detects_visible_marker_sdf_radius_mismatch(tmp_path, monkeypatch):
@@ -8545,7 +8567,9 @@ def test_place_target_three_ball_advances_after_practical_retrieval_without_full
 def test_run_target_fetch_to_pose_accepts_rollthrough_delivery_intersection(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.mission_objective = "fetch_to_pose"
-    runner.fetch_delivery_radius_m = 0.25
+    runner.args.target_model_sdf = str(gather_runner.DEFAULT_FETCH_TARGET_MODEL_SDF)
+    runner.args.zone_model_sdf = str(gather_runner.DEFAULT_FETCH_ZONE_MODEL_SDF)
+    runner.fetch_delivery_radius_m = 0.30
 
     monkeypatch.setattr(
         gather_runner,
@@ -8629,6 +8653,8 @@ def test_contact_ready_fetch_gate_starts_robot_behind_ball_and_preserves_nav2_mo
     runner.args.fetch_target_x = 0.95
     runner.args.fetch_target_y = 0.0
     runner.args.fetch_target_z = 0.001
+    runner.args.target_model_sdf = str(gather_runner.DEFAULT_FETCH_TARGET_MODEL_SDF)
+    runner.args.zone_model_sdf = str(gather_runner.DEFAULT_FETCH_ZONE_MODEL_SDF)
     runner.fetch_delivery_radius_m = 0.30
     runner.visit_runtime_state = {
         "visited_targets": [],

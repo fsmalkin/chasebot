@@ -446,6 +446,10 @@ button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
                 <div class="uat-v dim" id="uat-stage">-</div>
               </div>
               <div>
+                <div class="uat-k">Model</div>
+                <div class="uat-v dim" id="uat-model">-</div>
+              </div>
+              <div>
                 <div class="uat-k">Promotion</div>
                 <div class="uat-v warn" id="uat-promotion">not yet</div>
               </div>
@@ -1157,6 +1161,8 @@ function renderVisualUatPackage() {
     setClass('uat-videos', 'uat-v dim');
     setText('uat-stage', '-');
     setClass('uat-stage', 'uat-v dim');
+    setText('uat-model', '-');
+    setClass('uat-model', 'uat-v dim');
     setText('uat-promotion', 'not yet');
     setClass('uat-promotion', 'uat-v warn');
     const list = document.getElementById('uat-video-list');
@@ -1182,6 +1188,12 @@ function renderVisualUatPackage() {
   const stageWatch = Number(latestStage.watch_count || 0) > 0;
   setText('uat-stage', latestStage.total_count ? ratioText(latestStage.pass_count, latestStage.total_count, latestStage.setup_contact_blocker_count) : '-');
   setClass('uat-stage', latestStage.total_count ? (stageBlocked ? 'uat-v bad' : stageGreen && !stageWatch ? 'uat-v ok' : 'uat-v warn') : 'uat-v dim');
+  const missionRows = Array.isArray(pkg.missions) ? pkg.missions : [];
+  const firstMission = missionRows[0] || {};
+  const modelInvalid = Boolean(pkg.fetch_model_provenance_invalid_seen);
+  const modelLabel = firstMission.target_model_classification || (modelInvalid ? 'invalid' : pkg.raw_local_fetch_pass_seen ? 'calibrated' : '-');
+  setText('uat-model', modelLabel);
+  setClass('uat-model', modelInvalid ? 'uat-v bad' : pkg.raw_local_fetch_pass_seen ? 'uat-v ok' : 'uat-v dim');
   setText('uat-promotion', pkg.promotion_evidence ? 'yes' : 'not yet');
   setClass('uat-promotion', pkg.promotion_evidence ? 'uat-v ok' : 'uat-v warn');
 

@@ -777,6 +777,20 @@ def test_summarize_gather_artifacts_reads_fetch_to_pose_fields(tmp_path: Path):
                 "fetch_to_pose_failure_reason": "",
                 "fetch_pose_world": {"x": 2.4, "y": 0.0, "z": 0.001, "radius_m": 0.5},
                 "fetch_delivery_radius_m": 0.5,
+                "model_provenance": {
+                    "model_provenance_valid": True,
+                    "model_provenance_reason": "calibrated_fetch_models",
+                    "target_model_sdf": "ros2_config/calibrated_golf_ball.sdf",
+                    "zone_model_sdf": "ros2_config/golf_ball_delivery_zone_marker.sdf",
+                    "target_model_radius_m": 0.021336,
+                    "target_model_classification": "calibrated_golf_ball",
+                    "zone_model_classification": "golf_ball_delivery_zone_marker",
+                },
+                "model_provenance_valid": True,
+                "target_model_sdf": "ros2_config/calibrated_golf_ball.sdf",
+                "zone_model_sdf": "ros2_config/golf_ball_delivery_zone_marker.sdf",
+                "target_model_radius_m": 0.021336,
+                "target_model_classification": "calibrated_golf_ball",
                 "shot_outcome": shot_outcome,
                 "placed_count": 1,
                 "surface_profile": "short_turf",
@@ -794,7 +808,35 @@ def test_summarize_gather_artifacts_reads_fetch_to_pose_fields(tmp_path: Path):
     assert summary["fetch_to_pose_pass"] is True
     assert summary["fetch_to_pose_time_s"] == 4.25
     assert summary["fetch_pose_world"]["radius_m"] == 0.5
+    assert summary["model_provenance_valid"] is True
+    assert summary["target_model_classification"] == "calibrated_golf_ball"
     assert summary["shot_outcome"] == shot_outcome
+
+
+def test_model_provenance_rollup_counts_missing_and_valid():
+    rollup = repeatability_runner._model_provenance_rollup(
+        [
+            {
+                "mission_objective": "fetch_to_pose",
+                "model_provenance": {
+                    "model_provenance_valid": True,
+                    "target_model_sdf": "ros2_config/calibrated_golf_ball.sdf",
+                    "zone_model_sdf": "ros2_config/golf_ball_delivery_zone_marker.sdf",
+                    "target_model_radius_m": 0.021336,
+                    "target_model_classification": "calibrated_golf_ball",
+                    "zone_model_classification": "golf_ball_delivery_zone_marker",
+                },
+            },
+            {
+                "mission_objective": "fetch_to_pose",
+            },
+        ]
+    )
+
+    assert rollup["model_provenance_valid"] is False
+    assert rollup["model_provenance_valid_count"] == 1
+    assert rollup["model_provenance_missing_count"] == 1
+    assert rollup["target_model_classification"] == "calibrated_golf_ball"
 
 
 def test_summarize_gather_artifacts_preserves_fresh_attempt_approach_across_release_failure(tmp_path: Path):

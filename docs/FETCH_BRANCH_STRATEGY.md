@@ -84,6 +84,14 @@ post-fix reference package is
 and the post-fix geometry audit is
 `artifacts/session/fetch_geometry_evidence_audit_postfix_20260531/fetch_geometry_evidence_audit/scorecard.md`.
 
+Provenance reset rule after June 1, 2026: direct fetch evidence also needs
+`model_provenance_valid=true` with target model `calibrated_golf_ball`, target
+radius `0.021336m`, and marker model `golf_ball_delivery_zone_marker`. Commit
+`680e393 Use calibrated ball for fetch direct runs` is the direct-run boundary.
+Older direct repeatability artifacts without explicit calibrated model fields
+remain diagnostic until rerun. Inventory them with
+`scripts/fetch_model_provenance_audit.py`.
+
 | Candidate | Key evidence | Classification | Branch decision |
 | --- | --- | --- | --- |
 | `helper` / `short_horizon_v2` manual-drive lane | `artifacts/session/live_plus45_helper_turn_authority_contract_audit_20260420/gather_helper_turn_authority_contract_audit/helper_turn_authority_contract_summary.json`; `artifacts/session/live_plus45_probe_odom_world_sign_chain_20260421_provenance_rerun/probe_odom_world_sign_chain/odom_world_sign_chain_summary.json` | Physics-independent pre-stage / command-authority evidence | Baseline evidence only. |
@@ -103,6 +111,7 @@ and the post-fix geometry audit is
 | `contact_aware_geometric_shooter` | `artifacts/session/live_fetch_geometric_shooter_screen_20260527/fetch_geometric_shooter_screen/geometric_shooter_summary.json`; `artifacts/session/live_fetch_geometric_shooter_probe_zero_20260527/fetch_geometric_shooter_probe/geometric_shooter_probe_summary.json` plus `left05` / `right05` one-run probes | Direct-velocity physics probe, not robot-owned runtime evidence | Keep as roll-window/coast-geometry evidence; do not promote as the primary runtime path. |
 | `nav2_followpath_corridor_push_v1` | `artifacts/session/live_nav2_corridor_push_contact_ready_rerun3_20260529/calibrated_fetch_architecture_revisit/scorecard.md`; `artifacts/session/live_nav2_corridor_push_full_saved_layout_20260529/calibrated_fetch_architecture_revisit/scorecard.md` | Evidence branch; not standalone promotion candidate | Contact-ready and full saved-layout one-run gates passed, but saved-layout `3/3` failed on `right05` stop-short after Nav2 `STATUS_SUCCEEDED`. Preserve as corridor-tracking baseline and AI training/eval data. |
 | corrected Nav2/LLM-first baseline | `artifacts/session/20260531T204154158382Z/gather_mission/20260531T204255Z/mission_verdict.json`; `artifacts/session/uat_fetch_visual_package_postfix_20260531/fetch_visual_uat_package/scorecard.md` | Preferred immediate requalification lane | Rerun saved layouts and planner-approved local random cases with corrected geometry and same-session video before expanding custom contact or learned control. |
+| calibrated-ball direct fetch reset | `artifacts/session/20260601T000718616964Z/visual/raw_camera_browser.mp4`; `artifacts/session/20260601T000718616964Z/visual/topdown_telemetry_browser.mp4`; `artifacts/session/20260601T000718616964Z/visual/world_stream.mp4` | Current model-provenance reference | Rebuild saved-layout direct evidence from commit `680e393` onward with `model_provenance_valid=true`; quarantine missing-provenance or legacy-ball direct summaries. |
 | `ai_push_coast_servo` | planned from corrected Nav2-first gaps plus saved/random traces | Fallback model/proposer lane | Train or prototype local handoff/maneuver-class predictor from calibrated simulation, score in shadow mode on saved anchors and seeded random layouts, then allow it to select only deterministic guarded routines after shadow scoring proves a benefit. |
 
 ## Latest Revisit Result

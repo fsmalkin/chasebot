@@ -25,6 +25,13 @@ only when `geometry_consistency.pass=true`, the visible delivery marker matches
 video exists. Pre-fix or marker-mismatched fetch passes are diagnostic
 implementation evidence.
 
+June 1, 2026 provenance reset: direct `fetch_to_pose` evidence also needs
+`model_provenance_valid=true`, target model `calibrated_golf_ball`, target
+radius `0.021336m`, and marker model `golf_ball_delivery_zone_marker`. Commit
+`680e393 Use calibrated ball for fetch direct runs` is the boundary for direct
+fetch reruns. Older direct artifacts with missing or legacy model provenance
+are diagnostic and should be rebuilt through the saved-layout ladder.
+
 Corrected reference artifacts:
 
 - mission:
@@ -51,6 +58,7 @@ Corrected reference artifacts:
    - `zero`, `left05`, `right05`
    - no retries
    - `0.300m` delivery radius
+   - `model_provenance_valid=true`
    - same-session visual package
 6. Keep guarded-live AI/contact execution terminal-only until corrected
    saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
@@ -62,8 +70,8 @@ Corrected reference artifacts:
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches
   local fetch.
-- Fetch UAT evidence passes only when corrected marker geometry and same-session
-  video are present.
+- Fetch UAT evidence passes only when corrected marker geometry, calibrated model
+  provenance, and same-session video are present.
 - Mobile visual UAT passes only when the package has planner-green evidence, a
   local fetch pass, and playable `world_stream.mp4` plus `topdown_telemetry.mp4`.
 - Saved-layout gate requires `zero`, `left05`, and `right05` one-run, then `3/3`.

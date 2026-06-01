@@ -1938,6 +1938,8 @@ class DashboardController:
             "mobile_watchable": bool(package.get("mobile_watchable", False)),
             "planner_gate_green": bool(package.get("planner_gate_green", False)),
             "local_fetch_pass_seen": bool(package.get("local_fetch_pass_seen", False)),
+            "raw_local_fetch_pass_seen": bool(package.get("raw_local_fetch_pass_seen", False)),
+            "fetch_model_provenance_invalid_seen": bool(package.get("fetch_model_provenance_invalid_seen", False)),
             "promotion_evidence": bool(package.get("promotion_evidence", False)),
             "milestone_interpretation": str(package.get("milestone_interpretation", "") or ""),
             "stage_quality_green": bool(package.get("stage_quality_green", False)),
@@ -1999,6 +2001,9 @@ class DashboardController:
         probe_pass_count = int(probe.get("fetch_to_pose_pass_count", 0) or 0) if probe else 0
         probe_fail_count = int(probe.get("fetch_to_pose_fail_count", 0) or 0) if probe else 0
         probe_pass = bool(probe and probe_pass_count > 0 and probe_fail_count == 0)
+        probe_model_valid = bool(probe.get("model_provenance_valid", False)) if probe else False
+        probe_model_reason = str(probe.get("model_provenance_reason", "") or "") if probe else ""
+        probe_target_model = str(probe.get("target_model_classification", "") or "") if probe else ""
 
         def _is_planner_handoff_gate(payload: Dict[str, Any]) -> bool:
             return str(payload.get("type", "") or "") == "fetch_planner_handoff_gate"
@@ -2051,7 +2056,10 @@ class DashboardController:
         recommended_next_action = str(evidence.get("recommended_next_action", "") or "") if evidence else ""
         milestone_interpretation = str(evidence.get("milestone_interpretation", "") or "") if evidence else ""
 
-        if stage_quality_payload and stage_quality_blockers:
+        if probe and not probe_model_valid:
+            status = "bad"
+            headline = f"Latest guarded fetch probe lacks calibrated model provenance ({probe_model_reason or probe_target_model or 'missing'})."
+        elif stage_quality_payload and stage_quality_blockers:
             status = "bad"
             if stage_quality_push_coast_blockers:
                 headline = f"Stage-quality audit has {stage_quality_push_coast_blockers} push/coast blocker; repair bounded push/coast before terminal live."
@@ -2158,6 +2166,11 @@ class DashboardController:
                 "pass": probe_pass,
                 "fetch_to_pose_pass_count": probe_pass_count,
                 "fetch_to_pose_fail_count": probe_fail_count,
+                "model_provenance_valid": probe_model_valid,
+                "model_provenance_reason": probe_model_reason,
+                "target_model_classification": probe_target_model,
+                "target_model_sdf": str(probe.get("target_model_sdf", "") or "") if probe else "",
+                "zone_model_sdf": str(probe.get("zone_model_sdf", "") or "") if probe else "",
                 "first_contact_push_alignment_max_deg": probe.get("first_contact_push_alignment_max_deg") if probe else None,
                 "fetch_to_pose_time_max_s": probe.get("fetch_to_pose_time_max_s") if probe else None,
             },

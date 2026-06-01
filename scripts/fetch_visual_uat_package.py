@@ -150,6 +150,46 @@ def infer_geometry_consistency(source: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def extract_model_provenance(source: dict[str, Any]) -> dict[str, Any]:
+    existing = source.get("model_provenance") if isinstance(source.get("model_provenance"), dict) else {}
+    if existing:
+        payload = dict(existing)
+    else:
+        payload = {}
+        for key in (
+            "target_model_sdf",
+            "zone_model_sdf",
+            "target_model_radius_m",
+            "target_model_classification",
+            "zone_model_radius_m",
+            "zone_model_classification",
+            "model_provenance_valid",
+            "model_provenance_reason",
+            "model_provenance_required",
+        ):
+            if key in source:
+                payload[key] = source.get(key)
+    if not payload:
+        return {
+            "model_provenance_valid": False,
+            "model_provenance_reason": "missing_model_provenance",
+        }
+    if "model_provenance_valid" not in payload:
+        target_class = str(payload.get("target_model_classification", "") or "")
+        zone_class = str(payload.get("zone_model_classification", "") or "")
+        payload["model_provenance_valid"] = bool(
+            target_class == "calibrated_golf_ball"
+            and zone_class == "golf_ball_delivery_zone_marker"
+        )
+    if not str(payload.get("model_provenance_reason", "") or ""):
+        payload["model_provenance_reason"] = (
+            "calibrated_fetch_models"
+            if bool(payload.get("model_provenance_valid", False))
+            else "invalid_or_missing_model_provenance"
+        )
+    return payload
+
+
 def session_id_for_path(path: Path) -> str:
     try:
         rel = path.resolve().relative_to(SESSION_ROOT.resolve())
@@ -244,6 +284,8 @@ def summarize_mission(path: Path) -> dict[str, Any]:
             geometry_source.update(candidate)
     geometry_consistency = infer_geometry_consistency(geometry_source)
     geometry_ok = not geometry_consistency or bool(geometry_consistency.get("pass", False))
+    model_provenance = extract_model_provenance(geometry_source)
+    provenance_ok = bool(model_provenance.get("model_provenance_valid", False))
     pass_flag = bool(
         payload.get("pass", payload.get("promotion_gate_pass", mission_verdict.get("pass", first_run.get("mission_completed_pass", False))))
     )
@@ -253,12 +295,12 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         or mission_verdict.get("fetch_to_pose_pass", False)
         or first_run.get("fetch_to_pose_pass", False)
     )
-    fetch_pass = bool(raw_fetch_pass and geometry_ok)
+    fetch_pass = bool(raw_fetch_pass and geometry_ok and provenance_ok)
     return {
         "campaign_id": str(payload.get("campaign_id", "") or ""),
         "session_id": session_id_for_path(path),
         "path": artifact_display_path(path),
-        "pass": bool(pass_flag and geometry_ok),
+        "pass": bool(pass_flag and geometry_ok and provenance_ok),
         "fetch_to_pose_pass": fetch_pass,
         "raw_fetch_to_pose_pass": raw_fetch_pass,
         "fetch_to_pose_pass_count": int(payload.get("fetch_to_pose_pass_count", 1 if fetch_pass else 0) or 0) if fetch_pass else 0,
@@ -271,6 +313,13 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         "failure_reasons": payload.get("fetch_to_pose_failure_reasons", mission_verdict.get("failure_reasons", [])),
         "geometry_consistency": geometry_consistency,
         "geometry_consistent": geometry_ok,
+        "model_provenance": model_provenance,
+        "model_provenance_valid": provenance_ok,
+        "model_provenance_reason": str(model_provenance.get("model_provenance_reason", "") or ""),
+        "target_model_sdf": str(model_provenance.get("target_model_sdf", "") or ""),
+        "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "") or ""),
+        "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+        "target_model_classification": str(model_provenance.get("target_model_classification", "") or ""),
     }
 
 
@@ -352,6 +401,11 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         and not bool(mission.get("geometry_consistent", True))
         for mission in missions
     )
+    model_provenance_invalid_seen = any(
+        mission.get("raw_fetch_to_pose_pass", mission.get("fetch_to_pose_pass"))
+        and not bool(mission.get("model_provenance_valid", False))
+        for mission in missions
+    )
     local_fetch_seen = any(mission.get("fetch_to_pose_pass") for mission in missions)
     visual_confirmation_seen = any(item.get("visual_confirmation_pass") for item in visual_summaries)
     local_fetch_visual_confirmed = any(
@@ -374,6 +428,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         warnings.append("no_local_fetch_pass_seen")
     if geometry_mismatch_seen:
         warnings.append("fetch_marker_geometry_mismatch")
+    if model_provenance_invalid_seen:
+        warnings.append("fetch_model_provenance_invalid")
     if not video_ok:
         warnings.append("missing_or_tiny_required_mobile_video")
     if not onboard_camera_ok:
@@ -407,6 +463,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "local_fetch_pass_seen": local_fetch_seen,
         "raw_local_fetch_pass_seen": raw_local_fetch_seen,
         "fetch_marker_geometry_mismatch_seen": geometry_mismatch_seen,
+        "fetch_model_provenance_invalid_seen": model_provenance_invalid_seen,
         "stage_quality_green": stage_quality_green,
         "stage_quality_status": (
             "blocker" if stage_quality_blocker_seen else "watch" if stage_quality_watch_seen else "green" if stage_quality_green else ""
@@ -440,6 +497,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- local_fetch_pass_seen: `{summary.get('local_fetch_pass_seen', False)}`",
         f"- raw_local_fetch_pass_seen: `{summary.get('raw_local_fetch_pass_seen', False)}`",
         f"- fetch_marker_geometry_mismatch_seen: `{summary.get('fetch_marker_geometry_mismatch_seen', False)}`",
+        f"- fetch_model_provenance_invalid_seen: `{summary.get('fetch_model_provenance_invalid_seen', False)}`",
         f"- stage_quality_green: `{summary.get('stage_quality_green', False)}`",
         f"- stage_quality_status: `{summary.get('stage_quality_status', '')}`",
         f"- promotion_evidence: `{summary.get('promotion_evidence', False)}`",
@@ -506,6 +564,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"raw_fetch_to_pose=`{mission.get('raw_fetch_to_pose_pass', mission.get('fetch_to_pose_pass', False))}` "
             f"geometry=`{geometry.get('pass', 'unknown')}` "
             f"geometry_reason=`{geometry.get('reason', '')}` "
+            f"model_provenance=`{mission.get('model_provenance_valid', False)}` "
+            f"target_model=`{mission.get('target_model_classification', '')}` "
             f"ai_mode=`{mission.get('ai_push_coast_mode', '')}`"
         )
     lines.extend(["", "## Visual Evidence"])

@@ -45,6 +45,15 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
             "promotion_gate_pass": True,
             "fetch_pose_world": {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.3},
             "visible_delivery_marker_pose": {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.3},
+            "model_provenance": {
+                "model_provenance_valid": True,
+                "model_provenance_reason": "calibrated_fetch_models",
+                "target_model_sdf": "ros2_config/calibrated_golf_ball.sdf",
+                "zone_model_sdf": "ros2_config/golf_ball_delivery_zone_marker.sdf",
+                "target_model_radius_m": 0.021336,
+                "target_model_classification": "calibrated_golf_ball",
+                "zone_model_classification": "golf_ball_delivery_zone_marker",
+            },
         },
     )
     visual = session_root / "mission" / "visual"
@@ -238,7 +247,18 @@ def test_visual_uat_package_requires_same_session_visual_confirmation(tmp_path, 
         },
     )
     passing_mission = session_root / "pass_session" / "gather_mission" / "mission_verdict.json"
-    _write_json(passing_mission, {"fetch_to_pose_pass": True, "pass": True})
+    _write_json(
+        passing_mission,
+        {
+            "fetch_to_pose_pass": True,
+            "pass": True,
+            "model_provenance": {
+                "model_provenance_valid": True,
+                "target_model_classification": "calibrated_golf_ball",
+                "zone_model_classification": "golf_ball_delivery_zone_marker",
+            },
+        },
+    )
     pass_visual = session_root / "pass_session" / "visual"
     pass_visual.mkdir(parents=True)
     (pass_visual / "world_stream.mp4").write_bytes(b"w" * package.VIDEO_MIN_BYTES)
@@ -299,6 +319,11 @@ def test_visual_uat_package_rejects_fetch_marker_geometry_mismatch(tmp_path, mon
             "fetch_to_pose_pass": True,
             "fetch_pose_world": {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.3},
             "zone_pose": {"x": 2.4, "y": 0.0, "z": 0.001, "radius_m": 0.762},
+            "model_provenance": {
+                "model_provenance_valid": True,
+                "target_model_classification": "calibrated_golf_ball",
+                "zone_model_classification": "golf_ball_delivery_zone_marker",
+            },
         },
     )
     visual = session_root / "pass_session" / "visual"

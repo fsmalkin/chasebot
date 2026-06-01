@@ -532,6 +532,16 @@ showing the ball reached about `0.158m` from the target center inside the
 `0.300m` contract. Treat it as the first valid post-fix UAT reference. Broad
 generalization still requires saved-layout repeatability and the seeded gate.
 
+June 1, 2026 calibrated-ball provenance reset: direct `fetch_to_pose` evidence
+now requires explicit model provenance in addition to marker geometry and video.
+Commit `680e393 Use calibrated ball for fetch direct runs` changed direct fetch
+defaults from the legacy `frisbee_target_ball.sdf` to
+`calibrated_golf_ball.sdf`. Pre-boundary direct repeatability artifacts that do
+not record `model_provenance_valid=true`, target model `calibrated_golf_ball`,
+and marker model `golf_ball_delivery_zone_marker` are diagnostic. Rebuild the
+evidence ladder from corrected direct runs: saved `zero`/`left05`/`right05`
+one-run, saved `3/3`, seeded `6 x 1`, then browser-watchable visual UAT.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

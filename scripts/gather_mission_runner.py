@@ -309,6 +309,10 @@ DEFAULT_ZONE_MODEL_SDF = REPO_ROOT / "ros2_config" / "corral_zone_marker.sdf"
 DEFAULT_FETCH_TARGET_MODEL_SDF = REPO_ROOT / "ros2_config" / "calibrated_golf_ball.sdf"
 DEFAULT_FETCH_ZONE_MODEL_NAME = "golf_ball_delivery_zone_marker"
 DEFAULT_FETCH_ZONE_MODEL_SDF = REPO_ROOT / "ros2_config" / "golf_ball_delivery_zone_marker.sdf"
+CALIBRATED_GOLF_BALL_RADIUS_M = 0.021336
+LEGACY_FRISBEE_TARGET_BALL_RADIUS_M = 0.05
+FETCH_DELIVERY_MARKER_RADIUS_M = 0.30
+LEGACY_CORRAL_MARKER_RADIUS_M = 0.762
 DEFAULT_MISSION_START_POSE = {"x": 0.0, "y": 0.0, "yaw": 0.0}
 DEFAULT_PLACE_RECOVERY_SETTLE_S = 0.20
 DEFAULT_PLACE_MARGINAL_CAPTURE_SETTLE_S = 0.25
@@ -744,6 +748,180 @@ def fetch_geometry_consistency(
     }
 
 
+def _resolve_model_sdf_path(raw_path: str | Path | None) -> Path | None:
+    text = clean_text(raw_path)
+    if not text:
+        return None
+    path = Path(text)
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    return path
+
+
+def _display_model_sdf_path(path: Path | None) -> str:
+    if path is None:
+        return ""
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT.resolve())).replace("\\", "/")
+    except Exception:
+        return str(path)
+
+
+def _close_to(value: float | None, expected: float, tolerance: float = 0.002) -> bool:
+    return value is not None and abs(float(value) - float(expected)) <= float(tolerance)
+
+
+def _sdf_model_name(path: Path | None) -> str:
+    if path is None or not path.is_file():
+        return ""
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        return ""
+    model = root.find(".//model")
+    return clean_text(model.get("name") if model is not None else "")
+
+
+def _sdf_first_sphere_radius_m(path: Path | None) -> float | None:
+    if path is None or not path.is_file():
+        return None
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        return None
+    for radius in root.findall(".//sphere/radius"):
+        numeric = clean_number(radius.text)
+        if numeric is not None:
+            return round(float(numeric), 6)
+    return None
+
+
+def _sdf_first_cylinder_radius_m(path: Path | None) -> float | None:
+    if path is None or not path.is_file():
+        return None
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        return None
+    for radius in root.findall(".//cylinder/radius"):
+        numeric = clean_number(radius.text)
+        if numeric is not None:
+            return round(float(numeric), 6)
+    return None
+
+
+def _sdf_has_golf_ball_resistance_plugin(path: Path | None) -> bool:
+    if path is None or not path.is_file():
+        return False
+    try:
+        root = ET.parse(path).getroot()
+    except Exception:
+        return False
+    for plugin in root.findall(".//plugin"):
+        filename = clean_text(plugin.get("filename"))
+        name = clean_text(plugin.get("name"))
+        if "GolfBallRollingResistance" in filename or "GolfBallRollingResistance" in name:
+            return True
+    return False
+
+
+def classify_target_model_sdf(raw_path: str | Path | None) -> dict[str, Any]:
+    path = _resolve_model_sdf_path(raw_path)
+    radius_m = _sdf_first_sphere_radius_m(path)
+    model_name = _sdf_model_name(path)
+    filename = path.name if path is not None else ""
+    exists = bool(path and path.is_file())
+    plugin = _sdf_has_golf_ball_resistance_plugin(path)
+    if not path:
+        classification = "missing"
+    elif (
+        filename == DEFAULT_FETCH_TARGET_MODEL_SDF.name
+        or model_name == "calibrated_golf_ball"
+        or (_close_to(radius_m, CALIBRATED_GOLF_BALL_RADIUS_M, tolerance=0.001) and plugin)
+    ):
+        classification = "calibrated_golf_ball"
+    elif (
+        filename == DEFAULT_TARGET_MODEL_SDF.name
+        or model_name == "frisbee_target_ball"
+        or _close_to(radius_m, LEGACY_FRISBEE_TARGET_BALL_RADIUS_M, tolerance=0.003)
+    ):
+        classification = "legacy_frisbee_target_ball"
+    elif radius_m is not None:
+        classification = "unknown_sphere_target"
+    else:
+        classification = "unknown_target_model"
+    return {
+        "target_model_sdf": _display_model_sdf_path(path),
+        "target_model_sdf_exists": exists,
+        "target_model_name_in_sdf": model_name,
+        "target_model_radius_m": radius_m,
+        "target_model_classification": classification,
+        "target_model_has_rolling_resistance_plugin": plugin,
+    }
+
+
+def classify_zone_model_sdf(raw_path: str | Path | None) -> dict[str, Any]:
+    path = _resolve_model_sdf_path(raw_path)
+    radius_m = _sdf_first_cylinder_radius_m(path)
+    model_name = _sdf_model_name(path)
+    filename = path.name if path is not None else ""
+    exists = bool(path and path.is_file())
+    if not path:
+        classification = "missing"
+    elif (
+        filename == DEFAULT_FETCH_ZONE_MODEL_SDF.name
+        or model_name == DEFAULT_FETCH_ZONE_MODEL_NAME
+        or _close_to(radius_m, FETCH_DELIVERY_MARKER_RADIUS_M, tolerance=0.01)
+    ):
+        classification = "golf_ball_delivery_zone_marker"
+    elif (
+        filename == DEFAULT_ZONE_MODEL_SDF.name
+        or model_name == DEFAULT_ZONE_MODEL_NAME
+        or _close_to(radius_m, LEGACY_CORRAL_MARKER_RADIUS_M, tolerance=0.02)
+    ):
+        classification = "legacy_corral_zone_marker"
+    elif radius_m is not None:
+        classification = "unknown_cylinder_zone"
+    else:
+        classification = "unknown_zone_model"
+    return {
+        "zone_model_sdf": _display_model_sdf_path(path),
+        "zone_model_sdf_exists": exists,
+        "zone_model_name_in_sdf": model_name,
+        "zone_model_radius_m": radius_m,
+        "zone_model_classification": classification,
+    }
+
+
+def fetch_model_provenance(
+    *,
+    mission_objective: str,
+    target_model_sdf: str | Path | None,
+    zone_model_sdf: str | Path | None,
+) -> dict[str, Any]:
+    target = classify_target_model_sdf(target_model_sdf)
+    zone = classify_zone_model_sdf(zone_model_sdf)
+    required = clean_text(mission_objective).lower() == MISSION_OBJECTIVE_FETCH_TO_POSE
+    target_ok = target.get("target_model_classification") == "calibrated_golf_ball"
+    zone_ok = zone.get("zone_model_classification") == "golf_ball_delivery_zone_marker"
+    if not required:
+        reason = "not_required_for_objective"
+    elif target_ok and zone_ok:
+        reason = "calibrated_fetch_models"
+    elif not target_ok:
+        reason = f"invalid_target_model:{target.get('target_model_classification', 'unknown')}"
+    else:
+        reason = f"invalid_zone_model:{zone.get('zone_model_classification', 'unknown')}"
+    valid = bool((not required) or (target_ok and zone_ok))
+    return {
+        **target,
+        **zone,
+        "model_provenance_required": required,
+        "model_provenance_valid": valid,
+        "model_provenance_reason": reason,
+    }
+
+
 def _ball_pose_from_state_row(row: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "ball_pose",
@@ -1153,6 +1331,13 @@ class GatherMissionRunner:
             source="gather_mission_runner",
         )
 
+    def _model_provenance(self) -> dict[str, Any]:
+        return fetch_model_provenance(
+            mission_objective=self.mission_objective,
+            target_model_sdf=getattr(self.args, "target_model_sdf", ""),
+            zone_model_sdf=getattr(self.args, "zone_model_sdf", ""),
+        )
+
     def _contact_ready_pose_world(
         self,
         *,
@@ -1250,6 +1435,8 @@ class GatherMissionRunner:
                     "ball_pose": final_pose_payload,
                 }
             )
+        model_provenance = self._model_provenance()
+        model_provenance_valid = bool(model_provenance.get("model_provenance_valid", True))
         if fetch_xy is None:
             visible_marker_pose = self._visible_delivery_marker_pose()
             geometry_consistency = self._fetch_geometry_consistency(
@@ -1263,6 +1450,12 @@ class GatherMissionRunner:
                 "fetch_pose_world": fetch_pose,
                 "visible_delivery_marker_pose": visible_marker_pose,
                 "geometry_consistency": geometry_consistency,
+                "model_provenance": model_provenance,
+                "model_provenance_valid": model_provenance_valid,
+                "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+                "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+                "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+                "target_model_classification": str(model_provenance.get("target_model_classification", "")),
                 "delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
                 "sample_count": len(samples),
                 "ball_start_pose": {},
@@ -1304,7 +1497,11 @@ class GatherMissionRunner:
 
         observed = closest_distance is not None
         trajectory_intersects_delivery = bool(observed and closest_distance is not None and closest_distance <= radius_m)
-        pass_delivery = bool(trajectory_intersects_delivery and geometry_consistency.get("pass", False))
+        pass_delivery = bool(
+            trajectory_intersects_delivery
+            and geometry_consistency.get("pass", False)
+            and model_provenance_valid
+        )
         ball_start_pose = dict(samples[0]["ball_pose"]) if samples else {}
         ball_end_pose = dict(samples[-1]["ball_pose"]) if samples else {}
         end_xyyaw = world_pose_xyyaw(ball_end_pose)
@@ -1359,6 +1556,8 @@ class GatherMissionRunner:
             reason = "trajectory_intersects_delivery_radius"
         elif trajectory_intersects_delivery and not bool(geometry_consistency.get("pass", False)):
             reason = "fetch_marker_geometry_mismatch"
+        elif trajectory_intersects_delivery and not model_provenance_valid:
+            reason = "fetch_model_provenance_invalid"
         elif not observed:
             reason = "no_ball_samples"
         else:
@@ -1372,6 +1571,12 @@ class GatherMissionRunner:
             "fetch_pose_world": fetch_pose,
             "visible_delivery_marker_pose": visible_marker_pose,
             "geometry_consistency": geometry_consistency,
+            "model_provenance": model_provenance,
+            "model_provenance_valid": model_provenance_valid,
+            "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+            "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+            "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+            "target_model_classification": str(model_provenance.get("target_model_classification", "")),
             "delivery_radius_m": round(float(radius_m), 6),
             "sample_count": len(samples),
             "ball_start_pose": ball_start_pose,
@@ -1531,6 +1736,7 @@ class GatherMissionRunner:
             if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
             else {}
         )
+        model_provenance = self._model_provenance()
         payload = {
             "target_id": target.id,
             "label": target.label,
@@ -1553,6 +1759,12 @@ class GatherMissionRunner:
             "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
             "visible_delivery_marker_pose": visible_marker_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
             "geometry_consistency": geometry_consistency,
+            "model_provenance": model_provenance,
+            "model_provenance_valid": bool(model_provenance.get("model_provenance_valid", True)),
+            "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+            "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+            "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+            "target_model_classification": str(model_provenance.get("target_model_classification", "")),
             "shot_outcome": dict(shot_outcome) if isinstance(shot_outcome, dict) else {},
             "handoff_kind": clean_text(handoff_kind, "unspecified"),
             "zone_edge_correction_count": int(zone_edge_correction_count),
@@ -1710,11 +1922,21 @@ class GatherMissionRunner:
             if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
             else {}
         )
+        model_provenance = self._model_provenance()
         geometry_ok = bool(geometry_consistency.get("pass", True))
         fetch_failure_reason = clean_text(fetch_to_pose_failure_reason)
         if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE and fetch_to_pose_reached and not geometry_ok:
             fetch_failure_reason = "fetch_marker_geometry_mismatch"
-        fetch_pass = bool(fetch_to_pose_reached and geometry_ok)
+        provenance_ok = bool(model_provenance.get("model_provenance_valid", True))
+        if (
+            self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+            and fetch_to_pose_reached
+            and geometry_ok
+            and not provenance_ok
+            and not fetch_failure_reason
+        ):
+            fetch_failure_reason = "fetch_model_provenance_invalid"
+        fetch_pass = bool(fetch_to_pose_reached and geometry_ok and provenance_ok)
         if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
             target_pass = fetch_pass
         else:
@@ -1752,6 +1974,12 @@ class GatherMissionRunner:
             "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
             "visible_delivery_marker_pose": visible_marker_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
             "geometry_consistency": geometry_consistency,
+            "model_provenance": model_provenance,
+            "model_provenance_valid": provenance_ok,
+            "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+            "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+            "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+            "target_model_classification": str(model_provenance.get("target_model_classification", "")),
             "shot_outcome": dict(shot_outcome) if isinstance(shot_outcome, dict) else {},
             "final_ball_pose": final_ball_pose,
             "place_time_s": round(float(place_time_s), 6),
@@ -3343,6 +3571,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         active_zone_pose = self._visible_delivery_marker_pose()
         legacy_zone_pose = self._legacy_corral_zone_pose()
         fetch_pose_world = self._fetch_pose_world() if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {}
+        model_provenance = self._model_provenance()
         geometry_consistency = (
             self._fetch_geometry_consistency(
                 fetch_pose_world=fetch_pose_world,
@@ -3395,6 +3624,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "legacy_corral_zone_pose": legacy_zone_pose if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE else {},
             "fetch_pose_world": fetch_pose_world,
             "geometry_consistency": geometry_consistency,
+            "model_provenance": model_provenance,
+            "model_provenance_valid": bool(model_provenance.get("model_provenance_valid", True)),
+            "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+            "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+            "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+            "target_model_classification": str(model_provenance.get("target_model_classification", "")),
             "zone_score": {},
             "final_corral_audit": {},
             "settle_metrics": {},
@@ -11521,12 +11756,18 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     fetch_pose_world=fetch_pose_world,
                     visible_delivery_marker_pose=visible_delivery_marker_pose,
                 )
+            model_provenance = self._model_provenance()
+            model_provenance_valid = bool(model_provenance.get("model_provenance_valid", True))
             fetch_to_pose_pass = bool(
                 mission_completed_pass
                 and fetch_to_pose_reached
                 and (
                     self.mission_objective != MISSION_OBJECTIVE_FETCH_TO_POSE
                     or bool(geometry_consistency.get("pass", False))
+                )
+                and (
+                    self.mission_objective != MISSION_OBJECTIVE_FETCH_TO_POSE
+                    or model_provenance_valid
                 )
             )
             if (
@@ -11537,6 +11778,15 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 and not fetch_to_pose_failure_reason
             ):
                 fetch_to_pose_failure_reason = "fetch_marker_geometry_mismatch"
+            if (
+                self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+                and mission_completed_pass
+                and fetch_to_pose_reached
+                and bool(geometry_consistency.get("pass", False))
+                and not model_provenance_valid
+                and not fetch_to_pose_failure_reason
+            ):
+                fetch_to_pose_failure_reason = "fetch_model_provenance_invalid"
             final_corral_audit: dict[str, Any] = {}
             final_all_targets_inside_retrieval_corral = False
             final_all_targets_stopped = False
@@ -11645,6 +11895,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
                 "visible_delivery_marker_pose": visible_delivery_marker_pose,
                 "geometry_consistency": geometry_consistency,
+                "model_provenance": model_provenance,
+                "model_provenance_valid": model_provenance_valid,
+                "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+                "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+                "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+                "target_model_classification": str(model_provenance.get("target_model_classification", "")),
                 "shot_outcome": shot_outcome,
                 "final_corral_audit": final_corral_audit,
                 "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
@@ -11721,6 +11977,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "fetch_delivery_radius_m": round(float(self.fetch_delivery_radius_m), 6),
                 "visible_delivery_marker_pose": visible_delivery_marker_pose,
                 "geometry_consistency": geometry_consistency,
+                "model_provenance": model_provenance,
+                "model_provenance_valid": model_provenance_valid,
+                "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+                "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+                "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+                "target_model_classification": str(model_provenance.get("target_model_classification", "")),
                 "shot_outcome": shot_outcome,
                 "final_corral_audit": final_corral_audit,
                 "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
@@ -11749,6 +12011,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "fetch_to_pose_fail_count": 0 if fetch_to_pose_pass else 1,
                     "geometry_consistency_pass_count": 1 if bool(geometry_consistency.get("pass", False)) else 0,
                     "geometry_consistency_fail_count": 0 if bool(geometry_consistency.get("pass", False)) else 1,
+                    "model_provenance_valid_count": 1 if model_provenance_valid else 0,
+                    "model_provenance_invalid_count": 0 if model_provenance_valid else 1,
                     "final_inside_retrieval_corral_count": 1 if final_inside_retrieval_corral else 0,
                     "final_center_inside_zone_count": 1 if final_center_inside_zone else 0,
                     "ball_stopped_in_corral_count": 1 if ball_stopped_in_corral else 0,
@@ -11838,6 +12102,12 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "fetch_pose_world": fetch_pose_world,
                         "visible_delivery_marker_pose": visible_delivery_marker_pose,
                         "geometry_consistency": geometry_consistency,
+                        "model_provenance": model_provenance,
+                        "model_provenance_valid": model_provenance_valid,
+                        "target_model_sdf": str(model_provenance.get("target_model_sdf", "")),
+                        "zone_model_sdf": str(model_provenance.get("zone_model_sdf", "")),
+                        "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+                        "target_model_classification": str(model_provenance.get("target_model_classification", "")),
                         "final_corral_audit": final_corral_audit,
                         "final_all_targets_inside_retrieval_corral": final_all_targets_inside_retrieval_corral,
                         "final_all_targets_stopped": final_all_targets_stopped,
