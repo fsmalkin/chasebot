@@ -228,6 +228,9 @@ from gather_object_centric_policy_helpers import OBJECT_CENTRIC_PLACE_RECOVERY_R
 from gather_object_centric_policy_helpers import decide_object_centric_gather_command
 from gather_ai_push_coast_helpers import AI_PUSH_COAST_MODE_GUARDED_LIVE
 from gather_ai_push_coast_helpers import AI_PUSH_COAST_MODE_SHADOW
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_DEADBAND_DEG
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_WATCH_COUNT
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_CAPTURE_YAW_WATCH_DEG
 from gather_ai_push_coast_helpers import AI_PUSH_COAST_SERVO_CONTROL_FAMILY
 from gather_ai_push_coast_helpers import ALLOWED_AI_PUSH_COAST_MODES
 from gather_ai_push_coast_helpers import decide_ai_push_coast_handoff
@@ -1531,6 +1534,7 @@ class GatherMissionRunner:
                 "fetch_launch_motion_evidence_m",
                 "fetch_max_commanded_linear_x_mps",
                 "fetch_max_target_speed_scale",
+                "capture_geometry_gate",
             ):
                 if key in place_payload:
                     fetch_phase_metrics[key] = place_payload.get(key)
@@ -5745,6 +5749,14 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         capture_handoff_ball_pose: dict[str, Any] | None = None
         capture_started_monotonic: float | None = None
         last_capture_diagnostics: dict[str, Any] = {}
+        capture_yaw_sample_count = 0
+        capture_yaw_travel_rad = 0.0
+        capture_yaw_previous_raw_rad: float | None = None
+        capture_yaw_previous_unwrapped_rad: float | None = None
+        capture_yaw_min_unwrapped_rad: float | None = None
+        capture_yaw_max_unwrapped_rad: float | None = None
+        capture_yaw_previous_sign = 0
+        capture_yaw_sign_crossing_count = 0
         object_centric_previous_command: PlaceControlCommand | None = None
         object_centric_previous_ball_pose: dict[str, Any] | None = None
         last_object_centric_policy: dict[str, Any] = {}
@@ -5832,6 +5844,76 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 return dict(payload) if isinstance(payload, dict) else {}
             return {}
 
+        def _record_capture_yaw(robot_pose: dict[str, Any] | None) -> None:
+            nonlocal capture_yaw_sample_count
+            nonlocal capture_yaw_travel_rad
+            nonlocal capture_yaw_previous_raw_rad
+            nonlocal capture_yaw_previous_unwrapped_rad
+            nonlocal capture_yaw_min_unwrapped_rad
+            nonlocal capture_yaw_max_unwrapped_rad
+            nonlocal capture_yaw_previous_sign
+            nonlocal capture_yaw_sign_crossing_count
+            robot_xyyaw = world_pose_xyyaw(robot_pose or {})
+            if robot_xyyaw is None:
+                return
+            yaw = float(robot_xyyaw[2])
+            if capture_yaw_previous_raw_rad is None:
+                unwrapped = yaw
+            else:
+                delta = normalize_angle(yaw - float(capture_yaw_previous_raw_rad))
+                capture_yaw_travel_rad += abs(float(delta))
+                unwrapped = float(capture_yaw_previous_unwrapped_rad or 0.0) + float(delta)
+            capture_yaw_sample_count += 1
+            capture_yaw_previous_raw_rad = yaw
+            capture_yaw_previous_unwrapped_rad = unwrapped
+            capture_yaw_min_unwrapped_rad = (
+                unwrapped
+                if capture_yaw_min_unwrapped_rad is None
+                else min(float(capture_yaw_min_unwrapped_rad), unwrapped)
+            )
+            capture_yaw_max_unwrapped_rad = (
+                unwrapped
+                if capture_yaw_max_unwrapped_rad is None
+                else max(float(capture_yaw_max_unwrapped_rad), unwrapped)
+            )
+            deadband_rad = math.radians(float(AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_DEADBAND_DEG))
+            if abs(yaw) > deadband_rad:
+                current_sign = 1 if yaw > 0.0 else -1
+                if capture_yaw_previous_sign and current_sign != capture_yaw_previous_sign:
+                    capture_yaw_sign_crossing_count += 1
+                capture_yaw_previous_sign = current_sign
+
+        def _capture_geometry_gate_payload() -> dict[str, Any]:
+            yaw_span_rad = 0.0
+            if capture_yaw_min_unwrapped_rad is not None and capture_yaw_max_unwrapped_rad is not None:
+                yaw_span_rad = float(capture_yaw_max_unwrapped_rad) - float(capture_yaw_min_unwrapped_rad)
+            yaw_travel_deg = math.degrees(float(capture_yaw_travel_rad))
+            yaw_span_deg = math.degrees(float(yaw_span_rad))
+            flags: list[str] = []
+            if yaw_travel_deg > float(AI_PUSH_COAST_CAPTURE_YAW_WATCH_DEG):
+                flags.append("capture_yaw_watch")
+            if capture_yaw_sign_crossing_count >= int(AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_WATCH_COUNT):
+                flags.append("capture_yaw_sign_crossing_watch")
+            return {
+                "pass": not flags,
+                "flags": flags,
+                "capture_yaw_sample_count": int(capture_yaw_sample_count),
+                "capture_yaw_travel_deg": round(float(yaw_travel_deg), 6),
+                "capture_yaw_span_deg": round(float(yaw_span_deg), 6),
+                "capture_yaw_sign_crossing_count": int(capture_yaw_sign_crossing_count),
+                "thresholds": {
+                    "capture_yaw_watch_deg": round(float(AI_PUSH_COAST_CAPTURE_YAW_WATCH_DEG), 6),
+                    "capture_yaw_sign_crossing_watch_count": int(
+                        AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_WATCH_COUNT
+                    ),
+                    "capture_yaw_sign_crossing_deadband_deg": round(
+                        float(AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_DEADBAND_DEG),
+                        6,
+                    ),
+                },
+                "source": "live_capture_phase",
+            }
+
         def _capture_diagnostics_payload(
             *,
             now_monotonic: float,
@@ -5898,6 +5980,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "approach_snapshot": dict(approach_snapshot or {}),
                 "capture_entry_snapshot": last_capture_entry_snapshot,
                 "capture_entry_diagnostics": last_capture_entry_diagnostics,
+                "capture_geometry_gate": _capture_geometry_gate_payload(),
                 "robot_delta_from_capture_entry_handoff_m": clean_rounded_number(robot_delta_m),
                 "ball_delta_from_capture_entry_handoff_m": clean_rounded_number(ball_delta_m),
                 "capture_entry_handoff_robot_pose": dict(capture_handoff_robot_pose or {}),
@@ -5946,6 +6029,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "capture_entry": last_capture_entry_snapshot,
                     "capture_entry_diagnostics": last_capture_entry_diagnostics,
                     "capture_diagnostics": capture_diagnostics or {},
+                    "capture_geometry_gate": _capture_geometry_gate_payload(),
                     "object_centric_policy": object_centric_policy or {},
                     "selected_command": _command_payload(selected_command),
                     "ball_motion_m": ball_motion_m,
@@ -5978,6 +6062,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "capture_entry_reached": bool(capture_entry_reached_once if enable_goal_side_stage else True),
                 "capture_entry_time_s": round(float(capture_entry_time_s), 6),
                 "approach_failure_reason": str(failure_reason or verdict.get("reason", "") or ""),
+                "capture_geometry_gate": _capture_geometry_gate_payload(),
             }
         while time.monotonic() < deadline:
             now_monotonic = time.monotonic()
@@ -6430,6 +6515,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 capture_handoff_robot_pose = dict(robot_pose)
             if capture_handoff_ball_pose is None and isinstance(ball_pose, dict):
                 capture_handoff_ball_pose = dict(ball_pose)
+            _record_capture_yaw(robot_pose)
             command = None
             raw_command = None
             command_source = "no_pose_or_ball"
@@ -9111,6 +9197,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         session_id: str,
         target: GatherTargetSpec,
         state_history_path: Path,
+        approach_payload: dict[str, Any] | None = None,
         attempt_index: int = 0,
         attempt_kind: str = "",
     ) -> tuple[bool, dict[str, Any]]:
@@ -9150,6 +9237,16 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         max_target_speed_scale: float | None = None
         observe_count = 0
         failure_reason = "fetch_to_pose_timeout"
+        capture_geometry_gate = {}
+        if isinstance(approach_payload, dict) and isinstance(approach_payload.get("capture_geometry_gate"), dict):
+            capture_geometry_gate = dict(approach_payload.get("capture_geometry_gate") or {})
+        approach_contact_metrics = None
+        if capture_geometry_gate:
+            approach_contact_metrics = {
+                "stable_contact_approach_pass": bool(capture_geometry_gate.get("pass", False)),
+                "flags": list(capture_geometry_gate.get("flags", [])),
+                "capture_geometry_gate": dict(capture_geometry_gate),
+            }
 
         def _distance_to_fetch_pose(ball_pose: dict[str, Any] | None) -> float | None:
             if fetch_xyyaw is None or not ball_pose:
@@ -9181,6 +9278,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 latest_still_s=latest_still_s,
                 terminal_settled_after_nav2=terminal_settled_after_nav2,
                 ball_moved_since_fetch=ball_moved_since_fetch,
+                approach_contact_metrics=approach_contact_metrics,
+                capture_geometry_gate=capture_geometry_gate,
                 mode=self.ai_push_coast_mode,
             )
 
@@ -9398,6 +9497,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             "robot_pose": robot_pose,
                             "ball_pose": ball_pose,
                             "fetch_pose_world": fetch_pose_world,
+                            "capture_geometry_gate": capture_geometry_gate,
                             "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
                             "controller_family": self.gather_control_family,
                         },
@@ -9466,6 +9566,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                 "robot_pose": robot_pose,
                                 "ball_pose": ball_pose,
                                 "fetch_pose_world": fetch_pose_world,
+                                "capture_geometry_gate": capture_geometry_gate,
                                 "pre_correction_distance_m": (
                                     round(float(ai_terminal_correction_start_distance_m), 6)
                                     if ai_terminal_correction_start_distance_m is not None
@@ -9521,6 +9622,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "fetch_closest_pose": closest_pose,
                         "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
                         "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                        "capture_geometry_gate": capture_geometry_gate,
                         "ai_push_coast_mode": self.ai_push_coast_mode,
                         **latest_ai_push_coast,
                         "settle_exit_reason": "trajectory_intersects_delivery_radius",
@@ -9592,6 +9694,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                 "robot_pose": robot_pose,
                                 "ball_pose": ball_pose,
                                 "fetch_pose_world": fetch_pose_world,
+                                "capture_geometry_gate": capture_geometry_gate,
                                 "ai_terminal_correction_trigger": "settled_stop_short",
                                 "distance_to_fetch_pose_m": round(float(distance_to_fetch_pose_m), 6),
                                 "closest_approach_distance_m": (
@@ -9626,6 +9729,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                         "robot_pose": robot_pose,
                                         "ball_pose": ball_pose,
                                         "fetch_pose_world": fetch_pose_world,
+                                        "capture_geometry_gate": capture_geometry_gate,
                                         "pre_correction_distance_m": (
                                             round(float(ai_terminal_correction_start_distance_m), 6)
                                             if ai_terminal_correction_start_distance_m is not None
@@ -9701,6 +9805,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                 "robot_pose": robot_pose,
                                 "ball_pose": ball_pose,
                                 "fetch_pose_world": fetch_pose_world,
+                                "capture_geometry_gate": capture_geometry_gate,
                                 "nav2_follow_path_plan": probe_plan_dict,
                                 "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
                                 "ai_push_coast_mode": self.ai_push_coast_mode,
@@ -9878,6 +9983,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                     "robot_pose": robot_pose,
                                     "ball_pose": ball_pose,
                                     "fetch_pose_world": fetch_pose_world,
+                                    "capture_geometry_gate": capture_geometry_gate,
                                     "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
                                     "controller_family": self.gather_control_family,
                                     "control": self._control_debug_fields(
@@ -9934,6 +10040,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "robot_pose": robot_pose,
                         "ball_pose": ball_pose,
                         "fetch_pose_world": fetch_pose_world,
+                        "capture_geometry_gate": capture_geometry_gate,
                         "nav2_follow_path_plan": corridor_plan_dict,
                         "ai_push_coast_mode": self.ai_push_coast_mode,
                         **latest_ai_push_coast,
@@ -10010,6 +10117,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "nav2_follow_path_plan": corridor_plan_dict,
                         "nav2_follow_path_result": follow_path_result,
                         "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+                        "capture_geometry_gate": capture_geometry_gate,
                         "ai_push_coast_mode": self.ai_push_coast_mode,
                         **latest_ai_push_coast,
                         "controller_family": self.gather_control_family,
@@ -10085,6 +10193,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                 "robot_pose": robot_pose,
                                 "ball_pose": ball_pose,
                                 "fetch_pose_world": fetch_pose_world,
+                                "capture_geometry_gate": capture_geometry_gate,
                                 "distance_to_fetch_pose_m": round(float(distance_to_fetch_pose_m), 6),
                                 "closest_approach_distance_m": (
                                     round(float(closest_distance_m), 6)
@@ -10122,6 +10231,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                     "robot_pose": robot_pose,
                                     "ball_pose": ball_pose,
                                     "fetch_pose_world": fetch_pose_world,
+                                    "capture_geometry_gate": capture_geometry_gate,
                                     "ai_terminal_correction_trigger": "nav2_action_abort_stop_short",
                                     "distance_to_fetch_pose_m": round(float(distance_to_fetch_pose_m), 6),
                                     "closest_approach_distance_m": (
@@ -10286,6 +10396,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "capture": latest_capture,
                     "zone_score": latest_zone_score,
                     "fetch_pose_world": fetch_pose_world,
+                    "capture_geometry_gate": capture_geometry_gate,
                     "fetch_to_pose": {
                         "reached": bool(
                             distance_to_fetch_pose_m is not None
@@ -10315,6 +10426,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                             else None
                         ),
                         "ball_moved_since_fetch": bool(ball_moved_since_fetch),
+                        "capture_geometry_gate": capture_geometry_gate,
                         "min_launch_observe_s": round(float(DEFAULT_FETCH_TO_POSE_MIN_LAUNCH_OBSERVE_S), 6),
                         "launch_motion_evidence_m": round(float(DEFAULT_FETCH_TO_POSE_LAUNCH_MOTION_EVIDENCE_M), 6),
                         "max_commanded_linear_x_mps": (
@@ -10401,6 +10513,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     "failure_reason": failure_reason,
                     "final_ball_pose": latest_ball_pose,
                     "fetch_pose_world": fetch_pose_world,
+                    "capture_geometry_gate": capture_geometry_gate,
                     "pre_correction_distance_m": (
                         round(float(ai_terminal_correction_start_distance_m), 6)
                         if ai_terminal_correction_start_distance_m is not None
@@ -10464,6 +10577,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "fetch_closest_pose": closest_pose,
             "ai_first_contact_confirmation": ai_first_contact_confirmation_diagnostics,
             "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
+            "capture_geometry_gate": capture_geometry_gate,
             "ai_push_coast_mode": self.ai_push_coast_mode,
             **latest_ai_push_coast,
             "settle_exit_reason": failure_reason,
@@ -11771,6 +11885,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     session_id=session_id,
                     target=target,
                     state_history_path=state_history_path,
+                    approach_payload=capture_payload,
                     attempt_index=attempt,
                     attempt_kind=attempt_kind,
                 )

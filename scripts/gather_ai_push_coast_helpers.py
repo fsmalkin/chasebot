@@ -29,9 +29,15 @@ AI_PUSH_COAST_MAX_LATERAL_ERROR_M = 0.22
 AI_PUSH_COAST_MAX_SETUP_YAW_ERROR_DEG = 18.0
 AI_PUSH_COAST_PREDICTED_TERMINAL_GAIN_M = 0.22
 AI_PUSH_COAST_PREDICTED_TERMINAL_TOLERANCE_M = 0.015
+AI_PUSH_COAST_CAPTURE_YAW_WATCH_DEG = 60.0
+AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_WATCH_COUNT = 2
+AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_DEADBAND_DEG = 5.0
 AI_PUSH_COAST_FLAG_STAGE_LABELS = {
     "pre_contact_lateral_error": "setup",
     "pre_contact_yaw_error": "setup",
+    "capture_geometry_gate_failed": "setup",
+    "capture_yaw_watch": "setup",
+    "capture_yaw_sign_crossing_watch": "setup",
     "ball_lateral_knock_away": "first_contact",
     "contact_trajectory_angle_error": "push_coast",
 }
@@ -118,6 +124,7 @@ def _nav2_status(nav2_corridor_push: dict[str, Any] | None) -> dict[str, Any]:
 def classify_ai_push_coast_stage(
     *,
     approach_contact_metrics: dict[str, Any] | None = None,
+    capture_geometry_gate: dict[str, Any] | None = None,
     shot_outcome: dict[str, Any] | None = None,
     relative_errors: dict[str, Any] | None = None,
     distance_to_fetch_pose_m: float | None = None,
@@ -126,8 +133,15 @@ def classify_ai_push_coast_stage(
     terminal_correction_attempted: bool = False,
 ) -> dict[str, Any]:
     approach = approach_contact_metrics if isinstance(approach_contact_metrics, dict) else {}
+    capture_gate = capture_geometry_gate if isinstance(capture_geometry_gate, dict) else {}
     shot = shot_outcome if isinstance(shot_outcome, dict) else {}
     flags = [str(flag) for flag in approach.get("flags", []) if str(flag)]
+    for flag in capture_gate.get("flags", []):
+        clean_flag = str(flag)
+        if clean_flag and clean_flag not in flags:
+            flags.append(clean_flag)
+    if capture_gate and capture_gate.get("pass") is False and "capture_geometry_gate_failed" not in flags:
+        flags.append("capture_geometry_gate_failed")
     labels: list[str] = []
     for flag in flags:
         stage = AI_PUSH_COAST_FLAG_STAGE_LABELS.get(flag)
@@ -164,14 +178,19 @@ def classify_ai_push_coast_stage(
             labels.append("terminal_arrival")
     if bool(terminal_correction_attempted) and "terminal_correction" not in labels:
         labels.append("terminal_correction")
-    if not labels and bool(approach.get("stable_contact_approach_pass", False)):
+    capture_gate_pass = True
+    if capture_gate:
+        capture_gate_pass = bool(capture_gate.get("pass", False))
+    stable_contact_pass = bool(approach.get("stable_contact_approach_pass", False)) and capture_gate_pass
+    if not labels and stable_contact_pass:
         labels.append("clean_contact")
     primary = labels[0] if labels else "unknown"
     return {
         "primary_stage": primary,
         "stage_labels": labels,
         "contact_quality_flags": flags,
-        "stable_contact_approach_pass": bool(approach.get("stable_contact_approach_pass", False)),
+        "stable_contact_approach_pass": stable_contact_pass,
+        "capture_geometry_gate": dict(capture_gate),
         "shot_reason": reason,
     }
 
@@ -191,6 +210,7 @@ def decide_ai_push_coast_handoff(
     terminal_settled_after_nav2: bool = False,
     ball_moved_since_fetch: bool = False,
     approach_contact_metrics: dict[str, Any] | None = None,
+    capture_geometry_gate: dict[str, Any] | None = None,
     shot_outcome: dict[str, Any] | None = None,
     mode: str = AI_PUSH_COAST_MODE_SHADOW,
 ) -> dict[str, Any]:
@@ -203,8 +223,10 @@ def decide_ai_push_coast_handoff(
     radius = max(float(delivery_radius_m), 0.0)
     errors = _relative_errors(robot_pose, ball_pose, fetch_pose_world)
     nav2 = _nav2_status(nav2_corridor_push)
+    capture_gate = capture_geometry_gate if isinstance(capture_geometry_gate, dict) else {}
     stage_classification = classify_ai_push_coast_stage(
         approach_contact_metrics=approach_contact_metrics,
+        capture_geometry_gate=capture_gate,
         shot_outcome=shot_outcome,
         relative_errors=errors,
         distance_to_fetch_pose_m=distance,
@@ -281,6 +303,8 @@ def decide_ai_push_coast_handoff(
     if clean_mode != AI_PUSH_COAST_MODE_GUARDED_LIVE:
         guard_reasons.append("shadow_mode")
     stage_labels = list(stage_classification.get("stage_labels", []) or [])
+    if capture_gate and capture_gate.get("pass") is False:
+        guard_reasons.append("capture_geometry_gate_failed")
     if maneuver_class != "terminal_repush":
         guard_reasons.append(f"maneuver_{maneuver_class}_not_terminal_live")
     if terminal_correction_attempted:
@@ -329,6 +353,7 @@ def decide_ai_push_coast_handoff(
         "miss_vector_m": miss_vector,
         "relative_errors": errors,
         "nav2_status": nav2,
+        "capture_geometry_gate": dict(capture_gate),
         "stage_classification": stage_classification,
     }
     guard = {
@@ -351,6 +376,10 @@ def decide_ai_push_coast_handoff(
             "terminal_settled_after_nav2": bool(terminal_settled_after_nav2),
             "stage_labels": list(stage_classification.get("stage_labels", []) or []),
             "primary_stage": stage_classification.get("primary_stage", "unknown"),
+            "capture_geometry_gate_pass": (
+                bool(capture_gate.get("pass", False)) if capture_gate else None
+            ),
+            "capture_geometry_flags": list(capture_gate.get("flags", [])) if capture_gate else [],
             **trajectory_summary,
         },
         "trajectory": trajectory_summary,
