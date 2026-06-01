@@ -197,6 +197,40 @@ visual UAT package. The current package is watchable and operator-reviewed. The
 visual observer summary reports incomplete health, so future UAT packages should
 make the observer confirmation green alongside browser-watchable videos.
 
+Saved-anchor requalification result, later June 1:
+
+- Planner-handoff gate:
+  `artifacts/session/live_planner_handoff_mixed_fetch_20260601/fetch_planner_handoff_gate/gate_summary.json`
+  passed `5/5`; only the `fetch_ready_local` scene dispatches local fetch.
+- LLM-shadow planner gate:
+  `artifacts/session/live_planner_handoff_mixed_fetch_llm_shadow_20260601/fetch_planner_handoff_gate/gate_summary.json`
+  recorded provider requests and used deterministic fallback because
+  `OPENAI_API_KEY` was absent.
+- `zero` one-run:
+  `artifacts/session/live_contact_buffer_saved_anchor_zero_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`
+  passed with `closest=0.152567m`.
+- `left05` one-run:
+  `artifacts/session/live_contact_buffer_saved_anchor_left05_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`
+  passed with `closest=0.266102m` and a `capture_entry_time_watch`.
+- `right05` one-run:
+  `artifacts/session/live_contact_buffer_saved_anchor_right05_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`
+  failed at `capture_entry_timeout` after pre-stage handoff.
+- Stage audit:
+  `artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+  classifies the failure as `setup_capture_blocker` with next action
+  `repair_setup_contact_before_guarded_live`.
+- Browser UAT packages:
+  `artifacts/session/uat_contact_buffer_saved_anchor_zero_one_run_20260601/fetch_visual_uat_package/scorecard.md`,
+  `artifacts/session/uat_contact_buffer_saved_anchor_left05_one_run_20260601/fetch_visual_uat_package/scorecard.md`,
+  and
+  `artifacts/session/uat_contact_buffer_saved_anchor_right05_one_run_20260601/fetch_visual_uat_package/scorecard.md`.
+
+Evidence meaning: the staged baseline clears centerline and left-offset one-run
+anchors, but the right-offset setup/capture failure blocks saved-layout
+promotion. The next implementation work is setup/capture repair on `right05`;
+saved-layout `3/3`, seeded `6 x 1`, and guarded-live terminal correction wait
+behind that repair.
+
 ## May 28, 2026 Direction
 
 The research pass selected a no-shoot runtime direction. After the May 31

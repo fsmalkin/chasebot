@@ -189,12 +189,32 @@ the branch strategy now prefers:
   make this the immediate local fetch implementation baseline. Nav2 owns
   corridor approach, the adapter owns contact-buffer classification, the
   deterministic servo owns first-contact confirmation, and Nav2 plus the
-  monitor own delivery. The next branch work is saved-layout requalification,
-  not broader learned control.
+  monitor own delivery. The next branch work is saved-layout requalification;
+  broader learned control remains queued behind evidence.
 
 Promotion remains blocked until corrected `zero`/`left05`/`right05` one-run,
 saved-layout `3/3`, seeded `6 x 1`, and a healthy browser-watchable visual UAT
 package are green.
+
+Saved-anchor requalification update, later June 1:
+
+- planner gate:
+  `artifacts/session/live_planner_handoff_mixed_fetch_20260601/fetch_planner_handoff_gate/gate_summary.json`
+  passed `5/5`
+- one-run saved anchors:
+  `zero` passed at
+  `artifacts/session/live_contact_buffer_saved_anchor_zero_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`;
+  `left05` passed at
+  `artifacts/session/live_contact_buffer_saved_anchor_left05_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`;
+  `right05` failed at
+  `artifacts/session/live_contact_buffer_saved_anchor_right05_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`
+- audit:
+  `artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+  classifies `right05` as `setup_capture_blocker`
+- branch decision:
+  keep the staged Nav2/contact-buffer baseline, repair right-offset
+  setup/capture before repeatability, and keep guarded-live terminal correction
+  behind saved-anchor repair evidence.
 
 ## Wider Architecture Portfolio
 

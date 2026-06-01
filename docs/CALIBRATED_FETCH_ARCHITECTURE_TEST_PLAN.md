@@ -46,6 +46,13 @@ at `0.195671m` robot-ball separation, and `0.046811m` measured first-contact
 ball motion. Treat this as the current staged local fetch baseline and as
 one-run evidence only.
 
+Later June 1 saved-anchor requalification: planner handoff passed `5/5`, and
+the staged baseline passed `zero` plus `left05` one-run with corrected geometry
+and model provenance. `right05` failed at `capture_entry_timeout`, and
+`artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+classifies it as a setup/capture blocker. The next evidence gate is right-offset
+setup/capture repair, followed by saved-anchor one-run rerun.
+
 May 29, 2026 update: keep the runtime architecture no-shoot. The
 `nav2_followpath_corridor_push_v1` spike showed Nav2 can own useful real-time
 `FollowPath` corridor tracking, but not the full contact outcome by itself.

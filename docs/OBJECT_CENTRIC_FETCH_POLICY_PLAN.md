@@ -230,6 +230,25 @@ Contact-buffer handoff validation, June 1, 2026:
   evidence step is corrected saved-layout one-run across `zero`, `left05`, and
   `right05`.
 
+Saved-anchor requalification, later June 1, 2026:
+
+- Planner gate:
+  `artifacts/session/live_planner_handoff_mixed_fetch_20260601/fetch_planner_handoff_gate/gate_summary.json`
+  passed `5/5`.
+- `zero` one-run:
+  `artifacts/session/live_contact_buffer_saved_anchor_zero_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`
+  passed with `0.152567m` closest approach.
+- `left05` one-run:
+  `artifacts/session/live_contact_buffer_saved_anchor_left05_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`
+  passed with `0.266102m` closest approach and contact-quality watch.
+- `right05` one-run:
+  `artifacts/session/live_contact_buffer_saved_anchor_right05_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`
+  failed at `capture_entry_timeout`.
+- Audit:
+  `artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+  classifies the failure as setup/capture. Repair that stage before
+  repeatability or guarded-live terminal correction.
+
 ## Architecture Revisit Conclusion
 
 Preserve the calibrated golf-ball/turf lane and object-centric fetch architecture

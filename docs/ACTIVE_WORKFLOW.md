@@ -859,6 +859,13 @@ Live gates:
      and one-run proof. Promotion still requires corrected
      `zero`/`left05`/`right05` one-run, saved-layout `3/3`, seeded `6 x 1`, and
      a healthy mobile visual UAT package.
+   - later June 1 saved-anchor requalification:
+     planner gate `live_planner_handoff_mixed_fetch_20260601` passed `5/5`;
+     `zero` and `left05` passed one-run; `right05` failed at
+     `capture_entry_timeout`; audit
+     `artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+     classifies the blocker as setup/capture. Next live work is right-offset
+     setup/capture repair before repeatability.
 12. Hybrid fetch stage-supervisor / AI push-coast spike contract:
    - branch: `spike/fetch-arch-ai-push-coast-servo-20260529`
    - first gate: shadow-only handoff/maneuver prediction over saved anchors, the

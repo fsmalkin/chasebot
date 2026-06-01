@@ -60,6 +60,24 @@ Reference proof:
   handoff at `robot_ball_distance_m=0.195671`, first-contact servo motion
   `0.046811m`
 
+Saved-anchor requalification, later June 1:
+
+- planner gate:
+  `artifacts/session/live_planner_handoff_mixed_fetch_20260601/fetch_planner_handoff_gate/gate_summary.json`
+  passed `5/5`
+- `zero`:
+  `artifacts/session/live_contact_buffer_saved_anchor_zero_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`
+  passed, closest `0.152567m`
+- `left05`:
+  `artifacts/session/live_contact_buffer_saved_anchor_left05_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`
+  passed, closest `0.266102m`, contact-quality watch
+- `right05`:
+  `artifacts/session/live_contact_buffer_saved_anchor_right05_one_run_20260601/gather_mission_repeatability/campaign_run_summary.json`
+  failed at `capture_entry_timeout`
+- audit:
+  `artifacts/session/audit_contact_buffer_right05_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+  classifies the blocker as setup/capture
+
 ## Default Execution Order
 
 1. Keep `spike/fetch-arch-ai-push-coast-servo-20260529` as the active lane for
@@ -83,8 +101,8 @@ Reference proof:
    planner-approved local case -> Nav2 corridor approach -> contact-buffer
    monitor -> deterministic first-contact servo -> Nav2 corridor push ->
    delivery monitor.
-7. Treat the June 1 `zero` contact-buffer proof as one-run evidence only.
-   Rebuild `zero`/`left05`/`right05` one-run next, then saved-layout `3/3`.
+7. Treat the June 1 saved-anchor one-run set as blocked by `right05`
+   setup/capture. Repair that stage before saved-layout `3/3`.
 8. Keep guarded-live AI/contact execution terminal-only until corrected
    saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
 9. Build a mobile visual UAT package before asking for operator signoff:
