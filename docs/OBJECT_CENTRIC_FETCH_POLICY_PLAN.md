@@ -209,6 +209,27 @@ Corrected saved-anchor rebuild, June 1, 2026:
 - Browser UAT package:
   `artifacts/session/uat_corrected_fetch_saved_anchor_one_run_blocked_20260601/fetch_visual_uat_package/scorecard.md`
 
+Contact-buffer handoff validation, June 1, 2026:
+
+- Fix commit: `02a4c12 Fix Nav2 contact-buffer fetch handoff`
+- Campaign:
+  `artifacts/session/live_contact_buffer_monitor_servo_zero_probe_20260601/gather_mission_repeatability/campaign_run_summary.json`
+- Visual UAT package:
+  `artifacts/session/uat_contact_buffer_monitor_servo_zero_probe_20260601/fetch_visual_uat_package/scorecard.md`
+- Result: `zero` passed one-run `fetch_to_pose` with corrected marker geometry,
+  calibrated model provenance, and `0.179959m` closest approach against the
+  `0.300m` contract
+- Stage telemetry: Nav2 canceled with `monitor_contact_buffer_handoff` at
+  `robot_ball_distance_m=0.195671`; the deterministic first-contact servo
+  confirmed `0.046811m` ball motion; the later corridor push completed with
+  `monitor_success`
+- Interpretation: the immediate baseline is now a staged handoff rather than
+  pure Nav2 contact ownership. Nav2 owns the corridor approach, the adapter
+  classifies close/aligned no-object-motion stops, the deterministic servo owns
+  first-contact confirmation, and Nav2 plus the monitor own delivery. The next
+  evidence step is corrected saved-layout one-run across `zero`, `left05`, and
+  `right05`.
+
 ## Architecture Revisit Conclusion
 
 Preserve the calibrated golf-ball/turf lane and object-centric fetch architecture

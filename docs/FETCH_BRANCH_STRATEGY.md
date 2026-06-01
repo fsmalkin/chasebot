@@ -112,6 +112,7 @@ remain diagnostic until rerun. Inventory them with
 | `nav2_followpath_corridor_push_v1` | `artifacts/session/live_nav2_corridor_push_contact_ready_rerun3_20260529/calibrated_fetch_architecture_revisit/scorecard.md`; `artifacts/session/live_nav2_corridor_push_full_saved_layout_20260529/calibrated_fetch_architecture_revisit/scorecard.md` | Evidence branch; not standalone promotion candidate | Contact-ready and full saved-layout one-run gates passed, but saved-layout `3/3` failed on `right05` stop-short after Nav2 `STATUS_SUCCEEDED`. Preserve as corridor-tracking baseline and AI training/eval data. |
 | corrected Nav2/LLM-first baseline | `artifacts/session/20260531T204154158382Z/gather_mission/20260531T204255Z/mission_verdict.json`; `artifacts/session/uat_fetch_visual_package_postfix_20260531/fetch_visual_uat_package/scorecard.md` | Preferred immediate requalification lane | Rerun saved layouts and planner-approved local random cases with corrected geometry and same-session video before expanding custom contact or learned control. |
 | calibrated-ball direct fetch reset | `artifacts/session/20260601T000718616964Z/visual/raw_camera_browser.mp4`; `artifacts/session/20260601T000718616964Z/visual/topdown_telemetry_browser.mp4`; `artifacts/session/20260601T000718616964Z/visual/world_stream.mp4` | Current model-provenance reference | Rebuild saved-layout direct evidence from commit `680e393` onward with `model_provenance_valid=true`; quarantine missing-provenance or legacy-ball direct summaries. |
+| Nav2 contact-buffer handoff baseline | `artifacts/session/live_contact_buffer_monitor_servo_zero_probe_20260601/gather_mission_repeatability/campaign_run_summary.json`; `artifacts/session/uat_contact_buffer_monitor_servo_zero_probe_20260601/fetch_visual_uat_package/scorecard.md` | Preferred local fetch implementation baseline; one-run proof only | Commit `02a4c12` uses tight corridor goal checking, fixes the depth scan TF, and hands off from Nav2 to a deterministic contact servo at a close/aligned no-object-motion contact buffer. Rebuild saved-layout one-run and `3/3` before promotion. |
 | `ai_push_coast_servo` | planned from corrected Nav2-first gaps plus saved/random traces | Fallback model/proposer lane | Train or prototype local handoff/maneuver-class predictor from calibrated simulation, score in shadow mode on saved anchors and seeded random layouts, then allow it to select only deterministic guarded routines after shadow scoring proves a benefit. |
 
 ## Latest Revisit Result
@@ -165,6 +166,36 @@ Seeded random/generalization remains pending for this branch.
 Generalized-behavior claims require saved-anchor repeatability followed by the
 reusable `fetch_generalization_gate`.
 
+## Latest Nav2 Contact-Buffer Handoff Result
+
+The June 1, 2026 fix-forward pass validates the staged local fetch sequence that
+the branch strategy now prefers:
+
+- branch: `spike/fetch-arch-ai-push-coast-servo-20260529`
+- implementation/evidence commit: `02a4c12`
+- campaign:
+  `artifacts/session/live_contact_buffer_monitor_servo_zero_probe_20260601/gather_mission_repeatability/campaign_run_summary.json`
+- visual package:
+  `artifacts/session/uat_contact_buffer_monitor_servo_zero_probe_20260601/fetch_visual_uat_package/scorecard.md`
+- result:
+  `zero` passed one-run `fetch_to_pose` with `0.179959m` closest delivery
+  distance, `geometry_consistency.pass=true`, and calibrated model provenance
+- handoff telemetry:
+  Nav2 canceled at `monitor_contact_buffer_handoff` with
+  `robot_ball_distance_m=0.195671`; the deterministic contact servo confirmed
+  `0.046811m` ball motion; the later corridor push ended with
+  `monitor_success`
+- branch decision:
+  make this the immediate local fetch implementation baseline. Nav2 owns
+  corridor approach, the adapter owns contact-buffer classification, the
+  deterministic servo owns first-contact confirmation, and Nav2 plus the
+  monitor own delivery. The next branch work is saved-layout requalification,
+  not broader learned control.
+
+Promotion remains blocked until corrected `zero`/`left05`/`right05` one-run,
+saved-layout `3/3`, seeded `6 x 1`, and a healthy browser-watchable visual UAT
+package are green.
+
 ## Wider Architecture Portfolio
 
 Treat the runnable legacy `--gather-control-family` list as a control-family
@@ -207,12 +238,14 @@ fresh `zero` and `plus45` pre-stage proof is recorded with artifact paths and an
 explicit update to this document.
 
 Current preferred branch decision: use the current fetch spike to complete a
-corrected Nav2/LLM-first requalification before adding broader live custom
-control. The immediate hypothesis is that improved physics plus corrected
-metrics may keep more of the operation inside Nav2 and planner-owned
-subsystems than recent pre-fix evidence implied. The next runnable branch work
-should rerun saved layouts and planner-approved local random cases with
-corrected geometry, same-session video, and planner route labels.
+corrected Nav2/contact-buffer requalification before adding broader live custom
+control. The immediate hypothesis is now staged rather than Nav2-only:
+planner-approved local cases should use Nav2 for corridor approach, a monitored
+contact-buffer handoff for close/aligned no-object-motion stops, deterministic
+first-contact confirmation, and Nav2 corridor push plus delivery monitoring.
+The next runnable branch work should rerun saved layouts and planner-approved
+local random cases with corrected geometry, same-session video, and planner
+route labels.
 
 Keep `spike/fetch-arch-ai-push-coast-servo-20260529` available for analyzers,
 guards, shadow scoring, and narrow fallback routines. Learned local output may

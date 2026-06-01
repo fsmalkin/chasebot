@@ -41,6 +41,25 @@ Corrected reference artifacts:
 - geometry audit:
   `artifacts/session/fetch_geometry_evidence_audit_postfix_20260531/fetch_geometry_evidence_audit/scorecard.md`
 
+June 1, 2026 contact-buffer handoff validation: commit
+`02a4c12 Fix Nav2 contact-buffer fetch handoff` fixes the stop-short behavior
+seen in operator video review. Nav2 now uses the tight
+`corridor_push_goal_checker`, the readiness launch publishes the missing depth
+scan TF, and the fetch adapter treats a close/aligned no-object-motion Nav2 stop
+as `monitor_contact_buffer_handoff`. The bounded deterministic contact servo
+then confirms first contact before the corridor push continues.
+
+Reference proof:
+
+- campaign:
+  `artifacts/session/live_contact_buffer_monitor_servo_zero_probe_20260601/gather_mission_repeatability/campaign_run_summary.json`
+- visual package:
+  `artifacts/session/uat_contact_buffer_monitor_servo_zero_probe_20260601/fetch_visual_uat_package/scorecard.md`
+- result:
+  `fetch_to_pose_pass=true`, closest delivery distance `0.179959m`, Nav2
+  handoff at `robot_ball_distance_m=0.195671`, first-contact servo motion
+  `0.046811m`
+
 ## Default Execution Order
 
 1. Keep `spike/fetch-arch-ai-push-coast-servo-20260529` as the active lane for
@@ -60,11 +79,17 @@ Corrected reference artifacts:
    - `0.300m` delivery radius
    - `model_provenance_valid=true`
    - same-session visual package
-6. Keep guarded-live AI/contact execution terminal-only until corrected
+6. Use the staged local fetch sequence as the current implementation baseline:
+   planner-approved local case -> Nav2 corridor approach -> contact-buffer
+   monitor -> deterministic first-contact servo -> Nav2 corridor push ->
+   delivery monitor.
+7. Treat the June 1 `zero` contact-buffer proof as one-run evidence only.
+   Rebuild `zero`/`left05`/`right05` one-run next, then saved-layout `3/3`.
+8. Keep guarded-live AI/contact execution terminal-only until corrected
    saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
-7. Build a mobile visual UAT package before asking for operator signoff:
+9. Build a mobile visual UAT package before asking for operator signoff:
    `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
-8. Freeze reproduced seeded/random failures into named layouts before tuning.
+10. Freeze reproduced seeded/random failures into named layouts before tuning.
 
 ## Gates
 
@@ -74,6 +99,9 @@ Corrected reference artifacts:
   provenance, and same-session video are present.
 - Mobile visual UAT passes only when the package has planner-green evidence, a
   local fetch pass, and playable `world_stream.mp4` plus `topdown_telemetry.mp4`.
+- Operator-review videos are useful UAT evidence only when they are
+  browser-watchable and traceable to the same session. Rebuilt videos can support
+  review, but a green package should also carry healthy observer confirmation.
 - Saved-layout gate requires `zero`, `left05`, and `right05` one-run, then `3/3`.
 - Seeded gate uses `scripts/fetch_generalization_gate.py` and
   `scripts/fetch_seeded_gate_evidence_analyzer.py`.
@@ -83,5 +111,5 @@ Corrected reference artifacts:
 ## Stop Conditions
 
 Continue autonomously through reversible edits, tests, docs, commits, pushes,
-and evidence runs. Stop only for destructive operations, paid credentials,
-hardware safety risk, or a repeated blocker that the current gates do not cover.
+and evidence runs. Stop for destructive operations, paid credentials, hardware
+safety risk, or a repeated blocker outside the current gates.

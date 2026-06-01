@@ -551,6 +551,21 @@ The stage audit is
 The next milestone step is repair setup/contact behavior before saved-layout
 `3/3`, seeded gate, or guarded-live promotion.
 
+June 1, 2026 contact-buffer handoff validation: the operator-visible stop-short
+behavior was real, and the staged fix passed the `zero` one-run proof. Commit
+`02a4c12 Fix Nav2 contact-buffer fetch handoff` adds the tight corridor goal
+checker, the missing depth scan TF, and a monitored handoff from Nav2 to the
+deterministic contact servo when the robot reaches a close/aligned
+no-object-motion contact buffer. Campaign
+`artifacts/session/live_contact_buffer_monitor_servo_zero_probe_20260601/gather_mission_repeatability/campaign_run_summary.json`
+passed `fetch_to_pose` with `0.179959m` closest delivery distance. Nav2 handed
+off at `robot_ball_distance_m=0.195671`, the servo confirmed `0.046811m` ball
+motion, and the corridor push completed with `monitor_success`. The roadmap
+baseline is now staged local fetch: planner-approved local case, Nav2 corridor
+approach, contact-buffer monitor, deterministic first-contact servo, Nav2
+corridor push, delivery monitor. The next milestone step is corrected
+`zero`/`left05`/`right05` one-run, then saved-layout `3/3`.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
@@ -668,13 +683,14 @@ The next milestone step is repair setup/contact behavior before saved-layout
      failures become watchlist cases, while reproduced failures must be frozen
      before tuning
    - updated next spike:
-     corrected Nav2/LLM-first requalification on the current fetch spike, with
-     `spike/fetch-arch-ai-push-coast-servo-20260529` retained for fallback
+     corrected Nav2/contact-buffer requalification on the current fetch spike,
+     with `spike/fetch-arch-ai-push-coast-servo-20260529` retained for fallback
      analyzers, guards, and AI shadow scoring
    - updated interpretation:
-     prefer Nav2 and planner-owned reuse before custom control. Add
-     deterministic contact/terminal routines or learned proposal layers only
-     when corrected post-fix evidence shows a reproducible object-outcome gap.
+     prefer Nav2 and planner-owned reuse where the contract is clean, then use
+     deterministic contact-buffer and first-contact routines for the measured
+     object-outcome gap. Add broader learned proposal layers only when corrected
+     saved-anchor and seeded evidence show a reproducible benefit.
 11. architecture exploration should widen, but stay staged:
    - do not treat the legacy `--gather-control-family` list as exhaustive
      architecture coverage; it is a runnable control-family screen inside the

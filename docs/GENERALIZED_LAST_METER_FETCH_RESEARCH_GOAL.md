@@ -135,6 +135,68 @@ Corrected reference after the model fix:
   `closest_approach_distance_m=0.136176`, and calibrated yellow ball visual
   evidence.
 
+## June 1, 2026 Contact-Buffer Handoff Validation
+
+The operator video review exposed a real stop-short behavior in the current
+Nav2-first path. The fix-forward result keeps the architecture staged instead
+of treating Nav2 as the sole contact owner.
+
+Root causes and fixes:
+
+1. The first-contact probe used `general_goal_checker` with a `0.25m`
+   tolerance, so Nav2 could report success before measured ball contact. Commit
+   `02a4c12 Fix Nav2 contact-buffer fetch handoff` adds a
+   `corridor_push_goal_checker` with `0.035m` XY tolerance for corridor-push and
+   contact-probe paths.
+2. Commit `02a4c12` adds a static TF:
+   `base_link -> jetbot/d415_camera_link/d415_depth`. This resolves the
+   collision-monitor invalid-source stop in the failing run.
+3. Fresh live evidence showed Nav2 can approach the ball-target corridor and
+   then stop at a legitimate contact buffer. The adapter now treats a close,
+   laterally aligned, no-object-motion Nav2 stop as
+   `monitor_contact_buffer_handoff`, then starts the bounded deterministic
+   first-contact servo.
+
+Validated one-run evidence:
+
+- Commit: `02a4c12 Fix Nav2 contact-buffer fetch handoff`.
+- Campaign:
+  `artifacts/session/live_contact_buffer_monitor_servo_zero_probe_20260601/gather_mission_repeatability/campaign_run_summary.json`.
+- Session: `20260601T042808225875Z`.
+- Visual UAT package:
+  `artifacts/session/uat_contact_buffer_monitor_servo_zero_probe_20260601/fetch_visual_uat_package/scorecard.md`.
+- Result: `fetch_to_pose_pass=true`, `geometry_consistency.pass=true`,
+  `model_provenance_valid=true`, closest delivery distance `0.179959m` against
+  the `0.300m` contract.
+- Stage telemetry: Nav2 handed off at `robot_ball_distance_m=0.195671`; the
+  deterministic contact servo confirmed `0.046811m` ball motion; the later
+  corridor push ended with `monitor_success`.
+- Browser-watchable videos:
+  `artifacts/session/20260601T042808225875Z/visual/raw_camera_browser.mp4`,
+  `artifacts/session/20260601T042808225875Z/visual/topdown_telemetry_browser.mp4`,
+  and `artifacts/session/20260601T042808225875Z/visual/world_stream.mp4`.
+
+Architecture update:
+
+1. The planner classifies the scene and dispatches only `fetch_ready_local`
+   cases to local fetch.
+2. Nav2 owns corridor approach until the contact-buffer monitor fires or motion
+   evidence is observed.
+3. The deterministic contact servo owns first-contact confirmation after a
+   close/aligned Nav2 stop.
+4. Nav2 corridor push plus the fetch adapter own the delivery monitor, success,
+   escape, stale-state, and unsafe-drift classification.
+5. The AI/model lane remains a shadow handoff and maneuver-class proposer until
+   saved-anchor and seeded-random scoring shows a reproducible benefit.
+
+Evidence meaning: this is a valid one-run proof of the staged local fetch
+sequence on `zero`. It repairs the specific "robot stops halfway" behavior.
+Promotion still requires corrected `zero`/`left05`/`right05` one-run,
+saved-layout `3/3`, the seeded `6 x 1` generalization gate, and a healthy
+visual UAT package. The current package is watchable and operator-reviewed. The
+visual observer summary reports incomplete health, so future UAT packages should
+make the observer confirmation green alongside browser-watchable videos.
+
 ## May 28, 2026 Direction
 
 The research pass selected a no-shoot runtime direction. After the May 31
