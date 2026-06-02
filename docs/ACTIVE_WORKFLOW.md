@@ -241,8 +241,19 @@ Latest saved-anchor result after fetch-ready handoff and setup/contact repair:
   setup/capture blockers `0`, invalid geometry `0`, invalid model provenance
   `0`. `left05` carries a `capture_entry_time_watch` because its slowest
   capture-entry was `4.093s`.
-- Next command: run the seeded random generalization gate in shadow/evidence
-  mode, then freeze reproduced random failures before tuning.
+- Seeded shadow/evidence gate:
+  `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`
+- Seeded evidence analyzer:
+  `artifacts/session/evidence_fetch_setup_contact_repair_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`
+- Seeded result: `4/6` passed. `case01` and `case06` reproduced
+  `capture_entry_timeout` before corridor-push handoff. Both failures are
+  frozen under
+  `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/frozen_failure_layouts`.
+- Interpretation: saved anchors are green, but the first seeded random gate is
+  blocked by setup/capture generalization. Terminal guarded-live correction
+  stays paused because the reproduced failures occur before object delivery.
+- Next command: repair the frozen setup/capture cases, rerun those cases first,
+  then rerun seeded random `6 x 1` before promotion discussion.
 
 ## UAT Orchestrator Modes
 

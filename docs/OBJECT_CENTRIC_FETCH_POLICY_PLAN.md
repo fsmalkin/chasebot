@@ -477,9 +477,21 @@ setup/contact repair:
   `left05` carries a `capture_entry_time_watch`, so seeded random evidence
   should preserve stage labels and freeze any reproduced slow-entry cases.
 
-Next sequence: run seeded random generalization in shadow/evidence mode, freeze
-reproduced failures, and use those frozen layouts to decide whether the next
-control change belongs in setup/capture, push/coast, or terminal arrival.
+Seeded random evidence after the saved-anchor repair:
+
+- Gate:
+  `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
+- Analyzer:
+  `artifacts/session/evidence_fetch_setup_contact_repair_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+- Result: `4/6` passed in `ai_push_coast_servo_v1` shadow mode. Reproduced
+  failures were `case01` and `case06`, both `capture_entry_timeout` before
+  corridor-push handoff.
+- Interpretation: the next control change belongs in setup/capture
+  generalization. Push/coast and terminal arrival are not the current blocker.
+
+Next sequence: repair the frozen setup/capture layouts, rerun those named cases,
+then rerun seeded random `6 x 1` before broadening bounds or enabling terminal
+guarded-live correction.
 
 Approach-quality evidence must record:
 

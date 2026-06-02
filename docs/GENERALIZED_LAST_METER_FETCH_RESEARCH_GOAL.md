@@ -421,8 +421,8 @@ Latest live evidence:
   and seeded random evidence.
 
 June 2, 2026 repeatability update: the fetch-ready handoff plus setup/contact
-repair cleared saved-layout repeatability. The current evidence supports
-seeded random generalization as the next milestone gate.
+repair cleared saved-layout repeatability. The first seeded random gate exposed
+setup/capture generalization as the current blocker.
 
 Latest repeatability evidence:
 
@@ -441,10 +441,24 @@ Latest repeatability evidence:
   all `0`. `left05` keeps a `capture_entry_time_watch` because one run took
   `4.093s` to reach the gate.
 
-Next sequence: run the seeded random generalization gate in shadow/evidence
-mode, freeze reproduced random failures into named layouts, then decide whether
-guarded-live terminal correction is still needed. Terminal correction remains
-paused until random evidence shows a clean near-contract terminal-arrival gap.
+Seeded evidence:
+
+- Gate:
+  `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
+- Analyzer:
+  `artifacts/session/evidence_fetch_setup_contact_repair_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+- Result: `ai_push_coast_servo_v1` shadow mode passed `4/6`. `case01`
+  (`f0.627`, `l-0.121`) and `case06` (`f0.502`, `l-0.174`) reproduced
+  `capture_entry_timeout` before corridor-push handoff.
+- Frozen layouts:
+  `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/frozen_failure_layouts`.
+- Interpretation: the blocker is setup/capture generalization, not terminal
+  delivery. Passing seeded cases reached `fetch_push_ready` and delivered inside
+  the `0.300m` radius; reproduced failures did not dispatch corridor push.
+
+Next sequence: repair the frozen setup/capture cases, rerun those named cases,
+then rerun seeded random `6 x 1`. Terminal correction remains paused until
+random evidence shows a clean near-contract terminal-arrival gap.
 
 ## May 28, 2026 Direction
 

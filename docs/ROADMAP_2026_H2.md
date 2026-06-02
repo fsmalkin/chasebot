@@ -621,9 +621,15 @@ passed `zero`, `left05`, and `right05` promotion `3/3` with worst closest
 approaches `0.201194m`, `0.169541m`, and `0.136046m`. The stage audit
 `artifacts/session/audit_fetch_setup_contact_repair_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`
 is `stage_quality_green=true`, with one `left05` `capture_entry_time_watch`.
-The roadmap resumes seeded random generalization next; guarded-live terminal
-correction follows only if reproduced random evidence shows a clean
-near-contract terminal-arrival gap.
+The first seeded random shadow/evidence gate
+`artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`
+passed `4/6` and reproduced `capture_entry_timeout` on `case01` and `case06`.
+The analyzer
+`artifacts/session/evidence_fetch_setup_contact_repair_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`
+sets `recommended_next_action=freeze_reproduced_failures_before_tuning`.
+The roadmap priority is now setup/capture generalization over the two frozen
+random layouts; guarded-live terminal correction follows only if later random
+evidence shows a clean near-contract terminal-arrival gap.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
