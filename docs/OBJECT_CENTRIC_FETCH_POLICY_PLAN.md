@@ -401,6 +401,23 @@ Interpretation: the guard fixes corrected false handoffs, but saved-layout
 promotion is still blocked by setup/capture repeatability. The plan is now to
 make push-readiness the dispatch invariant, then rerun the saved-anchor ladder.
 
+Latest push-readiness gate evidence after commit
+`d3d1550 Add fetch push-readiness gate`:
+
+- Full saved-layout gate:
+  `artifacts/session/live_push_readiness_gate_saved_anchor_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Corrected stage audit:
+  `artifacts/session/audit_push_readiness_gate_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+- Visual UAT package:
+  `artifacts/session/uat_push_readiness_gate_saved_anchor_one_run_20260601/fetch_visual_uat_package/scorecard.md`.
+- Result: `zero`, `left05`, and `right05` all failed one-run saved-anchor
+  requalification. `zero` and `right05` were stopped before Nav2 dispatch by
+  push-readiness failures; `left05` passed the gate and then failed as a
+  first-contact/corridor-push blocker.
+- Interpretation: terminal correction is paused. The next repair target is
+  setup/reacquire to a measured push-ready pose, then a fresh saved-anchor
+  one-run gate.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

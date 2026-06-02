@@ -163,6 +163,25 @@ June 1, 2026 stage-boundary update:
   reacquire; terminal correction resumes after `zero`, `left05`, and `right05`
   prove clean push-readiness.
 
+June 1, 2026 push-readiness gate requalification:
+
+- Fix commit: `d3d1550 Add fetch push-readiness gate`
+- Full saved-layout gate:
+  `artifacts/session/live_push_readiness_gate_saved_anchor_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`
+- Corrected stage audit:
+  `artifacts/session/audit_push_readiness_gate_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+- Visual UAT package:
+  `artifacts/session/uat_push_readiness_gate_saved_anchor_one_run_20260601/fetch_visual_uat_package/scorecard.md`
+- Result: `zero`, `left05`, and `right05` failed one-run saved-anchor
+  requalification. `zero` stopped before Nav2 dispatch because measured
+  standoff was `0.114858m` against the current `0.120m` minimum. `left05`
+  passed the gate narrowly with `19.612223deg` yaw error, then failed during
+  Nav2 corridor push. `right05` stopped before Nav2 dispatch because yaw error
+  was `36.13447deg` against the current `20.0deg` limit.
+- Interpretation: current evidence has `0` guarded-live terminal candidates.
+  Repair setup/reacquire until the robot intentionally reaches a clean
+  push-ready pose, then rerun the saved-anchor one-run gate.
+
 ## UAT Orchestrator Modes
 
 Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:
@@ -949,6 +968,10 @@ Live gates:
      labels/watchlist evidence
    - if the guarded-live terminal probe fails before a terminal miss, stop the
      guarded-live ladder and repair the earlier setup/contact stage first
+   - current push-readiness evidence:
+     `artifacts/session/audit_push_readiness_gate_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+     reports `0` guarded-live terminal candidates and routes the next work to
+     setup/reacquire repair
    - learned live execution remains blocked until saved-anchor and seeded-random
      shadow scoring shows benefit and deterministic guards accept the proposed
      handoff or maneuver class

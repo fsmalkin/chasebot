@@ -156,6 +156,51 @@ def test_saved_anchor_audit_preserves_terminal_candidate(tmp_path):
     assert row["closest_approach_distance_m"] == 0.451645
 
 
+def test_saved_anchor_audit_treats_failed_push_readiness_as_setup_blocker(tmp_path):
+    path = tmp_path / "zero_push_readiness_summary.json"
+    payload = _summary(
+        campaign_id="zero",
+        layout="zero",
+        passed=False,
+        failure_reason="missed_delivery_radius_after_push_readiness_gate_failed",
+        closest=0.511099,
+        stage_labels=["terminal_arrival"],
+        maneuver="stay_with_nav2",
+    )
+    shot = payload["runs"][0]["shot_outcome"]
+    shot["nav2_follow_path_corridor_push"]["push_readiness_gate"] = {
+        "pass": False,
+        "reason": "push_readiness_gate_failed",
+        "flags": ["robot_too_close_for_push"],
+        "relative_errors": {
+            "robot_standoff_m": 0.114858,
+            "robot_lateral_error_m": 0.000423,
+            "robot_yaw_error_deg": 0.031042,
+        },
+        "thresholds": {
+            "min_standoff_m": 0.12,
+            "max_standoff_m": 0.8,
+            "max_lateral_error_m": 0.12,
+            "max_yaw_error_deg": 20.0,
+            "delivery_radius_m": 0.3,
+            "delivery_margin_m": 0.02,
+        },
+    }
+    write_json(path, payload)
+
+    summary = audit.analyze([str(path)])
+
+    row = summary["saved_anchors"][0]
+    assert summary["overall_interpretation"] == "repair_setup_contact_before_guarded_live"
+    assert row["quality_classification"] == "setup_capture_blocker"
+    assert row["interpretation"] == "setup_contact_blocker"
+    assert row["recommended_next_action"] == "repair_setup_contact_before_guarded_live"
+    assert "push_readiness_gate_failed" in row["quality_flags"]
+    assert "push_readiness_robot_too_close_for_push" in row["quality_flags"]
+    assert "setup" in row["stage_labels"]
+    assert row["push_readiness_gate"]["reason"] == "push_readiness_gate_failed"
+
+
 def test_saved_anchor_audit_prioritizes_push_coast_escape_over_terminal_candidate(tmp_path):
     path = tmp_path / "right05_summary.json"
     write_json(

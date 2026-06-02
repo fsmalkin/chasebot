@@ -331,6 +331,15 @@ branch strategy changes are propagated back to `main`.
   confirms browser-watchable onboard, topdown, and world-stream video. Treat
   this as the post-fix UAT reference for the metric path and as the starting
   point for corrected saved-layout requalification.
+- Push-readiness gate requalification:
+  `artifacts/session/live_push_readiness_gate_saved_anchor_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`
+  failed saved-anchor `zero`, `left05`, and `right05` one-run requalification.
+  The corrected audit
+  `artifacts/session/audit_push_readiness_gate_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+  reports `0` guarded-live terminal candidates. `zero` and `right05` failed
+  before Nav2 dispatch on measured push-readiness; `left05` passed readiness
+  and then failed during corridor push. Treat this as setup/contact evidence
+  that pauses terminal correction and routes the next work to setup/reacquire.
 - Seeded random/generalization status:
   not yet run for Nav2 corridor-push. Do not claim generalized behavior until
   the next candidate clears saved-anchor repeatability and then runs

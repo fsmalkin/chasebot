@@ -331,6 +331,39 @@ Evidence meaning: the guard fixes are useful, but the saved-anchor gate remains
 blocked by setup/capture repeatability. Terminal correction resumes after
 push-readiness is clean across `zero`, `left05`, and `right05`.
 
+## June 1, 2026 Push-Readiness Gate Evidence
+
+The push-readiness gate is now implemented as an explicit pre-dispatch
+contract. Nav2 corridor push starts only after measured geometry proves the
+robot is behind the ball on the ball-target line and inside standoff, lateral
+error, yaw error, target freshness, and corridor-validity bounds.
+
+Latest implementation and evidence:
+
+- Gate commit: `d3d1550 Add fetch push-readiness gate`.
+- Saved-anchor gate:
+  `artifacts/session/live_push_readiness_gate_saved_anchor_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Corrected stage audit:
+  `artifacts/session/audit_push_readiness_gate_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+- Visual UAT package:
+  `artifacts/session/uat_push_readiness_gate_saved_anchor_one_run_20260601/fetch_visual_uat_package/scorecard.md`.
+- Result: `zero`, `left05`, and `right05` all failed the one-run saved-anchor
+  gate under corrected geometry and calibrated model provenance.
+- `zero` failed before Nav2 dispatch because standoff was too close:
+  `0.114858m` against the current `0.120m` minimum.
+- `left05` passed push-readiness narrowly with `19.612223deg` yaw error against
+  the current `20.0deg` limit, then failed during Nav2 corridor push with a
+  timeout and capture-yaw churn.
+- `right05` failed before Nav2 dispatch because yaw error was out of bounds:
+  `36.13447deg` against the current `20.0deg` limit.
+
+Evidence meaning: the latest gate corrected the interpretation. The current
+blocker is setup and first-contact readiness, with zero guarded-live terminal
+correction candidates. The next engineering step is a setup/reacquire repair
+that intentionally reaches a clean push-ready pose before dispatch. Threshold
+tuning is allowed only after video and telemetry show the gate contract itself
+matches the desired physical setup.
+
 ## May 28, 2026 Direction
 
 The research pass selected a no-shoot runtime direction. After the May 31

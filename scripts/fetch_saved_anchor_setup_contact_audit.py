@@ -393,6 +393,18 @@ def _geometry_consistency(run: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
+def _push_readiness_gate(run: dict[str, Any]) -> dict[str, Any]:
+    for payload in _payload_candidates(run):
+        gate = _dict(payload.get("push_readiness_gate"))
+        if gate:
+            return gate
+        nav2 = _dict(payload.get("nav2_follow_path_corridor_push"))
+        gate = _dict(nav2.get("push_readiness_gate"))
+        if gate:
+            return gate
+    return {}
+
+
 def _model_provenance_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     nested = _dict(payload.get("model_provenance"))
@@ -472,6 +484,7 @@ def _run_stage_metrics(run: dict[str, Any]) -> dict[str, Any]:
     pre_stage = _pre_stage_payload(run)
     capture_entry = _capture_entry_payload(run)
     geometry = _geometry_consistency(run)
+    push_readiness = _push_readiness_gate(run)
     pre_stage_time_s = (
         _finite_float(pre_stage.get("time_s"))
         or _finite_float(run.get("pre_stage_time_s"))
@@ -503,6 +516,12 @@ def _run_stage_metrics(run: dict[str, Any]) -> dict[str, Any]:
         "first_contact_push_alignment_deg": _round_or_none(first_contact_alignment),
         "geometry_consistency_pass": bool(geometry.get("pass", True)) if geometry else True,
         "geometry_consistency_reason": _clean_text(geometry.get("reason")),
+        "push_readiness_gate_pass": bool(push_readiness.get("pass", True)) if push_readiness else True,
+        "push_readiness_gate_reason": _clean_text(push_readiness.get("reason")),
+        "push_readiness_gate_flags": [
+            _clean_text(flag) for flag in _list(push_readiness.get("flags")) if _clean_text(flag)
+        ],
+        "push_readiness_gate": push_readiness,
         **state_metrics,
     }
 
@@ -518,6 +537,12 @@ def _quality_flags(metrics: dict[str, Any], failure_reasons: list[str]) -> list[
         add("invalid_geometry")
     if metrics.get("model_provenance_valid") is False:
         add("invalid_model_provenance")
+    if metrics.get("push_readiness_gate_pass") is False:
+        add("push_readiness_gate_failed")
+        for flag in _list(metrics.get("push_readiness_gate_flags")):
+            clean_flag = _clean_text(flag)
+            if clean_flag:
+                add(f"push_readiness_{clean_flag}")
     failure_text = " ".join(reason.lower() for reason in failure_reasons)
     if "capture_entry_timeout" in failure_text or "pre_stage" in failure_text or "handoff" in failure_text:
         add("setup_capture_blocker")
@@ -563,7 +588,11 @@ def _quality_classification(
         return "invalid_geometry"
     if "invalid_model_provenance" in flags:
         return "invalid_model_provenance"
-    if "setup_capture_blocker" in flags or "pre_contact_ball_motion_blocker" in flags:
+    if (
+        "setup_capture_blocker" in flags
+        or "pre_contact_ball_motion_blocker" in flags
+        or "push_readiness_gate_failed" in flags
+    ):
         return "setup_capture_blocker"
     if "first_contact_blocker" in flags:
         return "first_contact_blocker"
@@ -609,6 +638,10 @@ def _stage_labels(summary: dict[str, Any], run: dict[str, Any], ai_fields: dict[
     if lateral_error is not None and lateral_error > SETUP_LATERAL_LIMIT_M:
         add("setup")
     if yaw_error is not None and abs(float(yaw_error)) > SETUP_YAW_LIMIT_DEG:
+        add("setup")
+
+    push_readiness = _push_readiness_gate(run)
+    if push_readiness and push_readiness.get("pass") is False:
         add("setup")
 
     first_contact_alignment = _finite_float(run.get("first_contact_push_alignment_deg"))
@@ -727,7 +760,10 @@ def analyze_summary(path: Path, summary: dict[str, Any]) -> dict[str, Any]:
         candidate_metrics["model_provenance_reason"] = _clean_text(candidate_provenance.get("model_provenance_reason"))
         candidate_delivery_pass = bool(candidate_run.get("fetch_to_pose_pass", False))
         for flag in _quality_flags(candidate_metrics, candidate_failure_reasons):
-            if flag in {"setup_capture_blocker", "pre_contact_ball_motion_blocker"} and "setup" not in labels:
+            if (
+                flag in {"setup_capture_blocker", "pre_contact_ball_motion_blocker", "push_readiness_gate_failed"}
+                and "setup" not in labels
+            ):
                 labels.append("setup")
             if flag == "first_contact_blocker" and "first_contact" not in labels:
                 labels.append("first_contact")
@@ -785,6 +821,7 @@ def analyze_summary(path: Path, summary: dict[str, Any]) -> dict[str, Any]:
         "run_stage_quality": run_quality_rows,
         "failure_reasons": failure_reasons,
         "stage_labels": labels,
+        "push_readiness_gate": _push_readiness_gate(run),
         "interpretation": interpretation,
         "recommended_next_action": next_action,
         "closest_approach_distance_m": _round_or_none(closest_approach_m),
