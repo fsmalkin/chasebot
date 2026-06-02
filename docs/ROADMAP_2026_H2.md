@@ -631,6 +631,14 @@ The roadmap priority is now setup/capture generalization over the two frozen
 random layouts; guarded-live terminal correction follows only if later random
 evidence shows a clean near-contract terminal-arrival gap.
 
+Next milestone slice for UAT is a frozen-layout setup/capture repair. The
+implementation should compare `case01` and `case06` against seeded passes,
+stabilize the behind-ball capture pose and `fetch_push_readiness` convergence,
+then prove the repair on frozen cases before rerunning seeded random `6 x 1`.
+This keeps the broader architecture simple: planner selects the route class,
+the setup/capture stage gets the robot onto the delivery line, Nav2 owns the
+corridor push, and the monitor verifies object outcome.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

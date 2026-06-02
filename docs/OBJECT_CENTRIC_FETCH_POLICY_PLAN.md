@@ -493,6 +493,17 @@ Next sequence: repair the frozen setup/capture layouts, rerun those named cases,
 then rerun seeded random `6 x 1` before broadening bounds or enabling terminal
 guarded-live correction.
 
+Frozen setup/capture repair scope:
+
+1. Use `case01` and `case06` as named brittleness fixtures, with passing
+   `case02` through `case05` as the comparison set.
+2. Repair the route-to-capture transition and capture-entry convergence because
+   the reproduced failures occur before corridor-push handoff.
+3. Measure success by `fetch_push_readiness` handoff, delivery-radius pass, and
+   clean stage labels on the frozen fixtures.
+4. Keep terminal guarded-live disabled until seeded evidence produces a
+   terminal-arrival candidate rather than a setup/capture blocker.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

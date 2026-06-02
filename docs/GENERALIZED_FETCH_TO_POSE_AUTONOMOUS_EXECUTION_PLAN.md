@@ -187,13 +187,17 @@ Clip-review reframe, later June 1:
     `capture_entry_timeout` before corridor-push handoff.
 13. Repair the frozen setup/capture layouts before additional live-control work:
     `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/frozen_failure_layouts`.
-14. Resume terminal-arrival correction only for clean near-contract misses after
+14. Implement the repair as a setup/capture slice: route to a behind-ball
+    capture pose, reduce standoff/lateral/yaw error to `fetch_push_readiness`,
+    then dispatch Nav2 corridor push.
+15. Prove frozen `case01` and `case06` before rerunning seeded random `6 x 1`.
+16. Resume terminal-arrival correction only for clean near-contract misses after
     saved-layout repeatability identifies a reproducible terminal-arrival gap.
-15. Keep guarded-live AI/contact execution terminal-only until corrected
+17. Keep guarded-live AI/contact execution terminal-only until corrected
     saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
-16. Build a mobile visual UAT package before asking for operator signoff:
+18. Build a mobile visual UAT package before asking for operator signoff:
    `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
-17. Freeze reproduced seeded/random failures into named layouts before tuning.
+19. Freeze reproduced seeded/random failures into named layouts before tuning.
 
 ## Gates
 

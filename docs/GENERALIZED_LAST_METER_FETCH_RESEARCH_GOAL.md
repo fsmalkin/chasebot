@@ -452,13 +452,28 @@ Seeded evidence:
   `capture_entry_timeout` before corridor-push handoff.
 - Frozen layouts:
   `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/frozen_failure_layouts`.
-- Interpretation: the blocker is setup/capture generalization, not terminal
-  delivery. Passing seeded cases reached `fetch_push_ready` and delivered inside
-  the `0.300m` radius; reproduced failures did not dispatch corridor push.
+- Interpretation: setup/capture generalization is the blocker. Passing seeded
+  cases reached `fetch_push_ready` and delivered inside the `0.300m` radius;
+  reproduced failures stopped before corridor-push dispatch.
 
 Next sequence: repair the frozen setup/capture cases, rerun those named cases,
 then rerun seeded random `6 x 1`. Terminal correction remains paused until
 random evidence shows a clean near-contract terminal-arrival gap.
+
+Frozen-case repair sequence:
+
+1. Compare the two reproduced failures (`case01`, `case06`) with the four
+   seeded passes by geometry, capture-entry timing, push-readiness relative
+   errors, and video.
+2. Repair setup/capture as an explicit stage: compute the delivery line, choose
+   a behind-ball capture pose, use bounded motion to reduce standoff, lateral
+   error, and yaw error, then release to Nav2 corridor push after
+   `fetch_push_readiness`.
+3. Keep the AI layer in shadow/proposal mode for this slice. The useful AI
+   signal is stage diagnosis and maneuver choice; deterministic routines still
+   execute the setup/capture repair.
+4. Requalify the frozen layouts before broadening: `case01`, `case06`, their
+   repro campaigns, saved anchors, seeded `6 x 1`, visual UAT package.
 
 ## May 28, 2026 Direction
 

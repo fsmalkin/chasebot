@@ -255,6 +255,19 @@ Latest saved-anchor result after fetch-ready handoff and setup/contact repair:
 - Next command: repair the frozen setup/capture cases, rerun those cases first,
   then rerun seeded random `6 x 1` before promotion discussion.
 
+Frozen setup/capture repair plan:
+
+1. Diagnose `case01` and `case06` against passing `case02` through `case05`
+   using state history, capture-entry diagnostics, `fetch_push_readiness`
+   relative errors, and onboard/topdown/world videos.
+2. Keep the control change scoped to setup/capture: choose the behind-ball
+   capture pose on the ball-target delivery line, converge standoff/lateral/yaw
+   into `fetch_push_readiness`, and hand off only after that gate passes.
+3. Preserve the delivery contract: no shooting/direct impulse, no delivery
+   radius change, no retry promotion, no terminal correction during this repair.
+4. Gate order: frozen `case01` and `case06` one-run pass, frozen repro pass,
+   saved-anchor smoke, seeded random `6 x 1`, then updated visual UAT package.
+
 ## UAT Orchestrator Modes
 
 Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:
