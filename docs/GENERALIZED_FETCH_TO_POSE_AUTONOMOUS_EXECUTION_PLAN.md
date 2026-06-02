@@ -22,6 +22,21 @@ surprising random scenes must pass planner routing before local fetch is judged.
 Custom contact routines and AI push-coast proposals remain fallback lanes that
 earn live authority only from corrected, reproducible stage-gap evidence.
 
+June 2, 2026 execution pivot: the LLM/world-state planner is integrated as a
+route-classification and shadow-evidence surface. The non-local route labels
+still need executable route owners. The opposite-side direct run proved
+corrected fetch geometry and delivery, then exposed a forward-motion gap because
+local fetch used legacy reverse pre-stage commands to reach setup. Future broad
+UAT should classify that scene as `nav2_reposition_first` and execute a
+forward-driving setup/reposition path before local fetch starts.
+
+The next preferred execution lane is
+`spike/fetch-arch-planner-routed-forward-only-moonshot-20260602`. Use cheap
+simulation to test broad route ownership quickly: executable reposition, scan,
+recovery/re-aim, no-go, and direct local fetch. Treat discarded branch work as a
+low-cost search mechanism while preserving canonical 1.0x evidence for
+promotion decisions.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence
@@ -144,20 +159,31 @@ Clip-review reframe, later June 1:
      `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --scene-descriptor-json ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json --dry-run`
    - optional LLM shadow comparison:
      `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --scene-descriptor-json ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json --dry-run --planner-mode llm_shadow`
-4. Run local fetch evidence only for planner-approved `fetch_ready_local` scenes.
-5. Rerun corrected saved-layout local fetch evidence before expanding custom
+4. Build the moonshot planner-routed executor before treating broad random
+   scenes as UAT:
+   - `fetch_ready_local` dispatches local `fetch_to_pose`
+   - `nav2_reposition_first` executes forward-driving setup/reposition, then
+     dispatches local fetch only after the measured setup gate is green
+   - `scan_or_perceive_first` records scan/perception action and waits for a
+     fresh scene digest
+   - `recovery_or_reaim` executes one known bounded recovery/re-aim routine
+   - `ambiguous_or_unsafe_no_go` records a no-go outcome with rationale
+5. Run local fetch evidence only for planner-approved `fetch_ready_local` scenes
+   or after an executable `nav2_reposition_first` route has produced a
+   forward-only setup handoff.
+6. Rerun corrected saved-layout local fetch evidence before expanding custom
    control:
    - `zero`, `left05`, `right05`
    - no retries
    - `0.300m` delivery radius
    - `model_provenance_valid=true`
    - same-session visual package
-6. Use the staged local fetch sequence as the current implementation baseline:
+7. Use the staged local fetch sequence as the current implementation baseline:
    planner-approved local case -> ball-target delivery line -> capture pose ->
    setup motion -> geometry gate -> Nav2 corridor push -> delivery monitor.
-7. Treat the June 1 clip-reviewed saved-anchor rebuild as superseded by the
+8. Treat the June 1 clip-reviewed saved-anchor rebuild as superseded by the
    June 2 fetch-ready handoff repair and one-run matrix.
-8. Use the fetch-ready capture-entry handoff as the current setup stage:
+9. Use the fetch-ready capture-entry handoff as the current setup stage:
    - compute the robot's standoff, lateral error, and yaw error against the
      ball-target line
    - hold when the fetch push-readiness gate is green under the tighter
@@ -166,49 +192,49 @@ Clip-review reframe, later June 1:
      fetch_push_ready`
    - preserve gate decisions in mission verdicts, saved-anchor summaries, and
      visual UAT packages
-9. Treat the June 2 saved-anchor one-run result as the current UAT screen:
+10. Treat the June 2 saved-anchor one-run result as the current UAT screen:
    `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_one_run_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
    The matrix is `3/3` at one run each with a green mobile visual package:
    `artifacts/session/uat_fetch_push_ready_handoff_saved_anchor_one_run_20260602/fetch_visual_uat_package/scorecard.md`.
-10. Use the June 2 corrected saved-layout repeatability result as the current
+11. Use the June 2 corrected saved-layout repeatability result as the current
     saved-anchor baseline:
     `artifacts/session/live_fetch_setup_contact_repair_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
     `zero`, `left05`, and `right05` passed promotion `3/3` with worst closest
     approaches `0.201194m`, `0.169541m`, and `0.136046m`.
-11. Use the setup/contact audit as the stage-quality baseline:
+12. Use the setup/contact audit as the stage-quality baseline:
     `artifacts/session/audit_fetch_setup_contact_repair_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
     The audit is `stage_quality_green=true` with one `left05`
     `capture_entry_time_watch`.
-12. Use the initial June 2 seeded shadow/evidence gate as the setup/capture
+13. Use the initial June 2 seeded shadow/evidence gate as the setup/capture
     blocker that drove the bounded recenter repair:
     `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
     The analyzer is
     `artifacts/session/evidence_fetch_setup_contact_repair_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
     The gate passed `4/6`; `case01` and `case06` reproduced
     `capture_entry_timeout` before corridor-push handoff.
-13. Treat the frozen setup/capture layouts as repaired for one-run evidence:
+14. Treat the frozen setup/capture layouts as repaired for one-run evidence:
     `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/frozen_failure_layouts`.
     Targeted one-run gates passed for both frozen cases:
     `artifacts/session/live_fetch_frozen_case01_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`
     and
     `artifacts/session/live_fetch_frozen_case06_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`.
-14. Use the clean seeded rerun as the current random-evidence baseline:
+15. Use the clean seeded rerun as the current random-evidence baseline:
     `artifacts/session/live_fetch_setup_capture_bounded_setup_v2_seeded_gate_clean_20260602/fetch_generalization_gate/gate_summary.json`.
     The analyzer is
     `artifacts/session/evidence_fetch_setup_capture_bounded_setup_v2_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
     The gate passed `5/6` initially with `0` reproduced failures; `case01`
     failed once after `fetch_push_ready`, then passed repro.
-15. Use the near-margin repair as the case01 closeout:
+16. Use the near-margin repair as the case01 closeout:
     `ball_already_at_delivery_margin` is a readiness note when setup geometry is
     otherwise ready, and contact-buffer re-push readiness accepts `0.10m`
     standoff.
-16. Treat the `case01` `3x` repeatability proof as green:
+17. Treat the `case01` `3x` repeatability proof as green:
     `artifacts/session/live_fetch_case01_near_margin_gate_v1_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
     The result is `3/3` with `handoff_kind=fetch_push_ready`.
-17. Treat the earlier `case01` `3x` probe as superseded evidence:
+18. Treat the earlier `case01` `3x` probe as superseded evidence:
     `artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
     The earlier `2/3` result drove the near-margin repair.
-18. Use the latest seeded gate as the active watchlist:
+19. Use the latest seeded gate as the active watchlist:
     `artifacts/session/live_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
     The analyzer is
     `artifacts/session/evidence_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
@@ -216,33 +242,33 @@ Clip-review reframe, later June 1:
     reproduced failures. `case04` failed once with
     `missed_delivery_radius_after_push_readiness_gate_failed` and
     `missing_first_contact_alignment`, then passed repro.
-19. Treat case04 targeted repeatability as delivery-green and contact-quality
+20. Treat case04 targeted repeatability as delivery-green and contact-quality
     flagged:
     `artifacts/session/live_fetch_case04_relaxed_standoff_v1_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
     Delivery passed `3/3`; `missing_first_contact_alignment` appeared in `2/3`.
-20. Treat the clean shadow seeded gate as the handoff to guarded live:
+21. Treat the clean shadow seeded gate as the handoff to guarded live:
     `artifacts/session/live_fetch_near_margin_case04_repeat_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`
     and
     `artifacts/session/evidence_fetch_near_margin_case04_repeat_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
     The result is `6/6`, with `0` reproduced failures.
-21. Treat guarded-live saved-anchor repeatability as green:
+22. Treat guarded-live saved-anchor repeatability as green:
     `artifacts/session/live_fetch_guarded_live_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
     `zero`, `left05`, and `right05` passed promotion `3/3`.
-22. Treat guarded-live seeded random as promotion-ready contract evidence:
+23. Treat guarded-live seeded random as promotion-ready contract evidence:
     `artifacts/session/live_fetch_guarded_live_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`
     and
     `artifacts/session/evidence_fetch_guarded_live_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
     The result is `6/6`, `0` reproduced failures, and
     `promotion_evidence=True`.
-23. Keep guarded-live AI/contact execution terminal-only until a later contact
+24. Keep guarded-live AI/contact execution terminal-only until a later contact
     quality slice proves broader deterministic routines are needed and useful.
-24. Build a mobile visual UAT package before asking for operator signoff:
+25. Build a mobile visual UAT package before asking for operator signoff:
     `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
     Current package:
     `artifacts/session/uat_fetch_guarded_live_seeded_case04_20260602/fetch_visual_uat_package/scorecard.md`.
     The package passes with browser-safe onboard, debug, topdown, and world
     videos for guarded-live seeded case04.
-25. Freeze reproduced seeded/random failures into named layouts before tuning.
+26. Freeze reproduced seeded/random failures into named layouts before tuning.
 
 ## Gates
 

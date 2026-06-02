@@ -84,6 +84,28 @@ The first concrete gate for this contract is
 may record provider requests and rationales, but deterministic guard agreement
 remains the promotion condition and no planner output can command `/cmd_vel`.
 
+Current integration boundary, June 2, 2026: the planner is integrated for route
+classification, deterministic replay, LLM-shadow comparison, rationale capture,
+and dashboard artifact recording. Executable route ownership is still pending
+for `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`, and
+`ambiguous_or_unsafe_no_go`. A scene that needs reposition can be classified
+correctly while the dashboard/direct runner records the route artifact and stops
+before live route execution.
+
+The opposite-side fetch probe turns that boundary into a control requirement.
+Local fetch should enter contact from a forward-driving setup. Reverse pre-stage
+commands are legacy gather behavior and should be treated as a planner/executor
+gap for `fetch_to_pose`. The intended fix is LLM/world-state route selection
+plus executable deterministic/Nav2 routes that put the robot into a forward-only
+capture pose before local fetch starts. Fast motor control stays with Nav2 and
+deterministic local controllers.
+
+The next architecture experiment should therefore be wide and disposable:
+`spike/fetch-arch-planner-routed-forward-only-moonshot-20260602`. That branch
+should wire each route label to a runnable executor or explicit no-go outcome,
+generate mixed random scenes across the route classes, and package videos where
+the operator can see the planner route and the actual robot path.
+
 The latest proven Nav2 lane is therefore evidence, not the final architecture:
 
 `LM/VLA supervisor -> deterministic fetch state machine/guards -> Nav2 FollowPath corridor-push -> ball-escape/success monitor -> robot`

@@ -692,6 +692,27 @@ is direct subsystem evidence; the next architecture step is to connect the
 planner route `nav2_reposition_first` to explicit setup/reposition execution
 before treating opposite-side scenes as planner-gated UAT.
 
+June 2 forward-motion reframe: the fixed opposite-side run also exposed a
+planning boundary. Telemetry shows the direct local fetch runner used legacy
+reverse pre-stage commands before Nav2/contact took over. The LLM/world-state
+planner can prevent that behavior only after `nav2_reposition_first` becomes an
+executable route, because the current integrated planner surface classifies and
+scores routes while non-local starts still need live reposition/setup dispatch.
+The next branch should therefore be a throwaway-friendly moonshot rather than a
+single threshold repair:
+`spike/fetch-arch-planner-routed-forward-only-moonshot-20260602`.
+
+The moonshot goal is a browser-watchable mixed-scene demo where the planner
+chooses among `fetch_ready_local`, `nav2_reposition_first`,
+`scan_or_perceive_first`, `recovery_or_reaim`, and
+`ambiguous_or_unsafe_no_go`, and every executed fetch path preserves
+forward-only pre-contact motion. Cheap simulation runs should explore broad
+scene classes first: opposite-side starts, far standoffs, stale perception,
+blocked corridors, near-margin delivery, and recovery/re-aim cases. Promotion
+evidence still comes from canonical 1.0x saved-layout and seeded gates, but the
+research loop should favor larger disposable branches when the question is
+architectural ownership rather than parameter fit.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

@@ -77,6 +77,26 @@ stage-boundary strict:
 - learned local models become fallback handoff and maneuver-class proposers
   after corrected Nav2-first evidence exposes reproducible stage gaps
 
+June 2, 2026 planner-routing update: the planner layer is integrated as a
+classification and shadow-evidence surface, including deterministic replay and
+`llm_shadow` scoring through `scripts/fetch_planner_handoff_gate.py`.
+Executable `nav2_reposition_first` dispatch is the missing route owner. That
+boundary explains the latest opposite-side clip: a correct high-level planner
+should route that scene to reposition/setup first, while the direct local fetch
+runner fell back to legacy reverse pre-stage behavior to reach the setup pose.
+Treat the clip as geometry and delivery proof, with a forward-motion setup gap.
+
+The next architecture lane should spend cheap simulation work aggressively. The
+preferred moonshot branch is
+`spike/fetch-arch-planner-routed-forward-only-moonshot-20260602`: implement
+executable planner routes for `fetch_ready_local`, `nav2_reposition_first`,
+`scan_or_perceive_first`, `recovery_or_reaim`, and
+`ambiguous_or_unsafe_no_go`, then run mixed random scenes with visual packages.
+The local fetch contract for this lane is forward-only before contact. When the
+capture/setup pose is unreachable under forward-only constraints, the planner
+selects reposition, scan, recovery, or no-go instead of letting local fetch back
+into position.
+
 May 29, 2026 architecture update, reinterpreted after the evidence reset: keep
 fetch no-shoot and robot-owned. The Nav2 corridor-push spike proved Nav2 can
 make useful bounded corridor contact. Sole-contact promotion remains blocked by
@@ -553,9 +573,11 @@ starts the ball beyond the far edge of the visible delivery circle. The rerun
 passed `1/1` with `fetch_to_pose_pass_count=1`, `handoff_kind=fetch_push_ready`,
 and `geometry_consistency.pass=true`; the visual package is
 `artifacts/session/uat_fetch_opposite_side_probe_fetch_zone_fix_20260602/fetch_visual_uat_package/scorecard.md`.
-Use this as broad direct-subsystem evidence. Planner-gated UAT still requires a
-separate `nav2_reposition_first` handoff path that routes the out-of-envelope
-start into explicit setup/reposition before local fetch.
+Use this as broad direct-subsystem evidence and as a forward-only setup
+regression trigger. The run used legacy reverse pre-stage commands before the
+Nav2/contact phases. Planner-gated UAT requires an executable
+`nav2_reposition_first` handoff path that routes the out-of-envelope start into
+explicit forward-driving setup/reposition before local fetch.
 
 Approach-quality evidence must record:
 

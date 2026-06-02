@@ -839,7 +839,14 @@ guarded execution -> monitor/result back to planner`.
     `artifacts/session/uat_fetch_opposite_side_probe_fetch_zone_fix_20260602/fetch_visual_uat_package/scorecard.md`.
     Classify this as broad subsystem proof. Planner-gated
     `nav2_reposition_first` promotion remains a separate handoff gate.
-22. when the goal is full architecture research, ground in
+22. require forward-only pre-contact motion for planner-gated `fetch_to_pose`
+    UAT. The same June 2 opposite-side proof used legacy reverse pre-stage
+    commands before Nav2/contact took over, so it proves corrected geometry and
+    delivery but still flags an executable-route gap. Future planner-routed
+    broad UAT should send opposite-side or out-of-envelope starts through
+    `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`, or
+    `ambiguous_or_unsafe_no_go` before local fetch receives control.
+23. when the goal is full architecture research, ground in
     `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` and return a findings
     matrix before tuning a single path
 
@@ -957,6 +964,16 @@ Live gates:
    - dashboard mixed-scene CTA uses `planner_gated_random: true`; if the route
      is not `fetch_ready_local`, it records planner artifacts and does not
      dispatch local fetch
+   - integration boundary: deterministic and `llm_shadow` route classification
+     are integrated; executable non-local routes are still pending. The next
+     moonshot lane should wire `nav2_reposition_first`,
+     `scan_or_perceive_first`, `recovery_or_reaim`, and
+     `ambiguous_or_unsafe_no_go` to runnable reposition, scan, recovery, or
+     no-go outcomes instead of stopping after the planner artifact.
+   - forward-only fetch rule: a planner-gated UAT run that reaches local fetch
+     should show no negative pre-contact `linear_x`; any needed backing or
+     side-selection should be handled as planner-owned reposition/setup before
+     `fetch_to_pose` dispatch
    - first dry-run artifact:
      `artifacts/session/dev_fetch_planner_handoff_gate_frozen_replay_20260531/fetch_planner_handoff_gate/scorecard.md`
    - required case classes:
