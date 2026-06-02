@@ -179,25 +179,38 @@ Clip-review reframe, later June 1:
     `artifacts/session/audit_fetch_setup_contact_repair_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
     The audit is `stage_quality_green=true` with one `left05`
     `capture_entry_time_watch`.
-12. Treat the June 2 seeded shadow/evidence gate as the current blocker:
+12. Use the initial June 2 seeded shadow/evidence gate as the setup/capture
+    blocker that drove the bounded recenter repair:
     `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
     The analyzer is
     `artifacts/session/evidence_fetch_setup_contact_repair_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
     The gate passed `4/6`; `case01` and `case06` reproduced
     `capture_entry_timeout` before corridor-push handoff.
-13. Repair the frozen setup/capture layouts before additional live-control work:
+13. Treat the frozen setup/capture layouts as repaired for one-run evidence:
     `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/frozen_failure_layouts`.
-14. Implement the repair as a setup/capture slice: route to a behind-ball
-    capture pose, reduce standoff/lateral/yaw error to `fetch_push_readiness`,
-    then dispatch Nav2 corridor push.
-15. Prove frozen `case01` and `case06` before rerunning seeded random `6 x 1`.
-16. Resume terminal-arrival correction only for clean near-contract misses after
-    saved-layout repeatability identifies a reproducible terminal-arrival gap.
-17. Keep guarded-live AI/contact execution terminal-only until corrected
+    Targeted one-run gates passed for both frozen cases:
+    `artifacts/session/live_fetch_frozen_case01_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`
+    and
+    `artifacts/session/live_fetch_frozen_case06_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+14. Use the clean seeded rerun as the current random-evidence baseline:
+    `artifacts/session/live_fetch_setup_capture_bounded_setup_v2_seeded_gate_clean_20260602/fetch_generalization_gate/gate_summary.json`.
+    The analyzer is
+    `artifacts/session/evidence_fetch_setup_capture_bounded_setup_v2_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+    The gate passed `5/6` initially with `0` reproduced failures; `case01`
+    failed once after `fetch_push_ready`, then passed repro.
+15. Use the `case01` `3x` watchlist probe as the active control blocker:
+    `artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+    The result is `2/3`; the remaining failure is
+    `missing_first_contact_alignment` / `release_roll_away`.
+16. Freeze the new case01 first-contact/release failure before tuning, then
+    repair first-contact alignment and release stability.
+17. Prove case01 `3/3`, rerun seeded random `6 x 1`, then consider narrow
+    guarded-live terminal correction only for clean near-contract misses.
+18. Keep guarded-live AI/contact execution terminal-only until corrected
     saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
-18. Build a mobile visual UAT package before asking for operator signoff:
+19. Build a mobile visual UAT package before asking for operator signoff:
    `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
-19. Freeze reproduced seeded/random failures into named layouts before tuning.
+20. Freeze reproduced seeded/random failures into named layouts before tuning.
 
 ## Gates
 

@@ -444,7 +444,8 @@ Latest live requalification after the setup slice:
 - Result: saved-anchor one-run improved to `2/3`. `zero` and `right05`
   delivered inside the `0.300m` radius; `left05` failed in capture-entry before
   the push-readiness gate.
-- Interpretation: left-offset capture-entry convergence is the current blocker.
+- Interpretation: left-offset capture-entry convergence was the next blocker
+  for that one-run rebuild.
   Continue with targeted `left05` setup/capture repair, then rerun the
   canonical saved-anchor one-run matrix.
 
@@ -479,30 +480,36 @@ setup/contact repair:
 
 Seeded random evidence after the saved-anchor repair:
 
-- Gate:
+- Initial gate:
   `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
-- Analyzer:
+- Initial analyzer:
   `artifacts/session/evidence_fetch_setup_contact_repair_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
-- Result: `4/6` passed in `ai_push_coast_servo_v1` shadow mode. Reproduced
+- Initial result: `4/6` passed in `ai_push_coast_servo_v1` shadow mode. Reproduced
   failures were `case01` and `case06`, both `capture_entry_timeout` before
   corridor-push handoff.
-- Interpretation: the next control change belongs in setup/capture
-  generalization. Push/coast and terminal arrival are not the current blocker.
+- Bounded setup repair proof: targeted one-run `case01` and `case06` gates
+  both passed with `handoff_kind=fetch_push_ready`.
+  - `case01`: `artifacts/session/live_fetch_frozen_case01_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`
+  - `case06`: `artifacts/session/live_fetch_frozen_case06_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`
+- Clean seeded rerun:
+  `artifacts/session/live_fetch_setup_capture_bounded_setup_v2_seeded_gate_clean_20260602/fetch_generalization_gate/gate_summary.json`.
+- Clean seeded analyzer:
+  `artifacts/session/evidence_fetch_setup_capture_bounded_setup_v2_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+- Current result: `5/6` initial pass and `0` reproduced failures. `case01`
+  failed once after `fetch_push_ready`; its repro passed. The analyzer labels
+  the miss as `push_coast,terminal_arrival` and recommends rerunning the
+  watchlist before guarded live.
+- Case01 `3x` probe:
+  `artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+  Result: `2/3` passed, with the remaining failure classified as
+  `missing_first_contact_alignment` / `release_roll_away`.
+- Interpretation: setup/capture generalization is improved enough to expose the
+  next stage boundary. The current policy work should repair first-contact
+  alignment and release stability for the high-forward left-lateral case before
+  broadening bounds or enabling terminal guarded-live correction.
 
-Next sequence: repair the frozen setup/capture layouts, rerun those named cases,
-then rerun seeded random `6 x 1` before broadening bounds or enabling terminal
-guarded-live correction.
-
-Frozen setup/capture repair scope:
-
-1. Use `case01` and `case06` as named brittleness fixtures, with passing
-   `case02` through `case05` as the comparison set.
-2. Repair the route-to-capture transition and capture-entry convergence because
-   the reproduced failures occur before corridor-push handoff.
-3. Measure success by `fetch_push_readiness` handoff, delivery-radius pass, and
-   clean stage labels on the frozen fixtures.
-4. Keep terminal guarded-live disabled until seeded evidence produces a
-   terminal-arrival candidate rather than a setup/capture blocker.
+Next sequence: freeze the new case01 first-contact/release failure, repair
+first-contact alignment, rerun case01 `3/3`, then rerun seeded random `6 x 1`.
 
 Approach-quality evidence must record:
 

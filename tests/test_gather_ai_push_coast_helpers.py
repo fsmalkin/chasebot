@@ -82,7 +82,7 @@ def test_push_readiness_setup_command_yaw_aligns_before_push():
     assert command.angular_z < 0.0
 
 
-def test_push_readiness_setup_command_backs_off_while_yaw_aligning_when_too_close():
+def test_push_readiness_setup_command_holds_forward_motion_near_minimum_standoff():
     command = compute_fetch_push_readiness_setup_command(
         robot_pose={"x": 0.865, "y": 0.223, "yaw": -0.57},
         ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
@@ -91,8 +91,55 @@ def test_push_readiness_setup_command_backs_off_while_yaw_aligning_when_too_clos
     )
 
     assert command is not None
-    assert command.linear_x < 0.0
+    assert command.linear_x <= 0.0
     assert command.angular_z > 0.0
+
+
+def test_push_readiness_setup_command_prioritizes_large_lateral_recenter_arc():
+    command = compute_fetch_push_readiness_setup_command(
+        robot_pose={"x": 0.50, "y": 0.30, "yaw": -0.25},
+        ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.6, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+    )
+
+    assert command is not None
+    assert command.mode == "push_readiness_lateral_align"
+    assert 0.05 <= command.linear_x <= 0.056
+    assert command.angular_z <= -0.40
+
+
+def test_push_readiness_setup_command_large_lateral_error_overrides_yaw_only():
+    command = compute_fetch_push_readiness_setup_command(
+        robot_pose={"x": 0.50, "y": 0.30, "yaw": -0.52},
+        ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.6, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+    )
+
+    assert command is not None
+    assert command.mode == "push_readiness_lateral_align"
+    assert command.linear_x > 0.0
+
+
+def test_push_readiness_setup_command_recenter_arc_is_symmetric():
+    plus = compute_fetch_push_readiness_setup_command(
+        robot_pose={"x": 0.50, "y": 0.30, "yaw": 0.0},
+        ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.6, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+    )
+    minus = compute_fetch_push_readiness_setup_command(
+        robot_pose={"x": 0.50, "y": -0.30, "yaw": 0.0},
+        ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.6, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+    )
+
+    assert plus is not None
+    assert minus is not None
+    assert plus.angular_z == -minus.angular_z
+    assert plus.linear_x == minus.linear_x
 
 
 def test_shadow_decision_stays_with_nav2_before_corridor_attempt():

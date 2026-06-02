@@ -390,6 +390,8 @@ DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M = 1.0
 DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M = 0.35
 DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S = 5.0
 DEFAULT_FETCH_CAPTURE_ENTRY_HANDOFF_MAX_STANDOFF_M = 0.58
+DEFAULT_FETCH_CAPTURE_ENTRY_PUSH_READINESS_TIMEOUT_S = 15.0
+DEFAULT_FETCH_CAPTURE_ENTRY_PUSH_READINESS_PROGRESS_MIN_SCORE_DELTA = 0.10
 DEFAULT_FETCH_GEOMETRY_CENTER_TOLERANCE_M = 0.02
 DEFAULT_FETCH_GEOMETRY_RADIUS_TOLERANCE_M = 0.01
 MISSION_OBJECTIVE_GATHER_HERE = "gather_here"
@@ -5784,6 +5786,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         last_capture_entry_diagnostics: dict[str, Any] = {}
         last_capture_entry_ready_source = ""
         last_capture_entry_push_readiness_gate: dict[str, Any] = {}
+        last_capture_entry_timeout_s = DEFAULT_CAPTURE_ENTRY_TIMEOUT_S
+        capture_entry_push_readiness_initial_score: float | None = None
+        capture_entry_push_readiness_best_score: float | None = None
+        capture_entry_push_readiness_last_score: float | None = None
         capture_handoff_robot_pose: dict[str, Any] | None = None
         capture_handoff_ball_pose: dict[str, Any] | None = None
         capture_started_monotonic: float | None = None
@@ -5811,6 +5817,45 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             if capture_entry_reached_once or capture_entry_ready_latched:
                 return "ready_dwell_not_completed"
             return "ready_band_never_reached"
+
+        def _capture_entry_push_readiness_score(gate: dict[str, Any] | None) -> float | None:
+            payload = gate if isinstance(gate, dict) else {}
+            errors = payload.get("relative_errors", {}) if isinstance(payload.get("relative_errors"), dict) else {}
+            thresholds = payload.get("thresholds", {}) if isinstance(payload.get("thresholds"), dict) else {}
+            lateral_error_m = clean_number(errors.get("robot_lateral_error_m"))
+            yaw_error_deg = clean_number(errors.get("robot_yaw_error_deg"))
+            standoff_m = clean_number(errors.get("robot_standoff_m"))
+            max_lateral_error_m = clean_number(thresholds.get("max_lateral_error_m"))
+            max_yaw_error_deg = clean_number(thresholds.get("max_yaw_error_deg"))
+            min_standoff_m = clean_number(thresholds.get("min_standoff_m"))
+            max_standoff_m = clean_number(thresholds.get("max_standoff_m"))
+            components: list[float] = []
+            if lateral_error_m is not None and max_lateral_error_m and max_lateral_error_m > 0.0:
+                components.append(abs(float(lateral_error_m)) / float(max_lateral_error_m))
+            if yaw_error_deg is not None and max_yaw_error_deg and max_yaw_error_deg > 0.0:
+                components.append(abs(float(yaw_error_deg)) / float(max_yaw_error_deg))
+            if standoff_m is not None and min_standoff_m is not None and max_standoff_m is not None:
+                if float(standoff_m) < float(min_standoff_m) and float(min_standoff_m) > 0.0:
+                    components.append(float(min_standoff_m) / max(float(standoff_m), 1.0e-6))
+                elif float(standoff_m) > float(max_standoff_m) and float(max_standoff_m) > 0.0:
+                    components.append(float(standoff_m) / float(max_standoff_m))
+                else:
+                    components.append(1.0)
+            if not components:
+                return None
+            return round(float(max(components)), 6)
+
+        def _capture_entry_push_readiness_progress_delta() -> float:
+            if (
+                capture_entry_push_readiness_initial_score is None
+                or capture_entry_push_readiness_best_score is None
+            ):
+                return 0.0
+            return max(
+                0.0,
+                float(capture_entry_push_readiness_initial_score)
+                - float(capture_entry_push_readiness_best_score),
+            )
 
         def _capture_entry_diagnostics_payload(
             *,
@@ -5842,7 +5887,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             )
             return {
                 "elapsed_s": round(float(capture_entry_elapsed_s), 6),
-                "timeout_s": round(float(DEFAULT_CAPTURE_ENTRY_TIMEOUT_S), 6),
+                "timeout_s": round(float(last_capture_entry_timeout_s), 6),
                 "ready_signal": bool(ready_signal),
                 "ready_latched": bool(capture_entry_ready_latched),
                 "ready_reached_once": bool(capture_entry_reached_once),
@@ -5862,6 +5907,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "gap_fill_reason": str(capture_entry_gap_fill_reason or ""),
                 "gap_fill_max_robot_delta_m": round(float(DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M), 6),
                 "gap_fill_max_elapsed_s": round(float(DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S), 6),
+                "push_readiness_score": clean_rounded_number(capture_entry_push_readiness_last_score),
+                "push_readiness_best_score": clean_rounded_number(capture_entry_push_readiness_best_score),
+                "push_readiness_progress_delta": clean_rounded_number(
+                    _capture_entry_push_readiness_progress_delta()
+                ),
                 "robot_delta_from_handoff_m": clean_rounded_number(robot_delta_m),
                 "ball_delta_from_handoff_m": clean_rounded_number(ball_delta_m),
                 "handoff_robot_pose": dict(handoff_robot_pose or {}),
@@ -6401,6 +6451,29 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         delivery_radius_m=float(self.fetch_delivery_radius_m),
                         max_standoff_m=DEFAULT_FETCH_CAPTURE_ENTRY_HANDOFF_MAX_STANDOFF_M,
                     )
+                    capture_entry_push_readiness_last_score = _capture_entry_push_readiness_score(
+                        capture_entry_push_readiness_gate
+                    )
+                    if capture_entry_push_readiness_last_score is not None:
+                        if capture_entry_push_readiness_initial_score is None:
+                            capture_entry_push_readiness_initial_score = float(
+                                capture_entry_push_readiness_last_score
+                            )
+                        if (
+                            capture_entry_push_readiness_best_score is None
+                            or float(capture_entry_push_readiness_last_score)
+                            < float(capture_entry_push_readiness_best_score)
+                        ):
+                            capture_entry_push_readiness_best_score = float(
+                                capture_entry_push_readiness_last_score
+                            )
+                    push_readiness_progress_delta = _capture_entry_push_readiness_progress_delta()
+                    last_capture_entry_timeout_s = (
+                        DEFAULT_FETCH_CAPTURE_ENTRY_PUSH_READINESS_TIMEOUT_S
+                        if push_readiness_progress_delta
+                        >= DEFAULT_FETCH_CAPTURE_ENTRY_PUSH_READINESS_PROGRESS_MIN_SCORE_DELTA
+                        else DEFAULT_CAPTURE_ENTRY_TIMEOUT_S
+                    )
                     if isinstance(capture_entry_snapshot_payload, dict):
                         capture_entry_snapshot_payload = {
                             **capture_entry_snapshot_payload,
@@ -6419,6 +6492,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                                 "capture_entry_ready_source": capture_entry_ready_source,
                                 "fetch_push_readiness_ready": True,
                             }
+                else:
+                    capture_entry_push_readiness_last_score = None
+                    last_capture_entry_timeout_s = DEFAULT_CAPTURE_ENTRY_TIMEOUT_S
                 last_capture_entry_push_readiness_gate = dict(capture_entry_push_readiness_gate or {})
                 if capture_entry_ready_signal:
                     last_capture_entry_ready_source = capture_entry_ready_source or "capture_entry_ball_frame"
@@ -6643,7 +6719,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     continue
                 if (
                     capture_entry_started_monotonic is not None
-                    and (now_monotonic - capture_entry_started_monotonic) >= DEFAULT_CAPTURE_ENTRY_TIMEOUT_S
+                    and (now_monotonic - capture_entry_started_monotonic) >= last_capture_entry_timeout_s
                     and not capture_entry_ready_latched
                 ):
                     capture_entry_time_s = now_monotonic - float(capture_entry_started_monotonic)

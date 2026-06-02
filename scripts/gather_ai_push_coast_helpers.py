@@ -44,6 +44,11 @@ AI_PUSH_READINESS_SETUP_MAX_LINEAR_X_MPS = 0.08
 AI_PUSH_READINESS_SETUP_MAX_ANGULAR_Z_RPS = 0.45
 AI_PUSH_READINESS_SETUP_YAW_ONLY_DEG = 25.0
 AI_PUSH_READINESS_SETUP_MIN_CORRECTION_MPS = 0.012
+AI_PUSH_READINESS_SETUP_YAW_GAIN = 0.85
+AI_PUSH_READINESS_SETUP_LATERAL_GAIN = 2.15
+AI_PUSH_READINESS_SETUP_LATERAL_PRIORITY_M = 0.18
+AI_PUSH_READINESS_SETUP_LATERAL_PRIORITY_LINEAR_SCALE = 0.70
+AI_PUSH_READINESS_SETUP_LATERAL_TARGET_STANDOFF_M = 0.16
 AI_PUSH_COAST_FLAG_STAGE_LABELS = {
     "pre_contact_lateral_error": "setup",
     "pre_contact_yaw_error": "setup",
@@ -229,15 +234,22 @@ def compute_fetch_push_readiness_setup_command(
 
     min_standoff_m = float(thresholds.get("min_standoff_m", AI_PUSH_READINESS_MIN_STANDOFF_M) or 0.0)
     max_standoff_m = float(thresholds.get("max_standoff_m", AI_PUSH_READINESS_MAX_STANDOFF_M) or 0.0)
+    lateral_signed = float(lateral_signed_m)
+    target_standoff_value = float(target_standoff_m)
+    if abs(lateral_signed) > float(max_lateral_error_m):
+        target_standoff_value = min(
+            target_standoff_value,
+            AI_PUSH_READINESS_SETUP_LATERAL_TARGET_STANDOFF_M,
+        )
     target_standoff = clamp(
-        float(target_standoff_m),
+        target_standoff_value,
         max(min_standoff_m + 0.04, min_standoff_m),
         max(max_standoff_m - 0.04, min_standoff_m + 0.04),
     )
     yaw_error_rad = math.radians(float(yaw_error_deg))
-    lateral_signed = float(lateral_signed_m)
     angular = clamp(
-        (-0.85 * yaw_error_rad) - (1.35 * lateral_signed),
+        (-AI_PUSH_READINESS_SETUP_YAW_GAIN * yaw_error_rad)
+        - (AI_PUSH_READINESS_SETUP_LATERAL_GAIN * lateral_signed),
         -float(max_angular_z_rps),
         float(max_angular_z_rps),
     )
@@ -246,7 +258,11 @@ def compute_fetch_push_readiness_setup_command(
 
     standoff_error_m = float(standoff_m) - float(target_standoff)
     needs_backoff = float(standoff_m) < target_standoff - 0.025
-    yaw_only = abs(float(yaw_error_deg)) > AI_PUSH_READINESS_SETUP_YAW_ONLY_DEG and not needs_backoff
+    yaw_only = (
+        abs(float(yaw_error_deg)) > AI_PUSH_READINESS_SETUP_YAW_ONLY_DEG
+        and abs(lateral_signed) <= float(max_lateral_error_m)
+        and not needs_backoff
+    )
     if yaw_only:
         linear = 0.0
         mode = "push_readiness_yaw_align"
@@ -264,6 +280,12 @@ def compute_fetch_push_readiness_setup_command(
             )
         if abs(standoff_error_m) <= 0.025 and abs(lateral_signed) > 0.04:
             linear = 0.0
+        if abs(lateral_signed) > AI_PUSH_READINESS_SETUP_LATERAL_PRIORITY_M:
+            linear = clamp(
+                linear,
+                -float(max_linear_x_mps) * AI_PUSH_READINESS_SETUP_LATERAL_PRIORITY_LINEAR_SCALE,
+                float(max_linear_x_mps) * AI_PUSH_READINESS_SETUP_LATERAL_PRIORITY_LINEAR_SCALE,
+            )
         if float(standoff_m) < min_standoff_m:
             mode = (
                 "push_readiness_backoff_yaw_align"

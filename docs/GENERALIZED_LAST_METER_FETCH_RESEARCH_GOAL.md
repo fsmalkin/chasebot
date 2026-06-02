@@ -422,7 +422,8 @@ Latest live evidence:
 
 June 2, 2026 repeatability update: the fetch-ready handoff plus setup/contact
 repair cleared saved-layout repeatability. The first seeded random gate exposed
-setup/capture generalization as the current blocker.
+setup/capture generalization; the bounded setup repair then shifted the active
+blocker to first-contact/release stability on case01.
 
 Latest repeatability evidence:
 
@@ -443,37 +444,45 @@ Latest repeatability evidence:
 
 Seeded evidence:
 
-- Gate:
+- Initial gate:
   `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
-- Analyzer:
+- Initial analyzer:
   `artifacts/session/evidence_fetch_setup_contact_repair_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
-- Result: `ai_push_coast_servo_v1` shadow mode passed `4/6`. `case01`
+- Initial result: `ai_push_coast_servo_v1` shadow mode passed `4/6`. `case01`
   (`f0.627`, `l-0.121`) and `case06` (`f0.502`, `l-0.174`) reproduced
   `capture_entry_timeout` before corridor-push handoff.
 - Frozen layouts:
   `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/frozen_failure_layouts`.
-- Interpretation: setup/capture generalization is the blocker. Passing seeded
-  cases reached `fetch_push_ready` and delivered inside the `0.300m` radius;
-  reproduced failures stopped before corridor-push dispatch.
+- Bounded setup repair: large lateral setup error now selects a bounded
+  recenter arc, uses a closer lateral setup standoff, and extends
+  capture-entry time only while `fetch_push_readiness` score improves.
+- Frozen repair proof: targeted one-run gates for `case01` and `case06` both
+  passed with `handoff_kind=fetch_push_ready`.
+  - `case01`: `artifacts/session/live_fetch_frozen_case01_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`
+  - `case06`: `artifacts/session/live_fetch_frozen_case06_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`
+- Clean seeded rerun:
+  `artifacts/session/live_fetch_setup_capture_bounded_setup_v2_seeded_gate_clean_20260602/fetch_generalization_gate/gate_summary.json`.
+- Clean seeded analyzer:
+  `artifacts/session/evidence_fetch_setup_capture_bounded_setup_v2_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+- Current result: `5/6` initial pass, with `0` reproduced failures. `case01`
+  failed once after `fetch_push_ready` with
+  `missed_delivery_radius_after_push_readiness_gate_failed`; its repro passed.
+  The analyzer marks this as a non-repro watchlist and a guarded-live terminal
+  candidate.
+- Case01 repeatability probe:
+  `artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+  Result: `2/3` passed. The remaining failure is
+  `missing_first_contact_alignment` / `release_roll_away`.
 
-Next sequence: repair the frozen setup/capture cases, rerun those named cases,
-then rerun seeded random `6 x 1`. Terminal correction remains paused until
-random evidence shows a clean near-contract terminal-arrival gap.
+Interpretation: setup/capture is no longer the primary blocker for the first
+seeded gate. The active blocker is first-contact/release stability on the
+high-forward left-lateral case. Terminal correction remains a candidate, but
+the next repair should first stabilize first-contact alignment and release
+before promotion.
 
-Frozen-case repair sequence:
-
-1. Compare the two reproduced failures (`case01`, `case06`) with the four
-   seeded passes by geometry, capture-entry timing, push-readiness relative
-   errors, and video.
-2. Repair setup/capture as an explicit stage: compute the delivery line, choose
-   a behind-ball capture pose, use bounded motion to reduce standoff, lateral
-   error, and yaw error, then release to Nav2 corridor push after
-   `fetch_push_readiness`.
-3. Keep the AI layer in shadow/proposal mode for this slice. The useful AI
-   signal is stage diagnosis and maneuver choice; deterministic routines still
-   execute the setup/capture repair.
-4. Requalify the frozen layouts before broadening: `case01`, `case06`, their
-   repro campaigns, saved anchors, seeded `6 x 1`, visual UAT package.
+Next sequence: freeze the new case01 first-contact/release failure as a named
+watchlist case, repair first-contact alignment and release stability, rerun
+case01 `3/3`, then rerun seeded random `6 x 1`.
 
 ## May 28, 2026 Direction
 

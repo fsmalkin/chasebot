@@ -245,28 +245,36 @@ Latest saved-anchor result after fetch-ready handoff and setup/contact repair:
   `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`
 - Seeded evidence analyzer:
   `artifacts/session/evidence_fetch_setup_contact_repair_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`
-- Seeded result: `4/6` passed. `case01` and `case06` reproduced
-  `capture_entry_timeout` before corridor-push handoff. Both failures are
-  frozen under
+- Initial seeded result: `4/6` passed. `case01` and `case06` reproduced
+  `capture_entry_timeout` before corridor-push handoff and were frozen under
   `artifacts/session/live_fetch_setup_contact_repair_seeded_gate_20260602/fetch_generalization_gate/frozen_failure_layouts`.
-- Interpretation: saved anchors are green, but the first seeded random gate is
-  blocked by setup/capture generalization. Terminal guarded-live correction
-  stays paused because the reproduced failures occur before object delivery.
-- Next command: repair the frozen setup/capture cases, rerun those cases first,
-  then rerun seeded random `6 x 1` before promotion discussion.
-
-Frozen setup/capture repair plan:
-
-1. Diagnose `case01` and `case06` against passing `case02` through `case05`
-   using state history, capture-entry diagnostics, `fetch_push_readiness`
-   relative errors, and onboard/topdown/world videos.
-2. Keep the control change scoped to setup/capture: choose the behind-ball
-   capture pose on the ball-target delivery line, converge standoff/lateral/yaw
-   into `fetch_push_readiness`, and hand off only after that gate passes.
-3. Preserve the delivery contract: no shooting/direct impulse, no delivery
-   radius change, no retry promotion, no terminal correction during this repair.
-4. Gate order: frozen `case01` and `case06` one-run pass, frozen repro pass,
-   saved-anchor smoke, seeded random `6 x 1`, then updated visual UAT package.
+- Bounded setup repair: `ai_push_coast_servo_v1` now gives large lateral
+  setup error a bounded recenter arc, keeps speeds under the existing setup
+  cap, uses a closer lateral setup standoff, and extends capture-entry time
+  only while `fetch_push_readiness` score improves.
+- Frozen repair proof: targeted `case01` and `case06` one-run gates both
+  passed with `handoff_kind=fetch_push_ready`.
+  - `case01`: `artifacts/session/live_fetch_frozen_case01_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`
+  - `case06`: `artifacts/session/live_fetch_frozen_case06_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`
+- Clean seeded rerun:
+  `artifacts/session/live_fetch_setup_capture_bounded_setup_v2_seeded_gate_clean_20260602/fetch_generalization_gate/gate_summary.json`.
+- Clean seeded analyzer:
+  `artifacts/session/evidence_fetch_setup_capture_bounded_setup_v2_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+- Current seeded result: `5/6` initial pass, `0` reproduced failures.
+  `case01` failed once after `fetch_push_ready` with
+  `missed_delivery_radius_after_push_readiness_gate_failed`; its repro passed.
+  The analyzer classifies this as a non-repro watchlist and a guarded-live
+  terminal candidate. Setup/capture has moved from the active blocker to a
+  regression watch.
+- Case01 repeatability probe:
+  `artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+  Result: `2/3` passed. The remaining failure is
+  `missing_first_contact_alignment` / `release_roll_away`, which moves the next
+  blocker to first-contact/release stability on the high-forward left-lateral
+  case.
+- Next command: freeze the new case01 first-contact/release failure as the
+  next named watchlist case, then repair first-contact alignment and release
+  stability before claiming seeded random promotion.
 
 ## UAT Orchestrator Modes
 

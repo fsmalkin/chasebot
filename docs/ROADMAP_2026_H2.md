@@ -543,7 +543,8 @@ evidence ladder from corrected direct runs: saved `zero`/`left05`/`right05`
 one-run, saved `3/3`, seeded `6 x 1`, then browser-watchable visual UAT.
 
 June 1, 2026 corrected saved-anchor one-run rebuild: the provenance and marker
-path is functioning, and the current blocker is setup/contact reliability.
+path is functioning, and the next blocker at that point was setup/contact
+reliability.
 `right05` passed with `0.143206m` closest approach, `zero` failed on
 first-contact no-object-motion, and `left05` failed on `capture_entry_timeout`.
 The stage audit is
@@ -627,17 +628,27 @@ passed `4/6` and reproduced `capture_entry_timeout` on `case01` and `case06`.
 The analyzer
 `artifacts/session/evidence_fetch_setup_contact_repair_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`
 sets `recommended_next_action=freeze_reproduced_failures_before_tuning`.
-The roadmap priority is now setup/capture generalization over the two frozen
-random layouts; guarded-live terminal correction follows only if later random
-evidence shows a clean near-contract terminal-arrival gap.
+The bounded setup repair cleared that setup/capture blocker in targeted
+one-run gates:
+`artifacts/session/live_fetch_frozen_case01_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`
+and
+`artifacts/session/live_fetch_frozen_case06_setup_capture_bounded_setup_v2_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+The clean seeded rerun
+`artifacts/session/live_fetch_setup_capture_bounded_setup_v2_seeded_gate_clean_20260602/fetch_generalization_gate/gate_summary.json`
+passed `5/6` initially with `0` reproduced failures. Its analyzer
+`artifacts/session/evidence_fetch_setup_capture_bounded_setup_v2_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`
+keeps `case01` on the watchlist after one non-repro miss following
+`fetch_push_ready`.
 
-Next milestone slice for UAT is a frozen-layout setup/capture repair. The
-implementation should compare `case01` and `case06` against seeded passes,
-stabilize the behind-ball capture pose and `fetch_push_readiness` convergence,
-then prove the repair on frozen cases before rerunning seeded random `6 x 1`.
-This keeps the broader architecture simple: planner selects the route class,
-the setup/capture stage gets the robot onto the delivery line, Nav2 owns the
-corridor push, and the monitor verifies object outcome.
+Next milestone slice for UAT is first-contact and release stability on the
+high-forward left-lateral case01 shape. The `case01` `3x` watchlist probe
+`artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`
+passed `2/3`; the remaining failure is `missing_first_contact_alignment` /
+`release_roll_away`. Freeze that failure, repair first-contact alignment,
+prove case01 `3/3`, then rerun seeded random `6 x 1`. This keeps the broader
+architecture simple: planner selects the route class, the setup/capture stage
+gets the robot onto the delivery line, Nav2 owns the corridor push, and the
+monitor verifies object outcome.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
