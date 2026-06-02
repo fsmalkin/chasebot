@@ -674,6 +674,24 @@ architecture simple: planner selects the route class, the setup/capture stage
 gets the robot onto the delivery line, Nav2 owns the corridor push, and the
 monitor verifies object outcome.
 
+June 2 opposite-side fetch probe expanded the validated subsystem envelope. The
+layout `ros2_config/target_layouts/golf_ball_circle_delivery_opposite_side_01.json`
+places the ball beyond the far edge of the visible delivery circle from the
+robot start. The first direct run exposed a geometry-source bug: setup and stage
+logic used the legacy corral zone at `x=2.4` while fetch validation used
+`fetch_pose_world` at `x=0.95`. The current slice preserves the legacy corral
+zone for reporting and makes the active control zone the fetch delivery pose
+for `fetch_to_pose` missions. The fixed rerun
+`artifacts/session/live_fetch_opposite_side_probe_fetch_zone_fix_20260602/gather_mission_repeatability/campaign_run_summary.json`
+passed `1/1` with `mission_completed_pass=true`,
+`fetch_to_pose_pass_count=1`, `fetch_to_pose_time_max_s=12.703`, and matched
+marker geometry. The visual package
+`artifacts/session/uat_fetch_opposite_side_probe_fetch_zone_fix_20260602/fetch_visual_uat_package/scorecard.md`
+is browser-watchable and confirms the broad setup arc plus delivery push. This
+is direct subsystem evidence; the next architecture step is to connect the
+planner route `nav2_reposition_first` to explicit setup/reposition execution
+before treating opposite-side scenes as planner-gated UAT.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

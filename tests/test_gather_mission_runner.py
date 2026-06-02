@@ -538,6 +538,31 @@ def test_fetch_objective_defaults_to_delivery_marker_sdf(tmp_path, monkeypatch):
     assert runner._fetch_geometry_consistency()["pass"] is True
 
 
+def test_fetch_objective_uses_delivery_pose_for_approach_geometry(tmp_path, monkeypatch):
+    args = _make_args(tmp_path)
+    args.mission_objective = "fetch_to_pose"
+    args.fetch_target_x = 0.95
+    args.fetch_target_y = 0.0
+    args.fetch_target_z = 0.001
+    args.fetch_delivery_radius_m = 0.30
+    monkeypatch.setattr(gather_runner, "choose_docker_cli", lambda: "docker")
+
+    runner = gather_runner.GatherMissionRunner(args)
+
+    assert runner.zone.id == "fetch_delivery_zone"
+    assert runner.zone.world_x == 0.95
+    assert runner.zone.retrieval_radius_m == 0.30
+    assert runner.legacy_zone.world_x == 2.4
+    snapshot = gather_runner.pre_stage_arrival_snapshot(
+        {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        {"x": 1.35, "y": 0.0},
+        zone=runner.zone,
+    )
+    assert snapshot is not None
+    assert snapshot["push_direction_yaw_deg"] == 180.0
+    assert snapshot["pre_stage_pose_world"]["x"] > 1.35
+
+
 def test_fetch_objective_defaults_to_calibrated_golf_ball_sdf(tmp_path, monkeypatch):
     args = _make_args(tmp_path)
     args.mission_objective = "fetch_to_pose"

@@ -827,7 +827,19 @@ guarded execution -> monitor/result back to planner`.
     contact-buffer handoff and deterministic first-contact servo may appear
     inside setup/contact confirmation. The measured push-readiness gate remains
     the required dispatch condition.
-21. when the goal is full architecture research, ground in
+21. use the fetch delivery pose as the active setup/capture zone for every
+    `fetch_to_pose` mission. The legacy corral zone remains historical reporting
+    context only. The June 2 opposite-side probe found that pre-stage/stage
+    geometry had been using the old corral target at `x=2.4`; after the fix,
+    `ros2_config/target_layouts/golf_ball_circle_delivery_opposite_side_01.json`
+    passed direct guarded-live `fetch_to_pose` with the ball starting beyond the
+    far edge of the visible delivery circle. Evidence:
+    `artifacts/session/live_fetch_opposite_side_probe_fetch_zone_fix_20260602/gather_mission_repeatability/campaign_run_summary.json`
+    and
+    `artifacts/session/uat_fetch_opposite_side_probe_fetch_zone_fix_20260602/fetch_visual_uat_package/scorecard.md`.
+    Classify this as broad subsystem proof. Planner-gated
+    `nav2_reposition_first` promotion remains a separate handoff gate.
+22. when the goal is full architecture research, ground in
     `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` and return a findings
     matrix before tuning a single path
 

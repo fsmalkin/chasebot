@@ -543,6 +543,20 @@ Seeded random evidence after the saved-anchor repair:
 Next sequence: review the browser-watchable UAT evidence, then choose between a
 contact-quality polish slice and broader planner-routed local-fetch coverage.
 
+June 2 opposite-side probe update: `fetch_to_pose` setup and capture now use
+the delivery pose as the active control zone. The legacy corral zone remains in
+artifacts for comparison, but it no longer defines the push direction for fetch
+missions. The fixed opposite-side layout
+`ros2_config/target_layouts/golf_ball_circle_delivery_opposite_side_01.json`
+starts the ball beyond the far edge of the visible delivery circle. The rerun
+`artifacts/session/live_fetch_opposite_side_probe_fetch_zone_fix_20260602/gather_mission_repeatability/campaign_run_summary.json`
+passed `1/1` with `fetch_to_pose_pass_count=1`, `handoff_kind=fetch_push_ready`,
+and `geometry_consistency.pass=true`; the visual package is
+`artifacts/session/uat_fetch_opposite_side_probe_fetch_zone_fix_20260602/fetch_visual_uat_package/scorecard.md`.
+Use this as broad direct-subsystem evidence. Planner-gated UAT still requires a
+separate `nav2_reposition_first` handoff path that routes the out-of-envelope
+start into explicit setup/reposition before local fetch.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

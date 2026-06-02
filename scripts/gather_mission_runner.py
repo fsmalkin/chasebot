@@ -272,6 +272,7 @@ from gather_mission_helpers import DEFAULT_STAGE_READY_DWELL_S
 from gather_mission_helpers import CaptureEnvelope
 from gather_mission_helpers import GatherTargetSpec
 from gather_mission_helpers import PlaceControlCommand
+from gather_mission_helpers import ZoneSpec
 from gather_mission_helpers import approach_side_verdict
 from gather_mission_helpers import build_gather_targets
 from gather_mission_helpers import build_scorecard_markdown
@@ -1196,7 +1197,8 @@ class GatherMissionRunner:
         self.dashboard_url = args.dashboard_url.rstrip("/")
         self.targets = _load_target_layout_override(getattr(args, "target_layout_json", "")) or build_gather_targets(args.scenario_id)
         self.targets_by_id = {item.id: item for item in self.targets}
-        self.zone = build_zone_spec(args.scenario_id)
+        self.legacy_zone = build_zone_spec(args.scenario_id)
+        self.zone = self.legacy_zone
         self.capture_envelope = CaptureEnvelope()
         self.docker = choose_docker_cli()
         self.world_file = clean_text(args.world_file)
@@ -1234,6 +1236,8 @@ class GatherMissionRunner:
             0.05,
             float(clean_number(getattr(args, "fetch_delivery_radius_m", DEFAULT_FETCH_DELIVERY_RADIUS_M)) or DEFAULT_FETCH_DELIVERY_RADIUS_M),
         )
+        if self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE:
+            self.zone = self._fetch_delivery_zone_spec()
         self.visit_runtime_state_path = resolve_visit_runtime_state_path(args.visit_runtime_json)
         self.gather_runtime_state_path = resolve_gather_runtime_state_path(args.gather_runtime_json)
         self.visit_runtime_state: dict[str, Any] = {}
@@ -1285,9 +1289,10 @@ class GatherMissionRunner:
         configured_x = clean_number(getattr(self.args, "fetch_target_x", None))
         configured_y = clean_number(getattr(self.args, "fetch_target_y", None))
         configured_z = clean_number(getattr(self.args, "fetch_target_z", None))
-        fetch_x = float(configured_x) if configured_x is not None else float(self.zone.world_x)
-        fetch_y = float(configured_y) if configured_y is not None else float(self.zone.world_y)
-        fetch_z = float(configured_z) if configured_z is not None else float(self.zone.z_m)
+        base_zone = getattr(self, "legacy_zone", self.zone)
+        fetch_x = float(configured_x) if configured_x is not None else float(base_zone.world_x)
+        fetch_y = float(configured_y) if configured_y is not None else float(base_zone.world_y)
+        fetch_z = float(configured_z) if configured_z is not None else float(base_zone.z_m)
         return {
             "x": round(fetch_x, 6),
             "y": round(fetch_y, 6),
@@ -1295,14 +1300,28 @@ class GatherMissionRunner:
             "radius_m": round(float(self.fetch_delivery_radius_m), 6),
         }
 
+    def _fetch_delivery_zone_spec(self) -> ZoneSpec:
+        fetch_pose = self._fetch_pose_world()
+        return ZoneSpec(
+            id="fetch_delivery_zone",
+            label="Fetch Delivery Zone",
+            world_x=float(fetch_pose["x"]),
+            world_y=float(fetch_pose["y"]),
+            retrieval_radius_m=float(self.fetch_delivery_radius_m),
+            control_radius_m=min(float(self.fetch_delivery_radius_m), float(getattr(self.legacy_zone, "control_radius_m", self.fetch_delivery_radius_m))),
+            dwell_s=float(getattr(self.legacy_zone, "dwell_s", 1.0)),
+            z_m=float(fetch_pose["z"]),
+        )
+
     def _legacy_corral_zone_pose(self) -> dict[str, Any]:
+        zone = getattr(self, "legacy_zone", self.zone)
         return {
-            "x": round(float(self.zone.world_x), 6),
-            "y": round(float(self.zone.world_y), 6),
-            "z": round(float(self.zone.z_m), 6),
-            "radius_m": round(float(self.zone.retrieval_radius_m), 6),
-            "control_radius_m": round(float(self.zone.control_radius_m), 6),
-            "dwell_s": round(float(self.zone.dwell_s), 6),
+            "x": round(float(zone.world_x), 6),
+            "y": round(float(zone.world_y), 6),
+            "z": round(float(zone.z_m), 6),
+            "radius_m": round(float(zone.retrieval_radius_m), 6),
+            "control_radius_m": round(float(zone.control_radius_m), 6),
+            "dwell_s": round(float(zone.dwell_s), 6),
             "source": "legacy_corral_zone",
         }
 

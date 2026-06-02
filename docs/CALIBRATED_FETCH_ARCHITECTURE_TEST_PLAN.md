@@ -133,6 +133,14 @@ dashboard observation showed that a policy can pass saved centerline/off-axis
 layouts while still failing when robot, target, and ball ordering changes. Use
 that as a reminder that saved-layout gates measure regression stability; they
 do not by themselves prove target-relative side selection or generalization.
+The June 2, 2026 opposite-side rerun added a concrete regression rule: direct
+`fetch_to_pose` setup must use the requested delivery pose as the active control
+target, while the legacy corral zone remains reporting context. The fixed layout
+`ros2_config/target_layouts/golf_ball_circle_delivery_opposite_side_01.json`
+passed `1/1` after that correction:
+`artifacts/session/live_fetch_opposite_side_probe_fetch_zone_fix_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+This expands direct subsystem coverage; planner-gated broad UAT still requires
+an executable `nav2_reposition_first` handoff path.
 
 Planner handoff is a separate evidence layer. Random scenes that are outside the
 local fetch envelope should not be handed directly to `fetch_to_pose` and scored
