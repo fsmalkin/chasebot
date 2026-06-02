@@ -260,21 +260,29 @@ Latest saved-anchor result after fetch-ready handoff and setup/contact repair:
   `artifacts/session/live_fetch_setup_capture_bounded_setup_v2_seeded_gate_clean_20260602/fetch_generalization_gate/gate_summary.json`.
 - Clean seeded analyzer:
   `artifacts/session/evidence_fetch_setup_capture_bounded_setup_v2_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
-- Current seeded result: `5/6` initial pass, `0` reproduced failures.
-  `case01` failed once after `fetch_push_ready` with
-  `missed_delivery_radius_after_push_readiness_gate_failed`; its repro passed.
-  The analyzer classifies this as a non-repro watchlist and a guarded-live
-  terminal candidate. Setup/capture has moved from the active blocker to a
-  regression watch.
-- Case01 repeatability probe:
+- Bounded setup seeded result: `5/6` initial pass, `0` reproduced failures.
+  `case01` failed once after `fetch_push_ready`; its repro passed.
+- Case01 near-margin repair: `ball_already_at_delivery_margin` now records a
+  readiness note rather than a blocker when setup geometry is otherwise ready.
+  Contact-buffer re-push readiness now accepts `0.10m` standoff.
+- Case01 repeatability proof:
+  `artifacts/session/live_fetch_case01_near_margin_gate_v1_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+  Result: `3/3` passed with `handoff_kind=fetch_push_ready`.
+- Latest seeded gate:
+  `artifacts/session/live_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
+- Latest seeded analyzer:
+  `artifacts/session/evidence_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+  Result: `5/6` initial pass, `1` non-repro failure, `0` reproduced failures.
+  `case04` failed once with
+  `missed_delivery_radius_after_push_readiness_gate_failed` and
+  `missing_first_contact_alignment`; its repro passed. The current
+  recommendation is `rerun_watchlist_before_guarded_live`.
+- Superseded case01 probe:
   `artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
-  Result: `2/3` passed. The remaining failure is
-  `missing_first_contact_alignment` / `release_roll_away`, which moves the next
-  blocker to first-contact/release stability on the high-forward left-lateral
-  case.
-- Next command: freeze the new case01 first-contact/release failure as the
-  next named watchlist case, then repair first-contact alignment and release
-  stability before claiming seeded random promotion.
+  Earlier result: `2/3`; this drove the near-margin repair.
+- Next command: run targeted case04 repeatability, freeze the exact layout only
+  if the miss reproduces, repair deterministic terminal/second-push reliability
+  if needed, then rerun seeded random `6 x 1`.
 
 ## UAT Orchestrator Modes
 

@@ -198,19 +198,32 @@ Clip-review reframe, later June 1:
     `artifacts/session/evidence_fetch_setup_capture_bounded_setup_v2_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
     The gate passed `5/6` initially with `0` reproduced failures; `case01`
     failed once after `fetch_push_ready`, then passed repro.
-15. Use the `case01` `3x` watchlist probe as the active control blocker:
+15. Use the near-margin repair as the case01 closeout:
+    `ball_already_at_delivery_margin` is a readiness note when setup geometry is
+    otherwise ready, and contact-buffer re-push readiness accepts `0.10m`
+    standoff.
+16. Treat the `case01` `3x` repeatability proof as green:
+    `artifacts/session/live_fetch_case01_near_margin_gate_v1_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+    The result is `3/3` with `handoff_kind=fetch_push_ready`.
+17. Treat the earlier `case01` `3x` probe as superseded evidence:
     `artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
-    The result is `2/3`; the remaining failure is
-    `missing_first_contact_alignment` / `release_roll_away`.
-16. Freeze the new case01 first-contact/release failure before tuning, then
-    repair first-contact alignment and release stability.
-17. Prove case01 `3/3`, rerun seeded random `6 x 1`, then consider narrow
-    guarded-live terminal correction only for clean near-contract misses.
-18. Keep guarded-live AI/contact execution terminal-only until corrected
+    The earlier `2/3` result drove the near-margin repair.
+18. Use the latest seeded gate as the active watchlist:
+    `artifacts/session/live_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
+    The analyzer is
+    `artifacts/session/evidence_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+    The gate passed `5/6` initially with `1` non-repro failure and `0`
+    reproduced failures. `case04` failed once with
+    `missed_delivery_radius_after_push_readiness_gate_failed` and
+    `missing_first_contact_alignment`, then passed repro.
+19. Run targeted case04 repeatability, freeze the exact layout only if the miss
+    reproduces, repair deterministic terminal/second-push reliability if needed,
+    then rerun seeded random `6 x 1`.
+20. Keep guarded-live AI/contact execution terminal-only until corrected
     saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
-19. Build a mobile visual UAT package before asking for operator signoff:
-   `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
-20. Freeze reproduced seeded/random failures into named layouts before tuning.
+21. Build a mobile visual UAT package before asking for operator signoff:
+    `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
+22. Freeze reproduced seeded/random failures into named layouts before tuning.
 
 ## Gates
 

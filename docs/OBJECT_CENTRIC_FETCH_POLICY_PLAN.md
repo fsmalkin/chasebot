@@ -495,21 +495,33 @@ Seeded random evidence after the saved-anchor repair:
   `artifacts/session/live_fetch_setup_capture_bounded_setup_v2_seeded_gate_clean_20260602/fetch_generalization_gate/gate_summary.json`.
 - Clean seeded analyzer:
   `artifacts/session/evidence_fetch_setup_capture_bounded_setup_v2_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
-- Current result: `5/6` initial pass and `0` reproduced failures. `case01`
-  failed once after `fetch_push_ready`; its repro passed. The analyzer labels
-  the miss as `push_coast,terminal_arrival` and recommends rerunning the
-  watchlist before guarded live.
-- Case01 `3x` probe:
+- Bounded setup result: `5/6` initial pass and `0` reproduced failures.
+  `case01` failed once after `fetch_push_ready`; its repro passed.
+- Case01 near-margin repair: `ball_already_at_delivery_margin` now records a
+  readiness note rather than a blocker when setup geometry is otherwise ready,
+  and contact-buffer re-push readiness accepts `0.10m` standoff.
+- Case01 `3x` proof:
+  `artifacts/session/live_fetch_case01_near_margin_gate_v1_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+  Result: `3/3` passed with `handoff_kind=fetch_push_ready`.
+- Latest seeded gate:
+  `artifacts/session/live_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
+- Latest seeded analyzer:
+  `artifacts/session/evidence_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+  Result: `5/6` initial pass, `1` non-repro failure, and `0` reproduced
+  failures. `case04` failed once with
+  `missed_delivery_radius_after_push_readiness_gate_failed` and
+  `missing_first_contact_alignment`; its repro passed. The analyzer recommends
+  `rerun_watchlist_before_guarded_live`.
+- Superseded case01 `3x` probe:
   `artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
-  Result: `2/3` passed, with the remaining failure classified as
-  `missing_first_contact_alignment` / `release_roll_away`.
-- Interpretation: setup/capture generalization is improved enough to expose the
-  next stage boundary. The current policy work should repair first-contact
-  alignment and release stability for the high-forward left-lateral case before
-  broadening bounds or enabling terminal guarded-live correction.
+  Earlier result: `2/3`; this drove the near-margin repair.
+- Interpretation: setup/capture and case01 near-margin behavior are no longer
+  the primary blockers. The active policy work is case04 repeatability:
+  short-forward, small-right-offset contact that can miss once and pass replay.
 
-Next sequence: freeze the new case01 first-contact/release failure, repair
-first-contact alignment, rerun case01 `3/3`, then rerun seeded random `6 x 1`.
+Next sequence: run targeted case04 repeatability, freeze the exact layout only
+if the miss reproduces, repair deterministic terminal/second-push reliability if
+needed, then rerun seeded random `6 x 1`.
 
 Approach-quality evidence must record:
 

@@ -9411,7 +9411,7 @@ def test_nav2_corridor_push_dispatches_after_push_readiness_setup(tmp_path, monk
     target = runner.targets_by_id["ball_1"]
     ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
     state_samples = [
-        ({"x": 0.89, "y": 0.0, "yaw": 0.0}, ball_pose),
+        ({"x": 0.93, "y": 0.0, "yaw": 0.0}, ball_pose),
         ({"x": 0.76, "y": 0.0, "yaw": 0.0}, ball_pose),
         ({"x": 0.76, "y": 0.0, "yaw": 0.0}, {"x": float(runner.zone.world_x), "y": float(runner.zone.world_y), "z": 0.05}),
     ]

@@ -637,18 +637,26 @@ The clean seeded rerun
 `artifacts/session/live_fetch_setup_capture_bounded_setup_v2_seeded_gate_clean_20260602/fetch_generalization_gate/gate_summary.json`
 passed `5/6` initially with `0` reproduced failures. Its analyzer
 `artifacts/session/evidence_fetch_setup_capture_bounded_setup_v2_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`
-keeps `case01` on the watchlist after one non-repro miss following
-`fetch_push_ready`.
+kept `case01` on the watchlist after one non-repro miss following
+`fetch_push_ready`. The near-margin repair then made
+`ball_already_at_delivery_margin` a readiness note when setup geometry is ready
+and accepted `0.10m` contact-buffer standoff for short re-push geometry. The
+case01 repeatability proof
+`artifacts/session/live_fetch_case01_near_margin_gate_v1_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`
+passed `3/3`.
 
-Next milestone slice for UAT is first-contact and release stability on the
-high-forward left-lateral case01 shape. The `case01` `3x` watchlist probe
-`artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`
-passed `2/3`; the remaining failure is `missing_first_contact_alignment` /
-`release_roll_away`. Freeze that failure, repair first-contact alignment,
-prove case01 `3/3`, then rerun seeded random `6 x 1`. This keeps the broader
-architecture simple: planner selects the route class, the setup/capture stage
-gets the robot onto the delivery line, Nav2 owns the corridor push, and the
-monitor verifies object outcome.
+Next milestone slice for UAT is case04 reproducibility. The latest seeded gate
+`artifacts/session/live_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`
+and analyzer
+`artifacts/session/evidence_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`
+report `5/6` initial pass, `1` non-repro failure, and `0` reproduced failures.
+Case04 missed once with `missed_delivery_radius_after_push_readiness_gate_failed`
+and `missing_first_contact_alignment`, then passed repro. The next sequence is
+targeted case04 repeatability, freeze only reproduced misses, repair
+deterministic terminal/second-push reliability if needed, then rerun seeded
+random `6 x 1`. This keeps the broader architecture simple: planner selects the
+route class, the setup/capture stage gets the robot onto the delivery line, Nav2
+owns the corridor push, and the monitor verifies object outcome.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`

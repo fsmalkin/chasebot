@@ -54,9 +54,51 @@ def test_push_readiness_rejects_robot_ahead_of_ball():
     assert "robot_not_behind_ball" in gate["flags"]
 
 
+def test_push_readiness_accepts_near_delivery_margin_when_geometry_is_ready():
+    gate = evaluate_fetch_push_readiness(
+        robot_pose={"x": 0.41931, "y": -0.073598, "yaw": -0.004888},
+        ball_pose={"x": 0.649039, "y": -0.100751, "z": 0.021336},
+        fetch_pose_world={"x": 0.95, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+        max_standoff_m=0.58,
+    )
+
+    assert gate["pass"] is True
+    assert gate["reason"] == "push_ready"
+    assert "ball_already_at_delivery_margin" in gate["flags"]
+    assert gate["blocking_flags"] == []
+
+
+def test_push_readiness_near_delivery_margin_keeps_setup_blockers():
+    gate = evaluate_fetch_push_readiness(
+        robot_pose={"x": 0.064352, "y": -0.016306, "yaw": 0.120132},
+        ball_pose={"x": 0.6266, "y": -0.121157, "z": 0.021336},
+        fetch_pose_world={"x": 0.95, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+        max_standoff_m=0.58,
+    )
+
+    assert gate["pass"] is False
+    assert "robot_lateral_error_out_of_bounds" in gate["blocking_flags"]
+    assert gate["stage_label"] == "setup"
+
+
+def test_push_readiness_accepts_contact_buffer_repush_standoff():
+    gate = evaluate_fetch_push_readiness(
+        robot_pose={"x": 0.198343, "y": 0.079393, "yaw": 0.060575},
+        ball_pose={"x": 0.367173, "y": 0.072689, "z": 0.021336},
+        fetch_pose_world={"x": 0.95, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+    )
+
+    assert gate["pass"] is True
+    assert gate["blocking_flags"] == []
+    assert gate["relative_errors"]["robot_standoff_m"] >= 0.10
+
+
 def test_push_readiness_setup_command_backs_off_when_too_close():
     command = compute_fetch_push_readiness_setup_command(
-        robot_pose={"x": 0.89, "y": 0.0, "yaw": 0.0},
+        robot_pose={"x": 0.93, "y": 0.0, "yaw": 0.0},
         ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
         fetch_pose_world={"x": 1.6, "y": 0.0, "z": 0.001},
         delivery_radius_m=0.3,

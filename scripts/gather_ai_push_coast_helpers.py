@@ -34,7 +34,7 @@ AI_PUSH_COAST_PREDICTED_TERMINAL_TOLERANCE_M = 0.015
 AI_PUSH_COAST_CAPTURE_YAW_WATCH_DEG = 60.0
 AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_WATCH_COUNT = 2
 AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_DEADBAND_DEG = 5.0
-AI_PUSH_READINESS_MIN_STANDOFF_M = 0.12
+AI_PUSH_READINESS_MIN_STANDOFF_M = 0.10
 AI_PUSH_READINESS_MAX_STANDOFF_M = 0.80
 AI_PUSH_READINESS_MAX_LATERAL_ERROR_M = 0.12
 AI_PUSH_READINESS_MAX_YAW_ERROR_DEG = 20.0
@@ -184,11 +184,13 @@ def evaluate_fetch_push_readiness(
     elif ball_target_distance_m <= delivery_floor:
         flags.append("ball_already_at_delivery_margin")
 
-    passed = not flags
+    blocking_flags = [flag for flag in flags if flag != "ball_already_at_delivery_margin"]
+    passed = not blocking_flags
     return {
         "pass": bool(passed),
         "reason": "push_ready" if passed else "push_readiness_gate_failed",
         "flags": flags,
+        "blocking_flags": blocking_flags,
         "stage_label": "" if passed else "setup",
         "relative_errors": errors,
         "thresholds": thresholds,
@@ -223,7 +225,7 @@ def compute_fetch_push_readiness_setup_command(
     thresholds = gate.get("thresholds", {}) if isinstance(gate.get("thresholds"), dict) else {}
     if not errors:
         return None
-    if "ball_already_at_delivery_margin" in gate.get("flags", []):
+    if bool(gate.get("pass", False)):
         return None
 
     standoff_m = _finite_float(errors.get("robot_standoff_m"))

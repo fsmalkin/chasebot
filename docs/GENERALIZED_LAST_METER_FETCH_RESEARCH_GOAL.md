@@ -422,8 +422,8 @@ Latest live evidence:
 
 June 2, 2026 repeatability update: the fetch-ready handoff plus setup/contact
 repair cleared saved-layout repeatability. The first seeded random gate exposed
-setup/capture generalization; the bounded setup repair then shifted the active
-blocker to first-contact/release stability on case01.
+setup/capture generalization; bounded setup and near-margin readiness repairs
+now leave one active seeded watchlist case, case04.
 
 Latest repeatability evidence:
 
@@ -464,25 +464,37 @@ Seeded evidence:
   `artifacts/session/live_fetch_setup_capture_bounded_setup_v2_seeded_gate_clean_20260602/fetch_generalization_gate/gate_summary.json`.
 - Clean seeded analyzer:
   `artifacts/session/evidence_fetch_setup_capture_bounded_setup_v2_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
-- Current result: `5/6` initial pass, with `0` reproduced failures. `case01`
-  failed once after `fetch_push_ready` with
-  `missed_delivery_radius_after_push_readiness_gate_failed`; its repro passed.
-  The analyzer marks this as a non-repro watchlist and a guarded-live terminal
-  candidate.
-- Case01 repeatability probe:
+- Bounded setup rerun result: `5/6` initial pass, with `0` reproduced
+  failures. `case01` failed once after `fetch_push_ready`; its repro passed.
+- Case01 near-margin repair: `ball_already_at_delivery_margin` is now a
+  non-blocking readiness note when setup geometry is otherwise ready, and the
+  contact-buffer standoff floor is `0.10m` for short re-push geometry.
+- Case01 repeatability proof:
+  `artifacts/session/live_fetch_case01_near_margin_gate_v1_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+  Result: `3/3` passed with `handoff_kind=fetch_push_ready`.
+- Latest seeded gate after near-margin and standoff repairs:
+  `artifacts/session/live_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
+- Latest seeded analyzer:
+  `artifacts/session/evidence_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+  Result: `5/6` initial pass, `1` non-repro failure, `0` reproduced failures.
+  `case04` failed once with
+  `missed_delivery_radius_after_push_readiness_gate_failed` and
+  `missing_first_contact_alignment`; its repro passed. The analyzer recommends
+  `rerun_watchlist_before_guarded_live`.
+- Superseded case01 probe:
   `artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
-  Result: `2/3` passed. The remaining failure is
-  `missing_first_contact_alignment` / `release_roll_away`.
+  Earlier result: `2/3`; this drove the near-margin repair above.
 
-Interpretation: setup/capture is no longer the primary blocker for the first
-seeded gate. The active blocker is first-contact/release stability on the
-high-forward left-lateral case. Terminal correction remains a candidate, but
-the next repair should first stabilize first-contact alignment and release
-before promotion.
+Interpretation: setup/capture and case01 near-margin behavior are no longer the
+primary blockers for the first seeded gate. The active blocker is case04
+repeatability: short-forward, small-right-offset contact that can miss delivery
+once and pass replay. Terminal correction remains a candidate, but promotion
+requires a clean seeded `6 x 1` gate or a reproduced case04 failure frozen and
+repaired.
 
-Next sequence: freeze the new case01 first-contact/release failure as a named
-watchlist case, repair first-contact alignment and release stability, rerun
-case01 `3/3`, then rerun seeded random `6 x 1`.
+Next sequence: run a targeted case04 repeatability probe, freeze the exact
+layout only if the miss reproduces, repair deterministic terminal/second-push
+reliability if needed, then rerun seeded random `6 x 1`.
 
 ## May 28, 2026 Direction
 
