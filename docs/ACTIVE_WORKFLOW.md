@@ -213,7 +213,7 @@ Latest saved-anchor result after setup slice:
   rerun the full saved-anchor one-run matrix. Keep guarded-live terminal
   correction paused.
 
-Latest saved-anchor result after fetch-ready handoff repair:
+Latest saved-anchor result after fetch-ready handoff and setup/contact repair:
 
 - Full saved-anchor gate:
   `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_one_run_20260602/calibrated_fetch_architecture_revisit/scorecard.md`
@@ -225,19 +225,24 @@ Latest saved-anchor result after fetch-ready handoff repair:
 - Stage handoff: `left05` and `right05` reached `fetch_push_ready`, so the
   runner handed off directly from capture-entry to corridor push. The approach
   rollups are clean for all three layouts.
-- Follow-on `3/3` gate:
-  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`
-- Setup/contact audit:
-  `artifacts/session/audit_fetch_push_ready_handoff_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`
-- Repeatability result: `zero` passed `3/3` with worst closest approach
-  `0.208838m`; `left05` passed `2/3` with one `misaligned_first_contact`
-  failure at `0.868724m`; `right05` passed `2/3` with one
-  `capture_entry_timeout` before corridor push dispatch.
-- Frozen failure package:
-  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/frozen_failure_cases/frozen_failure_cases_summary.json`
-- Next command: repair setup/contact repeatability using the frozen `left05`
-  and `right05` failures, then rerun saved-layout `3/3`. Seeded random evidence
-  resumes after this gate is green.
+- Repair patch: fetch mode now treats the ball-frame capture-entry band as
+  diagnostic only and accepts `fetch_push_readiness` as the corridor-push
+  handoff source. The capture-entry standoff cap is `0.58m`, matching the
+  observed near-threshold right-offset case while remaining tighter than the
+  general `0.80m` dispatch gate.
+- Corrected `3/3` gate:
+  `artifacts/session/live_fetch_setup_contact_repair_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`
+- Corrected setup/contact audit:
+  `artifacts/session/audit_fetch_setup_contact_repair_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+- Repeatability result: `zero`, `left05`, and `right05` all passed saved-layout
+  promotion `3/3`. Worst closest approaches were `0.201194m`, `0.169541m`,
+  and `0.136046m`.
+- Audit result: `stage_quality_green=true`, setup/contact blockers `0`,
+  setup/capture blockers `0`, invalid geometry `0`, invalid model provenance
+  `0`. `left05` carries a `capture_entry_time_watch` because its slowest
+  capture-entry was `4.093s`.
+- Next command: run the seeded random generalization gate in shadow/evidence
+  mode, then freeze reproduced random failures before tuning.
 
 ## UAT Orchestrator Modes
 

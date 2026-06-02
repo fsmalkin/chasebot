@@ -199,12 +199,20 @@ def compute_fetch_push_readiness_setup_command(
     target_standoff_m: float = AI_PUSH_READINESS_SETUP_TARGET_STANDOFF_M,
     max_linear_x_mps: float = AI_PUSH_READINESS_SETUP_MAX_LINEAR_X_MPS,
     max_angular_z_rps: float = AI_PUSH_READINESS_SETUP_MAX_ANGULAR_Z_RPS,
+    min_standoff_m: float = AI_PUSH_READINESS_MIN_STANDOFF_M,
+    max_standoff_m: float = AI_PUSH_READINESS_MAX_STANDOFF_M,
+    max_lateral_error_m: float = AI_PUSH_READINESS_MAX_LATERAL_ERROR_M,
+    max_yaw_error_deg: float = AI_PUSH_READINESS_MAX_YAW_ERROR_DEG,
 ) -> PlaceControlCommand | None:
     gate = evaluate_fetch_push_readiness(
         robot_pose=robot_pose,
         ball_pose=ball_pose,
         fetch_pose_world=fetch_pose_world,
         delivery_radius_m=delivery_radius_m,
+        min_standoff_m=min_standoff_m,
+        max_standoff_m=max_standoff_m,
+        max_lateral_error_m=max_lateral_error_m,
+        max_yaw_error_deg=max_yaw_error_deg,
     )
     errors = gate.get("relative_errors", {}) if isinstance(gate.get("relative_errors"), dict) else {}
     thresholds = gate.get("thresholds", {}) if isinstance(gate.get("thresholds"), dict) else {}
@@ -264,7 +272,7 @@ def compute_fetch_push_readiness_setup_command(
             )
         elif float(standoff_m) > max_standoff_m:
             mode = "push_readiness_advance"
-        elif abs(lateral_signed) > AI_PUSH_READINESS_MAX_LATERAL_ERROR_M:
+        elif abs(lateral_signed) > float(max_lateral_error_m):
             mode = "push_readiness_lateral_align"
         else:
             mode = "push_readiness_setup"

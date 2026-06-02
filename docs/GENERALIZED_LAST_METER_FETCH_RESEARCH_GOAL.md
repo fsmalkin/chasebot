@@ -420,33 +420,31 @@ Latest live evidence:
   supports one-run UAT screening; promotion still requires saved-layout `3/3`
   and seeded random evidence.
 
-June 2, 2026 repeatability update: the fetch-ready handoff cleared the one-run
-screen and failed the saved-layout `3/3` repeatability gate. The current blocker
-is setup/capture stability before reliable corridor push dispatch.
+June 2, 2026 repeatability update: the fetch-ready handoff plus setup/contact
+repair cleared saved-layout repeatability. The current evidence supports
+seeded random generalization as the next milestone gate.
 
 Latest repeatability evidence:
 
-- Saved-layout `3/3` gate:
-  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Corrected saved-layout `3/3` gate:
+  `artifacts/session/live_fetch_setup_contact_repair_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
 - Setup/contact audit:
-  `artifacts/session/audit_fetch_push_ready_handoff_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
-- Frozen failure cases:
-  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/frozen_failure_cases/frozen_failure_cases_summary.json`.
-- Result: `zero` passed promotion `3/3` with worst closest approach
-  `0.208838m`. `left05` passed `2/3`; run 2 failed at `0.868724m` after a
-  `soft_capture`, with `misaligned_first_contact` and a failed push-readiness
-  gate. `right05` passed `2/3`; run 3 failed with `capture_entry_timeout`
-  before a corridor push shot.
-- Interpretation: the failure mode is setup/capture repeatability upstream of
-  terminal Nav2 delivery. The audit classifies both failing layouts as
-  `setup_capture_blocker` and recommends
-  `repair_setup_contact_before_guarded_live`.
+  `artifacts/session/audit_fetch_setup_contact_repair_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+- Result: `zero`, `left05`, and `right05` passed promotion `3/3` with worst
+  closest approaches `0.201194m`, `0.169541m`, and `0.136046m`.
+- Handoff semantics: fetch mode now treats ball-frame capture-entry as a
+  diagnostic signal and requires `fetch_push_readiness` before corridor-push
+  dispatch. The capture-entry standoff cap is `0.58m`, tighter than the general
+  corridor-push dispatch cap.
+- Audit status: `stage_quality_green=true`; setup/contact blockers,
+  setup/capture blockers, invalid geometry, and invalid model provenance are
+  all `0`. `left05` keeps a `capture_entry_time_watch` because one run took
+  `4.093s` to reach the gate.
 
-Next sequence: repair setup/contact repeatability against the two frozen
-saved-anchor failures, rerun saved-layout `3/3`, then resume seeded random
-generalization only after the saved-anchor gate is green. Guarded-live terminal
-correction remains paused because the repeatability failures are upstream of
-terminal arrival.
+Next sequence: run the seeded random generalization gate in shadow/evidence
+mode, freeze reproduced random failures into named layouts, then decide whether
+guarded-live terminal correction is still needed. Terminal correction remains
+paused until random evidence shows a clean near-contract terminal-arrival gap.
 
 ## May 28, 2026 Direction
 

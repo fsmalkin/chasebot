@@ -464,23 +464,22 @@ Latest live requalification after the fetch-ready handoff repair:
 - Interpretation: the current saved-anchor blocker is cleared for one-run UAT.
   Advance to saved-layout `3/3` repeatability before seeded random evidence.
 
-Saved-layout repeatability result after the fetch-ready handoff repair:
+Saved-layout repeatability result after the fetch-ready handoff and
+setup/contact repair:
 
 - Gate:
-  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+  `artifacts/session/live_fetch_setup_contact_repair_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
 - Setup/contact audit:
-  `artifacts/session/audit_fetch_push_ready_handoff_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
-- Frozen failure cases:
-  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/frozen_failure_cases/frozen_failure_cases_summary.json`.
-- Result: `zero` passed `3/3` with worst closest approach `0.208838m`.
-  `left05` passed `2/3`; the failed run had `misaligned_first_contact`, a
-  failed push-readiness gate, and closest approach `0.868724m`. `right05`
-  passed `2/3`; the failed run was `capture_entry_timeout` before corridor
-  push dispatch.
-- Interpretation: the next control work is setup/contact repeatability. Seeded
-  random promotion and guarded-live terminal correction resume after the
-  saved-anchor failures move downstream to terminal arrival or clear the
-  repeatability gate.
+  `artifacts/session/audit_fetch_setup_contact_repair_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+- Result: `zero`, `left05`, and `right05` passed promotion `3/3`. Worst closest
+  approaches were `0.201194m`, `0.169541m`, and `0.136046m`.
+- Interpretation: setup/contact blockers are cleared for the saved anchors.
+  `left05` carries a `capture_entry_time_watch`, so seeded random evidence
+  should preserve stage labels and freeze any reproduced slow-entry cases.
+
+Next sequence: run seeded random generalization in shadow/evidence mode, freeze
+reproduced failures, and use those frozen layouts to decide whether the next
+control change belongs in setup/capture, push/coast, or terminal arrival.
 
 Approach-quality evidence must record:
 

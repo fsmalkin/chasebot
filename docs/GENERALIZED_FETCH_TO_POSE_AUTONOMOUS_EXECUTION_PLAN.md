@@ -161,7 +161,7 @@ Clip-review reframe, later June 1:
    - compute the robot's standoff, lateral error, and yaw error against the
      ball-target line
    - hold when the fetch push-readiness gate is green under the tighter
-     capture-entry `0.55m` standoff cap
+     capture-entry `0.58m` standoff cap
    - hand off to `fetch_to_pose` corridor push with `handoff_kind =
      fetch_push_ready`
    - preserve gate decisions in mission verdicts, saved-anchor summaries, and
@@ -170,14 +170,17 @@ Clip-review reframe, later June 1:
    `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_one_run_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
    The matrix is `3/3` at one run each with a green mobile visual package:
    `artifacts/session/uat_fetch_push_ready_handoff_saved_anchor_one_run_20260602/fetch_visual_uat_package/scorecard.md`.
-10. Use the June 2 saved-layout repeatability result as the current blocker:
-    `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
-    `zero` passed `3/3`; `left05` and `right05` each passed `2/3` with
-    setup/capture failures.
-11. Repair setup/contact repeatability using the frozen failure package:
-    `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/frozen_failure_cases/frozen_failure_cases_summary.json`.
-12. Rerun saved-layout `3/3` before seeded random evidence. Seeded random
-    resumes only after `zero`, `left05`, and `right05` are all green.
+10. Use the June 2 corrected saved-layout repeatability result as the current
+    saved-anchor baseline:
+    `artifacts/session/live_fetch_setup_contact_repair_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+    `zero`, `left05`, and `right05` passed promotion `3/3` with worst closest
+    approaches `0.201194m`, `0.169541m`, and `0.136046m`.
+11. Use the setup/contact audit as the stage-quality baseline:
+    `artifacts/session/audit_fetch_setup_contact_repair_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+    The audit is `stage_quality_green=true` with one `left05`
+    `capture_entry_time_watch`.
+12. Run seeded random generalization in shadow/evidence mode before additional
+    live-control work. Freeze reproduced random failures into named layouts.
 13. Resume terminal-arrival correction only for clean near-contract misses after
     saved-layout repeatability identifies a reproducible terminal-arrival gap.
 14. Keep guarded-live AI/contact execution terminal-only until corrected

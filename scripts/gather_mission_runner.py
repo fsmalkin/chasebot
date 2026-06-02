@@ -389,7 +389,7 @@ DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_BACKTRACK_M = 0.25
 DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M = 1.0
 DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M = 0.35
 DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S = 5.0
-DEFAULT_FETCH_CAPTURE_ENTRY_HANDOFF_MAX_STANDOFF_M = 0.55
+DEFAULT_FETCH_CAPTURE_ENTRY_HANDOFF_MAX_STANDOFF_M = 0.58
 DEFAULT_FETCH_GEOMETRY_CENTER_TOLERANCE_M = 0.02
 DEFAULT_FETCH_GEOMETRY_RADIUS_TOLERANCE_M = 0.01
 MISSION_OBJECTIVE_GATHER_HERE = "gather_here"
@@ -6371,6 +6371,11 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 time.sleep(self.args.poll_s)
                 continue
             if enable_goal_side_stage and not capture_entry_completed:
+                fetch_corridor_handoff_required = bool(
+                    self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+                    and self.gather_control_family
+                    in {NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY, AI_PUSH_COAST_SERVO_CONTROL_FAMILY}
+                )
                 capture_entry_snapshot_payload = (
                     capture_entry_snapshot(
                         robot_pose,
@@ -6381,19 +6386,14 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if robot_pose and ball_pose
                     else None
                 )
-                capture_entry_ready_signal = bool(
+                capture_entry_ball_frame_ready = bool(
                     isinstance(capture_entry_snapshot_payload, dict)
                     and capture_entry_snapshot_payload.get("capture_entry_reached", False)
                 )
+                capture_entry_ready_signal = bool(capture_entry_ball_frame_ready and not fetch_corridor_handoff_required)
                 capture_entry_ready_source = "capture_entry_ball_frame" if capture_entry_ready_signal else ""
                 capture_entry_push_readiness_gate: dict[str, Any] = {}
-                if (
-                    self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
-                    and self.gather_control_family
-                    in {NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY, AI_PUSH_COAST_SERVO_CONTROL_FAMILY}
-                    and robot_pose
-                    and ball_pose
-                ):
+                if fetch_corridor_handoff_required and robot_pose and ball_pose:
                     capture_entry_push_readiness_gate = evaluate_fetch_push_readiness(
                         robot_pose=robot_pose,
                         ball_pose=ball_pose,
@@ -6402,10 +6402,10 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         max_standoff_m=DEFAULT_FETCH_CAPTURE_ENTRY_HANDOFF_MAX_STANDOFF_M,
                     )
                     if isinstance(capture_entry_snapshot_payload, dict):
-                        ball_frame_ready = bool(capture_entry_snapshot_payload.get("capture_entry_reached", False))
                         capture_entry_snapshot_payload = {
                             **capture_entry_snapshot_payload,
-                            "capture_entry_ball_frame_reached": bool(ball_frame_ready),
+                            "capture_entry_ball_frame_reached": bool(capture_entry_ball_frame_ready),
+                            "capture_entry_reached": False,
                             "capture_entry_ready_source": capture_entry_ready_source,
                             "capture_entry_push_readiness_gate": dict(capture_entry_push_readiness_gate),
                         }
@@ -6442,6 +6442,35 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     if robot_pose and ball_pose
                     else None
                 )
+                if (
+                    fetch_corridor_handoff_required
+                    and not bool(capture_entry_push_readiness_gate.get("pass", False))
+                    and robot_pose
+                    and ball_pose
+                ):
+                    push_readiness_setup_command = compute_fetch_push_readiness_setup_command(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        fetch_pose_world=self._fetch_pose_world(),
+                        delivery_radius_m=float(self.fetch_delivery_radius_m),
+                        max_standoff_m=DEFAULT_FETCH_CAPTURE_ENTRY_HANDOFF_MAX_STANDOFF_M,
+                    )
+                    if push_readiness_setup_command is not None:
+                        capture_entry_command = PlaceControlCommand(
+                            mode=f"capture_entry_{push_readiness_setup_command.mode}",
+                            linear_x=float(push_readiness_setup_command.linear_x),
+                            angular_z=float(push_readiness_setup_command.angular_z),
+                            target_speed_scale=float(push_readiness_setup_command.target_speed_scale),
+                            rationale=push_readiness_setup_command.rationale,
+                        )
+                    elif capture_entry_ball_frame_ready:
+                        capture_entry_command = PlaceControlCommand(
+                            mode="capture_entry_fetch_push_wait",
+                            linear_x=0.0,
+                            angular_z=0.0,
+                            target_speed_scale=0.0,
+                            rationale="Ball-frame capture-entry is ready, but fetch push-readiness is not satisfied.",
+                        )
                 capture_entry_object_centric_policy: dict[str, Any] = {}
                 if (
                     self.gather_control_family == OBJECT_CENTRIC_GATHER_POLICY_CONTROL_FAMILY

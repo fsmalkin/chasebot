@@ -2107,11 +2107,25 @@ class DashboardController:
             if seeded_gate
             else 0
         )
+        seeded_context_stale_after_stage_audit = False
+        if evidence_path is not None and stage_quality_path is not None and stage_quality_payload and seeded_gate:
+            try:
+                seeded_context_stale_after_stage_audit = (
+                    stage_quality_path.stat().st_mtime > evidence_path.stat().st_mtime
+                    and stage_quality_green
+                    and stage_quality_invalid_model_count == 0
+                    and stage_quality_blockers == 0
+                    and seeded_invalid_model_count > 0
+                    and saved_invalid_model_count == 0
+                )
+            except OSError:
+                seeded_context_stale_after_stage_audit = False
         promotion_evidence = (
             bool(evidence.get("promotion_evidence", False))
             and seeded_model_valid
             and saved_invalid_model_count == 0
             and stage_quality_invalid_model_count == 0
+            and not seeded_context_stale_after_stage_audit
         ) if evidence else False
         recommended_next_action = str(evidence.get("recommended_next_action", "") or "") if evidence else ""
         if stage_quality_payload and stage_quality_blockers:
@@ -2119,7 +2133,11 @@ class DashboardController:
         elif stage_quality_payload and stage_quality_terminal_candidates:
             recommended_next_action = "run_narrow_terminal_correction_probe"
         elif stage_quality_payload and stage_quality_green:
-            recommended_next_action = "continue_saved_anchor_ladder"
+            recommended_next_action = (
+                "run_seeded_generalization_gate"
+                if seeded_context_stale_after_stage_audit or seeded_total == 0 or seeded_invalid_model_count > 0
+                else "continue_saved_anchor_ladder"
+            )
         milestone_interpretation = str(evidence.get("milestone_interpretation", "") or "") if evidence else ""
 
         if stage_quality_payload and stage_quality_invalid_model_count:
@@ -2141,7 +2159,7 @@ class DashboardController:
                 f"Saved-anchor stage quality passed {stage_quality_pass_count}/{stage_quality_total}; "
                 f"{stage_quality_terminal_candidates} terminal-arrival candidate is ready for a narrow correction probe."
             )
-        elif evidence and (seeded_invalid_model_count > 0 or saved_invalid_model_count > 0):
+        elif evidence and not seeded_context_stale_after_stage_audit and (seeded_invalid_model_count > 0 or saved_invalid_model_count > 0):
             status = "bad"
             headline = "Saved/seeded fetch evidence lacks calibrated model provenance; rerun the corrected evidence ladder."
         elif probe and not probe_model_valid:
@@ -2152,7 +2170,16 @@ class DashboardController:
             headline = f"Planner gate has {planner_wrong_fetch_dispatch_count} wrong fetch-ready dispatch; do not score broad random as local fetch."
         elif stage_quality_payload and stage_quality_green and stage_quality_watch:
             status = "warn"
-            headline = f"Saved anchors stage-quality pass {stage_quality_pass_count}/{stage_quality_total} with {stage_quality_watch} capture-quality watch item."
+            headline = (
+                f"Saved anchors stage-quality pass {stage_quality_pass_count}/{stage_quality_total} "
+                f"with {stage_quality_watch} capture-quality watch item; run seeded random gate next."
+            )
+        elif stage_quality_payload and stage_quality_green and (not evidence or seeded_context_stale_after_stage_audit):
+            status = "warn"
+            headline = (
+                f"Saved anchors stage-quality pass {stage_quality_pass_count}/{stage_quality_total}; "
+                "seeded random gate is pending current rerun."
+            )
         elif not evidence:
             status = "idle"
             headline = "No seeded fetch evidence package found yet."
@@ -2197,6 +2224,8 @@ class DashboardController:
                 "guarded_live_candidate_count": guarded_candidates,
                 "model_provenance_valid": seeded_model_valid,
                 "model_provenance_invalid_count": seeded_invalid_model_count,
+                "stale_after_stage_quality_audit": seeded_context_stale_after_stage_audit,
+                "current_blocking": bool(seeded_gate and seeded_invalid_model_count > 0 and not seeded_context_stale_after_stage_audit),
                 "interpretation": str(seeded_gate.get("interpretation", "") or ""),
             },
             "planner_handoff_gate": {

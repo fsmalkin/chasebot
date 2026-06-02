@@ -4202,12 +4202,122 @@ def test_capture_target_fetch_push_ready_hands_off_without_generic_capture(tmp_p
     assert payload["capture_entry_snapshot"]["capture_entry_ball_frame_reached"] is False
     assert payload["capture_entry_snapshot"]["capture_entry_ready_source"] == "fetch_push_readiness"
     assert diagnostics["ready_source"] == "fetch_push_readiness"
-    assert diagnostics["capture_entry_push_readiness_gate"]["thresholds"]["max_standoff_m"] == 0.55
+    assert diagnostics["capture_entry_push_readiness_gate"]["thresholds"]["max_standoff_m"] == 0.58
     assert diagnostics["selected_command_mode"] == "capture_entry_fetch_push_ready"
     assert "capture_entry" in phase_entries
     assert "capture" not in phase_entries
     assert not (mission_root / f"{target.id}_capture_entry_timeout.json").exists()
     assert any(item.get("mode") == "capture_entry_fetch_push_ready" for item in command_log)
+
+
+def test_capture_target_fetch_mode_does_not_handoff_on_ball_frame_capture_entry_only(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.mission_objective = gather_runner.MISSION_OBJECTIVE_FETCH_TO_POSE
+    runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.3
+    runner.args.capture_timeout_s = 10.0
+    runner.args.poll_s = 0.25
+    mission_root = tmp_path / "artifacts" / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    target = runner.targets[0]
+    clock = {"now": 0.0}
+    state_rows: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+
+    class _FakeCommand:
+        def __init__(self, mode: str):
+            self.mode = mode
+            self.linear_x = 0.0
+            self.angular_z = 0.0
+            self.target_speed_scale = 0.0
+            self.rationale = mode
+
+        def to_dict(self) -> dict[str, object]:
+            return {
+                "mode": self.mode,
+                "linear_x": self.linear_x,
+                "angular_z": self.angular_z,
+                "target_speed_scale": self.target_speed_scale,
+                "rationale": self.rationale,
+            }
+
+    def fake_monotonic():
+        return clock["now"]
+
+    def fake_sleep(seconds):
+        clock["now"] += float(seconds)
+
+    def fake_control_loop_state(**kwargs):
+        return (
+            {},
+            {"x": -0.70, "y": 0.0, "yaw": 0.0},
+            {"x": 0.0, "y": 0.0, "z": 0.05},
+        )
+
+    def fake_capture_entry_snapshot(*args, **kwargs):
+        return {
+            "ball_x_m": 0.20,
+            "ball_y_m": 0.0,
+            "bearing_rad": 0.0,
+            "robot_on_goal_side": False,
+            "entered_goal_side_before_capture": False,
+            "capture_entry_reached": True,
+        }
+
+    monkeypatch.setattr(gather_runner.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(gather_runner.time, "sleep", fake_sleep)
+    monkeypatch.setattr(
+        gather_runner,
+        "append_jsonl",
+        lambda _path, payload: state_rows.append(dict(payload)) if isinstance(payload, dict) else None,
+    )
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **kwargs: None)
+    monkeypatch.setattr(runner, "_fetch_pose_world", lambda: {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.3})
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda *args, **kwargs: command_log.append(dict(kwargs)),
+    )
+    monkeypatch.setattr(
+        gather_runner,
+        "goal_side_approach_snapshot",
+        lambda *args, **kwargs: {
+            "robot_on_goal_side": False,
+            "staging_pose_reached": True,
+            "push_direction_yaw_deg": 0.0,
+            "robot_longitudinal_projection_m": -0.45,
+            "robot_lateral_error_m": 0.0,
+        },
+    )
+    monkeypatch.setattr(gather_runner, "compute_stage_command", lambda *args, **kwargs: _FakeCommand("stage_ready"))
+    monkeypatch.setattr(gather_runner, "capture_entry_snapshot", fake_capture_entry_snapshot)
+    monkeypatch.setattr(gather_runner, "compute_capture_entry_command", lambda *args, **kwargs: _FakeCommand("capture_entry_ready"))
+
+    capture_pass, payload = runner._capture_target(
+        session_id="session-fetch-ball-frame-only",
+        target=target,
+        state_history_path=tmp_path / "state_history.jsonl",
+        mission_root=mission_root,
+        enable_goal_side_stage=True,
+    )
+
+    phase_entries = [str(row.get("phase", "")) for row in state_rows]
+    capture_entry_rows = [row for row in state_rows if row.get("phase") == "capture_entry"]
+    diagnostics = capture_entry_rows[-1]["capture_entry_diagnostics"]
+
+    assert capture_pass is False
+    assert payload["failure_stage"] == "capture_entry"
+    assert payload["capture_entry_ready_source"] == ""
+    assert payload["capture_entry_snapshot"]["capture_entry_ball_frame_reached"] is True
+    assert payload["capture_entry_snapshot"]["capture_entry_reached"] is False
+    assert payload["capture_entry_push_readiness_gate"]["pass"] is False
+    assert "robot_too_far_for_push" in payload["capture_entry_push_readiness_gate"]["flags"]
+    assert diagnostics["ready_source"] == ""
+    assert diagnostics["selected_command_mode"] == "capture_entry_push_readiness_advance"
+    assert "capture" not in phase_entries
+    assert any(item.get("mode") == "capture_entry_push_readiness_advance" for item in command_log)
 
 
 def test_capture_target_records_capture_entry_before_generic_capture_timeout(tmp_path, monkeypatch):
