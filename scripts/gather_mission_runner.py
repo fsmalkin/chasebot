@@ -389,6 +389,7 @@ DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_BACKTRACK_M = 0.25
 DEFAULT_NAV2_CORRIDOR_PUSH_MONITOR_MAX_ROBOT_BALL_M = 1.0
 DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ROBOT_DELTA_M = 0.35
 DEFAULT_CAPTURE_ENTRY_GAP_FILL_MAX_ELAPSED_S = 5.0
+DEFAULT_FETCH_CAPTURE_ENTRY_HANDOFF_MAX_STANDOFF_M = 0.55
 DEFAULT_FETCH_GEOMETRY_CENTER_TOLERANCE_M = 0.02
 DEFAULT_FETCH_GEOMETRY_RADIUS_TOLERANCE_M = 0.01
 MISSION_OBJECTIVE_GATHER_HERE = "gather_here"
@@ -5781,6 +5782,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         capture_entry_gap_fill_reason = ""
         last_capture_entry_snapshot: dict[str, Any] = {}
         last_capture_entry_diagnostics: dict[str, Any] = {}
+        last_capture_entry_ready_source = ""
+        last_capture_entry_push_readiness_gate: dict[str, Any] = {}
         capture_handoff_robot_pose: dict[str, Any] | None = None
         capture_handoff_ball_pose: dict[str, Any] | None = None
         capture_started_monotonic: float | None = None
@@ -5843,6 +5846,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "ready_signal": bool(ready_signal),
                 "ready_latched": bool(capture_entry_ready_latched),
                 "ready_reached_once": bool(capture_entry_reached_once),
+                "ready_source": str(last_capture_entry_ready_source or ""),
                 "ready_dwell_s": round(float(ready_dwell_s), 6),
                 "ready_dwell_required_s": round(float(DEFAULT_CAPTURE_ENTRY_READY_DWELL_S), 6),
                 "ready_dwell_completed": bool(
@@ -5863,6 +5867,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "handoff_robot_pose": dict(handoff_robot_pose or {}),
                 "handoff_ball_pose": dict(handoff_ball_pose or {}),
                 "capture_entry_snapshot": snapshot_payload,
+                "capture_entry_push_readiness_gate": dict(last_capture_entry_push_readiness_gate or {}),
                 "ball_x_m": clean_rounded_number(snapshot_payload.get("ball_x_m")),
                 "ball_y_m": clean_rounded_number(snapshot_payload.get("ball_y_m")),
                 "bearing_rad": clean_rounded_number(snapshot_payload.get("bearing_rad")),
@@ -6079,8 +6084,14 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             )
 
         def _approach_result_payload(*, failure_reason: str = "") -> dict[str, Any]:
+            fetch_push_ready_handoff = bool(
+                last_capture_entry_ready_source == "fetch_push_readiness"
+                and last_capture_entry_push_readiness_gate.get("pass", False)
+            )
             if failure_reason:
                 verdict = {"pass": False, "reason": str(failure_reason)}
+            elif fetch_push_ready_handoff:
+                verdict = {"pass": True, "reason": ""}
             elif not enable_goal_side_stage and first_contact_alignment_value is None:
                 verdict = {"pass": True, "reason": ""}
             else:
@@ -6102,6 +6113,8 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                 "stage_time_s": round(float(stage_time_s), 6),
                 "capture_entry_reached": bool(capture_entry_reached_once if enable_goal_side_stage else True),
                 "capture_entry_time_s": round(float(capture_entry_time_s), 6),
+                "capture_entry_ready_source": str(last_capture_entry_ready_source or ""),
+                "capture_entry_push_readiness_gate": dict(last_capture_entry_push_readiness_gate or {}),
                 "approach_failure_reason": str(failure_reason or verdict.get("reason", "") or ""),
                 "capture_geometry_gate": _capture_geometry_gate_payload(),
             }
@@ -6372,7 +6385,43 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     isinstance(capture_entry_snapshot_payload, dict)
                     and capture_entry_snapshot_payload.get("capture_entry_reached", False)
                 )
+                capture_entry_ready_source = "capture_entry_ball_frame" if capture_entry_ready_signal else ""
+                capture_entry_push_readiness_gate: dict[str, Any] = {}
+                if (
+                    self.mission_objective == MISSION_OBJECTIVE_FETCH_TO_POSE
+                    and self.gather_control_family
+                    in {NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY, AI_PUSH_COAST_SERVO_CONTROL_FAMILY}
+                    and robot_pose
+                    and ball_pose
+                ):
+                    capture_entry_push_readiness_gate = evaluate_fetch_push_readiness(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        fetch_pose_world=self._fetch_pose_world(),
+                        delivery_radius_m=float(self.fetch_delivery_radius_m),
+                        max_standoff_m=DEFAULT_FETCH_CAPTURE_ENTRY_HANDOFF_MAX_STANDOFF_M,
+                    )
+                    if isinstance(capture_entry_snapshot_payload, dict):
+                        ball_frame_ready = bool(capture_entry_snapshot_payload.get("capture_entry_reached", False))
+                        capture_entry_snapshot_payload = {
+                            **capture_entry_snapshot_payload,
+                            "capture_entry_ball_frame_reached": bool(ball_frame_ready),
+                            "capture_entry_ready_source": capture_entry_ready_source,
+                            "capture_entry_push_readiness_gate": dict(capture_entry_push_readiness_gate),
+                        }
+                    if bool(capture_entry_push_readiness_gate.get("pass", False)):
+                        capture_entry_ready_signal = True
+                        capture_entry_ready_source = "fetch_push_readiness"
+                        if isinstance(capture_entry_snapshot_payload, dict):
+                            capture_entry_snapshot_payload = {
+                                **capture_entry_snapshot_payload,
+                                "capture_entry_reached": True,
+                                "capture_entry_ready_source": capture_entry_ready_source,
+                                "fetch_push_readiness_ready": True,
+                            }
+                last_capture_entry_push_readiness_gate = dict(capture_entry_push_readiness_gate or {})
                 if capture_entry_ready_signal:
+                    last_capture_entry_ready_source = capture_entry_ready_source or "capture_entry_ball_frame"
                     capture_entry_reached_once = True
                     capture_entry_ready_latched = True
                     capture_entry_ready_started_monotonic = (
@@ -6382,6 +6431,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     )
                 elif not capture_entry_ready_latched:
                     capture_entry_ready_started_monotonic = None
+                    last_capture_entry_ready_source = ""
                 capture_entry_command = (
                     compute_capture_entry_command(
                         robot_pose,
@@ -6411,6 +6461,14 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     capture_entry_object_centric_policy = last_object_centric_policy
                     if object_decision.command is not None:
                         capture_entry_command = object_decision.command
+                if capture_entry_ready_signal and capture_entry_ready_source == "fetch_push_readiness":
+                    capture_entry_command = PlaceControlCommand(
+                        mode="capture_entry_fetch_push_ready",
+                        linear_x=0.0,
+                        angular_z=0.0,
+                        target_speed_scale=0.0,
+                        rationale="Fetch-to-pose push-readiness is satisfied; hold for handoff to corridor push.",
+                    )
                 if capture_entry_command is not None:
                     latest_pre_capture_command_mode = str(capture_entry_command.mode)
                 capture_entry_manager_decision = decide_gather_manager_directive(
@@ -6523,6 +6581,26 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     capture_started_monotonic = now_monotonic
                     capture_handoff_robot_pose = dict(robot_pose or {}) if isinstance(robot_pose, dict) else None
                     capture_handoff_ball_pose = dict(ball_pose or {}) if isinstance(ball_pose, dict) else None
+                    if last_capture_entry_ready_source == "fetch_push_readiness":
+                        self._set_manual_drive(
+                            enabled=False,
+                            mode="capture_entry_fetch_push_ready",
+                            rationale="Fetch-to-pose push-readiness is satisfied; handing off to corridor push.",
+                        )
+                        self._update_gather_runtime_state(
+                            latest_feedback=f"Fetch push-readiness reached on {target.label}; starting corridor push.",
+                        )
+                        return True, {
+                            "capture_state": capture.to_dict() if capture else {},
+                            "zone_score": zone_score.to_dict() if zone_score else {},
+                            "handoff_kind": "fetch_push_ready",
+                            "capture_entry_snapshot": last_capture_entry_snapshot,
+                            "capture_entry_diagnostics": last_capture_entry_diagnostics,
+                            "capture_entry_push_readiness_gate": dict(last_capture_entry_push_readiness_gate or {}),
+                            "capture_geometry_gate": _capture_geometry_gate_payload(),
+                            "object_centric_policy": last_object_centric_policy,
+                            **_approach_result_payload(),
+                        }
                     self._set_manual_drive(
                         enabled=False,
                         mode="capture_entry_ready",

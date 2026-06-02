@@ -155,26 +155,30 @@ Clip-review reframe, later June 1:
 6. Use the staged local fetch sequence as the current implementation baseline:
    planner-approved local case -> ball-target delivery line -> capture pose ->
    setup motion -> geometry gate -> Nav2 corridor push -> delivery monitor.
-7. Treat the June 1 clip-reviewed saved-anchor rebuild as blocked for promotion
-   by off-axis setup/capture/handoff instability, even though the centerline
-   case is clean.
-8. Implement the capture-geometry setup stage before another terminal-arrival
-   correction probe:
-   - compute capture pose behind the ball on the ball-target line
-   - reach that pose with Nav2 or a bounded deterministic setup routine
-   - gate standoff, lateral error, yaw error, target freshness, and corridor
-     validity before handoff
-   - record the gate decision in mission verdicts, saved-anchor audits, and
+7. Treat the June 1 clip-reviewed saved-anchor rebuild as superseded by the
+   June 2 fetch-ready handoff repair and one-run matrix.
+8. Use the fetch-ready capture-entry handoff as the current setup stage:
+   - compute the robot's standoff, lateral error, and yaw error against the
+     ball-target line
+   - hold when the fetch push-readiness gate is green under the tighter
+     capture-entry `0.55m` standoff cap
+   - hand off to `fetch_to_pose` corridor push with `handoff_kind =
+     fetch_push_ready`
+   - preserve gate decisions in mission verdicts, saved-anchor summaries, and
      visual UAT packages
-9. Rebuild corrected saved-anchor one-run evidence after capture-geometry work,
-   then advance only green `zero`/`left05`/`right05` evidence to `3/3`.
-10. Resume terminal-arrival correction only for clean near-contract misses after
-   the capture-geometry gate passes.
-11. Keep guarded-live AI/contact execution terminal-only until corrected
+9. Treat the June 2 saved-anchor one-run result as the current UAT baseline:
+   `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_one_run_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+   The matrix is `3/3` at one run each with a green mobile visual package:
+   `artifacts/session/uat_fetch_push_ready_handoff_saved_anchor_one_run_20260602/fetch_visual_uat_package/scorecard.md`.
+10. Advance the same `zero`/`left05`/`right05` matrix to saved-layout `3/3`
+    repeatability before seeded random evidence.
+11. Resume terminal-arrival correction only for clean near-contract misses after
+    saved-layout repeatability identifies a reproducible terminal-arrival gap.
+12. Keep guarded-live AI/contact execution terminal-only until corrected
    saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
-12. Build a mobile visual UAT package before asking for operator signoff:
+13. Build a mobile visual UAT package before asking for operator signoff:
    `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
-13. Freeze reproduced seeded/random failures into named layouts before tuning.
+14. Freeze reproduced seeded/random failures into named layouts before tuning.
 
 ## Gates
 

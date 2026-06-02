@@ -161,6 +161,43 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
     assert "`/artifacts/session/" not in text
 
 
+def test_visual_uat_package_accepts_architecture_revisit_planner_summary(tmp_path, monkeypatch):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(package, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+
+    planner = session_root / "matrix" / "calibrated_fetch_architecture_revisit" / "architecture_revisit_summary.json"
+    _write_json(
+        planner,
+        {
+            "campaign_id": "matrix",
+            "type": "calibrated_fetch_architecture_revisit",
+            "screen_scope": "runnable_control_family_screen",
+            "candidate_families": [
+                {
+                    "family": "ai_push_coast_servo_v1",
+                    "decision": {"one_run_green": True},
+                    "one_run_results": [
+                        {"layout_id": "zero", "pass": True},
+                        {"layout_id": "left05", "pass": True},
+                        {"layout_id": "right05", "pass": True},
+                    ],
+                }
+            ],
+        },
+    )
+
+    summary = package.summarize_planner_gate(planner)
+
+    assert summary["pass"] is True
+    assert summary["planner_mode"] == "calibrated_fetch_architecture_revisit"
+    assert summary["pass_count"] == 3
+    assert summary["fail_count"] == 0
+    assert summary["total_count"] == 3
+    assert summary["wrong_fetch_dispatch_count"] == 0
+    assert summary["route_counts"] == {"zero": 1, "left05": 1, "right05": 1}
+
+
 def test_visual_uat_package_warns_when_core_video_missing(tmp_path, monkeypatch):
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)

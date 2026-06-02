@@ -448,6 +448,22 @@ Latest live requalification after the setup slice:
   Continue with targeted `left05` setup/capture repair, then rerun the
   canonical saved-anchor one-run matrix.
 
+Latest live requalification after the fetch-ready handoff repair:
+
+- Targeted `left05` proof:
+  `artifacts/session/live_fetch_push_ready_handoff_left05_one_run_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Full saved-anchor gate:
+  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_one_run_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Mobile visual UAT package:
+  `artifacts/session/uat_fetch_push_ready_handoff_saved_anchor_one_run_20260602/fetch_visual_uat_package/scorecard.md`.
+- Result: saved-anchor one-run is `3/3`. `zero` passed at `0.200915m`;
+  `left05` passed at `0.148471m`; `right05` passed at `0.169160m`.
+- Handoff behavior: `zero` used the existing `secure_capture` path; `left05`
+  and `right05` used `fetch_push_ready`, which hands off from capture-entry to
+  corridor push once the world-frame push-readiness contract is green.
+- Interpretation: the current saved-anchor blocker is cleared for one-run UAT.
+  Advance to saved-layout `3/3` repeatability before seeded random evidence.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

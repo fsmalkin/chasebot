@@ -393,6 +393,38 @@ delivery, while left-offset capture-entry remains the saved-anchor blocker.
 The next repair target is `left05` capture-entry convergence, measured before
 Nav2 dispatch. Terminal correction and seeded random promotion remain paused.
 
+June 2, 2026 update: the left-offset blocker is resolved at the stage-boundary
+level. Capture-entry now has a fetch-specific handoff: once the robot satisfies
+world-frame push-readiness on the ball-target line, with a tighter `0.55m`
+capture-entry standoff cap, the runner holds and returns `handoff_kind =
+fetch_push_ready`. The caller then starts `fetch_to_pose` corridor push directly
+from capture-entry. This aligns the intermediate gate with the actual no-shoot
+fetch contract and keeps the older ball-frame capture-entry band intact for
+non-fetch capture flows.
+
+Latest live evidence:
+
+- Implementation: fetch push-readiness capture-entry handoff and corrected
+  visual-package architecture-summary parsing.
+- Targeted `left05` proof:
+  `artifacts/session/live_fetch_push_ready_handoff_left05_one_run_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Full saved-anchor one-run:
+  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_one_run_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Mobile visual UAT package:
+  `artifacts/session/uat_fetch_push_ready_handoff_saved_anchor_one_run_20260602/fetch_visual_uat_package/scorecard.md`.
+- Result: saved-anchor one-run is `3/3`. `zero` passed at `0.200915m` with
+  `secure_capture`; `left05` passed at `0.148471m` with `fetch_push_ready`;
+  `right05` passed at `0.169160m` with `fetch_push_ready`.
+- Evidence status: approach rollups are clean for all three layouts, calibrated
+  model provenance is valid, and the package is mobile-watchable. The package
+  supports one-run UAT screening; promotion still requires saved-layout `3/3`
+  and seeded random evidence.
+
+Next sequence: run saved-layout `3/3` repeatability for
+`ai_push_coast_servo_v1` in shadow mode, then rerun the seeded random
+generalization gate. Guarded-live terminal correction remains paused until
+repeatability shows a reproducible near-contract terminal miss.
+
 ## May 28, 2026 Direction
 
 The research pass selected a no-shoot runtime direction. After the May 31

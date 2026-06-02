@@ -280,6 +280,46 @@ def summarize_planner_gate(path: Path) -> dict[str, Any]:
     payload = read_json(path)
     if not payload:
         return {}
+    candidates = payload.get("candidate_families", [])
+    if isinstance(candidates, list) and candidates:
+        candidate_results = [item for item in candidates if isinstance(item, dict)]
+        one_run_results = [
+            result
+            for candidate in candidate_results
+            for result in candidate.get("one_run_results", [])
+            if isinstance(result, dict)
+        ]
+        pass_count = sum(1 for result in one_run_results if bool(result.get("pass", False)))
+        fail_count = sum(1 for result in one_run_results if not bool(result.get("pass", False)))
+        decision_green = any(
+            bool(
+                (
+                    candidate.get("decision")
+                    if isinstance(candidate.get("decision"), dict)
+                    else {}
+                ).get("one_run_green", candidate.get("one_run_green", False))
+            )
+            for candidate in candidate_results
+        )
+        route_counts = {
+            str(result.get("layout_id", "") or result.get("campaign_id", "")): 1 if bool(result.get("pass", False)) else 0
+            for result in one_run_results
+        }
+        return {
+            "campaign_id": str(payload.get("campaign_id", "") or ""),
+            "session_id": session_id_for_path(path),
+            "path": artifact_display_path(path),
+            "pass": bool(decision_green or (one_run_results and fail_count == 0)),
+            "planner_mode": "calibrated_fetch_architecture_revisit",
+            "scene_set": str(payload.get("screen_scope", "") or ""),
+            "scene_source": str(payload.get("type", "") or ""),
+            "pass_count": int(pass_count),
+            "fail_count": int(fail_count),
+            "total_count": int(len(one_run_results)),
+            "fetch_dispatch_count": int(pass_count),
+            "wrong_fetch_dispatch_count": 0,
+            "route_counts": route_counts,
+        }
     return {
         "campaign_id": str(payload.get("campaign_id", "") or ""),
         "session_id": session_id_for_path(path),

@@ -213,6 +213,22 @@ Latest saved-anchor result after setup slice:
   rerun the full saved-anchor one-run matrix. Keep guarded-live terminal
   correction paused.
 
+Latest saved-anchor result after fetch-ready handoff repair:
+
+- Full saved-anchor gate:
+  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_one_run_20260602/calibrated_fetch_architecture_revisit/scorecard.md`
+- Visual UAT package:
+  `artifacts/session/uat_fetch_push_ready_handoff_saved_anchor_one_run_20260602/fetch_visual_uat_package/scorecard.md`
+- Result: `zero`, `left05`, and `right05` passed the one-run
+  `0.300m` delivery-radius screen. Worst closest approaches were `0.200915m`,
+  `0.148471m`, and `0.169160m`.
+- Stage handoff: `left05` and `right05` reached `fetch_push_ready`, so the
+  runner handed off directly from capture-entry to corridor push. The approach
+  rollups are clean for all three layouts.
+- Next command: run saved-layout `3/3` repeatability for
+  `ai_push_coast_servo_v1` in shadow mode, then rerun seeded random evidence if
+  repeatability stays green.
+
 ## UAT Orchestrator Modes
 
 Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:
