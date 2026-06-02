@@ -374,6 +374,25 @@ gate is the same saved-anchor one-run matrix, scored on whether `zero`,
 `left05`, and `right05` reach push-readiness before Nav2 owns the corridor
 push.
 
+Live follow-up after the setup slice:
+
+- Implementation commits: `0828b33 Add bounded push-readiness setup` and
+  `3d5c73c Refine push-readiness backoff alignment`.
+- Full saved-anchor gate:
+  `artifacts/session/live_push_readiness_setup_backoff_saved_anchor_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Stage audit:
+  `artifacts/session/audit_push_readiness_setup_backoff_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+- Visual UAT package:
+  `artifacts/session/uat_push_readiness_setup_backoff_saved_anchor_one_run_20260601/fetch_visual_uat_package/scorecard.md`.
+- Result: `zero` passed at `0.110841m`; `right05` passed at `0.105228m`
+  with capture-quality watch flags; `left05` failed before push-readiness on
+  `capture_entry_timeout`.
+
+Evidence meaning: the setup slice recovered centerline and right-offset
+delivery, while left-offset capture-entry remains the saved-anchor blocker.
+The next repair target is `left05` capture-entry convergence, measured before
+Nav2 dispatch. Terminal correction and seeded random promotion remain paused.
+
 ## May 28, 2026 Direction
 
 The research pass selected a no-shoot runtime direction. After the May 31

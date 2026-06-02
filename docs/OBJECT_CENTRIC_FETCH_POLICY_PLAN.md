@@ -431,6 +431,23 @@ Push-readiness setup slice:
 - The next evidence gate is a fresh saved-anchor `zero`/`left05`/`right05`
   one-run matrix with browser-watchable onboard and context video.
 
+Latest live requalification after the setup slice:
+
+- Commits: `0828b33 Add bounded push-readiness setup` and
+  `3d5c73c Refine push-readiness backoff alignment`.
+- Full saved-anchor gate:
+  `artifacts/session/live_push_readiness_setup_backoff_saved_anchor_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Stage audit:
+  `artifacts/session/audit_push_readiness_setup_backoff_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+- Visual UAT package:
+  `artifacts/session/uat_push_readiness_setup_backoff_saved_anchor_one_run_20260601/fetch_visual_uat_package/scorecard.md`.
+- Result: saved-anchor one-run improved to `2/3`. `zero` and `right05`
+  delivered inside the `0.300m` radius; `left05` failed in capture-entry before
+  the push-readiness gate.
+- Interpretation: left-offset capture-entry convergence is the current blocker.
+  Continue with targeted `left05` setup/capture repair, then rerun the
+  canonical saved-anchor one-run matrix.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

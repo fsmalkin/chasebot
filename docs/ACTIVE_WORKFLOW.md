@@ -196,6 +196,23 @@ Push-readiness setup implementation slice:
 - Next command: rerun the saved-anchor one-run matrix on
   `zero`/`left05`/`right05`, then build a visual UAT package.
 
+Latest saved-anchor result after setup slice:
+
+- Commits: `0828b33 Add bounded push-readiness setup`,
+  `3d5c73c Refine push-readiness backoff alignment`
+- Full saved-anchor gate:
+  `artifacts/session/live_push_readiness_setup_backoff_saved_anchor_one_run_20260601/calibrated_fetch_architecture_revisit/scorecard.md`
+- Stage audit:
+  `artifacts/session/audit_push_readiness_setup_backoff_saved_anchor_one_run_20260601/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+- Visual UAT package:
+  `artifacts/session/uat_push_readiness_setup_backoff_saved_anchor_one_run_20260601/fetch_visual_uat_package/scorecard.md`
+- Result: `zero` passed with `0.110841m`; `right05` passed with
+  `0.105228m`; `left05` failed on `capture_entry_timeout` before a
+  push-readiness gate.
+- Next command: diagnose and repair `left05` capture-entry convergence, then
+  rerun the full saved-anchor one-run matrix. Keep guarded-live terminal
+  correction paused.
+
 ## UAT Orchestrator Modes
 
 Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:
