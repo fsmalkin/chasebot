@@ -418,6 +418,19 @@ Latest push-readiness gate evidence after commit
   setup/reacquire to a measured push-ready pose, then a fresh saved-anchor
   one-run gate.
 
+Push-readiness setup slice:
+
+- The fetch runner now converts an initial failed push-readiness gate into one
+  bounded deterministic setup attempt before Nav2 dispatch.
+- The setup target is conservative: `0.24m` standoff on the ball-target line,
+  bounded lateral/yaw correction, `0.08m/s` maximum linear correction, and
+  `0.45rad/s` maximum angular correction.
+- The attempt preserves the no-retry contract. A run that still fails the gate
+  after the setup window remains a setup/contact blocker; Nav2 dispatch remains
+  gated by measured push-readiness.
+- The next evidence gate is a fresh saved-anchor `zero`/`left05`/`right05`
+  one-run matrix with browser-watchable onboard and context video.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

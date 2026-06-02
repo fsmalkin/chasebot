@@ -9,6 +9,7 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from gather_ai_push_coast_helpers import decide_ai_push_coast_handoff  # noqa: E402
+from gather_ai_push_coast_helpers import compute_fetch_push_readiness_setup_command  # noqa: E402
 from gather_ai_push_coast_helpers import evaluate_fetch_push_readiness  # noqa: E402
 
 
@@ -51,6 +52,34 @@ def test_push_readiness_rejects_robot_ahead_of_ball():
 
     assert gate["pass"] is False
     assert "robot_not_behind_ball" in gate["flags"]
+
+
+def test_push_readiness_setup_command_backs_off_when_too_close():
+    command = compute_fetch_push_readiness_setup_command(
+        robot_pose={"x": 0.89, "y": 0.0, "yaw": 0.0},
+        ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.6, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+    )
+
+    assert command is not None
+    assert command.mode == "push_readiness_backoff"
+    assert command.linear_x < 0.0
+    assert command.angular_z == 0.0
+
+
+def test_push_readiness_setup_command_yaw_aligns_before_push():
+    command = compute_fetch_push_readiness_setup_command(
+        robot_pose={"x": 0.76, "y": 0.0, "yaw": 0.65},
+        ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.6, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+    )
+
+    assert command is not None
+    assert command.mode == "push_readiness_yaw_align"
+    assert command.linear_x == 0.0
+    assert command.angular_z < 0.0
 
 
 def test_shadow_decision_stays_with_nav2_before_corridor_attempt():

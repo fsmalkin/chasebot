@@ -12,6 +12,8 @@ import math
 import time
 from typing import Any
 
+from gather_mission_helpers import PlaceControlCommand
+from gather_mission_helpers import clamp
 from gather_mission_helpers import normalize_angle
 from gather_mission_helpers import world_pose_xyyaw
 
@@ -37,6 +39,11 @@ AI_PUSH_READINESS_MAX_STANDOFF_M = 0.80
 AI_PUSH_READINESS_MAX_LATERAL_ERROR_M = 0.12
 AI_PUSH_READINESS_MAX_YAW_ERROR_DEG = 20.0
 AI_PUSH_READINESS_DELIVERY_MARGIN_M = 0.02
+AI_PUSH_READINESS_SETUP_TARGET_STANDOFF_M = 0.24
+AI_PUSH_READINESS_SETUP_MAX_LINEAR_X_MPS = 0.08
+AI_PUSH_READINESS_SETUP_MAX_ANGULAR_Z_RPS = 0.45
+AI_PUSH_READINESS_SETUP_YAW_ONLY_DEG = 25.0
+AI_PUSH_READINESS_SETUP_MIN_CORRECTION_MPS = 0.012
 AI_PUSH_COAST_FLAG_STAGE_LABELS = {
     "pre_contact_lateral_error": "setup",
     "pre_contact_yaw_error": "setup",
@@ -181,6 +188,97 @@ def evaluate_fetch_push_readiness(
         "relative_errors": errors,
         "thresholds": thresholds,
     }
+
+
+def compute_fetch_push_readiness_setup_command(
+    *,
+    robot_pose: dict[str, Any] | None,
+    ball_pose: dict[str, Any] | None,
+    fetch_pose_world: dict[str, Any] | None,
+    delivery_radius_m: float,
+    target_standoff_m: float = AI_PUSH_READINESS_SETUP_TARGET_STANDOFF_M,
+    max_linear_x_mps: float = AI_PUSH_READINESS_SETUP_MAX_LINEAR_X_MPS,
+    max_angular_z_rps: float = AI_PUSH_READINESS_SETUP_MAX_ANGULAR_Z_RPS,
+) -> PlaceControlCommand | None:
+    gate = evaluate_fetch_push_readiness(
+        robot_pose=robot_pose,
+        ball_pose=ball_pose,
+        fetch_pose_world=fetch_pose_world,
+        delivery_radius_m=delivery_radius_m,
+    )
+    errors = gate.get("relative_errors", {}) if isinstance(gate.get("relative_errors"), dict) else {}
+    thresholds = gate.get("thresholds", {}) if isinstance(gate.get("thresholds"), dict) else {}
+    if not errors:
+        return None
+    if "ball_already_at_delivery_margin" in gate.get("flags", []):
+        return None
+
+    standoff_m = _finite_float(errors.get("robot_standoff_m"))
+    lateral_signed_m = _finite_float(errors.get("robot_lateral_signed_m"))
+    yaw_error_deg = _finite_float(errors.get("robot_yaw_error_deg"))
+    if standoff_m is None or lateral_signed_m is None or yaw_error_deg is None:
+        return None
+
+    min_standoff_m = float(thresholds.get("min_standoff_m", AI_PUSH_READINESS_MIN_STANDOFF_M) or 0.0)
+    max_standoff_m = float(thresholds.get("max_standoff_m", AI_PUSH_READINESS_MAX_STANDOFF_M) or 0.0)
+    target_standoff = clamp(
+        float(target_standoff_m),
+        max(min_standoff_m + 0.04, min_standoff_m),
+        max(max_standoff_m - 0.04, min_standoff_m + 0.04),
+    )
+    yaw_error_rad = math.radians(float(yaw_error_deg))
+    lateral_signed = float(lateral_signed_m)
+    angular = clamp(
+        (-0.85 * yaw_error_rad) - (1.35 * lateral_signed),
+        -float(max_angular_z_rps),
+        float(max_angular_z_rps),
+    )
+    if abs(float(yaw_error_deg)) > 6.0 and abs(angular) < 0.14:
+        angular = 0.14 if angular >= 0.0 else -0.14
+
+    standoff_error_m = float(standoff_m) - float(target_standoff)
+    yaw_only = abs(float(yaw_error_deg)) > AI_PUSH_READINESS_SETUP_YAW_ONLY_DEG
+    if yaw_only:
+        linear = 0.0
+        mode = "push_readiness_yaw_align"
+    else:
+        linear = clamp(
+            standoff_error_m * 0.45,
+            -float(max_linear_x_mps),
+            float(max_linear_x_mps),
+        )
+        if abs(linear) < AI_PUSH_READINESS_SETUP_MIN_CORRECTION_MPS and abs(standoff_error_m) > 0.025:
+            linear = (
+                AI_PUSH_READINESS_SETUP_MIN_CORRECTION_MPS
+                if standoff_error_m > 0.0
+                else -AI_PUSH_READINESS_SETUP_MIN_CORRECTION_MPS
+            )
+        if abs(standoff_error_m) <= 0.025 and abs(lateral_signed) > 0.04:
+            linear = 0.0
+        if float(standoff_m) < min_standoff_m:
+            mode = "push_readiness_backoff"
+        elif float(standoff_m) > max_standoff_m:
+            mode = "push_readiness_advance"
+        elif abs(lateral_signed) > AI_PUSH_READINESS_MAX_LATERAL_ERROR_M:
+            mode = "push_readiness_lateral_align"
+        else:
+            mode = "push_readiness_setup"
+
+    if abs(linear) <= 1.0e-6 and abs(angular) <= 1.0e-6:
+        return PlaceControlCommand(
+            mode="push_readiness_setup_hold",
+            linear_x=0.0,
+            angular_z=0.0,
+            target_speed_scale=0.0,
+            rationale="Push-readiness setup command has no safe correction to apply.",
+        )
+    return PlaceControlCommand(
+        mode=mode,
+        linear_x=round(float(linear), 6),
+        angular_z=round(float(angular), 6),
+        target_speed_scale=0.0 if abs(linear) <= 1.0e-6 else 0.35,
+        rationale="Correct measured standoff, lateral error, and yaw before Nav2 corridor push dispatch.",
+    )
 
 
 def _nav2_status(nav2_corridor_push: dict[str, Any] | None) -> dict[str, Any]:

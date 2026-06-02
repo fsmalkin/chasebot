@@ -233,6 +233,7 @@ from gather_ai_push_coast_helpers import AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING
 from gather_ai_push_coast_helpers import AI_PUSH_COAST_CAPTURE_YAW_WATCH_DEG
 from gather_ai_push_coast_helpers import AI_PUSH_COAST_SERVO_CONTROL_FAMILY
 from gather_ai_push_coast_helpers import ALLOWED_AI_PUSH_COAST_MODES
+from gather_ai_push_coast_helpers import compute_fetch_push_readiness_setup_command
 from gather_ai_push_coast_helpers import decide_ai_push_coast_handoff
 from gather_ai_push_coast_helpers import evaluate_fetch_push_readiness
 from gather_nav2_follow_path_reacquire_helpers import DEFAULT_NAV2_FOLLOW_PATH_BALL_MOTION_TOLERANCE_M
@@ -330,6 +331,7 @@ DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_ROBOT_BALL_M = 0.20
 DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_LATERAL_ERROR_M = 0.06
 DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_PATH_DISTANCE_M = 0.40
 DEFAULT_AI_PUSH_COAST_CONTACT_BUFFER_MAX_TERMINAL_YAW_ERROR_DEG = 20.0
+DEFAULT_FETCH_PUSH_READINESS_SETUP_WINDOW_S = 4.0
 DEFAULT_POST_VISIT_REVISIT_ESCAPE_TIMEOUT_S = 1.25
 DEFAULT_STATIONARY_RECAPTURE_NUDGE_DELAY_S = 1.0
 DEFAULT_SETTLE_NO_CHASE_ENTRY_DWELL_S = 0.25
@@ -9296,6 +9298,9 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
         latest_ai_push_coast: dict[str, Any] = {}
         nav2_corridor_push_attempted = False
         nav2_corridor_push_diagnostics: dict[str, Any] = {}
+        push_readiness_setup_attempted = False
+        push_readiness_setup_active_until: float | None = None
+        push_readiness_setup_diagnostics: dict[str, Any] = {}
         ai_first_contact_confirmation_attempted = False
         ai_first_contact_confirmation_confirmed = False
         ai_first_contact_confirmation_diagnostics: dict[str, Any] = {}
@@ -9718,6 +9723,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
                         "capture_geometry_gate": capture_geometry_gate,
                         "push_readiness_gate": push_readiness_gate,
+                        "push_readiness_setup": push_readiness_setup_diagnostics,
                         "ai_push_coast_mode": self.ai_push_coast_mode,
                         **latest_ai_push_coast,
                         "settle_exit_reason": "trajectory_intersects_delivery_radius",
@@ -9876,6 +9882,66 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     **nav2_corridor_push_diagnostics,
                     "push_readiness_gate": push_readiness_gate,
                 }
+                push_readiness_setup_command: PlaceControlCommand | None = None
+                push_readiness_setup_active = bool(
+                    push_readiness_setup_active_until is not None
+                    and now_monotonic < float(push_readiness_setup_active_until)
+                )
+                push_readiness_setup_started_now = False
+                if not bool(push_readiness_gate.get("pass", False)):
+                    failure_reason = "push_readiness_gate_failed"
+                    push_readiness_setup_command = compute_fetch_push_readiness_setup_command(
+                        robot_pose=robot_pose,
+                        ball_pose=ball_pose,
+                        fetch_pose_world=fetch_pose_world,
+                        delivery_radius_m=float(self.fetch_delivery_radius_m),
+                    )
+                    if (
+                        push_readiness_setup_command is not None
+                        and not push_readiness_setup_active
+                        and not push_readiness_setup_attempted
+                        and now_monotonic < deadline
+                    ):
+                        push_readiness_setup_attempted = True
+                        push_readiness_setup_started_now = True
+                        push_readiness_setup_active_until = min(
+                            deadline,
+                            now_monotonic + DEFAULT_FETCH_PUSH_READINESS_SETUP_WINDOW_S,
+                        )
+                        push_readiness_setup_active = True
+                    remaining_setup_s = (
+                        max(0.0, float(push_readiness_setup_active_until) - now_monotonic)
+                        if push_readiness_setup_active_until is not None
+                        else 0.0
+                    )
+                    push_readiness_setup_diagnostics = {
+                        "attempted": bool(push_readiness_setup_attempted),
+                        "active": bool(push_readiness_setup_active),
+                        "started_now": bool(push_readiness_setup_started_now),
+                        "window_s": round(float(DEFAULT_FETCH_PUSH_READINESS_SETUP_WINDOW_S), 6),
+                        "remaining_s": round(float(remaining_setup_s), 6),
+                        "command": (
+                            push_readiness_setup_command.to_dict()
+                            if push_readiness_setup_command is not None
+                            else {}
+                        ),
+                    }
+                    nav2_corridor_push_diagnostics = {
+                        **nav2_corridor_push_diagnostics,
+                        "push_readiness_setup": push_readiness_setup_diagnostics,
+                    }
+                elif push_readiness_setup_attempted:
+                    push_readiness_setup_diagnostics = {
+                        **push_readiness_setup_diagnostics,
+                        "attempted": True,
+                        "active": False,
+                        "result": "passed_after_setup",
+                        "final_gate": push_readiness_gate,
+                    }
+                    nav2_corridor_push_diagnostics = {
+                        **nav2_corridor_push_diagnostics,
+                        "push_readiness_setup": push_readiness_setup_diagnostics,
+                    }
                 append_jsonl(
                     state_history_path,
                     {
@@ -9890,6 +9956,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                         "fetch_pose_world": fetch_pose_world,
                         "capture_geometry_gate": capture_geometry_gate,
                         "push_readiness_gate": push_readiness_gate,
+                        "push_readiness_setup": push_readiness_setup_diagnostics,
                         "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
                         "ai_push_coast_mode": self.ai_push_coast_mode,
                         **latest_ai_push_coast,
@@ -9901,7 +9968,47 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
                     },
                 )
                 if not bool(push_readiness_gate.get("pass", False)):
-                    failure_reason = "push_readiness_gate_failed"
+                    if (
+                        push_readiness_setup_command is not None
+                        and push_readiness_setup_active
+                        and now_monotonic < deadline
+                    ):
+                        if push_readiness_setup_started_now:
+                            append_jsonl(
+                                state_history_path,
+                                {
+                                    "generated_utc": utc_now(),
+                                    "event_type": "fetch_to_pose_push_readiness_setup_start",
+                                    "phase": "fetch_to_pose",
+                                    "attempt": int(attempt_index),
+                                    "attempt_kind": str(attempt_kind),
+                                    "target_id": target.id,
+                                    "robot_pose": robot_pose,
+                                    "ball_pose": ball_pose,
+                                    "fetch_pose_world": fetch_pose_world,
+                                    "push_readiness_gate": push_readiness_gate,
+                                    "push_readiness_setup": push_readiness_setup_diagnostics,
+                                    "controller_family": self.gather_control_family,
+                                    "control": self._control_debug_fields(
+                                        strategy_name=NAV2_FOLLOW_PATH_CORRIDOR_PUSH_OBJECTIVE,
+                                        objective_name="push_readiness_setup",
+                                    ),
+                                },
+                            )
+                        self._set_manual_drive(
+                            True,
+                            linear_x=push_readiness_setup_command.linear_x,
+                            angular_z=push_readiness_setup_command.angular_z,
+                            mode=push_readiness_setup_command.mode,
+                            rationale=push_readiness_setup_command.rationale,
+                        )
+                        self._update_gather_runtime_state(
+                            latest_control_command=push_readiness_setup_command.to_dict(),
+                            latest_feedback=f"Re-aligning {target.label} to a measured push-ready pose.",
+                        )
+                        previous_ball_pose = dict(ball_pose or {}) if ball_pose else previous_ball_pose
+                        time.sleep(self.args.poll_s)
+                        continue
                     self._set_manual_drive(
                         False,
                         mode=failure_reason,
@@ -10742,6 +10849,7 @@ pkill -f "gather_motion_bridge.py" 2>/dev/null || true
             "nav2_follow_path_corridor_push": nav2_corridor_push_diagnostics,
             "capture_geometry_gate": capture_geometry_gate,
             "push_readiness_gate": push_readiness_gate,
+            "push_readiness_setup": push_readiness_setup_diagnostics,
             "ai_push_coast_mode": self.ai_push_coast_mode,
             **latest_ai_push_coast,
             "settle_exit_reason": failure_reason,

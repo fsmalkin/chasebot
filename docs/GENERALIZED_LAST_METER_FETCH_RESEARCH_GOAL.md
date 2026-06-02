@@ -364,6 +364,16 @@ that intentionally reaches a clean push-ready pose before dispatch. Threshold
 tuning is allowed only after video and telemetry show the gate contract itself
 matches the desired physical setup.
 
+Implementation update: the runner now includes one bounded push-readiness setup
+window before Nav2 corridor-push dispatch. The setup command uses the same
+ball-target-line geometry as the gate, corrects toward a conservative
+`0.24m` standoff, and caps local correction at `0.08m/s` linear and
+`0.45rad/s` angular. A no-retry mission still gets only one setup window; if
+the gate remains red, the run fails as setup/contact evidence. The next live
+gate is the same saved-anchor one-run matrix, scored on whether `zero`,
+`left05`, and `right05` reach push-readiness before Nav2 owns the corridor
+push.
+
 ## May 28, 2026 Direction
 
 The research pass selected a no-shoot runtime direction. After the May 31

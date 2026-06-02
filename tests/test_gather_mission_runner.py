@@ -9121,11 +9121,13 @@ def test_nav2_corridor_push_blocks_dispatch_when_push_readiness_fails(tmp_path, 
     runner = _make_runner(tmp_path, monkeypatch)
     runner.gather_control_family = gather_runner.NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
     runner.fetch_delivery_radius_m = 0.25
+    runner.args.poll_s = 0.01
     target = runner.targets_by_id["ball_1"]
     robot_pose = {"x": 0.45, "y": 0.25, "yaw": 0.55}
     ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
     dispatch_calls: list[dict[str, object]] = []
     command_log: list[dict[str, object]] = []
+    monkeypatch.setattr(gather_runner, "DEFAULT_FETCH_PUSH_READINESS_SETUP_WINDOW_S", 0.02)
 
     monkeypatch.setattr(
         runner,
@@ -9167,9 +9169,88 @@ def test_nav2_corridor_push_blocks_dispatch_when_push_readiness_fails(tmp_path, 
     assert payload["push_readiness_gate"]["pass"] is False
     assert "robot_lateral_error_out_of_bounds" in payload["push_readiness_gate"]["flags"]
     assert "robot_yaw_error_out_of_bounds" in payload["push_readiness_gate"]["flags"]
+    assert payload["push_readiness_setup"]["attempted"] is True
     assert payload["nav2_follow_path_corridor_push"]["push_readiness_gate"]["pass"] is False
     assert gate_event["push_readiness_gate"]["reason"] == "push_readiness_gate_failed"
+    assert gate_event["push_readiness_setup"]["attempted"] is True
+    assert any(str(item["mode"]).startswith("push_readiness_") for item in command_log)
     assert any(item["mode"] == "push_readiness_gate_failed" for item in command_log)
+
+
+def test_nav2_corridor_push_dispatches_after_push_readiness_setup(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.25
+    runner.args.poll_s = 0.01
+    target = runner.targets_by_id["ball_1"]
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+    state_samples = [
+        ({"x": 0.89, "y": 0.0, "yaw": 0.0}, ball_pose),
+        ({"x": 0.76, "y": 0.0, "yaw": 0.0}, ball_pose),
+        ({"x": 0.76, "y": 0.0, "yaw": 0.0}, {"x": float(runner.zone.world_x), "y": float(runner.zone.world_y), "z": 0.05}),
+    ]
+    dispatch_calls: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+
+    def fake_control_loop_state(session_id, target):
+        robot, ball = state_samples.pop(0) if len(state_samples) > 1 else state_samples[0]
+        return {"compose_project": "chasecar_dashboard_push_ready_after_setup"}, robot, ball
+
+    class FakePlan:
+        def to_dict(self):
+            return {
+                "active": True,
+                "reason": "follow_path_corridor_push",
+                "controller_id": "FollowPath",
+                "goal_checker_id": "general_goal_checker",
+                "path_poses": [
+                    {"kind": "start", "frame_id": "odom", "x": 0.76, "y": 0.0, "yaw": 0.0},
+                    {"kind": "corridor_push_through", "frame_id": "odom", "x": 1.25, "y": 0.0, "yaw": 0.0},
+                ],
+            }
+
+    monkeypatch.setattr(runner, "_control_loop_state", fake_control_loop_state)
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {"enabled": enabled, "mode": mode, "linear_x": linear_x, "angular_z": angular_z}
+        ),
+    )
+    monkeypatch.setattr(gather_runner, "build_nav2_follow_path_corridor_push_plan", lambda *args, **kwargs: FakePlan())
+    monkeypatch.setattr(
+        runner,
+        "_dispatch_nav2_follow_path_reacquire",
+        lambda **kwargs: dispatch_calls.append(kwargs)
+        or {
+            "dispatch_status": "monitor_success",
+            "accepted": True,
+            "success": True,
+            "timed_out": False,
+            "cancel_requested": True,
+            "monitor_cancel_reason": "success",
+            "monitor_sample": {"delivery_distance_m": 0.0},
+        },
+    )
+
+    state_history_path = tmp_path / "state_history.jsonl"
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-nav2-push-readiness-setup",
+        target=target,
+        state_history_path=state_history_path,
+    )
+
+    history = [json.loads(line) for line in state_history_path.read_text(encoding="utf-8").splitlines()]
+    assert passed is True
+    assert payload["failure_reason"] == ""
+    assert payload["push_readiness_setup"]["result"] == "passed_after_setup"
+    assert payload["nav2_follow_path_corridor_push"]["dispatch_status"] == "monitor_success"
+    assert len(dispatch_calls) == 1
+    assert any(item["mode"] == "push_readiness_backoff" for item in command_log)
+    assert any(item["event_type"] == "fetch_to_pose_push_readiness_setup_start" for item in history)
 
 
 def test_ai_push_coast_corridor_push_uses_bounded_push_through(tmp_path, monkeypatch):

@@ -182,6 +182,20 @@ June 1, 2026 push-readiness gate requalification:
   Repair setup/reacquire until the robot intentionally reaches a clean
   push-ready pose, then rerun the saved-anchor one-run gate.
 
+Push-readiness setup implementation slice:
+
+- Behavior: a failed push-readiness gate triggers one bounded deterministic
+  setup window before Nav2 corridor-push dispatch.
+- Setup target: `0.24m` standoff behind the ball on the ball-target line.
+- Command caps: `0.08m/s` linear and `0.45rad/s` angular.
+- Evidence fields: `push_readiness_setup` appears in gate events, final
+  payloads, and `nav2_follow_path_corridor_push` diagnostics.
+- Gate rule: Nav2 dispatch still requires `push_readiness_gate.pass=true`.
+  Runs that remain red after the setup window classify as setup/contact
+  blockers.
+- Next command: rerun the saved-anchor one-run matrix on
+  `zero`/`left05`/`right05`, then build a visual UAT package.
+
 ## UAT Orchestrator Modes
 
 Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:
