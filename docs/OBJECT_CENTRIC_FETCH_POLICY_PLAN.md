@@ -464,6 +464,24 @@ Latest live requalification after the fetch-ready handoff repair:
 - Interpretation: the current saved-anchor blocker is cleared for one-run UAT.
   Advance to saved-layout `3/3` repeatability before seeded random evidence.
 
+Saved-layout repeatability result after the fetch-ready handoff repair:
+
+- Gate:
+  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Setup/contact audit:
+  `artifacts/session/audit_fetch_push_ready_handoff_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+- Frozen failure cases:
+  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/frozen_failure_cases/frozen_failure_cases_summary.json`.
+- Result: `zero` passed `3/3` with worst closest approach `0.208838m`.
+  `left05` passed `2/3`; the failed run had `misaligned_first_contact`, a
+  failed push-readiness gate, and closest approach `0.868724m`. `right05`
+  passed `2/3`; the failed run was `capture_entry_timeout` before corridor
+  push dispatch.
+- Interpretation: the next control work is setup/contact repeatability. Seeded
+  random promotion and guarded-live terminal correction resume after the
+  saved-anchor failures move downstream to terminal arrival or clear the
+  repeatability gate.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

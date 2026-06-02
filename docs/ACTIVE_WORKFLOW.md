@@ -225,9 +225,19 @@ Latest saved-anchor result after fetch-ready handoff repair:
 - Stage handoff: `left05` and `right05` reached `fetch_push_ready`, so the
   runner handed off directly from capture-entry to corridor push. The approach
   rollups are clean for all three layouts.
-- Next command: run saved-layout `3/3` repeatability for
-  `ai_push_coast_servo_v1` in shadow mode, then rerun seeded random evidence if
-  repeatability stays green.
+- Follow-on `3/3` gate:
+  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`
+- Setup/contact audit:
+  `artifacts/session/audit_fetch_push_ready_handoff_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`
+- Repeatability result: `zero` passed `3/3` with worst closest approach
+  `0.208838m`; `left05` passed `2/3` with one `misaligned_first_contact`
+  failure at `0.868724m`; `right05` passed `2/3` with one
+  `capture_entry_timeout` before corridor push dispatch.
+- Frozen failure package:
+  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/frozen_failure_cases/frozen_failure_cases_summary.json`
+- Next command: repair setup/contact repeatability using the frozen `left05`
+  and `right05` failures, then rerun saved-layout `3/3`. Seeded random evidence
+  resumes after this gate is green.
 
 ## UAT Orchestrator Modes
 

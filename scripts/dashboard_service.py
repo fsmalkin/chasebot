@@ -2064,6 +2064,34 @@ class DashboardController:
         )
         stage_quality_green = bool(stage_quality_payload.get("stage_quality_green", False)) and stage_quality_invalid_model_count == 0 if stage_quality_payload else False
         stage_quality_overall = str(stage_quality_payload.get("overall_interpretation", "") or "") if stage_quality_payload else ""
+        if stage_quality_payload and stage_quality_rows:
+            audit_saved_layouts: Dict[str, Dict[str, Any]] = {}
+            for row in stage_quality_rows:
+                if not isinstance(row, dict):
+                    continue
+                layout_id = str(row.get("layout", "") or "").strip()
+                if not layout_id or layout_id in audit_saved_layouts:
+                    continue
+                row_model_valid = bool(row.get("model_provenance_valid", stage_quality_invalid_model_count == 0))
+                audit_saved_layouts[layout_id] = {
+                    "layout_id": layout_id,
+                    "pass": bool(row.get("pass", False)) and row_model_valid,
+                    "raw_pass": bool(row.get("pass", False)),
+                    "closest_m": row.get("closest_approach_distance_m"),
+                    "summary_path": str(row.get("summary_path", "") or ""),
+                    "model_provenance_valid": row_model_valid,
+                    "model_provenance_reason": str(row.get("model_provenance_reason", "") or ""),
+                    "target_model_classification": str(row.get("target_model_classification", "") or ""),
+                    "quality_classification": str(row.get("quality_classification", "") or ""),
+                    "quality_flags": list(row.get("quality_flags", [])) if isinstance(row.get("quality_flags"), list) else [],
+                }
+            if audit_saved_layouts:
+                saved_context = {"campaign_id": str(stage_quality_payload.get("campaign_id", "") or "")}
+                saved_layouts = audit_saved_layouts
+                saved_total = len(saved_layouts)
+                saved_pass = sum(1 for row in saved_layouts.values() if row.get("pass"))
+                saved_invalid_model_count = sum(1 for row in saved_layouts.values() if not row.get("model_provenance_valid"))
+                saved_green = saved_total > 0 and saved_pass == saved_total
 
         seeded_pass_count = int(seeded_gate.get("pass_count", 0) or 0) if seeded_gate else 0
         seeded_fail_count = int(seeded_gate.get("fail_count", 0) or 0) if seeded_gate else 0
@@ -2086,6 +2114,12 @@ class DashboardController:
             and stage_quality_invalid_model_count == 0
         ) if evidence else False
         recommended_next_action = str(evidence.get("recommended_next_action", "") or "") if evidence else ""
+        if stage_quality_payload and stage_quality_blockers:
+            recommended_next_action = "repair_setup_contact_before_guarded_live"
+        elif stage_quality_payload and stage_quality_terminal_candidates:
+            recommended_next_action = "run_narrow_terminal_correction_probe"
+        elif stage_quality_payload and stage_quality_green:
+            recommended_next_action = "continue_saved_anchor_ladder"
         milestone_interpretation = str(evidence.get("milestone_interpretation", "") or "") if evidence else ""
 
         if stage_quality_payload and stage_quality_invalid_model_count:

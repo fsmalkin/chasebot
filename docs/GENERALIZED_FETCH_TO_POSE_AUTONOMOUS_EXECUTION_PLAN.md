@@ -166,19 +166,25 @@ Clip-review reframe, later June 1:
      fetch_push_ready`
    - preserve gate decisions in mission verdicts, saved-anchor summaries, and
      visual UAT packages
-9. Treat the June 2 saved-anchor one-run result as the current UAT baseline:
+9. Treat the June 2 saved-anchor one-run result as the current UAT screen:
    `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_one_run_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
    The matrix is `3/3` at one run each with a green mobile visual package:
    `artifacts/session/uat_fetch_push_ready_handoff_saved_anchor_one_run_20260602/fetch_visual_uat_package/scorecard.md`.
-10. Advance the same `zero`/`left05`/`right05` matrix to saved-layout `3/3`
-    repeatability before seeded random evidence.
-11. Resume terminal-arrival correction only for clean near-contract misses after
+10. Use the June 2 saved-layout repeatability result as the current blocker:
+    `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+    `zero` passed `3/3`; `left05` and `right05` each passed `2/3` with
+    setup/capture failures.
+11. Repair setup/contact repeatability using the frozen failure package:
+    `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/frozen_failure_cases/frozen_failure_cases_summary.json`.
+12. Rerun saved-layout `3/3` before seeded random evidence. Seeded random
+    resumes only after `zero`, `left05`, and `right05` are all green.
+13. Resume terminal-arrival correction only for clean near-contract misses after
     saved-layout repeatability identifies a reproducible terminal-arrival gap.
-12. Keep guarded-live AI/contact execution terminal-only until corrected
-   saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
-13. Build a mobile visual UAT package before asking for operator signoff:
+14. Keep guarded-live AI/contact execution terminal-only until corrected
+    saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
+15. Build a mobile visual UAT package before asking for operator signoff:
    `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
-14. Freeze reproduced seeded/random failures into named layouts before tuning.
+16. Freeze reproduced seeded/random failures into named layouts before tuning.
 
 ## Gates
 

@@ -420,10 +420,33 @@ Latest live evidence:
   supports one-run UAT screening; promotion still requires saved-layout `3/3`
   and seeded random evidence.
 
-Next sequence: run saved-layout `3/3` repeatability for
-`ai_push_coast_servo_v1` in shadow mode, then rerun the seeded random
-generalization gate. Guarded-live terminal correction remains paused until
-repeatability shows a reproducible near-contract terminal miss.
+June 2, 2026 repeatability update: the fetch-ready handoff cleared the one-run
+screen and failed the saved-layout `3/3` repeatability gate. The current blocker
+is setup/capture stability before reliable corridor push dispatch.
+
+Latest repeatability evidence:
+
+- Saved-layout `3/3` gate:
+  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+- Setup/contact audit:
+  `artifacts/session/audit_fetch_push_ready_handoff_saved_anchor_3x_20260602/fetch_saved_anchor_setup_contact_audit/scorecard.md`.
+- Frozen failure cases:
+  `artifacts/session/live_fetch_push_ready_handoff_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/frozen_failure_cases/frozen_failure_cases_summary.json`.
+- Result: `zero` passed promotion `3/3` with worst closest approach
+  `0.208838m`. `left05` passed `2/3`; run 2 failed at `0.868724m` after a
+  `soft_capture`, with `misaligned_first_contact` and a failed push-readiness
+  gate. `right05` passed `2/3`; run 3 failed with `capture_entry_timeout`
+  before a corridor push shot.
+- Interpretation: the failure mode is setup/capture repeatability upstream of
+  terminal Nav2 delivery. The audit classifies both failing layouts as
+  `setup_capture_blocker` and recommends
+  `repair_setup_contact_before_guarded_live`.
+
+Next sequence: repair setup/contact repeatability against the two frozen
+saved-anchor failures, rerun saved-layout `3/3`, then resume seeded random
+generalization only after the saved-anchor gate is green. Guarded-live terminal
+correction remains paused because the repeatability failures are upstream of
+terminal arrival.
 
 ## May 28, 2026 Direction
 

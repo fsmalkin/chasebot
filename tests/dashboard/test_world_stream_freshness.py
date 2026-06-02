@@ -1604,8 +1604,8 @@ def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path,
     progress = state["fetch_progress"]
     assert progress["milestone"] == dashboard_service.FETCH_PROGRESS_MILESTONE
     assert progress["status"] == "bad"
-    assert progress["saved_anchor"]["green"] is True
-    assert progress["saved_anchor"]["pass_count"] == 3
+    assert progress["saved_anchor"]["green"] is False
+    assert progress["saved_anchor"]["pass_count"] == 2
     assert progress["seeded_shadow_gate"]["pass_count"] == 5
     assert progress["seeded_shadow_gate"]["non_repro_failure_count"] == 1
     assert progress["planner_handoff_gate"]["pass"] is True
@@ -1618,7 +1618,7 @@ def test_dashboard_state_includes_latest_fetch_progress_from_artifacts(tmp_path,
     assert progress["stage_quality_audit"]["watch_count"] == 2
     assert progress["latest_guarded_live_probe"]["pass"] is True
     assert progress["latest_guarded_live_probe"]["model_provenance_valid"] is True
-    assert progress["recommended_next_action"] == "rerun_watchlist_before_guarded_live"
+    assert progress["recommended_next_action"] == "repair_setup_contact_before_guarded_live"
 
 
 def test_dashboard_fetch_progress_blocks_stale_model_provenance(tmp_path, monkeypatch):
