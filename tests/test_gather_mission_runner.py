@@ -9117,6 +9117,61 @@ def test_nav2_corridor_push_monitor_success_observes_delivery_pass(tmp_path, mon
     assert payload["nav2_follow_path_corridor_push"]["monitor_cancel_reason"] == "success"
 
 
+def test_nav2_corridor_push_blocks_dispatch_when_push_readiness_fails(tmp_path, monkeypatch):
+    runner = _make_runner(tmp_path, monkeypatch)
+    runner.gather_control_family = gather_runner.NAV2_FOLLOW_PATH_CORRIDOR_PUSH_CONTROL_FAMILY
+    runner.fetch_delivery_radius_m = 0.25
+    target = runner.targets_by_id["ball_1"]
+    robot_pose = {"x": 0.45, "y": 0.25, "yaw": 0.55}
+    ball_pose = {"x": 1.0, "y": 0.0, "z": 0.05}
+    dispatch_calls: list[dict[str, object]] = []
+    command_log: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        runner,
+        "_control_loop_state",
+        lambda session_id, target: (
+            {"compose_project": "chasecar_dashboard_not_push_ready"},
+            robot_pose,
+            ball_pose,
+        ),
+    )
+    monkeypatch.setattr(runner, "_update_prior_from_ball_pose", lambda target_id, ball_pose: None)
+    monkeypatch.setattr(runner, "_update_gather_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(runner, "_update_visit_runtime_state", lambda **updates: None)
+    monkeypatch.setattr(
+        runner,
+        "_set_manual_drive",
+        lambda enabled, linear_x=0.0, angular_z=0.0, mode="idle", rationale="": command_log.append(
+            {"enabled": enabled, "mode": mode, "rationale": rationale}
+        ),
+    )
+    monkeypatch.setattr(
+        runner,
+        "_dispatch_nav2_follow_path_reacquire",
+        lambda **kwargs: dispatch_calls.append(kwargs) or {"success": True},
+    )
+
+    state_history_path = tmp_path / "state_history.jsonl"
+    passed, payload = runner._fetch_to_pose_target(
+        session_id="session-nav2-push-readiness-fail",
+        target=target,
+        state_history_path=state_history_path,
+    )
+
+    history = [json.loads(line) for line in state_history_path.read_text(encoding="utf-8").splitlines()]
+    gate_event = next(item for item in history if item["event_type"] == "fetch_to_pose_push_readiness_gate")
+    assert passed is False
+    assert dispatch_calls == []
+    assert payload["failure_reason"] == "push_readiness_gate_failed"
+    assert payload["push_readiness_gate"]["pass"] is False
+    assert "robot_lateral_error_out_of_bounds" in payload["push_readiness_gate"]["flags"]
+    assert "robot_yaw_error_out_of_bounds" in payload["push_readiness_gate"]["flags"]
+    assert payload["nav2_follow_path_corridor_push"]["push_readiness_gate"]["pass"] is False
+    assert gate_event["push_readiness_gate"]["reason"] == "push_readiness_gate_failed"
+    assert any(item["mode"] == "push_readiness_gate_failed" for item in command_log)
+
+
 def test_ai_push_coast_corridor_push_uses_bounded_push_through(tmp_path, monkeypatch):
     runner = _make_runner(tmp_path, monkeypatch)
     runner.gather_control_family = gather_runner.AI_PUSH_COAST_SERVO_CONTROL_FAMILY

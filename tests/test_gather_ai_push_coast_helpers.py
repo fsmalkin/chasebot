@@ -9,6 +9,48 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from gather_ai_push_coast_helpers import decide_ai_push_coast_handoff  # noqa: E402
+from gather_ai_push_coast_helpers import evaluate_fetch_push_readiness  # noqa: E402
+
+
+def test_push_readiness_accepts_centered_behind_ball_setup():
+    gate = evaluate_fetch_push_readiness(
+        robot_pose={"x": 0.65, "y": 0.0, "yaw": 0.0},
+        ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.6, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+    )
+
+    assert gate["pass"] is True
+    assert gate["reason"] == "push_ready"
+    assert gate["flags"] == []
+    assert gate["relative_errors"]["robot_standoff_m"] == 0.35
+
+
+def test_push_readiness_rejects_lateral_and_yaw_setup_error():
+    gate = evaluate_fetch_push_readiness(
+        robot_pose={"x": 0.65, "y": 0.22, "yaw": 0.5},
+        ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.6, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+    )
+
+    assert gate["pass"] is False
+    assert gate["reason"] == "push_readiness_gate_failed"
+    assert "robot_lateral_error_out_of_bounds" in gate["flags"]
+    assert "robot_yaw_error_out_of_bounds" in gate["flags"]
+    assert gate["stage_label"] == "setup"
+
+
+def test_push_readiness_rejects_robot_ahead_of_ball():
+    gate = evaluate_fetch_push_readiness(
+        robot_pose={"x": 1.08, "y": 0.0, "yaw": 0.0},
+        ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.6, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+    )
+
+    assert gate["pass"] is False
+    assert "robot_not_behind_ball" in gate["flags"]
 
 
 def test_shadow_decision_stays_with_nav2_before_corridor_attempt():

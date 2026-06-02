@@ -32,6 +32,11 @@ AI_PUSH_COAST_PREDICTED_TERMINAL_TOLERANCE_M = 0.015
 AI_PUSH_COAST_CAPTURE_YAW_WATCH_DEG = 60.0
 AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_WATCH_COUNT = 2
 AI_PUSH_COAST_CAPTURE_YAW_SIGN_CROSSING_DEADBAND_DEG = 5.0
+AI_PUSH_READINESS_MIN_STANDOFF_M = 0.12
+AI_PUSH_READINESS_MAX_STANDOFF_M = 0.80
+AI_PUSH_READINESS_MAX_LATERAL_ERROR_M = 0.12
+AI_PUSH_READINESS_MAX_YAW_ERROR_DEG = 20.0
+AI_PUSH_READINESS_DELIVERY_MARGIN_M = 0.02
 AI_PUSH_COAST_FLAG_STAGE_LABELS = {
     "pre_contact_lateral_error": "setup",
     "pre_contact_yaw_error": "setup",
@@ -93,11 +98,88 @@ def _relative_errors(
     yaw_error = normalize_angle(float(robot_yaw) - float(push_yaw))
     return {
         "robot_longitudinal_projection_m": round(float(longitudinal), 6),
+        "robot_standoff_m": round(float(-longitudinal), 6),
         "robot_lateral_signed_m": round(float(lateral), 6),
         "robot_lateral_error_m": round(abs(float(lateral)), 6),
         "robot_yaw_error_deg": round(math.degrees(float(yaw_error)), 6),
         "push_yaw_deg": round(math.degrees(float(push_yaw)), 6),
         "ball_target_distance_m": round(float(ball_target_distance_m), 6),
+    }
+
+
+def evaluate_fetch_push_readiness(
+    *,
+    robot_pose: dict[str, Any] | None,
+    ball_pose: dict[str, Any] | None,
+    fetch_pose_world: dict[str, Any] | None,
+    delivery_radius_m: float,
+    min_standoff_m: float = AI_PUSH_READINESS_MIN_STANDOFF_M,
+    max_standoff_m: float = AI_PUSH_READINESS_MAX_STANDOFF_M,
+    max_lateral_error_m: float = AI_PUSH_READINESS_MAX_LATERAL_ERROR_M,
+    max_yaw_error_deg: float = AI_PUSH_READINESS_MAX_YAW_ERROR_DEG,
+    delivery_margin_m: float = AI_PUSH_READINESS_DELIVERY_MARGIN_M,
+) -> dict[str, Any]:
+    errors = _relative_errors(robot_pose, ball_pose, fetch_pose_world)
+    thresholds = {
+        "min_standoff_m": round(max(float(min_standoff_m), 0.0), 6),
+        "max_standoff_m": round(max(float(max_standoff_m), 0.0), 6),
+        "max_lateral_error_m": round(max(float(max_lateral_error_m), 0.0), 6),
+        "max_yaw_error_deg": round(max(float(max_yaw_error_deg), 0.0), 6),
+        "delivery_radius_m": round(max(float(delivery_radius_m), 0.0), 6),
+        "delivery_margin_m": round(max(float(delivery_margin_m), 0.0), 6),
+    }
+    flags: list[str] = []
+    if not errors:
+        flags.append("missing_push_readiness_geometry")
+        return {
+            "pass": False,
+            "reason": "missing_push_readiness_geometry",
+            "flags": flags,
+            "stage_label": "setup",
+            "relative_errors": {},
+            "thresholds": thresholds,
+        }
+
+    longitudinal_m = _finite_float(errors.get("robot_longitudinal_projection_m"))
+    standoff_m = _finite_float(errors.get("robot_standoff_m"))
+    lateral_error_m = _finite_float(errors.get("robot_lateral_error_m"))
+    yaw_error_deg = _finite_float(errors.get("robot_yaw_error_deg"))
+    ball_target_distance_m = _finite_float(errors.get("ball_target_distance_m"))
+    min_standoff = float(thresholds["min_standoff_m"])
+    max_standoff = float(thresholds["max_standoff_m"])
+    max_lateral = float(thresholds["max_lateral_error_m"])
+    max_yaw = float(thresholds["max_yaw_error_deg"])
+    delivery_floor = float(thresholds["delivery_radius_m"]) + float(thresholds["delivery_margin_m"])
+
+    if longitudinal_m is None or standoff_m is None:
+        flags.append("missing_robot_ball_projection")
+    elif longitudinal_m >= 0.0:
+        flags.append("robot_not_behind_ball")
+    elif standoff_m < min_standoff:
+        flags.append("robot_too_close_for_push")
+    elif standoff_m > max_standoff:
+        flags.append("robot_too_far_for_push")
+    if lateral_error_m is None:
+        flags.append("missing_robot_lateral_error")
+    elif lateral_error_m > max_lateral:
+        flags.append("robot_lateral_error_out_of_bounds")
+    if yaw_error_deg is None:
+        flags.append("missing_robot_yaw_error")
+    elif abs(float(yaw_error_deg)) > max_yaw:
+        flags.append("robot_yaw_error_out_of_bounds")
+    if ball_target_distance_m is None:
+        flags.append("missing_ball_target_distance")
+    elif ball_target_distance_m <= delivery_floor:
+        flags.append("ball_already_at_delivery_margin")
+
+    passed = not flags
+    return {
+        "pass": bool(passed),
+        "reason": "push_ready" if passed else "push_readiness_gate_failed",
+        "flags": flags,
+        "stage_label": "" if passed else "setup",
+        "relative_errors": errors,
+        "thresholds": thresholds,
     }
 
 
