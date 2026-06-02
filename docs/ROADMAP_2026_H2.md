@@ -645,18 +645,34 @@ case01 repeatability proof
 `artifacts/session/live_fetch_case01_near_margin_gate_v1_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`
 passed `3/3`.
 
-Next milestone slice for UAT is case04 reproducibility. The latest seeded gate
+The next milestone slice first checked case04 reproducibility. The latest seeded gate
 `artifacts/session/live_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`
 and analyzer
 `artifacts/session/evidence_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`
 report `5/6` initial pass, `1` non-repro failure, and `0` reproduced failures.
-Case04 missed once with `missed_delivery_radius_after_push_readiness_gate_failed`
-and `missing_first_contact_alignment`, then passed repro. The next sequence is
-targeted case04 repeatability, freeze only reproduced misses, repair
-deterministic terminal/second-push reliability if needed, then rerun seeded
-random `6 x 1`. This keeps the broader architecture simple: planner selects the
-route class, the setup/capture stage gets the robot onto the delivery line, Nav2
-owns the corridor push, and the monitor verifies object outcome.
+Case04 missed once, then passed repro. The targeted case04 repeatability probe
+`artifacts/session/live_fetch_case04_relaxed_standoff_v1_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`
+passed delivery `3/3`, with `missing_first_contact_alignment` in `2/3` as a
+contact-quality flag. The clean shadow seeded gate
+`artifacts/session/live_fetch_near_margin_case04_repeat_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`
+then passed `6/6`.
+
+The guarded-live ladder is now contract-green. The saved-layout gate
+`artifacts/session/live_fetch_guarded_live_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`
+passed `zero`, `left05`, and `right05` promotion `3/3`; the guarded-live seeded
+gate
+`artifacts/session/live_fetch_guarded_live_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`
+passed `6/6`. The analyzer
+`artifacts/session/evidence_fetch_guarded_live_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`
+sets `promotion_evidence=True` and
+`milestone_interpretation=guarded_live_seeded_gate_promotion_ready`. The
+browser-watchable UAT package
+`artifacts/session/uat_fetch_guarded_live_seeded_case04_20260602/fetch_visual_uat_package/scorecard.md`
+passes with mobile-watchable onboard, topdown, debug, and world-stream video.
+The next roadmap step is operator clip review. This keeps the broader
+architecture simple: planner selects the route class, the setup/capture stage
+gets the robot onto the delivery line, Nav2 owns the corridor push, and the
+monitor verifies object outcome.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`

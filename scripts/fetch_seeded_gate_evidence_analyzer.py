@@ -245,6 +245,7 @@ def _stage_labels(*, summary: dict[str, Any], ai_fields: dict[str, Any], passed:
 
 def _case_interpretation(
     *,
+    mode: str,
     model_provenance_valid: bool,
     passed: bool,
     reproduced_failure: bool,
@@ -256,7 +257,7 @@ def _case_interpretation(
     if not model_provenance_valid:
         return "rebuild_required_model_provenance"
     if passed:
-        return "shadow_pass"
+        return "guarded_live_pass" if mode == "guarded_live" else "shadow_pass"
     if reproduced_failure:
         return "promotion_blocker_reproduced_failure"
     if "setup" in stage_labels or any("capture_entry_timeout" in reason for reason in failure_reasons):
@@ -269,6 +270,7 @@ def _case_interpretation(
 
 def analyze_gate(gate_summary: dict[str, Any]) -> dict[str, Any]:
     delivery_radius_m = float(_finite_float(gate_summary.get("fetch_delivery_radius_m")) or 0.3)
+    mode = _clean_text(gate_summary.get("ai_push_coast_mode"))
     cases: list[dict[str, Any]] = []
     for result in _list(gate_summary.get("results")):
         if not isinstance(result, dict):
@@ -312,6 +314,7 @@ def analyze_gate(gate_summary: dict[str, Any]) -> dict[str, Any]:
                 "target_model_classification": _clean_text(model_provenance.get("target_model_classification")),
                 "zone_model_classification": _clean_text(model_provenance.get("zone_model_classification")),
                 "interpretation": _case_interpretation(
+                    mode=mode,
                     model_provenance_valid=model_valid,
                     passed=passed,
                     reproduced_failure=reproduced_failure,
@@ -347,11 +350,11 @@ def analyze_gate(gate_summary: dict[str, Any]) -> dict[str, Any]:
     elif guarded_candidate_count:
         interpretation = "guarded_live_terminal_probe_candidates_present"
     else:
-        interpretation = "shadow_gate_clean"
+        interpretation = "guarded_live_seeded_gate_clean" if mode == "guarded_live" else "shadow_gate_clean"
     return {
         "campaign_id": _clean_text(gate_summary.get("campaign_id")),
         "seed": gate_summary.get("seed"),
-        "mode": _clean_text(gate_summary.get("ai_push_coast_mode")),
+        "mode": mode,
         "pass": bool(gate_summary.get("pass", False)),
         "pass_count": int(gate_summary.get("pass_count", 0) or 0),
         "fail_count": int(gate_summary.get("fail_count", 0) or 0),
@@ -465,6 +468,33 @@ def _saved_anchor_summaries(paths: str | list[str]) -> dict[str, Any]:
     }
 
 
+def _saved_anchor_promotion_green(saved_anchor_context: dict[str, Any]) -> bool:
+    required_layouts = {"zero", "left05", "right05"}
+    promotion_rows = [
+        row
+        for row in _list(saved_anchor_context.get("candidate_rows"))
+        if isinstance(row, dict) and _clean_text(row.get("stage")) == "promotion"
+    ]
+    passing_layouts = {
+        _clean_text(row.get("layout_id"))
+        for row in promotion_rows
+        if bool(row.get("pass", False)) and bool(row.get("model_provenance_valid", False))
+    }
+    return required_layouts.issubset(passing_layouts)
+
+
+def _recommended_next_action(gate_analysis: dict[str, Any], saved_anchor_context: dict[str, Any]) -> str:
+    if gate_analysis["model_provenance_invalid_count"]:
+        return "rerun_seeded_gate_with_calibrated_model_provenance"
+    if gate_analysis["reproduced_failure_count"]:
+        return "freeze_reproduced_failures_before_tuning"
+    if gate_analysis["non_repro_failure_count"]:
+        return "rerun_watchlist_before_guarded_live"
+    if gate_analysis["interpretation"] == "guarded_live_seeded_gate_clean":
+        return "package_mobile_visual_uat" if _saved_anchor_promotion_green(saved_anchor_context) else "run_saved_layout_ai_push_coast_gate"
+    return "run_guarded_live_terminal_probe"
+
+
 def summarize_evidence(
     *,
     campaign_id: str,
@@ -477,6 +507,13 @@ def summarize_evidence(
     if not isinstance(gate_payload, dict):
         raise ValueError(f"gate summary is not a JSON object: {gate_summary_path}")
     gate_analysis = analyze_gate(gate_payload)
+    saved_anchor_context = _saved_anchor_summaries(saved_anchor_summary_path)
+    promotion_evidence = (
+        gate_analysis["interpretation"] == "guarded_live_seeded_gate_clean"
+        and bool(gate_analysis["pass"])
+        and bool(gate_analysis["model_provenance_valid"])
+        and _saved_anchor_promotion_green(saved_anchor_context)
+    )
     summary = {
         "generated_utc": utc_now(),
         "type": ANALYZER_KIND,
@@ -484,18 +521,12 @@ def summarize_evidence(
         "gate_summary_path": str(_resolve_path(gate_summary_path)),
         "seeded_gate": gate_analysis,
         "local_visual_uat": _local_visual_summary(local_visual_summary_path),
-        "saved_anchor_context": _saved_anchor_summaries(saved_anchor_summary_path),
-        "milestone_interpretation": gate_analysis["interpretation"],
-        "promotion_evidence": False,
-        "recommended_next_action": (
-            "rerun_seeded_gate_with_calibrated_model_provenance"
-            if gate_analysis["model_provenance_invalid_count"]
-            else "freeze_reproduced_failures_before_tuning"
-            if gate_analysis["reproduced_failure_count"]
-            else "rerun_watchlist_before_guarded_live"
-            if gate_analysis["non_repro_failure_count"]
-            else "run_guarded_live_terminal_probe"
-        ),
+        "saved_anchor_context": saved_anchor_context,
+        "milestone_interpretation": "guarded_live_seeded_gate_promotion_ready"
+        if promotion_evidence
+        else gate_analysis["interpretation"],
+        "promotion_evidence": promotion_evidence,
+        "recommended_next_action": _recommended_next_action(gate_analysis, saved_anchor_context),
     }
     output_root = _output_root(clean_campaign_id)
     ensure_dir(output_root)

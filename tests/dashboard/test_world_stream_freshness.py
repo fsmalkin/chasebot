@@ -1797,6 +1797,66 @@ def test_dashboard_fetch_progress_prioritizes_fresh_seeded_reproduced_failures(t
     assert progress["seeded_shadow_gate"]["reproduced_failure_count"] == 2
 
 
+def test_dashboard_fetch_progress_promotion_evidence_overrides_stage_quality_watch(tmp_path, monkeypatch):
+    session_root = tmp_path / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    controller = _make_controller(tmp_path)
+    controller._fetch_progress_cache = {}
+    controller._fetch_progress_cache_at = 0.0
+
+    _write_json(
+        session_root / "stage_audit" / "fetch_saved_anchor_setup_contact_audit" / "audit_summary.json",
+        {
+            "type": "fetch_saved_anchor_setup_contact_audit",
+            "campaign_id": "stage_audit",
+            "overall_interpretation": "saved_anchor_repeatability_ready_with_contact_watch",
+            "stage_quality_green": True,
+            "saved_anchor_count": 3,
+            "stage_quality_pass_count": 3,
+            "setup_contact_blocker_count": 0,
+            "setup_capture_blocker_count": 0,
+            "first_contact_blocker_count": 0,
+            "push_coast_blocker_count": 0,
+            "invalid_geometry_count": 0,
+            "invalid_model_provenance_count": 0,
+            "saved_anchor_pass_with_contact_watch_count": 1,
+            "saved_anchors": [
+                {"layout": "zero", "pass": True, "delivery_pass": True, "model_provenance_valid": True, "quality_classification": "clean_pass"},
+                {"layout": "left05", "pass": True, "delivery_pass": True, "model_provenance_valid": True, "quality_classification": "pass_with_capture_quality_watch"},
+                {"layout": "right05", "pass": True, "delivery_pass": True, "model_provenance_valid": True, "quality_classification": "clean_pass"},
+            ],
+        },
+    )
+    _write_json(
+        session_root / "fetch_evidence" / "fetch_seeded_gate_evidence_analyzer" / "evidence_summary.json",
+        {
+            "type": "fetch_seeded_gate_evidence_analyzer",
+            "campaign_id": "guarded_live_evidence",
+            "recommended_next_action": "package_mobile_visual_uat",
+            "milestone_interpretation": "guarded_live_seeded_gate_promotion_ready",
+            "promotion_evidence": True,
+            "seeded_shadow_gate": {
+                "campaign_id": "guarded_seeded_gate",
+                "mode": "guarded_live",
+                "pass_count": 6,
+                "fail_count": 0,
+                "non_repro_failure_count": 0,
+                "reproduced_failure_count": 0,
+                "model_provenance_valid": True,
+                "model_provenance_invalid_count": 0,
+                "interpretation": "guarded_live_seeded_gate_clean",
+            },
+        },
+    )
+
+    progress = controller.get_state()["fetch_progress"]
+
+    assert progress["status"] == "ok"
+    assert progress["promotion_evidence"] is True
+    assert "promotion-grade" in progress["headline"]
+    assert progress["recommended_next_action"] == "package_mobile_visual_uat"
+
+
 def test_dashboard_fetch_progress_prefers_terminal_stage_audit_over_stale_seeded_context(tmp_path, monkeypatch):
     session_root = tmp_path / "session"
     monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)

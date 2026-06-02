@@ -216,14 +216,33 @@ Clip-review reframe, later June 1:
     reproduced failures. `case04` failed once with
     `missed_delivery_radius_after_push_readiness_gate_failed` and
     `missing_first_contact_alignment`, then passed repro.
-19. Run targeted case04 repeatability, freeze the exact layout only if the miss
-    reproduces, repair deterministic terminal/second-push reliability if needed,
-    then rerun seeded random `6 x 1`.
-20. Keep guarded-live AI/contact execution terminal-only until corrected
-    saved-anchor and seeded-random shadow scoring prove a reproducible benefit.
-21. Build a mobile visual UAT package before asking for operator signoff:
+19. Treat case04 targeted repeatability as delivery-green and contact-quality
+    flagged:
+    `artifacts/session/live_fetch_case04_relaxed_standoff_v1_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+    Delivery passed `3/3`; `missing_first_contact_alignment` appeared in `2/3`.
+20. Treat the clean shadow seeded gate as the handoff to guarded live:
+    `artifacts/session/live_fetch_near_margin_case04_repeat_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`
+    and
+    `artifacts/session/evidence_fetch_near_margin_case04_repeat_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+    The result is `6/6`, with `0` reproduced failures.
+21. Treat guarded-live saved-anchor repeatability as green:
+    `artifacts/session/live_fetch_guarded_live_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+    `zero`, `left05`, and `right05` passed promotion `3/3`.
+22. Treat guarded-live seeded random as promotion-ready contract evidence:
+    `artifacts/session/live_fetch_guarded_live_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`
+    and
+    `artifacts/session/evidence_fetch_guarded_live_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+    The result is `6/6`, `0` reproduced failures, and
+    `promotion_evidence=True`.
+23. Keep guarded-live AI/contact execution terminal-only until a later contact
+    quality slice proves broader deterministic routines are needed and useful.
+24. Build a mobile visual UAT package before asking for operator signoff:
     `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir <session>/visual`
-22. Freeze reproduced seeded/random failures into named layouts before tuning.
+    Current package:
+    `artifacts/session/uat_fetch_guarded_live_seeded_case04_20260602/fetch_visual_uat_package/scorecard.md`.
+    The package passes with browser-safe onboard, debug, topdown, and world
+    videos for guarded-live seeded case04.
+25. Freeze reproduced seeded/random failures into named layouts before tuning.
 
 ## Gates
 

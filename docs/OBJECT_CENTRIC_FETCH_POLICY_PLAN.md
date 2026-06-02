@@ -507,21 +507,41 @@ Seeded random evidence after the saved-anchor repair:
   `artifacts/session/live_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
 - Latest seeded analyzer:
   `artifacts/session/evidence_fetch_relaxed_standoff_v1_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
-  Result: `5/6` initial pass, `1` non-repro failure, and `0` reproduced
-  failures. `case04` failed once with
-  `missed_delivery_radius_after_push_readiness_gate_failed` and
-  `missing_first_contact_alignment`; its repro passed. The analyzer recommends
-  `rerun_watchlist_before_guarded_live`.
+  Earlier result: `5/6` initial pass, `1` non-repro failure, and `0`
+  reproduced failures. `case04` failed once, then passed repro.
+- Case04 targeted repeatability:
+  `artifacts/session/live_fetch_case04_relaxed_standoff_v1_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
+  Result: delivery passed `3/3`; approach-quality diagnostics reported
+  `missing_first_contact_alignment` in `2/3`.
+- Clean shadow seeded gate:
+  `artifacts/session/live_fetch_near_margin_case04_repeat_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
+- Clean shadow seeded analyzer:
+  `artifacts/session/evidence_fetch_near_margin_case04_repeat_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+  Result: `6/6`, `0` reproduced failures.
+- Guarded-live saved-layout `3/3` gate:
+  `artifacts/session/live_fetch_guarded_live_saved_anchor_3x_20260602/calibrated_fetch_architecture_revisit/scorecard.md`.
+  Result: `zero`, `left05`, and `right05` all passed promotion `3/3`.
+- Guarded-live seeded gate:
+  `artifacts/session/live_fetch_guarded_live_seeded_gate_20260602/fetch_generalization_gate/gate_summary.json`.
+- Guarded-live seeded analyzer:
+  `artifacts/session/evidence_fetch_guarded_live_seeded_gate_20260602/fetch_seeded_gate_evidence_analyzer/scorecard.md`.
+  Result: `6/6`, `0` reproduced failures,
+  `milestone_interpretation=guarded_live_seeded_gate_promotion_ready`, and
+  `promotion_evidence=True`.
+- Browser-watchable UAT package:
+  `artifacts/session/uat_fetch_guarded_live_seeded_case04_20260602/fetch_visual_uat_package/scorecard.md`.
+  Result: package pass `True`, mobile-watchable `True`, onboard-camera
+  watchable `True`, and same-session local fetch visual confirmation `True`.
 - Superseded case01 `3x` probe:
   `artifacts/session/live_fetch_case01_bounded_setup_v2_repeat_3x_20260602/gather_mission_repeatability/campaign_run_summary.json`.
   Earlier result: `2/3`; this drove the near-margin repair.
-- Interpretation: setup/capture and case01 near-margin behavior are no longer
-  the primary blockers. The active policy work is case04 repeatability:
-  short-forward, small-right-offset contact that can miss once and pass replay.
+- Interpretation: saved anchors and guarded-live seeded random are green at the
+  delivery-contract level. The active policy backlog is smoothness and contact
+  quality, especially first-contact alignment flags that can appear even when
+  delivery succeeds.
 
-Next sequence: run targeted case04 repeatability, freeze the exact layout only
-if the miss reproduces, repair deterministic terminal/second-push reliability if
-needed, then rerun seeded random `6 x 1`.
+Next sequence: review the browser-watchable UAT evidence, then choose between a
+contact-quality polish slice and broader planner-routed local-fetch coverage.
 
 Approach-quality evidence must record:
 

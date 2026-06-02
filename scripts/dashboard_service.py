@@ -2177,6 +2177,9 @@ class DashboardController:
         elif evidence and seeded_model_valid and seeded_fail_count > 0:
             status = "warn"
             headline = f"Seeded random gate passed {seeded_pass_count}/{seeded_total} with {seeded_fail_count} watchlist failure."
+        elif promotion_evidence:
+            status = "ok"
+            headline = f"Saved anchors green; seeded gate {seeded_pass_count}/{seeded_total} is promotion-grade."
         elif stage_quality_payload and stage_quality_green and stage_quality_watch:
             status = "warn"
             headline = (
@@ -2192,9 +2195,6 @@ class DashboardController:
         elif not evidence:
             status = "idle"
             headline = "No seeded fetch evidence package found yet."
-        elif promotion_evidence:
-            status = "ok"
-            headline = f"Saved anchors green; seeded gate {seeded_pass_count}/{seeded_total} is promotion-grade."
         elif saved_green and non_repro_count:
             status = "warn"
             headline = f"Saved anchors green; seeded shadow {seeded_pass_count}/{seeded_total} has {non_repro_count} non-repro watchlist case."

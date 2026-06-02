@@ -13,7 +13,13 @@ from llm_supervisor_core import read_json  # noqa: E402
 from llm_supervisor_core import write_json  # noqa: E402
 
 
-def _summary_with_ai(*, passed: bool, reason: str = "", stage_labels: list[str] | None = None) -> dict:
+def _summary_with_ai(
+    *,
+    passed: bool,
+    reason: str = "",
+    stage_labels: list[str] | None = None,
+    mode: str = "shadow",
+) -> dict:
     return {
         "promotion_gate_pass": passed,
         "model_provenance_valid": True,
@@ -29,7 +35,7 @@ def _summary_with_ai(*, passed: bool, reason: str = "", stage_labels: list[str] 
                     "reason": reason or "trajectory_intersects_delivery_radius",
                     "closest_approach_distance_m": 0.42 if reason else 0.12,
                     "distance_to_fetch_pose_m": 0.42 if reason else 0.12,
-                    "ai_push_coast_mode": "shadow",
+                    "ai_push_coast_mode": mode,
                     "ai_push_coast_shadow": {
                         "stage_classification": {
                             "primary_stage": (stage_labels or ["terminal_arrival"])[0],
@@ -238,3 +244,70 @@ def test_seeded_gate_analyzer_builds_milestone_context(tmp_path, monkeypatch):
     assert len(summary["saved_anchor_context"]["watchlist_rows"]) == 1
     assert len(summary["saved_anchor_context"]["stop_short_rows"]) == 1
     assert summary["recommended_next_action"] == "run_guarded_live_terminal_probe"
+
+
+def test_guarded_live_clean_gate_with_saved_anchor_promotion_is_milestone_evidence(tmp_path, monkeypatch):
+    monkeypatch.setattr(analyzer, "REPO_ROOT", tmp_path)
+    gate_path = tmp_path / "gate_summary.json"
+    saved_path = tmp_path / "saved.json"
+
+    write_json(
+        gate_path,
+        {
+            "campaign_id": "guarded_seeded_gate",
+            "seed": 20260529,
+            "ai_push_coast_mode": "guarded_live",
+            "fetch_delivery_radius_m": 0.3,
+            "pass": True,
+            "pass_count": 1,
+            "fail_count": 0,
+            "results": [
+                {
+                    "architecture": "ai_push_coast_servo_v1",
+                    "case_id": "case01",
+                    "layout_path": "layout01.json",
+                    "summary_path": "summary01.json",
+                    "pass": True,
+                    "return_code": 0,
+                    "summary": _summary_with_ai(passed=True, mode="guarded_live"),
+                }
+            ],
+        },
+    )
+    for layout in ("zero", "left05", "right05"):
+        write_json(tmp_path / f"{layout}_summary.json", _summary_with_ai(passed=True, mode="guarded_live"))
+    write_json(
+        saved_path,
+        {
+            "campaign_id": "saved_anchor_3x",
+            "baseline_by_layout": {"zero": {}, "left05": {}, "right05": {}},
+            "candidate_families": [
+                {
+                    "family": "ai_push_coast_servo_v1",
+                    "promotion_results": [
+                        {
+                            "family": "ai_push_coast_servo_v1",
+                            "layout_id": layout,
+                            "stage": "promotion",
+                            "pass": True,
+                            "summary_path": f"{layout}_summary.json",
+                            "metrics": {"worst_closest_approach_distance_m": 0.18},
+                        }
+                        for layout in ("zero", "left05", "right05")
+                    ],
+                }
+            ],
+        },
+    )
+
+    summary = analyzer.summarize_evidence(
+        campaign_id="milestone",
+        gate_summary_path=str(gate_path),
+        saved_anchor_summary_path=str(saved_path),
+    )
+
+    assert summary["seeded_gate"]["interpretation"] == "guarded_live_seeded_gate_clean"
+    assert summary["seeded_gate"]["cases"][0]["interpretation"] == "guarded_live_pass"
+    assert summary["milestone_interpretation"] == "guarded_live_seeded_gate_promotion_ready"
+    assert summary["promotion_evidence"] is True
+    assert summary["recommended_next_action"] == "package_mobile_visual_uat"
