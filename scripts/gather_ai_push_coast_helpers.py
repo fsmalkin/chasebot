@@ -237,7 +237,8 @@ def compute_fetch_push_readiness_setup_command(
         angular = 0.14 if angular >= 0.0 else -0.14
 
     standoff_error_m = float(standoff_m) - float(target_standoff)
-    yaw_only = abs(float(yaw_error_deg)) > AI_PUSH_READINESS_SETUP_YAW_ONLY_DEG
+    needs_backoff = float(standoff_m) < target_standoff - 0.025
+    yaw_only = abs(float(yaw_error_deg)) > AI_PUSH_READINESS_SETUP_YAW_ONLY_DEG and not needs_backoff
     if yaw_only:
         linear = 0.0
         mode = "push_readiness_yaw_align"
@@ -256,7 +257,11 @@ def compute_fetch_push_readiness_setup_command(
         if abs(standoff_error_m) <= 0.025 and abs(lateral_signed) > 0.04:
             linear = 0.0
         if float(standoff_m) < min_standoff_m:
-            mode = "push_readiness_backoff"
+            mode = (
+                "push_readiness_backoff_yaw_align"
+                if abs(float(yaw_error_deg)) > AI_PUSH_READINESS_SETUP_YAW_ONLY_DEG
+                else "push_readiness_backoff"
+            )
         elif float(standoff_m) > max_standoff_m:
             mode = "push_readiness_advance"
         elif abs(lateral_signed) > AI_PUSH_READINESS_MAX_LATERAL_ERROR_M:

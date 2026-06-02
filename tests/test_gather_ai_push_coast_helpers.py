@@ -82,6 +82,19 @@ def test_push_readiness_setup_command_yaw_aligns_before_push():
     assert command.angular_z < 0.0
 
 
+def test_push_readiness_setup_command_backs_off_while_yaw_aligning_when_too_close():
+    command = compute_fetch_push_readiness_setup_command(
+        robot_pose={"x": 0.865, "y": 0.223, "yaw": -0.57},
+        ball_pose={"x": 1.0, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.6, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+    )
+
+    assert command is not None
+    assert command.linear_x < 0.0
+    assert command.angular_z > 0.0
+
+
 def test_shadow_decision_stays_with_nav2_before_corridor_attempt():
     decision = decide_ai_push_coast_handoff(
         robot_pose={"x": 0.2, "y": 0.0, "yaw": 0.0},
