@@ -201,8 +201,11 @@ def line_servo_command(
     yaw_gain: float = 1.20,
     contact_standoff_m: float = 0.11,
     setup_standoff_m: float = 0.20,
+    recovery_setup_standoff_m: float = 0.34,
+    recovery_max_angular_z_rps: float = 0.45,
     contact_lateral_ready_m: float = 0.035,
     contact_yaw_ready_rad: float = 0.10,
+    route_label: str = "",
 ) -> dict[str, Any]:
     robot_x = float(robot_pose.get("x", 0.0) or 0.0)
     robot_y = float(robot_pose.get("y", 0.0) or 0.0)
@@ -210,19 +213,30 @@ def line_servo_command(
     ball_x = float(ball_pose.get("x", 0.0) or 0.0)
     ball_y = float(ball_pose.get("y", 0.0) or 0.0)
     line_yaw = math.atan2(float(target_y) - ball_y, float(target_x) - ball_x)
+    clean_route_label = str(route_label or "").strip()
+    effective_setup_standoff_m = max(float(setup_standoff_m), float(contact_standoff_m))
+    effective_max_angular_z_rps = float(max_angular_z_rps)
+    effective_contact_lateral_ready_m = float(contact_lateral_ready_m)
+    if clean_route_label == "recovery_or_reaim":
+        effective_setup_standoff_m = max(effective_setup_standoff_m, float(recovery_setup_standoff_m))
+        effective_max_angular_z_rps = max(effective_max_angular_z_rps, float(recovery_max_angular_z_rps))
+        effective_contact_lateral_ready_m = min(effective_contact_lateral_ready_m, 0.030)
     behind_x = ball_x - math.cos(line_yaw) * float(contact_standoff_m)
     behind_y = ball_y - math.sin(line_yaw) * float(contact_standoff_m)
-    setup_x = ball_x - math.cos(line_yaw) * max(float(setup_standoff_m), float(contact_standoff_m))
-    setup_y = ball_y - math.sin(line_yaw) * max(float(setup_standoff_m), float(contact_standoff_m))
+    setup_x = ball_x - math.cos(line_yaw) * effective_setup_standoff_m
+    setup_y = ball_y - math.sin(line_yaw) * effective_setup_standoff_m
     distance_to_contact = math.hypot(behind_x - robot_x, behind_y - robot_y)
     distance_to_setup = math.hypot(setup_x - robot_x, setup_y - robot_y)
     aim_yaw = math.atan2(behind_y - robot_y, behind_x - robot_x)
     setup_yaw = math.atan2(setup_y - robot_y, setup_x - robot_x)
     robot_lateral_error = signed_lateral_error_m(robot_x, robot_y, origin_x=ball_x, origin_y=ball_y, line_yaw_rad=line_yaw)
     line_yaw_error = normalize_angle_rad(line_yaw - robot_yaw)
-    lateral_reaim = clamp(float(robot_lateral_error) * 3.5, -0.45, 0.45)
+    yaw_priority_lateral_m = max(float(effective_contact_lateral_ready_m), 0.032)
+    lateral_reaim = 0.0
+    if abs(robot_lateral_error) > yaw_priority_lateral_m:
+        lateral_reaim = clamp(float(robot_lateral_error) * 3.5, -0.45, 0.45)
     lateral_corrected_yaw = normalize_angle_rad(line_yaw - lateral_reaim)
-    contact_ready = abs(robot_lateral_error) <= float(contact_lateral_ready_m) and abs(line_yaw_error) <= float(contact_yaw_ready_rad)
+    contact_ready = abs(robot_lateral_error) <= effective_contact_lateral_ready_m and abs(line_yaw_error) <= float(contact_yaw_ready_rad)
     ball_motion_m = 0.0
     if ball_start_pose is not None:
         ball_motion_m = math.hypot(
@@ -251,7 +265,7 @@ def line_servo_command(
         desired_yaw = line_yaw
         base_linear = min(float(max_linear_x_mps), max(float(push_linear_x_mps), 0.06))
     yaw_error = normalize_angle_rad(desired_yaw - robot_yaw)
-    angular_z = clamp(float(yaw_gain) * yaw_error, -float(max_angular_z_rps), float(max_angular_z_rps))
+    angular_z = clamp(float(yaw_gain) * yaw_error, -effective_max_angular_z_rps, effective_max_angular_z_rps)
     if abs(yaw_error) > 0.45:
         base_linear = min(base_linear, 0.035)
     elif abs(yaw_error) > 0.25:
@@ -268,14 +282,43 @@ def line_servo_command(
         "yaw_error_rad": round(float(yaw_error), 6),
         "line_yaw_error_rad": round(float(line_yaw_error), 6),
         "robot_lateral_error_m": round(float(robot_lateral_error), 6),
+        "contact_lateral_ready_m": round(float(effective_contact_lateral_ready_m), 6),
+        "yaw_priority_lateral_m": round(float(yaw_priority_lateral_m), 6),
         "contact_ready": contact_ready,
         "distance_to_contact_m": round(float(distance_to_contact), 6),
         "distance_to_setup_m": round(float(distance_to_setup), 6),
         "ball_motion_m": round(float(ball_motion_m), 6),
         "ball_moved": ball_moved,
         "contact_standoff_m": round(float(contact_standoff_m), 6),
-        "setup_standoff_m": round(float(max(float(setup_standoff_m), float(contact_standoff_m))), 6),
+        "setup_standoff_m": round(float(effective_setup_standoff_m), 6),
+        "max_angular_z_rps": round(float(effective_max_angular_z_rps), 6),
+        "route_label": clean_route_label,
     }
+
+
+def summarize_line_servo_effective_command(contact_samples: list[dict[str, Any]]) -> dict[str, Any]:
+    for sample in contact_samples:
+        command = sample.get("line_servo_command") if isinstance(sample, dict) else None
+        if not isinstance(command, dict):
+            continue
+        summary: dict[str, Any] = {}
+        numeric_fields = {
+            "setup_standoff_m": "line_servo_effective_setup_standoff_m",
+            "contact_standoff_m": "line_servo_effective_contact_standoff_m",
+            "contact_lateral_ready_m": "line_servo_effective_contact_lateral_ready_m",
+            "yaw_priority_lateral_m": "line_servo_effective_yaw_priority_lateral_m",
+            "max_angular_z_rps": "line_servo_effective_max_angular_z_rps",
+        }
+        for source_key, dest_key in numeric_fields.items():
+            if source_key not in command:
+                continue
+            try:
+                summary[dest_key] = round(float(command.get(source_key)), 6)
+            except (TypeError, ValueError):
+                pass
+        summary["line_servo_effective_route_label"] = str(command.get("route_label", "") or "")
+        return summary
+    return {}
 
 
 def collect_contact_samples(
@@ -443,6 +486,7 @@ def collect_line_servo_samples(
     push_linear_x_mps: float = 0.055,
     max_angular_z_rps: float = 0.18,
     yaw_gain: float = 1.20,
+    route_label: str = "",
 ) -> list[dict[str, Any]]:
     effective_stop_radius_m = float(delivery_stop_radius_m) if float(delivery_stop_radius_m) > 0.0 else float(delivery_radius_m)
     script = f"""
@@ -465,6 +509,7 @@ export MAX_LINEAR_X_MPS={json.dumps(f"{max_linear_x_mps:.6f}")}
 export PUSH_LINEAR_X_MPS={json.dumps(f"{push_linear_x_mps:.6f}")}
 export MAX_ANGULAR_Z_RPS={json.dumps(f"{max_angular_z_rps:.6f}")}
 export YAW_GAIN={json.dumps(f"{yaw_gain:.6f}")}
+export PLANNER_ROUTE_LABEL={json.dumps(str(route_label or ""))}
 python3 - <<'PY'
 import json
 import math
@@ -495,6 +540,7 @@ max_linear_x_mps = float(os.environ["MAX_LINEAR_X_MPS"])
 push_linear_x_mps = float(os.environ["PUSH_LINEAR_X_MPS"])
 max_angular_z_rps = float(os.environ["MAX_ANGULAR_Z_RPS"])
 yaw_gain = float(os.environ["YAW_GAIN"])
+planner_route_label = os.environ.get("PLANNER_ROUTE_LABEL", "")
 topic = f"/world/{{world_name}}/dynamic_pose/info"
 started = time.monotonic()
 deadline = started + max(duration_s, 0.1)
@@ -593,6 +639,7 @@ try:
                         push_linear_x_mps=push_linear_x_mps,
                         max_angular_z_rps=max_angular_z_rps,
                         yaw_gain=yaw_gain,
+                        route_label=planner_route_label,
                     )
                     record["line_servo_command"] = command
                     publish(pub, node, command["linear_x_mps"], command["angular_z_rps"])
@@ -1140,6 +1187,7 @@ def main() -> int:
             push_linear_x_mps=args.line_servo_push_linear_x_mps,
             max_angular_z_rps=args.line_servo_max_angular_z_rps,
             yaw_gain=args.line_servo_yaw_gain,
+            route_label=args.planner_route_label,
         )
         stop_payload = publish_zero_stop(args.compose_project)
     else:
@@ -1255,6 +1303,7 @@ def main() -> int:
         "line_servo_max_angular_z_rps": round(float(args.line_servo_max_angular_z_rps), 6),
         "line_servo_yaw_gain": round(float(args.line_servo_yaw_gain), 6),
     }
+    route_metadata.update(summarize_line_servo_effective_command(contact_samples))
     if bool(args.forward_only_pre_contact_required) and not forward_only_pre_contact:
         pass_flag = False
         shot_outcome = {

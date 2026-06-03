@@ -989,6 +989,21 @@ Live gates:
      `artifacts/session/uat_contact_ready_patch_nav2_scene02_20260603/fetch_visual_uat_package/scorecard.md`,
      and
      `artifacts/session/uat_contact_ready_patch_fetch_scene09_20260603/fetch_visual_uat_package/scorecard.md`.
+   - later June 3 setup-quality evidence:
+     `recovery_or_reaim` now applies route-specific setup before the shared
+     proof executor: `0.34m` setup standoff, `0.030m` lateral contact gate, and
+     `0.45rad/s` bounded turn authority. Current-code recovery scene01 passed
+     with clean first contact (`20260603T025500649447Z`, closest `0.195938m`,
+     first-contact lateral `0.029732m`, yaw `-1.397719deg`, trajectory angle
+     `0.043748deg`). Non-recovery smoke remained green on Nav2 scene02
+     (`20260603T023349145784Z`, closest `0.196889m`) and fetch-ready scene09
+     (`20260603T023748259579Z`, closest `0.196443m`). Packages:
+     `artifacts/session/uat_recovery_route_setup_quality_scene01_20260603/fetch_visual_uat_package/scorecard.md`,
+     `artifacts/session/uat_recovery_route_setup_quality_nav2_scene02_20260603/fetch_visual_uat_package/scorecard.md`,
+     and
+     `artifacts/session/uat_recovery_route_setup_quality_fetch_scene09_20260603/fetch_visual_uat_package/scorecard.md`.
+     Keep the lateral-gate change route-specific; the global threshold variant
+     regressed Nav2 scene02 at `0.300912m` closest approach.
    - forward-only fetch rule: a planner-gated UAT run that reaches local fetch
      should show no negative pre-contact `linear_x`; any needed backing or
      side-selection should be handled as planner-owned reposition/setup before

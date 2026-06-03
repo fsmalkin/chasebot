@@ -79,6 +79,28 @@ than another narrow terminal-distance tweak. Mobile visual packages:
 and
 `artifacts/session/uat_contact_ready_patch_fetch_scene09_20260603/fetch_visual_uat_package/scorecard.md`.
 
+Later June 3 setup-quality update: the recovery route now uses route-specific
+setup geometry before the shared `line_servo` proof executor. For
+`recovery_or_reaim`, the runner sets a deeper setup standoff (`0.34m`), keeps
+the tighter lateral contact gate (`0.030m`), and raises bounded turn authority
+to `0.45rad/s`; ordinary `fetch_ready_local` and `nav2_reposition_first`
+routes keep their existing local-fetch settings. The current-code recovery
+rerun passed with clean first contact (`20260603T025500649447Z`, closest
+`0.195938m`, first-contact lateral `0.029732m`, yaw `-1.397719deg`, trajectory
+angle `0.043748deg`, delivery stop triggered). Non-recovery smoke remains green
+on Nav2 scene02 (`20260603T023349145784Z`, closest `0.196889m`) and
+fetch-ready scene09 (`20260603T023748259579Z`, closest `0.196443m`). Mobile
+visual packages:
+`artifacts/session/uat_recovery_route_setup_quality_scene01_20260603/fetch_visual_uat_package/scorecard.md`,
+`artifacts/session/uat_recovery_route_setup_quality_nav2_scene02_20260603/fetch_visual_uat_package/scorecard.md`,
+and
+`artifacts/session/uat_recovery_route_setup_quality_fetch_scene09_20260603/fetch_visual_uat_package/scorecard.md`.
+The rejected micro-tuning evidence is also useful: a global tighter lateral gate
+regressed Nav2 scene02 (`20260603T023025633192Z`, closest `0.300912m`), and
+extra recovery creep/nudge preserved delivery while worsening first-contact
+quality. Keep route-specific setup changes; use broader route-owner tests before
+another narrow contact tweak.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

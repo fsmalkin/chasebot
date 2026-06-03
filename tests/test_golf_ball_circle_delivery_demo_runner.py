@@ -16,6 +16,7 @@ from golf_ball_circle_delivery_demo_runner import build_approach_contact_metrics
 from golf_ball_circle_delivery_demo_runner import line_servo_command  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import parse_args  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import apply_target_layout  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import summarize_line_servo_effective_command  # noqa: E402
 
 
 def test_shot_outcome_uses_segment_intersection_for_delivery_circle():
@@ -190,6 +191,44 @@ def test_line_servo_command_reaims_close_offset_contact_before_push():
     assert command["robot_lateral_error_m"] > 0.07
 
 
+def test_line_servo_command_uses_deeper_setup_for_recovery_route():
+    default_command = line_servo_command(
+        robot_pose={"x": -0.022148, "y": -0.106481, "yaw": 0.527487},
+        ball_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+    )
+    recovery_command = line_servo_command(
+        robot_pose={"x": -0.022148, "y": -0.106481, "yaw": 0.527487},
+        ball_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+        route_label="recovery_or_reaim",
+    )
+
+    assert default_command["setup_standoff_m"] == pytest.approx(0.20)
+    assert recovery_command["setup_standoff_m"] == pytest.approx(0.34)
+    assert default_command["max_angular_z_rps"] == pytest.approx(0.18)
+    assert recovery_command["max_angular_z_rps"] == pytest.approx(0.45)
+    assert default_command["contact_lateral_ready_m"] == pytest.approx(0.035)
+    assert recovery_command["contact_lateral_ready_m"] == pytest.approx(0.030)
+    assert recovery_command["route_label"] == "recovery_or_reaim"
+    assert recovery_command["phase"] == "setup_converge"
+    assert recovery_command["linear_x_mps"] > 0.0
+    assert abs(recovery_command["angular_z_rps"]) > abs(default_command["angular_z_rps"])
+    assert recovery_command["desired_yaw_rad"] < default_command["desired_yaw_rad"]
+
+
 def test_line_servo_command_allows_first_contact_when_geometry_ready():
     command = line_servo_command(
         robot_pose={"x": 0.270, "y": -0.156, "yaw": 0.2245},
@@ -206,6 +245,55 @@ def test_line_servo_command_allows_first_contact_when_geometry_ready():
     assert command["phase"] == "first_contact_align"
     assert command["contact_ready"] is True
     assert command["linear_x_mps"] >= 0.055
+
+
+def test_line_servo_command_prioritizes_yaw_when_lateral_is_ready():
+    command = line_servo_command(
+        robot_pose={"x": 0.265, "y": -0.127, "yaw": 0.113},
+        ball_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+        route_label="recovery_or_reaim",
+    )
+
+    assert command["contact_ready"] is False
+    assert command["robot_lateral_error_m"] < 0.030
+    assert command["yaw_priority_lateral_m"] == pytest.approx(0.032)
+    assert command["desired_yaw_rad"] == pytest.approx(command["line_yaw_rad"], abs=1.0e-6)
+    assert command["angular_z_rps"] > 0.10
+
+
+def test_summarize_line_servo_effective_command_preserves_route_caps():
+    summary = summarize_line_servo_effective_command(
+        [
+            {"sample_index": 0},
+            {
+                "sample_index": 1,
+                "line_servo_command": {
+                    "route_label": "recovery_or_reaim",
+                    "setup_standoff_m": 0.34,
+                    "contact_standoff_m": 0.11,
+                    "contact_lateral_ready_m": 0.03,
+                    "yaw_priority_lateral_m": 0.032,
+                    "max_angular_z_rps": 0.45,
+                },
+            },
+        ]
+    )
+
+    assert summary == {
+        "line_servo_effective_setup_standoff_m": 0.34,
+        "line_servo_effective_contact_standoff_m": 0.11,
+        "line_servo_effective_contact_lateral_ready_m": 0.03,
+        "line_servo_effective_yaw_priority_lateral_m": 0.032,
+        "line_servo_effective_max_angular_z_rps": 0.45,
+        "line_servo_effective_route_label": "recovery_or_reaim",
+    }
 
 
 def test_contact_trace_metrics_accept_stable_axial_approach():

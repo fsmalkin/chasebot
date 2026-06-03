@@ -734,6 +734,21 @@ recovery delivered inside the contract with a remaining contact-quality watch.
 The next roadmap step is a planner-owned setup/reposition owner before recovery
 fetch so recovery clips look as clean as the direct and Nav2-positioned clips.
 
+Later June 3 setup-quality progress: the recovery route now has route-specific
+setup geometry before the shared forward-only proof executor. The current-code
+recovery rerun passed with clean first contact (`20260603T025500649447Z`,
+closest `0.195938m`, first-contact lateral `0.029732m`, yaw `-1.397719deg`,
+trajectory angle `0.043748deg`) and a green browser-watchable package:
+`artifacts/session/uat_recovery_route_setup_quality_scene01_20260603/fetch_visual_uat_package/scorecard.md`.
+Nav2 scene02 and fetch-ready scene09 also stayed green with packages
+`artifacts/session/uat_recovery_route_setup_quality_nav2_scene02_20260603/fetch_visual_uat_package/scorecard.md`
+and
+`artifacts/session/uat_recovery_route_setup_quality_fetch_scene09_20260603/fetch_visual_uat_package/scorecard.md`.
+The next roadmap step remains route-owner completion: replace the v0 proof
+executor with real Nav2 reposition where the planner asks for reposition,
+connect live perception refresh for stale/unknown scenes, then run saved-layout
+and seeded random gates with sequence-based visual review.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
