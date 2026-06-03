@@ -814,6 +814,25 @@ The next roadmap slice is pre-contact smoothing and route-quality scoring,
 because the remaining watch is lateral/yaw posture before contact rather than
 planner dispatch or delivery geometry.
 
+Corrected fresh-session replay evidence, later June 3: the first six-scene
+route-owner batch exposed an evidence-binding issue, then the fixed harness
+closed it. `scripts/fetch_planner_route_replay_batch.py` now supports
+`--fresh-dashboard-session-per-run`, binds each mission to an
+`--expected-session-id`, stops the sim before packaging, and writes a
+package-local keyframe review sheet. The corrected six-scene analyzer passed
+all executable frozen layouts from seed `20260608`: two `fetch_ready_local`,
+two `nav2_reposition_first`, and two `recovery_or_reaim`.
+`artifacts/session/route_uat_seed20260608_six_fresh_sessions_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+
+The roadmap interpretation is route-owner UAT green with contact polish
+remaining. All six deliveries landed inside the `0.300m` radius
+(`0.194811m..0.197835m` closest approach), all six visual packages were
+browser-watchable, and sequence-based sheet review aligned with the geometry.
+Contact quality stayed in `watch` on every run, mostly pre-contact lateral/yaw
+posture and recovery first-contact alignment. The next roadmap step is a
+route-quality scorer plus pre-contact smoothing under the same harness, then
+the canonical saved-layout and seeded-random promotion gates.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

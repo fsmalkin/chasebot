@@ -1580,6 +1580,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the golf-ball circle delivery dashboard demo.")
     parser.add_argument("--dashboard-url", default=DEFAULT_DASHBOARD_URL)
     parser.add_argument("--compose-project", default="")
+    parser.add_argument("--expected-session-id", default="")
     parser.add_argument("--world-name", default=DEFAULT_WORLD_NAME)
     parser.add_argument("--world-file", default="yolo_test_world_v6_calibrated_golf_turf.world")
     parser.add_argument("--surface-profile", default="calibrated_golf_turf")
@@ -1667,7 +1668,20 @@ def main() -> int:
         args.compose_project = discover_compose_project(args.dashboard_url)
     if not args.compose_project:
         raise SystemExit("Unable to discover compose project; pass --compose-project.")
-    session_id = str(state.get("session_id", "") or make_session_id())
+    expected_session_id = str(args.expected_session_id or "").strip()
+    state_session_id = str(state.get("session_id", "") or "").strip()
+    if expected_session_id and state_session_id and state_session_id != expected_session_id:
+        raise SystemExit(
+            f"Dashboard session mismatch: expected {expected_session_id}, got {state_session_id}."
+        )
+    session_id = expected_session_id or state_session_id or make_session_id()
+    dashboard_session_binding = {
+        "expected_session_id": expected_session_id,
+        "state_session_id": state_session_id,
+        "artifact_session_id": session_id,
+        "dashboard_state_available": bool(state),
+        "matched": bool(not expected_session_id or session_id == expected_session_id),
+    }
     artifact_dir = SESSION_ROOT / session_id / args.artifact_kind / make_session_id()
     artifact_dir.mkdir(parents=True, exist_ok=True)
     trace_path = artifact_dir / "ball_trace.jsonl"
@@ -2026,6 +2040,7 @@ def main() -> int:
         "pre_fetch_reposition": pre_fetch_reposition,
         "nav2_layout_transform": nav2_layout_transform,
         "planner_route_execution_defaults": planner_route_defaults,
+        "dashboard_session_binding": dashboard_session_binding,
     }
     verdict = {
         "type": "gather_mission",
@@ -2051,6 +2066,8 @@ def main() -> int:
         "random_profile": random_profile,
         "random_draw": random_draw,
         "planner_route": route_metadata,
+        "session_id": session_id,
+        "dashboard_session_binding": dashboard_session_binding,
         "pre_fetch_reposition": pre_fetch_reposition,
         "nav2_layout_transform": nav2_layout_transform,
         "planner_route_label": planner_route_label,

@@ -579,6 +579,33 @@ Nav2/contact phases. Planner-gated UAT requires an executable
 `nav2_reposition_first` handoff path that routes the out-of-envelope start into
 explicit forward-driving setup/reposition before local fetch.
 
+June 3 planner-routed fresh-session update: frozen route-owner UAT now has a
+trustworthy replay harness. `scripts/fetch_planner_route_replay_batch.py`
+starts a calibrated dashboard session per replay row, binds
+`golf_ball_circle_delivery_demo_runner.py` with `--expected-session-id`, stops
+the sim before visual packaging, and relies on package-local keyframe review
+sheets. This prevents a passing mission from borrowing stale or unrelated video
+evidence.
+
+Corrected seed `20260608` evidence:
+
+- Analyzer:
+  `artifacts/session/route_uat_seed20260608_six_fresh_sessions_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: six executable frozen layouts passed with visual packages: two
+  `fetch_ready_local`, two `nav2_reposition_first`, and two
+  `recovery_or_reaim`.
+- Delivery margin: closest approach stayed between `0.194811m` and `0.197835m`
+  against the `0.300m` radius.
+- Quality interpretation: every run is a contact-quality watch, with no
+  first-contact blockers. The remaining policy work is pre-contact lateral/yaw
+  smoothing and route-quality scoring.
+
+The near-term policy sequence is route-quality scoring first, contact smoothing
+second, and canonical saved-layout/seeded gates after the route-owner harness
+stays green. Keep learned or AI-assisted control in the proposer lane until the
+scorer identifies a reproducible stage gap that deterministic setup or recovery
+reaches outside the clean envelope.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

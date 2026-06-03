@@ -172,6 +172,15 @@ success, not missing fetch capability.
 | Portfolio supervisor/switcher | Chooses push, coast, re-aim, hold, or give-up from measured uncertainty | Offline counterfactual replay, then live A/B on hard layouts | Does switching reduce tail failures without adding opaque behavior? |
 | Perception-first target-pose fetch | Replaces truth-state assumptions with sensed ball/target pose once pose delivery is stable | Shadow perception parity against truth-state UAT traces | Does it preserve success when truth-state shortcuts are removed? |
 
+June 3 route-owner UAT update: planner-gated fetch handoff now has a corrected
+fresh-session replay harness. The seed `20260608` six-scene analyzer passed two
+`fetch_ready_local`, two `nav2_reposition_first`, and two `recovery_or_reaim`
+layouts with same-session browser-watchable packages:
+`artifacts/session/route_uat_seed20260608_six_fresh_sessions_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+Use this as broad visual UAT and route-owner evidence. Promotion still requires
+the canonical saved-layout and seeded-random gates, because all six runs carry
+contact-quality watches around pre-contact lateral/yaw posture.
+
 ## Research Thread Output
 
 Before starting another implementation spike, produce a findings matrix across

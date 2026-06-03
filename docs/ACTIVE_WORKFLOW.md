@@ -126,6 +126,26 @@ Evidence rebuild ladder:
 3. seeded `fetch_generalization_gate`, `6 x 1`
 4. mobile visual UAT package with browser-watchable videos
 
+Planner-routed visual UAT adds a session-binding rule. Each replay row that is
+used for operator evidence must bind the mission verdict to the dashboard
+session that produced the videos and keyframe review. Prefer the fresh-session
+harness for mixed route-owner evidence:
+
+```powershell
+python scripts\fetch_planner_route_replay_batch.py `
+  --campaign-id <id> `
+  --gate-summary artifacts\session\<planner_gate>\fetch_planner_handoff_gate\gate_summary.json `
+  --max-per-route 1 `
+  --fresh-dashboard-session-per-run `
+  --dashboard-url http://127.0.0.1:8875
+```
+
+The harness starts a calibrated dashboard session per selected scene, passes
+`--expected-session-id` into `golf_ball_circle_delivery_demo_runner.py`, stops
+the sim before packaging, and writes a package-local
+`keyframe_review_contact_sheet.png`. Review that sheet across the run sequence
+before reporting pass/fail.
+
 June 1, 2026 corrected saved-anchor one-run rebuild:
 
 - Campaigns:
@@ -306,6 +326,21 @@ Latest saved-anchor result after fetch-ready handoff and setup/contact repair:
 - Next command: review the browser-watchable UAT clips. Use clip review to
   choose the next slice: smoother contact quality or broader planner-routed
   scenario coverage.
+
+June 3 planner-routed fresh-session evidence:
+
+- Corrected six-scene analyzer:
+  `artifacts/session/route_uat_seed20260608_six_fresh_sessions_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: six executable frozen layouts passed with same-session browser
+  packages: two `fetch_ready_local`, two `nav2_reposition_first`, and two
+  `recovery_or_reaim`. Closest approach ranged from `0.194811m` to
+  `0.197835m` against the `0.300m` contract.
+- Evidence status: `randomized_route_owner_visual_uat_green`,
+  `promotion_evidence=false`, contact quality `watch`, first-contact blockers
+  `0`.
+- Next command: keep the planner route-owner harness as the broad UAT surface,
+  then improve pre-contact lateral/yaw posture and first-contact cleanliness
+  while preserving the delivery-radius contract.
 
 ## UAT Orchestrator Modes
 

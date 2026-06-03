@@ -616,6 +616,39 @@ skips local fetch for non-`fetch_ready_local` scenes. The initial deterministic
 dry-run artifact is
 `artifacts/session/dev_fetch_planner_handoff_gate_frozen_replay_20260531/fetch_planner_handoff_gate/scorecard.md`.
 
+June 3, 2026 fresh-session route-owner evidence update: the planner-routed
+moonshot now has a corrected mixed-scene UAT harness. The first shared-session
+six-run replay showed why visual evidence must be isolated per row: one mission
+detached from the dashboard visual session, and one `nav2_reposition_first`
+miss cleared when rerun with clean evidence binding. The fixed batch
+runner starts a fresh calibrated dashboard session per selected scene, passes an
+`--expected-session-id` into the mission runner, stops the sim before packaging,
+and stores package-local keyframe review sheets.
+
+Corrected evidence:
+
+- six-scene analyzer:
+  `artifacts/session/route_uat_seed20260608_six_fresh_sessions_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+- covered executable route owners:
+  two `fetch_ready_local`, two `nav2_reposition_first`, and two
+  `recovery_or_reaim` scenes from seed `20260608`
+- result:
+  all six deliveries passed with same-session browser-watchable visual packages;
+  closest approach ranged from `0.194811m` to `0.197835m` against the
+  `0.300m` contract
+- interpretation:
+  route-owner UAT is green, `promotion_evidence=false`, and contact quality is
+  still a `watch` item. Sequence-based visual review agrees with the geometry:
+  the ball reaches the circle, while pre-contact lateral/yaw posture and
+  recovery first-contact alignment need smoothing.
+
+Next focused slice: keep the planner/LLM route split intact, keep Nav2 as the
+setup/reposition owner where fresh evidence supports it, and add route-quality
+scoring plus pre-contact smoothing before another broad randomized batch. Treat
+AI/local learned control as a proposer for reproducible stage gaps, especially
+where route-quality scoring shows deterministic setup or recovery reaching
+first contact outside the clean envelope.
+
 May 29, 2026 model-planning refinement: V-JEPA-style world models are relevant
 as an architectural pattern for scoring candidate actions against predicted
 physical outcomes, but full video world models are not the onboard control

@@ -267,6 +267,29 @@ Planner-routed moonshot update, June 2:
   Result is visual-UAT green with contact-quality watch, `0` first-contact
   blockers, and no promotion claim. The next branch work should improve
   pre-contact lateral/yaw posture while preserving the route-owner split.
+- corrected fresh-session route replay:
+  `scripts/fetch_planner_route_replay_batch.py` now owns balanced executable
+  route replay and can start a fresh dashboard session per row. Each mission
+  receives `--expected-session-id`, the sim is stopped before visual packaging,
+  and `fetch_visual_uat_package.py` writes the keyframe review sheet inside the
+  package, isolating sequence-review evidence per row.
+- corrected six-scene evidence:
+  the first shared-session six-run replay exposed one detached visual package
+  and one `nav2_reposition_first` miss that cleared under clean session
+  binding. Fresh-session reruns passed all six executable frozen layouts from
+  seed `20260608`: two
+  `fetch_ready_local`, two `nav2_reposition_first`, and two
+  `recovery_or_reaim`. Combined analyzer:
+  `artifacts/session/route_uat_seed20260608_six_fresh_sessions_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+  Result is route-owner UAT green with `promotion_evidence=false`, contact
+  quality `watch`, first-contact blockers `0`, and closest approaches
+  `0.194811m..0.197835m`.
+- branch decision:
+  keep the moonshot branch active as the route-owner UAT harness. The next
+  branch work is a route-quality scorer and pre-contact smoothing, especially
+  lateral/yaw setup quality and recovery first-contact alignment. Preserve the
+  LLM/world-state planner split and continue using Nav2 for reposition/corridor
+  stages where the fresh evidence stays green.
 
 Saved-anchor requalification update, later June 1:
 

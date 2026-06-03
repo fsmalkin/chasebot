@@ -323,11 +323,16 @@ def _keyframe_prefix(path: Path, suffix: str) -> str:
     return name[: -len(suffix)] if name.endswith(suffix) else path.stem
 
 
-def build_keyframe_review(visual_dir: Path) -> dict[str, Any]:
+def build_keyframe_review(
+    visual_dir: Path,
+    *,
+    output_dir: Path | None = None,
+    output_name: str = KEYFRAME_REVIEW_OUTPUT_NAME,
+) -> dict[str, Any]:
     """Create a compact sequence review from onboard and topdown keyframes."""
-    output_path = visual_dir / KEYFRAME_REVIEW_OUTPUT_NAME
+    output_path = (output_dir if output_dir is not None else visual_dir) / output_name
     result: dict[str, Any] = {
-        "output_name": KEYFRAME_REVIEW_OUTPUT_NAME,
+        "output_name": output_name,
         "session_id": session_id_for_path(visual_dir),
         "path": artifact_display_path(output_path),
         "url": "",
@@ -851,7 +856,21 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     missions = [item for item in missions if item]
     visual_dirs = [resolve_path(path) for path in args.visual_dir]
     video_recovery = [item for path in visual_dirs for item in recover_browser_videos(path)]
-    keyframe_reviews = [build_keyframe_review(path) for path in visual_dirs if path.is_dir()]
+    package_root = getattr(args, "package_root", None)
+    review_output_dir = ensure_dir(Path(package_root) / "keyframe_reviews") if package_root else None
+    keyframe_reviews = [
+        build_keyframe_review(
+            path,
+            output_dir=review_output_dir,
+            output_name=(
+                f"{session_id_for_path(path) or 'session'}_{KEYFRAME_REVIEW_OUTPUT_NAME}"
+                if review_output_dir is not None
+                else KEYFRAME_REVIEW_OUTPUT_NAME
+            ),
+        )
+        for path in visual_dirs
+        if path.is_dir()
+    ]
     visual_summaries = [summarize_visual_dir(path) for path in visual_dirs if path.is_dir()]
     videos = discover_videos(visual_dirs)
     visual_by_session = {
@@ -1148,6 +1167,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     root = ensure_dir(SESSION_ROOT / str(args.campaign_id) / PACKAGE_KIND)
+    setattr(args, "package_root", root)
     summary = build_summary(args)
     summary_path = root / "package_summary.json"
     scorecard_path = root / "scorecard.md"
