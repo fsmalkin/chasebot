@@ -29,6 +29,22 @@ ROUTE_LABELS = (
 )
 EXECUTABLE_FETCH_ROUTES = (ROUTE_FETCH_READY, ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM)
 PLANNER_ONLY_ROUTES = (ROUTE_SCAN_OR_PERCEIVE, ROUTE_NO_GO)
+SETUP_WATCH_FLAGS = {
+    "pre_contact_lateral_error",
+    "pre_contact_yaw_error",
+    "pre_contact_yaw_oscillation",
+}
+CONTACT_WATCH_FLAGS = {
+    "missing_contact_trace",
+    "missing_first_contact_motion",
+    "ball_lateral_knock_away",
+    "contact_trajectory_angle_error",
+}
+FIRST_CONTACT_BLOCKER_FLAGS = {
+    "missing_first_contact",
+    "first_contact_ball_lateral_error",
+    "first_contact_trajectory_angle_error",
+}
 
 
 def utc_now() -> str:
@@ -187,18 +203,26 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     delivery_pass = bool(
         payload.get("fetch_to_pose_pass", verdict.get("fetch_to_pose_pass", first_run.get("fetch_to_pose_pass", False)))
     )
-    first_contact_blocker_flags = {
-        "missing_first_contact",
-        "first_contact_ball_lateral_error",
-        "first_contact_trajectory_angle_error",
-    }
-    severe_first_flags = [flag for flag in first_flags if flag in first_contact_blocker_flags]
+    setup_watch_flags = [flag for flag in flags if flag in SETUP_WATCH_FLAGS]
+    contact_watch_flags = [flag for flag in flags if flag in CONTACT_WATCH_FLAGS]
+    contact_watch_flags.extend(
+        flag for flag in flags if flag not in SETUP_WATCH_FLAGS and flag not in CONTACT_WATCH_FLAGS
+    )
+    severe_first_flags = [flag for flag in first_flags if flag in FIRST_CONTACT_BLOCKER_FLAGS]
     if severe_first_flags or not delivery_pass:
         contact_quality = "blocker"
-    elif first_flags or flags:
+    elif first_flags or contact_watch_flags:
         contact_quality = "watch"
     else:
         contact_quality = "clean"
+    setup_quality = "watch" if setup_watch_flags else "clean"
+    execution_quality = (
+        "blocker"
+        if contact_quality == "blocker"
+        else "watch"
+        if setup_watch_flags or contact_quality == "watch"
+        else "clean"
+    )
     return {
         "session_id": session_id,
         "path": artifact_display_path(path),
@@ -219,8 +243,12 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         ),
         "closest_approach_distance_m": round(closest, 6) if closest is not None else None,
         "outcome_reason": pick_text(payload.get("reason"), verdict.get("reason"), shot.get("reason")),
+        "execution_quality": execution_quality,
+        "setup_quality": setup_quality,
         "contact_quality": contact_quality,
         "contact_flags": flags,
+        "setup_watch_flags": setup_watch_flags,
+        "contact_watch_flags": contact_watch_flags,
         "first_contact_quality_flags": first_flags,
         "first_contact_blocker_flags": severe_first_flags,
         "first_contact_t_s": metrics.get("first_contact_t_s"),
@@ -300,6 +328,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         clean_count = sum(1 for item in live_rows if item.get("contact_quality") == "clean")
         watch_count = sum(1 for item in live_rows if item.get("contact_quality") == "watch")
         blocker_count = sum(1 for item in live_rows if item.get("contact_quality") == "blocker")
+        setup_watch_count = sum(1 for item in live_rows if item.get("setup_quality") == "watch")
+        execution_watch_count = sum(1 for item in live_rows if item.get("execution_quality") == "watch")
         predicted_watch_count = sum(1 for item in live_rows if item.get("predicted_contact_quality") == "watch")
         predicted_blocker_count = sum(1 for item in live_rows if item.get("predicted_contact_quality") == "blocker")
         route_rows.append(
@@ -311,6 +341,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
                 "live_clean_count": clean_count,
                 "live_watch_count": watch_count,
                 "live_blocker_count": blocker_count,
+                "live_setup_watch_count": setup_watch_count,
+                "live_execution_watch_count": execution_watch_count,
                 "predicted_watch_count": predicted_watch_count,
                 "predicted_blocker_count": predicted_blocker_count,
                 "coverage_status": (
@@ -335,7 +367,13 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     )
     first_contact_blockers = sum(1 for mission in missions if mission.get("contact_quality") == "blocker")
     contact_watch_count = sum(1 for mission in missions if mission.get("contact_quality") == "watch")
+    setup_watch_count = sum(1 for mission in missions if mission.get("setup_quality") == "watch")
+    execution_watch_count = sum(1 for mission in missions if mission.get("execution_quality") == "watch")
     contact_quality_status = "blocker" if first_contact_blockers else "watch" if contact_watch_count else "clean"
+    setup_quality_status = "watch" if setup_watch_count else "clean"
+    execution_quality_status = (
+        "blocker" if first_contact_blockers else "watch" if execution_watch_count else "clean"
+    )
     green = bool(gate_green and executable_green and planner_only_green and visual_green and first_contact_blockers == 0)
     return {
         "type": ANALYZER_KIND,
@@ -350,6 +388,10 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "executable_route_green": executable_green,
         "planner_only_route_green": planner_only_green,
         "visual_package_green": visual_green,
+        "execution_quality_status": execution_quality_status,
+        "execution_watch_count": execution_watch_count,
+        "setup_quality_status": setup_quality_status,
+        "setup_watch_count": setup_watch_count,
         "contact_quality_status": contact_quality_status,
         "contact_watch_count": contact_watch_count,
         "first_contact_blocker_count": first_contact_blockers,
@@ -370,6 +412,10 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- Pass: `{summary.get('pass', False)}`",
         f"- Interpretation: `{summary.get('milestone_interpretation', '')}`",
         f"- Promotion evidence: `{summary.get('promotion_evidence', False)}`",
+        f"- Execution quality: `{summary.get('execution_quality_status', '')}`",
+        f"- Execution watches: `{summary.get('execution_watch_count', 0)}`",
+        f"- Setup quality: `{summary.get('setup_quality_status', '')}`",
+        f"- Setup watches: `{summary.get('setup_watch_count', 0)}`",
         f"- Contact quality: `{summary.get('contact_quality_status', '')}`",
         f"- Contact watches: `{summary.get('contact_watch_count', 0)}`",
         f"- First-contact blockers: `{summary.get('first_contact_blocker_count', 0)}`",
@@ -383,6 +429,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"- route=`{row.get('route_label', '')}` planner=`{row.get('planner_count', 0)}` "
             f"live=`{row.get('live_count', 0)}` pass=`{row.get('live_pass_count', 0)}` "
             f"clean=`{row.get('live_clean_count', 0)}` watch=`{row.get('live_watch_count', 0)}` "
+            f"setup_watch=`{row.get('live_setup_watch_count', 0)}` "
+            f"exec_watch=`{row.get('live_execution_watch_count', 0)}` "
             f"pred_watch=`{row.get('predicted_watch_count', 0)}` "
             f"pred_blocker=`{row.get('predicted_blocker_count', 0)}` "
             f"blocker=`{row.get('live_blocker_count', 0)}` status=`{row.get('coverage_status', '')}`"
@@ -401,6 +449,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         closest = mission.get("closest_approach_distance_m")
         closest_text = f"{float(closest):.3f}m" if isinstance(closest, (int, float)) else ""
         flags = ",".join(mission.get("contact_flags", []) or [])
+        setup_flags = ",".join(mission.get("setup_watch_flags", []) or [])
+        contact_flags = ",".join(mission.get("contact_watch_flags", []) or [])
         first_flags = ",".join(mission.get("first_contact_quality_flags", []) or [])
         lines.append(
             f"- route=`{mission.get('route_label', '')}` session=`{mission.get('session_id', '')}` "
@@ -408,7 +458,9 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"predicted=`{mission.get('predicted_contact_quality', '')}` "
             f"risk=`{mission.get('predicted_first_contact_risk', '')}` "
             f"score=`{mission.get('route_quality_score', '')}` "
-            f"quality=`{mission.get('contact_quality', '')}` flags=`{flags}` "
+            f"exec=`{mission.get('execution_quality', '')}` setup=`{mission.get('setup_quality', '')}` "
+            f"contact=`{mission.get('contact_quality', '')}` flags=`{flags}` "
+            f"setup_flags=`{setup_flags}` contact_flags=`{contact_flags}` "
             f"first_flags=`{first_flags}` {artifact_link(str(mission.get('path', '') or ''))}"
         )
     lines.extend(["", "## Visual Packages"])

@@ -1418,6 +1418,7 @@ def build_approach_contact_metrics(
     contact_angle_threshold_deg: float = 5.0,
     ball_lateral_threshold_m: float = 0.030,
     oscillation_yaw_threshold_deg: float = 0.5,
+    terminal_pre_contact_window_s: float = 1.0,
 ) -> dict[str, Any]:
     line_yaw = math.atan2(float(target_y) - float(ball_start_y), float(target_x) - float(ball_start_x))
     yaw_threshold_rad = math.radians(float(yaw_threshold_deg))
@@ -1462,6 +1463,21 @@ def build_approach_contact_metrics(
     ball_lateral_errors = [float(row.get("ball_lateral_error_m", 0.0) or 0.0) for row in ball_rows]
 
     first_contact_row = parsed[first_contact_index] if first_contact_index is not None else {}
+    terminal_pre_contact_rows: list[dict[str, Any]] = []
+    if robot_pre:
+        terminal_end_t = float(first_contact_row.get("t_s", robot_pre[-1].get("t_s", 0.0)) or 0.0)
+        terminal_start_t = terminal_end_t - max(0.0, float(terminal_pre_contact_window_s))
+        terminal_pre_contact_rows = [
+            row for row in robot_pre if float(row.get("t_s", 0.0) or 0.0) >= terminal_start_t
+        ]
+        if not terminal_pre_contact_rows:
+            terminal_pre_contact_rows = robot_pre[-1:]
+    terminal_lateral_errors = [
+        float(row.get("robot_lateral_error_m", 0.0) or 0.0) for row in terminal_pre_contact_rows
+    ]
+    terminal_yaw_errors = [
+        float(row.get("robot_yaw_error_rad", 0.0) or 0.0) for row in terminal_pre_contact_rows
+    ]
     first_contact_robot = first_contact_row.get("robot_pose") if isinstance(first_contact_row.get("robot_pose"), dict) else {}
     first_contact_ball = first_contact_row.get("ball_pose") if isinstance(first_contact_row.get("ball_pose"), dict) else {}
     first_contact_lateral = float(first_contact_row.get("robot_lateral_error_m", 0.0) or 0.0) if first_contact_row else None
@@ -1481,18 +1497,21 @@ def build_approach_contact_metrics(
 
     max_abs_lateral = max((abs(value) for value in lateral_errors), default=0.0)
     max_abs_yaw = max((abs(value) for value in yaw_errors), default=0.0)
+    terminal_max_abs_lateral = max((abs(value) for value in terminal_lateral_errors), default=0.0)
+    terminal_max_abs_yaw = max((abs(value) for value in terminal_yaw_errors), default=0.0)
     max_abs_ball_lateral = max((abs(value) for value in ball_lateral_errors), default=0.0)
     yaw_sign_changes = _sign_changes(yaw_errors, threshold=oscillation_threshold_rad)
+    terminal_yaw_sign_changes = _sign_changes(terminal_yaw_errors, threshold=oscillation_threshold_rad)
     flags: list[str] = []
     if not parsed:
         flags.append("missing_contact_trace")
     if first_contact_index is None:
         flags.append("missing_first_contact_motion")
-    if max_abs_lateral > float(lateral_threshold_m):
+    if terminal_max_abs_lateral > float(lateral_threshold_m):
         flags.append("pre_contact_lateral_error")
-    if max_abs_yaw > yaw_threshold_rad:
+    if terminal_max_abs_yaw > yaw_threshold_rad:
         flags.append("pre_contact_yaw_error")
-    if yaw_sign_changes > 1:
+    if terminal_yaw_sign_changes > 1:
         flags.append("pre_contact_yaw_oscillation")
     if max_abs_ball_lateral > float(ball_lateral_threshold_m):
         flags.append("ball_lateral_knock_away")
@@ -1529,6 +1548,11 @@ def build_approach_contact_metrics(
         "max_abs_robot_lateral_error_pre_contact_m": round(float(max_abs_lateral), 6),
         "max_abs_robot_yaw_error_pre_contact_deg": round(math.degrees(float(max_abs_yaw)), 6),
         "robot_yaw_error_sign_changes_pre_contact": yaw_sign_changes,
+        "terminal_pre_contact_window_s": round(float(terminal_pre_contact_window_s), 6),
+        "terminal_pre_contact_sample_count": len(terminal_pre_contact_rows),
+        "max_abs_robot_lateral_error_terminal_pre_contact_m": round(float(terminal_max_abs_lateral), 6),
+        "max_abs_robot_yaw_error_terminal_pre_contact_deg": round(math.degrees(float(terminal_max_abs_yaw)), 6),
+        "robot_yaw_error_sign_changes_terminal_pre_contact": terminal_yaw_sign_changes,
         "max_abs_ball_lateral_error_m": round(float(max_abs_ball_lateral), 6),
         "contact_trajectory_angle_error_deg": (
             round(math.degrees(float(contact_angle_rad)), 6) if contact_angle_rad is not None else None

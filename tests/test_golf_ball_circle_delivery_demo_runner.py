@@ -872,6 +872,53 @@ def test_contact_trace_metrics_accept_stable_axial_approach():
     assert metrics["first_contact_index"] == 2
     assert metrics["max_abs_robot_lateral_error_pre_contact_m"] == pytest.approx(0.001)
     assert metrics["robot_yaw_error_sign_changes_pre_contact"] == 0
+    assert metrics["max_abs_robot_lateral_error_terminal_pre_contact_m"] == pytest.approx(0.001)
+    assert metrics["robot_yaw_error_sign_changes_terminal_pre_contact"] == 0
+
+
+def test_contact_trace_metrics_do_not_flag_initial_setup_debt_after_terminal_settle():
+    samples = [
+        {
+            "sample_index": 0,
+            "t_s": 0.0,
+            "robot_pose": {"position": {"x": 0.00, "y": 0.12, "z": 0.0}, "yaw": 0.25},
+            "ball_pose": {"position": {"x": 0.38, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+        },
+        {
+            "sample_index": 1,
+            "t_s": 2.0,
+            "robot_pose": {"position": {"x": 0.20, "y": 0.02, "z": 0.0}, "yaw": 0.02},
+            "ball_pose": {"position": {"x": 0.38, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+        },
+        {
+            "sample_index": 2,
+            "t_s": 2.6,
+            "robot_pose": {"position": {"x": 0.34, "y": 0.01, "z": 0.0}, "yaw": 0.01},
+            "ball_pose": {"position": {"x": 0.38, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+        },
+        {
+            "sample_index": 3,
+            "t_s": 2.8,
+            "robot_pose": {"position": {"x": 0.40, "y": 0.01, "z": 0.0}, "yaw": 0.01},
+            "ball_pose": {"position": {"x": 0.39, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+        },
+    ]
+
+    metrics = build_approach_contact_metrics(
+        samples,
+        ball_start_x=0.38,
+        ball_start_y=0.0,
+        target_x=0.95,
+        target_y=0.0,
+    )
+
+    assert metrics["stable_contact_approach_pass"] is True
+    assert metrics["first_contact_quality_pass"] is True
+    assert metrics["flags"] == []
+    assert metrics["max_abs_robot_lateral_error_pre_contact_m"] == pytest.approx(0.12)
+    assert metrics["max_abs_robot_lateral_error_terminal_pre_contact_m"] == pytest.approx(0.02)
+    assert metrics["max_abs_robot_yaw_error_pre_contact_deg"] > 3.0
+    assert metrics["max_abs_robot_yaw_error_terminal_pre_contact_deg"] < 3.0
 
 
 def test_contact_trace_metrics_flag_lateral_knock_away_and_yaw_oscillation():

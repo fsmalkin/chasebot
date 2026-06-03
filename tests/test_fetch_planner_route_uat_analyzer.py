@@ -119,9 +119,16 @@ def test_planner_route_uat_analyzer_scores_green_randomized_route_uat(tmp_path, 
     assert summary["pass"] is True
     assert summary["promotion_evidence"] is False
     assert summary["milestone_interpretation"] == "randomized_route_owner_visual_uat_green"
-    assert summary["contact_quality_status"] == "watch"
+    assert summary["execution_quality_status"] == "watch"
+    assert summary["setup_quality_status"] == "watch"
+    assert summary["contact_quality_status"] == "clean"
+    assert summary["setup_watch_count"] == 1
+    assert summary["contact_watch_count"] == 0
     rows = {row["route_label"]: row for row in summary["route_rows"]}
     assert rows[analyzer.ROUTE_FETCH_READY]["coverage_status"] == "live_executable_passed"
+    assert rows[analyzer.ROUTE_FETCH_READY]["live_setup_watch_count"] == 1
+    assert rows[analyzer.ROUTE_FETCH_READY]["live_watch_count"] == 0
+    assert rows[analyzer.ROUTE_FETCH_READY]["live_execution_watch_count"] == 1
     assert rows[analyzer.ROUTE_NAV2_REPOSITION]["coverage_status"] == "live_executable_passed"
     assert rows[analyzer.ROUTE_RECOVERY_OR_REAIM]["coverage_status"] == "live_executable_passed"
     assert rows[analyzer.ROUTE_SCAN_OR_PERCEIVE]["coverage_status"] == "planner_only_classified"
@@ -131,6 +138,8 @@ def test_planner_route_uat_analyzer_scores_green_randomized_route_uat(tmp_path, 
     analyzer.write_scorecard(scorecard, summary)
     text = scorecard.read_text(encoding="utf-8")
     assert "route=`nav2_reposition_first`" in text
+    assert "Setup watches" in text
+    assert "setup_watch=`1`" in text
     assert "recoveries=`1/1`" in text
 
 
@@ -299,11 +308,77 @@ def test_planner_route_uat_analyzer_treats_robot_posture_first_contact_flags_as_
     summary = analyzer.build_summary(_args(tmp_path, planner=planner, missions=missions, visual_package=visual_package))
 
     assert summary["pass"] is True
+    assert summary["execution_quality_status"] == "watch"
+    assert summary["setup_quality_status"] == "clean"
     assert summary["contact_quality_status"] == "watch"
     assert summary["first_contact_blocker_count"] == 0
     mission = next(item for item in summary["missions"] if item["route_label"] == analyzer.ROUTE_FETCH_READY)
+    assert mission["execution_quality"] == "watch"
+    assert mission["setup_quality"] == "clean"
     assert mission["contact_quality"] == "watch"
     assert mission["first_contact_blocker_flags"] == []
+
+
+def test_planner_route_uat_analyzer_splits_setup_watch_from_contact_watch(tmp_path, monkeypatch):
+    monkeypatch.setattr(analyzer, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+    monkeypatch.setattr(analyzer, "REPO_ROOT", tmp_path)
+    root = analyzer.SESSION_ROOT
+    planner = root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
+    _write_json(
+        planner,
+        {
+            "campaign_id": "planner",
+            "pass": True,
+            "pass_count": 5,
+            "random_cases": 5,
+            "wrong_fetch_dispatch_count": 0,
+            "route_counts": {
+                analyzer.ROUTE_FETCH_READY: 1,
+                analyzer.ROUTE_NAV2_REPOSITION: 1,
+                analyzer.ROUTE_RECOVERY_OR_REAIM: 1,
+                analyzer.ROUTE_SCAN_OR_PERCEIVE: 1,
+                analyzer.ROUTE_NO_GO: 1,
+            },
+        },
+    )
+    missions = [
+        root / "fetch_session" / "mission_verdict.json",
+        root / "nav2_session" / "mission_verdict.json",
+        root / "recovery_session" / "mission_verdict.json",
+    ]
+    _mission(missions[0], analyzer.ROUTE_FETCH_READY, flags=["pre_contact_lateral_error", "pre_contact_yaw_error"])
+    _mission(missions[1], analyzer.ROUTE_NAV2_REPOSITION, flags=["ball_lateral_knock_away"])
+    _mission(missions[2], analyzer.ROUTE_RECOVERY_OR_REAIM)
+    visual_package = root / "uat" / "fetch_visual_uat_package" / "package_summary.json"
+    _write_json(
+        visual_package,
+        {
+            "campaign_id": "uat",
+            "pass": True,
+            "mobile_watchable": True,
+            "onboard_camera_watchable": True,
+            "visual_confirmation_seen": True,
+            "local_fetch_visual_confirmed": True,
+            "videos": [{"name": "raw_camera_browser.mp4"}],
+        },
+    )
+
+    summary = analyzer.build_summary(_args(tmp_path, planner=planner, missions=missions, visual_package=visual_package))
+
+    assert summary["execution_quality_status"] == "watch"
+    assert summary["setup_quality_status"] == "watch"
+    assert summary["contact_quality_status"] == "watch"
+    assert summary["setup_watch_count"] == 1
+    assert summary["contact_watch_count"] == 1
+    setup_mission = next(item for item in summary["missions"] if item["route_label"] == analyzer.ROUTE_FETCH_READY)
+    contact_mission = next(item for item in summary["missions"] if item["route_label"] == analyzer.ROUTE_NAV2_REPOSITION)
+    assert setup_mission["setup_quality"] == "watch"
+    assert setup_mission["contact_quality"] == "clean"
+    assert setup_mission["setup_watch_flags"] == ["pre_contact_lateral_error", "pre_contact_yaw_error"]
+    assert setup_mission["contact_watch_flags"] == []
+    assert contact_mission["setup_quality"] == "clean"
+    assert contact_mission["contact_quality"] == "watch"
+    assert contact_mission["contact_watch_flags"] == ["ball_lateral_knock_away"]
 
 
 def test_planner_route_uat_analyzer_blocks_missing_first_contact(tmp_path, monkeypatch):
