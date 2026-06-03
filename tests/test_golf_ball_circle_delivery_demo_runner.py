@@ -650,6 +650,80 @@ def test_line_servo_command_uses_contact_final_reaim_for_fetch_ready_lateral_wat
     assert command["angular_z_rps"] > 0.10
 
 
+def test_line_servo_command_crawls_close_fetch_ready_setup_debt_before_contact():
+    command = line_servo_command(
+        robot_pose={"x": 0.256813, "y": -0.27993, "yaw": 0.114764},
+        ball_pose={"x": 0.516185, "y": -0.135987, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.516185, "y": -0.135987, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=0.05236,
+        route_label="fetch_ready_local",
+    )
+
+    assert command["phase"] == "local_close_settle"
+    assert command["local_close_settle_active"] is True
+    assert command["contact_ready"] is False
+    assert command["ball_moved"] is False
+    assert command["linear_x_mps"] == pytest.approx(0.012)
+    assert command["angular_z_rps"] > 0.0
+    assert command["desired_yaw_rad"] != pytest.approx(command["setup_yaw_rad"], abs=1.0e-6)
+
+
+def test_line_servo_command_keeps_ready_fetch_local_on_first_contact_align():
+    command = line_servo_command(
+        robot_pose={"x": 0.294, "y": -0.193, "yaw": 0.305},
+        ball_pose={"x": 0.516185, "y": -0.135987, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.516185, "y": -0.135987, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=0.05236,
+        route_label="fetch_ready_local",
+    )
+
+    assert command["contact_ready"] is True
+    assert command["local_close_settle_active"] is False
+    assert command["phase"] == "first_contact_align"
+    assert command["linear_x_mps"] >= 0.055
+
+
+def test_line_servo_command_releases_near_threshold_lateral_reaim_to_line_yaw():
+    command = line_servo_command(
+        robot_pose={"x": 0.428545, "y": -0.193242, "yaw": 0.437994},
+        ball_pose={"x": 0.516185, "y": -0.135987, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.516185, "y": -0.135987, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=0.05236,
+        route_label="fetch_ready_local",
+    )
+
+    assert command["phase"] == "contact_final_reaim"
+    assert command["contact_final_reaim_active"] is True
+    assert abs(command["robot_lateral_error_m"]) < command["lateral_reaim_release_m"]
+    assert command["desired_yaw_rad"] == pytest.approx(command["line_yaw_rad"], abs=1.0e-6)
+    assert command["angular_z_rps"] < -0.10
+    assert command["linear_x_mps"] == pytest.approx(0.012)
+
+
 def test_line_servo_command_uses_recovery_final_reaim_before_rough_contact():
     command = line_servo_command(
         robot_pose={"x": 0.240562, "y": 0.060826, "yaw": 0.437386},

@@ -831,7 +831,17 @@ def line_servo_command(
     if abs(robot_lateral_error) > yaw_priority_lateral_m:
         lateral_reaim = clamp(float(robot_lateral_error) * lateral_reaim_gain, -lateral_reaim_limit_rad, lateral_reaim_limit_rad)
     lateral_corrected_yaw = normalize_angle_rad(line_yaw - lateral_reaim)
+    lateral_reaim_release_m = effective_contact_lateral_ready_m * 1.03
     contact_ready = abs(robot_lateral_error) <= effective_contact_lateral_ready_m and abs(line_yaw_error) <= float(contact_yaw_ready_rad)
+    local_close_settle_active = bool(
+        clean_route_label == ROUTE_FETCH_READY
+        and 0.14 < distance_to_contact <= 0.22
+        and not contact_ready
+        and (
+            abs(robot_lateral_error) > effective_contact_lateral_ready_m * 0.80
+            or abs(line_yaw_error) > float(contact_yaw_ready_rad) * 0.80
+        )
+    )
     ball_motion_m = 0.0
     if ball_start_pose is not None:
         ball_motion_m = math.hypot(
@@ -864,12 +874,32 @@ def line_servo_command(
     elif not contact_ready:
         if recovery_final_reaim_active:
             phase = "recovery_final_reaim"
-            desired_yaw = lateral_corrected_yaw
+            desired_yaw = (
+                lateral_corrected_yaw
+                if abs(robot_lateral_error) > lateral_reaim_release_m
+                else line_yaw
+            )
             base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
         elif contact_final_reaim_active:
             phase = "contact_final_reaim"
-            desired_yaw = lateral_corrected_yaw
+            desired_yaw = (
+                lateral_corrected_yaw
+                if abs(robot_lateral_error) > lateral_reaim_release_m
+                else line_yaw
+            )
             base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.018))
+        elif local_close_settle_active:
+            phase = "local_close_settle"
+            desired_yaw = (
+                lateral_corrected_yaw
+                if abs(robot_lateral_error) > lateral_reaim_release_m
+                else line_yaw
+            )
+            settle_cap = 0.012 if (
+                abs(robot_lateral_error) > effective_contact_lateral_ready_m * 1.50
+                or abs(line_yaw_error) > float(contact_yaw_ready_rad) * 1.50
+            ) else 0.018
+            base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), settle_cap))
         else:
             phase = "setup_converge" if distance_to_contact > 0.18 else "setup_reaim"
             desired_yaw = setup_yaw if distance_to_contact > 0.20 else lateral_corrected_yaw
@@ -942,7 +972,9 @@ def line_servo_command(
         "recovery_setup_pocket_m": round(float(recovery_setup_pocket_m), 6),
         "contact_final_reaim_active": contact_final_reaim_active,
         "recovery_final_reaim_active": recovery_final_reaim_active,
+        "local_close_settle_active": local_close_settle_active,
         "lateral_reaim_rad": round(float(lateral_reaim), 6),
+        "lateral_reaim_release_m": round(float(lateral_reaim_release_m), 6),
         "lateral_reaim_gain": round(float(lateral_reaim_gain), 6),
         "yaw_priority_lateral_m": round(float(yaw_priority_lateral_m), 6),
         "contact_ready": contact_ready,
