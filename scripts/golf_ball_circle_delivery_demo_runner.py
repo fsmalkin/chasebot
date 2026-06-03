@@ -180,14 +180,14 @@ def apply_planner_route_execution_defaults(
     _set_route_default(args, explicit_args, "drive_mode", "line_servo", "--drive-mode")
     _set_route_default(args, explicit_args, "drive_linear_x_mps", 0.1, "--drive-linear-x-mps")
     if route_label == ROUTE_RECOVERY_OR_REAIM:
-        route_drive_duration_s = 58.0
-        route_sample_duration_s = 62.0
+        route_drive_duration_s = 78.0
+        route_sample_duration_s = 82.0
     elif route_label == ROUTE_NAV2_REPOSITION:
-        route_drive_duration_s = 54.0
-        route_sample_duration_s = 58.0
+        route_drive_duration_s = 74.0
+        route_sample_duration_s = 78.0
     else:
-        route_drive_duration_s = 50.0
-        route_sample_duration_s = 54.0
+        route_drive_duration_s = 70.0
+        route_sample_duration_s = 74.0
     _set_route_default(args, explicit_args, "drive_duration_s", route_drive_duration_s, "--drive-duration-s")
     _set_route_default(args, explicit_args, "sample_duration_s", route_sample_duration_s, "--sample-duration-s")
     _set_route_default(args, explicit_args, "line_servo_push_linear_x_mps", 0.055, "--line-servo-push-linear-x-mps")
@@ -849,6 +849,13 @@ def line_servo_command(
         and abs(robot_lateral_error) > effective_contact_lateral_ready_m * 1.50
         and abs(line_yaw_error) <= 0.45
     )
+    recovery_contact_yaw_hold_active = bool(
+        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        and 0.10 < distance_to_contact <= 0.18
+        and not contact_ready
+        and abs(robot_lateral_error) <= effective_contact_lateral_ready_m
+        and abs(line_yaw_error) > 0.25
+    )
     ball_motion_m = 0.0
     if ball_start_pose is not None:
         ball_motion_m = math.hypot(
@@ -857,14 +864,28 @@ def line_servo_command(
         )
     ball_moved = bool(ball_motion_m >= float(motion_threshold_m))
     if ball_moved:
-        if abs(robot_lateral_error) > effective_contact_lateral_ready_m:
+        yaw_misaligned_after_motion = abs(line_yaw_error) > max(float(contact_yaw_ready_rad) * 1.50, 0.10)
+        if abs(robot_lateral_error) > effective_contact_lateral_ready_m or yaw_misaligned_after_motion:
             phase = "push_coast_realign"
-            desired_yaw = lateral_corrected_yaw
-            base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps), 0.035)
+            desired_yaw = (
+                lateral_corrected_yaw
+                if abs(robot_lateral_error) > effective_contact_lateral_ready_m
+                else line_yaw
+            )
+            if abs(line_yaw_error) > 0.35:
+                base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps), 0.018)
+            elif abs(line_yaw_error) > 0.18:
+                base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps), 0.025)
+            else:
+                base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps), 0.035)
         else:
             phase = "push_coast"
             desired_yaw = line_yaw
             base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps))
+    elif recovery_contact_yaw_hold_active:
+        phase = "recovery_contact_yaw_hold"
+        desired_yaw = line_yaw
+        base_linear = 0.0
     elif (
         clean_route_label == "recovery_or_reaim"
         and distance_to_setup <= recovery_setup_pocket_m
@@ -975,6 +996,8 @@ def line_servo_command(
         crawl_cap = 0.018 if distance_to_contact < 0.14 else 0.025
         base_linear = min(max(base_linear, float(min_linear_x_mps)), crawl_cap)
     linear_x = clamp(base_linear, linear_floor, float(max_linear_x_mps))
+    if recovery_contact_yaw_hold_active:
+        linear_x = 0.0
     return {
         "phase": phase,
         "linear_x_mps": round(float(linear_x), 6),
@@ -994,6 +1017,7 @@ def line_servo_command(
         "recovery_final_reaim_active": recovery_final_reaim_active,
         "local_close_settle_active": local_close_settle_active,
         "recovery_close_settle_active": recovery_close_settle_active,
+        "recovery_contact_yaw_hold_active": recovery_contact_yaw_hold_active,
         "lateral_reaim_rad": round(float(lateral_reaim), 6),
         "lateral_reaim_release_m": round(float(lateral_reaim_release_m), 6),
         "lateral_reaim_gain": round(float(lateral_reaim_gain), 6),

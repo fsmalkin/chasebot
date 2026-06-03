@@ -156,8 +156,8 @@ def test_planner_route_defaults_turn_frozen_fetch_layout_into_line_servo():
     assert args.forward_only_pre_contact_required is True
     assert args.drive_mode == "line_servo"
     assert args.drive_linear_x_mps == pytest.approx(0.10)
-    assert args.drive_duration_s == pytest.approx(50.0)
-    assert args.sample_duration_s == pytest.approx(54.0)
+    assert args.drive_duration_s == pytest.approx(70.0)
+    assert args.sample_duration_s == pytest.approx(74.0)
     assert args.stop_on_delivery is True
     assert args.delivery_stop_radius_m == pytest.approx(0.20)
     assert args.post_delivery_sample_s == pytest.approx(4.0)
@@ -186,8 +186,8 @@ def test_planner_route_defaults_enable_nav2_setup_for_frozen_reposition_layout()
     assert args.nav2_reposition_transform_layout_to_current_robot is True
     assert args.nav2_reposition_goal_frame_mode == "nav2_relative"
     assert args.nav2_reposition_setup_standoff_m == pytest.approx(0.38)
-    assert args.drive_duration_s == pytest.approx(54.0)
-    assert args.sample_duration_s == pytest.approx(58.0)
+    assert args.drive_duration_s == pytest.approx(74.0)
+    assert args.sample_duration_s == pytest.approx(78.0)
     assert args.robot_x == pytest.approx(0.0)
     assert args.robot_y == pytest.approx(0.0)
     assert args.robot_yaw == pytest.approx(0.0)
@@ -205,8 +205,8 @@ def test_planner_route_defaults_extend_recovery_execution_window():
 
     assert defaults["applied"] is True
     assert args.nav2_reposition_before_fetch is True
-    assert args.drive_duration_s == pytest.approx(58.0)
-    assert args.sample_duration_s == pytest.approx(62.0)
+    assert args.drive_duration_s == pytest.approx(78.0)
+    assert args.sample_duration_s == pytest.approx(82.0)
 
 
 def test_planner_route_defaults_preserve_explicit_cli_overrides():
@@ -226,7 +226,7 @@ def test_planner_route_defaults_preserve_explicit_cli_overrides():
     assert args.drive_mode == "constant"
     assert args.drive_duration_s == pytest.approx(5.0)
     assert args.stop_on_delivery is False
-    assert args.sample_duration_s == pytest.approx(54.0)
+    assert args.sample_duration_s == pytest.approx(74.0)
     assert args.robot_x == pytest.approx(0.25)
     assert args.robot_y == pytest.approx(0.1)
     assert args.robot_yaw == pytest.approx(0.2)
@@ -243,7 +243,7 @@ def test_planner_route_defaults_preserve_equals_style_cli_overrides():
     apply_planner_route_execution_defaults(args, layout, explicit_args={"--drive-duration-s=5.0"})
 
     assert args.drive_duration_s == pytest.approx(5.0)
-    assert args.sample_duration_s == pytest.approx(54.0)
+    assert args.sample_duration_s == pytest.approx(74.0)
 
 
 def test_parse_args_accepts_planner_route_metadata(monkeypatch):
@@ -805,6 +805,32 @@ def test_line_servo_command_keeps_recovery_line_acquire_for_yaw_only_debt():
     assert command["angular_z_rps"] == pytest.approx(0.45)
 
 
+def test_line_servo_command_holds_close_recovery_contact_until_yaw_is_safe():
+    command = line_servo_command(
+        robot_pose={"x": 0.089, "y": 0.088, "yaw": 0.157},
+        ball_pose={"x": 0.335058, "y": 0.013191, "yaw": 0.0},
+        target_x=0.90467,
+        target_y=-0.202663,
+        ball_start_pose={"x": 0.335058, "y": 0.013191, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=0.05236,
+        route_label="recovery_or_reaim",
+    )
+
+    assert command["phase"] == "recovery_contact_yaw_hold"
+    assert command["recovery_contact_yaw_hold_active"] is True
+    assert command["contact_ready"] is False
+    assert command["ball_moved"] is False
+    assert command["linear_x_mps"] == pytest.approx(0.0)
+    assert command["desired_yaw_rad"] == pytest.approx(command["line_yaw_rad"], abs=1.0e-6)
+    assert command["angular_z_rps"] < 0.0
+
+
 def test_line_servo_command_holds_forward_motion_for_large_recovery_yaw_setup():
     command = line_servo_command(
         robot_pose={"x": -0.001425, "y": -0.000102, "yaw": 0.142985},
@@ -921,6 +947,31 @@ def test_line_servo_command_realigns_after_early_bad_recovery_contact():
     assert command["contact_ready"] is False
     assert command["linear_x_mps"] <= 0.035
     assert command["desired_yaw_rad"] != pytest.approx(command["line_yaw_rad"], abs=1.0e-6)
+
+
+def test_line_servo_command_realigns_slowly_when_recovery_ball_moves_before_yaw_is_ready():
+    command = line_servo_command(
+        robot_pose={"x": 0.094894, "y": 0.088367, "yaw": 0.090335},
+        ball_pose={"x": 0.336253, "y": 0.003492, "yaw": 0.0},
+        target_x=0.90467,
+        target_y=-0.202663,
+        ball_start_pose={"x": 0.335058, "y": 0.013191, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=0.05236,
+        route_label="recovery_or_reaim",
+    )
+
+    assert command["phase"] == "push_coast_realign"
+    assert command["ball_moved"] is True
+    assert command["contact_ready"] is False
+    assert command["linear_x_mps"] <= 0.018
+    assert command["desired_yaw_rad"] == pytest.approx(command["line_yaw_rad"], abs=1.0e-6)
+    assert command["angular_z_rps"] < 0.0
 
 
 def test_summarize_line_servo_effective_command_preserves_route_caps():
