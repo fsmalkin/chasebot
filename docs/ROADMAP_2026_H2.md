@@ -846,6 +846,20 @@ first-contact blockers `0`. The roadmap implication is stable: route ownership
 is working across rough executable classes. Recovery first-contact smoothness is
 the next development target.
 
+Recovery first-contact smoothing evidence, later June 3: the first final-reaim
+slice reran the same high-risk recovery scene04 case:
+`artifacts/session/live_recovery_final_reaim_scene04_20260603/fetch_planner_route_replay_batch/scorecard.md`.
+Delivery stayed green with closest approach `0.194575m`, and first-contact
+quality cleared its prior lateral/yaw flags with lateral `0.026103m` and yaw
+error `-2.281033deg`. The run still carries pre-contact lateral/yaw history
+watches. The fresh roughest-trio analyzer
+`artifacts/session/route_uat_recovery_final_reaim_roughest_trio_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+stayed visual UAT green with `3/3` delivery and `promotion_evidence=false`;
+recovery and Nav2 cleared first-contact flags, while fetch-ready kept a narrow
+lateral first-contact watch at `0.030705m`. The next roadmap step is
+fetch-ready bumper-clearance polish followed by a second planner seed before
+promotion-gate discussion.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

@@ -620,6 +620,19 @@ Policy implication: the next policy work is recovery first-contact smoothing.
 Nav2 setup remains valuable where route quality predicts medium setup debt,
 because the rough Nav2 case delivered with clean first-contact flags.
 
+Recovery final-reaim evidence, later June 3: the first smoothing slice reran
+the same high-risk recovery case from the roughest selector:
+`artifacts/session/live_recovery_final_reaim_scene04_20260603/fetch_planner_route_replay_batch/scorecard.md`.
+The delivery pass held at closest approach `0.194575m`, and first-contact
+quality cleared with lateral `0.026103m`, yaw error `-2.281033deg`, and no
+first-contact flags. The fresh roughest-trio analyzer
+`artifacts/session/route_uat_recovery_final_reaim_roughest_trio_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+kept route-owner visual UAT green with `3/3` delivery and
+`promotion_evidence=false`; recovery and Nav2 cleared first-contact flags, while
+fetch-ready kept a narrow lateral first-contact watch at `0.030705m`. Keep this
+as a contact-quality repair proof and make fetch-ready bumper-clearance polish
+the next controller slice before a second planner seed.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

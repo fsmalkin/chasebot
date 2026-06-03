@@ -602,6 +602,32 @@ def test_line_servo_command_uses_slow_final_crawl_for_quality_tuned_contact():
     assert command["contact_yaw_ready_rad"] == pytest.approx(0.05236)
 
 
+def test_line_servo_command_uses_recovery_final_reaim_before_rough_contact():
+    command = line_servo_command(
+        robot_pose={"x": 0.240562, "y": 0.060826, "yaw": 0.437386},
+        ball_pose={"x": 0.343338, "y": 0.080267, "yaw": 0.0},
+        target_x=0.720524,
+        target_y=0.328572,
+        ball_start_pose={"x": 0.343338, "y": 0.080267, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=0.05236,
+        route_label="recovery_or_reaim",
+    )
+
+    assert command["phase"] == "recovery_final_reaim"
+    assert command["recovery_final_reaim_active"] is True
+    assert command["contact_ready"] is False
+    assert command["linear_x_mps"] <= 0.014
+    assert command["lateral_reaim_gain"] == pytest.approx(6.5)
+    assert abs(command["lateral_reaim_rad"]) > 0.20
+    assert command["angular_z_rps"] < -0.05
+
+
 def test_summarize_line_servo_effective_command_preserves_route_caps():
     summary = summarize_line_servo_effective_command(
         [

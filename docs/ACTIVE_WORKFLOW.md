@@ -362,6 +362,25 @@ June 3 route-quality scorer and roughest-trio evidence:
   use `--quality-order roughest` for stress UAT, and focus the next controller
   slice on recovery first-contact smoothing.
 
+June 3 recovery final-reaim update:
+
+- Same rough recovery case rerun:
+  `artifacts/session/live_recovery_final_reaim_scene04_20260603/fetch_planner_route_replay_batch/scorecard.md`
+- Result: delivery stayed green with closest approach `0.194575m`. First-contact
+  quality improved from flagged lateral/yaw contact to no first-contact flags:
+  lateral `0.026103m`, yaw error `-2.281033deg`.
+- Visual read: onboard/topdown frame sequence shows the ball centered through
+  first contact and then pushed into the circle. The run still carries
+  pre-contact lateral/yaw history watches because it starts as a high-risk
+  recovery case.
+- Roughest-trio rerun:
+  `artifacts/session/route_uat_recovery_final_reaim_roughest_trio_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+  stayed route-owner visual UAT green with `3/3` delivery and
+  `promotion_evidence=false`. Recovery and Nav2 had no first-contact flags;
+  fetch-ready still had a narrow lateral first-contact watch at `0.030705m`.
+- Next command: polish fetch-ready bumper-clearance/entry alignment, then
+  broaden to another planner seed before promotion-gate discussion.
+
 ## UAT Orchestrator Modes
 
 Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:
