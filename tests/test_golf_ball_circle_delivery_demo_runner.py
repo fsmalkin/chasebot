@@ -13,6 +13,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 from golf_ball_circle_delivery_demo_runner import build_shot_outcome  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import ball_samples_from_contact_samples  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_approach_contact_metrics  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import line_servo_command  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import parse_args  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import apply_target_layout  # noqa: E402
 
@@ -104,8 +105,18 @@ def test_parse_args_accepts_planner_route_metadata(monkeypatch):
             "nav2_forward_reposition_then_fetch",
             "--forward-only-pre-contact-required",
             "--stop-on-delivery",
+            "--delivery-stop-radius-m",
+            "0.20",
             "--post-delivery-sample-s",
             "4.0",
+            "--drive-mode",
+            "line_servo",
+            "--line-servo-push-linear-x-mps",
+            "0.05",
+            "--line-servo-max-angular-z-rps",
+            "0.16",
+            "--line-servo-yaw-gain",
+            "1.4",
         ],
     )
 
@@ -115,7 +126,48 @@ def test_parse_args_accepts_planner_route_metadata(monkeypatch):
     assert args.route_executor == "nav2_forward_reposition_then_fetch"
     assert args.forward_only_pre_contact_required is True
     assert args.stop_on_delivery is True
+    assert args.delivery_stop_radius_m == pytest.approx(0.20)
     assert args.post_delivery_sample_s == pytest.approx(4.0)
+    assert args.drive_mode == "line_servo"
+    assert args.line_servo_push_linear_x_mps == pytest.approx(0.05)
+    assert args.line_servo_max_angular_z_rps == pytest.approx(0.16)
+    assert args.line_servo_yaw_gain == pytest.approx(1.4)
+
+
+def test_line_servo_command_stays_forward_only_and_reduces_setup_error():
+    command = line_servo_command(
+        robot_pose={"x": -0.389734, "y": 0.662437, "yaw": -0.572531},
+        ball_pose={"x": 0.4457, "y": 0.212988, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.4457, "y": 0.212988, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+    )
+
+    assert command["phase"] == "setup_converge"
+    assert command["linear_x_mps"] > 0.0
+    assert command["angular_z_rps"] > 0.0
+    assert abs(command["angular_z_rps"]) <= 0.18
+
+
+def test_line_servo_command_slows_after_ball_motion():
+    command = line_servo_command(
+        robot_pose={"x": 0.30, "y": 0.16, "yaw": -0.36},
+        ball_pose={"x": 0.50, "y": 0.18, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.4457, "y": 0.212988, "yaw": 0.0},
+        motion_threshold_m=0.005,
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+    )
+
+    assert command["phase"] == "push_coast"
+    assert command["ball_moved"] is True
+    assert command["linear_x_mps"] <= 0.055
 
 
 def test_contact_trace_metrics_accept_stable_axial_approach():
@@ -155,7 +207,9 @@ def test_contact_trace_metrics_accept_stable_axial_approach():
     )
 
     assert metrics["stable_contact_approach_pass"] is True
+    assert metrics["first_contact_quality_pass"] is True
     assert metrics["flags"] == []
+    assert metrics["first_contact_quality_flags"] == []
     assert metrics["first_contact_index"] == 2
     assert metrics["max_abs_robot_lateral_error_pre_contact_m"] == pytest.approx(0.001)
     assert metrics["robot_yaw_error_sign_changes_pre_contact"] == 0
@@ -193,9 +247,11 @@ def test_contact_trace_metrics_flag_lateral_knock_away_and_yaw_oscillation():
     )
 
     assert metrics["stable_contact_approach_pass"] is False
+    assert metrics["first_contact_quality_pass"] is False
     assert "pre_contact_lateral_error" in metrics["flags"]
     assert "pre_contact_yaw_oscillation" in metrics["flags"]
     assert "ball_lateral_knock_away" in metrics["flags"]
+    assert "first_contact_ball_lateral_error" in metrics["first_contact_quality_flags"]
 
 
 def test_ball_samples_from_contact_samples_preserves_legacy_ball_trace_shape():

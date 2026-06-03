@@ -161,6 +161,88 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
     assert "`/artifacts/session/" not in text
 
 
+def test_visual_uat_package_accepts_keyframe_recovery_confirmation(tmp_path, monkeypatch):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(package, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+    _stub_browser_video_probe(monkeypatch)
+
+    planner = session_root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
+    _write_json(
+        planner,
+        {
+            "campaign_id": "planner",
+            "type": "fetch_planner_handoff_gate",
+            "pass": True,
+            "pass_count": 1,
+            "fail_count": 0,
+            "random_cases": 1,
+            "wrong_fetch_dispatch_count": 0,
+        },
+    )
+    mission = session_root / "mission" / "summary.json"
+    _write_json(
+        mission,
+        {
+            "campaign_id": "mission",
+            "fetch_to_pose_pass": True,
+            "pass": True,
+            "model_provenance": {
+                "model_provenance_valid": True,
+                "model_provenance_reason": "calibrated_fetch_models",
+                "target_model_radius_m": 0.021336,
+                "target_model_classification": "calibrated_golf_ball",
+            },
+        },
+    )
+    visual = session_root / "mission" / "visual"
+    keyframes = visual / "keyframes"
+    keyframes.mkdir(parents=True)
+    for index in range(3):
+        (keyframes / f"{index:08d}_raw.png").write_bytes(b"raw")
+        (keyframes / f"{index:08d}_debug.png").write_bytes(b"debug")
+        (keyframes / f"{index:08d}_topdown.png").write_bytes(b"topdown")
+    (visual / "world_stream.mp4").write_bytes(b"w" * package.VIDEO_MIN_BYTES)
+    (visual / "topdown_telemetry_browser.mp4").write_bytes(b"t" * package.VIDEO_MIN_BYTES)
+    (visual / "raw_camera_browser.mp4").write_bytes(b"r" * package.VIDEO_MIN_BYTES)
+    _write_json(
+        visual / "state.json",
+        {
+            "raw_frame_count": 12,
+            "debug_frame_count": 12,
+            "telemetry_frame_count": 12,
+            "raw_nonblank": True,
+            "debug_nonblank": True,
+            "true_target_seen": True,
+            "truth_alignment_ok": True,
+        },
+    )
+    _write_json(visual / "world_stream_summary.json", {"pass": False, "failure_class": "world_stream_no_recent_frames"})
+
+    args = type(
+        "Args",
+        (),
+        {
+            "campaign_id": "uat",
+            "planner_summary": [str(planner)],
+            "seeded_evidence_summary": [],
+            "stage_quality_summary": [],
+            "mission_summary": [str(mission)],
+            "visual_dir": [str(visual)],
+        },
+    )()
+
+    summary = package.build_summary(args)
+
+    assert summary["pass"] is True
+    assert summary["visual_confirmation_seen"] is True
+    assert summary["local_fetch_visual_confirmed"] is True
+    assert summary["visual_summaries"][0]["visual_keyframe_recovery_pass"] is True
+    assert summary["visual_summaries"][0]["visual_confirmation_source"] == "keyframe_recovery"
+    assert "visual_confirmation_keyframe_recovery" in summary["warnings"]
+    assert "no_healthy_visual_confirmation" not in summary["warnings"]
+
+
 def test_visual_uat_package_accepts_architecture_revisit_planner_summary(tmp_path, monkeypatch):
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)

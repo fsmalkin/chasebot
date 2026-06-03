@@ -21,6 +21,7 @@ from passive_ball_roll_calibration_runner import discover_compose_project
 from passive_ball_roll_calibration_runner import docker_exec
 from passive_ball_roll_calibration_runner import remove_model
 from passive_ball_roll_calibration_runner import spawn_model
+from gather_mission_runner import fetch_model_provenance
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -181,6 +182,76 @@ def signed_lateral_error_m(point_x: float, point_y: float, *, origin_x: float, o
     return -math.sin(line_yaw_rad) * dx + math.cos(line_yaw_rad) * dy
 
 
+def clamp(value: float, lower: float, upper: float) -> float:
+    return max(float(lower), min(float(upper), float(value)))
+
+
+def line_servo_command(
+    *,
+    robot_pose: dict[str, float],
+    ball_pose: dict[str, float],
+    target_x: float,
+    target_y: float,
+    ball_start_pose: dict[str, float] | None = None,
+    motion_threshold_m: float = 0.005,
+    max_linear_x_mps: float = 0.10,
+    push_linear_x_mps: float = 0.055,
+    min_linear_x_mps: float = 0.025,
+    max_angular_z_rps: float = 0.18,
+    yaw_gain: float = 1.20,
+    contact_standoff_m: float = 0.11,
+) -> dict[str, Any]:
+    robot_x = float(robot_pose.get("x", 0.0) or 0.0)
+    robot_y = float(robot_pose.get("y", 0.0) or 0.0)
+    robot_yaw = float(robot_pose.get("yaw", 0.0) or 0.0)
+    ball_x = float(ball_pose.get("x", 0.0) or 0.0)
+    ball_y = float(ball_pose.get("y", 0.0) or 0.0)
+    line_yaw = math.atan2(float(target_y) - ball_y, float(target_x) - ball_x)
+    behind_x = ball_x - math.cos(line_yaw) * float(contact_standoff_m)
+    behind_y = ball_y - math.sin(line_yaw) * float(contact_standoff_m)
+    distance_to_contact = math.hypot(behind_x - robot_x, behind_y - robot_y)
+    aim_yaw = math.atan2(behind_y - robot_y, behind_x - robot_x)
+    ball_motion_m = 0.0
+    if ball_start_pose is not None:
+        ball_motion_m = math.hypot(
+            ball_x - float(ball_start_pose.get("x", ball_x) or ball_x),
+            ball_y - float(ball_start_pose.get("y", ball_y) or ball_y),
+        )
+    ball_moved = bool(ball_motion_m >= float(motion_threshold_m))
+    if ball_moved:
+        phase = "push_coast"
+        desired_yaw = line_yaw
+        base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps))
+    elif distance_to_contact > 0.16:
+        phase = "setup_converge"
+        desired_yaw = aim_yaw
+        base_linear = float(max_linear_x_mps)
+    else:
+        phase = "first_contact_align"
+        desired_yaw = line_yaw
+        base_linear = min(float(max_linear_x_mps), max(float(push_linear_x_mps), 0.06))
+    yaw_error = normalize_angle_rad(desired_yaw - robot_yaw)
+    angular_z = clamp(float(yaw_gain) * yaw_error, -float(max_angular_z_rps), float(max_angular_z_rps))
+    if abs(yaw_error) > 0.45:
+        base_linear = min(base_linear, 0.035)
+    elif abs(yaw_error) > 0.25:
+        base_linear = min(base_linear, 0.055)
+    linear_x = clamp(base_linear, float(min_linear_x_mps), float(max_linear_x_mps))
+    return {
+        "phase": phase,
+        "linear_x_mps": round(float(linear_x), 6),
+        "angular_z_rps": round(float(angular_z), 6),
+        "desired_yaw_rad": round(float(desired_yaw), 6),
+        "line_yaw_rad": round(float(line_yaw), 6),
+        "aim_yaw_rad": round(float(aim_yaw), 6),
+        "yaw_error_rad": round(float(yaw_error), 6),
+        "distance_to_contact_m": round(float(distance_to_contact), 6),
+        "ball_motion_m": round(float(ball_motion_m), 6),
+        "ball_moved": ball_moved,
+        "contact_standoff_m": round(float(contact_standoff_m), 6),
+    }
+
+
 def collect_contact_samples(
     *,
     compose_project: str,
@@ -193,7 +264,9 @@ def collect_contact_samples(
     delivery_target_x: float = 0.0,
     delivery_target_y: float = 0.0,
     delivery_radius_m: float = 0.0,
+    delivery_stop_radius_m: float = 0.0,
 ) -> list[dict[str, Any]]:
+    effective_stop_radius_m = float(delivery_stop_radius_m) if float(delivery_stop_radius_m) > 0.0 else float(delivery_radius_m)
     script = f"""
 set -eo pipefail
 set +u
@@ -208,6 +281,7 @@ export STOP_ON_DELIVERY={json.dumps("1" if stop_on_delivery else "0")}
 export DELIVERY_TARGET_X={json.dumps(f"{delivery_target_x:.6f}")}
 export DELIVERY_TARGET_Y={json.dumps(f"{delivery_target_y:.6f}")}
 export DELIVERY_RADIUS_M={json.dumps(f"{delivery_radius_m:.6f}")}
+export DELIVERY_STOP_RADIUS_M={json.dumps(f"{effective_stop_radius_m:.6f}")}
 python3 - <<'PY'
 import json
 import math
@@ -228,6 +302,7 @@ stop_on_delivery = os.environ.get("STOP_ON_DELIVERY", "0") == "1"
 delivery_target_x = float(os.environ.get("DELIVERY_TARGET_X", "0.0"))
 delivery_target_y = float(os.environ.get("DELIVERY_TARGET_Y", "0.0"))
 delivery_radius_m = float(os.environ.get("DELIVERY_RADIUS_M", "0.0"))
+delivery_stop_radius_m = float(os.environ.get("DELIVERY_STOP_RADIUS_M", str(delivery_radius_m)))
 topic = f"/world/{{world_name}}/dynamic_pose/info"
 started = time.monotonic()
 deadline = started + max(duration_s, 0.1)
@@ -290,8 +365,9 @@ while time.monotonic() < deadline:
                     dy = float(position.get("y", 0.0)) - delivery_target_y
                     distance = math.hypot(dx, dy)
                     record["delivery_distance_m"] = round(distance, 6)
-                    if distance <= delivery_radius_m:
+                    if distance <= delivery_stop_radius_m:
                         record["delivery_stop_triggered"] = True
+                        record["delivery_stop_radius_m"] = round(delivery_stop_radius_m, 6)
                         should_break = True
                 except Exception:
                     pass
@@ -320,6 +396,228 @@ PY
             samples.append(row)
     if rc != 0 and not samples:
         raise RuntimeError(output.strip() or "failed to sample Gazebo pose topic")
+    return samples
+
+
+def collect_line_servo_samples(
+    *,
+    compose_project: str,
+    world_name: str,
+    robot_model_name: str,
+    ball_model_name: str,
+    duration_s: float,
+    poll_period_s: float,
+    delivery_target_x: float,
+    delivery_target_y: float,
+    delivery_radius_m: float,
+    delivery_stop_radius_m: float = 0.0,
+    stop_on_delivery: bool = False,
+    motion_threshold_m: float = 0.005,
+    max_linear_x_mps: float = 0.10,
+    push_linear_x_mps: float = 0.055,
+    max_angular_z_rps: float = 0.18,
+    yaw_gain: float = 1.20,
+) -> list[dict[str, Any]]:
+    effective_stop_radius_m = float(delivery_stop_radius_m) if float(delivery_stop_radius_m) > 0.0 else float(delivery_radius_m)
+    script = f"""
+set -eo pipefail
+set +u
+source /opt/ros/${{CORE_ROS_DISTRO:-kilted}}/setup.bash
+set -u
+export WORLD_NAME={json.dumps(world_name)}
+export ROBOT_MODEL_NAME={json.dumps(robot_model_name)}
+export BALL_MODEL_NAME={json.dumps(ball_model_name)}
+export DURATION_S={json.dumps(f"{duration_s:.6f}")}
+export POLL_PERIOD_S={json.dumps(f"{poll_period_s:.6f}")}
+export DELIVERY_TARGET_X={json.dumps(f"{delivery_target_x:.6f}")}
+export DELIVERY_TARGET_Y={json.dumps(f"{delivery_target_y:.6f}")}
+export DELIVERY_RADIUS_M={json.dumps(f"{delivery_radius_m:.6f}")}
+export DELIVERY_STOP_RADIUS_M={json.dumps(f"{effective_stop_radius_m:.6f}")}
+export STOP_ON_DELIVERY={json.dumps("1" if stop_on_delivery else "0")}
+export MOTION_THRESHOLD_M={json.dumps(f"{motion_threshold_m:.6f}")}
+export MAX_LINEAR_X_MPS={json.dumps(f"{max_linear_x_mps:.6f}")}
+export PUSH_LINEAR_X_MPS={json.dumps(f"{push_linear_x_mps:.6f}")}
+export MAX_ANGULAR_Z_RPS={json.dumps(f"{max_angular_z_rps:.6f}")}
+export YAW_GAIN={json.dumps(f"{yaw_gain:.6f}")}
+python3 - <<'PY'
+import json
+import math
+import os
+import subprocess
+import time
+
+import rclpy
+from geometry_msgs.msg import TwistStamped
+
+import sys
+sys.path.insert(0, "/workspaces/chasecar/scripts")
+from golf_ball_circle_delivery_demo_runner import line_servo_command
+from sim_truth_probe import parse_pose_message
+
+world_name = os.environ["WORLD_NAME"]
+robot_model_name = os.environ["ROBOT_MODEL_NAME"]
+ball_model_name = os.environ["BALL_MODEL_NAME"]
+duration_s = float(os.environ["DURATION_S"])
+poll_period_s = float(os.environ["POLL_PERIOD_S"])
+delivery_target_x = float(os.environ["DELIVERY_TARGET_X"])
+delivery_target_y = float(os.environ["DELIVERY_TARGET_Y"])
+delivery_radius_m = float(os.environ["DELIVERY_RADIUS_M"])
+delivery_stop_radius_m = float(os.environ["DELIVERY_STOP_RADIUS_M"])
+stop_on_delivery = os.environ.get("STOP_ON_DELIVERY", "0") == "1"
+motion_threshold_m = float(os.environ["MOTION_THRESHOLD_M"])
+max_linear_x_mps = float(os.environ["MAX_LINEAR_X_MPS"])
+push_linear_x_mps = float(os.environ["PUSH_LINEAR_X_MPS"])
+max_angular_z_rps = float(os.environ["MAX_ANGULAR_Z_RPS"])
+yaw_gain = float(os.environ["YAW_GAIN"])
+topic = f"/world/{{world_name}}/dynamic_pose/info"
+started = time.monotonic()
+deadline = started + max(duration_s, 0.1)
+index = 0
+ball_start_xy = None
+
+def yaw_from_orientation(orientation):
+    try:
+        x = float(orientation.get("x", 0.0) or 0.0)
+        y = float(orientation.get("y", 0.0) or 0.0)
+        z = float(orientation.get("z", 0.0) or 0.0)
+        w = float(orientation.get("w", 1.0) or 1.0)
+    except Exception:
+        return 0.0
+    return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+
+def convert_pose(pose):
+    if not pose:
+        return None
+    position = pose.get("position") if isinstance(pose.get("position"), dict) else {{}}
+    orientation = pose.get("orientation") if isinstance(pose.get("orientation"), dict) else {{}}
+    return {{
+        "name": pose.get("name", ""),
+        "position": position,
+        "orientation": orientation,
+        "yaw": yaw_from_orientation(orientation),
+    }}
+
+def pose_xy_yaw(converted):
+    if not converted:
+        return None
+    position = converted.get("position") if isinstance(converted.get("position"), dict) else {{}}
+    return {{
+        "x": float(position.get("x", 0.0) or 0.0),
+        "y": float(position.get("y", 0.0) or 0.0),
+        "z": float(position.get("z", 0.0) or 0.0),
+        "yaw": float(converted.get("yaw", 0.0) or 0.0),
+    }}
+
+def publish(pub, node, linear_x, angular_z):
+    msg = TwistStamped()
+    msg.header.frame_id = "base_link"
+    msg.header.stamp = node.get_clock().now().to_msg()
+    msg.twist.linear.x = float(linear_x)
+    msg.twist.angular.z = float(angular_z)
+    pub.publish(msg)
+    rclpy.spin_once(node, timeout_sec=0.0)
+
+rclpy.init(args=None)
+node = rclpy.create_node("fetch_line_servo_demo_runner")
+pub = node.create_publisher(TwistStamped, "/jetbot_base_controller/cmd_vel", 10)
+try:
+    while time.monotonic() < deadline:
+        tick_started = time.monotonic()
+        should_break = False
+        record = {{
+            "sample_index": index,
+            "t_s": round(tick_started - started, 6),
+            "topic_ok": False,
+            "robot_model_name": robot_model_name,
+            "ball_model_name": ball_model_name,
+            "robot_pose": None,
+            "ball_pose": None,
+            "drive_mode": "line_servo",
+        }}
+        try:
+            completed = subprocess.run(
+                ["gz", "topic", "-e", "-n", "1", "-t", topic],
+                capture_output=True,
+                text=True,
+                timeout=3.0,
+                check=False,
+            )
+            record["topic_ok"] = completed.returncode == 0
+            if completed.returncode == 0:
+                poses = parse_pose_message(completed.stdout or "")
+                robot_pose = next((item for item in poses if item.get("name") == robot_model_name), None)
+                ball_pose = next((item for item in poses if item.get("name") == ball_model_name), None)
+                converted_robot = convert_pose(robot_pose)
+                converted_ball = convert_pose(ball_pose)
+                record["robot_pose"] = converted_robot
+                record["ball_pose"] = converted_ball
+                robot_xy = pose_xy_yaw(converted_robot)
+                ball_xy = pose_xy_yaw(converted_ball)
+                if ball_xy and ball_start_xy is None:
+                    ball_start_xy = dict(ball_xy)
+                if robot_xy and ball_xy:
+                    command = line_servo_command(
+                        robot_pose=robot_xy,
+                        ball_pose=ball_xy,
+                        target_x=delivery_target_x,
+                        target_y=delivery_target_y,
+                        ball_start_pose=ball_start_xy,
+                        motion_threshold_m=motion_threshold_m,
+                        max_linear_x_mps=max_linear_x_mps,
+                        push_linear_x_mps=push_linear_x_mps,
+                        max_angular_z_rps=max_angular_z_rps,
+                        yaw_gain=yaw_gain,
+                    )
+                    record["line_servo_command"] = command
+                    publish(pub, node, command["linear_x_mps"], command["angular_z_rps"])
+                    dx = ball_xy["x"] - delivery_target_x
+                    dy = ball_xy["y"] - delivery_target_y
+                    distance = math.hypot(dx, dy)
+                    record["delivery_distance_m"] = round(distance, 6)
+                    if stop_on_delivery and distance <= delivery_stop_radius_m:
+                        record["delivery_stop_triggered"] = True
+                        record["delivery_stop_radius_m"] = round(delivery_stop_radius_m, 6)
+                        should_break = True
+                else:
+                    publish(pub, node, 0.0, 0.0)
+        except Exception as exc:
+            record["error"] = str(exc)
+            try:
+                publish(pub, node, 0.0, 0.0)
+            except Exception:
+                pass
+        print(json.dumps(record, sort_keys=True), flush=True)
+        index += 1
+        if should_break:
+            break
+        elapsed = time.monotonic() - tick_started
+        if elapsed < poll_period_s:
+            time.sleep(poll_period_s - elapsed)
+finally:
+    for _ in range(5):
+        try:
+            publish(pub, node, 0.0, 0.0)
+            time.sleep(0.05)
+        except Exception:
+            pass
+    node.destroy_node()
+    rclpy.shutdown()
+PY
+"""
+    rc, output = docker_exec(compose_project, script, timeout_s=duration_s + 60.0)
+    samples: list[dict[str, Any]] = []
+    for line in output.splitlines():
+        text = line.strip()
+        if not text or not text.startswith("{"):
+            continue
+        try:
+            row = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict) and (isinstance(row.get("robot_pose"), dict) or isinstance(row.get("ball_pose"), dict)):
+            samples.append(row)
+    if rc != 0 and not samples:
+        raise RuntimeError(output.strip() or "failed to run line-servo drive loop")
     return samples
 
 
@@ -449,11 +747,25 @@ def build_approach_contact_metrics(
         flags.append("ball_lateral_knock_away")
     if contact_angle_rad is not None and abs(contact_angle_rad) > math.radians(float(contact_angle_threshold_deg)):
         flags.append("contact_trajectory_angle_error")
+    first_contact_quality_flags: list[str] = []
+    if first_contact_row:
+        if first_contact_lateral is None or abs(first_contact_lateral) > float(lateral_threshold_m):
+            first_contact_quality_flags.append("first_contact_lateral_error")
+        if first_contact_yaw is None or abs(first_contact_yaw) > yaw_threshold_rad:
+            first_contact_quality_flags.append("first_contact_yaw_error")
+        if first_contact_ball_lateral is None or abs(first_contact_ball_lateral) > float(ball_lateral_threshold_m):
+            first_contact_quality_flags.append("first_contact_ball_lateral_error")
+        if contact_angle_rad is not None and abs(contact_angle_rad) > math.radians(float(contact_angle_threshold_deg)):
+            first_contact_quality_flags.append("first_contact_trajectory_angle_error")
+    else:
+        first_contact_quality_flags.append("missing_first_contact")
 
     return {
         "observed": bool(parsed),
         "stable_contact_approach_pass": not flags,
+        "first_contact_quality_pass": not first_contact_quality_flags,
         "flags": flags,
+        "first_contact_quality_flags": first_contact_quality_flags,
         "contact_line_yaw_deg": round(math.degrees(line_yaw), 6),
         "sample_count": len(parsed),
         "first_contact_index": first_contact_index,
@@ -662,12 +974,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fetch-target-y", type=float, default=None)
     parser.add_argument("--fetch-target-z", type=float, default=None)
     parser.add_argument("--fetch-delivery-radius-m", type=float, default=0.30)
+    parser.add_argument("--drive-mode", choices=["constant", "line_servo"], default="constant")
     parser.add_argument("--drive-linear-x-mps", type=float, default=0.12)
     parser.add_argument("--drive-duration-s", type=float, default=7.0)
+    parser.add_argument("--line-servo-push-linear-x-mps", type=float, default=0.055)
+    parser.add_argument("--line-servo-max-angular-z-rps", type=float, default=0.18)
+    parser.add_argument("--line-servo-yaw-gain", type=float, default=1.20)
     parser.add_argument("--planner-route-label", default="")
     parser.add_argument("--route-executor", default="")
     parser.add_argument("--forward-only-pre-contact-required", action="store_true")
     parser.add_argument("--stop-on-delivery", action="store_true")
+    parser.add_argument("--delivery-stop-radius-m", type=float, default=0.0)
     parser.add_argument("--post-delivery-sample-s", type=float, default=0.0)
     parser.add_argument("--sample-duration-s", type=float, default=9.0)
     parser.add_argument("--poll-period-s", type=float, default=0.10)
@@ -690,6 +1007,11 @@ def main() -> int:
         args.zone_y = args.fetch_target_y
     if args.fetch_target_z is not None:
         args.zone_z = args.fetch_target_z
+    delivery_stop_radius_m = (
+        float(args.delivery_stop_radius_m)
+        if float(args.delivery_stop_radius_m or 0.0) > 0.0
+        else float(args.fetch_delivery_radius_m)
+    )
     state = dashboard_state(args.dashboard_url)
     args.compose_project = args.compose_project or str(state.get("compose_project", "") or state.get("launcher_project", "") or "")
     if not args.compose_project:
@@ -771,43 +1093,67 @@ def main() -> int:
         latest_feedback="Driving the robot forward to collect and deliver the golf ball.",
     )
     contact_samples: list[dict[str, Any]] = []
+    drive_output = ""
+    stop_payload: dict[str, Any] = {"returncode": None, "output": "", "pass": None, "skipped": True}
     stop_publishers_payload: dict[str, Any] = {"returncode": None, "output": "", "pass": None, "skipped": True}
-    drive_proc = start_robot_drive(
-        compose_project=args.compose_project,
-        linear_x_mps=args.drive_linear_x_mps,
-        angular_z_rps=0.0,
-        duration_s=args.drive_duration_s,
-    )
-    try:
-        contact_samples = collect_contact_samples(
+    if str(args.drive_mode) == "line_servo":
+        contact_samples = collect_line_servo_samples(
             compose_project=args.compose_project,
             world_name=args.world_name,
             robot_model_name=args.robot_model_name,
             ball_model_name=args.target_model_name,
             duration_s=args.sample_duration_s,
             poll_period_s=args.poll_period_s,
-            stop_on_delivery=bool(args.stop_on_delivery),
             delivery_target_x=args.zone_x,
             delivery_target_y=args.zone_y,
             delivery_radius_m=args.fetch_delivery_radius_m,
+            delivery_stop_radius_m=delivery_stop_radius_m,
+            stop_on_delivery=bool(args.stop_on_delivery),
+            motion_threshold_m=args.first_contact_motion_threshold_m,
+            max_linear_x_mps=args.drive_linear_x_mps,
+            push_linear_x_mps=args.line_servo_push_linear_x_mps,
+            max_angular_z_rps=args.line_servo_max_angular_z_rps,
+            yaw_gain=args.line_servo_yaw_gain,
         )
-    finally:
-        delivery_detected_while_sampling = any(
-            bool(row.get("delivery_stop_triggered", False)) for row in contact_samples
-        )
-        if delivery_detected_while_sampling and drive_proc.poll() is None:
-            stop_publishers_payload = stop_robot_drive_publishers(args.compose_project)
-            drive_proc.terminate()
-        try:
-            drive_output, _ = drive_proc.communicate(timeout=8.0)
-        except subprocess.TimeoutExpired:
-            stop_publishers_payload = stop_robot_drive_publishers(args.compose_project)
-            drive_proc.kill()
-            try:
-                drive_output, _ = drive_proc.communicate(timeout=4.0)
-            except subprocess.TimeoutExpired:
-                drive_output = ""
         stop_payload = publish_zero_stop(args.compose_project)
+    else:
+        drive_proc = start_robot_drive(
+            compose_project=args.compose_project,
+            linear_x_mps=args.drive_linear_x_mps,
+            angular_z_rps=0.0,
+            duration_s=args.drive_duration_s,
+        )
+        try:
+            contact_samples = collect_contact_samples(
+                compose_project=args.compose_project,
+                world_name=args.world_name,
+                robot_model_name=args.robot_model_name,
+                ball_model_name=args.target_model_name,
+                duration_s=args.sample_duration_s,
+                poll_period_s=args.poll_period_s,
+                stop_on_delivery=bool(args.stop_on_delivery),
+                delivery_target_x=args.zone_x,
+                delivery_target_y=args.zone_y,
+                delivery_radius_m=args.fetch_delivery_radius_m,
+                delivery_stop_radius_m=delivery_stop_radius_m,
+            )
+        finally:
+            delivery_detected_while_sampling = any(
+                bool(row.get("delivery_stop_triggered", False)) for row in contact_samples
+            )
+            if delivery_detected_while_sampling and drive_proc.poll() is None:
+                stop_publishers_payload = stop_robot_drive_publishers(args.compose_project)
+                drive_proc.terminate()
+            try:
+                drive_output, _ = drive_proc.communicate(timeout=8.0)
+            except subprocess.TimeoutExpired:
+                stop_publishers_payload = stop_robot_drive_publishers(args.compose_project)
+                drive_proc.kill()
+                try:
+                    drive_output, _ = drive_proc.communicate(timeout=4.0)
+                except subprocess.TimeoutExpired:
+                    drive_output = ""
+            stop_payload = publish_zero_stop(args.compose_project)
 
     delivery_stop_triggered = any(bool(row.get("delivery_stop_triggered", False)) for row in contact_samples)
     post_delivery_sample_count = 0
@@ -852,6 +1198,11 @@ def main() -> int:
         ball_lateral_threshold_m=args.ball_lateral_threshold_m,
         oscillation_yaw_threshold_deg=args.oscillation_yaw_threshold_deg,
     )
+    model_provenance = fetch_model_provenance(
+        mission_objective=args.mission_objective,
+        target_model_sdf=args.target_model_sdf,
+        zone_model_sdf=args.zone_model_sdf,
+    )
     pass_flag = bool(shot_outcome.get("pass", False))
     mission_time_s = max(float(args.sample_duration_s), float(args.drive_duration_s))
     random_draw = target_layout.get("random_draw", {}) if isinstance(target_layout.get("random_draw"), dict) else {}
@@ -866,12 +1217,17 @@ def main() -> int:
         "forward_only_pre_contact_required": bool(args.forward_only_pre_contact_required),
         "forward_only_pre_contact": forward_only_pre_contact,
         "stop_on_delivery": bool(args.stop_on_delivery),
+        "delivery_stop_radius_m": round(float(delivery_stop_radius_m), 6),
         "delivery_stop_triggered": bool(delivery_stop_triggered),
         "post_delivery_sample_s": round(float(args.post_delivery_sample_s), 6),
         "post_delivery_sample_count": int(post_delivery_sample_count),
         "drive_stop_publishers": stop_publishers_payload,
         "drive_linear_x_mps": round(float(args.drive_linear_x_mps), 6),
         "drive_duration_s": round(float(args.drive_duration_s), 6),
+        "drive_mode": str(args.drive_mode),
+        "line_servo_push_linear_x_mps": round(float(args.line_servo_push_linear_x_mps), 6),
+        "line_servo_max_angular_z_rps": round(float(args.line_servo_max_angular_z_rps), 6),
+        "line_servo_yaw_gain": round(float(args.line_servo_yaw_gain), 6),
     }
     if bool(args.forward_only_pre_contact_required) and not forward_only_pre_contact:
         pass_flag = False
@@ -891,6 +1247,10 @@ def main() -> int:
         "fetch_to_pose_failure_reason": "" if pass_flag else str(shot_outcome.get("reason", "missed_delivery_radius")),
         "shot_outcome": shot_outcome,
         "approach_contact_metrics": approach_metrics,
+        "model_provenance": model_provenance,
+        "model_provenance_valid": bool(model_provenance.get("model_provenance_valid", True)),
+        "target_model_classification": str(model_provenance.get("target_model_classification", "")),
+        "target_model_radius_m": model_provenance.get("target_model_radius_m"),
         "random_profile": random_profile,
         "random_draw": random_draw,
         "planner_route": route_metadata,
@@ -904,6 +1264,10 @@ def main() -> int:
         "world_file": args.world_file,
         "target_model_sdf": args.target_model_sdf,
         "zone_model_sdf": args.zone_model_sdf,
+        "model_provenance": model_provenance,
+        "model_provenance_valid": bool(model_provenance.get("model_provenance_valid", True)),
+        "target_model_classification": str(model_provenance.get("target_model_classification", "")),
+        "target_model_radius_m": model_provenance.get("target_model_radius_m"),
         "pass": pass_flag,
         "mission_completed_pass": pass_flag,
         "fetch_to_pose_reached": pass_flag,
@@ -946,9 +1310,15 @@ def main() -> int:
             f"- Closest approach: `{float(shot_outcome.get('closest_approach_distance_m', 0.0) or 0.0):.3f}m`",
             f"- Delivery radius: `{float(args.fetch_delivery_radius_m):.3f}m`",
             f"- Stable contact approach: `{bool(approach_metrics.get('stable_contact_approach_pass', False))}`",
+            f"- First-contact quality: `{bool(approach_metrics.get('first_contact_quality_pass', False))}`",
             f"- Approach flags: `{approach_metrics.get('flags', [])}`",
+            f"- First-contact flags: `{approach_metrics.get('first_contact_quality_flags', [])}`",
             f"- Planner route: `{planner_route_label}`",
             f"- Route executor: `{route_executor}`",
+            f"- Drive mode: `{args.drive_mode}`",
+            f"- Delivery stop radius: `{delivery_stop_radius_m:.3f}m`",
+            f"- Model provenance: `{bool(model_provenance.get('model_provenance_valid', False))}` "
+            f"`{model_provenance.get('model_provenance_reason', '')}`",
             f"- Forward-only pre-contact: `{forward_only_pre_contact}`",
             f"- Ball start: `{shot_outcome.get('ball_start_pose', {})}`",
             f"- Ball end: `{shot_outcome.get('ball_end_pose', {})}`",

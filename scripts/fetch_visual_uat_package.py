@@ -42,6 +42,7 @@ BROWSER_COMPATIBLE_VIDEO_NAMES = frozenset(
         "world_stream.mp4",
     }
 )
+KEYFRAME_RECOVERY_MIN_FRAMES = 3
 
 
 def utc_now() -> str:
@@ -458,6 +459,7 @@ def summarize_visual_dir(path: Path) -> dict[str, Any]:
     visual_summary = read_json(path / "visual_demo_summary.json")
     world_summary = read_json(path / "world_stream_summary.json")
     world_state = read_json(path / "world_stream_state.json")
+    visual_state = read_json(path / "state.json")
     visual_pass = bool(visual_summary.get("pass", False))
     state_frame_count = int(world_state.get("frame_count", 0) or 0)
     summary_frame_count = int(world_summary.get("frame_count", 0) or 0)
@@ -470,19 +472,47 @@ def summarize_visual_dir(path: Path) -> dict[str, Any]:
     if state_world_pass and state_frame_count >= summary_frame_count:
         world_source = {**world_summary, **world_state, "pass": True, "failure_class": ""}
     world_pass = bool(world_summary.get("pass", False) or state_world_pass)
+    keyframes_dir = path / "keyframes"
+    keyframe_counts = {
+        "raw": len(list(keyframes_dir.glob("*_raw.png"))) if keyframes_dir.is_dir() else 0,
+        "debug": len(list(keyframes_dir.glob("*_debug.png"))) if keyframes_dir.is_dir() else 0,
+        "topdown": len(list(keyframes_dir.glob("*_topdown.png"))) if keyframes_dir.is_dir() else 0,
+    }
+    raw_frame_count = int(visual_summary.get("raw_frame_count", visual_state.get("raw_frame_count", 0)) or 0)
+    telemetry_frame_count = int(
+        visual_summary.get("telemetry_frame_count", visual_state.get("telemetry_frame_count", 0)) or 0
+    )
+    raw_nonblank = bool(visual_summary.get("raw_nonblank", visual_state.get("raw_nonblank", False)))
+    debug_nonblank = bool(visual_summary.get("debug_nonblank", visual_state.get("debug_nonblank", False)))
+    keyframe_recovery_pass = bool(
+        not visual_pass
+        and raw_nonblank
+        and debug_nonblank
+        and raw_frame_count >= KEYFRAME_RECOVERY_MIN_FRAMES
+        and telemetry_frame_count >= KEYFRAME_RECOVERY_MIN_FRAMES
+        and keyframe_counts["raw"] >= KEYFRAME_RECOVERY_MIN_FRAMES
+        and keyframe_counts["topdown"] >= KEYFRAME_RECOVERY_MIN_FRAMES
+        and bool(visual_state.get("true_target_seen", True))
+        and bool(visual_state.get("truth_alignment_ok", True))
+    )
     return {
         "session_id": session_id_for_path(path),
         "path": artifact_display_path(path),
         "visual_demo_pass": visual_pass,
         "world_stream_pass": world_pass,
-        "visual_confirmation_pass": bool(visual_pass or world_pass),
-        "raw_nonblank": bool(visual_summary.get("raw_nonblank", False)),
-        "debug_nonblank": bool(visual_summary.get("debug_nonblank", False)),
+        "visual_keyframe_recovery_pass": keyframe_recovery_pass,
+        "visual_confirmation_pass": bool(visual_pass or world_pass or keyframe_recovery_pass),
+        "visual_confirmation_source": (
+            "visual_demo_summary" if visual_pass else "world_stream" if world_pass else "keyframe_recovery" if keyframe_recovery_pass else ""
+        ),
+        "raw_nonblank": raw_nonblank,
+        "debug_nonblank": debug_nonblank,
         "target_persistence_ok": bool(visual_summary.get("target_persistence_ok", False)),
         "motion_progress_ok": bool(visual_summary.get("motion_progress_ok", False)),
         "target_visible_ratio": visual_summary.get("target_visible_ratio"),
-        "raw_frame_count": int(visual_summary.get("raw_frame_count", 0) or 0),
-        "telemetry_frame_count": int(visual_summary.get("telemetry_frame_count", 0) or 0),
+        "raw_frame_count": raw_frame_count,
+        "telemetry_frame_count": telemetry_frame_count,
+        "keyframe_counts": keyframe_counts,
         "world_stream_degraded": bool(world_source.get("world_stream_degraded", False)),
         "world_stream_transport_healthy": bool(world_source.get("world_stream_transport_healthy", False)),
         "world_stream_failure_class": str(world_source.get("failure_class", "") or ""),
@@ -598,6 +628,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         warnings.append("no_healthy_visual_confirmation")
     if local_fetch_seen and not local_fetch_visual_confirmed:
         warnings.append("passing_local_fetch_lacks_same_session_visual_confirmation")
+    if any(item.get("visual_keyframe_recovery_pass") for item in visual_summaries):
+        warnings.append("visual_confirmation_keyframe_recovery")
     stage_quality_green = bool(stage_quality_audits and all(item.get("green", False) for item in stage_quality_audits))
     stage_quality_blocker_seen = any(
         int(item.get("setup_contact_blocker_count", 0) or 0) > 0

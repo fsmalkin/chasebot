@@ -713,6 +713,18 @@ evidence still comes from canonical 1.0x saved-layout and seeded gates, but the
 research loop should favor larger disposable branches when the question is
 architectural ownership rather than parameter fit.
 
+June 3 moonshot progress: the planner-routed branch now proves the executable
+fetch/reposition routes with a shared stage-aware `line_servo` proof executor.
+The mixed planner gate
+`live_planner_routed_line_servo_wide_batch_seed_scan_20260603` passed `12/12`
+with no wrong fetch dispatches. Generated live UAT packages are green for
+direct local fetch (`scene09`), hard long setup (`scene04`, `1.24m`
+robot-ball separation), and an angled Nav2-reposition corridor (`scene05`,
+`-23deg`). The next roadmap step is route-owner completion: replace the v0
+proof executor with real Nav2 reposition plus local fetch, wire scan/perception
+refresh and bounded recovery/re-aim, then rerun the saved-layout and seeded
+random gates with sequence-based visual review.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

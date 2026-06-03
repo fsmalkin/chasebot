@@ -967,10 +967,16 @@ Live gates:
      `ambiguous_or_unsafe_no_go`, and records classified placeholders for
      `scan_or_perceive_first` and `recovery_or_reaim`
    - integration boundary: deterministic and `llm_shadow` route classification
-     are integrated; `nav2_reposition_first` currently uses the forward-only
-     golf delivery runner as proof of route execution. The next moonshot step
-     swaps that v0 executor for real Nav2 reposition plus local fetch, then
-     wires perception refresh and bounded re-aim.
+     are integrated; `fetch_ready_local` and `nav2_reposition_first` currently
+     use the stage-aware `line_servo` proof executor as route-execution UAT.
+     The next moonshot step swaps that v0 executor for real Nav2 reposition
+     plus local fetch, then wires perception refresh and bounded re-aim.
+   - June 3 route-execution evidence:
+     `live_planner_routed_line_servo_wide_batch_seed_scan_20260603` passed
+     `12/12` planner decisions with no wrong fetch dispatches. Green mobile UAT
+     packages cover generated direct local fetch (`scene09`), a hard
+     `nav2_reposition_first` start at `1.24m` robot-ball separation (`scene04`),
+     and an angled `-23deg` Nav2-reposition corridor (`scene05`).
    - forward-only fetch rule: a planner-gated UAT run that reaches local fetch
      should show no negative pre-contact `linear_x`; any needed backing or
      side-selection should be handled as planner-owned reposition/setup before
@@ -1005,6 +1011,16 @@ Live gates:
      `python scripts/fetch_visual_uat_package.py --campaign-id <id> --planner-summary <gate_summary.json> --seeded-evidence-summary <evidence_summary.json> --mission-summary <campaign_run_summary.json> --visual-dir artifacts/session/<session_id>/visual`
    - required visual assets for a green package:
      `world_stream.mp4` and `topdown_telemetry.mp4` must exist and be non-placeholder
+   - required operator review:
+     inspect a frame sequence before reporting UAT progress: start/setup,
+     approach, first contact, mid-push or handoff, terminal/stop, and final.
+     Use top-down plus onboard/raw and world-stream frames when available.
+     The end frame is one checkpoint in the broader visual review.
+   - keyframe recovery:
+     when continuous visual summaries are incomplete but same-session keyframes,
+     nonblank raw/debug frames, truth alignment, and browser videos are present,
+     the package may pass with `visual_confirmation_keyframe_recovery`; report
+     that label with the video links.
    - dashboard Watch tab exposes the latest package under `Mobile UAT Package`;
      playable videos are served from the whitelisted `/artifacts/session/...`
      route for mobile browser playback

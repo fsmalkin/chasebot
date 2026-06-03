@@ -5339,10 +5339,19 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             command.extend(["--route-executor", str(planner_route_execution.get("route_executor", ""))])
             if bool(planner_route_execution.get("forward_only_pre_contact_required", False)):
                 command.append("--forward-only-pre-contact-required")
-            if str(planner_route_execution.get("route_label", "")) == fetch_planner_gate.ROUTE_NAV2_REPOSITION:
+            if str(planner_route_execution.get("route_label", "")) in {
+                fetch_planner_gate.ROUTE_FETCH_READY,
+                fetch_planner_gate.ROUTE_NAV2_REPOSITION,
+            }:
+                command.extend(["--drive-mode", "line_servo"])
+                command.extend(["--drive-linear-x-mps", "0.100000"])
                 command.extend(["--drive-duration-s", "36.000000"])
                 command.extend(["--sample-duration-s", "40.000000"])
+                command.extend(["--line-servo-push-linear-x-mps", "0.055000"])
+                command.extend(["--line-servo-max-angular-z-rps", "0.180000"])
+                command.extend(["--line-servo-yaw-gain", "1.200000"])
                 command.append("--stop-on-delivery")
+                command.extend(["--delivery-stop-radius-m", "0.200000"])
                 command.extend(["--post-delivery-sample-s", "4.000000"])
         if artifact_kind:
             command.extend(["--artifact-kind", artifact_kind])

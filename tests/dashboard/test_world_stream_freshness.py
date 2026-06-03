@@ -2990,6 +2990,10 @@ def test_run_golf_fetch_planner_gated_fetch_ready_route_dispatches_layout(tmp_pa
     assert "--route-executor" in command
     assert command[command.index("--route-executor") + 1] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_LOCAL_FETCH
     assert "--forward-only-pre-contact-required" in command
+    assert "--drive-mode" in command
+    assert command[command.index("--drive-mode") + 1] == "line_servo"
+    assert "--stop-on-delivery" in command
+    assert command[command.index("--delivery-stop-radius-m") + 1] == "0.200000"
     assert command[command.index("--artifact-kind") + 1] == dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
 
 
@@ -3063,11 +3067,23 @@ def test_run_golf_fetch_planner_gated_nav2_reposition_route_dispatches_forward_l
     assert "--route-executor" in command
     assert command[command.index("--route-executor") + 1] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH
     assert "--forward-only-pre-contact-required" in command
+    assert "--drive-mode" in command
+    assert command[command.index("--drive-mode") + 1] == "line_servo"
+    assert "--drive-linear-x-mps" in command
+    assert command[command.index("--drive-linear-x-mps") + 1] == "0.100000"
     assert "--drive-duration-s" in command
     assert command[command.index("--drive-duration-s") + 1] == "36.000000"
     assert "--sample-duration-s" in command
     assert command[command.index("--sample-duration-s") + 1] == "40.000000"
+    assert "--line-servo-push-linear-x-mps" in command
+    assert command[command.index("--line-servo-push-linear-x-mps") + 1] == "0.055000"
+    assert "--line-servo-max-angular-z-rps" in command
+    assert command[command.index("--line-servo-max-angular-z-rps") + 1] == "0.180000"
+    assert "--line-servo-yaw-gain" in command
+    assert command[command.index("--line-servo-yaw-gain") + 1] == "1.200000"
     assert "--stop-on-delivery" in command
+    assert "--delivery-stop-radius-m" in command
+    assert command[command.index("--delivery-stop-radius-m") + 1] == "0.200000"
     assert "--post-delivery-sample-s" in command
     assert command[command.index("--post-delivery-sample-s") + 1] == "4.000000"
 

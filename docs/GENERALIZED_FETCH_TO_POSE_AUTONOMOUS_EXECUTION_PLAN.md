@@ -47,6 +47,22 @@ bounded re-aim executors are wired. The v0 forward runner is a proof surface for
 the route contract; real Nav2 reposition is the next executor swap after the
 operator-visible route demo is green.
 
+June 3, 2026 moonshot evidence update: planner-routed `fetch_ready_local` and
+`nav2_reposition_first` now share the stage-aware `line_servo` proof executor.
+The executor drives forward-only setup, aligns behind the ball-target line,
+pushes at bounded speed, and stops when the ball reaches the tighter `0.200m`
+delivery-stop radius while the formal `fetch_to_pose` contract remains `0.300m`.
+The mixed planner gate passed `12/12` with no wrong fetch dispatches:
+`artifacts/session/live_planner_routed_line_servo_wide_batch_seed_scan_20260603/fetch_planner_handoff_gate/gate_summary.json`.
+Representative live mobile UAT packages are green:
+`artifacts/session/uat_planner_routed_line_servo_generated_scene09_20260603/fetch_visual_uat_package/scorecard.md`
+for direct local fetch, `artifacts/session/uat_planner_routed_line_servo_generated_scene04_20260603/fetch_visual_uat_package/scorecard.md`
+for a `1.24m` robot-ball Nav2-reposition start, and
+`artifacts/session/uat_planner_routed_line_servo_generated_scene05_20260603/fetch_visual_uat_package/scorecard.md`
+for an angled `-23deg` corridor. Treat this as route-execution UAT evidence.
+Promotion still waits for canonical saved-layout and seeded-random gates after
+real Nav2 reposition and the remaining scan/recovery route owners are wired.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence
@@ -54,6 +70,14 @@ only when `geometry_consistency.pass=true`, the visible delivery marker matches
 `fetch_pose_world`, and same-session browser-watchable onboard plus context
 video exists. Pre-fix or marker-mismatched fetch passes are diagnostic
 implementation evidence.
+
+June 3, 2026 visual-review rule: operator-facing UAT needs a sequence review
+across start/setup, approach, first contact, mid-push or handoff,
+terminal/stop, and final frames from top-down plus onboard/world views when
+present. `fetch_visual_uat_package.py` may accept an explicit same-session
+keyframe recovery confirmation when continuous visual summaries are incomplete,
+and the package records
+`visual_confirmation_keyframe_recovery` so the evidence stays labeled.
 
 June 1, 2026 provenance reset: direct `fetch_to_pose` evidence also needs
 `model_provenance_valid=true`, target model `calibrated_golf_ball`, target
