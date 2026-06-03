@@ -1049,6 +1049,55 @@ def test_contact_trace_metrics_do_not_flag_initial_setup_debt_after_terminal_set
     assert metrics["max_abs_robot_yaw_error_terminal_pre_contact_deg"] < 3.0
 
 
+def test_contact_trace_metrics_gate_terminal_quality_after_contact_ready():
+    samples = [
+        {
+            "sample_index": 0,
+            "t_s": 0.0,
+            "robot_pose": {"position": {"x": 0.22, "y": 0.0, "z": 0.0}, "yaw": 0.061},
+            "ball_pose": {"position": {"x": 0.38, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+            "line_servo_command": {"phase": "contact_final_reaim", "contact_ready": False},
+        },
+        {
+            "sample_index": 1,
+            "t_s": 0.4,
+            "robot_pose": {"position": {"x": 0.30, "y": 0.0, "z": 0.0}, "yaw": 0.055},
+            "ball_pose": {"position": {"x": 0.38, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+            "line_servo_command": {"phase": "contact_final_reaim", "contact_ready": False},
+        },
+        {
+            "sample_index": 2,
+            "t_s": 0.6,
+            "robot_pose": {"position": {"x": 0.34, "y": 0.0, "z": 0.0}, "yaw": 0.040},
+            "ball_pose": {"position": {"x": 0.38, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+            "line_servo_command": {"phase": "first_contact_align", "contact_ready": True},
+        },
+        {
+            "sample_index": 3,
+            "t_s": 1.0,
+            "robot_pose": {"position": {"x": 0.40, "y": 0.0, "z": 0.0}, "yaw": 0.020},
+            "ball_pose": {"position": {"x": 0.39, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+            "line_servo_command": {"phase": "push_coast", "contact_ready": True},
+        },
+    ]
+
+    metrics = build_approach_contact_metrics(
+        samples,
+        ball_start_x=0.38,
+        ball_start_y=0.0,
+        target_x=0.95,
+        target_y=0.0,
+    )
+
+    assert metrics["stable_contact_approach_pass"] is True
+    assert metrics["flags"] == []
+    assert metrics["terminal_pre_contact_contact_ready_gated"] is True
+    assert metrics["terminal_pre_contact_sample_count"] == 4
+    assert metrics["terminal_pre_contact_quality_sample_count"] == 2
+    assert metrics["max_abs_robot_yaw_error_terminal_window_deg"] > 3.0
+    assert metrics["max_abs_robot_yaw_error_terminal_pre_contact_deg"] < 3.0
+
+
 def test_contact_trace_metrics_flag_lateral_knock_away_and_yaw_oscillation():
     samples = [
         {

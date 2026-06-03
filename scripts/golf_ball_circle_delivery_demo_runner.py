@@ -1483,6 +1483,10 @@ def build_approach_contact_metrics(
         if robot_pose is None and ball_pose is None:
             continue
         row = {"t_s": float(sample.get("t_s", 0.0) or 0.0), "robot_pose": robot_pose, "ball_pose": ball_pose}
+        command = sample.get("line_servo_command") if isinstance(sample.get("line_servo_command"), dict) else None
+        if command is not None:
+            row["line_servo_contact_ready"] = bool(command.get("contact_ready", False))
+            row["line_servo_phase"] = str(command.get("phase", "") or "")
         if robot_pose is not None:
             row["robot_lateral_error_m"] = signed_lateral_error_m(
                 robot_pose["x"],
@@ -1525,10 +1529,25 @@ def build_approach_contact_metrics(
         ]
         if not terminal_pre_contact_rows:
             terminal_pre_contact_rows = robot_pre[-1:]
+    terminal_quality_rows = terminal_pre_contact_rows
+    contact_ready_indices = [
+        index
+        for index, row in enumerate(terminal_pre_contact_rows)
+        if bool(row.get("line_servo_contact_ready", False))
+    ]
+    terminal_contact_ready_gated = bool(contact_ready_indices)
+    if contact_ready_indices:
+        terminal_quality_rows = terminal_pre_contact_rows[contact_ready_indices[0] :]
     terminal_lateral_errors = [
-        float(row.get("robot_lateral_error_m", 0.0) or 0.0) for row in terminal_pre_contact_rows
+        float(row.get("robot_lateral_error_m", 0.0) or 0.0) for row in terminal_quality_rows
     ]
     terminal_yaw_errors = [
+        float(row.get("robot_yaw_error_rad", 0.0) or 0.0) for row in terminal_quality_rows
+    ]
+    terminal_window_lateral_errors = [
+        float(row.get("robot_lateral_error_m", 0.0) or 0.0) for row in terminal_pre_contact_rows
+    ]
+    terminal_window_yaw_errors = [
         float(row.get("robot_yaw_error_rad", 0.0) or 0.0) for row in terminal_pre_contact_rows
     ]
     first_contact_robot = first_contact_row.get("robot_pose") if isinstance(first_contact_row.get("robot_pose"), dict) else {}
@@ -1552,6 +1571,8 @@ def build_approach_contact_metrics(
     max_abs_yaw = max((abs(value) for value in yaw_errors), default=0.0)
     terminal_max_abs_lateral = max((abs(value) for value in terminal_lateral_errors), default=0.0)
     terminal_max_abs_yaw = max((abs(value) for value in terminal_yaw_errors), default=0.0)
+    terminal_window_max_abs_lateral = max((abs(value) for value in terminal_window_lateral_errors), default=0.0)
+    terminal_window_max_abs_yaw = max((abs(value) for value in terminal_window_yaw_errors), default=0.0)
     max_abs_ball_lateral = max((abs(value) for value in ball_lateral_errors), default=0.0)
     yaw_sign_changes = _sign_changes(yaw_errors, threshold=oscillation_threshold_rad)
     terminal_yaw_sign_changes = _sign_changes(terminal_yaw_errors, threshold=oscillation_threshold_rad)
@@ -1603,6 +1624,10 @@ def build_approach_contact_metrics(
         "robot_yaw_error_sign_changes_pre_contact": yaw_sign_changes,
         "terminal_pre_contact_window_s": round(float(terminal_pre_contact_window_s), 6),
         "terminal_pre_contact_sample_count": len(terminal_pre_contact_rows),
+        "terminal_pre_contact_quality_sample_count": len(terminal_quality_rows),
+        "terminal_pre_contact_contact_ready_gated": terminal_contact_ready_gated,
+        "max_abs_robot_lateral_error_terminal_window_m": round(float(terminal_window_max_abs_lateral), 6),
+        "max_abs_robot_yaw_error_terminal_window_deg": round(math.degrees(float(terminal_window_max_abs_yaw)), 6),
         "max_abs_robot_lateral_error_terminal_pre_contact_m": round(float(terminal_max_abs_lateral), 6),
         "max_abs_robot_yaw_error_terminal_pre_contact_deg": round(math.degrees(float(terminal_max_abs_yaw)), 6),
         "robot_yaw_error_sign_changes_terminal_pre_contact": terminal_yaw_sign_changes,

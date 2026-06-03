@@ -1,6 +1,6 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 3, 2026, 4:45 PM ET",
+  "updated_label": "Updated June 3, 2026, 4:55 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
   "status_label": "Living plan and progress tracker",
   "status_detail": "This page summarizes current direction and evidence. It is route-owner UAT progress, not release or promotion evidence.",
@@ -50,31 +50,35 @@
   ],
   "latest_evidence": [
     {
-      "title": "Seed 20260619 route-owner batch",
-      "status": "16/16 executable routes delivered; contact clean",
+      "title": "Seed 20260619 metric-gated route-owner batch",
+      "status": "16/16 executable routes delivered clean",
       "tone": "green",
-      "summary": "Route-owner visual UAT is green with promotion_evidence=false. The batch is the cleanest broad run so far: executable local, Nav2, and recovery routes all delivered, with one setup watch and one execution watch left for review.",
+      "summary": "Route-owner visual UAT is green with promotion_evidence=false. The current scorecard uses contact-ready-aware terminal quality metrics: executable local, Nav2, and recovery routes all delivered with setup, execution, contact, and first-contact blockers clean.",
       "metrics": [
         "Planner gate: 30/30, wrong_fetch=0",
         "Live executable routes: 16/16",
         "Route spread: fetch_ready_local 4, nav2_reposition_first 9, recovery_or_reaim 3",
-        "Contact watches: 0; setup watches: 1; execution watches: 1; first-contact blockers: 0"
+        "Setup watches: 0; execution watches: 0; contact watches: 0; first-contact blockers: 0"
       ],
       "links": [
         {
           "label": "Scorecard",
-          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_current_20260603/fetch_planner_route_uat_analyzer/scorecard.md"
+          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_metric_gated_20260603/fetch_planner_route_uat_analyzer/scorecard.md"
         },
         {
           "label": "Summary JSON",
-          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_current_20260603/fetch_planner_route_uat_analyzer/route_uat_summary.json"
+          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_metric_gated_20260603/fetch_planner_route_uat_analyzer/route_uat_summary.json"
         },
         {
           "label": "Keyframe montage",
-          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_current_20260603/fetch_planner_route_uat_analyzer/seed20260619_all_exec16_keyframe_montage.png"
+          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_metric_gated_20260603/fetch_planner_route_uat_analyzer/seed20260619_all_exec16_metric_gated_keyframe_montage.png"
+        },
+        {
+          "label": "Scene07 fresh repro",
+          "url": "/artifacts/session/live_seed20260619_scene07_metric_gated_repro_fresh_20260603/fetch_planner_route_replay_batch/scorecard.md"
         }
       ],
-      "preview_image": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_current_20260603/fetch_planner_route_uat_analyzer/seed20260619_all_exec16_keyframe_montage.png"
+      "preview_image": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_metric_gated_20260603/fetch_planner_route_uat_analyzer/seed20260619_all_exec16_metric_gated_keyframe_montage.png"
     },
     {
       "title": "Seed 20260617 route-owner batch",
@@ -133,131 +137,63 @@
   ],
   "recent_video_proof": [
     {
-      "title": "Seed 20260619 montage and scorecard",
-      "summary": "The batch-level package gives the fast visual scan for 16 live executable route-owner runs across local, Nav2, and recovery routes.",
-      "preview_image": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_current_20260603/fetch_planner_route_uat_analyzer/seed20260619_all_exec16_keyframe_montage.png",
-      "proves": "The planner gate stayed green at 30/30 with wrong_fetch=0, all 16 executable routes delivered, contact quality was clean, and first-contact blockers were zero.",
-      "limits": "Promotion remains outside this artifact: promotion_evidence=false, with one setup watch and one execution watch still requiring sequence review.",
+      "title": "Seed 20260619 metric-gated montage and scorecard",
+      "summary": "The batch-level package gives the fast visual scan for 16 live executable route-owner runs after replacing scene07 with a fresh metric-gated repro.",
+      "preview_image": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_metric_gated_20260603/fetch_planner_route_uat_analyzer/seed20260619_all_exec16_metric_gated_keyframe_montage.png",
+      "proves": "The planner gate stayed green at 30/30 with wrong_fetch=0. All 16 executable routes delivered, contact quality was clean, setup and execution watches cleared, and first-contact blockers were zero.",
+      "limits": "Promotion remains outside this artifact: promotion_evidence=false. This is route-owner visual UAT and metric hygiene evidence before canonical promotion reruns.",
       "links": [
         {
           "label": "Scorecard",
-          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_current_20260603/fetch_planner_route_uat_analyzer/scorecard.md"
+          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_metric_gated_20260603/fetch_planner_route_uat_analyzer/scorecard.md"
         },
         {
           "label": "Keyframe montage",
-          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_current_20260603/fetch_planner_route_uat_analyzer/seed20260619_all_exec16_keyframe_montage.png"
+          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_metric_gated_20260603/fetch_planner_route_uat_analyzer/seed20260619_all_exec16_metric_gated_keyframe_montage.png"
         },
         {
           "label": "Summary JSON",
-          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_current_20260603/fetch_planner_route_uat_analyzer/route_uat_summary.json"
+          "url": "/artifacts/session/analysis_route_quality_seed20260619_all_exec16_metric_gated_20260603/fetch_planner_route_uat_analyzer/route_uat_summary.json"
         }
       ]
     },
     {
-      "title": "Seed 20260619 scene07 local-fetch watch",
-      "summary": "Session 20260603T195421912092Z is the onboard-first clip for the only seed20260619 setup/execution watch.",
+      "title": "Seed 20260619 scene07 metric-gated repro",
+      "summary": "Session 20260603T204828162759Z is the onboard-first repro for the former scene07 watch row.",
       "primary_video": {
         "label": "Scene07 onboard raw camera browser MP4",
-        "url": "/artifacts/session/20260603T195421912092Z/visual/raw_camera_browser.mp4"
+        "url": "/artifacts/session/20260603T204828162759Z/visual/raw_camera_browser.mp4"
       },
-      "proves": "The local fetch route still delivered inside contract: raw_fetch_to_pose=True, closest=0.196m, visual package pass=True, and first-contact blocker flags were empty.",
-      "limits": "This is the watch row. The analyzer flags pre_contact_yaw_error, so it is progress evidence plus a setup-smoothing backlog item.",
+      "proves": "The fresh replay delivered inside contract with raw_fetch_to_pose=True, closest=0.197m, stable_contact_approach_pass=True, first-contact quality clean, and contact-ready-gated terminal quality active.",
+      "limits": "This proves the previous scene07 watch was a metric alignment issue, not a broad control fix. It remains one route-owner visual UAT row inside a broader evidence ladder.",
       "links": [
         {
           "label": "Onboard raw camera MP4",
-          "url": "/artifacts/session/20260603T195421912092Z/visual/raw_camera_browser.mp4"
+          "url": "/artifacts/session/20260603T204828162759Z/visual/raw_camera_browser.mp4"
         },
         {
           "label": "Topdown telemetry MP4",
-          "url": "/artifacts/session/20260603T195421912092Z/visual/topdown_telemetry_browser.mp4"
+          "url": "/artifacts/session/20260603T204828162759Z/visual/topdown_telemetry_browser.mp4"
         },
         {
           "label": "World stream MP4",
-          "url": "/artifacts/session/20260603T195421912092Z/visual/world_stream.mp4"
+          "url": "/artifacts/session/20260603T204828162759Z/visual/world_stream.mp4"
         },
         {
-          "label": "Scorecard",
-          "url": "/artifacts/session/live_route_quality_seed20260619_all_exec16_current_20260603_seed20260619_scene07_fetch_ready_local/fetch_visual_uat_package/scorecard.md"
+          "label": "Replay scorecard",
+          "url": "/artifacts/session/live_seed20260619_scene07_metric_gated_repro_fresh_20260603/fetch_planner_route_replay_batch/scorecard.md"
         },
         {
-          "label": "Contact sheet",
-          "url": "/artifacts/session/live_route_quality_seed20260619_all_exec16_current_20260603_seed20260619_scene07_fetch_ready_local/fetch_visual_uat_package/keyframe_reviews/20260603T195421912092Z_keyframe_review_contact_sheet.png"
-        },
-        {
-          "label": "Mission verdict",
-          "url": "/artifacts/session/20260603T195421912092Z/golf_ball_circle_delivery/20260603T195439786597Z/mission_verdict.json"
-        }
-      ]
-    },
-    {
-      "title": "Seed 20260619 scene22 recovery route",
-      "summary": "Session 20260603T201209832749Z is the onboard-first clip for the highest predicted-risk recovery_or_reaim row in the batch.",
-      "primary_video": {
-        "label": "Scene22 onboard raw camera browser MP4",
-        "url": "/artifacts/session/20260603T201209832749Z/visual/raw_camera_browser.mp4"
-      },
-      "proves": "The recovery route delivered despite a high predicted first-contact risk: closest=0.196m, contact quality clean, stable_contact_approach_pass=True, and first-contact blocker flags were empty.",
-      "limits": "This remains route-owner visual UAT. It proves the current routed recovery can finish this scene, while repeatability and promotion gates remain separate work.",
-      "links": [
-        {
-          "label": "Onboard raw camera MP4",
-          "url": "/artifacts/session/20260603T201209832749Z/visual/raw_camera_browser.mp4"
-        },
-        {
-          "label": "Topdown telemetry MP4",
-          "url": "/artifacts/session/20260603T201209832749Z/visual/topdown_telemetry_browser.mp4"
-        },
-        {
-          "label": "World stream MP4",
-          "url": "/artifacts/session/20260603T201209832749Z/visual/world_stream.mp4"
-        },
-        {
-          "label": "Scorecard",
-          "url": "/artifacts/session/live_route_quality_seed20260619_all_exec16_current_20260603_seed20260619_scene22_recovery_or_reaim/fetch_visual_uat_package/scorecard.md"
+          "label": "Visual scorecard",
+          "url": "/artifacts/session/live_seed20260619_scene07_metric_gated_repro_fresh_20260603_seed20260619_scene07_fetch_ready_local/fetch_visual_uat_package/scorecard.md"
         },
         {
           "label": "Contact sheet",
-          "url": "/artifacts/session/live_route_quality_seed20260619_all_exec16_current_20260603_seed20260619_scene22_recovery_or_reaim/fetch_visual_uat_package/keyframe_reviews/20260603T201209832749Z_keyframe_review_contact_sheet.png"
+          "url": "/artifacts/session/live_seed20260619_scene07_metric_gated_repro_fresh_20260603_seed20260619_scene07_fetch_ready_local/fetch_visual_uat_package/keyframe_reviews/20260603T204828162759Z_keyframe_review_contact_sheet.png"
         },
         {
           "label": "Mission verdict",
-          "url": "/artifacts/session/20260603T201209832749Z/golf_ball_circle_delivery/20260603T201251011556Z/mission_verdict.json"
-        }
-      ]
-    },
-    {
-      "title": "Seed 20260619 scene27 Nav2 route",
-      "summary": "Session 20260603T202758071984Z is a representative onboard-first clip for Nav2 reposition followed by local fetch.",
-      "primary_video": {
-        "label": "Scene27 onboard raw camera browser MP4",
-        "url": "/artifacts/session/20260603T202758071984Z/visual/raw_camera_browser.mp4"
-      },
-      "proves": "The Nav2-first route completed cleanly: closest=0.196m, setup/contact/execution quality clean, stable_contact_approach_pass=True, and visual package pass=True.",
-      "limits": "This is representative proof for one Nav2 row inside the broad batch. Promotion still needs canonical saved-layout repeatability and seeded-random gates.",
-      "links": [
-        {
-          "label": "Onboard raw camera MP4",
-          "url": "/artifacts/session/20260603T202758071984Z/visual/raw_camera_browser.mp4"
-        },
-        {
-          "label": "Topdown telemetry MP4",
-          "url": "/artifacts/session/20260603T202758071984Z/visual/topdown_telemetry_browser.mp4"
-        },
-        {
-          "label": "World stream MP4",
-          "url": "/artifacts/session/20260603T202758071984Z/visual/world_stream.mp4"
-        },
-        {
-          "label": "Scorecard",
-          "url": "/artifacts/session/live_route_quality_seed20260619_remaining_exec3_current_20260603_seed20260619_scene27_nav2_reposition_first/fetch_visual_uat_package/scorecard.md"
-        },
-        {
-          "label": "Contact sheet",
-          "url": "/artifacts/session/live_route_quality_seed20260619_remaining_exec3_current_20260603_seed20260619_scene27_nav2_reposition_first/fetch_visual_uat_package/keyframe_reviews/20260603T202758071984Z_keyframe_review_contact_sheet.png"
-        },
-        {
-          "label": "Mission verdict",
-          "url": "/artifacts/session/20260603T202758071984Z/golf_ball_circle_delivery/20260603T202821815484Z/mission_verdict.json"
+          "url": "/artifacts/session/20260603T204828162759Z/golf_ball_circle_delivery/20260603T204846166849Z/mission_verdict.json"
         }
       ]
     },
@@ -398,18 +334,18 @@
     },
     {
       "label": "Yaw and lateral setup quality",
-      "body": "Pre-contact lateral and yaw flags are the repeated quality debt across broad random route-owner evidence."
+      "body": "Current seed20260619 executable rows are clean after contact-ready-aware metric gating. Keep yaw/lateral setup under watch in the next broad seed and canonical promotion reruns."
     },
     {
       "label": "Visual keyframe review",
-      "body": "Keep inspecting start/setup, pre-contact, first contact, mid-push or coast, terminal arrival, and final rest. Raw onboard camera review remains the primary sanity check."
+      "body": "Continue inspecting start/setup, pre-contact, first contact, mid-push or coast, terminal arrival, and final rest. Raw onboard camera review remains the primary sanity check, with topdown/world-stream as geometry context."
     }
   ],
   "next_steps": [
-    "Use seed20260619 as the current broad visual baseline, then inspect the scene07 watch row frame-by-frame before changing control code.",
+    "Use seed20260619 metric-gated evidence as the current broad visual baseline for route-owner UAT.",
+    "Run the next broad generated seed with the contact-ready-aware metric in place, then compare watches against seed20260619.",
     "Keep sequence review onboard-first: start/setup, pre-contact, first contact, mid-push or coast, terminal arrival, and final rest.",
-    "Prioritize pre-contact yaw smoothing for local fetch while preserving the planner route split.",
-    "Run another broad seed after the watch-row review to confirm the seed20260619 cleanup generalizes.",
+    "Prioritize new control work only when a watch reproduces visually and geometrically across fresh evidence.",
     "Rerun canonical saved layouts and seeded-random promotion gates after route-owner quality stays clean across multiple broad batches."
   ]
 }
