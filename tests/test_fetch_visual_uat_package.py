@@ -161,6 +161,66 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
     assert "`/artifacts/session/" not in text
 
 
+def test_visual_uat_package_scorecard_labels_multiple_planner_routes(tmp_path, monkeypatch):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(package, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+
+    mission_a = session_root / "session_a" / "mission_verdict.json"
+    mission_b = session_root / "session_b" / "mission_verdict.json"
+    for path, route, executor, closest in (
+        (mission_a, "fetch_ready_local", "bounded_local_fetch", 0.196023),
+        (mission_b, "nav2_reposition_first", "nav2_forward_reposition_then_fetch", 0.193737),
+    ):
+        _write_json(
+            path,
+            {
+                "session_id": path.parent.name,
+                "scenario_label": "Golf Ball Circle Delivery",
+                "planner_route_label": route,
+                "route_executor": executor,
+                "fetch_to_pose_pass": True,
+                "pass": True,
+                "shot_outcome": {
+                    "closest_approach_distance_m": closest,
+                    "reason": "trajectory_intersects_delivery_radius",
+                },
+                "model_provenance": {
+                    "model_provenance_valid": True,
+                    "target_model_classification": "calibrated_golf_ball",
+                },
+            },
+        )
+
+    args = type(
+        "Args",
+        (),
+        {
+            "campaign_id": "uat",
+            "planner_summary": [],
+            "seeded_evidence_summary": [],
+            "stage_quality_summary": [],
+            "mission_summary": [str(mission_a), str(mission_b)],
+            "visual_dir": [],
+        },
+    )()
+
+    summary = package.build_summary(args)
+
+    assert summary["missions"][0]["planner_route_label"] == "fetch_ready_local"
+    assert summary["missions"][1]["planner_route_label"] == "nav2_reposition_first"
+    assert summary["missions"][0]["route_executor"] == "bounded_local_fetch"
+    assert summary["missions"][1]["closest_approach_distance_m"] == 0.193737
+    scorecard = tmp_path / "scorecard.md"
+    package.write_scorecard(scorecard, summary)
+    text = scorecard.read_text(encoding="utf-8")
+    assert "route=`fetch_ready_local` session=`session_a`" in text
+    assert "route=`nav2_reposition_first` session=`session_b`" in text
+    assert "closest=`0.196m`" in text
+    assert "executor=`nav2_forward_reposition_then_fetch`" in text
+    assert "[summary](/artifacts/session/session_b/mission_verdict.json)" in text
+
+
 def test_visual_uat_package_accepts_keyframe_recovery_confirmation(tmp_path, monkeypatch):
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)

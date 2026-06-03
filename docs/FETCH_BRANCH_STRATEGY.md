@@ -215,11 +215,23 @@ Planner-routed moonshot update, June 2:
   (`20260603T040615017369Z`) now passes at `0.196169m` closest
   (`20260603T042159429741Z`) after `recovery_line_acquire` was added. Package:
   `artifacts/session/uat_recovery_line_acquire_fix_seed20260606_20260603/fetch_visual_uat_package/scorecard.md`
+- broad frozen route evidence:
+  the mixed planner handoff gate passed `5/5` with zero wrong fetch dispatches:
+  `artifacts/session/live_broad_frozen_planner_routed_gate_20260603/fetch_planner_handoff_gate/gate_summary.json`.
+  Same-session executable route UAT passed for `fetch_ready_local`
+  (`20260603T043331724833Z`, closest `0.196023m`),
+  `nav2_reposition_first` (`20260603T043525704923Z`, closest `0.193737m`),
+  and `recovery_or_reaim` (`20260603T043728550735Z`, closest `0.197799m`).
+  `scan_or_perceive_first` and `ambiguous_or_unsafe_no_go` selected the correct
+  planner-owned non-fetch actions. Combined package:
+  `artifacts/session/uat_broad_frozen_planner_routes_20260603/fetch_visual_uat_package/scorecard.md`
 - next branch decision:
-  keep this branch disposable until operator-visible video shows the planner
-  route, actual robot path, ball trajectory, and route outcome clearly. After a
-  broad planner-routed rerun, decide whether the next patch belongs in
-  contact-quality polish, live perception refresh, or route-supervisor coverage.
+  keep this branch disposable while expanding from frozen scenes to randomized
+  planner-routed coverage. The next patch should target contact-quality polish
+  only when the sequence review shows repeated first-contact or terminal-delivery
+  watches across route classes; live perception refresh can remain a classified
+  planner action until random coverage exposes a real scan/refresh execution
+  need.
 
 Saved-anchor requalification update, later June 1:
 

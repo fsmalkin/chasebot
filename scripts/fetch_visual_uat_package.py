@@ -407,6 +407,22 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     mission_verdict = payload.get("mission_verdict", {}) if isinstance(payload.get("mission_verdict"), dict) else {}
     if not mission_verdict and isinstance(first_run.get("mission_verdict"), dict):
         mission_verdict = first_run.get("mission_verdict", {})
+    planner_route: dict[str, Any] = {}
+    for candidate in (payload.get("planner_route"), mission_verdict.get("planner_route"), first_run.get("planner_route")):
+        if isinstance(candidate, dict):
+            planner_route.update(candidate)
+    shot_outcome: dict[str, Any] = {}
+    for candidate in (payload.get("shot_outcome"), mission_verdict.get("shot_outcome"), first_run.get("shot_outcome")):
+        if isinstance(candidate, dict):
+            shot_outcome.update(candidate)
+
+    def pick_text(*values: Any) -> str:
+        for value in values:
+            text = str(value or "").strip()
+            if text:
+                return text
+        return ""
+
     geometry_source: dict[str, Any] = {}
     for candidate in (payload, mission_verdict, first_run):
         if isinstance(candidate, dict):
@@ -428,10 +444,37 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     session_id = str(
         mission_verdict.get("session_id", first_run.get("session_id", payload.get("session_id", session_id_for_path(path)))) or ""
     )
+    route_label = pick_text(
+        payload.get("planner_route_label"),
+        mission_verdict.get("planner_route_label"),
+        first_run.get("planner_route_label"),
+        planner_route.get("planner_route_label"),
+        planner_route.get("route_label"),
+    )
+    route_executor = pick_text(
+        payload.get("route_executor"),
+        mission_verdict.get("route_executor"),
+        first_run.get("route_executor"),
+        planner_route.get("route_executor"),
+        planner_route.get("executor"),
+    )
+    closest_approach = payload.get(
+        "closest_approach_distance_m",
+        mission_verdict.get("closest_approach_distance_m", shot_outcome.get("closest_approach_distance_m")),
+    )
+    outcome_reason = pick_text(
+        payload.get("reason"),
+        mission_verdict.get("reason"),
+        shot_outcome.get("reason"),
+        payload.get("pass_reason"),
+        mission_verdict.get("pass_reason"),
+    )
     return {
         "campaign_id": str(payload.get("campaign_id", "") or ""),
         "session_id": session_id,
         "path": artifact_display_path(path),
+        "planner_route_label": route_label,
+        "route_executor": route_executor,
         "pass": bool(pass_flag and geometry_ok and provenance_ok),
         "fetch_to_pose_pass": fetch_pass,
         "raw_fetch_to_pose_pass": raw_fetch_pass,
@@ -441,7 +484,8 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         "mission_objective": str(payload.get("mission_objective", mission_verdict.get("mission_objective", "")) or ""),
         "scenario_label": str(payload.get("scenario_label", mission_verdict.get("scenario_label", "")) or ""),
         "target_layout_json": str(payload.get("requested_target_layout_json", mission_verdict.get("target_layout_json", "")) or ""),
-        "closest_approach_distance_m": payload.get("closest_approach_distance_m", mission_verdict.get("closest_approach_distance_m")),
+        "closest_approach_distance_m": closest_approach,
+        "outcome_reason": outcome_reason,
         "failure_reasons": payload.get("fetch_to_pose_failure_reasons", mission_verdict.get("failure_reasons", [])),
         "geometry_consistency": geometry_consistency,
         "geometry_consistent": geometry_ok,
@@ -780,15 +824,28 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
     lines.extend(["", "## Missions"])
     for mission in summary.get("missions", []) if isinstance(summary.get("missions"), list) else []:
         geometry = mission.get("geometry_consistency", {}) if isinstance(mission.get("geometry_consistency"), dict) else {}
+        route_label = str(mission.get("planner_route_label", "") or mission.get("scenario_label", "") or mission.get("campaign_id", "") or "")
+        session_id = str(mission.get("session_id", "") or "")
+        closest = mission.get("closest_approach_distance_m")
+        closest_text = ""
+        if isinstance(closest, (int, float)) and math.isfinite(float(closest)):
+            closest_text = f" closest=`{float(closest):.3f}m`"
+        summary_path = str(mission.get("path", "") or "")
+        summary_link = f" [summary](/{summary_path})" if summary_path.startswith("artifacts/session/") else ""
         lines.append(
-            f"- `{mission.get('campaign_id', '') or mission.get('scenario_label', '')}` "
+            f"- route=`{route_label}` "
+            f"session=`{session_id}` "
             f"fetch_to_pose=`{mission.get('fetch_to_pose_pass', False)}` "
             f"raw_fetch_to_pose=`{mission.get('raw_fetch_to_pose_pass', mission.get('fetch_to_pose_pass', False))}` "
+            f"executor=`{mission.get('route_executor', '')}` "
+            f"reason=`{mission.get('outcome_reason', '')}`"
+            f"{closest_text} "
             f"geometry=`{geometry.get('pass', 'unknown')}` "
             f"geometry_reason=`{geometry.get('reason', '')}` "
             f"model_provenance=`{mission.get('model_provenance_valid', False)}` "
             f"target_model=`{mission.get('target_model_classification', '')}` "
             f"ai_mode=`{mission.get('ai_push_coast_mode', '')}`"
+            f"{summary_link}"
         )
     lines.extend(["", "## Visual Evidence"])
     for visual in summary.get("visual_summaries", []) if isinstance(summary.get("visual_summaries"), list) else []:

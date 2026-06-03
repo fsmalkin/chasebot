@@ -1016,6 +1016,19 @@ Live gates:
       Treat the remaining lateral/yaw first-contact flags as broad
       route-quality backlog; rerun planner-routed multi-scene coverage before
       another narrow contact tweak.
+    - broad frozen route rerun, late June 3:
+      `artifacts/session/live_broad_frozen_planner_routed_gate_20260603/fetch_planner_handoff_gate/gate_summary.json`
+      passed `5/5` with zero wrong fetch dispatches. Same-session executable
+      route UAT passed for `fetch_ready_local` (`20260603T043331724833Z`,
+      closest `0.196023m`), `nav2_reposition_first`
+      (`20260603T043525704923Z`, closest `0.193737m`), and
+      `recovery_or_reaim` (`20260603T043728550735Z`, closest `0.197799m`).
+      Planner-owned `scan_or_perceive_first` selected perception refresh, and
+      `ambiguous_or_unsafe_no_go` selected safe no-go. Sequence-based visual
+      review and browser-safe videos are packaged at
+      `artifacts/session/uat_broad_frozen_planner_routes_20260603/fetch_visual_uat_package/scorecard.md`.
+      Treat this as broad route-owner visual UAT; canonical saved-layout and
+      seeded-random gates remain the promotion path.
     - forward-only fetch rule: a planner-gated UAT run that reaches local fetch
       should show no negative pre-contact `linear_x`; any needed backing or
       side-selection should be handled as planner-owned reposition/setup before

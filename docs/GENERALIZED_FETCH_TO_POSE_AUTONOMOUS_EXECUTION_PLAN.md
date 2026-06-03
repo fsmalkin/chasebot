@@ -116,6 +116,21 @@ The remaining watch is contact quality (`pre_contact_lateral_error`,
 `pre_contact_yaw_error`, and `first_contact_lateral_error`), so the next broad
 test is a planner-routed multi-scene rerun before another local-contact tweak.
 
+Broad frozen route rerun, late June 3: the planner-routed branch now has a
+green mixed-route UAT package across all five route classes. The handoff gate
+passed `5/5` with zero wrong fetch dispatches:
+`artifacts/session/live_broad_frozen_planner_routed_gate_20260603/fetch_planner_handoff_gate/gate_summary.json`.
+Executable route runs passed under same-session sequence review:
+`fetch_ready_local` (`20260603T043331724833Z`, closest `0.196023m`),
+`nav2_reposition_first` (`20260603T043525704923Z`, closest `0.193737m`), and
+`recovery_or_reaim` (`20260603T043728550735Z`, closest `0.197799m`). The
+planner-owned non-fetch routes also executed correctly:
+`scan_or_perceive_first` selected perception refresh, and
+`ambiguous_or_unsafe_no_go` selected safe no-go. Browser-watchable package:
+`artifacts/session/uat_broad_frozen_planner_routes_20260603/fetch_visual_uat_package/scorecard.md`.
+Treat this as mobile visual UAT for route ownership and video review. Promotion
+still waits for canonical saved-layout and seeded-random gates.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

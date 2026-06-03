@@ -755,10 +755,26 @@ circle. Browser-watchable package:
 The remaining lateral/yaw contact flags make the next roadmap step broader
 planner-routed multi-scene coverage before another narrow local-contact patch.
 
-The next roadmap step remains route-owner completion: replace the v0 proof
-executor with real Nav2 reposition where the planner asks for reposition,
-connect live perception refresh for stale/unknown scenes, then run saved-layout
-and seeded random gates with sequence-based visual review.
+Late June 3 broad frozen route evidence: the route-owner coverage step is now
+green as mobile visual UAT. The mixed handoff gate passed `5/5` with zero wrong
+fetch dispatches:
+`artifacts/session/live_broad_frozen_planner_routed_gate_20260603/fetch_planner_handoff_gate/gate_summary.json`.
+Executable route videos and mission verdicts passed for `fetch_ready_local`
+(`20260603T043331724833Z`, closest `0.196023m`), `nav2_reposition_first`
+(`20260603T043525704923Z`, closest `0.193737m`), and `recovery_or_reaim`
+(`20260603T043728550735Z`, closest `0.197799m`). The planner also selected
+the correct non-fetch actions for `scan_or_perceive_first` and
+`ambiguous_or_unsafe_no_go`. Combined browser-watchable package:
+`artifacts/session/uat_broad_frozen_planner_routes_20260603/fetch_visual_uat_package/scorecard.md`.
+This advances the roadmap from single-case recovery repair to route-owner UAT.
+The next roadmap step is randomized planner-routed coverage plus contact-quality
+polish, then canonical saved-layout and seeded-random gates.
+
+Route-owner completion now means scaling beyond frozen scenes: run randomized
+planner-routed coverage, keep live perception refresh as a classified
+planner-owned action until it needs an executable scan behavior, polish the
+remaining contact-quality watches, then run saved-layout and seeded-random
+gates with sequence-based visual review.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
