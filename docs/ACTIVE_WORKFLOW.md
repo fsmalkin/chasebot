@@ -1106,6 +1106,12 @@ Live gates:
      approach, first contact, mid-push or handoff, terminal/stop, and final.
      Use top-down plus onboard/raw and world-stream frames when available.
      The end frame is one checkpoint in the broader visual review.
+   - keyframe review sheet:
+     `fetch_visual_uat_package.py` generates
+     `visual/keyframe_review_contact_sheet.png` from paired onboard raw and
+     topdown keyframes when enough frames exist. Open this sheet before
+     reporting a pass so the visual check covers the run sequence, contact, and
+     final delivery geometry.
    - keyframe recovery:
      when continuous visual summaries are incomplete but same-session keyframes,
      nonblank raw/debug frames, truth alignment, and browser videos are present,
@@ -1120,8 +1126,8 @@ Live gates:
      playable videos are served from the whitelisted `/artifacts/session/...`
      route for mobile browser playback
    - interpretation: green package means visually reviewable planner-gated fetch
-     UAT; it does not replace saved-layout `3/3` or seeded random promotion
-     gates
+     UAT; saved-layout `3/3` and seeded random promotion gates remain required
+     for promotion
 10. Nav2 corridor-push spike contract:
    - branch: `spike/fetch-arch-nav2-corridor-push-20260528`
    - architecture: `nav2_followpath_corridor_push_v1`

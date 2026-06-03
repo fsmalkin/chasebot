@@ -43,6 +43,11 @@ BROWSER_COMPATIBLE_VIDEO_NAMES = frozenset(
     }
 )
 KEYFRAME_RECOVERY_MIN_FRAMES = 3
+KEYFRAME_REVIEW_OUTPUT_NAME = "keyframe_review_contact_sheet.png"
+KEYFRAME_REVIEW_MAX_FRAMES = 10
+KEYFRAME_REVIEW_THUMBNAIL_SIZE = (220, 124)
+KEYFRAME_REVIEW_LABEL_HEIGHT_PX = 22
+KEYFRAME_REVIEW_GAP_PX = 6
 KEYFRAME_VIDEO_RECOVERY_SPECS = (
     {
         "output_name": "raw_camera_browser.mp4",
@@ -63,6 +68,18 @@ KEYFRAME_VIDEO_RECOVERY_SPECS = (
         "source": "world_stream_frames",
     },
 )
+
+
+def _select_evenly_spaced(items: list[Any], limit: int) -> list[Any]:
+    if limit <= 0 or len(items) <= limit:
+        return list(items)
+    last_index = len(items) - 1
+    selected_indexes = []
+    for index in range(limit):
+        selected = round(index * last_index / max(1, limit - 1))
+        if selected not in selected_indexes:
+            selected_indexes.append(selected)
+    return [items[index] for index in selected_indexes]
 
 
 def utc_now() -> str:
@@ -299,6 +316,99 @@ def recover_browser_videos(visual_dir: Path) -> list[dict[str, Any]]:
         result["error"] = error
         results.append(result)
     return results
+
+
+def _keyframe_prefix(path: Path, suffix: str) -> str:
+    name = path.name
+    return name[: -len(suffix)] if name.endswith(suffix) else path.stem
+
+
+def build_keyframe_review(visual_dir: Path) -> dict[str, Any]:
+    """Create a compact sequence review from onboard and topdown keyframes."""
+    output_path = visual_dir / KEYFRAME_REVIEW_OUTPUT_NAME
+    result: dict[str, Any] = {
+        "output_name": KEYFRAME_REVIEW_OUTPUT_NAME,
+        "session_id": session_id_for_path(visual_dir),
+        "path": artifact_display_path(output_path),
+        "url": "",
+        "source": "raw_topdown_keyframes",
+        "attempted": False,
+        "ok": False,
+        "raw_frame_count": 0,
+        "topdown_frame_count": 0,
+        "paired_frame_count": 0,
+        "selected_count": 0,
+        "selected_frame_ids": [],
+        "error": "",
+        "review_instruction": "inspect_onboard_and_topdown_sequence_not_only_end_frame",
+    }
+    keyframes_dir = visual_dir / "keyframes"
+    if not keyframes_dir.is_dir():
+        result["error"] = "missing_keyframes_dir"
+        return result
+    raw_frames = sorted(keyframes_dir.glob("*_raw.png"))
+    topdown_by_prefix = {
+        _keyframe_prefix(path, "_topdown.png"): path for path in sorted(keyframes_dir.glob("*_topdown.png"))
+    }
+    result["raw_frame_count"] = len(raw_frames)
+    result["topdown_frame_count"] = len(topdown_by_prefix)
+    pairs: list[tuple[str, Path, Path]] = []
+    for raw_path in raw_frames:
+        frame_id = _keyframe_prefix(raw_path, "_raw.png")
+        topdown_path = topdown_by_prefix.get(frame_id)
+        if topdown_path is not None:
+            pairs.append((frame_id, raw_path, topdown_path))
+    result["paired_frame_count"] = len(pairs)
+    if len(pairs) < KEYFRAME_RECOVERY_MIN_FRAMES:
+        result["error"] = "insufficient_paired_keyframes"
+        return result
+
+    result["attempted"] = True
+    selected = _select_evenly_spaced(pairs, KEYFRAME_REVIEW_MAX_FRAMES)
+    result["selected_count"] = len(selected)
+    result["selected_frame_ids"] = [frame_id for frame_id, _, _ in selected]
+    try:
+        from PIL import Image, ImageDraw, ImageOps
+    except Exception:
+        result["error"] = "pillow_not_available"
+        return result
+
+    thumb_width, thumb_height = KEYFRAME_REVIEW_THUMBNAIL_SIZE
+    label_height = KEYFRAME_REVIEW_LABEL_HEIGHT_PX
+    gap = KEYFRAME_REVIEW_GAP_PX
+    columns = max(1, len(selected))
+    rows = 2
+    sheet_width = columns * thumb_width + (columns + 1) * gap
+    sheet_height = rows * (thumb_height + label_height) + (rows + 1) * gap
+    sheet = Image.new("RGB", (sheet_width, sheet_height), (248, 248, 248))
+    draw = ImageDraw.Draw(sheet)
+
+    def paste_tile(source_path: Path, column: int, row: int, label: str) -> None:
+        x = gap + column * (thumb_width + gap)
+        y = gap + row * (thumb_height + label_height + gap)
+        with Image.open(source_path) as image:
+            image = ImageOps.contain(image.convert("RGB"), (thumb_width, thumb_height))
+            tile = Image.new("RGB", (thumb_width, thumb_height), (28, 28, 28))
+            tile.paste(image, ((thumb_width - image.width) // 2, (thumb_height - image.height) // 2))
+        sheet.paste(tile, (x, y + label_height))
+        draw.text((x + 4, y + 4), label, fill=(20, 20, 20))
+        draw.rectangle((x, y + label_height, x + thumb_width - 1, y + label_height + thumb_height - 1), outline=(120, 120, 120))
+
+    try:
+        for column, (frame_id, raw_path, topdown_path) in enumerate(selected):
+            paste_tile(raw_path, column, 0, f"{frame_id} raw")
+            paste_tile(topdown_path, column, 1, f"{frame_id} topdown")
+        ensure_dir(output_path.parent)
+        sheet.save(output_path)
+    except Exception as exc:
+        result["error"] = compact_validation_error(exc)
+        return result
+
+    result["ok"] = output_path.is_file() and output_path.stat().st_size > 0
+    result["url"] = artifact_url(output_path) if result["ok"] else ""
+    if not result["ok"]:
+        result["error"] = "contact_sheet_not_written"
+    return result
 
 
 def finite_float(value: Any) -> float | None:
@@ -741,6 +851,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     missions = [item for item in missions if item]
     visual_dirs = [resolve_path(path) for path in args.visual_dir]
     video_recovery = [item for path in visual_dirs for item in recover_browser_videos(path)]
+    keyframe_reviews = [build_keyframe_review(path) for path in visual_dirs if path.is_dir()]
     visual_summaries = [summarize_visual_dir(path) for path in visual_dirs if path.is_dir()]
     videos = discover_videos(visual_dirs)
     visual_by_session = {
@@ -849,6 +960,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "seeded_evidence": seeded_evidence,
         "stage_quality_audits": stage_quality_audits,
         "video_recovery": video_recovery,
+        "keyframe_reviews": keyframe_reviews,
         "missions": missions,
         "visual_summaries": visual_summaries,
         "videos": videos,
@@ -929,6 +1041,20 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 f"ok=`{item.get('ok', False)}` frames=`{item.get('frame_count', 0)}` "
                 f"previous=`{item.get('previous_validation_error', '')}` "
                 f"error=`{item.get('error', '')}`"
+            )
+    else:
+        lines.append("- none")
+    review_rows = summary.get("keyframe_reviews", []) if isinstance(summary.get("keyframe_reviews"), list) else []
+    lines.extend(["", "## Visual Keyframe Reviews"])
+    if review_rows:
+        for item in review_rows:
+            name = str(item.get("output_name", "") or "")
+            url = str(item.get("url", "") or "")
+            label = f"[{name}]({url})" if url else f"`{name}`"
+            lines.append(
+                f"- {label} session=`{item.get('session_id', '')}` ok=`{item.get('ok', False)}` "
+                f"selected=`{item.get('selected_count', 0)}` paired=`{item.get('paired_frame_count', 0)}` "
+                f"source=`{item.get('source', '')}` error=`{item.get('error', '')}`"
             )
     else:
         lines.append("- none")

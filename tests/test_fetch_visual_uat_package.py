@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
@@ -26,6 +28,12 @@ def _stub_browser_video_probe(monkeypatch):
         }
 
     monkeypatch.setattr(package, "inspect_video_file", _probe)
+
+
+def _write_png(path: Path, color: tuple[int, int, int]) -> None:
+    Image = pytest.importorskip("PIL.Image")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (64, 48), color).save(path)
 
 
 def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
@@ -286,6 +294,49 @@ def test_visual_uat_package_recovers_browser_videos_from_keyframes(tmp_path, mon
     text = scorecard.read_text(encoding="utf-8")
     assert "## Video Recovery" in text
     assert "source=`raw_keyframes` ok=`True`" in text
+
+
+def test_visual_uat_package_generates_multiframe_keyframe_review(tmp_path, monkeypatch):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(package, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+
+    visual = session_root / "session_a" / "visual"
+    keyframes = visual / "keyframes"
+    for index in range(6):
+        _write_png(keyframes / f"{index:06d}_raw.png", (30 + index * 20, 40, 80))
+        _write_png(keyframes / f"{index:06d}_topdown.png", (40, 80, 30 + index * 20))
+
+    args = type(
+        "Args",
+        (),
+        {
+            "campaign_id": "uat",
+            "planner_summary": [],
+            "seeded_evidence_summary": [],
+            "stage_quality_summary": [],
+            "mission_summary": [],
+            "visual_dir": [str(visual)],
+        },
+    )()
+
+    summary = package.build_summary(args)
+
+    reviews = summary["keyframe_reviews"]
+    assert len(reviews) == 1
+    assert reviews[0]["ok"] is True
+    assert reviews[0]["source"] == "raw_topdown_keyframes"
+    assert reviews[0]["selected_count"] == 6
+    assert reviews[0]["paired_frame_count"] == 6
+    assert reviews[0]["review_instruction"] == "inspect_onboard_and_topdown_sequence_not_only_end_frame"
+    assert reviews[0]["url"] == "/artifacts/session/session_a/visual/keyframe_review_contact_sheet.png"
+    assert (visual / "keyframe_review_contact_sheet.png").is_file()
+
+    scorecard = tmp_path / "scorecard.md"
+    package.write_scorecard(scorecard, summary)
+    text = scorecard.read_text(encoding="utf-8")
+    assert "## Visual Keyframe Reviews" in text
+    assert "[keyframe_review_contact_sheet.png](/artifacts/session/session_a/visual/keyframe_review_contact_sheet.png)" in text
 
 
 def test_visual_uat_package_accepts_keyframe_recovery_confirmation(tmp_path, monkeypatch):
