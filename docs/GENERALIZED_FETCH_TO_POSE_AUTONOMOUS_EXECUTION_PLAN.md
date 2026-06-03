@@ -131,19 +131,25 @@ planner-owned non-fetch routes also executed correctly:
 Treat this as mobile visual UAT for route ownership and video review. Promotion
 still waits for canonical saved-layout and seeded-random gates.
 
-Random planner-routed mini-batch, later June 3: the generated planner gate
-passed `15/15` with zero wrong fetch dispatches and route spread across all
-five labels:
+Random planner-routed route-owner batch, later June 3: the generated planner
+gate passed `15/15` with zero wrong fetch dispatches and route spread across
+all five labels:
 `artifacts/session/live_random_planner_routed_gate_seed20260607_15case_20260603/fetch_planner_handoff_gate/gate_summary.json`.
-Three executable route replays passed with sequence-based visual review:
-`fetch_ready_local` (`20260603T110734954675Z`, closest `0.197448m`),
-`nav2_reposition_first` (`20260603T111354017138Z`, closest `0.195932m`), and
-`recovery_or_reaim` (`20260603T111751279374Z`, closest `0.247356m`). The
-browser-watchable package is
-`artifacts/session/uat_random_planner_routes_seed20260607_exec3_20260603/fetch_visual_uat_package/scorecard.md`.
-This is the first randomized route-owner visual UAT slice on the moonshot
-branch. The remaining contact-quality watch is pre-contact lateral/yaw error;
-first-contact flags were clean in the three executable random runs.
+Six executable route replays passed with sequence-based visual review, two per
+executable route class:
+`fetch_ready_local` (`20260603T110734954675Z`, closest `0.197448m`;
+`20260603T114148765004Z`, closest `0.197425m`),
+`nav2_reposition_first` (`20260603T111354017138Z`, closest `0.195932m`;
+`20260603T114321822659Z`, closest `0.196426m`), and
+`recovery_or_reaim` (`20260603T111751279374Z`, closest `0.247356m`;
+`20260603T114506043298Z`, closest `0.193687m`). The browser-watchable package
+is
+`artifacts/session/uat_random_planner_routes_seed20260607_exec6_20260603/fetch_visual_uat_package/scorecard.md`,
+and the route UAT analyzer is
+`artifacts/session/route_uat_random_seed20260607_exec6_analyzer_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+This is randomized route-owner visual UAT on the moonshot branch. The remaining
+contact-quality watch is pre-contact lateral/yaw error across all six
+executable runs; first-contact flags were clean in the six-run batch.
 
 ## Evidence Reset
 

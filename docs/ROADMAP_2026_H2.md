@@ -777,19 +777,20 @@ remaining contact-quality watches, then run saved-layout and seeded-random
 gates with sequence-based visual review.
 
 Later June 3 randomized route-owner evidence: the first generated route-owner
-mini-batch passed the dry planner gate `15/15` with zero wrong fetch dispatches:
+batch passed the dry planner gate `15/15` with zero wrong fetch dispatches:
 `artifacts/session/live_random_planner_routed_gate_seed20260607_15case_20260603/fetch_planner_handoff_gate/gate_summary.json`.
-Executable live replays passed for direct local fetch, Nav2 reposition-first,
-and recovery/re-aim:
-`20260603T110734954675Z` closest `0.197448m`,
-`20260603T111354017138Z` closest `0.195932m`, and
-`20260603T111751279374Z` closest `0.247356m`. Combined package:
-`artifacts/session/uat_random_planner_routes_seed20260607_exec3_20260603/fetch_visual_uat_package/scorecard.md`.
+Executable live replays passed `6/6`, with two runs for direct local fetch,
+Nav2 reposition-first, and recovery/re-aim. Closest approach ranged from
+`0.193687m` to `0.247356m`, inside the `0.300m` delivery contract. Combined
+browser-watchable package:
+`artifacts/session/uat_random_planner_routes_seed20260607_exec6_20260603/fetch_visual_uat_package/scorecard.md`.
+Route UAT analyzer:
+`artifacts/session/route_uat_random_seed20260607_exec6_analyzer_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
 The package builder now recovers browser-safe videos from saved frame sequences,
 so every future evidence package can include onboard and context clips even when
-the live MP4 recorder emits empty files. The next roadmap slice is a wider
-randomized executable-route batch and contact-quality scoring, followed by the
-canonical saved-layout and seeded-random promotion gates.
+the live MP4 recorder emits empty files. The next roadmap slice is contact-
+quality scoring and pre-contact smoothing under the same route-owner harness,
+followed by the canonical saved-layout and seeded-random promotion gates.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`

@@ -1029,19 +1029,22 @@ Live gates:
       `artifacts/session/uat_broad_frozen_planner_routes_20260603/fetch_visual_uat_package/scorecard.md`.
       Treat this as broad route-owner visual UAT; canonical saved-layout and
       seeded-random gates remain the promotion path.
-    - random planner-routed mini-batch, later June 3:
+    - random planner-routed route-owner batch, later June 3:
       `artifacts/session/live_random_planner_routed_gate_seed20260607_15case_20260603/fetch_planner_handoff_gate/gate_summary.json`
       passed `15/15` with zero wrong fetch dispatches and route coverage across
-      all five labels. Same-session executable route UAT passed for
-      `fetch_ready_local` (`20260603T110734954675Z`, closest `0.197448m`),
-      `nav2_reposition_first` (`20260603T111354017138Z`, closest
-      `0.195932m`), and `recovery_or_reaim` (`20260603T111751279374Z`,
-      closest `0.247356m`). Sequence review confirmed start/setup,
-      pre-contact, first-contact, push/coast, terminal, and final frames.
+      all five labels. Same-session executable route UAT passed `6/6`, two
+      runs per executable route class. Closest approach ranged from `0.193687m`
+      to `0.247356m`, all inside the `0.300m` delivery contract. Sequence
+      review confirmed start/setup, pre-contact, first-contact, push/coast,
+      terminal, and final frames for the latest runs.
       Browser-watchable package:
-      `artifacts/session/uat_random_planner_routes_seed20260607_exec3_20260603/fetch_visual_uat_package/scorecard.md`.
-      This is randomized route-owner visual UAT, with promotion still gated by
-      canonical saved-layout and seeded-random evidence.
+      `artifacts/session/uat_random_planner_routes_seed20260607_exec6_20260603/fetch_visual_uat_package/scorecard.md`.
+      Route UAT analyzer:
+      `artifacts/session/route_uat_random_seed20260607_exec6_analyzer_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+      This is randomized route-owner visual UAT; canonical saved-layout and
+      seeded-random evidence remain the promotion path. Contact-quality status
+      is `watch` because all six runs flagged pre-contact lateral/yaw error,
+      while first-contact flags stayed clean.
     - forward-only fetch rule: a planner-gated UAT run that reaches local fetch
       should show no negative pre-contact `linear_x`; any needed backing or
       side-selection should be handled as planner-owned reposition/setup before

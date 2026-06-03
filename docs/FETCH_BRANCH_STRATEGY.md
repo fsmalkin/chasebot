@@ -228,24 +228,27 @@ Planner-routed moonshot update, June 2:
 - randomized route-owner evidence:
   generated planner handoff passed `15/15` with zero wrong fetch dispatches:
   `artifacts/session/live_random_planner_routed_gate_seed20260607_15case_20260603/fetch_planner_handoff_gate/gate_summary.json`.
-  Executable route UAT passed for `fetch_ready_local`
-  (`20260603T110734954675Z`, closest `0.197448m`),
-  `nav2_reposition_first` (`20260603T111354017138Z`, closest `0.195932m`),
-  and `recovery_or_reaim` (`20260603T111751279374Z`, closest `0.247356m`).
+  Executable route UAT passed `6/6`, with two live runs each for
+  `fetch_ready_local`, `nav2_reposition_first`, and `recovery_or_reaim`.
+  Closest approach ranged from `0.193687m` to `0.247356m`, inside the
+  `0.300m` delivery contract. Contact quality is a watch item because
+  pre-contact lateral/yaw flags appeared in all six runs, while first-contact
+  flags stayed clean.
   Combined package:
-  `artifacts/session/uat_random_planner_routes_seed20260607_exec3_20260603/fetch_visual_uat_package/scorecard.md`
+  `artifacts/session/uat_random_planner_routes_seed20260607_exec6_20260603/fetch_visual_uat_package/scorecard.md`
+  Route UAT analyzer:
+  `artifacts/session/route_uat_random_seed20260607_exec6_analyzer_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
 - video recovery:
   `fetch_visual_uat_package.py` now rebuilds browser-safe onboard, top-down, and
   world-stream clips from saved frame sequences when recorder MP4s are missing,
   empty, or invalid. Scorecards list those recoveries explicitly.
 - next branch decision:
-  keep this branch disposable while expanding from a three-executable-route
-  random mini-batch to wider randomized route-owner coverage. The next patch
-  should target contact-quality polish
-  only when the sequence review shows repeated first-contact or terminal-delivery
-  watches across route classes; live perception refresh can remain a classified
-  planner action until random coverage exposes a real scan/refresh execution
-  need.
+  keep this branch disposable while using the six-run random route-owner batch
+  as the current UAT baseline. The next patch should target contact-quality
+  scoring and pre-contact smoothing because the repeated watch is setup
+  lateral/yaw quality; first-contact and terminal delivery stayed green. Live
+  perception refresh can remain a classified planner action until random
+  coverage exposes a real scan/refresh execution need.
 
 Saved-anchor requalification update, later June 1:
 
