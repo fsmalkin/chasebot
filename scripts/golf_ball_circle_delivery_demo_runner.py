@@ -842,6 +842,13 @@ def line_servo_command(
             or abs(line_yaw_error) > float(contact_yaw_ready_rad) * 0.80
         )
     )
+    recovery_close_settle_active = bool(
+        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        and 0.12 < distance_to_contact <= 0.22
+        and not contact_ready
+        and abs(robot_lateral_error) > effective_contact_lateral_ready_m * 1.50
+        and abs(line_yaw_error) <= 0.45
+    )
     ball_motion_m = 0.0
     if ball_start_pose is not None:
         ball_motion_m = math.hypot(
@@ -863,6 +870,7 @@ def line_servo_command(
         and distance_to_setup <= recovery_setup_pocket_m
         and abs(robot_lateral_error) <= recovery_line_acquire_lateral_m
         and distance_to_contact > 0.12
+        and not recovery_close_settle_active
     ):
         phase = "recovery_line_acquire"
         desired_yaw = line_yaw
@@ -880,6 +888,18 @@ def line_servo_command(
                 else line_yaw
             )
             base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
+        elif recovery_close_settle_active:
+            phase = "recovery_close_settle"
+            desired_yaw = (
+                lateral_corrected_yaw
+                if abs(robot_lateral_error) > lateral_reaim_release_m
+                else line_yaw
+            )
+            settle_cap = 0.012 if (
+                abs(robot_lateral_error) > effective_contact_lateral_ready_m * 1.25
+                or abs(line_yaw_error) > float(contact_yaw_ready_rad) * 2.50
+            ) else 0.018
+            base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), settle_cap))
         elif contact_final_reaim_active:
             phase = "contact_final_reaim"
             desired_yaw = (
@@ -973,6 +993,7 @@ def line_servo_command(
         "contact_final_reaim_active": contact_final_reaim_active,
         "recovery_final_reaim_active": recovery_final_reaim_active,
         "local_close_settle_active": local_close_settle_active,
+        "recovery_close_settle_active": recovery_close_settle_active,
         "lateral_reaim_rad": round(float(lateral_reaim), 6),
         "lateral_reaim_release_m": round(float(lateral_reaim_release_m), 6),
         "lateral_reaim_gain": round(float(lateral_reaim_gain), 6),
