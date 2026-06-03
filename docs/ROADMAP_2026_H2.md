@@ -792,6 +792,18 @@ the live MP4 recorder emits empty files. The next roadmap slice is contact-
 quality scoring and pre-contact smoothing under the same route-owner harness,
 followed by the canonical saved-layout and seeded-random promotion gates.
 
+Replay-path fix, later June 3: the next generated seed found a harness gap
+before it found a new controller gap. `seed20260608_scene24_fetch_ready_local`
+failed as a manual frozen-layout replay because the runner used the old
+constant-push defaults and default robot pose, then passed after
+`golf_ball_circle_delivery_demo_runner.py` started applying planner route
+execution defaults from frozen layouts. The patched replay reached `0.196327m`
+and produced a browser-watchable package:
+`artifacts/session/uat_planner_route_replay_fix_seed20260608_scene24_20260603/fetch_visual_uat_package/scorecard.md`.
+This protects the roadmap evidence ladder because frozen random failures can now
+be replayed through the same route-owner profile as dashboard planner-gated
+runs. Contact-quality watch flags remain the next controller backlog.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

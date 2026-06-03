@@ -1045,6 +1045,19 @@ Live gates:
       seeded-random evidence remain the promotion path. Contact-quality status
       is `watch` because all six runs flagged pre-contact lateral/yaw error,
       while first-contact flags stayed clean.
+    - frozen planner-layout replay fix, later June 3:
+      fresh seed `seed20260608_scene24_fetch_ready_local` first exposed a
+      replay-path mismatch: manual target-layout replay used the old constant
+      push and default robot pose, missing at `0.416135m`. The runner now
+      applies planner route execution defaults from frozen layouts, including
+      route metadata, planned robot pose for `fetch_ready_local`, current-robot
+      pose normalization for setup-first route replays,
+      long-horizon line servo, delivery stop, and forward-only contact guard.
+      Patched rerun `20260603T120817888242Z` passed at `0.196327m`.
+      Browser-watchable package:
+      `artifacts/session/uat_planner_route_replay_fix_seed20260608_scene24_20260603/fetch_visual_uat_package/scorecard.md`.
+      Treat this as replay-harness fix evidence and a diagnostic UAT clip;
+      canonical saved-layout and seeded-random gates remain the promotion path.
     - forward-only fetch rule: a planner-gated UAT run that reaches local fetch
       should show no negative pre-contact `linear_x`; any needed backing or
       side-selection should be handled as planner-owned reposition/setup before

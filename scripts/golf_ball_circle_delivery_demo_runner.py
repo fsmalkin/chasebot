@@ -33,6 +33,19 @@ DEFAULT_ZONE_MODEL_NAME = "golf_ball_delivery_zone"
 DEFAULT_ROBOT_MODEL_NAME = "jetbot"
 NAV2_REPOSITION_RESULT_MARKER = "NAV2_REPOSITION_RESULT="
 NAV2_REPOSITION_BEHAVIOR_TREE = "/workspaces/chasecar/ros2_config/behavior_trees/navigate_to_pose_w_replanning.xml"
+ROUTE_FETCH_READY = "fetch_ready_local"
+ROUTE_NAV2_REPOSITION = "nav2_reposition_first"
+ROUTE_RECOVERY_OR_REAIM = "recovery_or_reaim"
+ROUTE_EXECUTOR_LOCAL_FETCH = "local_fetch_to_pose"
+ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH = "nav2_forward_reposition_then_fetch"
+ROUTE_EXECUTOR_RECOVERY = "bounded_recovery_reaim"
+EXECUTABLE_PLANNER_FETCH_ROUTES = {ROUTE_FETCH_READY, ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM}
+NAV2_SETUP_PLANNER_ROUTES = {ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM}
+ROUTE_EXECUTOR_BY_LABEL = {
+    ROUTE_FETCH_READY: ROUTE_EXECUTOR_LOCAL_FETCH,
+    ROUTE_NAV2_REPOSITION: ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
+    ROUTE_RECOVERY_OR_REAIM: ROUTE_EXECUTOR_RECOVERY,
+}
 
 
 def utc_now() -> str:
@@ -116,6 +129,103 @@ def apply_target_layout(args: argparse.Namespace) -> dict[str, Any]:
         "route_executor": str(layout.get("route_executor", "") or random_draw.get("route_executor", "")),
         "random_draw": random_draw,
         "target": target,
+    }
+
+
+def _option_present(explicit_args: set[str], *options: str) -> bool:
+    return any(arg == option or arg.startswith(f"{option}=") for arg in explicit_args for option in options)
+
+
+def _set_route_default(args: argparse.Namespace, explicit_args: set[str], attr: str, value: Any, *options: str) -> None:
+    if not _option_present(explicit_args, *options):
+        setattr(args, attr, value)
+
+
+def apply_planner_route_execution_defaults(
+    args: argparse.Namespace,
+    target_layout: dict[str, Any],
+    *,
+    explicit_args: set[str] | None = None,
+) -> dict[str, Any]:
+    """Apply route-owner execution defaults for frozen planner target layouts."""
+
+    explicit_args = explicit_args or set()
+    random_draw = target_layout.get("random_draw") if isinstance(target_layout.get("random_draw"), dict) else {}
+    route_label = str(
+        getattr(args, "planner_route_label", "")
+        or target_layout.get("planner_route_label", "")
+        or random_draw.get("planner_route_label", "")
+        or ""
+    ).strip()
+    if not route_label:
+        return {"applied": False, "reason": "missing_planner_route_label"}
+    route_executor = str(
+        getattr(args, "route_executor", "")
+        or target_layout.get("route_executor", "")
+        or random_draw.get("route_executor", "")
+        or ROUTE_EXECUTOR_BY_LABEL.get(route_label, "")
+    ).strip()
+    _set_route_default(args, explicit_args, "planner_route_label", route_label, "--planner-route-label")
+    _set_route_default(args, explicit_args, "route_executor", route_executor, "--route-executor")
+    robot_pose = random_draw.get("robot_pose") if isinstance(random_draw.get("robot_pose"), dict) else {}
+    if route_label not in EXECUTABLE_PLANNER_FETCH_ROUTES:
+        return {
+            "applied": False,
+            "reason": "planner_route_not_local_fetch_executable",
+            "planner_route_label": route_label,
+            "route_executor": route_executor,
+        }
+
+    _set_route_default(args, explicit_args, "forward_only_pre_contact_required", True, "--forward-only-pre-contact-required")
+    _set_route_default(args, explicit_args, "drive_mode", "line_servo", "--drive-mode")
+    _set_route_default(args, explicit_args, "drive_linear_x_mps", 0.1, "--drive-linear-x-mps")
+    _set_route_default(args, explicit_args, "drive_duration_s", 36.0, "--drive-duration-s")
+    _set_route_default(args, explicit_args, "sample_duration_s", 40.0, "--sample-duration-s")
+    _set_route_default(args, explicit_args, "line_servo_push_linear_x_mps", 0.055, "--line-servo-push-linear-x-mps")
+    _set_route_default(args, explicit_args, "line_servo_max_angular_z_rps", 0.18, "--line-servo-max-angular-z-rps")
+    _set_route_default(args, explicit_args, "line_servo_yaw_gain", 1.2, "--line-servo-yaw-gain")
+    _set_route_default(args, explicit_args, "stop_on_delivery", True, "--stop-on-delivery")
+    _set_route_default(args, explicit_args, "delivery_stop_radius_m", 0.2, "--delivery-stop-radius-m")
+    _set_route_default(args, explicit_args, "post_delivery_sample_s", 4.0, "--post-delivery-sample-s")
+    if route_label in NAV2_SETUP_PLANNER_ROUTES:
+        _set_route_default(args, explicit_args, "robot_x", 0.0, "--robot-x")
+        _set_route_default(args, explicit_args, "robot_y", 0.0, "--robot-y")
+        _set_route_default(args, explicit_args, "robot_yaw", 0.0, "--robot-yaw")
+        _set_route_default(args, explicit_args, "nav2_reposition_before_fetch", True, "--nav2-reposition-before-fetch")
+        _set_route_default(
+            args,
+            explicit_args,
+            "nav2_reposition_transform_layout_to_current_robot",
+            True,
+            "--nav2-reposition-transform-layout-to-current-robot",
+        )
+        _set_route_default(args, explicit_args, "nav2_reposition_frame_id", "odom", "--nav2-reposition-frame-id")
+        _set_route_default(
+            args,
+            explicit_args,
+            "nav2_reposition_goal_frame_mode",
+            "nav2_relative",
+            "--nav2-reposition-goal-frame-mode",
+        )
+        _set_route_default(args, explicit_args, "nav2_reposition_setup_standoff_m", 0.38, "--nav2-reposition-setup-standoff-m")
+        _set_route_default(args, explicit_args, "nav2_reposition_timeout_s", 24.0, "--nav2-reposition-timeout-s")
+        _set_route_default(args, explicit_args, "nav2_reposition_server_wait_s", 8.0, "--nav2-reposition-server-wait-s")
+        _set_route_default(args, explicit_args, "nav2_reposition_pose_wait_s", 3.0, "--nav2-reposition-pose-wait-s")
+    elif robot_pose:
+        _set_route_default(args, explicit_args, "robot_x", float(robot_pose.get("x", args.robot_x) or 0.0), "--robot-x")
+        _set_route_default(args, explicit_args, "robot_y", float(robot_pose.get("y", args.robot_y) or 0.0), "--robot-y")
+        _set_route_default(args, explicit_args, "robot_yaw", float(robot_pose.get("yaw", args.robot_yaw) or 0.0), "--robot-yaw")
+    return {
+        "applied": True,
+        "planner_route_label": route_label,
+        "route_executor": route_executor,
+        "drive_mode": str(args.drive_mode),
+        "nav2_reposition_before_fetch": bool(args.nav2_reposition_before_fetch),
+        "robot_pose": {
+            "x": round(float(args.robot_x), 6),
+            "y": round(float(args.robot_y), 6),
+            "yaw": round(float(args.robot_yaw), 6),
+        },
     }
 
 
@@ -1533,7 +1643,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    explicit_args = set(sys.argv[1:])
     target_layout = apply_target_layout(args)
+    planner_route_defaults = apply_planner_route_execution_defaults(args, target_layout, explicit_args=explicit_args)
     if args.fetch_target_x is not None:
         args.zone_x = args.fetch_target_x
     if args.fetch_target_y is not None:
@@ -1865,6 +1977,7 @@ def main() -> int:
         "nav2_reposition_status_text": str(pre_fetch_reposition.get("status_text", "")),
         "nav2_reposition_goal_pose": pre_fetch_reposition.get("goal_pose", {}),
         "nav2_layout_transform": nav2_layout_transform,
+        "planner_route_execution_defaults": planner_route_defaults,
         "fetch_skipped_after_reposition": bool(fetch_skipped_after_reposition),
         "contact_phase_forward_only": bool(float(args.drive_linear_x_mps) >= -1e-9),
         "forward_only_pre_contact_required": bool(args.forward_only_pre_contact_required),
@@ -1912,6 +2025,7 @@ def main() -> int:
         "planner_route": route_metadata,
         "pre_fetch_reposition": pre_fetch_reposition,
         "nav2_layout_transform": nav2_layout_transform,
+        "planner_route_execution_defaults": planner_route_defaults,
     }
     verdict = {
         "type": "gather_mission",

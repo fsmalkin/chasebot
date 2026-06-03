@@ -18,6 +18,7 @@ from golf_ball_circle_delivery_demo_runner import build_approach_contact_metrics
 from golf_ball_circle_delivery_demo_runner import line_servo_command  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import parse_args  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import apply_target_layout  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import apply_planner_route_execution_defaults  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_nav2_reposition_setup_pose  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_nav2_relative_setup_goal  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import dispatch_nav2_reposition_before_fetch  # noqa: E402
@@ -100,6 +101,125 @@ def test_apply_target_layout_sets_ball_pose_from_layout(tmp_path):
     assert layout["random_draw"]["seed"] == 123
     assert layout["planner_route_label"] == "nav2_reposition_first"
     assert layout["route_executor"] == "nav2_forward_reposition_then_fetch"
+
+
+def _route_default_args(**overrides):
+    values = {
+        "planner_route_label": "",
+        "route_executor": "",
+        "forward_only_pre_contact_required": False,
+        "drive_mode": "constant",
+        "drive_linear_x_mps": 0.12,
+        "drive_duration_s": 7.0,
+        "sample_duration_s": 9.0,
+        "line_servo_push_linear_x_mps": 0.055,
+        "line_servo_max_angular_z_rps": 0.18,
+        "line_servo_yaw_gain": 1.2,
+        "stop_on_delivery": False,
+        "delivery_stop_radius_m": 0.0,
+        "post_delivery_sample_s": 0.0,
+        "nav2_reposition_before_fetch": False,
+        "nav2_reposition_transform_layout_to_current_robot": False,
+        "nav2_reposition_frame_id": "odom",
+        "nav2_reposition_goal_frame_mode": "nav2_relative",
+        "nav2_reposition_setup_standoff_m": 0.38,
+        "nav2_reposition_timeout_s": 24.0,
+        "nav2_reposition_server_wait_s": 8.0,
+        "nav2_reposition_pose_wait_s": 3.0,
+        "robot_x": 0.06,
+        "robot_y": 0.0,
+        "robot_yaw": 0.0,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def test_planner_route_defaults_turn_frozen_fetch_layout_into_line_servo():
+    args = _route_default_args()
+    layout = {
+        "planner_route_label": "fetch_ready_local",
+        "route_executor": "local_fetch_to_pose",
+        "random_draw": {
+            "planner_route_label": "fetch_ready_local",
+            "robot_pose": {"x": -0.109148, "y": -0.035637, "yaw": 0.253126},
+        },
+    }
+
+    defaults = apply_planner_route_execution_defaults(args, layout, explicit_args=set())
+
+    assert defaults["applied"] is True
+    assert args.planner_route_label == "fetch_ready_local"
+    assert args.route_executor == "local_fetch_to_pose"
+    assert args.forward_only_pre_contact_required is True
+    assert args.drive_mode == "line_servo"
+    assert args.drive_linear_x_mps == pytest.approx(0.10)
+    assert args.drive_duration_s == pytest.approx(36.0)
+    assert args.sample_duration_s == pytest.approx(40.0)
+    assert args.stop_on_delivery is True
+    assert args.delivery_stop_radius_m == pytest.approx(0.20)
+    assert args.post_delivery_sample_s == pytest.approx(4.0)
+    assert args.nav2_reposition_before_fetch is False
+    assert args.robot_x == pytest.approx(-0.109148)
+    assert args.robot_y == pytest.approx(-0.035637)
+    assert args.robot_yaw == pytest.approx(0.253126)
+
+
+def test_planner_route_defaults_enable_nav2_setup_for_frozen_reposition_layout():
+    args = _route_default_args()
+    layout = {
+        "planner_route_label": "nav2_reposition_first",
+        "route_executor": "nav2_forward_reposition_then_fetch",
+        "random_draw": {"planner_route_label": "nav2_reposition_first"},
+    }
+
+    defaults = apply_planner_route_execution_defaults(args, layout, explicit_args=set())
+
+    assert defaults["applied"] is True
+    assert args.drive_mode == "line_servo"
+    assert args.nav2_reposition_before_fetch is True
+    assert args.nav2_reposition_transform_layout_to_current_robot is True
+    assert args.nav2_reposition_goal_frame_mode == "nav2_relative"
+    assert args.nav2_reposition_setup_standoff_m == pytest.approx(0.38)
+    assert args.robot_x == pytest.approx(0.0)
+    assert args.robot_y == pytest.approx(0.0)
+    assert args.robot_yaw == pytest.approx(0.0)
+
+
+def test_planner_route_defaults_preserve_explicit_cli_overrides():
+    args = _route_default_args(drive_mode="constant", drive_duration_s=5.0, stop_on_delivery=False, robot_x=0.25)
+    layout = {
+        "planner_route_label": "fetch_ready_local",
+        "route_executor": "local_fetch_to_pose",
+        "random_draw": {"robot_pose": {"x": -0.1, "y": 0.1, "yaw": 0.2}},
+    }
+
+    apply_planner_route_execution_defaults(
+        args,
+        layout,
+        explicit_args={"--drive-mode", "--drive-duration-s", "--stop-on-delivery", "--robot-x"},
+    )
+
+    assert args.drive_mode == "constant"
+    assert args.drive_duration_s == pytest.approx(5.0)
+    assert args.stop_on_delivery is False
+    assert args.sample_duration_s == pytest.approx(40.0)
+    assert args.robot_x == pytest.approx(0.25)
+    assert args.robot_y == pytest.approx(0.1)
+    assert args.robot_yaw == pytest.approx(0.2)
+
+
+def test_planner_route_defaults_preserve_equals_style_cli_overrides():
+    args = _route_default_args(drive_duration_s=5.0)
+    layout = {
+        "planner_route_label": "fetch_ready_local",
+        "route_executor": "local_fetch_to_pose",
+        "random_draw": {"robot_pose": {"x": -0.1, "y": 0.1, "yaw": 0.2}},
+    }
+
+    apply_planner_route_execution_defaults(args, layout, explicit_args={"--drive-duration-s=5.0"})
+
+    assert args.drive_duration_s == pytest.approx(5.0)
+    assert args.sample_duration_s == pytest.approx(40.0)
 
 
 def test_parse_args_accepts_planner_route_metadata(monkeypatch):

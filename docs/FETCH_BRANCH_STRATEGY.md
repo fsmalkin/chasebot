@@ -249,6 +249,16 @@ Planner-routed moonshot update, June 2:
   lateral/yaw quality; first-contact and terminal delivery stayed green. Live
   perception refresh can remain a classified planner action until random
   coverage exposes a real scan/refresh execution need.
+- frozen planner-layout replay fix:
+  fresh seed `seed20260608_scene24_fetch_ready_local` first failed as a manual
+  target-layout replay because the runner used the old constant-push defaults
+  and default robot pose. The branch now applies planner route execution
+  defaults from frozen layouts, including route metadata, planned robot pose for
+  `fetch_ready_local`, current-robot pose normalization for setup-first route
+  replays, long-horizon line servo, delivery stop, and forward-only
+  contact guard. Patched rerun `20260603T120817888242Z` passed at `0.196327m`.
+  Diagnostic package:
+  `artifacts/session/uat_planner_route_replay_fix_seed20260608_scene24_20260603/fetch_visual_uat_package/scorecard.md`
 
 Saved-anchor requalification update, later June 1:
 

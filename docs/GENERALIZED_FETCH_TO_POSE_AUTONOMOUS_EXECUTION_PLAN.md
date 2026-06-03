@@ -151,6 +151,19 @@ This is randomized route-owner visual UAT on the moonshot branch. The remaining
 contact-quality watch is pre-contact lateral/yaw error across all six
 executable runs; first-contact flags were clean in the six-run batch.
 
+Replay-path fix, later June 3: fresh-seed `seed20260608_scene24_fetch_ready_local`
+exposed a frozen-layout replay mismatch. The manual target-layout path used the
+old constant-push defaults and default robot pose, then missed at `0.416135m`.
+`golf_ball_circle_delivery_demo_runner.py` now applies planner route execution
+defaults from frozen layouts: route metadata, planned robot pose for
+`fetch_ready_local`, current-robot pose normalization for setup-first route
+replays, long-horizon line servo, delivery stop, and forward-only
+contact guard. The patched replay passed at `0.196327m` with sequence review and
+browser-watchable evidence:
+`artifacts/session/uat_planner_route_replay_fix_seed20260608_scene24_20260603/fetch_visual_uat_package/scorecard.md`.
+This is a replay-harness fix and diagnostic UAT evidence; promotion still
+requires the canonical saved-layout and seeded-random gates.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence
