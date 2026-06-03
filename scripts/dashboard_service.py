@@ -4805,6 +4805,7 @@ pkill -f "fluxbox" 2>/dev/null || true
         forward_required = route_label in {
             fetch_planner_gate.ROUTE_FETCH_READY,
             fetch_planner_gate.ROUTE_NAV2_REPOSITION,
+            fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
         }
         if forward_only_pre_contact is None:
             forward_only_pre_contact = True if not route_executed else None
@@ -5201,12 +5202,16 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             route_dispatches_local_fetch = route_label in {
                 fetch_planner_gate.ROUTE_FETCH_READY,
                 fetch_planner_gate.ROUTE_NAV2_REPOSITION,
+                fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
             }
             if not route_dispatches_local_fetch:
                 local_fetch_dispatched = False
                 pass_flag = bool(decision.get("correct", False))
                 route_executor = str(decision.get("route_executor", fetch_planner_gate.executor_for_route(route_label)) or "")
-                route_executed = route_label == fetch_planner_gate.ROUTE_NO_GO
+                route_executed = route_label in {
+                    fetch_planner_gate.ROUTE_SCAN_OR_PERCEIVE,
+                    fetch_planner_gate.ROUTE_NO_GO,
+                }
                 planner_route_execution = self._planner_route_execution_payload(
                     decision,
                     local_fetch_dispatched=False,
@@ -5342,6 +5347,7 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             if str(planner_route_execution.get("route_label", "")) in {
                 fetch_planner_gate.ROUTE_FETCH_READY,
                 fetch_planner_gate.ROUTE_NAV2_REPOSITION,
+                fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
             }:
                 command.extend(["--drive-mode", "line_servo"])
                 command.extend(["--drive-linear-x-mps", "0.100000"])

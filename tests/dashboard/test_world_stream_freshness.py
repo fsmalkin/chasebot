@@ -2917,6 +2917,51 @@ def test_run_golf_fetch_planner_gated_non_fetch_route_does_not_dispatch_local_fe
     assert Path(result["artifacts"]["planner_decision"]).exists()
 
 
+def test_run_golf_fetch_planner_gated_scan_route_executes_without_local_fetch(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    controller.state["dashboard_url"] = "http://127.0.0.1:8860/"
+    controller._scenarios_dir = lambda: tmp_path / "scenarios"
+    controller._current_validation_dir = lambda: tmp_path / "validation"
+    controller.active_scenario_overrides = {
+        "planner_gated_random": True,
+        "planner_mode": dashboard_service.fetch_planner_gate.PLANNER_MODE_DETERMINISTIC,
+        "random_seed": 123,
+    }
+    controller._visit_mission_runtime_state = lambda: {"proof_state": "completed"}
+    controller._gather_mission_runtime_state = lambda: {"surface_profile": "calibrated_golf_turf"}
+    controller._scenario_env = lambda _scenario: {
+        "WORLD_FILE": "yolo_test_world_v6_calibrated_golf_turf.world",
+        "CHASECAR_SURFACE_PROFILE": "calibrated_golf_turf",
+    }
+    scene = next(
+        item for item in dashboard_service.fetch_planner_gate.generate_random_scenes(seed=20260603, random_cases=20)
+        if item["expected_route_label"] == dashboard_service.fetch_planner_gate.ROUTE_SCAN_OR_PERCEIVE
+    )
+    monkeypatch.setattr(dashboard_service.fetch_planner_gate, "generate_dashboard_scene", lambda **_kwargs: scene)
+
+    def _unexpected_popen(*_args, **_kwargs):
+        raise AssertionError("local fetch runner should not start for scan/perceive planner routes")
+
+    monkeypatch.setattr(dashboard_service.subprocess, "Popen", _unexpected_popen)
+
+    scenario = dashboard_service.SCENARIOS_BY_ID[dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID]
+    result = controller._run_gather_mission_scenario(scenario)
+
+    decision = result["planner_handoff"]["decision"]
+    assert result["pass"] is True
+    assert result["planner_gated_random"] is True
+    assert result["local_fetch_dispatched"] is False
+    assert decision["route_label"] == dashboard_service.fetch_planner_gate.ROUTE_SCAN_OR_PERCEIVE
+    assert result["route_label"] == dashboard_service.fetch_planner_gate.ROUTE_SCAN_OR_PERCEIVE
+    assert result["route_executor"] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_SCAN
+    assert result["planner_route_executed"] is True
+    assert result["planner_route_execution"]["outcome"] == "scan_or_perception_refresh_selected"
+    assert result["forward_only_pre_contact_required"] is False
+    assert result["target_layout_json"] == ""
+    assert result["artifacts"]["planner_decision"]
+    assert Path(result["artifacts"]["planner_decision"]).exists()
+
+
 def test_run_golf_fetch_planner_gated_fetch_ready_route_dispatches_layout(tmp_path, monkeypatch):
     controller = _make_controller(tmp_path)
     controller.state["dashboard_url"] = "http://127.0.0.1:8860/"
@@ -2989,6 +3034,84 @@ def test_run_golf_fetch_planner_gated_fetch_ready_route_dispatches_layout(tmp_pa
     assert command[command.index("--planner-route-label") + 1] == dashboard_service.fetch_planner_gate.ROUTE_FETCH_READY
     assert "--route-executor" in command
     assert command[command.index("--route-executor") + 1] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_LOCAL_FETCH
+    assert "--forward-only-pre-contact-required" in command
+    assert "--drive-mode" in command
+    assert command[command.index("--drive-mode") + 1] == "line_servo"
+    assert "--stop-on-delivery" in command
+    assert command[command.index("--delivery-stop-radius-m") + 1] == "0.200000"
+    assert command[command.index("--artifact-kind") + 1] == dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
+
+
+def test_run_golf_fetch_planner_gated_recovery_route_dispatches_forward_layout(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    controller.state["dashboard_url"] = "http://127.0.0.1:8860/"
+    controller._scenarios_dir = lambda: tmp_path / "scenarios"
+    controller._current_validation_dir = lambda: tmp_path / "validation"
+    controller.active_scenario_overrides = {
+        "planner_gated_random": True,
+        "planner_mode": dashboard_service.fetch_planner_gate.PLANNER_MODE_DETERMINISTIC,
+        "random_seed": 20260603,
+    }
+    controller._visit_mission_runtime_state = lambda: {"proof_state": "completed"}
+    controller._gather_mission_runtime_state = lambda: {
+        "mission_phase": "completed",
+        "mission_status": "completed",
+        "gather_phase": "completed",
+        "surface_profile": "calibrated_golf_turf",
+    }
+    controller._scenario_env = lambda _scenario: {
+        "WORLD_FILE": "yolo_test_world_v6_calibrated_golf_turf.world",
+        "CHASECAR_SURFACE_PROFILE": "calibrated_golf_turf",
+    }
+    scene = next(
+        item for item in dashboard_service.fetch_planner_gate.generate_random_scenes(seed=20260603, random_cases=20)
+        if item["expected_route_label"] == dashboard_service.fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM
+    )
+    monkeypatch.setattr(dashboard_service.fetch_planner_gate, "generate_dashboard_scene", lambda **_kwargs: scene)
+
+    mission_root = tmp_path / "mission"
+    mission_root.mkdir(parents=True, exist_ok=True)
+    mission_verdict_path = mission_root / "mission_verdict.json"
+    _write_json(mission_verdict_path, {"pass": True, "type": "gather_mission"})
+    _write_json(mission_root / "summary.json", {"pass": True})
+    _write_json(mission_root / "target_results.json", {"targets": []})
+
+    captured: dict[str, object] = {}
+
+    class _FakeProc:
+        def __init__(self, cmd, stdout_handle) -> None:
+            captured["cmd"] = list(cmd)
+            stdout_handle.write(f"GATHER_MISSION_SUMMARY={mission_verdict_path}\n")
+            stdout_handle.flush()
+            self.returncode = 0
+
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(dashboard_service.subprocess, "Popen", lambda command, **kwargs: _FakeProc(command, kwargs["stdout"]))
+
+    scenario = dashboard_service.SCENARIOS_BY_ID[dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID]
+    result = controller._run_gather_mission_scenario(scenario)
+
+    command = captured["cmd"]
+    layout_path = Path(command[command.index("--target-layout-json") + 1])
+    layout = json.loads(layout_path.read_text(encoding="utf-8"))
+    assert result["pass"] is True
+    assert result["planner_gated_random"] is True
+    assert result["local_fetch_dispatched"] is True
+    assert result["route_label"] == dashboard_service.fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM
+    assert result["route_executor"] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_RECOVERY
+    assert result["planner_route_executed"] is True
+    assert result["forward_only_pre_contact_required"] is True
+    assert result["forward_only_pre_contact"] is True
+    assert layout["layout_family"] == "planner_gated_recovery_or_reaim"
+    assert layout["planner_route_label"] == dashboard_service.fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM
+    assert layout["route_executor"] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_RECOVERY
+    assert layout["planner_scene"]["scene_id"] == scene["scene_id"]
+    assert "--planner-route-label" in command
+    assert command[command.index("--planner-route-label") + 1] == dashboard_service.fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM
+    assert "--route-executor" in command
+    assert command[command.index("--route-executor") + 1] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_RECOVERY
     assert "--forward-only-pre-contact-required" in command
     assert "--drive-mode" in command
     assert command[command.index("--drive-mode") + 1] == "line_servo"
