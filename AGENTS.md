@@ -54,6 +54,16 @@ If no Tailscale dashboard URL is already known, start or point the operator to a
 dashboard bind that prints `DASHBOARD_TAILSCALE_URL`:
 `powershell -ExecutionPolicy Bypass -File scripts/run_dashboard_service.ps1 -BindHost 0.0.0.0 -Port 8860`.
 
+## Operator Visual Debugging
+
+For each key fetch UAT or evidence run, inspect a sequence of frames throughout
+the run rather than only the ending frame. Cover start/setup, pre-contact,
+first contact, mid-push/coast, terminal arrival, and final rest when those
+phases are present. Prefer onboard `raw_camera` frames first, then cross-check
+with `topdown_telemetry`, `world_stream`, and telemetry keyframes. Treat any
+telemetry pass that conflicts with the visual sequence as suspect until the
+geometry, delivery metric, and artifact provenance are reconciled.
+
 ## Baseline
 
 1. Runtime substrate: Docker-first (`docker compose` profiles).
