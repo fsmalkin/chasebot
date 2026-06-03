@@ -1,6 +1,6 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 3, 2026, 4:55 PM ET",
+  "updated_label": "Updated June 3, 2026, 5:23 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
   "status_label": "Living plan and progress tracker",
   "status_detail": "This page summarizes current direction and evidence. It is route-owner UAT progress, not release or promotion evidence.",
@@ -49,6 +49,38 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Seed 20260620 broad route-owner batch",
+      "status": "16/18 executable routes delivered; 2 misses",
+      "tone": "watch",
+      "summary": "Route-owner visual UAT is incomplete with promotion_evidence=false. The planner gate stayed clean and Nav2 reposition was 8/8, while one recovery-contact miss and one fetch-ready terminal shortfall expose the next controller-stage work.",
+      "metrics": [
+        "Planner gate: 30/30, wrong_fetch=0",
+        "Live executable routes: 16/18 delivered",
+        "Route spread: fetch_ready_local 4/5, nav2_reposition_first 8/8, recovery_or_reaim 4/5",
+        "Misses: scene10 recovery closest 0.574m; scene21 local closest 0.392m",
+        "Execution quality: blocker; setup quality: watch; contact quality: blocker"
+      ],
+      "links": [
+        {
+          "label": "Scorecard",
+          "url": "/artifacts/session/analysis_route_quality_seed20260620_all_exec18_metric_gated_20260603/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Summary JSON",
+          "url": "/artifacts/session/analysis_route_quality_seed20260620_all_exec18_metric_gated_20260603/fetch_planner_route_uat_analyzer/route_uat_summary.json"
+        },
+        {
+          "label": "Keyframe montage",
+          "url": "/artifacts/session/analysis_route_quality_seed20260620_all_exec18_metric_gated_20260603/fetch_planner_route_uat_analyzer/seed20260620_all_exec18_metric_gated_keyframe_montage.png"
+        },
+        {
+          "label": "Replay batch scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_metric_gated_20260603/fetch_planner_route_replay_batch/scorecard.md"
+        }
+      ],
+      "preview_image": "/artifacts/session/analysis_route_quality_seed20260620_all_exec18_metric_gated_20260603/fetch_planner_route_uat_analyzer/seed20260620_all_exec18_metric_gated_keyframe_montage.png"
+    },
     {
       "title": "Seed 20260619 metric-gated route-owner batch",
       "status": "16/16 executable routes delivered clean",
@@ -135,7 +167,161 @@
       "preview_image": "/artifacts/session/analysis_route_quality_seed20260618_all_exec15_local_settle_20260603/fetch_planner_route_uat_analyzer/seed20260618_all_exec15_keyframe_montage.png"
     }
   ],
+  "running_video_proof": [],
   "recent_video_proof": [
+    {
+      "title": "Seed 20260620 completed batch montage and scorecard",
+      "summary": "The batch-level package gives the fast visual scan for 18 live executable route-owner runs, with the two misses outlined in red.",
+      "preview_image": "/artifacts/session/analysis_route_quality_seed20260620_all_exec18_metric_gated_20260603/fetch_planner_route_uat_analyzer/seed20260620_all_exec18_metric_gated_keyframe_montage.png",
+      "proves": "The planner gate stayed green at 30/30 with wrong_fetch=0. Nav2 reposition delivered 8/8, local fetch delivered 4/5, and recovery delivered 4/5. The batch cleanly identifies scene10 and scene21 as the current controller-stage gaps.",
+      "limits": "The batch is incomplete for promotion: pass=false and promotion_evidence=false. The right next work is targeted terminal/recovery correction, followed by another broad seed and then canonical promotion gates.",
+      "links": [
+        {
+          "label": "Scorecard",
+          "url": "/artifacts/session/analysis_route_quality_seed20260620_all_exec18_metric_gated_20260603/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Keyframe montage",
+          "url": "/artifacts/session/analysis_route_quality_seed20260620_all_exec18_metric_gated_20260603/fetch_planner_route_uat_analyzer/seed20260620_all_exec18_metric_gated_keyframe_montage.png"
+        },
+        {
+          "label": "Replay batch scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_metric_gated_20260603/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Summary JSON",
+          "url": "/artifacts/session/analysis_route_quality_seed20260620_all_exec18_metric_gated_20260603/fetch_planner_route_uat_analyzer/route_uat_summary.json"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260620 scene02 recovery pass",
+      "summary": "Session 20260603T205503927041Z is an onboard-first recovery pass from the completed seed20260620 broad route-owner batch.",
+      "primary_video": {
+        "label": "Scene02 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260603T205503927041Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The recovery_or_reaim route can set up, contact, and push through the delivery circle in the current metric-gated runner. I visually checked the raw/topdown sequence across setup, first contact, mid-push, terminal arrival, and final rest.",
+      "limits": "This is one row inside a batch that finished 16/18. It remains route-owner visual UAT with promotion_evidence=false until targeted fixes and canonical promotion gates complete.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260603T205503927041Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260603T205503927041Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_metric_gated_20260603_seed20260620_scene02_recovery_or_reaim/fetch_visual_uat_package/keyframe_reviews/20260603T205503927041Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Visual scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_metric_gated_20260603_seed20260620_scene02_recovery_or_reaim/fetch_visual_uat_package/scorecard.md"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260620 scene04 Nav2 reposition pass",
+      "summary": "Session 20260603T205917595572Z shows Nav2 repositioning into a forward local-fetch setup before the ball is pushed into the circle.",
+      "primary_video": {
+        "label": "Scene04 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260603T205917595572Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The route-owner split is working for this row: Nav2 handles the setup leg, then the bounded local fetch handles contact and terminal delivery. The onboard camera and topdown contact sheet agree across the run.",
+      "limits": "This is route-owner visual UAT, not release evidence. The completed seed also includes two misses, so the batch interpretation remains incomplete despite this strong Nav2 row.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260603T205917595572Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260603T205917595572Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_metric_gated_20260603_seed20260620_scene04_nav2_reposition_first/fetch_visual_uat_package/keyframe_reviews/20260603T205917595572Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Visual scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_metric_gated_20260603_seed20260620_scene04_nav2_reposition_first/fetch_visual_uat_package/scorecard.md"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260620 scene10 recovery miss",
+      "summary": "Session 20260603T210328421082Z is the current negative proof row from the active batch.",
+      "primary_video": {
+        "label": "Scene10 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260603T210328421082Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The failure is real and useful: calibrated geometry and model provenance are valid, Nav2 reposition succeeded, and the ball missed the 0.300m delivery radius with closest approach about 0.574m. The contact metrics flag first-contact yaw and trajectory-angle error, matching the visual miss pattern.",
+      "limits": "This is a controller-stage gap, not a page or artifact issue. It should feed route-supervisor and recovery-contact work after the full batch completes, rather than being treated as a promotion result.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260603T210328421082Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260603T210328421082Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260603T210328421082Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_metric_gated_20260603_seed20260620_scene10_recovery_or_reaim/fetch_visual_uat_package/keyframe_reviews/20260603T210328421082Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Visual scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_metric_gated_20260603_seed20260620_scene10_recovery_or_reaim/fetch_visual_uat_package/scorecard.md"
+        },
+        {
+          "label": "Mission verdict",
+          "url": "/artifacts/session/20260603T210328421082Z/golf_ball_circle_delivery/20260603T210348462726Z/mission_verdict.json"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260620 scene21 terminal miss",
+      "summary": "Session 20260603T211625725564Z shows a fetch_ready_local row with clean first contact that still stops short of the delivery circle.",
+      "primary_video": {
+        "label": "Scene21 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260603T211625725564Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The broad random surface is finding a real terminal-arrival gap: first-contact quality passed, trajectory-angle error was low, stable contact approach passed, and the ball still missed the 0.300m delivery radius with closest approach about 0.392m.",
+      "limits": "This is not a setup-routing failure. It points at terminal correction or delivery-energy shaping inside the local fetch stage, and it should be handled after the full batch confirms how often this pattern appears.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260603T211625725564Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260603T211625725564Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260603T211625725564Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_metric_gated_20260603_seed20260620_scene21_fetch_ready_local/fetch_visual_uat_package/keyframe_reviews/20260603T211625725564Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Visual scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_metric_gated_20260603_seed20260620_scene21_fetch_ready_local/fetch_visual_uat_package/scorecard.md"
+        },
+        {
+          "label": "Mission verdict",
+          "url": "/artifacts/session/20260603T211625725564Z/golf_ball_circle_delivery/20260603T211643687927Z/mission_verdict.json"
+        }
+      ]
+    },
     {
       "title": "Seed 20260619 metric-gated montage and scorecard",
       "summary": "The batch-level package gives the fast visual scan for 16 live executable route-owner runs after replacing scene07 with a fresh metric-gated repro.",

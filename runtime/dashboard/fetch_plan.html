@@ -431,7 +431,7 @@ h1 {
   </section>
 
   <section class="section" id="recent-video-proof">
-    <p class="eyebrow">Recent Video Proof</p>
+    <p class="eyebrow">Running / Recent Video Proof</p>
     <h2>Browser-watchable visual progress evidence</h2>
     <p>Each entry states the proof value and the evidence boundary. Onboard raw camera clips come first, followed by topdown and world-stream context when those clips exist.</p>
     <div class="video-proof-grid" id="videoProof"></div>
@@ -538,6 +538,12 @@ function renderVideoProof(items) {
   });
 }
 
+function proofItems(data) {
+  const running = data.runningProof || data.running_proof || data.running_video_proof || [];
+  const recent = data.recentVideoProof || data.recent_video_proof || [];
+  return [].concat(running, recent);
+}
+
 function renderNextSteps(items) {
   const root = document.getElementById('nextSteps');
   root.textContent = '';
@@ -560,7 +566,7 @@ function render(data) {
   renderTitledItems(document.getElementById('architecture'), data.architecture_direction || [], 'flow-item');
   renderTitledItems(document.getElementById('ladder'), data.evidence_ladder || [], 'ladder-item');
   renderEvidence(data.latest_evidence || []);
-  renderVideoProof(data.recent_video_proof || []);
+  renderVideoProof(proofItems(data));
   renderTitledItems(document.getElementById('watches'), data.watch_areas || [], 'watch-card');
   renderNextSteps(data.next_steps || []);
 }

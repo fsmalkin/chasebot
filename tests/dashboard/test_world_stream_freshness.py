@@ -480,6 +480,12 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
     assert payload["status_label"] == "Living plan and progress tracker"
     assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")
+    html = (dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan.html").read_text(encoding="utf-8")
+    assert "Running / Recent Video Proof" in html
+    assert "runningProof" in html
+    assert "running_proof" in html
+    assert "recent_video_proof" in html
+    assert "primary_video" in html
 
 
 def test_artifact_media_route_serves_mp4_ranges(monkeypatch, tmp_path):
