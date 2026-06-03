@@ -179,8 +179,17 @@ def apply_planner_route_execution_defaults(
     _set_route_default(args, explicit_args, "forward_only_pre_contact_required", True, "--forward-only-pre-contact-required")
     _set_route_default(args, explicit_args, "drive_mode", "line_servo", "--drive-mode")
     _set_route_default(args, explicit_args, "drive_linear_x_mps", 0.1, "--drive-linear-x-mps")
-    _set_route_default(args, explicit_args, "drive_duration_s", 36.0, "--drive-duration-s")
-    _set_route_default(args, explicit_args, "sample_duration_s", 40.0, "--sample-duration-s")
+    if route_label == ROUTE_RECOVERY_OR_REAIM:
+        route_drive_duration_s = 58.0
+        route_sample_duration_s = 62.0
+    elif route_label == ROUTE_NAV2_REPOSITION:
+        route_drive_duration_s = 54.0
+        route_sample_duration_s = 58.0
+    else:
+        route_drive_duration_s = 50.0
+        route_sample_duration_s = 54.0
+    _set_route_default(args, explicit_args, "drive_duration_s", route_drive_duration_s, "--drive-duration-s")
+    _set_route_default(args, explicit_args, "sample_duration_s", route_sample_duration_s, "--sample-duration-s")
     _set_route_default(args, explicit_args, "line_servo_push_linear_x_mps", 0.055, "--line-servo-push-linear-x-mps")
     _set_route_default(args, explicit_args, "line_servo_max_angular_z_rps", 0.18, "--line-servo-max-angular-z-rps")
     _set_route_default(args, explicit_args, "line_servo_yaw_gain", 1.2, "--line-servo-yaw-gain")
@@ -831,9 +840,14 @@ def line_servo_command(
         )
     ball_moved = bool(ball_motion_m >= float(motion_threshold_m))
     if ball_moved:
-        phase = "push_coast"
-        desired_yaw = line_yaw
-        base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps))
+        if abs(robot_lateral_error) > effective_contact_lateral_ready_m:
+            phase = "push_coast_realign"
+            desired_yaw = lateral_corrected_yaw
+            base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps), 0.035)
+        else:
+            phase = "push_coast"
+            desired_yaw = line_yaw
+            base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps))
     elif (
         clean_route_label == "recovery_or_reaim"
         and distance_to_setup <= recovery_setup_pocket_m
@@ -855,7 +869,7 @@ def line_servo_command(
         elif contact_final_reaim_active:
             phase = "contact_final_reaim"
             desired_yaw = lateral_corrected_yaw
-            base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
+            base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.018))
         else:
             phase = "setup_converge" if distance_to_contact > 0.18 else "setup_reaim"
             desired_yaw = setup_yaw if distance_to_contact > 0.20 else lateral_corrected_yaw
@@ -883,7 +897,34 @@ def line_servo_command(
         base_linear = min(base_linear, 0.035)
     elif abs(yaw_error) > 0.25:
         base_linear = min(base_linear, 0.055)
-    linear_x = clamp(base_linear, float(min_linear_x_mps), float(max_linear_x_mps))
+    linear_floor = float(min_linear_x_mps)
+    recovery_yaw_hold = bool(
+        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        and not ball_moved
+        and abs(yaw_error) > 1.25
+        and distance_to_contact > 0.20
+    )
+    recovery_yaw_crawl = bool(
+        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        and not ball_moved
+        and not recovery_yaw_hold
+        and (
+            abs(yaw_error) > 0.55
+            or (
+                distance_to_contact < 0.14
+                and abs(robot_lateral_error) > effective_contact_lateral_ready_m
+            )
+        )
+    )
+    if recovery_yaw_hold:
+        phase = f"{phase}_yaw_hold"
+        base_linear = 0.0
+        linear_floor = 0.0
+    elif recovery_yaw_crawl:
+        phase = f"{phase}_yaw_crawl"
+        crawl_cap = 0.018 if distance_to_contact < 0.14 else 0.025
+        base_linear = min(max(base_linear, float(min_linear_x_mps)), crawl_cap)
+    linear_x = clamp(base_linear, linear_floor, float(max_linear_x_mps))
     return {
         "phase": phase,
         "linear_x_mps": round(float(linear_x), 6),
@@ -905,6 +946,8 @@ def line_servo_command(
         "lateral_reaim_gain": round(float(lateral_reaim_gain), 6),
         "yaw_priority_lateral_m": round(float(yaw_priority_lateral_m), 6),
         "contact_ready": contact_ready,
+        "recovery_yaw_hold": recovery_yaw_hold,
+        "recovery_yaw_crawl": recovery_yaw_crawl,
         "distance_to_contact_m": round(float(distance_to_contact), 6),
         "distance_to_setup_m": round(float(distance_to_setup), 6),
         "ball_motion_m": round(float(ball_motion_m), 6),
