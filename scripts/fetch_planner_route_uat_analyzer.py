@@ -179,9 +179,15 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     delivery_pass = bool(
         payload.get("fetch_to_pose_pass", verdict.get("fetch_to_pose_pass", first_run.get("fetch_to_pose_pass", False)))
     )
-    if first_flags or not delivery_pass:
+    first_contact_blocker_flags = {
+        "missing_first_contact",
+        "first_contact_ball_lateral_error",
+        "first_contact_trajectory_angle_error",
+    }
+    severe_first_flags = [flag for flag in first_flags if flag in first_contact_blocker_flags]
+    if severe_first_flags or not delivery_pass:
         contact_quality = "blocker"
-    elif flags:
+    elif first_flags or flags:
         contact_quality = "watch"
     else:
         contact_quality = "clean"
@@ -199,6 +205,7 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         "contact_quality": contact_quality,
         "contact_flags": flags,
         "first_contact_quality_flags": first_flags,
+        "first_contact_blocker_flags": severe_first_flags,
         "first_contact_t_s": metrics.get("first_contact_t_s"),
         "first_contact_quality_pass": metrics.get("first_contact_quality_pass"),
         "stable_contact_approach_pass": metrics.get("stable_contact_approach_pass"),
@@ -298,9 +305,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         item.get("pass") and item.get("mobile_watchable") and item.get("onboard_camera_watchable")
         for item in visual_packages
     )
-    first_contact_blockers = sum(
-        1 for mission in missions if mission.get("first_contact_quality_flags") or not mission.get("fetch_to_pose_pass")
-    )
+    first_contact_blockers = sum(1 for mission in missions if mission.get("contact_quality") == "blocker")
     contact_watch_count = sum(1 for mission in missions if mission.get("contact_quality") == "watch")
     contact_quality_status = "blocker" if first_contact_blockers else "watch" if contact_watch_count else "clean"
     green = bool(gate_green and executable_green and planner_only_green and visual_green and first_contact_blockers == 0)

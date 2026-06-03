@@ -863,12 +863,12 @@ def summarize_line_servo_effective_command(contact_samples: list[dict[str, Any]]
         summary: dict[str, Any] = {}
         numeric_fields = {
             "setup_standoff_m": "line_servo_effective_setup_standoff_m",
-        "contact_standoff_m": "line_servo_effective_contact_standoff_m",
-        "contact_lateral_ready_m": "line_servo_effective_contact_lateral_ready_m",
-        "recovery_line_acquire_lateral_m": "line_servo_effective_recovery_line_acquire_lateral_m",
-        "recovery_setup_pocket_m": "line_servo_effective_recovery_setup_pocket_m",
-        "yaw_priority_lateral_m": "line_servo_effective_yaw_priority_lateral_m",
-        "max_angular_z_rps": "line_servo_effective_max_angular_z_rps",
+            "contact_standoff_m": "line_servo_effective_contact_standoff_m",
+            "contact_lateral_ready_m": "line_servo_effective_contact_lateral_ready_m",
+            "recovery_line_acquire_lateral_m": "line_servo_effective_recovery_line_acquire_lateral_m",
+            "recovery_setup_pocket_m": "line_servo_effective_recovery_setup_pocket_m",
+            "yaw_priority_lateral_m": "line_servo_effective_yaw_priority_lateral_m",
+            "max_angular_z_rps": "line_servo_effective_max_angular_z_rps",
         }
         for source_key, dest_key in numeric_fields.items():
             if source_key not in command:

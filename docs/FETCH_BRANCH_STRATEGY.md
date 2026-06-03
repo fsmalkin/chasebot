@@ -259,6 +259,14 @@ Planner-routed moonshot update, June 2:
   contact guard. Patched rerun `20260603T120817888242Z` passed at `0.196327m`.
   Diagnostic package:
   `artifacts/session/uat_planner_route_replay_fix_seed20260608_scene24_20260603/fetch_visual_uat_package/scorecard.md`
+- frozen executable-route coverage:
+  seed `20260608` now has one browser-watchable replay for each executable
+  route owner: `fetch_ready_local`, `nav2_reposition_first`, and
+  `recovery_or_reaim`. Combined analyzer:
+  `artifacts/session/route_uat_frozen_seed20260608_three_route_replays_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+  Result is visual-UAT green with contact-quality watch, `0` first-contact
+  blockers, and no promotion claim. The next branch work should improve
+  pre-contact lateral/yaw posture while preserving the route-owner split.
 
 Saved-anchor requalification update, later June 1:
 

@@ -164,6 +164,15 @@ browser-watchable evidence:
 This is a replay-harness fix and diagnostic UAT evidence; promotion still
 requires the canonical saved-layout and seeded-random gates.
 
+Frozen executable-route replay set, later June 3: seed `20260608` now covers
+all three executable route owners with one browser-watchable replay each:
+`fetch_ready_local`, `nav2_reposition_first`, and `recovery_or_reaim`. The
+combined analyzer is green for visual UAT and keeps promotion evidence false:
+`artifacts/session/route_uat_frozen_seed20260608_three_route_replays_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+Contact quality is a watch item rather than a blocker because delivery and ball
+trajectory are coherent, first-contact blockers are `0`, and pre-contact
+lateral/yaw posture still needs smoothing.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

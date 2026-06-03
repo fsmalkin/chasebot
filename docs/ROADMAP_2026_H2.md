@@ -804,6 +804,16 @@ This protects the roadmap evidence ladder because frozen random failures can now
 be replayed through the same route-owner profile as dashboard planner-gated
 runs. Contact-quality watch flags remain the next controller backlog.
 
+Frozen executable-route replay set, later June 3: the seed `20260608` frozen
+layouts now cover the three executable route owners with browser-watchable
+evidence. `fetch_ready_local`, `nav2_reposition_first`, and `recovery_or_reaim`
+each delivered inside the `0.300m` contract, and the combined analyzer reports
+`randomized_route_owner_visual_uat_green` with `promotion_evidence=false`:
+`artifacts/session/route_uat_frozen_seed20260608_three_route_replays_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+The next roadmap slice is pre-contact smoothing and route-quality scoring,
+because the remaining watch is lateral/yaw posture before contact rather than
+planner dispatch or delivery geometry.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

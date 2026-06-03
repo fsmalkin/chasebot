@@ -1058,6 +1058,15 @@ Live gates:
       `artifacts/session/uat_planner_route_replay_fix_seed20260608_scene24_20260603/fetch_visual_uat_package/scorecard.md`.
       Treat this as replay-harness fix evidence and a diagnostic UAT clip;
       canonical saved-layout and seeded-random gates remain the promotion path.
+    - frozen seed `20260608` executable-route replay set, later June 3:
+      `fetch_ready_local`, `nav2_reposition_first`, and `recovery_or_reaim`
+      each passed one browser-watchable frozen-layout replay after the route
+      default fix. Combined analyzer:
+      `artifacts/session/route_uat_frozen_seed20260608_three_route_replays_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+      Interpretation is `randomized_route_owner_visual_uat_green` with
+      `promotion_evidence=false`. Contact quality stays `watch`: ball path and
+      delivery are coherent, first-contact blockers are `0`, and pre-contact
+      lateral/yaw posture remains the next smoothing backlog.
     - forward-only fetch rule: a planner-gated UAT run that reaches local fetch
       should show no negative pre-contact `linear_x`; any needed backing or
       side-selection should be handled as planner-owned reposition/setup before
