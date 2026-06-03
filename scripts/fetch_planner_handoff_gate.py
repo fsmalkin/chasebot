@@ -62,6 +62,13 @@ FETCH_TARGET_POSE = {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.30}
 PLANNER_GATE_KIND = "fetch_planner_handoff_gate"
 PLANNER_MIXED_PROFILE = "planner_mixed_v1"
 OPENAI_TOOL_NAME = "emit_fetch_planner_route"
+CONTACT_QUALITY_CLEAN_LATERAL_M = 0.030
+CONTACT_QUALITY_CLEAN_YAW_DEG = 3.0
+FETCH_READY_LATERAL_LIMIT_M = 0.120
+FETCH_READY_YAW_LIMIT_DEG = 18.0
+RECOVERY_LATERAL_LIMIT_M = 0.240
+RECOVERY_YAW_LIMIT_DEG = 35.0
+NAV2_REPOSITION_STANDOFF_LIMIT_M = 1.350
 
 
 def current_utc_stamp() -> str:
@@ -119,6 +126,23 @@ def _round_pose(x: float, y: float, yaw: float = 0.0, z: float = 0.0) -> dict[st
         "z": round(float(z), 6),
         "yaw": round(float(yaw), 6),
     }
+
+
+def _finite_float(value: Any, default: float = 0.0) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    if not math.isfinite(number):
+        return float(default)
+    return number
+
+
+def _quality_ratio(value: float, clean: float, limit: float) -> float:
+    clean = max(float(clean), 0.0)
+    limit = max(float(limit), clean + 1.0e-9)
+    excess = max(abs(float(value)) - clean, 0.0)
+    return max(0.0, min(1.0, excess / (limit - clean)))
 
 
 def _target_relative_scene(
@@ -386,6 +410,134 @@ def deterministic_route_label(scene: dict[str, Any]) -> str:
     return ROUTE_NAV2_REPOSITION
 
 
+def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[str, Any]:
+    geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
+    corridor = scene.get("corridor") if isinstance(scene.get("corridor"), dict) else {}
+    perception = scene.get("perception") if isinstance(scene.get("perception"), dict) else {}
+    route = str(route_label or deterministic_route_label(scene)).strip()
+    lateral_m = abs(_finite_float(geometry.get("robot_lateral_error_m"), 999.0))
+    yaw_deg = abs(_finite_float(geometry.get("robot_yaw_error_deg"), 999.0))
+    robot_ball_m = _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
+    ball_target_m = _finite_float(geometry.get("ball_target_distance_m"), 999.0)
+    ball_target_angle_deg = abs(_finite_float(geometry.get("ball_target_angle_deg"), 0.0))
+    clearance_m = _finite_float(corridor.get("clearance_m"), 0.0)
+    blocked = bool(corridor.get("blocked", False))
+    ball_conf = _finite_float(perception.get("ball_confidence"), 0.0)
+    target_conf = _finite_float(perception.get("target_confidence"), 0.0)
+    state_age_s = _finite_float(perception.get("state_age_s"), 999.0)
+
+    flags: list[str] = []
+    recommendations: list[str] = []
+    non_contact_route = route in {ROUTE_SCAN_OR_PERCEIVE, ROUTE_NO_GO}
+    status = "clean"
+    risk = "low"
+    setup_debt_lateral_m = max(lateral_m - CONTACT_QUALITY_CLEAN_LATERAL_M, 0.0)
+    setup_debt_yaw_deg = max(yaw_deg - CONTACT_QUALITY_CLEAN_YAW_DEG, 0.0)
+
+    if ball_conf < 0.65 or target_conf < 0.65 or state_age_s > 2.0:
+        flags.append("perception_refresh_required")
+    if blocked or clearance_m < 0.12:
+        flags.append("corridor_unusable")
+    if not 0.34 <= ball_target_m <= 0.85:
+        flags.append("target_distance_outside_local_fetch_window")
+
+    if route == ROUTE_FETCH_READY:
+        lateral_ratio = _quality_ratio(lateral_m, CONTACT_QUALITY_CLEAN_LATERAL_M, FETCH_READY_LATERAL_LIMIT_M)
+        yaw_ratio = _quality_ratio(yaw_deg, CONTACT_QUALITY_CLEAN_YAW_DEG, FETCH_READY_YAW_LIMIT_DEG)
+        severity = max(lateral_ratio, yaw_ratio)
+        if lateral_m > CONTACT_QUALITY_CLEAN_LATERAL_M:
+            flags.append("initial_lateral_setup_debt")
+        if yaw_deg > CONTACT_QUALITY_CLEAN_YAW_DEG:
+            flags.append("initial_yaw_setup_debt")
+        if lateral_m > FETCH_READY_LATERAL_LIMIT_M or yaw_deg > FETCH_READY_YAW_LIMIT_DEG:
+            flags.append("outside_fetch_ready_envelope")
+            status = "blocker"
+            risk = "high"
+        elif severity > 0.0:
+            status = "watch"
+            risk = "medium" if severity >= 0.45 else "low"
+        recommendations.append("local_line_servo_contact")
+        if status != "clean":
+            recommendations.append("pre_contact_smoothing")
+        score = 100.0 - 42.0 * severity
+    elif route == ROUTE_RECOVERY_OR_REAIM:
+        lateral_ratio = _quality_ratio(lateral_m, FETCH_READY_LATERAL_LIMIT_M, RECOVERY_LATERAL_LIMIT_M)
+        yaw_ratio = _quality_ratio(yaw_deg, FETCH_READY_YAW_LIMIT_DEG, RECOVERY_YAW_LIMIT_DEG)
+        standoff_ratio = _quality_ratio(robot_ball_m, 0.52, 0.70)
+        severity = max(lateral_ratio, yaw_ratio, standoff_ratio)
+        flags.append("bounded_recovery_required")
+        if lateral_m > CONTACT_QUALITY_CLEAN_LATERAL_M:
+            flags.append("initial_lateral_setup_debt")
+        if yaw_deg > CONTACT_QUALITY_CLEAN_YAW_DEG:
+            flags.append("initial_yaw_setup_debt")
+        if lateral_m > RECOVERY_LATERAL_LIMIT_M or yaw_deg > RECOVERY_YAW_LIMIT_DEG or robot_ball_m > 0.70:
+            flags.append("outside_recovery_envelope")
+            status = "blocker"
+            risk = "high"
+        else:
+            status = "watch"
+            risk = "high" if severity >= 0.65 else "medium"
+        recommendations.extend(["bounded_reaim_before_push", "pre_contact_smoothing"])
+        score = 78.0 - 38.0 * severity
+    elif route == ROUTE_NAV2_REPOSITION:
+        standoff_ratio = _quality_ratio(robot_ball_m, 0.70, NAV2_REPOSITION_STANDOFF_LIMIT_M)
+        angle_ratio = _quality_ratio(ball_target_angle_deg, 20.0, 45.0)
+        severity = max(standoff_ratio, angle_ratio)
+        flags.append("nav2_reposition_required")
+        if robot_ball_m > NAV2_REPOSITION_STANDOFF_LIMIT_M:
+            flags.append("nav2_setup_distance_watch")
+        status = "watch"
+        risk = "medium" if severity >= 0.55 else "low"
+        recommendations.extend(["nav2_forward_reposition", "verify_setup_pose_before_push"])
+        score = 84.0 - 28.0 * severity
+    elif route == ROUTE_SCAN_OR_PERCEIVE:
+        status = "blocker"
+        risk = "unavailable"
+        recommendations.append("scan_or_perception_refresh")
+        score = 0.0
+    elif route == ROUTE_NO_GO:
+        status = "blocker"
+        risk = "unavailable"
+        recommendations.append("safe_no_go")
+        score = 0.0
+    else:
+        status = "blocker"
+        risk = "unknown"
+        flags.append("unsupported_route")
+        recommendations.append("planner_guard_recheck")
+        score = 0.0
+
+    if non_contact_route:
+        predicted_first_contact_quality = "not_applicable"
+    else:
+        predicted_first_contact_quality = status
+
+    return {
+        "route_label": route,
+        "quality_score": round(max(0.0, min(100.0, float(score))), 3),
+        "predicted_contact_quality": status,
+        "predicted_first_contact_risk": risk,
+        "predicted_first_contact_quality": predicted_first_contact_quality,
+        "flags": sorted(set(flags)),
+        "recommendations": recommendations,
+        "setup_debt": {
+            "lateral_m": round(float(setup_debt_lateral_m), 6),
+            "yaw_deg": round(float(setup_debt_yaw_deg), 6),
+            "robot_ball_distance_m": round(float(robot_ball_m), 6),
+            "ball_target_distance_m": round(float(ball_target_m), 6),
+            "ball_target_angle_abs_deg": round(float(ball_target_angle_deg), 6),
+        },
+        "thresholds": {
+            "clean_lateral_m": CONTACT_QUALITY_CLEAN_LATERAL_M,
+            "clean_yaw_deg": CONTACT_QUALITY_CLEAN_YAW_DEG,
+            "fetch_ready_lateral_limit_m": FETCH_READY_LATERAL_LIMIT_M,
+            "fetch_ready_yaw_limit_deg": FETCH_READY_YAW_LIMIT_DEG,
+            "recovery_lateral_limit_m": RECOVERY_LATERAL_LIMIT_M,
+            "recovery_yaw_limit_deg": RECOVERY_YAW_LIMIT_DEG,
+        },
+    }
+
+
 def executor_for_route(route_label: str) -> str:
     return str(ROUTE_EXECUTORS.get(str(route_label or "").strip(), "unsupported_route"))
 
@@ -521,6 +673,7 @@ def decide_scene(
     correct = bool(route_label == expected_route)
     wrong_fetch_dispatch = bool(fetch_dispatch and expected_route != ROUTE_FETCH_READY)
     route_executor = executor_for_route(route_label)
+    route_quality = score_route_quality(scene, route_label)
     return {
         "scene_id": str(scene.get("scene_id", "") or ""),
         "planner_mode": planner_mode,
@@ -537,6 +690,7 @@ def decide_scene(
         "wrong_fetch_ready_dispatch": wrong_fetch_dispatch,
         "rationale_short": rationale,
         "confidence": round(float(confidence), 6),
+        "route_quality": route_quality,
         "provider_status": provider_status,
         "provider_error": provider_error,
         "provider_request": provider_request,
@@ -556,6 +710,7 @@ def write_fetch_ready_layout_from_scene(
     ball_pose = scene.get("ball_pose") if isinstance(scene.get("ball_pose"), dict) else {}
     clean_route_label = str(route_label or scene.get("expected_route_label", "") or ROUTE_FETCH_READY).strip()
     clean_route_executor = str(route_executor or executor_for_route(clean_route_label)).strip()
+    route_quality = score_route_quality(scene, clean_route_label)
     layout_family = (
         "planner_gated_fetch_ready"
         if clean_route_label == ROUTE_FETCH_READY
@@ -570,12 +725,14 @@ def write_fetch_ready_layout_from_scene(
             "random_profile": PLANNER_MIXED_PROFILE,
             "planner_route_label": clean_route_label,
             "route_executor": clean_route_executor,
+            "route_quality": route_quality,
             "planner_scene": scene,
             "random_draw": {
                 "random_profile": PLANNER_MIXED_PROFILE,
                 "seed": scene.get("seed", ""),
                 "planner_route_label": clean_route_label,
                 "route_executor": clean_route_executor,
+                "route_quality": route_quality,
                 "target_pose": scene.get("target_pose", {}),
                 "ball_pose": scene.get("ball_pose", {}),
                 "robot_pose": scene.get("robot_pose", {}),

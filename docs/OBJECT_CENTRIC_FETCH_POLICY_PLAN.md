@@ -606,6 +606,20 @@ stays green. Keep learned or AI-assisted control in the proposer lane until the
 scorer identifies a reproducible stage gap that deterministic setup or recovery
 reaches outside the clean envelope.
 
+June 3 route-quality scorer result: route-quality scoring is now part of the
+planner handoff and replay evidence. Seed `20260613` roughest executable replay
+passed `3/3` with browser-watchable packages:
+`artifacts/session/live_route_quality_roughest_fresh_replay_20260603/fetch_planner_route_replay_batch/scorecard.md`.
+The analyzer
+`artifacts/session/route_uat_route_quality_roughest_live_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+shows predicted contact quality `watch` for all three selected routes, risk
+spread `high/medium/low`, first-contact blockers `0`, and closest approach
+`0.193026m..0.197752m`.
+
+Policy implication: the next policy work is recovery first-contact smoothing.
+Nav2 setup remains valuable where route quality predicts medium setup debt,
+because the rough Nav2 case delivered with clean first-contact flags.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

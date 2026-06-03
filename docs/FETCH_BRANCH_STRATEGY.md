@@ -290,6 +290,23 @@ Planner-routed moonshot update, June 2:
   lateral/yaw setup quality and recovery first-contact alignment. Preserve the
   LLM/world-state planner split and continue using Nav2 for reposition/corridor
   stages where the fresh evidence stays green.
+- route-quality scorer evidence:
+  `scripts/fetch_planner_handoff_gate.py` now records route-quality score,
+  predicted contact quality, first-contact risk, route-quality flags, and
+  recommendations. `scripts/fetch_planner_route_replay_batch.py` can select
+  `--quality-order roughest` for stress UAT. Seed `20260613` roughest live
+  replay passed all three executable route owners with same-session packages:
+  `artifacts/session/live_route_quality_roughest_fresh_replay_20260603/fetch_planner_route_replay_batch/scorecard.md`.
+  Combined analyzer:
+  `artifacts/session/route_uat_route_quality_roughest_live_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+  Result is route-owner UAT green with `promotion_evidence=false`, contact
+  quality `watch`, first-contact blockers `0`, and closest approaches
+  `0.193026m..0.197752m`.
+- branch decision update:
+  keep the planner-routed moonshot branch active. The next controller slice is
+  recovery first-contact smoothing, because the high-risk recovery case still
+  shows visible off-axis contact while Nav2 reposition produced clean first
+  contact under the same roughest-selector harness.
 
 Saved-anchor requalification update, later June 1:
 

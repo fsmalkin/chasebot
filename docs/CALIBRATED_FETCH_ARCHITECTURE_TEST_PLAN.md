@@ -181,6 +181,19 @@ Use this as broad visual UAT and route-owner evidence. Promotion still requires
 the canonical saved-layout and seeded-random gates, because all six runs carry
 contact-quality watches around pre-contact lateral/yaw posture.
 
+June 3 route-quality scorer update: planner-gated fetch handoff now emits a
+route-quality score and first-contact risk before execution, and the route UAT
+analyzer preserves predicted-vs-actual contact quality. The roughest live
+executable replay from seed `20260613` passed `3/3` across recovery, Nav2
+reposition, and fetch-ready route owners:
+`artifacts/session/live_route_quality_roughest_fresh_replay_20260603/fetch_planner_route_replay_batch/scorecard.md`.
+The analyzer
+`artifacts/session/route_uat_route_quality_roughest_live_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+classifies the result as visual UAT green with `promotion_evidence=false`.
+Treat the high-risk recovery case as the next contact-smoothing target; treat
+the clean-first-contact Nav2 run as supporting evidence for Nav2 setup
+ownership inside the broader planner-routed architecture.
+
 ## Research Thread Output
 
 Before starting another implementation spike, produce a findings matrix across

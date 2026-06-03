@@ -93,6 +93,42 @@ def test_deterministic_classifier_separates_reposition_recovery_and_fetch_ready(
     assert by_expected[gate.ROUTE_RECOVERY_OR_REAIM]["local_fetch_envelope"]["eligible"] is False
 
 
+def test_route_quality_scores_clean_fetch_ready_and_recovery_watch():
+    scenes = gate.generate_random_scenes(seed=321, random_cases=20)
+    by_expected = {scene["expected_route_label"]: scene for scene in scenes}
+    clean_scene = dict(by_expected[gate.ROUTE_FETCH_READY])
+    clean_scene["geometry"] = {
+        **clean_scene["geometry"],
+        "robot_lateral_error_m": 0.010,
+        "robot_yaw_error_deg": 1.2,
+    }
+
+    clean_quality = gate.score_route_quality(clean_scene, gate.ROUTE_FETCH_READY)
+    recovery_quality = gate.score_route_quality(
+        by_expected[gate.ROUTE_RECOVERY_OR_REAIM],
+        gate.ROUTE_RECOVERY_OR_REAIM,
+    )
+
+    assert clean_quality["predicted_contact_quality"] == "clean"
+    assert clean_quality["predicted_first_contact_risk"] == "low"
+    assert clean_quality["quality_score"] > recovery_quality["quality_score"]
+    assert recovery_quality["predicted_contact_quality"] == "watch"
+    assert "bounded_recovery_required" in recovery_quality["flags"]
+
+
+def test_decision_records_route_quality_for_planner_artifacts():
+    scene = next(
+        item for item in gate.generate_random_scenes(seed=20260612, random_cases=10)
+        if item["expected_route_label"] == gate.ROUTE_FETCH_READY
+    )
+
+    decision = gate.decide_scene(scene)
+
+    assert decision["route_quality"]["route_label"] == gate.ROUTE_FETCH_READY
+    assert decision["route_quality"]["predicted_contact_quality"] in {"clean", "watch"}
+    assert decision["route_quality"]["quality_score"] > 0.0
+
+
 def test_route_executor_mapping_covers_all_route_labels():
     assert gate.executor_for_route(gate.ROUTE_FETCH_READY) == gate.ROUTE_EXECUTOR_LOCAL_FETCH
     assert gate.executor_for_route(gate.ROUTE_NAV2_REPOSITION) == gate.ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH
@@ -132,6 +168,8 @@ def test_fetch_ready_layout_writer_preserves_planner_scene(tmp_path):
     assert layout["layout_family"] == "planner_gated_fetch_ready"
     assert layout["random_profile"] == gate.PLANNER_MIXED_PROFILE
     assert layout["planner_scene"]["scene_id"] == scene["scene_id"]
+    assert layout["route_quality"]["route_label"] == gate.ROUTE_FETCH_READY
+    assert layout["random_draw"]["route_quality"]["route_label"] == gate.ROUTE_FETCH_READY
     assert layout["targets"][0]["forward_m"] == scene["ball_pose"]["x"]
 
 

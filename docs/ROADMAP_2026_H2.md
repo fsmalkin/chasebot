@@ -833,6 +833,19 @@ posture and recovery first-contact alignment. The next roadmap step is a
 route-quality scorer plus pre-contact smoothing under the same harness, then
 the canonical saved-layout and seeded-random promotion gates.
 
+Route-quality scorer evidence, later June 3: the planner handoff now emits a
+route-quality score, predicted contact quality, first-contact risk, flags, and
+recommended next stage. The roughest executable route replay from seed
+`20260613` selected one high-risk recovery case, one medium-risk Nav2
+reposition case, and one low-risk fetch-ready case:
+`artifacts/session/live_route_quality_roughest_fresh_replay_20260603/fetch_planner_route_replay_batch/scorecard.md`.
+All three passed delivery and visual packaging. The combined analyzer
+`artifacts/session/route_uat_route_quality_roughest_live_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+keeps the result as `promotion_evidence=false`, contact quality `watch`, and
+first-contact blockers `0`. The roadmap implication is stable: route ownership
+is working across rough executable classes. Recovery first-contact smoothness is
+the next development target.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

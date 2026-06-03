@@ -137,6 +137,14 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     route = payload.get("planner_route", {}) if isinstance(payload.get("planner_route"), dict) else {}
     if isinstance(verdict.get("planner_route"), dict):
         route = {**route, **verdict["planner_route"]}
+    random_draw = payload.get("random_draw", {}) if isinstance(payload.get("random_draw"), dict) else {}
+    if isinstance(verdict.get("random_draw"), dict):
+        random_draw = {**random_draw, **verdict["random_draw"]}
+    route_quality = {}
+    if isinstance(route.get("route_quality"), dict):
+        route_quality = route["route_quality"]
+    elif isinstance(random_draw.get("route_quality"), dict):
+        route_quality = random_draw["route_quality"]
     shot = payload.get("shot_outcome", {}) if isinstance(payload.get("shot_outcome"), dict) else {}
     if isinstance(verdict.get("shot_outcome"), dict):
         shot = {**shot, **verdict["shot_outcome"]}
@@ -196,6 +204,15 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         "path": artifact_display_path(path),
         "route_label": route_label,
         "route_executor": route_executor,
+        "route_quality": route_quality,
+        "predicted_contact_quality": str(route_quality.get("predicted_contact_quality", "") or ""),
+        "predicted_first_contact_risk": str(route_quality.get("predicted_first_contact_risk", "") or ""),
+        "route_quality_score": (
+            round(float(route_quality.get("quality_score")), 6)
+            if finite_float(route_quality.get("quality_score")) is not None
+            else None
+        ),
+        "route_quality_flags": [str(item) for item in list_value(route_quality.get("flags"))],
         "fetch_to_pose_pass": delivery_pass,
         "mission_completed_pass": bool(
             payload.get("mission_completed_pass", verdict.get("mission_completed_pass", delivery_pass))
@@ -269,6 +286,13 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         route: [mission for mission in missions if mission.get("route_label") == route]
         for route in ROUTE_LABELS
     }
+    quality_prediction_counts: dict[str, int] = {}
+    first_contact_risk_counts: dict[str, int] = {}
+    for mission in missions:
+        predicted = str(mission.get("predicted_contact_quality", "") or "missing")
+        risk = str(mission.get("predicted_first_contact_risk", "") or "missing")
+        quality_prediction_counts[predicted] = quality_prediction_counts.get(predicted, 0) + 1
+        first_contact_risk_counts[risk] = first_contact_risk_counts.get(risk, 0) + 1
     route_rows = []
     for route in ROUTE_LABELS:
         live_rows = live_by_route.get(route, [])
@@ -276,6 +300,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         clean_count = sum(1 for item in live_rows if item.get("contact_quality") == "clean")
         watch_count = sum(1 for item in live_rows if item.get("contact_quality") == "watch")
         blocker_count = sum(1 for item in live_rows if item.get("contact_quality") == "blocker")
+        predicted_watch_count = sum(1 for item in live_rows if item.get("predicted_contact_quality") == "watch")
+        predicted_blocker_count = sum(1 for item in live_rows if item.get("predicted_contact_quality") == "blocker")
         route_rows.append(
             {
                 "route_label": route,
@@ -285,6 +311,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
                 "live_clean_count": clean_count,
                 "live_watch_count": watch_count,
                 "live_blocker_count": blocker_count,
+                "predicted_watch_count": predicted_watch_count,
+                "predicted_blocker_count": predicted_blocker_count,
                 "coverage_status": (
                     "live_executable_passed"
                     if route in EXECUTABLE_FETCH_ROUTES and pass_count > 0
@@ -325,6 +353,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "contact_quality_status": contact_quality_status,
         "contact_watch_count": contact_watch_count,
         "first_contact_blocker_count": first_contact_blockers,
+        "quality_prediction_counts": quality_prediction_counts,
+        "first_contact_risk_counts": first_contact_risk_counts,
         "route_rows": route_rows,
         "planner_gates": planner_gates,
         "missions": missions,
@@ -343,6 +373,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- Contact quality: `{summary.get('contact_quality_status', '')}`",
         f"- Contact watches: `{summary.get('contact_watch_count', 0)}`",
         f"- First-contact blockers: `{summary.get('first_contact_blocker_count', 0)}`",
+        f"- Predicted contact quality: `{summary.get('quality_prediction_counts', {})}`",
+        f"- Predicted first-contact risk: `{summary.get('first_contact_risk_counts', {})}`",
         "",
         "## Route Coverage",
     ]
@@ -351,6 +383,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"- route=`{row.get('route_label', '')}` planner=`{row.get('planner_count', 0)}` "
             f"live=`{row.get('live_count', 0)}` pass=`{row.get('live_pass_count', 0)}` "
             f"clean=`{row.get('live_clean_count', 0)}` watch=`{row.get('live_watch_count', 0)}` "
+            f"pred_watch=`{row.get('predicted_watch_count', 0)}` "
+            f"pred_blocker=`{row.get('predicted_blocker_count', 0)}` "
             f"blocker=`{row.get('live_blocker_count', 0)}` status=`{row.get('coverage_status', '')}`"
         )
     lines.extend(["", "## Planner Gates"])
@@ -371,6 +405,9 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         lines.append(
             f"- route=`{mission.get('route_label', '')}` session=`{mission.get('session_id', '')}` "
             f"pass=`{mission.get('fetch_to_pose_pass', False)}` closest=`{closest_text}` "
+            f"predicted=`{mission.get('predicted_contact_quality', '')}` "
+            f"risk=`{mission.get('predicted_first_contact_risk', '')}` "
+            f"score=`{mission.get('route_quality_score', '')}` "
             f"quality=`{mission.get('contact_quality', '')}` flags=`{flags}` "
             f"first_flags=`{first_flags}` {artifact_link(str(mission.get('path', '') or ''))}"
         )

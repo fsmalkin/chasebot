@@ -33,6 +33,7 @@ def _mission(
     closest: float = 0.19,
     flags: list[str] | None = None,
     first_flags: list[str] | None = None,
+    route_quality: dict | None = None,
 ) -> None:
     _write_json(
         path,
@@ -52,6 +53,8 @@ def _mission(
                 "first_contact_quality_pass": not bool(first_flags),
                 "first_contact_t_s": 4.2,
             },
+            "random_draw": {"route_quality": route_quality or {}},
+            "planner_route": {"route_quality": route_quality or {}},
             "model_provenance": {"model_provenance_valid": True},
         },
     )
@@ -129,6 +132,76 @@ def test_planner_route_uat_analyzer_scores_green_randomized_route_uat(tmp_path, 
     text = scorecard.read_text(encoding="utf-8")
     assert "route=`nav2_reposition_first`" in text
     assert "recoveries=`1/1`" in text
+
+
+def test_planner_route_uat_analyzer_preserves_route_quality_predictions(tmp_path, monkeypatch):
+    monkeypatch.setattr(analyzer, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+    monkeypatch.setattr(analyzer, "REPO_ROOT", tmp_path)
+    root = analyzer.SESSION_ROOT
+    planner = root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
+    _write_json(
+        planner,
+        {
+            "campaign_id": "planner",
+            "pass": True,
+            "pass_count": 5,
+            "random_cases": 5,
+            "wrong_fetch_dispatch_count": 0,
+            "route_counts": {
+                analyzer.ROUTE_FETCH_READY: 1,
+                analyzer.ROUTE_NAV2_REPOSITION: 1,
+                analyzer.ROUTE_RECOVERY_OR_REAIM: 1,
+                analyzer.ROUTE_SCAN_OR_PERCEIVE: 1,
+                analyzer.ROUTE_NO_GO: 1,
+            },
+        },
+    )
+    missions = [
+        root / "fetch_session" / "mission_verdict.json",
+        root / "nav2_session" / "mission_verdict.json",
+        root / "recovery_session" / "mission_verdict.json",
+    ]
+    _mission(
+        missions[0],
+        analyzer.ROUTE_FETCH_READY,
+        route_quality={
+            "predicted_contact_quality": "watch",
+            "predicted_first_contact_risk": "medium",
+            "quality_score": 61.25,
+            "flags": ["initial_lateral_setup_debt"],
+        },
+    )
+    _mission(missions[1], analyzer.ROUTE_NAV2_REPOSITION)
+    _mission(missions[2], analyzer.ROUTE_RECOVERY_OR_REAIM)
+    visual_package = root / "uat" / "fetch_visual_uat_package" / "package_summary.json"
+    _write_json(
+        visual_package,
+        {
+            "campaign_id": "uat",
+            "pass": True,
+            "mobile_watchable": True,
+            "onboard_camera_watchable": True,
+            "visual_confirmation_seen": True,
+            "local_fetch_visual_confirmed": True,
+            "videos": [{"name": "raw_camera_browser.mp4"}],
+        },
+    )
+
+    summary = analyzer.build_summary(_args(tmp_path, planner=planner, missions=missions, visual_package=visual_package))
+
+    assert summary["quality_prediction_counts"]["watch"] == 1
+    assert summary["first_contact_risk_counts"]["medium"] == 1
+    mission = next(item for item in summary["missions"] if item["route_label"] == analyzer.ROUTE_FETCH_READY)
+    assert mission["predicted_contact_quality"] == "watch"
+    assert mission["predicted_first_contact_risk"] == "medium"
+    assert mission["route_quality_score"] == 61.25
+    assert mission["route_quality_flags"] == ["initial_lateral_setup_debt"]
+
+    scorecard = tmp_path / "scorecard.md"
+    analyzer.write_scorecard(scorecard, summary)
+    text = scorecard.read_text(encoding="utf-8")
+    assert "Predicted contact quality" in text
+    assert "predicted=`watch`" in text
 
 
 def test_planner_route_uat_analyzer_requires_all_executable_routes(tmp_path, monkeypatch):

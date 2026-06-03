@@ -184,6 +184,14 @@ def load_gate_results(gate_summary_path: Path) -> list[dict[str, Any]]:
     return [row for row in rows if isinstance(row, dict)]
 
 
+def _route_quality_score(row: dict[str, Any]) -> float:
+    quality = row.get("route_quality") if isinstance(row.get("route_quality"), dict) else {}
+    try:
+        return float(quality.get("quality_score", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def select_executable_results(
     results: list[dict[str, Any]],
     *,
@@ -191,10 +199,16 @@ def select_executable_results(
     max_per_route: int,
     scene_ids: set[str],
     skip_scene_ids: set[str],
+    quality_order: str = "source",
 ) -> list[dict[str, Any]]:
     selected: list[dict[str, Any]] = []
     per_route: dict[str, int] = {route: 0 for route in routes}
-    for row in results:
+    candidate_rows = list(results)
+    if quality_order == "cleanest":
+        candidate_rows = sorted(candidate_rows, key=lambda row: (-_route_quality_score(row), str(row.get("scene_id", ""))))
+    elif quality_order == "roughest":
+        candidate_rows = sorted(candidate_rows, key=lambda row: (_route_quality_score(row), str(row.get("scene_id", ""))))
+    for row in candidate_rows:
         scene_id = str(row.get("scene_id", "") or "")
         route_label = str(row.get("route_label", "") or "")
         if scene_ids and scene_id not in scene_ids:
@@ -331,6 +345,7 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
         max_per_route=int(args.max_per_route),
         scene_ids=scene_ids,
         skip_scene_ids=skip_scene_ids,
+        quality_order=str(args.quality_order or "source"),
     )
     rows: list[dict[str, Any]] = []
     for index, result in enumerate(selected, start=1):
@@ -362,6 +377,7 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
             "scene_id": scene_id,
             "route_label": str(result.get("route_label", "") or ""),
             "route_executor": str(result.get("route_executor", "") or ""),
+            "route_quality": result.get("route_quality", {}) if isinstance(result.get("route_quality"), dict) else {},
             "layout_path": artifact_display_path(layout_path),
             "command": command,
             "fresh_dashboard_session_per_run": bool(args.fresh_dashboard_session_per_run),
@@ -484,18 +500,26 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
     for row in summary.get("rows", []) if isinstance(summary.get("rows"), list) else []:
         mission = row.get("mission") if isinstance(row.get("mission"), dict) else {}
         package = row.get("visual_package") if isinstance(row.get("visual_package"), dict) else {}
+        quality = row.get("route_quality") if isinstance(row.get("route_quality"), dict) else {}
         mission_path = str(row.get("mission_summary_path", "") or "")
         package_scorecard = str(package.get("scorecard_path", "") or "")
         mission_link = f" [mission](/{mission_path})" if mission_path.startswith("artifacts/session/") else ""
         package_link = f" [visual_package](/{package_scorecard})" if package_scorecard.startswith("artifacts/session/") else ""
         closest = mission.get("closest_approach_distance_m")
         closest_text = f" closest=`{float(closest):.3f}m`" if isinstance(closest, (int, float)) else ""
+        quality_text = (
+            f" score=`{quality.get('quality_score', '')}` "
+            f"pred=`{quality.get('predicted_contact_quality', '')}` "
+            f"risk=`{quality.get('predicted_first_contact_risk', '')}`"
+            if quality
+            else ""
+        )
         lines.append(
             f"- `{row.get('scene_id', '')}` route=`{row.get('route_label', '')}` "
             f"dry_run=`{row.get('dry_run', False)}` rc=`{row.get('returncode', '')}` "
             f"session=`{row.get('expected_session_id', '')}` "
             f"mission_pass=`{mission.get('pass', '')}` visual_pass=`{package.get('pass', '')}`"
-            f"{closest_text}{mission_link}{package_link}"
+            f"{quality_text}{closest_text}{mission_link}{package_link}"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -508,6 +532,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scene-id", action="append", default=[])
     parser.add_argument("--skip-scene-id", action="append", default=[])
     parser.add_argument("--max-per-route", type=int, default=1)
+    parser.add_argument("--quality-order", choices=["source", "cleanest", "roughest"], default="source")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--dashboard-url", default="")
     parser.add_argument("--compose-project", default="")

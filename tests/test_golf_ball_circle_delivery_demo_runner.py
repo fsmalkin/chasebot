@@ -113,8 +113,11 @@ def _route_default_args(**overrides):
         "drive_duration_s": 7.0,
         "sample_duration_s": 9.0,
         "line_servo_push_linear_x_mps": 0.055,
+        "line_servo_min_linear_x_mps": 0.025,
         "line_servo_max_angular_z_rps": 0.18,
         "line_servo_yaw_gain": 1.2,
+        "line_servo_contact_lateral_ready_m": 0.035,
+        "line_servo_contact_yaw_ready_deg": 5.729578,
         "stop_on_delivery": False,
         "delivery_stop_radius_m": 0.0,
         "post_delivery_sample_s": 0.0,
@@ -158,6 +161,9 @@ def test_planner_route_defaults_turn_frozen_fetch_layout_into_line_servo():
     assert args.stop_on_delivery is True
     assert args.delivery_stop_radius_m == pytest.approx(0.20)
     assert args.post_delivery_sample_s == pytest.approx(4.0)
+    assert args.line_servo_min_linear_x_mps == pytest.approx(0.012)
+    assert args.line_servo_contact_lateral_ready_m == pytest.approx(0.028)
+    assert args.line_servo_contact_yaw_ready_deg == pytest.approx(3.0)
     assert args.nav2_reposition_before_fetch is False
     assert args.robot_x == pytest.approx(-0.109148)
     assert args.robot_y == pytest.approx(-0.035637)
@@ -261,6 +267,9 @@ def test_parse_args_accepts_planner_route_metadata(monkeypatch):
     assert args.line_servo_push_linear_x_mps == pytest.approx(0.05)
     assert args.line_servo_max_angular_z_rps == pytest.approx(0.16)
     assert args.line_servo_yaw_gain == pytest.approx(1.4)
+    assert args.line_servo_min_linear_x_mps == pytest.approx(0.025)
+    assert args.line_servo_contact_lateral_ready_m == pytest.approx(0.035)
+    assert args.line_servo_contact_yaw_ready_deg == pytest.approx(5.729578)
 
 
 def test_parse_args_accepts_nav2_reposition_before_fetch(monkeypatch):
@@ -570,6 +579,29 @@ def test_line_servo_command_prioritizes_yaw_when_lateral_is_ready():
     assert command["angular_z_rps"] > 0.10
 
 
+def test_line_servo_command_uses_slow_final_crawl_for_quality_tuned_contact():
+    command = line_servo_command(
+        robot_pose={"x": 0.264, "y": -0.125, "yaw": 0.100},
+        ball_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=0.05236,
+    )
+
+    assert command["phase"] == "setup_reaim"
+    assert command["contact_ready"] is False
+    assert command["linear_x_mps"] <= 0.018
+    assert command["contact_lateral_ready_m"] == pytest.approx(0.028)
+    assert command["contact_yaw_ready_rad"] == pytest.approx(0.05236)
+
+
 def test_summarize_line_servo_effective_command_preserves_route_caps():
     summary = summarize_line_servo_effective_command(
         [
@@ -581,6 +613,7 @@ def test_summarize_line_servo_effective_command_preserves_route_caps():
                     "setup_standoff_m": 0.34,
                     "contact_standoff_m": 0.11,
                     "contact_lateral_ready_m": 0.03,
+                    "contact_yaw_ready_rad": 0.05236,
                     "recovery_line_acquire_lateral_m": 0.08,
                     "recovery_setup_pocket_m": 0.12,
                     "yaw_priority_lateral_m": 0.032,
@@ -594,6 +627,7 @@ def test_summarize_line_servo_effective_command_preserves_route_caps():
         "line_servo_effective_setup_standoff_m": 0.34,
         "line_servo_effective_contact_standoff_m": 0.11,
         "line_servo_effective_contact_lateral_ready_m": 0.03,
+        "line_servo_effective_contact_yaw_ready_rad": 0.05236,
         "line_servo_effective_recovery_line_acquire_lateral_m": 0.08,
         "line_servo_effective_recovery_setup_pocket_m": 0.12,
         "line_servo_effective_yaw_priority_lateral_m": 0.032,

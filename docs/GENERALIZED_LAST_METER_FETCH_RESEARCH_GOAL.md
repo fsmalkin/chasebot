@@ -649,6 +649,25 @@ AI/local learned control as a proposer for reproducible stage gaps, especially
 where route-quality scoring shows deterministic setup or recovery reaching
 first contact outside the clean envelope.
 
+June 3, 2026 route-quality scorer update: the planner-routed moonshot now
+scores route quality before execution and validates predicted quality after
+execution. The dry planner gate
+`artifacts/session/dev_route_quality_gate_seed20260613_20260603/fetch_planner_handoff_gate/gate_summary.json`
+produced route-quality scores across all five route labels. The roughest live
+executable replay
+`artifacts/session/live_route_quality_roughest_fresh_replay_20260603/fetch_planner_route_replay_batch/scorecard.md`
+selected `recovery_or_reaim` risk `high`, `nav2_reposition_first` risk
+`medium`, and `fetch_ready_local` risk `low`. All three delivered inside the
+`0.300m` contract with same-session visual packages. The combined analyzer
+`artifacts/session/route_uat_route_quality_roughest_live_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+keeps contact quality at `watch`, first-contact blockers at `0`, and promotion
+evidence at `false`.
+
+Research interpretation: route ownership now has supporting evidence across
+bounded local-random executable cases. The clearest remaining gap is recovery
+first-contact smoothness; Nav2 reposition is now the strongest setup owner in
+the roughest selector because its first-contact flags stayed clean.
+
 May 29, 2026 model-planning refinement: V-JEPA-style world models are relevant
 as an architectural pattern for scoring candidate actions against predicted
 physical outcomes, but full video world models are not the onboard control

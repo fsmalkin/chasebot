@@ -184,6 +184,21 @@ def apply_planner_route_execution_defaults(
     _set_route_default(args, explicit_args, "line_servo_push_linear_x_mps", 0.055, "--line-servo-push-linear-x-mps")
     _set_route_default(args, explicit_args, "line_servo_max_angular_z_rps", 0.18, "--line-servo-max-angular-z-rps")
     _set_route_default(args, explicit_args, "line_servo_yaw_gain", 1.2, "--line-servo-yaw-gain")
+    _set_route_default(args, explicit_args, "line_servo_min_linear_x_mps", 0.012, "--line-servo-min-linear-x-mps")
+    _set_route_default(
+        args,
+        explicit_args,
+        "line_servo_contact_lateral_ready_m",
+        0.028,
+        "--line-servo-contact-lateral-ready-m",
+    )
+    _set_route_default(
+        args,
+        explicit_args,
+        "line_servo_contact_yaw_ready_deg",
+        3.0,
+        "--line-servo-contact-yaw-ready-deg",
+    )
     _set_route_default(args, explicit_args, "stop_on_delivery", True, "--stop-on-delivery")
     _set_route_default(args, explicit_args, "delivery_stop_radius_m", 0.2, "--delivery-stop-radius-m")
     _set_route_default(args, explicit_args, "post_delivery_sample_s", 4.0, "--post-delivery-sample-s")
@@ -221,6 +236,18 @@ def apply_planner_route_execution_defaults(
         "route_executor": route_executor,
         "drive_mode": str(args.drive_mode),
         "nav2_reposition_before_fetch": bool(args.nav2_reposition_before_fetch),
+        "route_quality": (
+            random_draw.get("route_quality", {})
+            if isinstance(random_draw.get("route_quality"), dict)
+            else target_layout.get("route_quality", {})
+            if isinstance(target_layout.get("route_quality"), dict)
+            else {}
+        ),
+        "line_servo_quality_defaults": {
+            "min_linear_x_mps": round(float(args.line_servo_min_linear_x_mps), 6),
+            "contact_lateral_ready_m": round(float(args.line_servo_contact_lateral_ready_m), 6),
+            "contact_yaw_ready_deg": round(float(args.line_servo_contact_yaw_ready_deg), 6),
+        },
         "robot_pose": {
             "x": round(float(args.robot_x), 6),
             "y": round(float(args.robot_y), 6),
@@ -812,7 +839,12 @@ def line_servo_command(
         if abs(robot_lateral_error) > 0.07 or abs(line_yaw_error) > 0.18:
             base_linear = min(base_linear, 0.035)
         if distance_to_contact < 0.09:
-            base_linear = min(base_linear, 0.025)
+            base_linear = min(base_linear, max(float(min_linear_x_mps), 0.012))
+        elif distance_to_contact < 0.14 and (
+            abs(robot_lateral_error) > effective_contact_lateral_ready_m
+            or abs(line_yaw_error) > float(contact_yaw_ready_rad)
+        ):
+            base_linear = min(base_linear, max(float(min_linear_x_mps), 0.018))
     elif distance_to_contact > 0.16:
         phase = "setup_converge"
         desired_yaw = setup_yaw
@@ -840,6 +872,7 @@ def line_servo_command(
         "line_yaw_error_rad": round(float(line_yaw_error), 6),
         "robot_lateral_error_m": round(float(robot_lateral_error), 6),
         "contact_lateral_ready_m": round(float(effective_contact_lateral_ready_m), 6),
+        "contact_yaw_ready_rad": round(float(contact_yaw_ready_rad), 6),
         "recovery_line_acquire_lateral_m": round(float(recovery_line_acquire_lateral_m), 6),
         "recovery_setup_pocket_m": round(float(recovery_setup_pocket_m), 6),
         "yaw_priority_lateral_m": round(float(yaw_priority_lateral_m), 6),
@@ -865,6 +898,7 @@ def summarize_line_servo_effective_command(contact_samples: list[dict[str, Any]]
             "setup_standoff_m": "line_servo_effective_setup_standoff_m",
             "contact_standoff_m": "line_servo_effective_contact_standoff_m",
             "contact_lateral_ready_m": "line_servo_effective_contact_lateral_ready_m",
+            "contact_yaw_ready_rad": "line_servo_effective_contact_yaw_ready_rad",
             "recovery_line_acquire_lateral_m": "line_servo_effective_recovery_line_acquire_lateral_m",
             "recovery_setup_pocket_m": "line_servo_effective_recovery_setup_pocket_m",
             "yaw_priority_lateral_m": "line_servo_effective_yaw_priority_lateral_m",
@@ -1045,8 +1079,11 @@ def collect_line_servo_samples(
     motion_threshold_m: float = 0.005,
     max_linear_x_mps: float = 0.10,
     push_linear_x_mps: float = 0.055,
+    min_linear_x_mps: float = 0.025,
     max_angular_z_rps: float = 0.18,
     yaw_gain: float = 1.20,
+    contact_lateral_ready_m: float = 0.035,
+    contact_yaw_ready_rad: float = 0.10,
     route_label: str = "",
 ) -> list[dict[str, Any]]:
     effective_stop_radius_m = float(delivery_stop_radius_m) if float(delivery_stop_radius_m) > 0.0 else float(delivery_radius_m)
@@ -1068,8 +1105,11 @@ export STOP_ON_DELIVERY={json.dumps("1" if stop_on_delivery else "0")}
 export MOTION_THRESHOLD_M={json.dumps(f"{motion_threshold_m:.6f}")}
 export MAX_LINEAR_X_MPS={json.dumps(f"{max_linear_x_mps:.6f}")}
 export PUSH_LINEAR_X_MPS={json.dumps(f"{push_linear_x_mps:.6f}")}
+export MIN_LINEAR_X_MPS={json.dumps(f"{min_linear_x_mps:.6f}")}
 export MAX_ANGULAR_Z_RPS={json.dumps(f"{max_angular_z_rps:.6f}")}
 export YAW_GAIN={json.dumps(f"{yaw_gain:.6f}")}
+export CONTACT_LATERAL_READY_M={json.dumps(f"{contact_lateral_ready_m:.6f}")}
+export CONTACT_YAW_READY_RAD={json.dumps(f"{contact_yaw_ready_rad:.6f}")}
 export PLANNER_ROUTE_LABEL={json.dumps(str(route_label or ""))}
 python3 - <<'PY'
 import json
@@ -1099,8 +1139,11 @@ stop_on_delivery = os.environ.get("STOP_ON_DELIVERY", "0") == "1"
 motion_threshold_m = float(os.environ["MOTION_THRESHOLD_M"])
 max_linear_x_mps = float(os.environ["MAX_LINEAR_X_MPS"])
 push_linear_x_mps = float(os.environ["PUSH_LINEAR_X_MPS"])
+min_linear_x_mps = float(os.environ["MIN_LINEAR_X_MPS"])
 max_angular_z_rps = float(os.environ["MAX_ANGULAR_Z_RPS"])
 yaw_gain = float(os.environ["YAW_GAIN"])
+contact_lateral_ready_m = float(os.environ["CONTACT_LATERAL_READY_M"])
+contact_yaw_ready_rad = float(os.environ["CONTACT_YAW_READY_RAD"])
 planner_route_label = os.environ.get("PLANNER_ROUTE_LABEL", "")
 topic = f"/world/{{world_name}}/dynamic_pose/info"
 started = time.monotonic()
@@ -1198,8 +1241,11 @@ try:
                         motion_threshold_m=motion_threshold_m,
                         max_linear_x_mps=max_linear_x_mps,
                         push_linear_x_mps=push_linear_x_mps,
+                        min_linear_x_mps=min_linear_x_mps,
                         max_angular_z_rps=max_angular_z_rps,
                         yaw_gain=yaw_gain,
+                        contact_lateral_ready_m=contact_lateral_ready_m,
+                        contact_yaw_ready_rad=contact_yaw_ready_rad,
                         route_label=planner_route_label,
                     )
                     record["line_servo_command"] = command
@@ -1613,8 +1659,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--drive-linear-x-mps", type=float, default=0.12)
     parser.add_argument("--drive-duration-s", type=float, default=7.0)
     parser.add_argument("--line-servo-push-linear-x-mps", type=float, default=0.055)
+    parser.add_argument("--line-servo-min-linear-x-mps", type=float, default=0.025)
     parser.add_argument("--line-servo-max-angular-z-rps", type=float, default=0.18)
     parser.add_argument("--line-servo-yaw-gain", type=float, default=1.20)
+    parser.add_argument("--line-servo-contact-lateral-ready-m", type=float, default=0.035)
+    parser.add_argument("--line-servo-contact-yaw-ready-deg", type=float, default=5.729578)
     parser.add_argument("--planner-route-label", default="")
     parser.add_argument("--route-executor", default="")
     parser.add_argument("--nav2-reposition-before-fetch", action="store_true")
@@ -1872,8 +1921,11 @@ def main() -> int:
             motion_threshold_m=args.first_contact_motion_threshold_m,
             max_linear_x_mps=args.drive_linear_x_mps,
             push_linear_x_mps=args.line_servo_push_linear_x_mps,
+            min_linear_x_mps=args.line_servo_min_linear_x_mps,
             max_angular_z_rps=args.line_servo_max_angular_z_rps,
             yaw_gain=args.line_servo_yaw_gain,
+            contact_lateral_ready_m=args.line_servo_contact_lateral_ready_m,
+            contact_yaw_ready_rad=math.radians(args.line_servo_contact_yaw_ready_deg),
             route_label=args.planner_route_label,
         )
         stop_payload = publish_zero_stop(args.compose_project)
@@ -1979,10 +2031,20 @@ def main() -> int:
     planner_route_label = str(args.planner_route_label or target_layout.get("planner_route_label", "") or random_draw.get("planner_route_label", "") or "")
     route_executor = str(args.route_executor or target_layout.get("route_executor", "") or random_draw.get("route_executor", "") or "")
     forward_only_pre_contact = bool(float(args.drive_linear_x_mps) >= -1e-9)
+    route_quality = (
+        planner_route_defaults.get("route_quality", {})
+        if isinstance(planner_route_defaults.get("route_quality"), dict)
+        else random_draw.get("route_quality", {})
+        if isinstance(random_draw.get("route_quality"), dict)
+        else target_layout.get("route_quality", {})
+        if isinstance(target_layout.get("route_quality"), dict)
+        else {}
+    )
     route_metadata = {
         "planner_route_label": planner_route_label,
         "route_executor": route_executor,
         "executor_actual": "golf_ball_circle_delivery_demo_runner",
+        "route_quality": route_quality,
         "pre_fetch_reposition": pre_fetch_reposition,
         "nav2_reposition_before_fetch": bool(args.nav2_reposition_before_fetch),
         "nav2_reposition_required": bool(args.nav2_reposition_before_fetch),
@@ -2006,8 +2068,11 @@ def main() -> int:
         "drive_duration_s": round(float(args.drive_duration_s), 6),
         "drive_mode": str(args.drive_mode),
         "line_servo_push_linear_x_mps": round(float(args.line_servo_push_linear_x_mps), 6),
+        "line_servo_min_linear_x_mps": round(float(args.line_servo_min_linear_x_mps), 6),
         "line_servo_max_angular_z_rps": round(float(args.line_servo_max_angular_z_rps), 6),
         "line_servo_yaw_gain": round(float(args.line_servo_yaw_gain), 6),
+        "line_servo_contact_lateral_ready_m": round(float(args.line_servo_contact_lateral_ready_m), 6),
+        "line_servo_contact_yaw_ready_deg": round(float(args.line_servo_contact_yaw_ready_deg), 6),
     }
     route_metadata.update(summarize_line_servo_effective_command(contact_samples))
     if fetch_skipped_after_reposition:

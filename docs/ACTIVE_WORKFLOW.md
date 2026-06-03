@@ -342,6 +342,26 @@ June 3 planner-routed fresh-session evidence:
   then improve pre-contact lateral/yaw posture and first-contact cleanliness
   while preserving the delivery-radius contract.
 
+June 3 route-quality scorer and roughest-trio evidence:
+
+- Planner route-quality gate:
+  `artifacts/session/dev_route_quality_gate_seed20260613_20260603/fetch_planner_handoff_gate/gate_summary.json`
+- Roughest executable replay:
+  `artifacts/session/live_route_quality_roughest_fresh_replay_20260603/fetch_planner_route_replay_batch/scorecard.md`
+- Combined analyzer:
+  `artifacts/session/route_uat_route_quality_roughest_live_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: roughest selected `recovery_or_reaim` risk `high`,
+  `nav2_reposition_first` risk `medium`, and `fetch_ready_local` risk `low`.
+  All three delivered inside the `0.300m` contract with same-session browser
+  packages; closest approach ranged from `0.193026m` to `0.197752m`.
+- Visual read: sequence sheets confirm real delivery in all three runs. Nav2
+  reposition produced the cleanest first contact; recovery delivered but stayed
+  visibly off-axis; fetch-ready delivered with a small lateral first-contact
+  watch.
+- Next command: keep route-quality scoring in the planner handoff artifact,
+  use `--quality-order roughest` for stress UAT, and focus the next controller
+  slice on recovery first-contact smoothing.
+
 ## UAT Orchestrator Modes
 
 Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:

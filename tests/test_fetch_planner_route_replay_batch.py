@@ -24,6 +24,7 @@ def _make_args(**overrides):
         "scene_id": [],
         "skip_scene_id": [],
         "max_per_route": 1,
+        "quality_order": "source",
         "dry_run": True,
         "dashboard_url": "",
         "compose_project": "",
@@ -76,6 +77,46 @@ def test_replay_batch_dry_run_materializes_one_layout_per_route(tmp_path, monkey
         assert layout["planner_route_label"] == row["route_label"]
         assert "--target-layout-json" in row["command"]
         assert row["command"][row["command"].index("--target-layout-json") + 1] == str(layout_path)
+
+
+def test_replay_batch_quality_order_selects_roughest_per_route():
+    rows = [
+        {
+            "scene_id": "fetch_clean",
+            "route_label": gate.ROUTE_FETCH_READY,
+            "correct": True,
+            "route_quality": {"quality_score": 95.0},
+        },
+        {
+            "scene_id": "fetch_rough",
+            "route_label": gate.ROUTE_FETCH_READY,
+            "correct": True,
+            "route_quality": {"quality_score": 52.0},
+        },
+        {
+            "scene_id": "recovery_cleaner",
+            "route_label": gate.ROUTE_RECOVERY_OR_REAIM,
+            "correct": True,
+            "route_quality": {"quality_score": 70.0},
+        },
+        {
+            "scene_id": "recovery_rough",
+            "route_label": gate.ROUTE_RECOVERY_OR_REAIM,
+            "correct": True,
+            "route_quality": {"quality_score": 40.0},
+        },
+    ]
+
+    selected = batch.select_executable_results(
+        rows,
+        routes={gate.ROUTE_FETCH_READY, gate.ROUTE_RECOVERY_OR_REAIM},
+        max_per_route=1,
+        scene_ids=set(),
+        skip_scene_ids=set(),
+        quality_order="roughest",
+    )
+
+    assert {row["scene_id"] for row in selected} == {"fetch_rough", "recovery_rough"}
 
 
 def test_replay_batch_live_mock_records_mission_and_visual_package(tmp_path, monkeypatch):
