@@ -803,13 +803,17 @@ def line_servo_command(
     robot_lateral_error = signed_lateral_error_m(robot_x, robot_y, origin_x=ball_x, origin_y=ball_y, line_yaw_rad=line_yaw)
     line_yaw_error = normalize_angle_rad(line_yaw - robot_yaw)
     yaw_priority_lateral_m = max(float(effective_contact_lateral_ready_m), 0.032)
-    recovery_final_reaim_active = bool(
-        clean_route_label == ROUTE_RECOVERY_OR_REAIM
-        and distance_to_contact < 0.14
+    contact_final_reaim_active = bool(
+        distance_to_contact < 0.14
         and abs(robot_lateral_error) > effective_contact_lateral_ready_m
     )
+    recovery_final_reaim_active = bool(clean_route_label == ROUTE_RECOVERY_OR_REAIM and contact_final_reaim_active)
     lateral_reaim_gain = 3.5
     lateral_reaim_limit_rad = 0.45
+    if contact_final_reaim_active:
+        yaw_priority_lateral_m = min(yaw_priority_lateral_m, max(effective_contact_lateral_ready_m, 0.020))
+        lateral_reaim_gain = 4.5
+        lateral_reaim_limit_rad = 0.50
     if recovery_final_reaim_active:
         yaw_priority_lateral_m = min(yaw_priority_lateral_m, max(effective_contact_lateral_ready_m * 0.80, 0.020))
         lateral_reaim_gain = 6.5
@@ -846,6 +850,10 @@ def line_servo_command(
     elif not contact_ready:
         if recovery_final_reaim_active:
             phase = "recovery_final_reaim"
+            desired_yaw = lateral_corrected_yaw
+            base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
+        elif contact_final_reaim_active:
+            phase = "contact_final_reaim"
             desired_yaw = lateral_corrected_yaw
             base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
         else:
@@ -891,6 +899,7 @@ def line_servo_command(
         "contact_yaw_ready_rad": round(float(contact_yaw_ready_rad), 6),
         "recovery_line_acquire_lateral_m": round(float(recovery_line_acquire_lateral_m), 6),
         "recovery_setup_pocket_m": round(float(recovery_setup_pocket_m), 6),
+        "contact_final_reaim_active": contact_final_reaim_active,
         "recovery_final_reaim_active": recovery_final_reaim_active,
         "lateral_reaim_rad": round(float(lateral_reaim), 6),
         "lateral_reaim_gain": round(float(lateral_reaim_gain), 6),

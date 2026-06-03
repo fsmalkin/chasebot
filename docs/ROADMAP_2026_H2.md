@@ -857,8 +857,15 @@ watches. The fresh roughest-trio analyzer
 stayed visual UAT green with `3/3` delivery and `promotion_evidence=false`;
 recovery and Nav2 cleared first-contact flags, while fetch-ready kept a narrow
 lateral first-contact watch at `0.030705m`. The next roadmap step is
-fetch-ready bumper-clearance polish followed by a second planner seed before
-promotion-gate discussion.
+fetch-ready bumper-clearance polish.
+
+Contact final-reaim evidence, later June 3: the follow-up roughest-trio analyzer
+`artifacts/session/route_uat_contact_final_reaim_roughest_trio_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+stayed visual UAT green with `3/3` delivery and `promotion_evidence=false`. All
+three executable roughest routes cleared first-contact flags, with closest
+approach `0.192788m..0.197427m`. Contact quality remains `watch` because the
+selected cases begin with pre-contact lateral/yaw setup debt. The next roadmap
+step is a second planner seed before promotion-gate discussion.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`

@@ -630,8 +630,16 @@ first-contact flags. The fresh roughest-trio analyzer
 kept route-owner visual UAT green with `3/3` delivery and
 `promotion_evidence=false`; recovery and Nav2 cleared first-contact flags, while
 fetch-ready kept a narrow lateral first-contact watch at `0.030705m`. Keep this
-as a contact-quality repair proof and make fetch-ready bumper-clearance polish
-the next controller slice before a second planner seed.
+as a recovery contact-quality repair proof.
+
+Contact final-reaim evidence, later June 3: the follow-up roughest-trio analyzer
+`artifacts/session/route_uat_contact_final_reaim_roughest_trio_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+kept route-owner visual UAT green with `3/3` delivery and
+`promotion_evidence=false`. All three executable roughest routes cleared
+first-contact flags, with closest approach `0.192788m..0.197427m`. The remaining
+contact-quality `watch` classification comes from pre-contact lateral/yaw setup
+history in the rough selected cases. Make the next policy step a second planner
+seed before any promotion-gate discussion.
 
 Approach-quality evidence must record:
 

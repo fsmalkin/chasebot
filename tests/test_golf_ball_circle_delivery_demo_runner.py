@@ -472,7 +472,8 @@ def test_line_servo_command_reaims_close_offset_contact_before_push():
         yaw_gain=1.20,
     )
 
-    assert command["phase"] == "setup_reaim"
+    assert command["phase"] == "contact_final_reaim"
+    assert command["contact_final_reaim_active"] is True
     assert command["contact_ready"] is False
     assert command["linear_x_mps"] <= 0.035
     assert command["angular_z_rps"] < 0.0
@@ -595,11 +596,39 @@ def test_line_servo_command_uses_slow_final_crawl_for_quality_tuned_contact():
         contact_yaw_ready_rad=0.05236,
     )
 
-    assert command["phase"] == "setup_reaim"
+    assert command["phase"] == "contact_final_reaim"
+    assert command["contact_final_reaim_active"] is True
     assert command["contact_ready"] is False
     assert command["linear_x_mps"] <= 0.018
     assert command["contact_lateral_ready_m"] == pytest.approx(0.028)
     assert command["contact_yaw_ready_rad"] == pytest.approx(0.05236)
+
+
+def test_line_servo_command_uses_contact_final_reaim_for_fetch_ready_lateral_watch():
+    command = line_servo_command(
+        robot_pose={"x": 0.163824, "y": -0.000171, "yaw": -0.038539},
+        ball_pose={"x": 0.266267, "y": 0.026575, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.266267, "y": 0.026575, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=0.05236,
+        route_label="fetch_ready_local",
+    )
+
+    assert command["phase"] == "contact_final_reaim"
+    assert command["contact_final_reaim_active"] is True
+    assert command["recovery_final_reaim_active"] is False
+    assert command["contact_ready"] is False
+    assert command["linear_x_mps"] <= 0.014
+    assert command["lateral_reaim_gain"] == pytest.approx(4.5)
+    assert command["lateral_reaim_rad"] < -0.10
+    assert command["angular_z_rps"] > 0.10
 
 
 def test_line_servo_command_uses_recovery_final_reaim_before_rough_contact():
@@ -620,6 +649,7 @@ def test_line_servo_command_uses_recovery_final_reaim_before_rough_contact():
     )
 
     assert command["phase"] == "recovery_final_reaim"
+    assert command["contact_final_reaim_active"] is True
     assert command["recovery_final_reaim_active"] is True
     assert command["contact_ready"] is False
     assert command["linear_x_mps"] <= 0.014

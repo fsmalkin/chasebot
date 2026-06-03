@@ -378,8 +378,14 @@ June 3 recovery final-reaim update:
   stayed route-owner visual UAT green with `3/3` delivery and
   `promotion_evidence=false`. Recovery and Nav2 had no first-contact flags;
   fetch-ready still had a narrow lateral first-contact watch at `0.030705m`.
-- Next command: polish fetch-ready bumper-clearance/entry alignment, then
-  broaden to another planner seed before promotion-gate discussion.
+- Contact final-reaim follow-up:
+  `artifacts/session/route_uat_contact_final_reaim_roughest_trio_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+  stayed route-owner visual UAT green with `3/3` delivery. All three executable
+  roughest routes cleared first-contact flags; closest approach ranged from
+  `0.192788m` to `0.197427m`. Contact quality remains `watch` because the
+  selected cases start with pre-contact lateral/yaw setup debt.
+- Next command: broaden to another planner seed, then compare roughest-selector
+  evidence against the canonical saved-layout and seeded-random promotion gates.
 
 ## UAT Orchestrator Modes
 
