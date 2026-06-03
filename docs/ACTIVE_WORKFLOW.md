@@ -961,15 +961,16 @@ Live gates:
      `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --scene-descriptor-json ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json --dry-run`
    - LLM shadow command:
      `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --scene-descriptor-json ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json --dry-run --planner-mode llm_shadow`
-   - dashboard mixed-scene CTA uses `planner_gated_random: true`; if the route
-     is not `fetch_ready_local`, it records planner artifacts and does not
-     dispatch local fetch
+   - dashboard mixed-scene CTA uses `planner_gated_random: true`; the v0
+     executable path dispatches forward-only proof runs for `fetch_ready_local`
+     and `nav2_reposition_first`, records executed safe no-go for
+     `ambiguous_or_unsafe_no_go`, and records classified placeholders for
+     `scan_or_perceive_first` and `recovery_or_reaim`
    - integration boundary: deterministic and `llm_shadow` route classification
-     are integrated; executable non-local routes are still pending. The next
-     moonshot lane should wire `nav2_reposition_first`,
-     `scan_or_perceive_first`, `recovery_or_reaim`, and
-     `ambiguous_or_unsafe_no_go` to runnable reposition, scan, recovery, or
-     no-go outcomes instead of stopping after the planner artifact.
+     are integrated; `nav2_reposition_first` currently uses the forward-only
+     golf delivery runner as proof of route execution. The next moonshot step
+     swaps that v0 executor for real Nav2 reposition plus local fetch, then
+     wires perception refresh and bounded re-aim.
    - forward-only fetch rule: a planner-gated UAT run that reaches local fetch
      should show no negative pre-contact `linear_x`; any needed backing or
      side-selection should be handled as planner-owned reposition/setup before

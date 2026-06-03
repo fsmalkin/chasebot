@@ -37,6 +37,16 @@ recovery/re-aim, no-go, and direct local fetch. Treat discarded branch work as a
 low-cost search mechanism while preserving canonical 1.0x evidence for
 promotion decisions.
 
+June 2, 2026 moonshot implementation target: the branch routes mixed planner
+scenes into v0 executable outcomes. `fetch_ready_local` and
+`nav2_reposition_first` dispatch the forward-only golf delivery runner with
+route metadata and a pre-contact forward-motion guard. `ambiguous_or_unsafe_no_go`
+records an executed safe no-go. `scan_or_perceive_first` and
+`recovery_or_reaim` remain classified placeholders until their scan/refresh and
+bounded re-aim executors are wired. The v0 forward runner is a proof surface for
+the route contract; real Nav2 reposition is the next executor swap after the
+operator-visible route demo is green.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence
@@ -159,15 +169,19 @@ Clip-review reframe, later June 1:
      `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --scene-descriptor-json ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json --dry-run`
    - optional LLM shadow comparison:
      `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --scene-descriptor-json ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json --dry-run --planner-mode llm_shadow`
-4. Build the moonshot planner-routed executor before treating broad random
+4. Run the moonshot planner-routed executor ladder before treating broad random
    scenes as UAT:
-   - `fetch_ready_local` dispatches local `fetch_to_pose`
-   - `nav2_reposition_first` executes forward-driving setup/reposition, then
-     dispatches local fetch only after the measured setup gate is green
-   - `scan_or_perceive_first` records scan/perception action and waits for a
-     fresh scene digest
-   - `recovery_or_reaim` executes one known bounded recovery/re-aim routine
-   - `ambiguous_or_unsafe_no_go` records a no-go outcome with rationale
+   - `fetch_ready_local` dispatches the forward-only local fetch proof runner
+     with route metadata
+   - `nav2_reposition_first` dispatches the same forward-only proof runner as
+     v0 executable evidence, then graduates to real Nav2 reposition plus local
+     fetch
+   - `scan_or_perceive_first` records a planner classification placeholder
+     until the scan/perception refresh executor exists
+   - `recovery_or_reaim` records a planner classification placeholder until one
+     bounded recovery/re-aim routine exists
+   - `ambiguous_or_unsafe_no_go` records an executed safe no-go outcome with
+     rationale
 5. Run local fetch evidence only for planner-approved `fetch_ready_local` scenes
    or after an executable `nav2_reposition_first` route has produced a
    forward-only setup handoff.

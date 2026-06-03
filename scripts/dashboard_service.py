@@ -4755,18 +4755,29 @@ pkill -f "fluxbox" 2>/dev/null || true
         planner_handoff: Dict[str, Any],
     ) -> Dict[str, Any]:
         scene = planner_handoff.get("scene") if isinstance(planner_handoff.get("scene"), dict) else {}
+        decision = planner_handoff.get("decision") if isinstance(planner_handoff.get("decision"), dict) else {}
+        route_label = str(decision.get("route_label", scene.get("expected_route_label", "")) or "").strip()
+        route_executor = str(decision.get("route_executor", fetch_planner_gate.executor_for_route(route_label)) or "").strip()
         scene_id = str(scene.get("scene_id", "planner_scene") or "planner_scene")
         scenario_dir = self._scenarios_dir() or ensure_dir(
             self._current_validation_dir()
             or (SESSION_ROOT / self.state["session_id"] / "dashboard_validation")
         )
         layout_path = ensure_dir(scenario_dir / "planner_fetch_layouts") / f"{scene_id}.json"
-        fetch_planner_gate.write_fetch_ready_layout_from_scene(layout_path, scene, scenario_id=scenario.id)
+        fetch_planner_gate.write_fetch_ready_layout_from_scene(
+            layout_path,
+            scene,
+            scenario_id=scenario.id,
+            route_label=route_label,
+            route_executor=route_executor,
+        )
         geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
         return {
-            "layout_id": "planner_gated_fetch_ready",
+            "layout_id": "planner_gated_fetch_ready" if route_label == fetch_planner_gate.ROUTE_FETCH_READY else f"planner_gated_{route_label}",
             "random_profile": fetch_planner_gate.PLANNER_MIXED_PROFILE,
             "seed": scene.get("seed", ""),
+            "planner_route_label": route_label,
+            "route_executor": route_executor,
             "target_pose": scene.get("target_pose", {}),
             "ball_pose": scene.get("ball_pose", {}),
             "robot_pose": scene.get("robot_pose", {}),
@@ -4777,6 +4788,36 @@ pkill -f "fluxbox" 2>/dev/null || true
             "robot_lateral_offset_m": geometry.get("robot_lateral_signed_m"),
             "robot_yaw_error_deg": geometry.get("robot_yaw_error_deg"),
             "target_layout_json": str(layout_path),
+        }
+
+    def _planner_route_execution_payload(
+        self,
+        decision: Dict[str, Any],
+        *,
+        local_fetch_dispatched: bool,
+        route_executed: bool,
+        outcome: str,
+        reason: str = "",
+        forward_only_pre_contact: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        route_label = str(decision.get("route_label", "") or "").strip()
+        route_executor = str(decision.get("route_executor", fetch_planner_gate.executor_for_route(route_label)) or "").strip()
+        forward_required = route_label in {
+            fetch_planner_gate.ROUTE_FETCH_READY,
+            fetch_planner_gate.ROUTE_NAV2_REPOSITION,
+        }
+        if forward_only_pre_contact is None:
+            forward_only_pre_contact = True if not route_executed else None
+        return {
+            "route_label": route_label,
+            "route_executor": route_executor,
+            "route_executable": bool(decision.get("route_executable", route_executor != "unsupported_route")),
+            "route_executed": bool(route_executed),
+            "local_fetch_dispatched": bool(local_fetch_dispatched),
+            "forward_only_pre_contact_required": bool(forward_required),
+            "forward_only_pre_contact": forward_only_pre_contact,
+            "outcome": str(outcome or ""),
+            "reason": str(reason or ""),
         }
 
     def _run_uat_stage(self, mode: str, scenario: ScenarioDefinition) -> Dict[str, Any]:
@@ -5149,15 +5190,31 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         )
         random_draw: Dict[str, Any] = {}
         planner_handoff: Dict[str, Any] = {}
+        planner_route_execution: Dict[str, Any] = {}
         local_fetch_dispatched = True
         target_layout_json = str(scenario_overrides.get("target_layout_json", scenario.target_layout_json) or "")
         artifact_kind = ""
         if scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID and truthy_value(scenario_overrides.get("planner_gated_random", False)):
             planner_handoff = self._run_dashboard_planner_handoff(overrides=scenario_overrides)
             decision = planner_handoff.get("decision", {}) if isinstance(planner_handoff.get("decision"), dict) else {}
-            if not bool(decision.get("should_dispatch_fetch_to_pose", False)):
+            route_label = str(decision.get("route_label", "") or "").strip()
+            route_dispatches_local_fetch = route_label in {
+                fetch_planner_gate.ROUTE_FETCH_READY,
+                fetch_planner_gate.ROUTE_NAV2_REPOSITION,
+            }
+            if not route_dispatches_local_fetch:
                 local_fetch_dispatched = False
                 pass_flag = bool(decision.get("correct", False))
+                route_executor = str(decision.get("route_executor", fetch_planner_gate.executor_for_route(route_label)) or "")
+                route_executed = route_label == fetch_planner_gate.ROUTE_NO_GO
+                planner_route_execution = self._planner_route_execution_payload(
+                    decision,
+                    local_fetch_dispatched=False,
+                    route_executed=route_executed,
+                    outcome=f"{route_executor}_selected" if route_executed else f"{route_executor}_selected_placeholder",
+                    reason="planner route did not permit local fetch dispatch",
+                    forward_only_pre_contact=True if route_executed else None,
+                )
                 artifacts = {
                     "planner_handoff_gate": str(planner_handoff.get("artifact_dir", "")),
                     "planner_scene": str(planner_handoff.get("paths", {}).get("scene_path", "")) if isinstance(planner_handoff.get("paths"), dict) else "",
@@ -5178,6 +5235,14 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
                     "planner_scene_set": str(scenario_overrides.get("planner_scene_set", GOLF_BALL_PLANNER_GATED_SCENE_SET) or ""),
                     "planner_handoff": planner_handoff,
                     "local_fetch_dispatched": False,
+                    "planner_route_execution": planner_route_execution,
+                    "planner_route_executed": bool(planner_route_execution.get("route_executed", False)),
+                    "route_label": str(planner_route_execution.get("route_label", "")),
+                    "route_executor": str(planner_route_execution.get("route_executor", "")),
+                    "forward_only_pre_contact_required": bool(
+                        planner_route_execution.get("forward_only_pre_contact_required", False)
+                    ),
+                    "forward_only_pre_contact": planner_route_execution.get("forward_only_pre_contact"),
                     "target_model_sdf": scenario.target_model_sdf,
                     "zone_model_sdf": scenario.zone_model_sdf,
                     "phase": scenario.phase,
@@ -5213,6 +5278,14 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             random_draw = self._write_planner_gated_fetch_layout(scenario, planner_handoff=planner_handoff)
             target_layout_json = str(random_draw.get("target_layout_json", target_layout_json))
             artifact_kind = GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
+            planner_route_execution = self._planner_route_execution_payload(
+                decision,
+                local_fetch_dispatched=True,
+                route_executed=True,
+                outcome="forward_only_fetch_runner_dispatched",
+                reason="planner route permitted bounded local execution",
+                forward_only_pre_contact=runner_script == "golf_ball_circle_delivery_demo_runner.py",
+            )
         if (
             scenario.id == GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID
             and not planner_handoff
@@ -5261,6 +5334,16 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             command.extend(["--robot-x", f"{float(robot_pose.get('x', 0.06)):.6f}"])
             command.extend(["--robot-y", f"{float(robot_pose.get('y', 0.0)):.6f}"])
             command.extend(["--robot-yaw", f"{float(robot_pose.get('yaw', 0.0)):.6f}"])
+        if planner_route_execution and runner_script == "golf_ball_circle_delivery_demo_runner.py":
+            command.extend(["--planner-route-label", str(planner_route_execution.get("route_label", ""))])
+            command.extend(["--route-executor", str(planner_route_execution.get("route_executor", ""))])
+            if bool(planner_route_execution.get("forward_only_pre_contact_required", False)):
+                command.append("--forward-only-pre-contact-required")
+            if str(planner_route_execution.get("route_label", "")) == fetch_planner_gate.ROUTE_NAV2_REPOSITION:
+                command.extend(["--drive-duration-s", "36.000000"])
+                command.extend(["--sample-duration-s", "40.000000"])
+                command.append("--stop-on-delivery")
+                command.extend(["--post-delivery-sample-s", "4.000000"])
         if artifact_kind:
             command.extend(["--artifact-kind", artifact_kind])
         if scenario.target_model_sdf:
@@ -5337,6 +5420,14 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             "planner_scene_set": str(scenario_overrides.get("planner_scene_set", "")) if planner_handoff else "",
             "planner_handoff": planner_handoff,
             "local_fetch_dispatched": bool(local_fetch_dispatched),
+            "planner_route_execution": planner_route_execution,
+            "planner_route_executed": bool(planner_route_execution.get("route_executed", False)) if planner_route_execution else False,
+            "route_label": str(planner_route_execution.get("route_label", "")) if planner_route_execution else "",
+            "route_executor": str(planner_route_execution.get("route_executor", "")) if planner_route_execution else "",
+            "forward_only_pre_contact_required": bool(
+                planner_route_execution.get("forward_only_pre_contact_required", False)
+            ) if planner_route_execution else False,
+            "forward_only_pre_contact": planner_route_execution.get("forward_only_pre_contact") if planner_route_execution else None,
             "target_model_sdf": scenario.target_model_sdf,
             "zone_model_sdf": scenario.zone_model_sdf,
             "phase": scenario.phase,

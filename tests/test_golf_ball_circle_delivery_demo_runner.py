@@ -59,6 +59,8 @@ def test_apply_target_layout_sets_ball_pose_from_layout(tmp_path):
             {
                 "layout_family": "bounded_random_golf_ball_circle_delivery",
                 "random_profile": "local_visual_v1",
+                "planner_route_label": "nav2_reposition_first",
+                "route_executor": "nav2_forward_reposition_then_fetch",
                 "random_draw": {"seed": 123},
                 "targets": [
                     {
@@ -86,6 +88,34 @@ def test_apply_target_layout_sets_ball_pose_from_layout(tmp_path):
     assert args.ball_z == pytest.approx(0.021336)
     assert layout["random_profile"] == "local_visual_v1"
     assert layout["random_draw"]["seed"] == 123
+    assert layout["planner_route_label"] == "nav2_reposition_first"
+    assert layout["route_executor"] == "nav2_forward_reposition_then_fetch"
+
+
+def test_parse_args_accepts_planner_route_metadata(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "golf_ball_circle_delivery_demo_runner.py",
+            "--planner-route-label",
+            "nav2_reposition_first",
+            "--route-executor",
+            "nav2_forward_reposition_then_fetch",
+            "--forward-only-pre-contact-required",
+            "--stop-on-delivery",
+            "--post-delivery-sample-s",
+            "4.0",
+        ],
+    )
+
+    args = parse_args()
+
+    assert args.planner_route_label == "nav2_reposition_first"
+    assert args.route_executor == "nav2_forward_reposition_then_fetch"
+    assert args.forward_only_pre_contact_required is True
+    assert args.stop_on_delivery is True
+    assert args.post_delivery_sample_s == pytest.approx(4.0)
 
 
 def test_contact_trace_metrics_accept_stable_axial_approach():

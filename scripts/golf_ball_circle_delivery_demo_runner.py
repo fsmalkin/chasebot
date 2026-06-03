@@ -79,6 +79,8 @@ def apply_target_layout(args: argparse.Namespace) -> dict[str, Any]:
         "path": str(layout_path),
         "layout_family": str(layout.get("layout_family", "")),
         "random_profile": str(layout.get("random_profile", "") or random_draw.get("random_profile", "")),
+        "planner_route_label": str(layout.get("planner_route_label", "") or random_draw.get("planner_route_label", "")),
+        "route_executor": str(layout.get("route_executor", "") or random_draw.get("route_executor", "")),
         "random_draw": random_draw,
         "target": target,
     }
@@ -187,6 +189,10 @@ def collect_contact_samples(
     ball_model_name: str,
     duration_s: float,
     poll_period_s: float,
+    stop_on_delivery: bool = False,
+    delivery_target_x: float = 0.0,
+    delivery_target_y: float = 0.0,
+    delivery_radius_m: float = 0.0,
 ) -> list[dict[str, Any]]:
     script = f"""
 set -eo pipefail
@@ -198,6 +204,10 @@ export ROBOT_MODEL_NAME={json.dumps(robot_model_name)}
 export BALL_MODEL_NAME={json.dumps(ball_model_name)}
 export DURATION_S={json.dumps(f"{duration_s:.6f}")}
 export POLL_PERIOD_S={json.dumps(f"{poll_period_s:.6f}")}
+export STOP_ON_DELIVERY={json.dumps("1" if stop_on_delivery else "0")}
+export DELIVERY_TARGET_X={json.dumps(f"{delivery_target_x:.6f}")}
+export DELIVERY_TARGET_Y={json.dumps(f"{delivery_target_y:.6f}")}
+export DELIVERY_RADIUS_M={json.dumps(f"{delivery_radius_m:.6f}")}
 python3 - <<'PY'
 import json
 import math
@@ -214,6 +224,10 @@ robot_model_name = os.environ["ROBOT_MODEL_NAME"]
 ball_model_name = os.environ["BALL_MODEL_NAME"]
 duration_s = float(os.environ["DURATION_S"])
 poll_period_s = float(os.environ["POLL_PERIOD_S"])
+stop_on_delivery = os.environ.get("STOP_ON_DELIVERY", "0") == "1"
+delivery_target_x = float(os.environ.get("DELIVERY_TARGET_X", "0.0"))
+delivery_target_y = float(os.environ.get("DELIVERY_TARGET_Y", "0.0"))
+delivery_radius_m = float(os.environ.get("DELIVERY_RADIUS_M", "0.0"))
 topic = f"/world/{{world_name}}/dynamic_pose/info"
 started = time.monotonic()
 deadline = started + max(duration_s, 0.1)
@@ -243,6 +257,7 @@ def convert_pose(pose):
 
 while time.monotonic() < deadline:
     tick_started = time.monotonic()
+    should_break = False
     record = {{
         "sample_index": index,
         "t_s": round(tick_started - started, 6),
@@ -267,10 +282,25 @@ while time.monotonic() < deadline:
             ball_pose = next((item for item in poses if item.get("name") == ball_model_name), None)
             record["robot_pose"] = convert_pose(robot_pose)
             record["ball_pose"] = convert_pose(ball_pose)
+            converted_ball = record["ball_pose"]
+            if stop_on_delivery and converted_ball:
+                position = converted_ball.get("position") if isinstance(converted_ball.get("position"), dict) else {{}}
+                try:
+                    dx = float(position.get("x", 0.0)) - delivery_target_x
+                    dy = float(position.get("y", 0.0)) - delivery_target_y
+                    distance = math.hypot(dx, dy)
+                    record["delivery_distance_m"] = round(distance, 6)
+                    if distance <= delivery_radius_m:
+                        record["delivery_stop_triggered"] = True
+                        should_break = True
+                except Exception:
+                    pass
     except Exception as exc:
         record["error"] = str(exc)
     print(json.dumps(record, sort_keys=True), flush=True)
     index += 1
+    if should_break:
+        break
     elapsed = time.monotonic() - tick_started
     if elapsed < poll_period_s:
         time.sleep(poll_period_s - elapsed)
@@ -481,6 +511,20 @@ timeout {max(float(duration_s), 0.1):.3f}s ros2 topic pub -r 20 /jetbot_base_con
     )
 
 
+def stop_robot_drive_publishers(compose_project: str) -> dict[str, Any]:
+    script = """
+set +e
+pkill -f '[r]os2 topic pub.*jetbot_base_controller/cmd_vel'
+rc=$?
+if [ "$rc" -eq 0 ] || [ "$rc" -eq 1 ]; then
+  exit 0
+fi
+exit "$rc"
+"""
+    rc, output = docker_exec_service(compose_project, "gate-stack", script, timeout_s=10.0)
+    return {"returncode": rc, "output": output, "pass": rc == 0}
+
+
 def publish_zero_stop(compose_project: str) -> dict[str, Any]:
     msg = "{header: {frame_id: base_link}, twist: {linear: {x: 0.0, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: 0.0}}}"
     script = f"""
@@ -488,7 +532,10 @@ set +e
 set +u
 source /opt/ros/${{CORE_ROS_DISTRO:-kilted}}/setup.bash
 set -u
-ros2 topic pub --once /jetbot_base_controller/cmd_vel geometry_msgs/msg/TwistStamped {json.dumps(msg)}
+for _ in 1 2 3; do
+  ros2 topic pub --once /jetbot_base_controller/cmd_vel geometry_msgs/msg/TwistStamped {json.dumps(msg)}
+  sleep 0.05
+done
 """
     rc, output = docker_exec_service(compose_project, "gate-stack", script, timeout_s=10.0)
     return {"returncode": rc, "output": output, "pass": rc == 0}
@@ -617,6 +664,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fetch-delivery-radius-m", type=float, default=0.30)
     parser.add_argument("--drive-linear-x-mps", type=float, default=0.12)
     parser.add_argument("--drive-duration-s", type=float, default=7.0)
+    parser.add_argument("--planner-route-label", default="")
+    parser.add_argument("--route-executor", default="")
+    parser.add_argument("--forward-only-pre-contact-required", action="store_true")
+    parser.add_argument("--stop-on-delivery", action="store_true")
+    parser.add_argument("--post-delivery-sample-s", type=float, default=0.0)
     parser.add_argument("--sample-duration-s", type=float, default=9.0)
     parser.add_argument("--poll-period-s", type=float, default=0.10)
     parser.add_argument("--first-contact-motion-threshold-m", type=float, default=0.005)
@@ -718,6 +770,8 @@ def main() -> int:
         zone_pose={"x": args.zone_x, "y": args.zone_y, "z": args.zone_z, "radius_m": args.fetch_delivery_radius_m},
         latest_feedback="Driving the robot forward to collect and deliver the golf ball.",
     )
+    contact_samples: list[dict[str, Any]] = []
+    stop_publishers_payload: dict[str, Any] = {"returncode": None, "output": "", "pass": None, "skipped": True}
     drive_proc = start_robot_drive(
         compose_project=args.compose_project,
         linear_x_mps=args.drive_linear_x_mps,
@@ -732,14 +786,48 @@ def main() -> int:
             ball_model_name=args.target_model_name,
             duration_s=args.sample_duration_s,
             poll_period_s=args.poll_period_s,
+            stop_on_delivery=bool(args.stop_on_delivery),
+            delivery_target_x=args.zone_x,
+            delivery_target_y=args.zone_y,
+            delivery_radius_m=args.fetch_delivery_radius_m,
         )
     finally:
-        try:
-            drive_output, _ = drive_proc.communicate(timeout=2.0)
-        except subprocess.TimeoutExpired:
+        delivery_detected_while_sampling = any(
+            bool(row.get("delivery_stop_triggered", False)) for row in contact_samples
+        )
+        if delivery_detected_while_sampling and drive_proc.poll() is None:
+            stop_publishers_payload = stop_robot_drive_publishers(args.compose_project)
             drive_proc.terminate()
-            drive_output, _ = drive_proc.communicate(timeout=2.0)
+        try:
+            drive_output, _ = drive_proc.communicate(timeout=8.0)
+        except subprocess.TimeoutExpired:
+            stop_publishers_payload = stop_robot_drive_publishers(args.compose_project)
+            drive_proc.kill()
+            try:
+                drive_output, _ = drive_proc.communicate(timeout=4.0)
+            except subprocess.TimeoutExpired:
+                drive_output = ""
         stop_payload = publish_zero_stop(args.compose_project)
+
+    delivery_stop_triggered = any(bool(row.get("delivery_stop_triggered", False)) for row in contact_samples)
+    post_delivery_sample_count = 0
+    if delivery_stop_triggered and float(args.post_delivery_sample_s) > 0.0:
+        post_samples = collect_contact_samples(
+            compose_project=args.compose_project,
+            world_name=args.world_name,
+            robot_model_name=args.robot_model_name,
+            ball_model_name=args.target_model_name,
+            duration_s=float(args.post_delivery_sample_s),
+            poll_period_s=args.poll_period_s,
+        )
+        t_offset = float(contact_samples[-1].get("t_s", 0.0) or 0.0) + float(args.poll_period_s) if contact_samples else 0.0
+        index_offset = len(contact_samples)
+        for index, row in enumerate(post_samples):
+            row["sample_index"] = index_offset + index
+            row["t_s"] = round(t_offset + float(row.get("t_s", 0.0) or 0.0), 6)
+            row["post_delivery_sample"] = True
+        post_delivery_sample_count = len(post_samples)
+        contact_samples.extend(post_samples)
 
     samples = ball_samples_from_contact_samples(contact_samples)
     append_jsonl(trace_path, samples)
@@ -768,6 +856,30 @@ def main() -> int:
     mission_time_s = max(float(args.sample_duration_s), float(args.drive_duration_s))
     random_draw = target_layout.get("random_draw", {}) if isinstance(target_layout.get("random_draw"), dict) else {}
     random_profile = str(target_layout.get("random_profile", "") or random_draw.get("random_profile", ""))
+    planner_route_label = str(args.planner_route_label or target_layout.get("planner_route_label", "") or random_draw.get("planner_route_label", "") or "")
+    route_executor = str(args.route_executor or target_layout.get("route_executor", "") or random_draw.get("route_executor", "") or "")
+    forward_only_pre_contact = bool(float(args.drive_linear_x_mps) >= -1e-9)
+    route_metadata = {
+        "planner_route_label": planner_route_label,
+        "route_executor": route_executor,
+        "executor_actual": "golf_ball_circle_delivery_demo_runner",
+        "forward_only_pre_contact_required": bool(args.forward_only_pre_contact_required),
+        "forward_only_pre_contact": forward_only_pre_contact,
+        "stop_on_delivery": bool(args.stop_on_delivery),
+        "delivery_stop_triggered": bool(delivery_stop_triggered),
+        "post_delivery_sample_s": round(float(args.post_delivery_sample_s), 6),
+        "post_delivery_sample_count": int(post_delivery_sample_count),
+        "drive_stop_publishers": stop_publishers_payload,
+        "drive_linear_x_mps": round(float(args.drive_linear_x_mps), 6),
+        "drive_duration_s": round(float(args.drive_duration_s), 6),
+    }
+    if bool(args.forward_only_pre_contact_required) and not forward_only_pre_contact:
+        pass_flag = False
+        shot_outcome = {
+            **shot_outcome,
+            "pass": False,
+            "reason": "forward_only_pre_contact_violation",
+        }
     target_result = {
         "target_id": "ball_1",
         "mission_completed_pass": pass_flag,
@@ -781,6 +893,7 @@ def main() -> int:
         "approach_contact_metrics": approach_metrics,
         "random_profile": random_profile,
         "random_draw": random_draw,
+        "planner_route": route_metadata,
     }
     verdict = {
         "type": "gather_mission",
@@ -801,6 +914,11 @@ def main() -> int:
         "target_layout": target_layout,
         "random_profile": random_profile,
         "random_draw": random_draw,
+        "planner_route": route_metadata,
+        "planner_route_label": planner_route_label,
+        "route_executor": route_executor,
+        "forward_only_pre_contact_required": bool(args.forward_only_pre_contact_required),
+        "forward_only_pre_contact": forward_only_pre_contact,
         "shot_outcome": shot_outcome,
         "approach_contact_metrics": approach_metrics,
         "mission_time_s": round(mission_time_s, 6),
@@ -829,13 +947,16 @@ def main() -> int:
             f"- Delivery radius: `{float(args.fetch_delivery_radius_m):.3f}m`",
             f"- Stable contact approach: `{bool(approach_metrics.get('stable_contact_approach_pass', False))}`",
             f"- Approach flags: `{approach_metrics.get('flags', [])}`",
+            f"- Planner route: `{planner_route_label}`",
+            f"- Route executor: `{route_executor}`",
+            f"- Forward-only pre-contact: `{forward_only_pre_contact}`",
             f"- Ball start: `{shot_outcome.get('ball_start_pose', {})}`",
             f"- Ball end: `{shot_outcome.get('ball_end_pose', {})}`",
             "",
         ]
     )
 
-    write_json(artifact_dir / "drive_summary.json", {"drive_output": drive_output, "stop": stop_payload})
+    write_json(artifact_dir / "drive_summary.json", {"drive_output": drive_output, "stop": stop_payload, "planner_route": route_metadata})
     write_json(artifact_dir / "approach_metrics.json", approach_metrics)
     write_json(artifact_dir / "target_results.json", target_results)
     write_json(artifact_dir / "mission_verdict.json", verdict)

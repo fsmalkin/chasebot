@@ -797,8 +797,12 @@ architectural ownership rather than parameter fit.
      `scripts/fetch_planner_handoff_gate.py` is the first planner-handoff
      evidence surface; it can replay
      `ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json`, and
-     dashboard planner-gated random runs skip local fetch unless the route is
-     `fetch_ready_local`
+     dashboard planner-gated random runs now dispatch v0 forward-only proof
+     routes for `fetch_ready_local` and `nav2_reposition_first`; safe no-go is
+     recorded as an executed route, while scan and recovery routes remain
+     classified placeholders until their executors are wired
+   - current moonshot branch:
+     `spike/fetch-arch-planner-routed-forward-only-moonshot-20260602`
    - keep deterministic guards authoritative over command bounds, target
      freshness, ball drift, retry budget, safe stop, `/odom`, and frozen
      contracts

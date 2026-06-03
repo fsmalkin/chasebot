@@ -86,11 +86,12 @@ remains the promotion condition and no planner output can command `/cmd_vel`.
 
 Current integration boundary, June 2, 2026: the planner is integrated for route
 classification, deterministic replay, LLM-shadow comparison, rationale capture,
-and dashboard artifact recording. Executable route ownership is still pending
-for `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`, and
-`ambiguous_or_unsafe_no_go`. A scene that needs reposition can be classified
-correctly while the dashboard/direct runner records the route artifact and stops
-before live route execution.
+dashboard artifact recording, and a v0 executable route contract. The dashboard
+now treats `fetch_ready_local` and `nav2_reposition_first` as runnable forward-only
+proof routes with route metadata and a pre-contact forward-motion guard.
+`ambiguous_or_unsafe_no_go` is an executed safe-stop/no-go route. The scan and
+recovery labels remain classified placeholders until their perception-refresh
+and bounded re-aim executors are wired.
 
 The opposite-side fetch probe turns that boundary into a control requirement.
 Local fetch should enter contact from a forward-driving setup. Reverse pre-stage
@@ -102,9 +103,11 @@ deterministic local controllers.
 
 The next architecture experiment should therefore be wide and disposable:
 `spike/fetch-arch-planner-routed-forward-only-moonshot-20260602`. That branch
-should wire each route label to a runnable executor or explicit no-go outcome,
-generate mixed random scenes across the route classes, and package videos where
-the operator can see the planner route and the actual robot path.
+should convert the v0 forward-proof route into real executor ownership:
+Nav2 reposition plus local fetch for `nav2_reposition_first`, perception refresh
+for `scan_or_perceive_first`, one bounded deterministic re-aim for
+`recovery_or_reaim`, and browser-watchable videos where the operator can see the
+planner route and the actual robot path.
 
 The latest proven Nav2 lane is therefore evidence, not the final architecture:
 

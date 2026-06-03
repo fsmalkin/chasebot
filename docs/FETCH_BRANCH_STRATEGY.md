@@ -197,6 +197,25 @@ Promotion remains blocked until corrected `zero`/`left05`/`right05` one-run,
 saved-layout `3/3`, seeded `6 x 1`, and a healthy browser-watchable visual UAT
 package are green.
 
+Planner-routed moonshot update, June 2:
+
+- branch:
+  `spike/fetch-arch-planner-routed-forward-only-moonshot-20260602`
+- purpose:
+  test the full-stack route contract before another narrow controller fix
+- v0 executable lanes:
+  `fetch_ready_local` and `nav2_reposition_first` dispatch the forward-only golf
+  delivery runner with route metadata and a pre-contact forward-motion guard;
+  `ambiguous_or_unsafe_no_go` records an executed safe no-go
+- pending executor lanes:
+  `scan_or_perceive_first` still needs a perception-refresh executor, and
+  `recovery_or_reaim` still needs one bounded deterministic re-aim routine
+- next branch decision:
+  keep this branch disposable until operator-visible video shows the planner
+  route, actual robot path, ball trajectory, and route outcome clearly. After a
+  green v0 video, swap the reposition proof runner for real Nav2 reposition plus
+  local fetch.
+
 Saved-anchor requalification update, later June 1:
 
 - planner gate:

@@ -46,6 +46,18 @@ ROUTE_LABELS = (
     ROUTE_RECOVERY_OR_REAIM,
     ROUTE_NO_GO,
 )
+ROUTE_EXECUTOR_LOCAL_FETCH = "local_fetch_to_pose"
+ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH = "nav2_forward_reposition_then_fetch"
+ROUTE_EXECUTOR_SCAN = "scan_or_perception_refresh"
+ROUTE_EXECUTOR_RECOVERY = "bounded_recovery_reaim"
+ROUTE_EXECUTOR_NO_GO = "safe_no_go"
+ROUTE_EXECUTORS = {
+    ROUTE_FETCH_READY: ROUTE_EXECUTOR_LOCAL_FETCH,
+    ROUTE_NAV2_REPOSITION: ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
+    ROUTE_SCAN_OR_PERCEIVE: ROUTE_EXECUTOR_SCAN,
+    ROUTE_RECOVERY_OR_REAIM: ROUTE_EXECUTOR_RECOVERY,
+    ROUTE_NO_GO: ROUTE_EXECUTOR_NO_GO,
+}
 FETCH_TARGET_POSE = {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.30}
 PLANNER_GATE_KIND = "fetch_planner_handoff_gate"
 PLANNER_MIXED_PROFILE = "planner_mixed_v1"
@@ -374,10 +386,15 @@ def deterministic_route_label(scene: dict[str, Any]) -> str:
     return ROUTE_NAV2_REPOSITION
 
 
+def executor_for_route(route_label: str) -> str:
+    return str(ROUTE_EXECUTORS.get(str(route_label or "").strip(), "unsupported_route"))
+
+
 def planner_prompt(scene: dict[str, Any]) -> str:
     return (
         "Classify this robot fetch scene before any local fetch execution.\n"
-        "Return exactly one route label. Only fetch_ready_local may dispatch local fetch_to_pose.\n"
+        "Return exactly one route label. fetch_ready_local may dispatch local fetch_to_pose immediately; "
+        "nav2_reposition_first must route through a bounded reposition executor first.\n"
         f"Allowed labels: {json.dumps(list(ROUTE_LABELS))}\n\n"
         f"Scene descriptor:\n{json.dumps(scene, indent=2, sort_keys=True)}"
     )
@@ -503,12 +520,15 @@ def decide_scene(
     fetch_dispatch = route_label == ROUTE_FETCH_READY
     correct = bool(route_label == expected_route)
     wrong_fetch_dispatch = bool(fetch_dispatch and expected_route != ROUTE_FETCH_READY)
+    route_executor = executor_for_route(route_label)
     return {
         "scene_id": str(scene.get("scene_id", "") or ""),
         "planner_mode": planner_mode,
         "planner_mode_effective": planner_mode_effective,
         "expected_route_label": expected_route,
         "route_label": route_label,
+        "route_executor": route_executor,
+        "route_executable": bool(route_executor != "unsupported_route"),
         "guard_route_label": guard_route,
         "guard_agrees": bool(route_label == guard_route),
         "correct": correct,
@@ -530,19 +550,32 @@ def write_fetch_ready_layout_from_scene(
     scene: dict[str, Any],
     *,
     scenario_id: str = "golf_ball_circle_delivery_uat",
+    route_label: str = "",
+    route_executor: str = "",
 ) -> None:
     ball_pose = scene.get("ball_pose") if isinstance(scene.get("ball_pose"), dict) else {}
+    clean_route_label = str(route_label or scene.get("expected_route_label", "") or ROUTE_FETCH_READY).strip()
+    clean_route_executor = str(route_executor or executor_for_route(clean_route_label)).strip()
+    layout_family = (
+        "planner_gated_fetch_ready"
+        if clean_route_label == ROUTE_FETCH_READY
+        else f"planner_gated_{clean_route_label}"
+    )
     write_json(
         path,
         {
             "generated_utc": utc_now(),
             "scenario_id": scenario_id,
-            "layout_family": "planner_gated_fetch_ready",
+            "layout_family": layout_family,
             "random_profile": PLANNER_MIXED_PROFILE,
+            "planner_route_label": clean_route_label,
+            "route_executor": clean_route_executor,
             "planner_scene": scene,
             "random_draw": {
                 "random_profile": PLANNER_MIXED_PROFILE,
                 "seed": scene.get("seed", ""),
+                "planner_route_label": clean_route_label,
+                "route_executor": clean_route_executor,
                 "target_pose": scene.get("target_pose", {}),
                 "ball_pose": scene.get("ball_pose", {}),
                 "robot_pose": scene.get("robot_pose", {}),
