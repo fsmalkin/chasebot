@@ -63,6 +63,22 @@ for an angled `-23deg` corridor. Treat this as route-execution UAT evidence.
 Promotion still waits for canonical saved-layout and seeded-random gates after
 real Nav2 reposition and the remaining scan/recovery route owners are wired.
 
+Later June 3 route-owner update: `recovery_or_reaim` now dispatches the same
+bounded forward-only proof executor with a contact-ready re-aim gate, while
+`scan_or_perceive_first` records an executed planner-owned refresh/abstain
+outcome. Post-change live UAT passed the same frozen recovery scene
+(`20260603T014849625586Z`, closest `0.197571m`), a Nav2-reposition scene
+(`20260603T015429081277Z`, closest `0.194266m`), and a fetch-ready local scene
+(`20260603T015619379922Z`, closest `0.197331m`). Nav2-reposition and
+fetch-ready local were clean at first contact. Recovery delivered with improved
+trajectory angle and a remaining first-contact lateral/yaw watch, so the next
+route-owner work is planner-owned setup/reposition before recovery fetch rather
+than another narrow terminal-distance tweak. Mobile visual packages:
+`artifacts/session/uat_contact_ready_patch_recovery_scene01_20260603/fetch_visual_uat_package/scorecard.md`,
+`artifacts/session/uat_contact_ready_patch_nav2_scene02_20260603/fetch_visual_uat_package/scorecard.md`,
+and
+`artifacts/session/uat_contact_ready_patch_fetch_scene09_20260603/fetch_visual_uat_package/scorecard.md`.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence
@@ -200,10 +216,11 @@ Clip-review reframe, later June 1:
    - `nav2_reposition_first` dispatches the same forward-only proof runner as
      v0 executable evidence, then graduates to real Nav2 reposition plus local
      fetch
-   - `scan_or_perceive_first` records a planner classification placeholder
-     until the scan/perception refresh executor exists
-   - `recovery_or_reaim` records a planner classification placeholder until one
-     bounded recovery/re-aim routine exists
+   - `scan_or_perceive_first` records an executed planner-owned
+     scan/perception-refresh abstention until a live refresh executor exists
+   - `recovery_or_reaim` dispatches the bounded forward-only re-aim proof
+     executor and reports contact-quality watches separately from delivery
+     success
    - `ambiguous_or_unsafe_no_go` records an executed safe no-go outcome with
      rationale
 5. Run local fetch evidence only for planner-approved `fetch_ready_local` scenes

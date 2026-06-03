@@ -200,6 +200,9 @@ def line_servo_command(
     max_angular_z_rps: float = 0.18,
     yaw_gain: float = 1.20,
     contact_standoff_m: float = 0.11,
+    setup_standoff_m: float = 0.20,
+    contact_lateral_ready_m: float = 0.035,
+    contact_yaw_ready_rad: float = 0.10,
 ) -> dict[str, Any]:
     robot_x = float(robot_pose.get("x", 0.0) or 0.0)
     robot_y = float(robot_pose.get("y", 0.0) or 0.0)
@@ -209,8 +212,17 @@ def line_servo_command(
     line_yaw = math.atan2(float(target_y) - ball_y, float(target_x) - ball_x)
     behind_x = ball_x - math.cos(line_yaw) * float(contact_standoff_m)
     behind_y = ball_y - math.sin(line_yaw) * float(contact_standoff_m)
+    setup_x = ball_x - math.cos(line_yaw) * max(float(setup_standoff_m), float(contact_standoff_m))
+    setup_y = ball_y - math.sin(line_yaw) * max(float(setup_standoff_m), float(contact_standoff_m))
     distance_to_contact = math.hypot(behind_x - robot_x, behind_y - robot_y)
+    distance_to_setup = math.hypot(setup_x - robot_x, setup_y - robot_y)
     aim_yaw = math.atan2(behind_y - robot_y, behind_x - robot_x)
+    setup_yaw = math.atan2(setup_y - robot_y, setup_x - robot_x)
+    robot_lateral_error = signed_lateral_error_m(robot_x, robot_y, origin_x=ball_x, origin_y=ball_y, line_yaw_rad=line_yaw)
+    line_yaw_error = normalize_angle_rad(line_yaw - robot_yaw)
+    lateral_reaim = clamp(float(robot_lateral_error) * 3.5, -0.45, 0.45)
+    lateral_corrected_yaw = normalize_angle_rad(line_yaw - lateral_reaim)
+    contact_ready = abs(robot_lateral_error) <= float(contact_lateral_ready_m) and abs(line_yaw_error) <= float(contact_yaw_ready_rad)
     ball_motion_m = 0.0
     if ball_start_pose is not None:
         ball_motion_m = math.hypot(
@@ -222,10 +234,18 @@ def line_servo_command(
         phase = "push_coast"
         desired_yaw = line_yaw
         base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps))
+    elif not contact_ready:
+        phase = "setup_converge" if distance_to_contact > 0.18 else "setup_reaim"
+        desired_yaw = setup_yaw if distance_to_contact > 0.20 else lateral_corrected_yaw
+        base_linear = min(float(max_linear_x_mps), 0.055)
+        if abs(robot_lateral_error) > 0.07 or abs(line_yaw_error) > 0.18:
+            base_linear = min(base_linear, 0.035)
+        if distance_to_contact < 0.09:
+            base_linear = min(base_linear, 0.025)
     elif distance_to_contact > 0.16:
         phase = "setup_converge"
-        desired_yaw = aim_yaw
-        base_linear = float(max_linear_x_mps)
+        desired_yaw = setup_yaw
+        base_linear = min(float(max_linear_x_mps), 0.075)
     else:
         phase = "first_contact_align"
         desired_yaw = line_yaw
@@ -244,11 +264,17 @@ def line_servo_command(
         "desired_yaw_rad": round(float(desired_yaw), 6),
         "line_yaw_rad": round(float(line_yaw), 6),
         "aim_yaw_rad": round(float(aim_yaw), 6),
+        "setup_yaw_rad": round(float(setup_yaw), 6),
         "yaw_error_rad": round(float(yaw_error), 6),
+        "line_yaw_error_rad": round(float(line_yaw_error), 6),
+        "robot_lateral_error_m": round(float(robot_lateral_error), 6),
+        "contact_ready": contact_ready,
         "distance_to_contact_m": round(float(distance_to_contact), 6),
+        "distance_to_setup_m": round(float(distance_to_setup), 6),
         "ball_motion_m": round(float(ball_motion_m), 6),
         "ball_moved": ball_moved,
         "contact_standoff_m": round(float(contact_standoff_m), 6),
+        "setup_standoff_m": round(float(max(float(setup_standoff_m), float(contact_standoff_m))), 6),
     }
 
 

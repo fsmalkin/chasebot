@@ -170,6 +170,44 @@ def test_line_servo_command_slows_after_ball_motion():
     assert command["linear_x_mps"] <= 0.055
 
 
+def test_line_servo_command_reaims_close_offset_contact_before_push():
+    command = line_servo_command(
+        robot_pose={"x": 0.199536, "y": -0.083082, "yaw": 0.068093},
+        ball_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+    )
+
+    assert command["phase"] == "setup_reaim"
+    assert command["contact_ready"] is False
+    assert command["linear_x_mps"] <= 0.035
+    assert command["angular_z_rps"] < 0.0
+    assert command["robot_lateral_error_m"] > 0.07
+
+
+def test_line_servo_command_allows_first_contact_when_geometry_ready():
+    command = line_servo_command(
+        robot_pose={"x": 0.270, "y": -0.156, "yaw": 0.2245},
+        ball_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.375666, "y": -0.131166, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        max_angular_z_rps=0.18,
+        yaw_gain=1.20,
+    )
+
+    assert command["phase"] == "first_contact_align"
+    assert command["contact_ready"] is True
+    assert command["linear_x_mps"] >= 0.055
+
+
 def test_contact_trace_metrics_accept_stable_axial_approach():
     samples = [
         {

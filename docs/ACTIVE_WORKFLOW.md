@@ -963,20 +963,32 @@ Live gates:
      `python scripts/fetch_planner_handoff_gate.py --campaign-id <id> --scene-descriptor-json ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json --dry-run --planner-mode llm_shadow`
    - dashboard mixed-scene CTA uses `planner_gated_random: true`; the v0
      executable path dispatches forward-only proof runs for `fetch_ready_local`
-     and `nav2_reposition_first`, records executed safe no-go for
-     `ambiguous_or_unsafe_no_go`, and records classified placeholders for
-     `scan_or_perceive_first` and `recovery_or_reaim`
+     `nav2_reposition_first`, and `recovery_or_reaim`, records executed safe
+     no-go for `ambiguous_or_unsafe_no_go`, and records executed planner-owned
+     scan/perception refresh abstention for `scan_or_perceive_first`
    - integration boundary: deterministic and `llm_shadow` route classification
      are integrated; `fetch_ready_local` and `nav2_reposition_first` currently
      use the stage-aware `line_servo` proof executor as route-execution UAT.
+     `recovery_or_reaim` uses the same executor with a contact-ready re-aim
+     gate and reports first-contact quality watches separately from delivery.
      The next moonshot step swaps that v0 executor for real Nav2 reposition
-     plus local fetch, then wires perception refresh and bounded re-aim.
+     plus local fetch, then wires live perception refresh and planner-owned
+     setup before recovery fetch.
    - June 3 route-execution evidence:
      `live_planner_routed_line_servo_wide_batch_seed_scan_20260603` passed
      `12/12` planner decisions with no wrong fetch dispatches. Green mobile UAT
      packages cover generated direct local fetch (`scene09`), a hard
      `nav2_reposition_first` start at `1.24m` robot-ball separation (`scene04`),
      and an angled `-23deg` Nav2-reposition corridor (`scene05`).
+   - later June 3 contact-ready patch evidence:
+     frozen recovery scene01, Nav2 scene02, and fetch-ready scene09 passed live
+     after the recovery route became executable. Nav2 scene02 and fetch-ready
+     scene09 were clean at first contact; recovery scene01 delivered with a
+     remaining first-contact lateral/yaw watch. Packages:
+     `artifacts/session/uat_contact_ready_patch_recovery_scene01_20260603/fetch_visual_uat_package/scorecard.md`,
+     `artifacts/session/uat_contact_ready_patch_nav2_scene02_20260603/fetch_visual_uat_package/scorecard.md`,
+     and
+     `artifacts/session/uat_contact_ready_patch_fetch_scene09_20260603/fetch_visual_uat_package/scorecard.md`.
    - forward-only fetch rule: a planner-gated UAT run that reaches local fetch
      should show no negative pre-contact `linear_x`; any needed backing or
      side-selection should be handled as planner-owned reposition/setup before

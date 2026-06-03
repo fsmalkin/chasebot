@@ -725,6 +725,15 @@ proof executor with real Nav2 reposition plus local fetch, wire scan/perception
 refresh and bounded recovery/re-aim, then rerun the saved-layout and seeded
 random gates with sequence-based visual review.
 
+Later June 3 moonshot progress: `recovery_or_reaim` is now executable through
+the bounded forward-only proof executor with a contact-ready re-aim gate, and
+`scan_or_perceive_first` records an executed planner-owned refresh/abstain
+route. Frozen post-change live checks passed recovery scene01, Nav2 scene02,
+and fetch-ready scene09. Nav2 and fetch-ready were clean at first contact;
+recovery delivered inside the contract with a remaining contact-quality watch.
+The next roadmap step is a planner-owned setup/reposition owner before recovery
+fetch so recovery clips look as clean as the direct and Nav2-positioned clips.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
@@ -810,9 +819,10 @@ random gates with sequence-based visual review.
      evidence surface; it can replay
      `ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json`, and
      dashboard planner-gated random runs now dispatch v0 forward-only proof
-     routes for `fetch_ready_local` and `nav2_reposition_first`; safe no-go is
-     recorded as an executed route, while scan and recovery routes remain
-     classified placeholders until their executors are wired
+     routes for `fetch_ready_local`, `nav2_reposition_first`, and
+     `recovery_or_reaim`; safe no-go is recorded as an executed route, and
+     scan/perception refresh is recorded as an executed abstention until a live
+     refresh executor exists
    - current moonshot branch:
      `spike/fetch-arch-planner-routed-forward-only-moonshot-20260602`
    - keep deterministic guards authoritative over command bounds, target
