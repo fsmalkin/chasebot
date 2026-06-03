@@ -43,7 +43,6 @@ CONTACT_WATCH_FLAGS = {
 FIRST_CONTACT_BLOCKER_FLAGS = {
     "missing_first_contact",
     "first_contact_ball_lateral_error",
-    "first_contact_trajectory_angle_error",
 }
 
 
