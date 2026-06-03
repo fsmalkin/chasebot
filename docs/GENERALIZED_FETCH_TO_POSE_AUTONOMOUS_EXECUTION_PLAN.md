@@ -131,6 +131,20 @@ planner-owned non-fetch routes also executed correctly:
 Treat this as mobile visual UAT for route ownership and video review. Promotion
 still waits for canonical saved-layout and seeded-random gates.
 
+Random planner-routed mini-batch, later June 3: the generated planner gate
+passed `15/15` with zero wrong fetch dispatches and route spread across all
+five labels:
+`artifacts/session/live_random_planner_routed_gate_seed20260607_15case_20260603/fetch_planner_handoff_gate/gate_summary.json`.
+Three executable route replays passed with sequence-based visual review:
+`fetch_ready_local` (`20260603T110734954675Z`, closest `0.197448m`),
+`nav2_reposition_first` (`20260603T111354017138Z`, closest `0.195932m`), and
+`recovery_or_reaim` (`20260603T111751279374Z`, closest `0.247356m`). The
+browser-watchable package is
+`artifacts/session/uat_random_planner_routes_seed20260607_exec3_20260603/fetch_visual_uat_package/scorecard.md`.
+This is the first randomized route-owner visual UAT slice on the moonshot
+branch. The remaining contact-quality watch is pre-contact lateral/yaw error;
+first-contact flags were clean in the three executable random runs.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence
@@ -146,6 +160,10 @@ present. `fetch_visual_uat_package.py` may accept an explicit same-session
 keyframe recovery confirmation when continuous visual summaries are incomplete,
 and the package records
 `visual_confirmation_keyframe_recovery` so the evidence stays labeled.
+The package builder also recovers browser-safe onboard, top-down, and
+world-stream videos from saved keyframes or world frames when recorder MP4s are
+missing, empty, or invalid; recovered clips are listed in the scorecard under
+`Video Recovery`.
 
 June 1, 2026 provenance reset: direct `fetch_to_pose` evidence also needs
 `model_provenance_valid=true`, target model `calibrated_golf_ball`, target

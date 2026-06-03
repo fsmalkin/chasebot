@@ -225,9 +225,23 @@ Planner-routed moonshot update, June 2:
   `scan_or_perceive_first` and `ambiguous_or_unsafe_no_go` selected the correct
   planner-owned non-fetch actions. Combined package:
   `artifacts/session/uat_broad_frozen_planner_routes_20260603/fetch_visual_uat_package/scorecard.md`
+- randomized route-owner evidence:
+  generated planner handoff passed `15/15` with zero wrong fetch dispatches:
+  `artifacts/session/live_random_planner_routed_gate_seed20260607_15case_20260603/fetch_planner_handoff_gate/gate_summary.json`.
+  Executable route UAT passed for `fetch_ready_local`
+  (`20260603T110734954675Z`, closest `0.197448m`),
+  `nav2_reposition_first` (`20260603T111354017138Z`, closest `0.195932m`),
+  and `recovery_or_reaim` (`20260603T111751279374Z`, closest `0.247356m`).
+  Combined package:
+  `artifacts/session/uat_random_planner_routes_seed20260607_exec3_20260603/fetch_visual_uat_package/scorecard.md`
+- video recovery:
+  `fetch_visual_uat_package.py` now rebuilds browser-safe onboard, top-down, and
+  world-stream clips from saved frame sequences when recorder MP4s are missing,
+  empty, or invalid. Scorecards list those recoveries explicitly.
 - next branch decision:
-  keep this branch disposable while expanding from frozen scenes to randomized
-  planner-routed coverage. The next patch should target contact-quality polish
+  keep this branch disposable while expanding from a three-executable-route
+  random mini-batch to wider randomized route-owner coverage. The next patch
+  should target contact-quality polish
   only when the sequence review shows repeated first-contact or terminal-delivery
   watches across route classes; live perception refresh can remain a classified
   planner action until random coverage exposes a real scan/refresh execution

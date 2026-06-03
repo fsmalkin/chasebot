@@ -221,6 +221,73 @@ def test_visual_uat_package_scorecard_labels_multiple_planner_routes(tmp_path, m
     assert "[summary](/artifacts/session/session_b/mission_verdict.json)" in text
 
 
+def test_visual_uat_package_recovers_browser_videos_from_keyframes(tmp_path, monkeypatch):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(package, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+
+    visual = session_root / "session_a" / "visual"
+    keyframes = visual / "keyframes"
+    world_frames = visual / "world_stream_frames"
+    keyframes.mkdir(parents=True)
+    world_frames.mkdir(parents=True)
+    for index in range(package.KEYFRAME_RECOVERY_MIN_FRAMES):
+        (keyframes / f"{index:06d}_raw.png").write_bytes(b"raw")
+        (keyframes / f"{index:06d}_topdown.png").write_bytes(b"topdown")
+        (world_frames / f"{index + 1:06d}.jpg").write_bytes(b"world")
+
+    def fake_probe(path: Path) -> dict:
+        playable = path.is_file() and path.stat().st_size >= package.VIDEO_MIN_BYTES
+        return {
+            "size_bytes": path.stat().st_size if path.is_file() else 0,
+            "ffprobe_valid": playable,
+            "browser_playable": playable,
+            "codec_name": "h264" if playable else "",
+            "pix_fmt": "yuv420p" if playable else "",
+            "duration_s": 1.0 if playable else 0.0,
+            "validation_error": "" if playable else "video_missing_or_tiny",
+        }
+
+    def fake_run(command, capture_output, text, timeout, check):
+        Path(command[-1]).write_bytes(b"v" * package.VIDEO_MIN_BYTES)
+        return type("Completed", (), {"returncode": 0, "stderr": "", "stdout": ""})()
+
+    monkeypatch.setattr(package, "inspect_video_file", fake_probe)
+    monkeypatch.setattr(package.subprocess, "run", fake_run)
+
+    args = type(
+        "Args",
+        (),
+        {
+            "campaign_id": "uat",
+            "planner_summary": [],
+            "seeded_evidence_summary": [],
+            "stage_quality_summary": [],
+            "mission_summary": [],
+            "visual_dir": [str(visual)],
+        },
+    )()
+
+    summary = package.build_summary(args)
+
+    assert {item["output_name"] for item in summary["video_recovery"]} == {
+        "raw_camera_browser.mp4",
+        "topdown_telemetry_browser.mp4",
+        "world_stream.mp4",
+    }
+    assert all(item["ok"] for item in summary["video_recovery"])
+    assert {video["name"] for video in summary["videos"]} == {
+        "raw_camera_browser.mp4",
+        "topdown_telemetry_browser.mp4",
+        "world_stream.mp4",
+    }
+    scorecard = tmp_path / "scorecard.md"
+    package.write_scorecard(scorecard, summary)
+    text = scorecard.read_text(encoding="utf-8")
+    assert "## Video Recovery" in text
+    assert "source=`raw_keyframes` ok=`True`" in text
+
+
 def test_visual_uat_package_accepts_keyframe_recovery_confirmation(tmp_path, monkeypatch):
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)

@@ -43,6 +43,26 @@ BROWSER_COMPATIBLE_VIDEO_NAMES = frozenset(
     }
 )
 KEYFRAME_RECOVERY_MIN_FRAMES = 3
+KEYFRAME_VIDEO_RECOVERY_SPECS = (
+    {
+        "output_name": "raw_camera_browser.mp4",
+        "frame_dir": "keyframes",
+        "frame_glob": "*_raw.png",
+        "source": "raw_keyframes",
+    },
+    {
+        "output_name": "topdown_telemetry_browser.mp4",
+        "frame_dir": "keyframes",
+        "frame_glob": "*_topdown.png",
+        "source": "topdown_keyframes",
+    },
+    {
+        "output_name": "world_stream.mp4",
+        "frame_dir": "world_stream_frames",
+        "frame_glob": "*.jpg",
+        "source": "world_stream_frames",
+    },
+)
 
 
 def utc_now() -> str:
@@ -168,6 +188,117 @@ def inspect_video_file(path: Path) -> dict[str, Any]:
     elif not result["browser_playable"]:
         result["validation_error"] = f"not_browser_h264_yuv420p:codec={codec}:pix_fmt={pix_fmt}"
     return result
+
+
+def _write_ffconcat(frames: list[Path], list_path: Path, *, frame_duration_s: float = 0.2) -> None:
+    lines = ["ffconcat version 1.0"]
+    for frame in frames:
+        safe_path = frame.resolve().as_posix().replace("'", "'\\''")
+        lines.append(f"file '{safe_path}'")
+        lines.append(f"duration {frame_duration_s:.6f}")
+    if frames:
+        safe_path = frames[-1].resolve().as_posix().replace("'", "'\\''")
+        lines.append(f"file '{safe_path}'")
+    list_path.write_text("\n".join(lines) + "\n", encoding="ascii")
+
+
+def _transcode_frame_sequence(
+    *,
+    frames: list[Path],
+    output_path: Path,
+    color_range_fix: bool,
+) -> tuple[bool, str]:
+    concat_path = output_path.with_suffix(f"{output_path.suffix}.ffconcat")
+    _write_ffconcat(frames, concat_path)
+    command = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(concat_path),
+    ]
+    if color_range_fix:
+        command.extend(["-vf", "scale=in_range=pc:out_range=tv,format=yuv420p"])
+    command.extend(
+        [
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-color_range",
+            "tv",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+    )
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=120, check=False)
+    except FileNotFoundError:
+        return False, "ffmpeg_not_found"
+    except subprocess.TimeoutExpired:
+        return False, "ffmpeg_timeout"
+    finally:
+        try:
+            concat_path.unlink()
+        except FileNotFoundError:
+            pass
+    if completed.returncode != 0:
+        return False, compact_validation_error(completed.stderr or completed.stdout or f"ffmpeg_exit_{completed.returncode}")
+    probe = inspect_video_file(output_path)
+    if not probe.get("browser_playable", False):
+        return False, str(probe.get("validation_error", "") or "browser_video_validation_failed")
+    return True, ""
+
+
+def recover_browser_videos(visual_dir: Path) -> list[dict[str, Any]]:
+    """Recover browser-watchable videos from saved keyframes when recorders fail."""
+    results: list[dict[str, Any]] = []
+    if not visual_dir.is_dir():
+        return results
+    for spec in KEYFRAME_VIDEO_RECOVERY_SPECS:
+        output_name = str(spec["output_name"])
+        output_path = visual_dir / output_name
+        current_probe = inspect_video_file(output_path)
+        if current_probe.get("browser_playable", False):
+            continue
+        frame_dir = visual_dir / str(spec["frame_dir"])
+        frames = sorted(frame_dir.glob(str(spec["frame_glob"]))) if frame_dir.is_dir() else []
+        result = {
+            "output_name": output_name,
+            "path": artifact_display_path(output_path),
+            "source": str(spec["source"]),
+            "attempted": False,
+            "ok": False,
+            "frame_count": len(frames),
+            "previous_validation_error": str(current_probe.get("validation_error", "") or ""),
+            "error": "",
+        }
+        if len(frames) < KEYFRAME_RECOVERY_MIN_FRAMES:
+            result["error"] = "insufficient_frames"
+            results.append(result)
+            continue
+        result["attempted"] = True
+        ok, error = _transcode_frame_sequence(
+            frames=frames,
+            output_path=output_path,
+            color_range_fix=output_name == "world_stream.mp4",
+        )
+        result["ok"] = bool(ok)
+        result["error"] = error
+        results.append(result)
+    return results
 
 
 def finite_float(value: Any) -> float | None:
@@ -609,6 +740,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     missions = [summarize_mission(resolve_path(path)) for path in args.mission_summary]
     missions = [item for item in missions if item]
     visual_dirs = [resolve_path(path) for path in args.visual_dir]
+    video_recovery = [item for path in visual_dirs for item in recover_browser_videos(path)]
     visual_summaries = [summarize_visual_dir(path) for path in visual_dirs if path.is_dir()]
     videos = discover_videos(visual_dirs)
     visual_by_session = {
@@ -716,6 +848,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "planner_gates": planner_gates,
         "seeded_evidence": seeded_evidence,
         "stage_quality_audits": stage_quality_audits,
+        "video_recovery": video_recovery,
         "missions": missions,
         "visual_summaries": visual_summaries,
         "videos": videos,
@@ -785,6 +918,18 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 lines.append(f"- `{name}` validation=`{validation}`")
             else:
                 lines.append(f"- `{name}`")
+    else:
+        lines.append("- none")
+    recovery_rows = summary.get("video_recovery", []) if isinstance(summary.get("video_recovery"), list) else []
+    lines.extend(["", "## Video Recovery"])
+    if recovery_rows:
+        for item in recovery_rows:
+            lines.append(
+                f"- `{item.get('output_name', '')}` source=`{item.get('source', '')}` "
+                f"ok=`{item.get('ok', False)}` frames=`{item.get('frame_count', 0)}` "
+                f"previous=`{item.get('previous_validation_error', '')}` "
+                f"error=`{item.get('error', '')}`"
+            )
     else:
         lines.append("- none")
     lines.extend(["", "## Planner Gates"])
