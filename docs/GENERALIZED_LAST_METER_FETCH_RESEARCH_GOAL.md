@@ -664,9 +664,15 @@ keeps contact quality at `watch`, first-contact blockers at `0`, and promotion
 evidence at `false`.
 
 Research interpretation: route ownership now has supporting evidence across
-bounded local-random executable cases. The clearest remaining gap is recovery
-first-contact smoothness; Nav2 reposition is now the strongest setup owner in
-the roughest selector because its first-contact flags stayed clean.
+bounded local-random executable cases. The first June 3 roughest selector exposed
+recovery and fetch-ready first-contact smoothness as the immediate control gaps;
+final-reaim repairs then cleared first-contact flags across the roughest
+executable trio for seed `20260613`. A second planner seed, `20260614`, routed
+`15/15` correctly and passed the roughest executable trio with no first-contact
+flags:
+`artifacts/session/route_uat_contact_final_reaim_seed20260614_roughest_trio_20260603/fetch_planner_route_uat_analyzer/scorecard.md`.
+Treat this as breadth-oriented visual UAT with `promotion_evidence=false`;
+canonical saved layouts and seeded-random gates remain the milestone proof.
 
 May 29, 2026 model-planning refinement: V-JEPA-style world models are relevant
 as an architectural pattern for scoring candidate actions against predicted

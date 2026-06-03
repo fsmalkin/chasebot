@@ -638,8 +638,18 @@ kept route-owner visual UAT green with `3/3` delivery and
 `promotion_evidence=false`. All three executable roughest routes cleared
 first-contact flags, with closest approach `0.192788m..0.197427m`. The remaining
 contact-quality `watch` classification comes from pre-contact lateral/yaw setup
-history in the rough selected cases. Make the next policy step a second planner
-seed before any promotion-gate discussion.
+history in the rough selected cases.
+
+Second-seed breadth evidence, later June 3: seed `20260614` routed `15/15`
+planner cases correctly with zero wrong fetch dispatches:
+`artifacts/session/dev_route_quality_gate_seed20260614_20260603/fetch_planner_handoff_gate/gate_summary.json`.
+The roughest executable analyzer
+`artifacts/session/route_uat_contact_final_reaim_seed20260614_roughest_trio_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+kept route-owner visual UAT green with `3/3` delivery, browser-safe packages,
+and no first-contact flags across recovery, Nav2 reposition, or fetch-ready.
+Closest approach was `0.194274m..0.196471m`. Use this as breadth evidence for
+the planner-routed local-random lane; canonical saved-layout and seeded-random
+promotion gates remain the milestone proof.
 
 Approach-quality evidence must record:
 

@@ -387,6 +387,22 @@ June 3 recovery final-reaim update:
 - Next command: broaden to another planner seed, then compare roughest-selector
   evidence against the canonical saved-layout and seeded-random promotion gates.
 
+June 3 second-seed breadth check:
+
+- Planner gate:
+  `artifacts/session/dev_route_quality_gate_seed20260614_20260603/fetch_planner_handoff_gate/gate_summary.json`
+- Roughest executable analyzer:
+  `artifacts/session/route_uat_contact_final_reaim_seed20260614_roughest_trio_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: seed `20260614` routed `15/15` correctly with zero wrong fetch
+  dispatches. The live roughest executable trio passed `3/3` delivery with
+  browser-safe packages and no first-contact flags across recovery, Nav2
+  reposition, or fetch-ready. Closest approach ranged from `0.194274m` to
+  `0.196471m`.
+- Interpretation: this is breadth-oriented visual UAT, still
+  `promotion_evidence=false`. The next evidence step is canonical saved-layout
+  comparison plus the seeded-random promotion gate, using the roughest-selector
+  artifacts as stress/backlog evidence.
+
 ## UAT Orchestrator Modes
 
 Use `scripts/run_compose_uat.ps1 -UatMode <mode>`:

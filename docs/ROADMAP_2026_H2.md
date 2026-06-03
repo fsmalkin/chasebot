@@ -867,6 +867,17 @@ approach `0.192788m..0.197427m`. Contact quality remains `watch` because the
 selected cases begin with pre-contact lateral/yaw setup debt. The next roadmap
 step is a second planner seed before promotion-gate discussion.
 
+Second-seed breadth evidence, later June 3: seed `20260614` routed `15/15`
+planner cases correctly with zero wrong fetch dispatches:
+`artifacts/session/dev_route_quality_gate_seed20260614_20260603/fetch_planner_handoff_gate/gate_summary.json`.
+The roughest executable analyzer
+`artifacts/session/route_uat_contact_final_reaim_seed20260614_roughest_trio_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+passed `3/3` delivery with browser-safe packages and no first-contact flags
+across recovery, Nav2 reposition, or fetch-ready. Closest approach was
+`0.194274m..0.196471m`. The result strengthens the planner-routed local-random
+case while preserving `promotion_evidence=false`; canonical saved layouts and
+the seeded-random promotion gate remain the milestone evidence.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
