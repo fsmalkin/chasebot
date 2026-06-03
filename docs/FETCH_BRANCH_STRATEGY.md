@@ -203,18 +203,23 @@ Planner-routed moonshot update, June 2:
   `spike/fetch-arch-planner-routed-forward-only-moonshot-20260602`
 - purpose:
   test the full-stack route contract before another narrow controller fix
-- v0 executable lanes:
-  `fetch_ready_local` and `nav2_reposition_first` dispatch the forward-only golf
-  delivery runner with route metadata and a pre-contact forward-motion guard;
-  `ambiguous_or_unsafe_no_go` records an executed safe no-go
-- pending executor lanes:
-  `scan_or_perceive_first` still needs a perception-refresh executor, and
-  `recovery_or_reaim` still needs one bounded deterministic re-aim routine
+- executable lanes:
+  `fetch_ready_local`, `nav2_reposition_first`, and `recovery_or_reaim`
+  dispatch the forward-only golf delivery runner with route metadata and a
+  pre-contact forward-motion guard; `nav2_reposition_first` and
+  `recovery_or_reaim` use real Nav2 setup before local fetch; `ambiguous_or_unsafe_no_go`
+  records an executed safe no-go; `scan_or_perceive_first` records a
+  planner-owned refresh/abstain outcome
+- current recovery evidence:
+  the exact recovery layout that stalled without contact at `0.739814m` closest
+  (`20260603T040615017369Z`) now passes at `0.196169m` closest
+  (`20260603T042159429741Z`) after `recovery_line_acquire` was added. Package:
+  `artifacts/session/uat_recovery_line_acquire_fix_seed20260606_20260603/fetch_visual_uat_package/scorecard.md`
 - next branch decision:
   keep this branch disposable until operator-visible video shows the planner
   route, actual robot path, ball trajectory, and route outcome clearly. After a
-  green v0 video, swap the reposition proof runner for real Nav2 reposition plus
-  local fetch.
+  broad planner-routed rerun, decide whether the next patch belongs in
+  contact-quality polish, live perception refresh, or route-supervisor coverage.
 
 Saved-anchor requalification update, later June 1:
 

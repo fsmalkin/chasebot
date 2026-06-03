@@ -31,6 +31,8 @@ DEFAULT_ZONE_SDF = REPO_ROOT / "ros2_config" / "golf_ball_delivery_zone_marker.s
 DEFAULT_BALL_MODEL_NAME = "visit_mission_target_ball_1"
 DEFAULT_ZONE_MODEL_NAME = "golf_ball_delivery_zone"
 DEFAULT_ROBOT_MODEL_NAME = "jetbot"
+NAV2_REPOSITION_RESULT_MARKER = "NAV2_REPOSITION_RESULT="
+NAV2_REPOSITION_BEHAVIOR_TREE = "/workspaces/chasecar/ros2_config/behavior_trees/navigate_to_pose_w_replanning.xml"
 
 
 def utc_now() -> str:
@@ -60,6 +62,36 @@ def read_json(path: Path) -> dict[str, Any]:
         return {}
 
 
+def transform_point_between_robot_frames(
+    *,
+    point_pose: dict[str, Any],
+    source_robot_pose: dict[str, Any],
+    target_robot_pose: dict[str, Any],
+) -> dict[str, float]:
+    source_x = float(source_robot_pose.get("x", 0.0) or 0.0)
+    source_y = float(source_robot_pose.get("y", 0.0) or 0.0)
+    source_yaw = float(source_robot_pose.get("yaw", 0.0) or 0.0)
+    target_x = float(target_robot_pose.get("x", 0.0) or 0.0)
+    target_y = float(target_robot_pose.get("y", 0.0) or 0.0)
+    target_yaw = float(target_robot_pose.get("yaw", 0.0) or 0.0)
+    point_x = float(point_pose.get("x", 0.0) or 0.0)
+    point_y = float(point_pose.get("y", 0.0) or 0.0)
+    point_yaw = float(point_pose.get("yaw", 0.0) or 0.0)
+    dx = point_x - source_x
+    dy = point_y - source_y
+    cos_source = math.cos(-source_yaw)
+    sin_source = math.sin(-source_yaw)
+    local_x = cos_source * dx - sin_source * dy
+    local_y = sin_source * dx + cos_source * dy
+    cos_target = math.cos(target_yaw)
+    sin_target = math.sin(target_yaw)
+    return {
+        "x": round(target_x + cos_target * local_x - sin_target * local_y, 6),
+        "y": round(target_y + sin_target * local_x + cos_target * local_y, 6),
+        "yaw": round(normalize_angle_rad(target_yaw + normalize_angle_rad(point_yaw - source_yaw)), 6),
+    }
+
+
 def apply_target_layout(args: argparse.Namespace) -> dict[str, Any]:
     raw_path = str(getattr(args, "target_layout_json", "") or "").strip()
     if not raw_path:
@@ -84,6 +116,48 @@ def apply_target_layout(args: argparse.Namespace) -> dict[str, Any]:
         "route_executor": str(layout.get("route_executor", "") or random_draw.get("route_executor", "")),
         "random_draw": random_draw,
         "target": target,
+    }
+
+
+def transform_nav2_reposition_layout_to_current_robot(args: argparse.Namespace, target_layout: dict[str, Any]) -> dict[str, Any]:
+    random_draw = target_layout.get("random_draw") if isinstance(target_layout.get("random_draw"), dict) else {}
+    source_robot_pose = random_draw.get("robot_pose") if isinstance(random_draw.get("robot_pose"), dict) else {}
+    source_ball_pose = random_draw.get("ball_pose") if isinstance(random_draw.get("ball_pose"), dict) else {}
+    source_target_pose = random_draw.get("target_pose") if isinstance(random_draw.get("target_pose"), dict) else {}
+    if not source_robot_pose or not source_ball_pose or not source_target_pose:
+        return {"applied": False, "reason": "missing_planner_random_draw_pose"}
+    target_robot_pose = {
+        "x": float(args.robot_x),
+        "y": float(args.robot_y),
+        "yaw": float(args.robot_yaw),
+    }
+    transformed_ball = transform_point_between_robot_frames(
+        point_pose=source_ball_pose,
+        source_robot_pose=source_robot_pose,
+        target_robot_pose=target_robot_pose,
+    )
+    transformed_target = transform_point_between_robot_frames(
+        point_pose=source_target_pose,
+        source_robot_pose=source_robot_pose,
+        target_robot_pose=target_robot_pose,
+    )
+    args.ball_x = transformed_ball["x"]
+    args.ball_y = transformed_ball["y"]
+    args.zone_x = transformed_target["x"]
+    args.zone_y = transformed_target["y"]
+    return {
+        "applied": True,
+        "reason": "preserve_planner_geometry_without_robot_teleport",
+        "source_robot_pose": source_robot_pose,
+        "source_ball_pose": source_ball_pose,
+        "source_target_pose": source_target_pose,
+        "target_robot_pose": target_robot_pose,
+        "transformed_ball_pose": {**transformed_ball, "z": float(args.ball_z)},
+        "transformed_target_pose": {
+            **transformed_target,
+            "z": float(args.zone_z),
+            "radius_m": float(args.fetch_delivery_radius_m),
+        },
     }
 
 
@@ -186,6 +260,362 @@ def clamp(value: float, lower: float, upper: float) -> float:
     return max(float(lower), min(float(upper), float(value)))
 
 
+def yaw_to_quaternion(yaw_rad: float) -> dict[str, float]:
+    half_yaw = 0.5 * float(yaw_rad)
+    return {
+        "x": 0.0,
+        "y": 0.0,
+        "z": round(math.sin(half_yaw), 6),
+        "w": round(math.cos(half_yaw), 6),
+    }
+
+
+def build_nav2_reposition_setup_pose(
+    *,
+    ball_x: float,
+    ball_y: float,
+    target_x: float,
+    target_y: float,
+    setup_standoff_m: float,
+    frame_id: str = "odom",
+) -> dict[str, Any]:
+    line_yaw = math.atan2(float(target_y) - float(ball_y), float(target_x) - float(ball_x))
+    setup_x = float(ball_x) - math.cos(line_yaw) * float(setup_standoff_m)
+    setup_y = float(ball_y) - math.sin(line_yaw) * float(setup_standoff_m)
+    return {
+        "frame_id": str(frame_id or "odom"),
+        "x": round(float(setup_x), 6),
+        "y": round(float(setup_y), 6),
+        "z": 0.0,
+        "yaw": round(float(line_yaw), 6),
+        "line_yaw_rad": round(float(line_yaw), 6),
+        "setup_standoff_m": round(float(setup_standoff_m), 6),
+        "source": "ball_target_line_setup_pose",
+        "orientation": yaw_to_quaternion(line_yaw),
+    }
+
+
+def dashboard_robot_pose_from_state(state: dict[str, Any]) -> dict[str, float] | None:
+    candidates: list[Any] = []
+    if isinstance(state.get("belief"), dict):
+        candidates.append(state["belief"].get("latest_robot_pose"))
+    if isinstance(state.get("brain"), dict):
+        candidates.append(state["brain"].get("latest_robot_pose"))
+    candidates.append(state.get("latest_robot_pose"))
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        try:
+            return {
+                "x": float(candidate.get("x", 0.0) or 0.0),
+                "y": float(candidate.get("y", 0.0) or 0.0),
+                "yaw": float(candidate.get("yaw", 0.0) or 0.0),
+            }
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def wait_for_dashboard_robot_pose(dashboard_url: str, *, timeout_s: float = 3.0, poll_s: float = 0.2) -> dict[str, Any]:
+    started = time.monotonic()
+    deadline = started + max(float(timeout_s), 0.1)
+    last_state: dict[str, Any] = {}
+    while time.monotonic() < deadline:
+        try:
+            state = dashboard_state(dashboard_url)
+        except Exception as exc:
+            last_state = {"error": str(exc)}
+            time.sleep(max(float(poll_s), 0.05))
+            continue
+        last_state = state if isinstance(state, dict) else {}
+        pose = dashboard_robot_pose_from_state(last_state)
+        if pose is not None:
+            return {
+                "available": True,
+                "pose": pose,
+                "elapsed_s": round(time.monotonic() - started, 6),
+                "source": "dashboard_state.belief.latest_robot_pose",
+            }
+        time.sleep(max(float(poll_s), 0.05))
+    return {
+        "available": False,
+        "pose": None,
+        "elapsed_s": round(time.monotonic() - started, 6),
+        "source": "dashboard_state.belief.latest_robot_pose",
+        "last_state_keys": sorted(last_state.keys()) if isinstance(last_state, dict) else [],
+        "error": str(last_state.get("error", "")) if isinstance(last_state, dict) else "",
+    }
+
+
+def build_nav2_relative_setup_goal(
+    *,
+    world_setup_pose: dict[str, Any],
+    world_robot_pose: dict[str, Any],
+    nav2_robot_pose: dict[str, Any],
+    frame_id: str = "odom",
+) -> dict[str, Any]:
+    world_setup_x = float(world_setup_pose.get("x", 0.0) or 0.0)
+    world_setup_y = float(world_setup_pose.get("y", 0.0) or 0.0)
+    world_setup_yaw = float(world_setup_pose.get("yaw", 0.0) or 0.0)
+    world_robot_x = float(world_robot_pose.get("x", 0.0) or 0.0)
+    world_robot_y = float(world_robot_pose.get("y", 0.0) or 0.0)
+    world_robot_yaw = float(world_robot_pose.get("yaw", 0.0) or 0.0)
+    nav2_robot_x = float(nav2_robot_pose.get("x", 0.0) or 0.0)
+    nav2_robot_y = float(nav2_robot_pose.get("y", 0.0) or 0.0)
+    nav2_robot_yaw = float(nav2_robot_pose.get("yaw", 0.0) or 0.0)
+    goal_yaw = normalize_angle_rad(nav2_robot_yaw + normalize_angle_rad(world_setup_yaw - world_robot_yaw))
+    goal = {
+        **world_setup_pose,
+        "frame_id": str(frame_id or world_setup_pose.get("frame_id") or "odom"),
+        "x": round(nav2_robot_x + (world_setup_x - world_robot_x), 6),
+        "y": round(nav2_robot_y + (world_setup_y - world_robot_y), 6),
+        "yaw": round(goal_yaw, 6),
+        "orientation": yaw_to_quaternion(goal_yaw),
+        "source": "nav2_relative_from_truth_delta",
+        "world_setup_pose": dict(world_setup_pose),
+        "world_robot_pose": dict(world_robot_pose),
+        "nav2_robot_pose": dict(nav2_robot_pose),
+        "frame_delta": {
+            "world_dx_m": round(world_setup_x - world_robot_x, 6),
+            "world_dy_m": round(world_setup_y - world_robot_y, 6),
+            "world_dyaw_rad": round(normalize_angle_rad(world_setup_yaw - world_robot_yaw), 6),
+        },
+    }
+    return goal
+
+
+def _status_text(status_code: Any) -> str:
+    mapping = {
+        0: "STATUS_UNKNOWN",
+        1: "STATUS_ACCEPTED",
+        2: "STATUS_EXECUTING",
+        3: "STATUS_CANCELING",
+        4: "STATUS_SUCCEEDED",
+        5: "STATUS_CANCELED",
+        6: "STATUS_ABORTED",
+    }
+    try:
+        return mapping.get(int(status_code), f"STATUS_{int(status_code)}")
+    except (TypeError, ValueError):
+        return "STATUS_UNKNOWN"
+
+
+def parse_nav2_reposition_result(output: str, *, rc: int) -> dict[str, Any]:
+    for line in reversed(str(output or "").splitlines()):
+        text = line.strip()
+        if not text.startswith(NAV2_REPOSITION_RESULT_MARKER):
+            continue
+        raw = text[len(NAV2_REPOSITION_RESULT_MARKER):].strip()
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            break
+        if isinstance(payload, dict):
+            payload.setdefault("process_returncode", int(rc))
+            payload.setdefault("status_text", _status_text(payload.get("status_code")))
+            return payload
+    return {
+        "phase": "nav2_reposition_before_fetch",
+        "attempted": True,
+        "accepted": False,
+        "success": False,
+        "dispatch_status": "client_error",
+        "status_code": None,
+        "status_text": "STATUS_UNKNOWN",
+        "elapsed_s": 0.0,
+        "error": str(output or "missing_nav2_reposition_result").strip(),
+        "process_returncode": int(rc),
+    }
+
+
+def dispatch_nav2_reposition_before_fetch(
+    *,
+    compose_project: str,
+    goal_pose: dict[str, Any],
+    timeout_s: float,
+    server_wait_s: float,
+) -> dict[str, Any]:
+    payload = {
+        "goal_pose": goal_pose,
+        "behavior_tree": NAV2_REPOSITION_BEHAVIOR_TREE,
+        "timeout_s": max(float(timeout_s), 0.1),
+        "server_wait_s": max(float(server_wait_s), 0.1),
+    }
+    script = f"""
+set -eo pipefail
+set +u
+source /opt/ros/${{CORE_ROS_DISTRO:-kilted}}/setup.bash
+if [ -f /root/ros2_ws/install/setup.bash ]; then source /root/ros2_ws/install/setup.bash; fi
+set -u
+export NAV2_REPOSITION_PAYLOAD={json.dumps(json.dumps(payload, separators=(",", ":")))}
+python3 - <<'PY'
+import json
+import math
+import os
+import time
+
+import rclpy
+from action_msgs.msg import GoalStatus
+from geometry_msgs.msg import PoseStamped
+from nav2_msgs.action import NavigateToPose
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from rclpy.parameter import Parameter
+
+MARKER = "NAV2_REPOSITION_RESULT="
+
+
+def status_text(status_code):
+    return {{
+        int(GoalStatus.STATUS_UNKNOWN): "STATUS_UNKNOWN",
+        int(GoalStatus.STATUS_ACCEPTED): "STATUS_ACCEPTED",
+        int(GoalStatus.STATUS_EXECUTING): "STATUS_EXECUTING",
+        int(GoalStatus.STATUS_CANCELING): "STATUS_CANCELING",
+        int(GoalStatus.STATUS_SUCCEEDED): "STATUS_SUCCEEDED",
+        int(GoalStatus.STATUS_CANCELED): "STATUS_CANCELED",
+        int(GoalStatus.STATUS_ABORTED): "STATUS_ABORTED",
+    }}.get(int(status_code), f"STATUS_{{int(status_code)}}")
+
+
+def yaw_to_quaternion(yaw):
+    half = 0.5 * float(yaw)
+    return 0.0, 0.0, math.sin(half), math.cos(half)
+
+
+def wait_future(node, future, timeout_s):
+    deadline = time.monotonic() + max(float(timeout_s), 0.1)
+    while time.monotonic() < deadline and rclpy.ok():
+        if future.done():
+            return True
+        rclpy.spin_once(node, timeout_sec=0.1)
+    return bool(future.done())
+
+
+def emit(payload):
+    print(MARKER + json.dumps(payload, sort_keys=True), flush=True)
+
+
+payload = json.loads(os.environ["NAV2_REPOSITION_PAYLOAD"])
+goal_pose = payload["goal_pose"]
+started = time.monotonic()
+rclpy.init()
+node = Node("fetch_nav2_reposition_before_fetch_client")
+node.set_parameters([Parameter("use_sim_time", Parameter.Type.BOOL, True)])
+client = ActionClient(node, NavigateToPose, "/navigate_to_pose")
+try:
+    server_ready = bool(client.wait_for_server(timeout_sec=max(float(payload["server_wait_s"]), 0.1)))
+    if not server_ready:
+        emit({{
+            "phase": "nav2_reposition_before_fetch",
+            "attempted": True,
+            "accepted": False,
+            "success": False,
+            "dispatch_status": "server_unavailable",
+            "status_code": int(GoalStatus.STATUS_UNKNOWN),
+            "status_text": status_text(GoalStatus.STATUS_UNKNOWN),
+            "elapsed_s": round(time.monotonic() - started, 6),
+            "error": "nav2_action_server_unavailable",
+        }})
+    else:
+        goal = NavigateToPose.Goal()
+        pose = PoseStamped()
+        pose.header.frame_id = str(goal_pose.get("frame_id") or "odom")
+        pose.header.stamp = node.get_clock().now().to_msg()
+        pose.pose.position.x = float(goal_pose["x"])
+        pose.pose.position.y = float(goal_pose["y"])
+        pose.pose.position.z = float(goal_pose.get("z", 0.0) or 0.0)
+        qx, qy, qz, qw = yaw_to_quaternion(float(goal_pose["yaw"]))
+        pose.pose.orientation.x = qx
+        pose.pose.orientation.y = qy
+        pose.pose.orientation.z = qz
+        pose.pose.orientation.w = qw
+        goal.pose = pose
+        goal.behavior_tree = str(payload.get("behavior_tree") or "")
+        send_future = client.send_goal_async(goal)
+        if not wait_future(node, send_future, timeout_s=5.0):
+            emit({{
+                "phase": "nav2_reposition_before_fetch",
+                "attempted": True,
+                "accepted": False,
+                "success": False,
+                "dispatch_status": "send_goal_timeout",
+                "status_code": int(GoalStatus.STATUS_UNKNOWN),
+                "status_text": status_text(GoalStatus.STATUS_UNKNOWN),
+                "elapsed_s": round(time.monotonic() - started, 6),
+                "error": "send_goal_timeout",
+            }})
+        else:
+            goal_handle = send_future.result()
+            if goal_handle is None:
+                emit({{
+                    "phase": "nav2_reposition_before_fetch",
+                    "attempted": True,
+                    "accepted": False,
+                    "success": False,
+                    "dispatch_status": "send_goal_result_none",
+                    "status_code": int(GoalStatus.STATUS_UNKNOWN),
+                    "status_text": status_text(GoalStatus.STATUS_UNKNOWN),
+                    "elapsed_s": round(time.monotonic() - started, 6),
+                    "error": "send_goal_result_none",
+                }})
+            elif not goal_handle.accepted:
+                emit({{
+                    "phase": "nav2_reposition_before_fetch",
+                    "attempted": True,
+                    "accepted": False,
+                    "success": False,
+                    "dispatch_status": "goal_rejected",
+                    "status_code": None,
+                    "status_text": "STATUS_REJECTED",
+                    "elapsed_s": round(time.monotonic() - started, 6),
+                    "error": "goal_rejected",
+                }})
+            else:
+                result_future = goal_handle.get_result_async()
+                if not wait_future(node, result_future, timeout_s=float(payload["timeout_s"])):
+                    try:
+                        goal_handle.cancel_goal_async()
+                    except Exception:
+                        pass
+                    emit({{
+                        "phase": "nav2_reposition_before_fetch",
+                        "attempted": True,
+                        "accepted": True,
+                        "success": False,
+                        "dispatch_status": "goal_result_timeout",
+                        "status_code": int(GoalStatus.STATUS_ABORTED),
+                        "status_text": status_text(GoalStatus.STATUS_ABORTED),
+                        "elapsed_s": round(time.monotonic() - started, 6),
+                        "error": "goal_result_timeout",
+                    }})
+                else:
+                    result = result_future.result()
+                    status_code = int(result.status) if result is not None else int(GoalStatus.STATUS_UNKNOWN)
+                    success = status_code == int(GoalStatus.STATUS_SUCCEEDED)
+                    emit({{
+                        "phase": "nav2_reposition_before_fetch",
+                        "attempted": True,
+                        "accepted": True,
+                        "success": bool(success),
+                        "dispatch_status": "goal_succeeded" if success else "goal_finished",
+                        "status_code": status_code,
+                        "status_text": status_text(status_code),
+                        "elapsed_s": round(time.monotonic() - started, 6),
+                        "error": "" if success else f"goal_status_{{status_code}}",
+                    }})
+finally:
+    node.destroy_node()
+    if rclpy.ok():
+        rclpy.shutdown()
+PY
+"""
+    rc, output = docker_exec_service(compose_project, "gate-stack", script, timeout_s=max(float(timeout_s), 0.1) + 30.0)
+    result = parse_nav2_reposition_result(output, rc=rc)
+    result.setdefault("goal_pose", dict(goal_pose))
+    result.setdefault("behavior_tree", NAV2_REPOSITION_BEHAVIOR_TREE)
+    return result
+
+
 def line_servo_command(
     *,
     robot_pose: dict[str, float],
@@ -217,10 +647,14 @@ def line_servo_command(
     effective_setup_standoff_m = max(float(setup_standoff_m), float(contact_standoff_m))
     effective_max_angular_z_rps = float(max_angular_z_rps)
     effective_contact_lateral_ready_m = float(contact_lateral_ready_m)
+    recovery_line_acquire_lateral_m = max(float(effective_contact_lateral_ready_m), 0.0)
+    recovery_setup_pocket_m = 0.10
     if clean_route_label == "recovery_or_reaim":
         effective_setup_standoff_m = max(effective_setup_standoff_m, float(recovery_setup_standoff_m))
         effective_max_angular_z_rps = max(effective_max_angular_z_rps, float(recovery_max_angular_z_rps))
         effective_contact_lateral_ready_m = min(effective_contact_lateral_ready_m, 0.030)
+        recovery_line_acquire_lateral_m = max(effective_contact_lateral_ready_m, 0.080)
+        recovery_setup_pocket_m = 0.12
     behind_x = ball_x - math.cos(line_yaw) * float(contact_standoff_m)
     behind_y = ball_y - math.sin(line_yaw) * float(contact_standoff_m)
     setup_x = ball_x - math.cos(line_yaw) * effective_setup_standoff_m
@@ -248,6 +682,19 @@ def line_servo_command(
         phase = "push_coast"
         desired_yaw = line_yaw
         base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps))
+    elif (
+        clean_route_label == "recovery_or_reaim"
+        and distance_to_setup <= recovery_setup_pocket_m
+        and abs(robot_lateral_error) <= recovery_line_acquire_lateral_m
+        and distance_to_contact > 0.12
+    ):
+        phase = "recovery_line_acquire"
+        desired_yaw = line_yaw
+        base_linear = min(float(max_linear_x_mps), max(float(push_linear_x_mps), 0.055))
+        if abs(line_yaw_error) > 0.35:
+            base_linear = min(base_linear, 0.035)
+        elif abs(line_yaw_error) > 0.25:
+            base_linear = min(base_linear, 0.045)
     elif not contact_ready:
         phase = "setup_converge" if distance_to_contact > 0.18 else "setup_reaim"
         desired_yaw = setup_yaw if distance_to_contact > 0.20 else lateral_corrected_yaw
@@ -283,6 +730,8 @@ def line_servo_command(
         "line_yaw_error_rad": round(float(line_yaw_error), 6),
         "robot_lateral_error_m": round(float(robot_lateral_error), 6),
         "contact_lateral_ready_m": round(float(effective_contact_lateral_ready_m), 6),
+        "recovery_line_acquire_lateral_m": round(float(recovery_line_acquire_lateral_m), 6),
+        "recovery_setup_pocket_m": round(float(recovery_setup_pocket_m), 6),
         "yaw_priority_lateral_m": round(float(yaw_priority_lateral_m), 6),
         "contact_ready": contact_ready,
         "distance_to_contact_m": round(float(distance_to_contact), 6),
@@ -304,10 +753,12 @@ def summarize_line_servo_effective_command(contact_samples: list[dict[str, Any]]
         summary: dict[str, Any] = {}
         numeric_fields = {
             "setup_standoff_m": "line_servo_effective_setup_standoff_m",
-            "contact_standoff_m": "line_servo_effective_contact_standoff_m",
-            "contact_lateral_ready_m": "line_servo_effective_contact_lateral_ready_m",
-            "yaw_priority_lateral_m": "line_servo_effective_yaw_priority_lateral_m",
-            "max_angular_z_rps": "line_servo_effective_max_angular_z_rps",
+        "contact_standoff_m": "line_servo_effective_contact_standoff_m",
+        "contact_lateral_ready_m": "line_servo_effective_contact_lateral_ready_m",
+        "recovery_line_acquire_lateral_m": "line_servo_effective_recovery_line_acquire_lateral_m",
+        "recovery_setup_pocket_m": "line_servo_effective_recovery_setup_pocket_m",
+        "yaw_priority_lateral_m": "line_servo_effective_yaw_priority_lateral_m",
+        "max_angular_z_rps": "line_servo_effective_max_angular_z_rps",
         }
         for source_key, dest_key in numeric_fields.items():
             if source_key not in command:
@@ -1055,6 +1506,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--line-servo-yaw-gain", type=float, default=1.20)
     parser.add_argument("--planner-route-label", default="")
     parser.add_argument("--route-executor", default="")
+    parser.add_argument("--nav2-reposition-before-fetch", action="store_true")
+    parser.add_argument("--nav2-reposition-frame-id", default="odom")
+    parser.add_argument("--nav2-reposition-goal-frame-mode", choices=["nav2_relative", "world_direct"], default="nav2_relative")
+    parser.add_argument("--nav2-reposition-transform-layout-to-current-robot", action="store_true")
+    parser.add_argument("--nav2-reposition-setup-standoff-m", type=float, default=0.38)
+    parser.add_argument("--nav2-reposition-timeout-s", type=float, default=24.0)
+    parser.add_argument("--nav2-reposition-server-wait-s", type=float, default=8.0)
+    parser.add_argument("--nav2-reposition-pose-wait-s", type=float, default=3.0)
+    parser.add_argument("--nav2-reposition-continue-on-failure", action="store_true")
     parser.add_argument("--forward-only-pre-contact-required", action="store_true")
     parser.add_argument("--stop-on-delivery", action="store_true")
     parser.add_argument("--delivery-stop-radius-m", type=float, default=0.0)
@@ -1080,6 +1540,10 @@ def main() -> int:
         args.zone_y = args.fetch_target_y
     if args.fetch_target_z is not None:
         args.zone_z = args.fetch_target_z
+    nav2_layout_transform: dict[str, Any] = {"applied": False, "reason": "nav2_layout_transform_disabled"}
+    if bool(args.nav2_reposition_transform_layout_to_current_robot):
+        nav2_layout_transform = transform_nav2_reposition_layout_to_current_robot(args, target_layout)
+        target_layout["nav2_layout_transform"] = nav2_layout_transform
     delivery_stop_radius_m = (
         float(args.delivery_stop_radius_m)
         if float(args.delivery_stop_radius_m or 0.0) > 0.0
@@ -1152,10 +1616,100 @@ def main() -> int:
             "ball": spawn_ball,
             "robot_pose": robot_pose,
             "target_layout": target_layout,
+            "nav2_layout_transform": nav2_layout_transform,
         },
     )
     if not spawn_zone.get("pass") or not spawn_ball.get("pass") or not robot_pose.get("pass"):
         raise RuntimeError(f"Demo spawn failed; see {artifact_dir / 'spawn_summary.json'}")
+
+    pre_fetch_reposition: dict[str, Any] = {
+        "phase": "nav2_reposition_before_fetch",
+        "attempted": False,
+        "skipped": True,
+        "success": None,
+        "reason": "nav2_reposition_before_fetch_disabled",
+    }
+    pre_fetch_reposition_samples: list[dict[str, Any]] = []
+    fetch_skipped_after_reposition = False
+    if bool(args.nav2_reposition_before_fetch):
+        world_setup_pose = build_nav2_reposition_setup_pose(
+            ball_x=args.ball_x,
+            ball_y=args.ball_y,
+            target_x=args.zone_x,
+            target_y=args.zone_y,
+            setup_standoff_m=args.nav2_reposition_setup_standoff_m,
+            frame_id=args.nav2_reposition_frame_id,
+        )
+        world_robot_pose = dict(robot_pose.get("pose", {}) if isinstance(robot_pose.get("pose"), dict) else {})
+        world_robot_pose.setdefault("x", args.robot_x)
+        world_robot_pose.setdefault("y", args.robot_y)
+        world_robot_pose.setdefault("yaw", args.robot_yaw)
+        nav2_pose_sample: dict[str, Any] = {"available": False, "pose": None, "source": ""}
+        goal_pose = dict(world_setup_pose)
+        if str(args.nav2_reposition_goal_frame_mode) == "nav2_relative":
+            nav2_pose_sample = wait_for_dashboard_robot_pose(
+                args.dashboard_url,
+                timeout_s=args.nav2_reposition_pose_wait_s,
+            )
+            nav2_robot_pose = nav2_pose_sample.get("pose") if isinstance(nav2_pose_sample.get("pose"), dict) else None
+            if nav2_robot_pose is not None:
+                goal_pose = build_nav2_relative_setup_goal(
+                    world_setup_pose=world_setup_pose,
+                    world_robot_pose=world_robot_pose,
+                    nav2_robot_pose=nav2_robot_pose,
+                    frame_id=args.nav2_reposition_frame_id,
+                )
+        update_runtime(
+            args.gather_runtime_json,
+            mission_phase="nav2_reposition",
+            gather_phase="nav2_reposition",
+            proof_state="visiting",
+            zone_pose={"x": args.zone_x, "y": args.zone_y, "z": args.zone_z, "radius_m": args.fetch_delivery_radius_m},
+            latest_feedback="Nav2 repositioning to the ball-target setup pose before local fetch.",
+        )
+        update_runtime(
+            args.visit_runtime_json,
+            mission_phase="nav2_reposition",
+            proof_state="visiting",
+            latest_feedback="Nav2 repositioning before contact fetch.",
+        )
+        pre_fetch_reposition = dispatch_nav2_reposition_before_fetch(
+            compose_project=args.compose_project,
+            goal_pose=goal_pose,
+            timeout_s=args.nav2_reposition_timeout_s,
+            server_wait_s=args.nav2_reposition_server_wait_s,
+        )
+        pre_fetch_reposition["skipped"] = False
+        pre_fetch_reposition["goal_pose"] = goal_pose
+        pre_fetch_reposition["world_setup_pose"] = world_setup_pose
+        pre_fetch_reposition["world_robot_pose"] = world_robot_pose
+        pre_fetch_reposition["nav2_pose_sample"] = nav2_pose_sample
+        pre_fetch_reposition["goal_frame_mode"] = str(args.nav2_reposition_goal_frame_mode)
+        pre_fetch_reposition["configured_timeout_s"] = round(float(args.nav2_reposition_timeout_s), 6)
+        pre_fetch_reposition["configured_server_wait_s"] = round(float(args.nav2_reposition_server_wait_s), 6)
+        pre_fetch_reposition["configured_pose_wait_s"] = round(float(args.nav2_reposition_pose_wait_s), 6)
+        pre_fetch_reposition["continue_on_failure"] = bool(args.nav2_reposition_continue_on_failure)
+        pre_fetch_reposition["stop_after_reposition"] = publish_zero_stop(args.compose_project)
+        try:
+            pre_fetch_reposition_samples = collect_contact_samples(
+                compose_project=args.compose_project,
+                world_name=args.world_name,
+                robot_model_name=args.robot_model_name,
+                ball_model_name=args.target_model_name,
+                duration_s=0.5,
+                poll_period_s=args.poll_period_s,
+            )
+        except Exception as exc:
+            pre_fetch_reposition["post_reposition_sample_error"] = str(exc)
+        if pre_fetch_reposition_samples:
+            pre_fetch_reposition["post_reposition_sample_count"] = len(pre_fetch_reposition_samples)
+            last_sample = pre_fetch_reposition_samples[-1]
+            pre_fetch_reposition["post_reposition_robot_pose"] = last_sample.get("robot_pose")
+            pre_fetch_reposition["post_reposition_ball_pose"] = last_sample.get("ball_pose")
+            append_jsonl(artifact_dir / "pre_fetch_reposition_trace.jsonl", pre_fetch_reposition_samples)
+        if not bool(pre_fetch_reposition.get("success", False)) and not bool(args.nav2_reposition_continue_on_failure):
+            fetch_skipped_after_reposition = True
+        write_json(artifact_dir / "pre_fetch_reposition.json", pre_fetch_reposition)
 
     update_runtime(
         args.gather_runtime_json,
@@ -1163,13 +1717,20 @@ def main() -> int:
         gather_phase="fetch_to_pose",
         proof_state="fetching",
         zone_pose={"x": args.zone_x, "y": args.zone_y, "z": args.zone_z, "radius_m": args.fetch_delivery_radius_m},
-        latest_feedback="Driving the robot forward to collect and deliver the golf ball.",
+        latest_feedback=(
+            "Nav2 reposition failed; local contact fetch is blocked."
+            if fetch_skipped_after_reposition
+            else "Driving the robot forward to collect and deliver the golf ball."
+        ),
     )
     contact_samples: list[dict[str, Any]] = []
     drive_output = ""
     stop_payload: dict[str, Any] = {"returncode": None, "output": "", "pass": None, "skipped": True}
     stop_publishers_payload: dict[str, Any] = {"returncode": None, "output": "", "pass": None, "skipped": True}
-    if str(args.drive_mode) == "line_servo":
+    if fetch_skipped_after_reposition:
+        drive_output = "local contact fetch skipped because nav2 reposition before fetch failed"
+        stop_payload = {"returncode": None, "output": "", "pass": None, "skipped": True, "reason": "nav2_reposition_failed"}
+    elif str(args.drive_mode) == "line_servo":
         contact_samples = collect_line_servo_samples(
             compose_project=args.compose_project,
             world_name=args.world_name,
@@ -1259,6 +1820,13 @@ def main() -> int:
         target_z=args.zone_z,
         radius_m=args.fetch_delivery_radius_m,
     )
+    if fetch_skipped_after_reposition:
+        shot_outcome = {
+            **shot_outcome,
+            "pass": False,
+            "reason": "nav2_reposition_failed_before_fetch",
+            "nav2_reposition": pre_fetch_reposition,
+        }
     approach_metrics = build_approach_contact_metrics(
         contact_samples,
         ball_start_x=args.ball_x,
@@ -1278,7 +1846,8 @@ def main() -> int:
         zone_model_sdf=args.zone_model_sdf,
     )
     pass_flag = bool(shot_outcome.get("pass", False))
-    mission_time_s = max(float(args.sample_duration_s), float(args.drive_duration_s))
+    pre_fetch_elapsed_s = float(pre_fetch_reposition.get("elapsed_s", 0.0) or 0.0)
+    mission_time_s = pre_fetch_elapsed_s + (0.0 if fetch_skipped_after_reposition else max(float(args.sample_duration_s), float(args.drive_duration_s)))
     random_draw = target_layout.get("random_draw", {}) if isinstance(target_layout.get("random_draw"), dict) else {}
     random_profile = str(target_layout.get("random_profile", "") or random_draw.get("random_profile", ""))
     planner_route_label = str(args.planner_route_label or target_layout.get("planner_route_label", "") or random_draw.get("planner_route_label", "") or "")
@@ -1288,6 +1857,16 @@ def main() -> int:
         "planner_route_label": planner_route_label,
         "route_executor": route_executor,
         "executor_actual": "golf_ball_circle_delivery_demo_runner",
+        "pre_fetch_reposition": pre_fetch_reposition,
+        "nav2_reposition_before_fetch": bool(args.nav2_reposition_before_fetch),
+        "nav2_reposition_required": bool(args.nav2_reposition_before_fetch),
+        "nav2_reposition_success": pre_fetch_reposition.get("success"),
+        "nav2_reposition_dispatch_status": str(pre_fetch_reposition.get("dispatch_status", "")),
+        "nav2_reposition_status_text": str(pre_fetch_reposition.get("status_text", "")),
+        "nav2_reposition_goal_pose": pre_fetch_reposition.get("goal_pose", {}),
+        "nav2_layout_transform": nav2_layout_transform,
+        "fetch_skipped_after_reposition": bool(fetch_skipped_after_reposition),
+        "contact_phase_forward_only": bool(float(args.drive_linear_x_mps) >= -1e-9),
         "forward_only_pre_contact_required": bool(args.forward_only_pre_contact_required),
         "forward_only_pre_contact": forward_only_pre_contact,
         "stop_on_delivery": bool(args.stop_on_delivery),
@@ -1304,6 +1883,8 @@ def main() -> int:
         "line_servo_yaw_gain": round(float(args.line_servo_yaw_gain), 6),
     }
     route_metadata.update(summarize_line_servo_effective_command(contact_samples))
+    if fetch_skipped_after_reposition:
+        pass_flag = False
     if bool(args.forward_only_pre_contact_required) and not forward_only_pre_contact:
         pass_flag = False
         shot_outcome = {
@@ -1329,6 +1910,8 @@ def main() -> int:
         "random_profile": random_profile,
         "random_draw": random_draw,
         "planner_route": route_metadata,
+        "pre_fetch_reposition": pre_fetch_reposition,
+        "nav2_layout_transform": nav2_layout_transform,
     }
     verdict = {
         "type": "gather_mission",
@@ -1354,6 +1937,8 @@ def main() -> int:
         "random_profile": random_profile,
         "random_draw": random_draw,
         "planner_route": route_metadata,
+        "pre_fetch_reposition": pre_fetch_reposition,
+        "nav2_layout_transform": nav2_layout_transform,
         "planner_route_label": planner_route_label,
         "route_executor": route_executor,
         "forward_only_pre_contact_required": bool(args.forward_only_pre_contact_required),
@@ -1390,6 +1975,9 @@ def main() -> int:
             f"- First-contact flags: `{approach_metrics.get('first_contact_quality_flags', [])}`",
             f"- Planner route: `{planner_route_label}`",
             f"- Route executor: `{route_executor}`",
+            f"- Nav2 reposition before fetch: `{bool(args.nav2_reposition_before_fetch)}` "
+            f"`{pre_fetch_reposition.get('dispatch_status', 'skipped')}` "
+            f"`{pre_fetch_reposition.get('status_text', '')}`",
             f"- Drive mode: `{args.drive_mode}`",
             f"- Delivery stop radius: `{delivery_stop_radius_m:.3f}m`",
             f"- Model provenance: `{bool(model_provenance.get('model_provenance_valid', False))}` "
@@ -1401,7 +1989,16 @@ def main() -> int:
         ]
     )
 
-    write_json(artifact_dir / "drive_summary.json", {"drive_output": drive_output, "stop": stop_payload, "planner_route": route_metadata})
+    write_json(
+        artifact_dir / "drive_summary.json",
+        {
+            "drive_output": drive_output,
+            "stop": stop_payload,
+            "planner_route": route_metadata,
+            "pre_fetch_reposition": pre_fetch_reposition,
+            "fetch_skipped_after_reposition": bool(fetch_skipped_after_reposition),
+        },
+    )
     write_json(artifact_dir / "approach_metrics.json", approach_metrics)
     write_json(artifact_dir / "target_results.json", target_results)
     write_json(artifact_dir / "mission_verdict.json", verdict)

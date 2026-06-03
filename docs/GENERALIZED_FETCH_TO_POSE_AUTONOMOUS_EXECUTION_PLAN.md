@@ -101,6 +101,21 @@ extra recovery creep/nudge preserved delivery while worsening first-contact
 quality. Keep route-specific setup changes; use broader route-owner tests before
 another narrow contact tweak.
 
+Late June 3 Nav2 setup-first recovery update: the recovery route now combines
+real Nav2 setup, the shared bounded `line_servo` executor, and a
+`recovery_line_acquire` transition once the robot reaches the setup pocket. The
+exact recovery layout that previously stalled without first contact
+(`20260603T040615017369Z`, closest `0.739814m`) now passes
+(`20260603T042159429741Z`, closest `0.196169m`). The contact trace shows the
+expected sequence: `setup_converge`, `recovery_line_acquire`, then `push_coast`;
+first ball motion occurs at `6.026817s`. Sequence-based visual review confirms
+the robot advances into contact and pushes the ball into the delivery circle.
+Browser-watchable package:
+`artifacts/session/uat_recovery_line_acquire_fix_seed20260606_20260603/fetch_visual_uat_package/scorecard.md`.
+The remaining watch is contact quality (`pre_contact_lateral_error`,
+`pre_contact_yaw_error`, and `first_contact_lateral_error`), so the next broad
+test is a planner-routed multi-scene rerun before another local-contact tweak.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

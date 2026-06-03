@@ -5283,12 +5283,24 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             random_draw = self._write_planner_gated_fetch_layout(scenario, planner_handoff=planner_handoff)
             target_layout_json = str(random_draw.get("target_layout_json", target_layout_json))
             artifact_kind = GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
+            nav2_setup_first_routes = {
+                fetch_planner_gate.ROUTE_NAV2_REPOSITION,
+                fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
+            }
             planner_route_execution = self._planner_route_execution_payload(
                 decision,
                 local_fetch_dispatched=True,
                 route_executed=True,
-                outcome="forward_only_fetch_runner_dispatched",
-                reason="planner route permitted bounded local execution",
+                outcome=(
+                    "nav2_reposition_then_forward_only_fetch_runner_dispatched"
+                    if route_label in nav2_setup_first_routes
+                    else "forward_only_fetch_runner_dispatched"
+                ),
+                reason=(
+                    "planner route required bounded Nav2 setup before local contact fetch"
+                    if route_label in nav2_setup_first_routes
+                    else "planner route permitted bounded local execution"
+                ),
                 forward_only_pre_contact=runner_script == "golf_ball_circle_delivery_demo_runner.py",
             )
         if (
@@ -5335,10 +5347,19 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
         if target_layout_json:
             command.extend(["--target-layout-json", target_layout_json])
         if random_draw and runner_script == "golf_ball_circle_delivery_demo_runner.py":
-            robot_pose = random_draw.get("robot_pose", {}) if isinstance(random_draw.get("robot_pose"), dict) else {}
-            command.extend(["--robot-x", f"{float(robot_pose.get('x', 0.06)):.6f}"])
-            command.extend(["--robot-y", f"{float(robot_pose.get('y', 0.0)):.6f}"])
-            command.extend(["--robot-yaw", f"{float(robot_pose.get('yaw', 0.0)):.6f}"])
+            if (
+                planner_route_execution
+                and str(planner_route_execution.get("route_label", ""))
+                in {fetch_planner_gate.ROUTE_NAV2_REPOSITION, fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM}
+            ):
+                command.extend(["--robot-x", "0.000000"])
+                command.extend(["--robot-y", "0.000000"])
+                command.extend(["--robot-yaw", "0.000000"])
+            else:
+                robot_pose = random_draw.get("robot_pose", {}) if isinstance(random_draw.get("robot_pose"), dict) else {}
+                command.extend(["--robot-x", f"{float(robot_pose.get('x', 0.06)):.6f}"])
+                command.extend(["--robot-y", f"{float(robot_pose.get('y', 0.0)):.6f}"])
+                command.extend(["--robot-yaw", f"{float(robot_pose.get('yaw', 0.0)):.6f}"])
         if planner_route_execution and runner_script == "golf_ball_circle_delivery_demo_runner.py":
             command.extend(["--planner-route-label", str(planner_route_execution.get("route_label", ""))])
             command.extend(["--route-executor", str(planner_route_execution.get("route_executor", ""))])
@@ -5356,6 +5377,18 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
                 command.extend(["--line-servo-push-linear-x-mps", "0.055000"])
                 command.extend(["--line-servo-max-angular-z-rps", "0.180000"])
                 command.extend(["--line-servo-yaw-gain", "1.200000"])
+                if str(planner_route_execution.get("route_label", "")) in {
+                    fetch_planner_gate.ROUTE_NAV2_REPOSITION,
+                    fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
+                }:
+                    command.append("--nav2-reposition-before-fetch")
+                    command.extend(["--nav2-reposition-frame-id", "odom"])
+                    command.extend(["--nav2-reposition-goal-frame-mode", "nav2_relative"])
+                    command.append("--nav2-reposition-transform-layout-to-current-robot")
+                    command.extend(["--nav2-reposition-setup-standoff-m", "0.380000"])
+                    command.extend(["--nav2-reposition-timeout-s", "24.000000"])
+                    command.extend(["--nav2-reposition-server-wait-s", "8.000000"])
+                    command.extend(["--nav2-reposition-pose-wait-s", "3.000000"])
                 command.append("--stop-on-delivery")
                 command.extend(["--delivery-stop-radius-m", "0.200000"])
                 command.extend(["--post-delivery-sample-s", "4.000000"])

@@ -744,6 +744,17 @@ Nav2 scene02 and fetch-ready scene09 also stayed green with packages
 `artifacts/session/uat_recovery_route_setup_quality_nav2_scene02_20260603/fetch_visual_uat_package/scorecard.md`
 and
 `artifacts/session/uat_recovery_route_setup_quality_fetch_scene09_20260603/fetch_visual_uat_package/scorecard.md`.
+
+Late June 3 Nav2 setup-first recovery progress: the generated recovery layout
+that previously stalled without contact (`20260603T040615017369Z`, closest
+`0.739814m`) now passes under real Nav2 setup plus `recovery_line_acquire`
+(`20260603T042159429741Z`, closest `0.196169m`). Sequence-based visual review
+shows the robot advances into contact and pushes the ball into the delivery
+circle. Browser-watchable package:
+`artifacts/session/uat_recovery_line_acquire_fix_seed20260606_20260603/fetch_visual_uat_package/scorecard.md`.
+The remaining lateral/yaw contact flags make the next roadmap step broader
+planner-routed multi-scene coverage before another narrow local-contact patch.
+
 The next roadmap step remains route-owner completion: replace the v0 proof
 executor with real Nav2 reposition where the planner asks for reposition,
 connect live perception refresh for stale/unknown scenes, then run saved-layout

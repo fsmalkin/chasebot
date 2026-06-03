@@ -3102,6 +3102,7 @@ def test_run_golf_fetch_planner_gated_recovery_route_dispatches_forward_layout(t
     assert result["route_label"] == dashboard_service.fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM
     assert result["route_executor"] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_RECOVERY
     assert result["planner_route_executed"] is True
+    assert result["planner_route_execution"]["outcome"] == "nav2_reposition_then_forward_only_fetch_runner_dispatched"
     assert result["forward_only_pre_contact_required"] is True
     assert result["forward_only_pre_contact"] is True
     assert layout["layout_family"] == "planner_gated_recovery_or_reaim"
@@ -3113,8 +3114,13 @@ def test_run_golf_fetch_planner_gated_recovery_route_dispatches_forward_layout(t
     assert "--route-executor" in command
     assert command[command.index("--route-executor") + 1] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_RECOVERY
     assert "--forward-only-pre-contact-required" in command
+    assert command[command.index("--robot-x") + 1] == "0.000000"
+    assert command[command.index("--robot-y") + 1] == "0.000000"
+    assert command[command.index("--robot-yaw") + 1] == "0.000000"
     assert "--drive-mode" in command
     assert command[command.index("--drive-mode") + 1] == "line_servo"
+    assert "--nav2-reposition-before-fetch" in command
+    assert "--nav2-reposition-transform-layout-to-current-robot" in command
     assert "--stop-on-delivery" in command
     assert command[command.index("--delivery-stop-radius-m") + 1] == "0.200000"
     assert command[command.index("--artifact-kind") + 1] == dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
@@ -3189,6 +3195,9 @@ def test_run_golf_fetch_planner_gated_nav2_reposition_route_dispatches_forward_l
     assert command[command.index("--planner-route-label") + 1] == dashboard_service.fetch_planner_gate.ROUTE_NAV2_REPOSITION
     assert "--route-executor" in command
     assert command[command.index("--route-executor") + 1] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH
+    assert command[command.index("--robot-x") + 1] == "0.000000"
+    assert command[command.index("--robot-y") + 1] == "0.000000"
+    assert command[command.index("--robot-yaw") + 1] == "0.000000"
     assert "--forward-only-pre-contact-required" in command
     assert "--drive-mode" in command
     assert command[command.index("--drive-mode") + 1] == "line_servo"
@@ -3204,6 +3213,14 @@ def test_run_golf_fetch_planner_gated_nav2_reposition_route_dispatches_forward_l
     assert command[command.index("--line-servo-max-angular-z-rps") + 1] == "0.180000"
     assert "--line-servo-yaw-gain" in command
     assert command[command.index("--line-servo-yaw-gain") + 1] == "1.200000"
+    assert "--nav2-reposition-before-fetch" in command
+    assert command[command.index("--nav2-reposition-frame-id") + 1] == "odom"
+    assert command[command.index("--nav2-reposition-goal-frame-mode") + 1] == "nav2_relative"
+    assert "--nav2-reposition-transform-layout-to-current-robot" in command
+    assert command[command.index("--nav2-reposition-setup-standoff-m") + 1] == "0.380000"
+    assert command[command.index("--nav2-reposition-timeout-s") + 1] == "24.000000"
+    assert command[command.index("--nav2-reposition-server-wait-s") + 1] == "8.000000"
+    assert command[command.index("--nav2-reposition-pose-wait-s") + 1] == "3.000000"
     assert "--stop-on-delivery" in command
     assert "--delivery-stop-radius-m" in command
     assert command[command.index("--delivery-stop-radius-m") + 1] == "0.200000"

@@ -1001,12 +1001,24 @@ Live gates:
      `artifacts/session/uat_recovery_route_setup_quality_scene01_20260603/fetch_visual_uat_package/scorecard.md`,
      `artifacts/session/uat_recovery_route_setup_quality_nav2_scene02_20260603/fetch_visual_uat_package/scorecard.md`,
      and
-     `artifacts/session/uat_recovery_route_setup_quality_fetch_scene09_20260603/fetch_visual_uat_package/scorecard.md`.
-     Keep the lateral-gate change route-specific; the global threshold variant
-     regressed Nav2 scene02 at `0.300912m` closest approach.
-   - forward-only fetch rule: a planner-gated UAT run that reaches local fetch
-     should show no negative pre-contact `linear_x`; any needed backing or
-     side-selection should be handled as planner-owned reposition/setup before
+      `artifacts/session/uat_recovery_route_setup_quality_fetch_scene09_20260603/fetch_visual_uat_package/scorecard.md`.
+      Keep the lateral-gate change route-specific; the global threshold variant
+      regressed Nav2 scene02 at `0.300912m` closest approach.
+    - late June 3 Nav2 setup-first recovery evidence:
+      the exact generated recovery layout that previously stalled at
+      `0.739814m` closest (`20260603T040615017369Z`) now passes at
+      `0.196169m` closest (`20260603T042159429741Z`) after the local runner
+      added `recovery_line_acquire`. The contact trace shows
+      `setup_converge -> recovery_line_acquire -> push_coast`, with first ball
+      motion at `6.026817s`. Sequence review of top-down plus onboard frames
+      confirms contact and delivery. Browser-watchable package:
+      `artifacts/session/uat_recovery_line_acquire_fix_seed20260606_20260603/fetch_visual_uat_package/scorecard.md`.
+      Treat the remaining lateral/yaw first-contact flags as broad
+      route-quality backlog; rerun planner-routed multi-scene coverage before
+      another narrow contact tweak.
+    - forward-only fetch rule: a planner-gated UAT run that reaches local fetch
+      should show no negative pre-contact `linear_x`; any needed backing or
+      side-selection should be handled as planner-owned reposition/setup before
      `fetch_to_pose` dispatch
    - first dry-run artifact:
      `artifacts/session/dev_fetch_planner_handoff_gate_frozen_replay_20260531/fetch_planner_handoff_gate/scorecard.md`
