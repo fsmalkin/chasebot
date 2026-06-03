@@ -458,6 +458,30 @@ def _serve_dashboard_path(path: str, tmp_path: Path) -> list[tuple[Path, str, bo
     return served
 
 
+def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
+    page = _serve_dashboard_path("/fetch-plan", tmp_path)
+    assert page == [
+        (
+            dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan.html",
+            "text/html; charset=utf-8",
+            False,
+        )
+    ]
+
+    data = _serve_dashboard_path("/fetch_plan_data.json", tmp_path)
+    assert data == [
+        (
+            dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json",
+            "application/json; charset=utf-8",
+            True,
+        )
+    ]
+
+    payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
+    assert payload["status_label"] == "Living plan and progress tracker"
+    assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")
+
+
 def test_artifact_media_route_serves_mp4_ranges(monkeypatch, tmp_path):
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)

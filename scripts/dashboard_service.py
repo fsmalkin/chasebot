@@ -5806,6 +5806,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return self._serve_file(STATIC_DASHBOARD_DIR / "browser_dashboard.html", "text/html; charset=utf-8")
         if path == "/browser_dashboard.js":
             return self._serve_file(STATIC_DASHBOARD_DIR / "browser_dashboard.js", "text/javascript; charset=utf-8")
+        if path in {"/fetch-plan", "/fetch-plan/", "/fetch_plan.html"}:
+            return self._serve_file(STATIC_DASHBOARD_DIR / "fetch_plan.html", "text/html; charset=utf-8")
+        if path == "/fetch_plan_data.json":
+            return self._serve_file(STATIC_DASHBOARD_DIR / "fetch_plan_data.json", "application/json; charset=utf-8", no_cache=True)
         if path == "/api/state":
             return self._json_response(HTTPStatus.OK, controller.get_state())
         if path == "/api/llm/supervisor/history":
