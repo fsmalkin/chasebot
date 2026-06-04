@@ -1038,6 +1038,15 @@ authority: provider success, confidence threshold, and deterministic guard
 agreement are all required. The next roadmap slice repeats supervised dry
 scoring across the seven-seed manifest.
 
+The supervised hard-plus-seven-seed manifest is now green at
+`artifacts/session/analysis_supervised_llm_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_supervised_evidence/scorecard.md`.
+Across `220` cases, provider status was `ok` on `220/220`, route pass/fail was
+`220/0`, guard agreement was `220/220`, and wrong fetch-ready dispatches stayed
+at `0`. The guard accepted `217` model proposals and vetoed `3` confidence-only
+proposals into deterministic fallback. This clears the high-level route
+selection question for the next roadmap slice: route-owner visual UAT with live
+executors and browser-watchable proof.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

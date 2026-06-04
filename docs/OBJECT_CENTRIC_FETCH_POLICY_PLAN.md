@@ -784,6 +784,14 @@ and deterministic guard agreement all held. On the hard matrix it accepted
 `10/10`, vetoed `0`, and kept wrong fetch-ready dispatches at `0`. The next AI
 control step is supervised dry scoring over the seven-seed manifest.
 
+The supervised hard-plus-seven-seed rollup now closes that dry scoring step:
+`artifacts/session/analysis_supervised_llm_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_supervised_evidence/scorecard.md`.
+It produced provider `ok` `220/220`, route pass/fail `220/0`, guard agreement
+`220/220`, wrong fetch-ready dispatches `0`, and accept/veto `217/3`. The three
+vetoes were all confidence-threshold fallbacks, so local fetch policy work can
+assume the high-level planner is guarded and return to executable route-owner
+visual UAT.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

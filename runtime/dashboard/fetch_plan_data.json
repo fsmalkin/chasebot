@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 5:26 PM ET",
+  "updated_label": "Updated June 4, 2026, 5:58 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Supervised LLM route guard hard proof green",
-  "status_detail": "The route planner now has both a full 220-case LLM-shadow manifest and a first supervised-guarded dry proof. In supervised mode on the hard matrix, the provider returned ok on 10/10 cases, the model matched the deterministic guard on 10/10, all 10 proposals were accepted, vetoes were 0, and wrong fetch-ready dispatches stayed at 0. Live execution remains guarded; this proves the acceptance/veto policy shape before broader supervised dry gates.",
+  "status_label": "Supervised LLM route guard manifest green",
+  "status_detail": "The route planner now has provider-backed supervised-guarded evidence over the hard matrix plus seven seeded mixed-route batches. Across 220 cases, the provider returned ok on 220/220, route pass/fail was 220/0, guard agreement was 220/220, wrong fetch-ready dispatches stayed at 0, and the guard accepted 217 proposals while safely vetoing 3 confidence-only proposals into deterministic fallback.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -50,19 +50,23 @@
   ],
   "latest_evidence": [
     {
-      "title": "Supervised LLM route guard hard proof is green",
-      "status": "llm_supervised_guarded hard matrix: 10/10 accepted, 0 vetoes",
+      "title": "Supervised LLM route guard manifest is green",
+      "status": "hard matrix + seven seeds: 220/220 safe routes, 217 accepted, 3 confidence fallbacks",
       "tone": "green",
-      "summary": "The first supervised-guarded route-selection proof accepted the model only when provider status was ok, confidence cleared the threshold, and the route matched the deterministic guard. On the hard mixed matrix, all ten proposals were accepted, guard agreement was 10/10, and wrong fetch-ready dispatches stayed at zero. This makes the live-authority boundary explicit: the LLM can propose high-level routes, while deterministic guards still veto and bounded executors still move the robot.",
+      "summary": "The supervised-guarded route-selection proof now covers the hard mixed matrix plus seven seeded mixed-route batches. The provider returned ok on every case, the final route matched the expected route on every case, and the deterministic guard kept wrong fetch-ready dispatches at zero. Three proposals landed just below the 0.90 confidence threshold, so the guard withheld LLM authority and used deterministic fallback while preserving the same safe route.",
       "metrics": [
-        "Supervised hard gate: pass=true; route pass/fail=10/0",
-        "Provider: ok=10/10; effective planner modes={llm_supervised_guarded: 10}",
-        "Accept/veto: accepted=10; vetoed=0; confidence threshold=0.90",
-        "Guard agreement: 10/10; wrong fetch-ready dispatches=0",
-        "Precondition evidence: shadow manifest remains green at 220/220 across hard matrix + seven seeds",
-        "Authority: dry route-selection proof only; live execution remains deterministic and guarded"
+        "Supervised rollup: pass=true; interpretation=llm_supervised_guarded_fallback_green",
+        "Cases: gates=8; total_cases=220; route pass/fail=220/0",
+        "Provider and guard: ok=220/220; guard agreement=220/220; wrong fetch-ready dispatches=0",
+        "Accept/veto: accepted=217; vetoed=3; veto reasons={confidence_below_threshold: 3}",
+        "Readiness: strict_supervised_acceptance_ready=false; supervised_guarded_fallback_ready=true",
+        "Authority: dry route-selection proof only; live motion remains deterministic and guarded"
       ],
       "links": [
+        {
+          "label": "Supervised LLM 220-case manifest scorecard",
+          "url": "/artifacts/session/analysis_supervised_llm_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_supervised_evidence/scorecard.md"
+        },
         {
           "label": "Supervised LLM hard matrix scorecard",
           "url": "/artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md"

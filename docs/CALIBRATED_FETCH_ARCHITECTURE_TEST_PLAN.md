@@ -278,6 +278,14 @@ matched the deterministic guard `10/10`, and produced wrong fetch-ready
 dispatches `0`. Treat this as dry supervised route-selection evidence; the next
 calibrated gate is supervised dry scoring over the seven-seed manifest.
 
+The supervised hard-plus-seven-seed rollup is also green:
+`artifacts/session/analysis_supervised_llm_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_supervised_evidence/scorecard.md`.
+It covers `220` provider-backed cases with route pass/fail `220/0`, provider
+`ok` `220/220`, guard agreement `220/220`, wrong fetch-ready dispatches `0`,
+and supervised accept/veto `217/3`. The three vetoes were all
+`confidence_below_threshold`, so the calibrated interpretation is guarded
+fallback readiness rather than strict all-accepted live authority.
+
 ## Research Thread Output
 
 Before starting another implementation spike, produce a findings matrix across

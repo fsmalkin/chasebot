@@ -616,6 +616,21 @@ June 4, 2026 supervised LLM route guard proof:
   deterministic and guarded. The next gate is supervised dry scoring across the
   seven-seed manifest.
 
+June 4, 2026 supervised hard-plus-seven-seed manifest:
+
+- Scorecard:
+  `artifacts/session/analysis_supervised_llm_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_supervised_evidence/scorecard.md`
+- Result: gates `8`, total cases `220`, provider `ok` on `220/220`, route
+  pass/fail `220/0`, guard agreement `220/220`, wrong fetch-ready dispatches
+  `0`, supervised accept/veto `217/3`, and veto reasons
+  `{'confidence_below_threshold': 3}`.
+- Evidence meaning: the supervised route layer is green as guarded-fallback
+  evidence. Strict all-accepted authority is still false because three proposals
+  fell below the `0.90` confidence threshold, but the guard preserved the safe
+  deterministic route in every vetoed case. The next operator-facing work should
+  return to route-owner visual UAT for executable fetch, Nav2-reposition, and
+  recovery/re-aim routes.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

@@ -478,6 +478,15 @@ scenes, accepted proposals `10/10`, vetoed `0`, matched the deterministic guard
 `10/10`, and produced wrong fetch-ready dispatches `0`. Run the same supervised
 dry mode over the seven-seed manifest before live route-selection authority.
 
+The supervised hard-plus-seven-seed rollup now completes that dry mode:
+`artifacts/session/analysis_supervised_llm_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_supervised_evidence/scorecard.md`.
+The rollup is green as guarded-fallback evidence across `220` provider-backed
+cases: route pass/fail `220/0`, provider `ok` `220/220`, guard agreement
+`220/220`, wrong fetch-ready dispatches `0`, and accept/veto `217/3`. The three
+vetoes were confidence-only and fell back to the deterministic route. The next
+autonomous execution step is live route-owner visual UAT, with LLM route output
+still gated by deterministic guards.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

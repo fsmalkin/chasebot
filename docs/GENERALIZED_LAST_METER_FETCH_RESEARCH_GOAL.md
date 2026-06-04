@@ -1091,6 +1091,15 @@ vetoed `0`, kept guard agreement `10/10`, and kept wrong fetch-ready dispatches
 at `0`. This establishes the route-level acceptance policy in dry mode before
 any live LLM route authority.
 
+The supervised hard-plus-seven-seed manifest now extends that proof:
+`artifacts/session/analysis_supervised_llm_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_supervised_evidence/scorecard.md`.
+Across `220` provider-backed cases, route pass/fail was `220/0`, provider `ok`
+was `220/220`, guard agreement was `220/220`, and wrong fetch-ready dispatches
+were `0`. The guard accepted `217` proposals and vetoed `3` confidence-only
+proposals into deterministic fallback. The research interpretation is guarded
+fallback readiness for high-level route choice; physical fetch generalization
+still depends on live route-owner visual UAT and canonical promotion gates.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

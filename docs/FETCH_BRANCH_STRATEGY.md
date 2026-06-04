@@ -319,6 +319,13 @@ Planner-routed moonshot update, June 2:
   model proposals, vetoed `0`, kept guard agreement `10/10`, and kept wrong
   fetch-ready dispatches `0`. Next branch work is supervised dry scoring across
   the seven-seed manifest, then hardware-transfer review.
+- supervised LLM hard-plus-seven-seed rollup:
+  `artifacts/session/analysis_supervised_llm_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_supervised_evidence/scorecard.md`
+  validates guarded fallback over `220` provider-backed cases. Route pass/fail
+  was `220/0`, provider `ok` was `220/220`, guard agreement was `220/220`,
+  wrong fetch-ready dispatches stayed `0`, and supervised accept/veto was
+  `217/3` with only `confidence_below_threshold` vetoes. Branch work now returns
+  to route-owner visual UAT and hardware-transfer packaging.
 - frozen planner-layout replay fix:
   fresh seed `seed20260608_scene24_fetch_ready_local` first failed as a manual
   target-layout replay because the runner used the old constant-push defaults
