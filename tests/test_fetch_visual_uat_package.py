@@ -317,6 +317,11 @@ def test_visual_uat_package_generates_multiframe_keyframe_review(tmp_path, monke
             "stage_quality_summary": [],
             "mission_summary": [],
             "visual_dir": [str(visual)],
+            "package_root": tmp_path
+            / "artifacts"
+            / "session"
+            / "live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_replay_seed20260628_scene09_nav2_reposition_first"
+            / "fetch_visual_uat_package",
         },
     )()
 
@@ -331,6 +336,7 @@ def test_visual_uat_package_generates_multiframe_keyframe_review(tmp_path, monke
     assert reviews[0]["review_instruction"] == "inspect_onboard_and_topdown_sequence_not_only_end_frame"
     assert reviews[0]["url"] == "/artifacts/session/session_a/visual/keyframe_review_contact_sheet.png"
     assert (visual / "keyframe_review_contact_sheet.png").is_file()
+    assert not (Path(args.package_root) / "keyframe_reviews" / "session_a_keyframe_review_contact_sheet.png").exists()
 
     scorecard = tmp_path / "scorecard.md"
     package.write_scorecard(scorecard, summary)

@@ -275,6 +275,21 @@ Nav2-fallback boundary evidence. The promotion-grade task remains a canonical
 parent seeded gate run that carries visual packaging through the wrapper and
 sets `promotion_evidence=true`.
 
+June 4 second-seed breadth proof: seed `20260628` repeated the parent
+planner-routed seeded gate as a fresh breadth check:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner child passed `30/30` with `0` wrong fetch-ready dispatches. The
+live replay passed `6/6` executable rows and `6/6` browser-watchable visual
+packages across two local fetch, two Nav2-first, and two recovery/re-aim cases:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_replay/fetch_planner_route_replay_batch/scorecard.md`.
+The analyzer reports clean execution, setup, and contact quality with `0`
+first-contact blockers:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_analysis/fetch_planner_route_uat_analyzer/scorecard.md`.
+This gives the sim milestone two independent promotion-green randomized seeds
+after saved-anchor repeatability. Next execution work is UAT packaging,
+regression preservation, and hardware-transfer planning for the planner-routed
+route-owner split.
+
 Harness hardening from the same run: Gazebo stale-model removal is now
 timeout-safe, returning `rc=124` and preserving runner control flow instead of
 crashing before mission dispatch.

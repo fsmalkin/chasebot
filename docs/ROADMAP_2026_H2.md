@@ -875,6 +875,21 @@ rerun the same parent gate on at least one additional seed, keep seed
 `20260627` and saved anchors as regression gates, and begin hardware-transfer
 planning for the route-owner split.
 
+Second-seed breadth evidence, later June 4: seed `20260628` passed the same
+parent seeded gate after unused Chasecar Docker networks were cleaned up:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner child passed `30/30` with `0` wrong fetch-ready dispatches. The
+live replay passed `6/6` missions and `6/6` visual packages across local fetch,
+Nav2-first, and recovery/re-aim routes:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_replay/fetch_planner_route_replay_batch/scorecard.md`.
+The analyzer stayed clean for execution, setup, and contact quality with `0`
+first-contact blockers:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_analysis/fetch_planner_route_uat_analyzer/scorecard.md`.
+The roadmap now treats the sim milestone as two-green-seed strong evidence. The
+next milestone slice is a browser-watchable UAT review bundle, regression gates
+for seeds `20260627` and `20260628`, and a hardware-transfer plan for the
+planner-routed route-owner stack.
+
 Route-quality scorer evidence, later June 3: the planner handoff now emits a
 route-quality score, predicted contact quality, first-contact risk, flags, and
 recommended next stage. The roughest executable route replay from seed

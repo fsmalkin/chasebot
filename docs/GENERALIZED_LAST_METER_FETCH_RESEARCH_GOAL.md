@@ -855,8 +855,26 @@ browser-watchable visual packages across two `fetch_ready_local`, two
 clean execution/setup/contact quality and `0` first-contact blockers. The six
 raw/topdown keyframe sheets were reviewed across setup, contact, push, and
 terminal arrival and agree with telemetry. This is the current promotion-grade
-sim evidence for the planner-routed architecture; the next research step is
-seed breadth and hardware-transfer planning, not a route-owner reset.
+sim evidence for the planner-routed architecture. The next research step is
+seed breadth and hardware-transfer planning.
+
+June 4, 2026 second-seed breadth update: seed `20260628` now gives the same
+planner-routed parent gate a second promotion-green randomized result:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+Planner routing passed `30/30` with `0` wrong fetch-ready dispatches across
+`fetch_ready_local`, `nav2_reposition_first`, `recovery_or_reaim`,
+`scan_or_perceive_first`, and `ambiguous_or_unsafe_no_go`. The live replay
+passed `6/6` executable rows and `6/6` browser-watchable visual packages across
+two local fetch, two Nav2-first, and two recovery/re-aim cases:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_replay/fetch_planner_route_replay_batch/scorecard.md`.
+The analyzer is clean for execution, setup, and contact quality with `0`
+first-contact blockers:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_analysis/fetch_planner_route_uat_analyzer/scorecard.md`.
+The first seed `20260628` attempt failed before mission launch because Docker
+bridge subnet space was exhausted; cleanup removed unused Chasecar dashboard and
+gate networks, and the rerun is the behavior evidence. The visual package now
+writes contact sheets beside each visual session, which keeps Windows package
+paths short and sequence review browser-linkable.
 
 June 4, 2026 recovery/re-aim route-boundary update: the same seed `20260627`
 later exposed a cleaner architecture lesson. A `recovery_or_reaim` route should

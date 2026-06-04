@@ -247,6 +247,30 @@ Live rerun after visual-evidence startup fix:
   optional/degraded Xpra no longer disables `world_stream_controller.py` or
   `visual_demo_observer.py`.
 
+June 4, 2026 second-seed planner-routed breadth check:
+
+- Gate:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Replay:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: seed `20260628` passed the same parent seeded gate after Docker
+  subnet cleanup. Planner routing passed `30/30` with `0` wrong fetch-ready
+  dispatches. Replay passed `6/6` live executable rows and `6/6`
+  browser-watchable visual packages across two `fetch_ready_local`, two
+  `nav2_reposition_first`, and two `recovery_or_reaim` rows.
+- Analyzer meaning: execution/setup/contact quality are clean, first-contact
+  blocker count is `0`, and the parent gate sets
+  `promotion_evidence=true`.
+- Visual review: the contact-sheet package now writes sequence review images
+  beside each visual session, which keeps Windows package paths short. Six
+  raw/topdown contact sheets were inspected across setup, first contact, push,
+  and terminal arrival; the onboard and topdown views agree with telemetry.
+- Infrastructure note: the first seed `20260628` attempt failed before mission
+  launch because Docker exhausted predefined bridge subnets. Unused Chasecar
+  dashboard/gate networks were removed; the rerun is the behavior evidence.
+
 June 4, 2026 recovery/re-aim route-boundary correction:
 
 - Code boundary: `nav2_reposition_first` remains the route that owns real Nav2

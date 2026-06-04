@@ -856,17 +856,11 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     missions = [item for item in missions if item]
     visual_dirs = [resolve_path(path) for path in args.visual_dir]
     video_recovery = [item for path in visual_dirs for item in recover_browser_videos(path)]
-    package_root = getattr(args, "package_root", None)
-    review_output_dir = ensure_dir(Path(package_root) / "keyframe_reviews") if package_root else None
     keyframe_reviews = [
         build_keyframe_review(
             path,
-            output_dir=review_output_dir,
-            output_name=(
-                f"{session_id_for_path(path) or 'session'}_{KEYFRAME_REVIEW_OUTPUT_NAME}"
-                if review_output_dir is not None
-                else KEYFRAME_REVIEW_OUTPUT_NAME
-            ),
+            output_dir=None,
+            output_name=KEYFRAME_REVIEW_OUTPUT_NAME,
         )
         for path in visual_dirs
         if path.is_dir()

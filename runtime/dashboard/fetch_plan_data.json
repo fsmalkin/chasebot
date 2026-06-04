@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 10:58 AM ET",
+  "updated_label": "Updated June 4, 2026, 11:38 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Seeded promotion gate green",
-  "status_detail": "The planner-routed stack now has promotion-grade seeded evidence for the current sim milestone: 30/30 planner routing, 6/6 live executable missions, 6/6 browser-watchable visual packages, clean analyzer status, and sequence-reviewed onboard/topdown proof. Hardware transfer and broader seed breadth remain next.",
+  "status_label": "Two seeded promotion gates green",
+  "status_detail": "The planner-routed stack now has two promotion-green randomized sim seeds for the current milestone: seed 20260627 and seed 20260628 each delivered 30/30 planner routing, 6/6 live executable missions, 6/6 browser-watchable visual packages, clean analyzer status, and sequence-reviewed onboard/topdown proof. The next work is a browser UAT bundle, regression preservation, and hardware-transfer planning.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,56 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Second planner-routed seeded gate is green",
+      "status": "Seed 20260628: 30/30 planner routing, 6/6 live missions, 6/6 visual packages",
+      "tone": "green",
+      "summary": "Seed 20260628 repeated the canonical planner-routed seeded gate after cleaning unused Chasecar Docker networks. The planner child routed all 30 mixed scenes correctly with zero wrong fetch-ready dispatches. The live replay selected two rows each for recovery_or_reaim, nav2_reposition_first, and fetch_ready_local; every mission delivered inside the 0.300m contract and every row produced browser-watchable onboard, topdown, and world-stream proof. The analyzer reports clean execution, setup, and contact quality with zero first-contact blockers, and the parent gate sets promotion_evidence=true.",
+      "metrics": [
+        "Parent gate: planner_routed_seeded_generalization_promotion_green; promotion_evidence=true",
+        "Planner child: 30/30, wrong_fetch=0; route split fetch_ready_local 6, nav2_reposition_first 4, recovery_or_reaim 7, scan_or_perceive_first 7, ambiguous_or_unsafe_no_go 6",
+        "Replay child: selected_count=6; mission_pass_count=6; visual_package_pass_count=6",
+        "Route coverage: fetch_ready_local 2/2, nav2_reposition_first 2/2, recovery_or_reaim 2/2",
+        "Analyzer: execution clean, setup clean, contact clean, first-contact blockers 0",
+        "Visual audit: six session-local keyframe sheets reviewed across setup, contact, push, and terminal arrival; raw/topdown sequences agree with telemetry",
+        "Infra note: the first seed20260628 attempt failed before mission launch because Docker bridge subnet space was exhausted; the rerun after unused network cleanup is the behavior evidence"
+      ],
+      "links": [
+        {
+          "label": "Seed 20260628 parent gate scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260628 parent gate summary",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604/fetch_planner_seeded_generalization_gate/gate_summary.json"
+        },
+        {
+          "label": "Seed 20260628 replay scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_replay/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Seed 20260628 analyzer scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Scene03 recovery onboard proof",
+          "url": "/artifacts/session/20260604T151923053290Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene09 Nav2 onboard proof",
+          "url": "/artifacts/session/20260604T152806933422Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene05 local onboard proof",
+          "url": "/artifacts/session/20260604T152216704001Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene06 recovery contact sheet",
+          "url": "/artifacts/session/20260604T152357745963Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ],
+      "preview_image": "/artifacts/session/20260604T152357745963Z/visual/keyframe_review_contact_sheet.png"
+    },
     {
       "title": "Planner-routed seeded gate is promotion green",
       "status": "30/30 planner routing, 6/6 live missions, 6/6 visual packages, analyzer clean",
@@ -723,6 +773,90 @@
   ],
   "running_video_proof": [],
   "recent_video_proof": [
+    {
+      "title": "Seed 20260628 scene03 recovery proof",
+      "summary": "Session 20260604T151923053290Z is a recovery_or_reaim row from the second promotion-green seeded gate.",
+      "primary_video": {
+        "label": "Scene03 recovery onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T151923053290Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The local bounded recovery routine can re-aim from lateral/yaw debt, establish contact, and push the ball into the delivery circle.",
+      "limits": "This is one row inside the six-row seed20260628 gate. Use the parent gate and analyzer for the milestone claim.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T151923053290Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T151923053290Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T151923053290Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/20260604T151923053290Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260628 scene09 Nav2-first proof",
+      "summary": "Session 20260604T152806933422Z is a Nav2-reposition-first row from the second promotion-green seeded gate.",
+      "primary_video": {
+        "label": "Scene09 Nav2-first onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T152806933422Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The planner can assign setup to Nav2, then hand contact back to bounded local fetch with the ball centered into the delivery circle.",
+      "limits": "This validates one Nav2-first sample inside the seed20260628 executable route slice.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T152806933422Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T152806933422Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T152806933422Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/20260604T152806933422Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260628 scene05 local proof",
+      "summary": "Session 20260604T152216704001Z is a fetch_ready_local row from the second promotion-green seeded gate.",
+      "primary_video": {
+        "label": "Scene05 local onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T152216704001Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The direct local fetch path remains clean when the planner correctly classifies the scene as contact-ready.",
+      "limits": "This is the easy-lane sanity sample inside the broader seeded gate.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T152216704001Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T152216704001Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T152216704001Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/20260604T152216704001Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
     {
       "title": "Seeded gate scene04 recovery proof",
       "summary": "Session 20260604T144624320615Z is the first recovery_or_reaim row from the promotion-green seeded gate.",
@@ -1746,12 +1880,10 @@
     }
   ],
   "next_steps": [
-    "Consolidate the promotion-green seeded gate by committing the visual-evidence startup fix, fixture refresh, tests, and planning updates.",
-    "Run at least one additional planner-routed seeded gate with a new seed and the same fresh-dashboard visual package contract to test breadth beyond seed 20260627.",
-    "Keep saved anchors and seed 20260627 as regression gates before any controller change; preserve browser-watchable onboard, topdown, world-stream, and keyframe-sheet proof for every row.",
-    "Use local-fetch smoothness candidates only after they reproduce across saved anchors or additional seeded gates.",
-    "Keep Nav2 and recovery as active route owners because the promotion-green gate now includes clean samples in both lanes.",
-    "Keep sequence review onboard-first: start/setup, pre-contact, first contact, mid-push or coast, terminal arrival, and final rest.",
-    "Start hardware-transfer planning after another breadth seed confirms the route-owner split under the same evidence contract."
+    "Package a short browser UAT review page section that highlights seed 20260627 and seed 20260628 with onboard-first videos and contact sheets.",
+    "Keep saved anchors plus seeds 20260627 and 20260628 as regression gates for any route-owner or contact-servo change.",
+    "Draft the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, model provenance checks, and visual-evidence capture on robot hardware.",
+    "Run the next breadth seed only after the UAT bundle is easy to review, so failures or wins are visually inspectable by default.",
+    "Investigate container-side ffmpeg availability as evidence hardening; host-side browser video recovery is working but remains a packaging dependency."
   ]
 }
