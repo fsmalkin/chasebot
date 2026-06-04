@@ -271,6 +271,17 @@ Planner-routed moonshot update, June 2:
   first-contact blockers `0`. The next patch should repeat mixed-family breadth
   on a second rough seed or package the stack for hardware-transfer review
   before contact-quality tuning.
+- second rough mixed-family confirmation:
+  seed `20260632` repeated the full two-live-samples-per-route package at
+  `artifacts/session/analysis_mixed_route_family_2per_route_seed20260632_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+  The replay used fresh packages for all `10` rows and passed route contracts
+  `10/10`, visual packages `10/10`, executable deliveries `6/6`, route-only
+  proofs `4/4`, clean analyzer status, and first-contact blockers `0`.
+  Branch decision: keep
+  `spike/fetch-arch-planner-routed-forward-only-moonshot-20260602` active as
+  the planner-routed UAT harness. The next branch work is a harder mixed
+  scenario matrix plus hardware-transfer packaging. Alternative architectures
+  remain reserve lanes for reproduced stage gaps in that harder matrix.
 - frozen planner-layout replay fix:
   fresh seed `seed20260608_scene24_fetch_ready_local` first failed as a manual
   target-layout replay because the runner used the old constant-push defaults

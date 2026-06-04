@@ -482,13 +482,20 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Two-per-route mixed-family UAT green"
-    assert payload["latest_evidence"][0]["title"] == "Two-per-route mixed-family UAT is green"
+    assert payload["status_label"] == "Second rough mixed-family seed green"
+    assert payload["latest_evidence"][0]["title"] == "Second rough mixed-family seed is green"
     assert payload["latest_evidence"][0]["links"][0]["url"].endswith(
         "/fetch_planner_route_uat_analyzer/scorecard.md"
     )
-    assert payload["uat_review_bundle"]["route_samples"][0]["route"] == "fetch_ready_local"
-    assert payload["uat_review_bundle"]["route_samples"][9]["route"] == "nav2_reposition_first"
+    route_samples = payload["uat_review_bundle"]["route_samples"]
+    assert len(route_samples) == 10
+    assert {sample["route"] for sample in route_samples} == {
+        "fetch_ready_local",
+        "nav2_reposition_first",
+        "recovery_or_reaim",
+        "scan_or_perceive_first",
+        "ambiguous_or_unsafe_no_go",
+    }
     assert payload["uat_review_bundle"]["route_samples"][0]["video_url"].startswith("/artifacts/session/")
     assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")
     html = (dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan.html").read_text(encoding="utf-8")

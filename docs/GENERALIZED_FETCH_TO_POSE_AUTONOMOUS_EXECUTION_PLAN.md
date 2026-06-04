@@ -421,8 +421,20 @@ green at
 `artifacts/session/analysis_mixed_route_family_2per_route_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
 It passed route contracts `10/10`, visual packages `10/10`, executable
 deliveries `6/6`, route-only proofs `4/4`, clean analyzer status, and
-first-contact blockers `0`. The next autonomous step is a second rough mixed
-seed or hardware-transfer packaging before contact-control changes.
+first-contact blockers `0`.
+
+June 4 second rough mixed-family proof: seed `20260632` repeated the same
+two-per-route mixed-family UAT at
+`artifacts/session/analysis_mixed_route_family_2per_route_seed20260632_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+It selected `10` fresh rows and passed route contracts `10/10`, visual packages
+`10/10`, executable deliveries `6/6`, route-only proofs `4/4`, clean analyzer
+status, and first-contact blockers `0`. Sequence review across all ten
+raw-camera/topdown sheets matched the route contract: executable rows delivered
+into the visible circle, while planner-only rows withheld local fetch. The next
+autonomous step is a harder mixed-scenario UAT matrix with opposite-side starts,
+larger setup angles, and forward-only setup pressure, plus hardware-transfer
+packaging in parallel. Hold contact-control changes until that matrix exposes
+a reproduced route-family stage gap.
 
 ## Evidence Reset
 

@@ -507,6 +507,33 @@ June 4, 2026 two-per-route mixed route-family UAT:
 - Evidence meaning: seed `20260633` now has enough route-family breadth for the
   next question to move to another rough seed or hardware-transfer packaging.
 
+June 4, 2026 second rough-seed mixed route-family UAT:
+
+- Command:
+  `python scripts\fetch_planner_route_replay_batch.py --campaign-id live_mixed_route_family_2per_route_seed20260632_20260604 --gate-summary artifacts\session\live_planner_seeded_generalization_gate_seed20260632_breadth_20260604_planner\fetch_planner_handoff_gate\gate_summary.json --route fetch_ready_local --route nav2_reposition_first --route recovery_or_reaim --route scan_or_perceive_first --route ambiguous_or_unsafe_no_go --max-per-route 2 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --route-only-sample-duration-s 6 --timeout-s 180 --package-timeout-s 180`
+- Replay scorecard:
+  `artifacts/session/live_mixed_route_family_2per_route_seed20260632_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/analysis_mixed_route_family_2per_route_seed20260632_20260604/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: selected `10`, route contracts `10/10`, visual packages `10/10`,
+  executable deliveries `6/6`, route-only proofs `4/4`, analyzer clean, and
+  first-contact blockers `0`.
+- Route read: every route family has two live samples on a second rough seed.
+  `fetch_ready_local`, `recovery_or_reaim`, and `nav2_reposition_first`
+  delivered with closest approach `0.195m..0.198m`. `scan_or_perceive_first`
+  and `ambiguous_or_unsafe_no_go` withheld local fetch and passed route-only
+  proof.
+- Visual review: inspected raw-camera plus topdown keyframe sheets for all ten
+  sessions. The six executable rows showed coherent setup, contact, push, and
+  visible delivery. The four planner-only rows showed stopped-scene proof with
+  local fetch withheld.
+- Evidence meaning: this confirms the seed `20260633` mixed-family result on a
+  second rough seed and keeps the architecture question pointed at
+  route-gated planner ownership. The next useful work is a deliberately hard
+  mixed-scenario UAT matrix, including opposite-side-of-circle and large
+  setup-angle cases, plus hardware-transfer packaging. Keep contact-control
+  tuning behind reproducible route-family stage gaps.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

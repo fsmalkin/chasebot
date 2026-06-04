@@ -1041,6 +1041,20 @@ Executable closest approach stayed within `0.194m..0.197m`. This moves the
 next research question from this seed to either a second rough mixed-family
 seed or hardware-transfer packaging.
 
+The second rough mixed-family seed is now green:
+`artifacts/session/analysis_mixed_route_family_2per_route_seed20260632_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The replay selected `10` fresh rows from seed `20260632`, with two live samples
+for each route family. It passed route contracts `10/10`, visual packages
+`10/10`, executable deliveries `6/6`, route-only proofs `4/4`, clean
+execution/setup/contact analysis, and first-contact blockers `0`. Raw-camera
+plus topdown frame-sequence review matched the telemetry: executable rows
+showed setup, contact, push, and visible delivery, while planner-only rows
+withheld local fetch and stayed stopped. This strengthens the route-gated
+architecture decision. The next research gate should deliberately stress hard
+scenario geometry, especially opposite-side-of-circle starts, large setup
+angles, forward-only setup pressure, and unknown-scene refusal boundaries.
+Alternative architectures remain reserve lanes for reproduced stage gaps.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

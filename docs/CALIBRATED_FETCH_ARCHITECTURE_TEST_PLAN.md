@@ -223,6 +223,18 @@ final parent gate
 is promotion-green with `30/30` planner routing, `6/6` live missions, `6/6`
 visual packages, clean analyzer status, and `0` first-contact blockers.
 
+June 4 mixed-family route-owner evidence now covers two rough seeds. Seed
+`20260633` and seed `20260632` each passed the two-live-samples-per-route UAT
+surface across `fetch_ready_local`, `nav2_reposition_first`,
+`recovery_or_reaim`, `scan_or_perceive_first`, and
+`ambiguous_or_unsafe_no_go`. The latest analyzer is
+`artifacts/session/analysis_mixed_route_family_2per_route_seed20260632_20260604/fetch_planner_route_uat_analyzer/scorecard.md`:
+route contracts `10/10`, visual packages `10/10`, executable deliveries `6/6`,
+route-only proofs `4/4`, clean analyzer status, and first-contact blockers
+`0`. Treat this as route-family visual UAT. The next gate should deliberately
+stress hard geometry and planner refusal boundaries before additional contact
+controller work.
+
 ## Research Thread Output
 
 Before starting another implementation spike, produce a findings matrix across

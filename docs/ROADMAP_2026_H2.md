@@ -982,6 +982,19 @@ passed route contracts `10/10`, visual packages `10/10`, executable deliveries
 blockers `0`. The next roadmap slice should repeat mixed-family breadth on a
 second rough seed or package the current stack for hardware-transfer review.
 
+June 4 second rough-seed mixed-family evidence: seed `20260632` repeated the
+full two-per-route mixed-family UAT at
+`artifacts/session/analysis_mixed_route_family_2per_route_seed20260632_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The live replay selected `10` rows with no reused packages and passed route
+contracts `10/10`, visual packages `10/10`, executable deliveries `6/6`,
+route-only proofs `4/4`, clean analyzer status, and first-contact blockers
+`0`. The route mix included two live rows each for direct local fetch,
+Nav2-first setup, recovery/re-aim, scan/defer, and safe no-go. The roadmap
+therefore keeps the planner-gated architecture as the active path. The next
+roadmap slice is a harder mixed-scenario UAT matrix that deliberately includes
+opposite-side-of-circle starts, larger setup angles, and forward-only setup
+pressure, while hardware-transfer packaging starts in parallel.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

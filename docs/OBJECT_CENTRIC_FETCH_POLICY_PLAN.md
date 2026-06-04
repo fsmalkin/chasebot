@@ -731,6 +731,18 @@ first-contact blockers `0`. Policy implication: keep this branch on
 route-family breadth and hardware-transfer packaging; use a second rough seed
 as the next evidence gate before contact-control tuning.
 
+The second rough mixed-family seed is now green:
+`artifacts/session/analysis_mixed_route_family_2per_route_seed20260632_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+It repeated the two-per-route package with `10/10` route contracts, `10/10`
+visual packages, executable deliveries `6/6`, route-only proofs `4/4`, clean
+setup/contact/execution quality, and first-contact blockers `0`. Policy
+implication: the current evidence supports planner-gated route ownership as
+the primary architecture. The next local-control work should come from a hard
+mixed-scenario matrix that stresses opposite-side-of-circle setup, larger
+angles, forward-only positioning, and LLM/planner refusal boundaries. Contact
+servo changes should follow a reproduced route-family stage gap rather than a
+single rough visual impression.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose
