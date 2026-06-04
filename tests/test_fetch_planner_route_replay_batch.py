@@ -36,6 +36,7 @@ def _make_args(**overrides):
         "env_ready_timeout_s": 420.0,
         "env_stop_timeout_s": 90.0,
         "fetch_delivery_radius_m": 0.3,
+        "route_only_sample_duration_s": 5.0,
         "python_exe": sys.executable,
         "timeout_s": 180.0,
         "package_timeout_s": 120.0,
@@ -79,6 +80,43 @@ def test_replay_batch_dry_run_materializes_one_layout_per_route(tmp_path, monkey
         assert layout["planner_route_label"] == row["route_label"]
         assert "--target-layout-json" in row["command"]
         assert row["command"][row["command"].index("--target-layout-json") + 1] == str(layout_path)
+
+
+def test_replay_batch_dry_run_can_materialize_planner_only_route_proofs(tmp_path, monkeypatch):
+    monkeypatch.setattr(batch, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(batch, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+
+    gate_root = tmp_path / "artifacts" / "session" / "gate" / gate.PLANNER_GATE_KIND
+    scenes = gate.generate_random_scenes(seed=20260633, random_cases=30)
+    results = []
+    for scene in scenes:
+        scene_path = gate_root / "scene_descriptors" / f"{scene['scene_id']}.json"
+        _write_json(scene_path, scene)
+        decision = gate.decide_scene(scene)
+        results.append({**decision, "scene_path": str(scene_path)})
+    gate_summary = gate_root / "gate_summary.json"
+    _write_json(gate_summary, {"results": results})
+
+    summary = batch.run_batch(
+        _make_args(
+            gate_summary=str(gate_summary),
+            route=[gate.ROUTE_SCAN_OR_PERCEIVE, gate.ROUTE_NO_GO],
+            max_per_route=1,
+            dry_run=True,
+        )
+    )
+
+    assert summary["pass"] is True
+    assert summary["selected_count"] == 2
+    assert summary["requested_route_count"] == {
+        gate.ROUTE_SCAN_OR_PERCEIVE: 1,
+        gate.ROUTE_NO_GO: 1,
+    }
+    assert all(row["planner_only_route"] is True for row in summary["rows"])
+    for row in summary["rows"]:
+        assert "--planner-route-only-proof" in row["command"]
+        assert row["command"][row["command"].index("--drive-linear-x-mps") + 1] == "0.000000"
+        assert row["command"][row["command"].index("--sample-duration-s") + 1] == "5.000000"
 
 
 def test_replay_batch_quality_order_selects_roughest_per_route():
@@ -182,6 +220,101 @@ def test_replay_batch_live_mock_records_mission_and_visual_package(tmp_path, mon
     assert summary["visual_package_pass_count"] == 1
     assert summary["rows"][0]["mission"]["closest_approach_distance_m"] == 0.196
     assert summary["rows"][0]["visual_package"]["pass"] is True
+
+
+def test_replay_batch_live_mock_records_planner_only_route_package(tmp_path, monkeypatch):
+    monkeypatch.setattr(batch, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(batch, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+
+    gate_root = tmp_path / "artifacts" / "session" / "gate" / gate.PLANNER_GATE_KIND
+    scene = next(
+        item
+        for item in gate.generate_random_scenes(seed=20260633, random_cases=30)
+        if item["expected_route_label"] == gate.ROUTE_NO_GO
+    )
+    scene_path = gate_root / "scene_descriptors" / f"{scene['scene_id']}.json"
+    _write_json(scene_path, scene)
+    decision = gate.decide_scene(scene)
+    gate_summary = gate_root / "gate_summary.json"
+    _write_json(gate_summary, {"results": [{**decision, "scene_path": str(scene_path)}]})
+
+    def fake_run(command, *, timeout_s):
+        command_text = " ".join(command)
+        if "golf_ball_circle_delivery_demo_runner.py" in command_text:
+            assert "--planner-route-only-proof" in command
+            mission = (
+                tmp_path
+                / "artifacts"
+                / "session"
+                / "session_route_only"
+                / "golf_ball_circle_delivery"
+                / "run"
+                / "mission_verdict.json"
+            )
+            _write_json(
+                mission,
+                {
+                    "type": "planner_route_only_proof",
+                    "pass": True,
+                    "fetch_to_pose_pass": False,
+                    "planner_route_only_pass": True,
+                    "local_fetch_dispatched": False,
+                    "planner_route_executed": True,
+                    "planner_route_label": gate.ROUTE_NO_GO,
+                    "route_executor": gate.ROUTE_EXECUTOR_NO_GO,
+                    "planner_route_execution": {
+                        "route_label": gate.ROUTE_NO_GO,
+                        "route_executor": gate.ROUTE_EXECUTOR_NO_GO,
+                        "route_executed": True,
+                        "outcome": "safe_no_go_selected",
+                    },
+                    "shot_outcome": {
+                        "reason": "planner_route_only_local_fetch_withheld",
+                        "closest_approach_distance_m": 0.733,
+                    },
+                },
+            )
+            return type("Completed", (), {"returncode": 0, "stdout": f"{batch.MISSION_SUMMARY_MARKER}{mission}\n", "stderr": ""})()
+        assert "fetch_visual_uat_package.py" in command_text
+        assert "--route-only-proof" in command
+        package_summary = (
+            tmp_path
+            / "artifacts"
+            / "session"
+            / "route_only_package"
+            / "fetch_visual_uat_package"
+            / "package_summary.json"
+        )
+        _write_json(
+            package_summary,
+            {
+                "campaign_id": "route_only_package",
+                "pass": True,
+                "route_only_proof": True,
+                "scorecard_path": "artifacts/session/route_only_package/fetch_visual_uat_package/scorecard.md",
+            },
+        )
+        return type("Completed", (), {"returncode": 0, "stdout": f"{batch.VISUAL_PACKAGE_MARKER}{package_summary}\n", "stderr": ""})()
+
+    monkeypatch.setattr(batch, "_run_command", fake_run)
+
+    summary = batch.run_batch(
+        _make_args(
+            gate_summary=str(gate_summary),
+            route=[gate.ROUTE_NO_GO],
+            max_per_route=1,
+            dry_run=False,
+        )
+    )
+
+    assert summary["pass"] is True
+    assert summary["mission_pass_count"] == 0
+    assert summary["route_only_pass_count"] == 1
+    assert summary["route_success_count"] == 1
+    assert summary["visual_package_pass_count"] == 1
+    assert summary["rows"][0]["planner_only_route"] is True
+    assert summary["rows"][0]["mission"]["planner_route_only_pass"] is True
+    assert summary["rows"][0]["visual_package"]["route_only_proof"] is True
 
 
 def test_replay_batch_resume_skip_existing_visual_package(tmp_path, monkeypatch):

@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 2:43 PM ET",
+  "updated_label": "Updated June 4, 2026, 3:05 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Seven-seed breadth manifest green",
-  "status_detail": "The planner-routed stack now has a seven-seed preservation bar plus four rougher broad-UAT seeds. Seeds 20260630 through 20260633 all pass after the bounded recovery line-acquire crawl repair. The expanded regression manifest is green with 7/7 seeded gates, 210/210 planner routing, wrong_fetch=0, 42/42 live executable missions, and 42/42 browser-watchable visual packages. Seed 20260633 adds a harder route mix with 10 no-go classifications, four scan/perception classifications, and six watch-predicted executable rows that all passed cleanly.",
+  "status_label": "Seven-seed breadth plus route-only proof green",
+  "status_detail": "The planner-routed stack now has a seven-seed preservation bar plus live route-only proof for planner-owned scan/defer and safe no-go. The expanded regression manifest is green with 7/7 seeded gates, 210/210 planner routing, wrong_fetch=0, 42/42 live executable missions, and 42/42 browser-watchable visual packages. Seed 20260633 adds a harder route mix with 10 no-go classifications and four scan/perception classifications; the new route-only proof replay selected one scan row and one no-go row, kept local fetch withheld, sampled 59 stopped-scene frames for each, and measured zero robot or ball displacement.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,42 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Planner-only route proof is green",
+      "status": "Seed 20260633 scan/defer and no-go rows replayed as stopped-scene visual proof",
+      "tone": "green",
+      "summary": "The route-only proof closes the immediate architecture gap for planner-owned non-fetch outcomes. The replay selected one scan_or_perceive_first row and one ambiguous_or_unsafe_no_go row from the seed20260633 planner child, spawned the calibrated scene, withheld local fetch, and produced browser-watchable onboard, topdown, world, and keyframe evidence. Telemetry agrees with the visual read: both rows passed route_only proof, both had local_fetch_dispatched=false, and both sampled 59 frames with zero robot and ball displacement.",
+      "metrics": [
+        "Route-only replay: selected=2; route_only_pass=2; visual_package_pass=2",
+        "scan_or_perceive_first: local_fetch_dispatched=false; outcome=scan_or_perception_refresh_selected; closest=0.681m",
+        "ambiguous_or_unsafe_no_go: local_fetch_dispatched=false; outcome=safe_no_go_selected; closest=1.711m",
+        "Trace sanity: 59 samples each; robot_move=0.000m; ball_move=0.000m",
+        "Evidence role: live route-family UAT, promotion_evidence=false; fetch_to_pose promotion remains tied to saved anchors and seeded executable gates"
+      ],
+      "links": [
+        {
+          "label": "Route-only replay scorecard",
+          "url": "/artifacts/session/live_planner_only_route_proof_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Scan/defer onboard proof",
+          "url": "/artifacts/session/20260604T190012811111Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scan/defer contact sheet",
+          "url": "/artifacts/session/20260604T190012811111Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "No-go onboard proof",
+          "url": "/artifacts/session/20260604T190145812743Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "No-go contact sheet",
+          "url": "/artifacts/session/20260604T190145812743Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ],
+      "preview_image": "/artifacts/session/20260604T190145812743Z/visual/keyframe_review_contact_sheet.png"
+    },
     {
       "title": "Seed 20260633 breadth gate is green",
       "status": "Fourth rough breadth seed: 30/30 planner routing, 6/6 executable missions, 6/6 visual packages",
@@ -1077,6 +1113,62 @@
   ],
   "running_video_proof": [
     {
+      "title": "Seed 20260633 scene04 scan/defer route-only proof",
+      "summary": "Session 20260604T190012811111Z materializes a scan_or_perceive_first scene, with local fetch withheld and no robot or ball movement across 59 samples.",
+      "primary_video": {
+        "label": "scan_or_perceive_first onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T190012811111Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The planner can route a scene to perception refresh/abstain without dispatching local fetch, while preserving browser-watchable scene evidence.",
+      "limits": "This is route-family UAT and promotion_evidence=false; it validates correct withholding, not delivery into the circle.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T190012811111Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T190012811111Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T190012811111Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/20260604T190012811111Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260633 scene05 safe no-go route-only proof",
+      "summary": "Session 20260604T190145812743Z materializes an ambiguous_or_unsafe_no_go scene, with local fetch withheld and no robot or ball movement across 59 samples.",
+      "primary_video": {
+        "label": "ambiguous_or_unsafe_no_go onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T190145812743Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The planner can choose safe no-go for an out-of-envelope scene and keep the robot stopped instead of attempting local fetch.",
+      "limits": "This proves correct refusal/defer behavior for one no-go row; broader mixed route-family UAT should repeat this over additional seeds.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T190145812743Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T190145812743Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T190145812743Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/20260604T190145812743Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
       "title": "Seed 20260633 scene02 recovery proof",
       "summary": "Session 20260604T183054817097Z is the roughest high-risk recovery_or_reaim row from seed20260633.",
       "primary_video": {
@@ -1134,6 +1226,62 @@
     }
   ],
   "recent_video_proof": [
+    {
+      "title": "Seed 20260633 scene04 scan/defer route-only proof",
+      "summary": "Session 20260604T190012811111Z materializes a scan_or_perceive_first scene, with local fetch withheld and no robot or ball movement across 59 samples.",
+      "primary_video": {
+        "label": "scan_or_perceive_first onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T190012811111Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The planner can route a scene to perception refresh/abstain without dispatching local fetch, while preserving browser-watchable scene evidence.",
+      "limits": "This is route-family UAT and promotion_evidence=false; it validates correct withholding, not delivery into the circle.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T190012811111Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T190012811111Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T190012811111Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/20260604T190012811111Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260633 scene05 safe no-go route-only proof",
+      "summary": "Session 20260604T190145812743Z materializes an ambiguous_or_unsafe_no_go scene, with local fetch withheld and no robot or ball movement across 59 samples.",
+      "primary_video": {
+        "label": "ambiguous_or_unsafe_no_go onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T190145812743Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The planner can choose safe no-go for an out-of-envelope scene and keep the robot stopped instead of attempting local fetch.",
+      "limits": "This proves correct refusal/defer behavior for one no-go row; broader mixed route-family UAT should repeat this over additional seeds.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T190145812743Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T190145812743Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T190145812743Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/20260604T190145812743Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
     {
       "title": "Seed 20260633 scene02 recovery proof",
       "summary": "Session 20260604T183054817097Z is the roughest high-risk recovery_or_reaim row from seed20260633.",
@@ -2621,8 +2769,28 @@
   ],
   "uat_review_bundle": {
     "title": "Seed 20260633 breadth browser UAT bundle",
-    "summary": "Review the seed20260633 route samples first, then use the parent seed scorecards and seven-seed manifest to confirm the broader claim. The intended read is simple: the planner routes the scene, the chosen setup owner reaches a forward contact path, and local bounded fetch pushes the calibrated ball into the delivery circle. Seed20260633 is the fourth rough breadth seed after the recovery yaw-hold repair and includes a heavier planner-only no-go/scan mix.",
+    "summary": "Review the seed20260633 route-only proof first for planner-owned scan/no-go behavior, then review the executable route samples for contact and delivery. The intended read is now broader: the planner either withholds fetch for out-of-envelope scenes or routes an executable setup owner into bounded local fetch. The seven-seed manifest remains the preservation bar for executable delivery; the route-only proof is supporting UAT for correct refusal/defer.",
     "route_samples": [
+      {
+        "label": "Scan/defer route-only sample",
+        "route": "scan_or_perceive_first",
+        "session_id": "20260604T190012811111Z",
+        "reason": "Shows planner-owned perception refresh/abstain with local fetch withheld and no measured robot or ball movement.",
+        "video_url": "/artifacts/session/20260604T190012811111Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T190012811111Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T190012811111Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T190012811111Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Safe no-go route-only sample",
+        "route": "ambiguous_or_unsafe_no_go",
+        "session_id": "20260604T190145812743Z",
+        "reason": "Shows planner-owned safe no-go with local fetch withheld and no measured robot or ball movement.",
+        "video_url": "/artifacts/session/20260604T190145812743Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T190145812743Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T190145812743Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T190145812743Z/visual/keyframe_review_contact_sheet.png"
+      },
       {
         "label": "Recovery / re-aim sample A",
         "route": "recovery_or_reaim",
@@ -2665,13 +2833,18 @@
       }
     ],
     "review_checklist": [
-      "Start with onboard raw camera: verify setup, first contact, push, and final approach before trusting telemetry.",
-      "Use the contact sheet for the same session to compare onboard and topdown frames across the full run.",
+      "Start with onboard raw camera: verify whether the route is a stopped route-only proof or an executable fetch run before judging motion.",
+      "For route-only scan/no-go rows, confirm the scene is visible, local_fetch_dispatched=false, and robot/ball displacement remain zero in the scorecard.",
+      "For executable rows, verify setup, first contact, push, and final approach before trusting telemetry.",
+      "Use the contact sheet for the same session to compare onboard and topdown frames across the full run or stopped-scene sample.",
       "Use the parent scorecards to verify the broader claim: seeds 20260627 through 20260633 are each 30/30 planner and 6/6 live executable green.",
-      "Treat scan_or_perceive_first and ambiguous_or_unsafe_no_go as planner classifications until those route families receive live executors.",
-      "Keep the next engineering decision focused on route-family executor coverage and hardware-transfer packaging because current sim breadth now includes four rough post-repair seeds."
+      "Keep the next engineering decision focused on mixed route-family UAT and hardware-transfer packaging because current sim breadth now includes route-only refusal/defer proof."
     ],
     "links": [
+      {
+        "label": "Route-only proof scorecard",
+        "url": "/artifacts/session/live_planner_only_route_proof_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md"
+      },
       {
         "label": "Seed 20260633 parent scorecard",
         "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260633_breadth_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"

@@ -440,9 +440,28 @@ June 4, 2026 seven-seed regression manifest:
 - Result: `planner_routed_moonshot_regression_set_green`; seeded gates `7/7`,
   live seeded missions `42/42`, and visual packages `42/42`.
 - Evidence meaning: this is the current preservation bar for route-owner,
-  controller, visual-packaging, dashboard, and hardware-transfer changes. The
-  next broadening target is live evidence for the planner-only route families:
-  `scan_or_perceive_first` and `ambiguous_or_unsafe_no_go`.
+  controller, visual-packaging, dashboard, and hardware-transfer changes.
+
+June 4, 2026 planner-only route proof:
+
+- Command:
+  `python scripts\fetch_planner_route_replay_batch.py --campaign-id live_planner_only_route_proof_seed20260633_20260604 --gate-summary artifacts\session\live_planner_seeded_generalization_gate_seed20260633_breadth_20260604_planner\fetch_planner_handoff_gate\gate_summary.json --route scan_or_perceive_first --route ambiguous_or_unsafe_no_go --max-per-route 1 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --route-only-sample-duration-s 6 --timeout-s 120 --package-timeout-s 180 --stop-on-fail`
+- Scorecard:
+  `artifacts/session/live_planner_only_route_proof_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Result: route-only proof `2/2`, visual packages `2/2`,
+  `local_fetch_dispatched=false` for both rows, `fetch_to_pose_pass=false` for
+  both rows by design, and `promotion_evidence=false`.
+- Visual/trace review: inspected both keyframe contact sheets. The
+  `scan_or_perceive_first` row selected
+  `scan_or_perception_refresh_selected`, sampled `59` frames, and measured
+  robot motion `0.000m` and ball motion `0.000m`. The
+  `ambiguous_or_unsafe_no_go` row selected `safe_no_go_selected`, sampled `59`
+  frames, and measured robot motion `0.000m` and ball motion `0.000m`.
+- Evidence meaning: planner-owned refusal/defer now has live stopped-scene
+  browser evidence beside the executable fetch evidence. The next broadening
+  target is a mixed route-family UAT batch over additional seeds, scored as
+  fetch success for executable routes and correct withholding for route-only
+  routes.
 
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing

@@ -254,12 +254,15 @@ Planner-routed moonshot update, June 2:
   world-stream clips from saved frame sequences when recorder MP4s are missing,
   empty, or invalid. Scorecards list those recoveries explicitly.
 - next branch decision:
-  keep this branch disposable while using the six-run random route-owner batch
-  as the current UAT baseline. The next patch should target contact-quality
-  scoring and pre-contact smoothing because the repeated watch is setup
-  lateral/yaw quality; first-contact and terminal delivery stayed green. Live
-  perception refresh can remain a classified planner action until random
-  coverage exposes a real scan/refresh execution need.
+  keep this branch disposable while using the seven-seed executable regression
+  manifest and the seed `20260633` route-only proof as the current UAT
+  baseline. The latest non-fetch proof is
+  `artifacts/session/live_planner_only_route_proof_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md`:
+  one `scan_or_perceive_first` row and one `ambiguous_or_unsafe_no_go` row
+  passed with local fetch withheld, browser-watchable packages, `59` samples
+  each, and measured robot/ball motion `0.000m`. The next patch should scale a
+  mixed route-family UAT batch before contact-quality tuning because the
+  branch now has proof for both executable fetch and correct refusal/defer.
 - frozen planner-layout replay fix:
   fresh seed `seed20260608_scene24_fetch_ready_local` first failed as a manual
   target-layout replay because the runner used the old constant-push defaults

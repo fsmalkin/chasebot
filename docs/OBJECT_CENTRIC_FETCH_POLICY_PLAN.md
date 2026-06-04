@@ -697,6 +697,20 @@ setup owner for admissible Nav2-first scenes, keep deterministic recovery as the
 fallback for clean pre-contact aborts and high-debt setup, and add seed20260629
 scene01/scene05 to the regression set.
 
+June 4 seven-seed plus route-only update: the current preservation bar is
+`artifacts/session/analysis_planner_moonshot_regression_set_seven_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
+It covers seeds `20260627` through `20260633` with planner routing `210/210`,
+`wrong_fetch=0`, live executable missions `42/42`, and visual packages `42/42`.
+The first live non-fetch route proof is
+`artifacts/session/live_planner_only_route_proof_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md`:
+one `scan_or_perceive_first` row and one `ambiguous_or_unsafe_no_go` row
+passed route-only proof, withheld local fetch, produced browser-watchable
+packages, and measured robot/ball motion `0.000m` over `59` samples each.
+Policy implication: the next broad UAT surface should score mixed route-family
+success: executable routes must deliver inside the radius, while scan/no-go
+routes must materialize the scene, withhold local fetch, and keep the robot and
+ball stopped. Keep contact-control tuning behind that mixed-route breadth check.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

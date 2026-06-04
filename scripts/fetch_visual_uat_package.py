@@ -16,6 +16,9 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 PACKAGE_KIND = "fetch_visual_uat_package"
+ROUTE_SCAN_OR_PERCEIVE = "scan_or_perceive_first"
+ROUTE_NO_GO = "ambiguous_or_unsafe_no_go"
+PLANNER_ONLY_ROUTE_LABELS = frozenset({ROUTE_SCAN_OR_PERCEIVE, ROUTE_NO_GO})
 VIDEO_MIN_BYTES = 1024
 VIDEO_NAMES = (
     "raw_camera_browser.mp4",
@@ -657,6 +660,15 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     for candidate in (payload.get("planner_route"), mission_verdict.get("planner_route"), first_run.get("planner_route")):
         if isinstance(candidate, dict):
             planner_route.update(candidate)
+    planner_route_execution: dict[str, Any] = {}
+    for candidate in (
+        payload.get("planner_route_execution"),
+        mission_verdict.get("planner_route_execution"),
+        first_run.get("planner_route_execution"),
+        planner_route.get("planner_route_execution"),
+    ):
+        if isinstance(candidate, dict):
+            planner_route_execution.update(candidate)
     shot_outcome: dict[str, Any] = {}
     for candidate in (payload.get("shot_outcome"), mission_verdict.get("shot_outcome"), first_run.get("shot_outcome")):
         if isinstance(candidate, dict):
@@ -696,6 +708,7 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         first_run.get("planner_route_label"),
         planner_route.get("planner_route_label"),
         planner_route.get("route_label"),
+        planner_route_execution.get("route_label"),
     )
     route_executor = pick_text(
         payload.get("route_executor"),
@@ -703,6 +716,30 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         first_run.get("route_executor"),
         planner_route.get("route_executor"),
         planner_route.get("executor"),
+        planner_route_execution.get("route_executor"),
+    )
+    local_fetch_dispatched_raw = payload.get(
+        "local_fetch_dispatched",
+        mission_verdict.get(
+            "local_fetch_dispatched",
+            first_run.get("local_fetch_dispatched", planner_route_execution.get("local_fetch_dispatched", None)),
+        ),
+    )
+    local_fetch_dispatched = True if local_fetch_dispatched_raw is None else bool(local_fetch_dispatched_raw)
+    planner_route_executed = bool(
+        payload.get(
+            "planner_route_executed",
+            mission_verdict.get(
+                "planner_route_executed",
+                first_run.get("planner_route_executed", planner_route_execution.get("route_executed", False)),
+            ),
+        )
+    )
+    planner_route_only_pass = bool(
+        pass_flag
+        and not local_fetch_dispatched
+        and planner_route_executed
+        and route_label in PLANNER_ONLY_ROUTE_LABELS
     )
     closest_approach = payload.get(
         "closest_approach_distance_m",
@@ -724,6 +761,11 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         "pass": bool(pass_flag and geometry_ok and provenance_ok),
         "fetch_to_pose_pass": fetch_pass,
         "raw_fetch_to_pose_pass": raw_fetch_pass,
+        "planner_route_only_pass": planner_route_only_pass,
+        "local_fetch_dispatched": local_fetch_dispatched,
+        "planner_route_executed": planner_route_executed,
+        "planner_route_outcome": str(planner_route_execution.get("outcome", "") or ""),
+        "planner_route_reason": str(planner_route_execution.get("reason", "") or ""),
         "fetch_to_pose_pass_count": int(payload.get("fetch_to_pose_pass_count", 1 if fetch_pass else 0) or 0) if fetch_pass else 0,
         "fetch_to_pose_fail_count": int(payload.get("fetch_to_pose_fail_count", 0 if fetch_pass else 1) or 0) if fetch_pass else 1,
         "ai_push_coast_mode": str(payload.get("ai_push_coast_mode", mission_verdict.get("ai_push_coast_mode", "")) or ""),
@@ -846,6 +888,7 @@ def discover_videos(visual_dirs: list[Path]) -> list[dict[str, Any]]:
 
 
 def build_summary(args: argparse.Namespace) -> dict[str, Any]:
+    route_only_proof = bool(getattr(args, "route_only_proof", False))
     planner_gates = [summarize_planner_gate(resolve_path(path)) for path in args.planner_summary]
     planner_gates = [item for item in planner_gates if item]
     seeded_evidence = [summarize_seeded_evidence(resolve_path(path)) for path in args.seeded_evidence_summary]
@@ -888,9 +931,15 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         for mission in missions
     )
     local_fetch_seen = any(mission.get("fetch_to_pose_pass") for mission in missions)
+    planner_route_only_seen = any(mission.get("planner_route_only_pass") for mission in missions)
     visual_confirmation_seen = any(item.get("visual_confirmation_pass") for item in visual_summaries)
     local_fetch_visual_confirmed = any(
         mission.get("fetch_to_pose_pass")
+        and visual_by_session.get(str(mission.get("session_id", "") or ""), {}).get("visual_confirmation_pass")
+        for mission in missions
+    )
+    planner_route_only_visual_confirmed = any(
+        mission.get("planner_route_only_pass")
         and visual_by_session.get(str(mission.get("session_id", "") or ""), {}).get("visual_confirmation_pass")
         for mission in missions
     )
@@ -901,11 +950,17 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     }
     onboard_camera_ok = "raw_camera_browser.mp4" in playable_core
     video_ok = REQUIRED_MOBILE_VIDEO_NAMES.issubset(playable_core)
-    pass_flag = bool(planner_ok and local_fetch_seen and video_ok and local_fetch_visual_confirmed)
+    if route_only_proof:
+        pass_flag = bool(planner_ok and planner_route_only_seen and video_ok and planner_route_only_visual_confirmed)
+    else:
+        pass_flag = bool(planner_ok and local_fetch_seen and video_ok and local_fetch_visual_confirmed)
     warnings: list[str] = []
     if not planner_ok:
         warnings.append("planner_gate_not_green")
-    if not local_fetch_seen:
+    if route_only_proof:
+        if not planner_route_only_seen:
+            warnings.append("no_planner_route_only_pass_seen")
+    elif not local_fetch_seen:
         warnings.append("no_local_fetch_pass_seen")
     if geometry_mismatch_seen:
         warnings.append("fetch_marker_geometry_mismatch")
@@ -926,7 +981,9 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         warnings.append("missing_or_tiny_onboard_raw_camera_video")
     if not visual_confirmation_seen:
         warnings.append("no_healthy_visual_confirmation")
-    if local_fetch_seen and not local_fetch_visual_confirmed:
+    if route_only_proof and planner_route_only_seen and not planner_route_only_visual_confirmed:
+        warnings.append("passing_planner_route_only_lacks_same_session_visual_confirmation")
+    if not route_only_proof and local_fetch_seen and not local_fetch_visual_confirmed:
         warnings.append("passing_local_fetch_lacks_same_session_visual_confirmation")
     if any(item.get("visual_keyframe_recovery_pass") for item in visual_summaries):
         warnings.append("visual_confirmation_keyframe_recovery")
@@ -951,12 +1008,15 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "campaign_id": str(args.campaign_id or ""),
         "generated_utc": utc_now(),
         "pass": pass_flag,
+        "route_only_proof": route_only_proof,
         "mobile_watchable": video_ok,
         "onboard_camera_watchable": onboard_camera_ok,
         "visual_confirmation_seen": visual_confirmation_seen,
         "local_fetch_visual_confirmed": local_fetch_visual_confirmed,
+        "planner_route_only_visual_confirmed": planner_route_only_visual_confirmed,
         "planner_gate_green": planner_ok,
         "local_fetch_pass_seen": local_fetch_seen,
+        "planner_route_only_pass_seen": planner_route_only_seen,
         "raw_local_fetch_pass_seen": raw_local_fetch_seen,
         "fetch_marker_geometry_mismatch_seen": geometry_mismatch_seen,
         "fetch_model_provenance_invalid_seen": model_provenance_invalid_seen,
@@ -966,7 +1026,11 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         ),
         "promotion_evidence": False,
         "milestone_interpretation": (
-            "mobile_visual_uat_ready_not_promotion" if pass_flag else "mobile_visual_uat_incomplete"
+            "planner_route_only_visual_uat_ready_not_promotion"
+            if pass_flag and route_only_proof
+            else "mobile_visual_uat_ready_not_promotion"
+            if pass_flag
+            else "mobile_visual_uat_incomplete"
         ),
         "warnings": warnings,
         "planner_gates": planner_gates,
@@ -987,12 +1051,15 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         "",
         f"- campaign_id: `{summary.get('campaign_id', '')}`",
         f"- pass: `{summary.get('pass', False)}`",
+        f"- route_only_proof: `{summary.get('route_only_proof', False)}`",
         f"- mobile_watchable: `{summary.get('mobile_watchable', False)}`",
         f"- onboard_camera_watchable: `{summary.get('onboard_camera_watchable', False)}`",
         f"- visual_confirmation_seen: `{summary.get('visual_confirmation_seen', False)}`",
         f"- local_fetch_visual_confirmed: `{summary.get('local_fetch_visual_confirmed', False)}`",
+        f"- planner_route_only_visual_confirmed: `{summary.get('planner_route_only_visual_confirmed', False)}`",
         f"- planner_gate_green: `{summary.get('planner_gate_green', False)}`",
         f"- local_fetch_pass_seen: `{summary.get('local_fetch_pass_seen', False)}`",
+        f"- planner_route_only_pass_seen: `{summary.get('planner_route_only_pass_seen', False)}`",
         f"- raw_local_fetch_pass_seen: `{summary.get('raw_local_fetch_pass_seen', False)}`",
         f"- fetch_marker_geometry_mismatch_seen: `{summary.get('fetch_marker_geometry_mismatch_seen', False)}`",
         f"- fetch_model_provenance_invalid_seen: `{summary.get('fetch_model_provenance_invalid_seen', False)}`",
@@ -1120,6 +1187,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"- route=`{route_label}` "
             f"session=`{session_id}` "
             f"fetch_to_pose=`{mission.get('fetch_to_pose_pass', False)}` "
+            f"route_only=`{mission.get('planner_route_only_pass', False)}` "
             f"raw_fetch_to_pose=`{mission.get('raw_fetch_to_pose_pass', mission.get('fetch_to_pose_pass', False))}` "
             f"executor=`{mission.get('route_executor', '')}` "
             f"reason=`{mission.get('outcome_reason', '')}`"
@@ -1128,7 +1196,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"geometry_reason=`{geometry.get('reason', '')}` "
             f"model_provenance=`{mission.get('model_provenance_valid', False)}` "
             f"target_model=`{mission.get('target_model_classification', '')}` "
-            f"ai_mode=`{mission.get('ai_push_coast_mode', '')}`"
+            f"ai_mode=`{mission.get('ai_push_coast_mode', '')}` "
+            f"route_outcome=`{mission.get('planner_route_outcome', '')}`"
             f"{summary_link}"
         )
     lines.extend(["", "## Visual Evidence"])
@@ -1155,6 +1224,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stage-quality-summary", action="append", default=[])
     parser.add_argument("--mission-summary", action="append", default=[])
     parser.add_argument("--visual-dir", action="append", default=[])
+    parser.add_argument("--route-only-proof", action="store_true")
     return parser.parse_args()
 
 

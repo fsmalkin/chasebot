@@ -448,6 +448,33 @@ def test_parse_args_accepts_planner_route_metadata(monkeypatch):
     assert args.line_servo_contact_yaw_ready_deg == pytest.approx(5.729578)
 
 
+def test_parse_args_accepts_planner_route_only_proof(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "golf_ball_circle_delivery_demo_runner.py",
+            "--planner-route-label",
+            "ambiguous_or_unsafe_no_go",
+            "--route-executor",
+            "safe_no_go",
+            "--planner-route-only-proof",
+            "--drive-linear-x-mps",
+            "0",
+            "--sample-duration-s",
+            "5",
+        ],
+    )
+
+    args = parse_args()
+
+    assert args.planner_route_label == "ambiguous_or_unsafe_no_go"
+    assert args.route_executor == "safe_no_go"
+    assert args.planner_route_only_proof is True
+    assert args.drive_linear_x_mps == pytest.approx(0.0)
+    assert args.sample_duration_s == pytest.approx(5.0)
+
+
 def test_parse_args_accepts_nav2_reposition_before_fetch(monkeypatch):
     monkeypatch.setattr(
         sys,

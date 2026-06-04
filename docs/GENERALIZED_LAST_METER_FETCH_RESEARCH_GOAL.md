@@ -1004,9 +1004,17 @@ The seven-seed manifest is now the current preservation bar:
 `artifacts/session/analysis_planner_moonshot_regression_set_seven_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
 It is green with seeds `20260627` through `20260633`, seeded gates `7/7`, live
 seeded missions `42/42`, and visual packages `42/42`. The architecture remains
-planner-routed route ownership. The next useful architecture expansion is live
-evidence for the planner-only route families, especially
-`scan_or_perceive_first` and `ambiguous_or_unsafe_no_go`, before another local
+planner-routed route ownership.
+
+June 4 route-only proof now covers the planner-owned non-fetch families:
+`artifacts/session/live_planner_only_route_proof_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md`.
+The batch replayed one `scan_or_perceive_first` row and one
+`ambiguous_or_unsafe_no_go` row from the seed `20260633` planner child. Both
+rows passed route-only proof, produced browser-watchable visual packages,
+withheld local fetch, and sampled `59` stopped-scene frames with measured robot
+motion `0.000m` and ball motion `0.000m`. This is supporting route-family UAT
+with `promotion_evidence=false`; the next useful architecture expansion is a
+mixed route-family UAT batch over additional seeds before another local
 contact-control moonshot.
 
 ## Definition Of Done For The Research Thread

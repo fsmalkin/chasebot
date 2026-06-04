@@ -941,6 +941,27 @@ across recovery, Nav2 reposition, or fetch-ready. Closest approach was
 case while preserving `promotion_evidence=false`; canonical saved layouts and
 the seeded-random promotion gate remain the milestone evidence.
 
+June 4 seven-seed breadth evidence: the planner-routed moonshot stack now has a
+green preservation bar at
+`artifacts/session/analysis_planner_moonshot_regression_set_seven_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
+It verifies saved anchors, seeds `20260627` through `20260633`, planner routing
+`210/210`, `wrong_fetch=0`, live executable missions `42/42`, and visual
+packages `42/42`. Seed `20260633` adds a heavier non-fetch route mix with
+`10` no-go classifications and `4` scan/perception classifications while the
+six selected executable rows remain green.
+
+June 4 route-only proof: planner-owned non-fetch behavior now has live stopped-
+scene UAT evidence at
+`artifacts/session/live_planner_only_route_proof_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md`.
+The batch replayed one `scan_or_perceive_first` row and one
+`ambiguous_or_unsafe_no_go` row from the seed `20260633` planner child. Both
+rows passed route-only proof, produced browser-watchable visual packages,
+withheld local fetch, and sampled `59` frames with measured robot motion
+`0.000m` and ball motion `0.000m`. This closes the immediate scan/no-go UAT
+gap while preserving `promotion_evidence=false`. The next roadmap slice is a
+mixed route-family UAT batch over additional seeds, where executable routes
+must deliver and route-only rows must refuse/defer cleanly.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

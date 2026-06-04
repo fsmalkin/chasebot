@@ -169,6 +169,103 @@ def test_visual_uat_package_scores_mobile_ready(tmp_path, monkeypatch):
     assert "`/artifacts/session/" not in text
 
 
+def test_visual_uat_package_scores_route_only_proof(tmp_path, monkeypatch):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(package, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+    _stub_browser_video_probe(monkeypatch)
+
+    planner = session_root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
+    _write_json(
+        planner,
+        {
+            "campaign_id": "planner",
+            "type": "fetch_planner_handoff_gate",
+            "pass": True,
+            "pass_count": 1,
+            "fail_count": 0,
+            "random_cases": 1,
+            "fetch_dispatch_count": 0,
+            "wrong_fetch_dispatch_count": 0,
+            "route_counts": {"ambiguous_or_unsafe_no_go": 1},
+        },
+    )
+    mission = session_root / "route_session" / "planner_route_only" / "mission_verdict.json"
+    _write_json(
+        mission,
+        {
+            "type": "planner_route_only_proof",
+            "pass": True,
+            "fetch_to_pose_pass": False,
+            "planner_route_only_pass": True,
+            "local_fetch_dispatched": False,
+            "planner_route_executed": True,
+            "planner_route_label": "ambiguous_or_unsafe_no_go",
+            "route_executor": "safe_no_go",
+            "planner_route_execution": {
+                "route_label": "ambiguous_or_unsafe_no_go",
+                "route_executor": "safe_no_go",
+                "route_executed": True,
+                "outcome": "safe_no_go_selected",
+                "reason": "planner route selected a non-fetch owner",
+            },
+            "model_provenance": {
+                "model_provenance_valid": True,
+                "model_provenance_reason": "calibrated_fetch_models",
+                "target_model_radius_m": 0.021336,
+                "target_model_classification": "calibrated_golf_ball",
+            },
+        },
+    )
+    visual = session_root / "route_session" / "visual"
+    visual.mkdir(parents=True)
+    (visual / "world_stream.mp4").write_bytes(b"w" * package.VIDEO_MIN_BYTES)
+    (visual / "topdown_telemetry_browser.mp4").write_bytes(b"t" * package.VIDEO_MIN_BYTES)
+    (visual / "raw_camera_browser.mp4").write_bytes(b"r" * package.VIDEO_MIN_BYTES)
+    _write_json(
+        visual / "visual_demo_summary.json",
+        {
+            "pass": True,
+            "raw_nonblank": True,
+            "debug_nonblank": True,
+            "target_persistence_ok": True,
+            "motion_progress_ok": False,
+            "raw_frame_count": 12,
+            "telemetry_frame_count": 12,
+        },
+    )
+
+    args = type(
+        "Args",
+        (),
+        {
+            "campaign_id": "route_only_uat",
+            "planner_summary": [str(planner)],
+            "seeded_evidence_summary": [],
+            "stage_quality_summary": [],
+            "mission_summary": [str(mission)],
+            "visual_dir": [str(visual)],
+            "route_only_proof": True,
+        },
+    )()
+
+    summary = package.build_summary(args)
+
+    assert summary["pass"] is True
+    assert summary["route_only_proof"] is True
+    assert summary["local_fetch_pass_seen"] is False
+    assert summary["planner_route_only_pass_seen"] is True
+    assert summary["planner_route_only_visual_confirmed"] is True
+    assert "no_local_fetch_pass_seen" not in summary["warnings"]
+    assert summary["missions"][0]["planner_route_only_pass"] is True
+    scorecard = tmp_path / "scorecard.md"
+    package.write_scorecard(scorecard, summary)
+    text = scorecard.read_text(encoding="utf-8")
+    assert "route_only_proof: `True`" in text
+    assert "route_only=`True`" in text
+    assert "route_outcome=`safe_no_go_selected`" in text
+
+
 def test_visual_uat_package_scorecard_labels_multiple_planner_routes(tmp_path, monkeypatch):
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)

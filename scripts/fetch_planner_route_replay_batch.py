@@ -28,6 +28,11 @@ EXECUTABLE_ROUTES = (
     planner_gate.ROUTE_NAV2_REPOSITION,
     planner_gate.ROUTE_RECOVERY_OR_REAIM,
 )
+PLANNER_ONLY_ROUTES = (
+    planner_gate.ROUTE_SCAN_OR_PERCEIVE,
+    planner_gate.ROUTE_NO_GO,
+)
+REPLAY_ROUTES = EXECUTABLE_ROUTES + PLANNER_ONLY_ROUTES
 MISSION_SUMMARY_MARKER = "GATHER_MISSION_SUMMARY="
 VISUAL_PACKAGE_MARKER = "FETCH_VISUAL_UAT_PACKAGE_SUMMARY="
 
@@ -300,6 +305,8 @@ def build_replay_command(
     compose_project: str,
     expected_session_id: str,
     fetch_delivery_radius_m: float,
+    planner_route_only_proof: bool = False,
+    route_only_sample_duration_s: float = 5.0,
 ) -> list[str]:
     command = [
         python_exe,
@@ -309,6 +316,18 @@ def build_replay_command(
         "--fetch-delivery-radius-m",
         f"{float(fetch_delivery_radius_m):.3f}",
     ]
+    if planner_route_only_proof:
+        command.extend(
+            [
+                "--planner-route-only-proof",
+                "--drive-linear-x-mps",
+                "0.000000",
+                "--drive-duration-s",
+                "0.000000",
+                "--sample-duration-s",
+                f"{float(route_only_sample_duration_s):.6f}",
+            ]
+        )
     if str(dashboard_url or "").strip():
         command.extend(["--dashboard-url", str(dashboard_url).strip()])
     if str(compose_project or "").strip():
@@ -324,10 +343,11 @@ def build_visual_package_command(
     package_campaign_id: str,
     gate_summary_path: Path,
     mission_summary_path: Path,
+    route_only_proof: bool = False,
 ) -> list[str]:
     session_id = _session_id_for_artifact(mission_summary_path)
     visual_dir = SESSION_ROOT / session_id / "visual" if session_id else Path("")
-    return [
+    command = [
         python_exe,
         str(REPO_ROOT / "scripts" / "fetch_visual_uat_package.py"),
         "--campaign-id",
@@ -339,6 +359,9 @@ def build_visual_package_command(
         "--visual-dir",
         str(visual_dir),
     ]
+    if route_only_proof:
+        command.append("--route-only-proof")
+    return command
 
 
 def existing_visual_package_summary_path(campaign_id: str, scene_id: str) -> Path:
@@ -369,6 +392,7 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     shot = payload.get("shot_outcome") if isinstance(payload.get("shot_outcome"), dict) else {}
     metrics = payload.get("approach_contact_metrics") if isinstance(payload.get("approach_contact_metrics"), dict) else {}
     route = payload.get("planner_route") if isinstance(payload.get("planner_route"), dict) else {}
+    route_execution = payload.get("planner_route_execution") if isinstance(payload.get("planner_route_execution"), dict) else {}
     closest = shot.get("closest_approach_distance_m")
     try:
         closest_value = float(closest)
@@ -377,9 +401,14 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     return {
         "path": artifact_display_path(path),
         "session_id": _session_id_for_artifact(path),
-        "pass": bool(payload.get("fetch_to_pose_pass", payload.get("pass", False))),
-        "route_label": str(payload.get("planner_route_label", route.get("planner_route_label", "")) or ""),
-        "route_executor": str(payload.get("route_executor", route.get("route_executor", "")) or ""),
+        "pass": bool(payload.get("pass", False)),
+        "fetch_to_pose_pass": bool(payload.get("fetch_to_pose_pass", False)),
+        "planner_route_only_pass": bool(payload.get("planner_route_only_pass", False)),
+        "local_fetch_dispatched": bool(payload.get("local_fetch_dispatched", True)),
+        "planner_route_executed": bool(payload.get("planner_route_executed", route_execution.get("route_executed", False))),
+        "planner_route_outcome": str(route_execution.get("outcome", "") or ""),
+        "route_label": str(payload.get("planner_route_label", route.get("planner_route_label", route_execution.get("route_label", ""))) or ""),
+        "route_executor": str(payload.get("route_executor", route.get("route_executor", route_execution.get("route_executor", ""))) or ""),
         "closest_approach_distance_m": round(closest_value, 6) if math.isfinite(closest_value) else None,
         "outcome_reason": str(shot.get("reason", payload.get("fetch_to_pose_failure_reason", "")) or ""),
         "contact_quality_flags": metrics.get("flags", []) if isinstance(metrics.get("flags"), list) else [],
@@ -398,7 +427,8 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
     campaign_id = str(args.campaign_id or "").strip() or f"live_fetch_planner_route_replay_batch_{current_utc_stamp()}"
     root = ensure_dir(SESSION_ROOT / campaign_id / BATCH_KIND)
     gate_summary_path = resolve_path(str(args.gate_summary))
-    routes = set(args.route or EXECUTABLE_ROUTES)
+    requested_routes = tuple(args.route or EXECUTABLE_ROUTES)
+    routes = set(requested_routes)
     scene_ids = set(args.scene_id or [])
     skip_scene_ids = set(args.skip_scene_id or [])
     selected = select_executable_results(
@@ -413,6 +443,8 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
     for index, result in enumerate(selected, start=1):
         scene_id = str(result.get("scene_id", "") or f"scene{index:02d}")
         layout_path = write_layout_for_result(root, result)
+        route_label = str(result.get("route_label", "") or "")
+        planner_only_route = route_label in PLANNER_ONLY_ROUTES
         if bool(args.resume_skip_existing) and not args.dry_run and not bool(args.no_visual_package):
             existing_package_path = existing_visual_package_summary_path(campaign_id, scene_id)
             existing_package = read_json(existing_package_path) if existing_package_path.is_file() else {}
@@ -420,8 +452,9 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
                 row = {
                     "index": index,
                     "scene_id": scene_id,
-                    "route_label": str(result.get("route_label", "") or ""),
+                    "route_label": route_label,
                     "route_executor": str(result.get("route_executor", "") or ""),
+                    "planner_only_route": planner_only_route,
                     "route_quality": result.get("route_quality", {}) if isinstance(result.get("route_quality"), dict) else {},
                     "layout_path": artifact_display_path(layout_path),
                     "command": [],
@@ -473,12 +506,15 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
             compose_project=run_compose_project,
             expected_session_id=expected_session_id,
             fetch_delivery_radius_m=float(args.fetch_delivery_radius_m),
+            planner_route_only_proof=planner_only_route,
+            route_only_sample_duration_s=float(getattr(args, "route_only_sample_duration_s", 5.0)),
         )
         row: dict[str, Any] = {
             "index": index,
             "scene_id": scene_id,
-            "route_label": str(result.get("route_label", "") or ""),
+            "route_label": route_label,
             "route_executor": str(result.get("route_executor", "") or ""),
+            "planner_only_route": planner_only_route,
             "route_quality": result.get("route_quality", {}) if isinstance(result.get("route_quality"), dict) else {},
             "layout_path": artifact_display_path(layout_path),
             "command": command,
@@ -533,6 +569,7 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
                         package_campaign_id=package_campaign_id,
                         gate_summary_path=gate_summary_path,
                         mission_summary_path=mission_summary_path,
+                        route_only_proof=planner_only_route,
                     )
                     row["visual_package_command"] = package_command
                     package_completed = _run_command(package_command, timeout_s=float(args.package_timeout_s))
@@ -558,7 +595,17 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
                 break
         rows.append(row)
 
-    mission_pass_count = sum(1 for row in rows if bool((row.get("mission") or {}).get("pass", False)))
+    mission_pass_count = sum(
+        1
+        for row in rows
+        if not bool(row.get("planner_only_route", False)) and bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+    )
+    route_only_pass_count = sum(
+        1
+        for row in rows
+        if bool(row.get("planner_only_route", False)) and bool((row.get("mission") or {}).get("planner_route_only_pass", False))
+    )
+    route_success_count = mission_pass_count + route_only_pass_count
     mission_fail_count = sum(1 for row in rows if row.get("mission") and not bool((row.get("mission") or {}).get("pass", False)))
     visual_pass_count = sum(1 for row in rows if bool((row.get("visual_package") or {}).get("pass", False)))
     summary = {
@@ -572,13 +619,15 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
         "gate_summary_path": artifact_display_path(gate_summary_path),
         "selected_count": len(rows),
         "skipped_existing_count": sum(1 for row in rows if bool(row.get("resume_skip_existing", False))),
-        "requested_route_count": {route: sum(1 for row in rows if row.get("route_label") == route) for route in EXECUTABLE_ROUTES},
+        "requested_route_count": {route: sum(1 for row in rows if row.get("route_label") == route) for route in requested_routes},
         "mission_pass_count": mission_pass_count,
+        "route_only_pass_count": route_only_pass_count,
+        "route_success_count": route_success_count,
         "mission_fail_count": mission_fail_count,
         "visual_package_pass_count": visual_pass_count,
         "pass": bool(
             rows
-            and (args.dry_run or (mission_pass_count == len(rows) and visual_pass_count == len(rows)))
+            and (args.dry_run or (route_success_count == len(rows) and visual_pass_count == len(rows)))
         ),
         "promotion_evidence": False,
         "milestone_interpretation": "planner_route_replay_batch_dry_run" if args.dry_run else "planner_route_replay_batch_visual_uat",
@@ -604,6 +653,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- selected_count: `{summary.get('selected_count', 0)}`",
         f"- skipped_existing_count: `{summary.get('skipped_existing_count', 0)}`",
         f"- mission_pass_count: `{summary.get('mission_pass_count', 0)}`",
+        f"- route_only_pass_count: `{summary.get('route_only_pass_count', 0)}`",
+        f"- route_success_count: `{summary.get('route_success_count', 0)}`",
         f"- mission_fail_count: `{summary.get('mission_fail_count', 0)}`",
         f"- visual_package_pass_count: `{summary.get('visual_package_pass_count', 0)}`",
         f"- promotion_evidence: `{summary.get('promotion_evidence', False)}`",
@@ -630,11 +681,14 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         )
         lines.append(
             f"- `{row.get('scene_id', '')}` route=`{row.get('route_label', '')}` "
+            f"planner_only=`{row.get('planner_only_route', False)}` "
             f"dry_run=`{row.get('dry_run', False)}` rc=`{row.get('returncode', '')}` "
             f"resume_skip_existing=`{row.get('resume_skip_existing', False)}` "
             f"failure=`{row.get('failure_reason', '')}` "
             f"session=`{row.get('expected_session_id', '')}` "
-            f"mission_pass=`{mission.get('pass', '')}` visual_pass=`{package.get('pass', '')}`"
+            f"mission_pass=`{mission.get('fetch_to_pose_pass', mission.get('pass', ''))}` "
+            f"route_only_pass=`{mission.get('planner_route_only_pass', '')}` "
+            f"visual_pass=`{package.get('pass', '')}`"
             f"{quality_text}{closest_text}{mission_link}{package_link}"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -644,7 +698,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Replay executable planner-routed fetch scenes.")
     parser.add_argument("--campaign-id", default=f"live_fetch_planner_route_replay_batch_{current_utc_stamp()}")
     parser.add_argument("--gate-summary", required=True)
-    parser.add_argument("--route", action="append", choices=EXECUTABLE_ROUTES, default=[])
+    parser.add_argument("--route", action="append", choices=REPLAY_ROUTES, default=[])
     parser.add_argument("--scene-id", action="append", default=[])
     parser.add_argument("--skip-scene-id", action="append", default=[])
     parser.add_argument("--max-per-route", type=int, default=1)
@@ -664,6 +718,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env-ready-timeout-s", type=float, default=420.0)
     parser.add_argument("--env-stop-timeout-s", type=float, default=90.0)
     parser.add_argument("--fetch-delivery-radius-m", type=float, default=0.300)
+    parser.add_argument("--route-only-sample-duration-s", type=float, default=5.0)
     parser.add_argument("--python-exe", default=sys.executable)
     parser.add_argument("--timeout-s", type=float, default=180.0)
     parser.add_argument("--package-timeout-s", type=float, default=120.0)

@@ -35,11 +35,19 @@ NAV2_REPOSITION_RESULT_MARKER = "NAV2_REPOSITION_RESULT="
 NAV2_REPOSITION_BEHAVIOR_TREE = "/workspaces/chasecar/ros2_config/behavior_trees/navigate_to_pose_w_replanning.xml"
 ROUTE_FETCH_READY = "fetch_ready_local"
 ROUTE_NAV2_REPOSITION = "nav2_reposition_first"
+ROUTE_SCAN_OR_PERCEIVE = "scan_or_perceive_first"
 ROUTE_RECOVERY_OR_REAIM = "recovery_or_reaim"
+ROUTE_NO_GO = "ambiguous_or_unsafe_no_go"
 ROUTE_EXECUTOR_LOCAL_FETCH = "local_fetch_to_pose"
 ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH = "nav2_forward_reposition_then_fetch"
+ROUTE_EXECUTOR_SCAN = "scan_or_perception_refresh"
 ROUTE_EXECUTOR_RECOVERY = "bounded_recovery_reaim"
+ROUTE_EXECUTOR_NO_GO = "safe_no_go"
 EXECUTABLE_PLANNER_FETCH_ROUTES = {ROUTE_FETCH_READY, ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM}
+PLANNER_ONLY_ROUTE_EXECUTORS = {
+    ROUTE_SCAN_OR_PERCEIVE: ROUTE_EXECUTOR_SCAN,
+    ROUTE_NO_GO: ROUTE_EXECUTOR_NO_GO,
+}
 NAV2_SETUP_PLANNER_ROUTES = {ROUTE_NAV2_REPOSITION}
 RECOVERY_LATERAL_LIMIT_M = 0.240
 RECOVERY_YAW_LIMIT_DEG = 35.0
@@ -52,6 +60,7 @@ ROUTE_EXECUTOR_BY_LABEL = {
     ROUTE_FETCH_READY: ROUTE_EXECUTOR_LOCAL_FETCH,
     ROUTE_NAV2_REPOSITION: ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
     ROUTE_RECOVERY_OR_REAIM: ROUTE_EXECUTOR_RECOVERY,
+    **PLANNER_ONLY_ROUTE_EXECUTORS,
 }
 
 
@@ -2175,6 +2184,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--line-servo-contact-yaw-ready-deg", type=float, default=5.729578)
     parser.add_argument("--planner-route-label", default="")
     parser.add_argument("--route-executor", default="")
+    parser.add_argument(
+        "--planner-route-only-proof",
+        action="store_true",
+        help="Materialize a planner-only route scene, sample it visually, and record that local fetch was intentionally withheld.",
+    )
     parser.add_argument("--nav2-reposition-before-fetch", action="store_true")
     parser.add_argument("--nav2-reposition-frame-id", default="odom")
     parser.add_argument("--nav2-reposition-goal-frame-mode", choices=["nav2_relative", "world_direct"], default="nav2_relative")
@@ -2306,6 +2320,235 @@ def main() -> int:
     )
     if not spawn_zone.get("pass") or not spawn_ball.get("pass") or not robot_pose.get("pass"):
         raise RuntimeError(f"Demo spawn failed; see {artifact_dir / 'spawn_summary.json'}")
+
+    random_draw = target_layout.get("random_draw", {}) if isinstance(target_layout.get("random_draw"), dict) else {}
+    random_profile = str(target_layout.get("random_profile", "") or random_draw.get("random_profile", ""))
+    planner_route_label = str(
+        args.planner_route_label
+        or target_layout.get("planner_route_label", "")
+        or random_draw.get("planner_route_label", "")
+        or ""
+    )
+    route_executor = str(args.route_executor or target_layout.get("route_executor", "") or random_draw.get("route_executor", "") or "")
+    if bool(args.planner_route_only_proof):
+        route_only_expected_executor = PLANNER_ONLY_ROUTE_EXECUTORS.get(planner_route_label, "")
+        route_only_pass = bool(route_only_expected_executor and route_executor == route_only_expected_executor)
+        update_runtime(
+            args.gather_runtime_json,
+            mission_phase="planner_route_only_proof",
+            gather_phase="planner_route_only_proof",
+            proof_state="visiting",
+            zone_pose={"x": args.zone_x, "y": args.zone_y, "z": args.zone_z, "radius_m": args.fetch_delivery_radius_m},
+            latest_feedback="Planner-only route selected; local fetch is intentionally withheld.",
+        )
+        stop_payload = publish_zero_stop(args.compose_project)
+        contact_samples = collect_contact_samples(
+            compose_project=args.compose_project,
+            world_name=args.world_name,
+            robot_model_name=args.robot_model_name,
+            ball_model_name=args.target_model_name,
+            duration_s=max(float(args.sample_duration_s), 1.0),
+            poll_period_s=args.poll_period_s,
+        )
+        stop_after_sample_payload = publish_zero_stop(args.compose_project)
+        samples = ball_samples_from_contact_samples(contact_samples)
+        append_jsonl(trace_path, samples)
+        append_jsonl(contact_trace_path, contact_samples)
+        shot_outcome = build_shot_outcome(
+            samples,
+            target_x=args.zone_x,
+            target_y=args.zone_y,
+            target_z=args.zone_z,
+            radius_m=args.fetch_delivery_radius_m,
+        )
+        shot_outcome = {
+            **shot_outcome,
+            "pass": False,
+            "reason": "planner_route_only_local_fetch_withheld",
+        }
+        approach_metrics = build_approach_contact_metrics(
+            contact_samples,
+            ball_start_x=args.ball_x,
+            ball_start_y=args.ball_y,
+            target_x=args.zone_x,
+            target_y=args.zone_y,
+            motion_threshold_m=args.first_contact_motion_threshold_m,
+            lateral_threshold_m=args.approach_lateral_threshold_m,
+            yaw_threshold_deg=args.approach_yaw_threshold_deg,
+            contact_angle_threshold_deg=args.contact_angle_threshold_deg,
+            ball_lateral_threshold_m=args.ball_lateral_threshold_m,
+            oscillation_yaw_threshold_deg=args.oscillation_yaw_threshold_deg,
+        )
+        model_provenance = fetch_model_provenance(
+            mission_objective=args.mission_objective,
+            target_model_sdf=args.target_model_sdf,
+            zone_model_sdf=args.zone_model_sdf,
+        )
+        planner_route_execution = {
+            "route_label": planner_route_label,
+            "route_executor": route_executor,
+            "local_fetch_dispatched": False,
+            "route_executed": route_only_pass,
+            "outcome": f"{route_executor}_selected" if route_only_pass else "planner_route_only_rejected",
+            "reason": (
+                "planner route selected a non-fetch owner and local fetch was withheld"
+                if route_only_pass
+                else "planner-route-only proof is allowed only for scan/perceive or no-go routes"
+            ),
+            "forward_only_pre_contact_required": False,
+            "forward_only_pre_contact": True,
+            "no_direct_cmd_vel": True,
+        }
+        route_metadata = {
+            "planner_route_label": planner_route_label,
+            "route_executor": route_executor,
+            "executor_actual": "planner_route_only_scene_proof",
+            "route_quality": (
+                planner_route_defaults.get("route_quality", {})
+                if isinstance(planner_route_defaults.get("route_quality"), dict)
+                else random_draw.get("route_quality", {})
+                if isinstance(random_draw.get("route_quality"), dict)
+                else target_layout.get("route_quality", {})
+                if isinstance(target_layout.get("route_quality"), dict)
+                else {}
+            ),
+            "planner_route_execution_defaults": planner_route_defaults,
+            "local_fetch_dispatched": False,
+            "planner_route_executed": route_only_pass,
+            "contact_phase_forward_only": True,
+            "forward_only_pre_contact_required": False,
+            "forward_only_pre_contact": True,
+            "drive_mode": "stopped_scene_sample",
+            "drive_linear_x_mps": 0.0,
+            "drive_duration_s": 0.0,
+            "sample_duration_s": round(max(float(args.sample_duration_s), 1.0), 6),
+            "stop_before_sample": stop_payload,
+            "stop_after_sample": stop_after_sample_payload,
+        }
+        target_result = {
+            "target_id": "ball_1",
+            "mission_completed_pass": route_only_pass,
+            "fetch_to_pose_reached": False,
+            "fetch_to_pose_pass": False,
+            "fetch_to_pose_failure_reason": "planner_route_only_local_fetch_withheld",
+            "planner_route_only_pass": route_only_pass,
+            "shot_outcome": shot_outcome,
+            "approach_contact_metrics": approach_metrics,
+            "model_provenance": model_provenance,
+            "model_provenance_valid": bool(model_provenance.get("model_provenance_valid", True)),
+            "random_profile": random_profile,
+            "random_draw": random_draw,
+            "planner_route": route_metadata,
+            "planner_route_execution": planner_route_execution,
+            "dashboard_session_binding": dashboard_session_binding,
+        }
+        verdict = {
+            "type": "planner_route_only_proof",
+            "scenario_id": args.scenario_id,
+            "scenario_label": args.scenario_label,
+            "mission_objective": "planner_route_only_proof",
+            "surface_profile": args.surface_profile,
+            "world_file": args.world_file,
+            "target_model_sdf": args.target_model_sdf,
+            "zone_model_sdf": args.zone_model_sdf,
+            "model_provenance": model_provenance,
+            "model_provenance_valid": bool(model_provenance.get("model_provenance_valid", True)),
+            "target_model_classification": str(model_provenance.get("target_model_classification", "")),
+            "target_model_radius_m": model_provenance.get("target_model_radius_m"),
+            "pass": route_only_pass,
+            "mission_completed_pass": route_only_pass,
+            "fetch_to_pose_reached": False,
+            "fetch_to_pose_pass": False,
+            "planner_route_only_pass": route_only_pass,
+            "local_fetch_dispatched": False,
+            "planner_route_executed": route_only_pass,
+            "planner_route_execution": planner_route_execution,
+            "fetch_delivery_radius_m": round(float(args.fetch_delivery_radius_m), 6),
+            "fetch_pose_world": shot_outcome["fetch_pose_world"],
+            "target_layout_json": str(args.target_layout_json or ""),
+            "target_layout": target_layout,
+            "random_profile": random_profile,
+            "random_draw": random_draw,
+            "planner_route": route_metadata,
+            "session_id": session_id,
+            "dashboard_session_binding": dashboard_session_binding,
+            "planner_route_label": planner_route_label,
+            "route_executor": route_executor,
+            "forward_only_pre_contact_required": False,
+            "forward_only_pre_contact": True,
+            "shot_outcome": shot_outcome,
+            "approach_contact_metrics": approach_metrics,
+            "mission_time_s": round(max(float(args.sample_duration_s), 1.0), 6),
+            "artifact_dir": str(artifact_dir),
+        }
+        summary = {
+            **verdict,
+            "runs": 1,
+            "pass_count": 1 if route_only_pass else 0,
+            "fail_count": 0 if route_only_pass else 1,
+            "fetch_to_pose_pass_count": 0,
+            "fetch_to_pose_fail_count": 0,
+            "planner_route_only_pass_count": 1 if route_only_pass else 0,
+            "planner_route_only_fail_count": 0 if route_only_pass else 1,
+            "target_results_path": str(artifact_dir / "target_results.json"),
+            "mission_verdict_path": str(artifact_dir / "mission_verdict.json"),
+            "trace_path": str(trace_path),
+            "contact_trace_path": str(contact_trace_path),
+            "approach_metrics_path": str(artifact_dir / "approach_metrics.json"),
+        }
+        target_results = {"ball_1": target_result}
+        scorecard = "\n".join(
+            [
+                "# Planner Route-Only Scene Proof",
+                "",
+                f"- Pass: `{route_only_pass}`",
+                f"- Planner route: `{planner_route_label}`",
+                f"- Route executor: `{route_executor}`",
+                f"- Local fetch dispatched: `False`",
+                f"- Planner route executed: `{route_only_pass}`",
+                f"- Outcome: `{planner_route_execution['outcome']}`",
+                f"- Closest approach if sampled: `{float(shot_outcome.get('closest_approach_distance_m', 0.0) or 0.0):.3f}m`",
+                f"- Model provenance: `{bool(model_provenance.get('model_provenance_valid', False))}` "
+                f"`{model_provenance.get('model_provenance_reason', '')}`",
+                f"- Forward-only pre-contact: `True`",
+                f"- Sample count: `{len(contact_samples)}`",
+                "",
+            ]
+        )
+        write_json(artifact_dir / "drive_summary.json", {"planner_route": route_metadata, "drive_output": "planner_route_only_no_drive"})
+        write_json(artifact_dir / "approach_metrics.json", approach_metrics)
+        write_json(artifact_dir / "target_results.json", target_results)
+        write_json(artifact_dir / "mission_verdict.json", verdict)
+        write_json(artifact_dir / "summary.json", summary)
+        (artifact_dir / "scorecard.md").write_text(scorecard, encoding="utf-8")
+        update_runtime(
+            args.gather_runtime_json,
+            mission_status="completed" if route_only_pass else "failed",
+            mission_phase="completed" if route_only_pass else "failed",
+            gather_phase="completed" if route_only_pass else "failed",
+            proof_state="completed" if route_only_pass else "failed",
+            latest_feedback=(
+                "Planner-only route proof completed; local fetch remained withheld."
+                if route_only_pass
+                else "Planner-only route proof failed route eligibility."
+            ),
+            mission_verdict=verdict,
+            last_fetch_to_pose_result=shot_outcome,
+            last_approach_contact_metrics=approach_metrics,
+            zone_pose={"x": args.zone_x, "y": args.zone_y, "z": args.zone_z, "radius_m": args.fetch_delivery_radius_m},
+            placed_targets=[],
+            remaining_targets=[],
+        )
+        update_runtime(
+            args.visit_runtime_json,
+            mission_status="completed" if route_only_pass else "failed",
+            mission_phase="completed" if route_only_pass else "failed",
+            proof_state="completed" if route_only_pass else "failed",
+            mission_verdict=verdict,
+            latest_feedback="Planner-only route proof completed." if route_only_pass else "Planner-only route proof failed.",
+        )
+        print(f"GATHER_MISSION_SUMMARY={artifact_dir / 'mission_verdict.json'}")
+        return 0 if route_only_pass else 2
 
     pre_fetch_reposition: dict[str, Any] = {
         "phase": "nav2_reposition_before_fetch",
@@ -2577,10 +2820,6 @@ def main() -> int:
     pass_flag = bool(shot_outcome.get("pass", False))
     pre_fetch_elapsed_s = float(pre_fetch_reposition.get("elapsed_s", 0.0) or 0.0)
     mission_time_s = pre_fetch_elapsed_s + (0.0 if fetch_skipped_after_reposition else max(float(args.sample_duration_s), float(args.drive_duration_s)))
-    random_draw = target_layout.get("random_draw", {}) if isinstance(target_layout.get("random_draw"), dict) else {}
-    random_profile = str(target_layout.get("random_profile", "") or random_draw.get("random_profile", ""))
-    planner_route_label = str(args.planner_route_label or target_layout.get("planner_route_label", "") or random_draw.get("planner_route_label", "") or "")
-    route_executor = str(args.route_executor or target_layout.get("route_executor", "") or random_draw.get("route_executor", "") or "")
     forward_only_pre_contact = bool(float(args.drive_linear_x_mps) >= -1e-9)
     route_quality = (
         planner_route_defaults.get("route_quality", {})
