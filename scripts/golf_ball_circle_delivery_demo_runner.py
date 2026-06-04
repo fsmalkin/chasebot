@@ -345,14 +345,20 @@ gz service -s "/world/$WORLD_NAME/set_pose/blocking" --reqtype gz.msgs.Pose --re
 
 
 def docker_exec_service(compose_project: str, service: str, script: str, *, timeout_s: float = 60.0) -> tuple[int, str]:
-    completed = subprocess.run(
-        ["docker", "compose", "-p", compose_project, "exec", "-T", service, "bash", "-lc", script],
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-        timeout=timeout_s,
-        check=False,
-    )
+    cmd = ["docker", "compose", "-p", compose_project, "exec", "-T", service, "bash", "-lc", script]
+    try:
+        completed = subprocess.run(
+            cmd,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        return 124, stdout + stderr + f"\ntimeout_after_s={float(timeout_s):.3f}"
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
 

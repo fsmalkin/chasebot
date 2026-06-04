@@ -2,6 +2,7 @@ import sys
 import json
 import math
 import inspect
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,6 +22,7 @@ from golf_ball_circle_delivery_demo_runner import apply_target_layout  # noqa: E
 from golf_ball_circle_delivery_demo_runner import apply_planner_route_execution_defaults  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_nav2_reposition_setup_pose  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_nav2_relative_setup_goal  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import docker_exec_service  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import dispatch_nav2_reposition_before_fetch  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import NAV2_REPOSITION_BEHAVIOR_TREE  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import parse_nav2_reposition_result  # noqa: E402
@@ -61,6 +63,20 @@ def test_parse_args_accepts_dashboard_fetch_target_aliases(monkeypatch):
     assert args.fetch_target_x == pytest.approx(1.25)
     assert args.fetch_target_y == pytest.approx(0.10)
     assert args.fetch_target_z == pytest.approx(0.002)
+
+
+def test_docker_exec_service_returns_timeout_result(monkeypatch):
+    def fake_run(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd=["docker", "compose"], timeout=10.0, output="partial-out", stderr="partial-err")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    rc, output = docker_exec_service("project", "gate-stack", "ros2 topic pub", timeout_s=10.0)
+
+    assert rc == 124
+    assert "partial-out" in output
+    assert "partial-err" in output
+    assert "timeout_after_s=10.000" in output
 
 
 def test_apply_target_layout_sets_ball_pose_from_layout(tmp_path):

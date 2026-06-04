@@ -1,6 +1,6 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 3, 2026, 11:27 PM ET",
+  "updated_label": "Updated June 4, 2026, 12:10 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
   "status_label": "Living plan and progress tracker",
   "status_detail": "This page summarizes current direction and evidence. It is route-owner UAT progress, not release or promotion evidence.",
@@ -49,6 +49,42 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Seed 20260625 repaired broad route-owner batch",
+      "status": "16/16 executable routes delivered clean after zero-stop timeout hardening",
+      "tone": "green",
+      "summary": "A second fresh mixed seed supports the planner-routed architecture. The initial replay delivered 15 rows and exposed one Nav2-reposition integration timeout while publishing a best-effort zero stop. After hardening docker service timeouts, the exact scene25 repro delivered cleanly. The repaired analyzer is green across local, Nav2-reposition, and recovery routes, with zero setup watches, zero contact watches, and zero first-contact blockers.",
+      "metrics": [
+        "Planner gate: 30/30, wrong_fetch=0",
+        "Repaired live executable coverage: 16/16 delivered; visual packages 16/16",
+        "Route spread: fetch_ready_local 3/3 clean, nav2_reposition_first 6/6 clean, recovery_or_reaim 7/7 clean",
+        "Quality: setup watches 0; contact watches 0; first-contact blockers 0",
+        "Scene25 diagnosis: original rc=1 was a zero-stop docker exec timeout after Nav2 setup; targeted repro passed with closest 0.193m and no contact flags"
+      ],
+      "links": [
+        {
+          "label": "Repaired analyzer scorecard",
+          "url": "/artifacts/session/analysis_route_quality_seed20260625_all_exec16_line_acquire_hold_repaired_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Repaired analyzer summary JSON",
+          "url": "/artifacts/session/analysis_route_quality_seed20260625_all_exec16_line_acquire_hold_repaired_20260604/fetch_planner_route_uat_analyzer/route_uat_summary.json"
+        },
+        {
+          "label": "Initial replay batch scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260625_all_exec16_line_acquire_hold_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Scene25 repaired onboard proof",
+          "url": "/artifacts/session/20260604T040553143252Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene25 repaired contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260625_scene25_zero_stop_timeout_fix_20260604_seed20260625_scene25_nav2_reposition_first/fetch_visual_uat_package/keyframe_reviews/20260604T040553143252Z_keyframe_review_contact_sheet.png"
+        }
+      ],
+      "preview_image": "/artifacts/session/live_route_quality_seed20260625_scene25_zero_stop_timeout_fix_20260604_seed20260625_scene25_nav2_reposition_first/fetch_visual_uat_package/keyframe_reviews/20260604T040553143252Z_keyframe_review_contact_sheet.png"
+    },
     {
       "title": "Seed 20260624 fresh broad route-owner batch",
       "status": "19/19 executable routes delivered; 18/19 clean; 1 mild local-fetch contact watch",
@@ -433,6 +469,70 @@
   ],
   "running_video_proof": [],
   "recent_video_proof": [
+    {
+      "title": "Seed 20260625 scene25 repaired Nav2 proof",
+      "summary": "Session 20260604T040553143252Z is the targeted repro for the only failed row in the initial seed20260625 replay.",
+      "primary_video": {
+        "label": "Scene25 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T040553143252Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "Nav2 reposition-first now survives the zero-stop timeout path and delivers cleanly: closest 0.193m, setup clean, contact clean, execution clean, and first-contact blockers 0.",
+      "limits": "The initial full replay had a runner rc=1 for this row before the timeout hardening. The repaired analyzer combines the original 15 successful rows with this targeted repro.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T040553143252Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T040553143252Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T040553143252Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260625_scene25_zero_stop_timeout_fix_20260604_seed20260625_scene25_nav2_reposition_first/fetch_visual_uat_package/keyframe_reviews/20260604T040553143252Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Visual scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260625_scene25_zero_stop_timeout_fix_20260604_seed20260625_scene25_nav2_reposition_first/fetch_visual_uat_package/scorecard.md"
+        },
+        {
+          "label": "Mission verdict",
+          "url": "/artifacts/session/20260604T040553143252Z/golf_ball_circle_delivery/20260604T040631356447Z/mission_verdict.json"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260625 scene04 clean recovery proof",
+      "summary": "Session 20260604T033100755055Z is a high-risk predicted recovery row that delivered cleanly in the second broad seed.",
+      "primary_video": {
+        "label": "Scene04 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T033100755055Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "Recovery handled a high-risk setup row cleanly: closest 0.195m, setup clean, contact clean, execution clean, and no first-contact flags.",
+      "limits": "This remains route-owner UAT, useful for architecture confidence and watch-rate monitoring before canonical promotion.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T033100755055Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T033100755055Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260625_all_exec16_line_acquire_hold_20260604_seed20260625_scene04_recovery_or_reaim/fetch_visual_uat_package/keyframe_reviews/20260604T033100755055Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Visual scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260625_all_exec16_line_acquire_hold_20260604_seed20260625_scene04_recovery_or_reaim/fetch_visual_uat_package/scorecard.md"
+        }
+      ]
+    },
     {
       "title": "Seed 20260624 scene24 local-fetch contact watch",
       "summary": "Session 20260604T031548299984Z is the only quality watch in the fresh 19-row broad batch.",
@@ -1175,6 +1275,10 @@
   ],
   "watch_areas": [
     {
+      "label": "Zero-stop integration robustness",
+      "body": "Seed20260625 scene25 exposed a best-effort zero-stop docker exec timeout after Nav2 reposition. The timeout path is now structured; keep this as an integration watch during the next full run."
+    },
+    {
       "label": "Local-fetch contact smoothness",
       "body": "Seed20260624 scene24 delivered but carried mild lateral and trajectory-angle contact flags. Treat this as the current local-fetch smoothness watch after the recovery line-acquire repair generalized."
     },
@@ -1192,9 +1296,10 @@
     }
   ],
   "next_steps": [
-    "Run one more fresh broad generated seed with the line-acquire hold to confirm the low watch rate across local, Nav2, and recovery routes.",
-    "Use seed20260624 scene24 as the current local-fetch contact-smoothness watch if the next seed repeats that pattern.",
-    "Keep seed20260623 scene16 as a narrowed recovery yaw/trim watch and compare it against the clean seed20260624 recovery rows before changing terminal contact behavior.",
+    "Commit the zero-stop timeout hardening and repaired seed20260625 evidence.",
+    "Run one full broad replay after the timeout fix, or proceed to canonical saved-layout gates if operator priority is promotion proof over more route-owner breadth.",
+    "Use seed20260624 scene24 as the current local-fetch contact-smoothness watch only if another broad seed repeats that pattern.",
+    "Keep seed20260623 scene16 as a narrowed recovery yaw/trim watch, but treat clean seed20260625 recovery coverage as evidence against a major recovery architecture pivot.",
     "Keep sequence review onboard-first: start/setup, pre-contact, first contact, mid-push or coast, terminal arrival, and final rest.",
     "Preserve promotion_evidence=false for route-owner UAT until canonical saved-layout and seeded-random promotion gates rerun."
   ]
