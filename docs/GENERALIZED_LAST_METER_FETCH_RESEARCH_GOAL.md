@@ -790,8 +790,18 @@ The live replay passed `3/3` with browser-watchable visual packages:
 `artifacts/session/live_planner_saved_anchor_replay_zero_numeric_fix_8881_20260604/fetch_planner_route_replay_batch/scorecard.md`.
 Use this as current route-owner UAT evidence: `zero` is `fetch_ready_local`;
 `left05` and `right05` are `recovery_or_reaim`; all three delivered inside the
-`0.300m` contract with sequence-reviewed onboard/topdown proof. Promotion still
-requires saved-anchor repeatability and seeded random proof.
+`0.300m` contract with sequence-reviewed onboard/topdown proof.
+
+June 4, 2026 saved-anchor repeatability update: the planner-routed stack passed
+the saved-anchor `3/3` rung with nine fresh-dashboard runs:
+`artifacts/session/analysis_planner_saved_anchor_repeat3x_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The analyzer reports `saved_anchor_repeatability_green`, `9/9` live mission
+passes, `9/9` mobile/onboard visual packages, `0` first-contact blockers, clean
+setup/contact quality, and closest approaches from `0.194m` to `0.198m`. The
+visual review montage is
+`artifacts/session/analysis_planner_saved_anchor_repeat3x_20260604/fetch_planner_route_uat_analyzer/saved_anchor_repeat3x_contact_sheet_montage.png`.
+The seeded random gate is now the remaining promotion-grade proof for the
+planner-routed architecture.
 
 June 4, 2026 infrastructure note: two failed live attempts on stale dashboard
 ports reproduced truth-probe startup failures before mission dispatch. The

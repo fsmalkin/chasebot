@@ -184,8 +184,19 @@ The live one-run replay passed `3/3` with visual packages:
 Closest approaches were `0.195m` for `left05`, `0.190m` for `right05`, and
 `0.193m` for `zero`. Sequence review of the onboard/topdown sheets confirmed
 visible delivery into the circle for all three anchors. This is saved-anchor
-visual UAT. Promotion still requires saved-anchor repeatability and seeded
-random proof.
+visual UAT.
+
+June 4 saved-anchor repeatability proof: the planner-routed stack passed the
+saved-anchor `3/3` rung with nine fresh-dashboard runs and browser-watchable
+packages:
+`artifacts/session/analysis_planner_saved_anchor_repeat3x_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+Counts are `saved_anchor_left05=3/3`, `saved_anchor_right05=3/3`, and
+`saved_anchor_zero=3/3`. Execution, setup, and contact quality were clean;
+first-contact blockers were `0`; closest approaches ranged from `0.194m` to
+`0.198m`. The contact-sheet montage is
+`artifacts/session/analysis_planner_saved_anchor_repeat3x_20260604/fetch_planner_route_uat_analyzer/saved_anchor_repeat3x_contact_sheet_montage.png`.
+The seeded random gate is now the remaining promotion-grade proof before
+claiming generalized fetch-to-pose readiness.
 
 June 4 harness hardening: route replay now returns immediately when dashboard
 startup reports `environment_state=error`, preserving truth-probe failures as

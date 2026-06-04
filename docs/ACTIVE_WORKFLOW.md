@@ -146,6 +146,29 @@ the sim before packaging, and writes a package-local
 `keyframe_review_contact_sheet.png`. Review that sheet across the run sequence
 before reporting pass/fail.
 
+Saved-anchor repeatability analyzer scope:
+
+```powershell
+python scripts\fetch_planner_route_uat_analyzer.py `
+  --campaign-id <id> `
+  --evidence-scope saved_anchor_repeatability `
+  --repeatability-runs-per-anchor 3 `
+  --planner-summary artifacts\session\<planner_gate>\fetch_planner_handoff_gate\gate_summary.json `
+  --mission-summary <mission_verdict.json> `
+  --visual-package-summary <package_summary.json>
+```
+
+June 4, 2026 planner-routed saved-anchor repeatability:
+
+- Analyzer:
+  `artifacts/session/analysis_planner_saved_anchor_repeat3x_20260604/fetch_planner_route_uat_analyzer/scorecard.md`
+- Contact-sheet montage:
+  `artifacts/session/analysis_planner_saved_anchor_repeat3x_20260604/fetch_planner_route_uat_analyzer/saved_anchor_repeat3x_contact_sheet_montage.png`
+- Result: `saved_anchor_repeatability_green`, `9/9` live mission passes,
+  `9/9` browser-watchable visual packages, `0` first-contact blockers, clean
+  setup/contact quality, closest approach range `0.194m..0.198m`.
+- Remaining promotion rung: seeded random `fetch_generalization_gate`, `6 x 1`.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

@@ -15,6 +15,8 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 ANALYZER_KIND = "fetch_planner_route_uat_analyzer"
+SCOPE_ROUTE_OWNER_VISUAL_UAT = "route_owner_visual_uat"
+SCOPE_SAVED_ANCHOR_REPEATABILITY = "saved_anchor_repeatability"
 ROUTE_FETCH_READY = "fetch_ready_local"
 ROUTE_NAV2_REPOSITION = "nav2_reposition_first"
 ROUTE_SCAN_OR_PERCEIVE = "scan_or_perceive_first"
@@ -122,6 +124,12 @@ def summarize_planner_gate(path: Path) -> dict[str, Any]:
     expected_counts = (
         payload.get("expected_route_counts", {}) if isinstance(payload.get("expected_route_counts"), dict) else {}
     )
+    results = payload.get("results", []) if isinstance(payload.get("results"), list) else []
+    scene_ids = [
+        str(row.get("scene_id", "") or "").strip()
+        for row in results
+        if isinstance(row, dict) and str(row.get("scene_id", "") or "").strip()
+    ]
     total_count = int(payload.get("random_cases", 0) or payload.get("pass_count", 0) or 0)
     return {
         "campaign_id": str(payload.get("campaign_id", "") or ""),
@@ -137,6 +145,7 @@ def summarize_planner_gate(path: Path) -> dict[str, Any]:
         "seed": payload.get("seed"),
         "route_counts": {str(key): int(value or 0) for key, value in route_counts.items()},
         "expected_route_counts": {str(key): int(value or 0) for key, value in expected_counts.items()},
+        "scene_ids": scene_ids,
     }
 
 
@@ -294,7 +303,32 @@ def summarize_visual_package(path: Path) -> dict[str, Any]:
     }
 
 
+def saved_anchor_scene_counts(planner_gates: list[dict[str, Any]], visual_packages: list[dict[str, Any]]) -> dict[str, int]:
+    scene_ids: list[str] = []
+    for gate in planner_gates:
+        for scene_id in list_value(gate.get("scene_ids")):
+            text = str(scene_id or "").strip()
+            if text and text not in scene_ids:
+                scene_ids.append(text)
+    counts = {scene_id: 0 for scene_id in scene_ids}
+    for package in visual_packages:
+        haystack = " ".join(
+            [
+                str(package.get("campaign_id", "") or ""),
+                str(package.get("path", "") or ""),
+                str(package.get("scorecard_path", "") or ""),
+            ]
+        )
+        for scene_id in scene_ids:
+            if haystack.endswith(scene_id) or f"_{scene_id}" in haystack or f"/{scene_id}" in haystack:
+                counts[scene_id] += 1
+                break
+    return counts
+
+
 def build_summary(args: argparse.Namespace) -> dict[str, Any]:
+    evidence_scope = str(getattr(args, "evidence_scope", SCOPE_ROUTE_OWNER_VISUAL_UAT) or SCOPE_ROUTE_OWNER_VISUAL_UAT)
+    repeatability_runs_per_anchor = int(getattr(args, "repeatability_runs_per_anchor", 3) or 3)
     planner_gates = [summarize_planner_gate(resolve_path(path)) for path in args.planner_summary]
     planner_gates = [item for item in planner_gates if item]
     missions = [summarize_mission(resolve_path(path)) for path in args.mission_summary]
@@ -364,6 +398,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         item.get("pass") and item.get("mobile_watchable") and item.get("onboard_camera_watchable")
         for item in visual_packages
     )
+    mission_green = bool(missions) and all(mission.get("fetch_to_pose_pass") for mission in missions)
     first_contact_blockers = sum(1 for mission in missions if mission.get("contact_quality") == "blocker")
     contact_watch_count = sum(1 for mission in missions if mission.get("contact_quality") == "watch")
     setup_watch_count = sum(1 for mission in missions if mission.get("setup_quality") == "watch")
@@ -373,20 +408,50 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     execution_quality_status = (
         "blocker" if first_contact_blockers else "watch" if execution_watch_count else "clean"
     )
-    green = bool(gate_green and executable_green and planner_only_green and visual_green and first_contact_blockers == 0)
+    anchor_counts = saved_anchor_scene_counts(planner_gates, visual_packages)
+    saved_anchor_repeatability_green = bool(
+        evidence_scope == SCOPE_SAVED_ANCHOR_REPEATABILITY
+        and gate_green
+        and mission_green
+        and visual_green
+        and first_contact_blockers == 0
+        and anchor_counts
+        and all(count >= repeatability_runs_per_anchor for count in anchor_counts.values())
+    )
+    route_owner_green = bool(
+        evidence_scope == SCOPE_ROUTE_OWNER_VISUAL_UAT
+        and gate_green
+        and executable_green
+        and planner_only_green
+        and visual_green
+        and first_contact_blockers == 0
+    )
+    green = bool(saved_anchor_repeatability_green or route_owner_green)
+    milestone_interpretation = (
+        "saved_anchor_repeatability_green"
+        if saved_anchor_repeatability_green
+        else "saved_anchor_repeatability_incomplete"
+        if evidence_scope == SCOPE_SAVED_ANCHOR_REPEATABILITY
+        else "randomized_route_owner_visual_uat_green"
+        if green
+        else "randomized_route_owner_visual_uat_incomplete"
+    )
     return {
         "type": ANALYZER_KIND,
         "campaign_id": str(args.campaign_id or ""),
         "generated_utc": utc_now(),
+        "evidence_scope": evidence_scope,
+        "repeatability_runs_per_anchor": repeatability_runs_per_anchor,
         "pass": green,
         "promotion_evidence": False,
-        "milestone_interpretation": (
-            "randomized_route_owner_visual_uat_green" if green else "randomized_route_owner_visual_uat_incomplete"
-        ),
+        "milestone_interpretation": milestone_interpretation,
         "planner_gate_green": gate_green,
         "executable_route_green": executable_green,
         "planner_only_route_green": planner_only_green,
+        "mission_green": mission_green,
         "visual_package_green": visual_green,
+        "saved_anchor_repeatability_green": saved_anchor_repeatability_green,
+        "saved_anchor_scene_counts": anchor_counts,
         "execution_quality_status": execution_quality_status,
         "execution_watch_count": execution_watch_count,
         "setup_quality_status": setup_quality_status,
@@ -408,9 +473,15 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         "# Fetch Planner Route UAT Scorecard",
         "",
         f"- Campaign: `{summary.get('campaign_id', '')}`",
+        f"- Evidence scope: `{summary.get('evidence_scope', '')}`",
         f"- Pass: `{summary.get('pass', False)}`",
         f"- Interpretation: `{summary.get('milestone_interpretation', '')}`",
         f"- Promotion evidence: `{summary.get('promotion_evidence', False)}`",
+        f"- Mission green: `{summary.get('mission_green', False)}`",
+        f"- Visual package green: `{summary.get('visual_package_green', False)}`",
+        f"- Saved-anchor repeatability green: `{summary.get('saved_anchor_repeatability_green', False)}`",
+        f"- Repeatability runs per anchor: `{summary.get('repeatability_runs_per_anchor', 0)}`",
+        f"- Saved-anchor scene counts: `{summary.get('saved_anchor_scene_counts', {})}`",
         f"- Execution quality: `{summary.get('execution_quality_status', '')}`",
         f"- Execution watches: `{summary.get('execution_watch_count', 0)}`",
         f"- Setup quality: `{summary.get('setup_quality_status', '')}`",
@@ -478,6 +549,12 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Analyze planner-routed fetch UAT evidence.")
     parser.add_argument("--campaign-id", default=f"live_fetch_planner_route_uat_analyzer_{current_utc_stamp()}")
+    parser.add_argument(
+        "--evidence-scope",
+        choices=(SCOPE_ROUTE_OWNER_VISUAL_UAT, SCOPE_SAVED_ANCHOR_REPEATABILITY),
+        default=SCOPE_ROUTE_OWNER_VISUAL_UAT,
+    )
+    parser.add_argument("--repeatability-runs-per-anchor", type=int, default=3)
     parser.add_argument("--planner-summary", action="append", default=[])
     parser.add_argument("--mission-summary", action="append", default=[])
     parser.add_argument("--visual-package-summary", action="append", default=[])

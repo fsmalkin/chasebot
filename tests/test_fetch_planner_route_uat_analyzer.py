@@ -13,12 +13,22 @@ def _write_json(path: Path, payload: dict) -> None:
     analyzer.write_json(path, payload)
 
 
-def _args(tmp_path: Path, *, planner: Path, missions: list[Path], visual_package: Path):
+def _args(
+    tmp_path: Path,
+    *,
+    planner: Path,
+    missions: list[Path],
+    visual_package: Path,
+    evidence_scope: str = analyzer.SCOPE_ROUTE_OWNER_VISUAL_UAT,
+    repeatability_runs_per_anchor: int = 3,
+):
     return type(
         "Args",
         (),
         {
             "campaign_id": "uat",
+            "evidence_scope": evidence_scope,
+            "repeatability_runs_per_anchor": repeatability_runs_per_anchor,
             "planner_summary": [str(planner)],
             "mission_summary": [str(path) for path in missions],
             "visual_package_summary": [str(visual_package)],
@@ -255,6 +265,135 @@ def test_planner_route_uat_analyzer_requires_all_executable_routes(tmp_path, mon
     rows = {row["route_label"]: row for row in summary["route_rows"]}
     assert rows[analyzer.ROUTE_NAV2_REPOSITION]["coverage_status"] == "missing_live_executable"
     assert rows[analyzer.ROUTE_RECOVERY_OR_REAIM]["coverage_status"] == "missing_live_executable"
+
+
+def test_planner_route_uat_analyzer_scores_saved_anchor_repeatability_scope(tmp_path, monkeypatch):
+    monkeypatch.setattr(analyzer, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+    monkeypatch.setattr(analyzer, "REPO_ROOT", tmp_path)
+    root = analyzer.SESSION_ROOT
+    planner = root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
+    _write_json(
+        planner,
+        {
+            "campaign_id": "saved_anchor_gate",
+            "pass": True,
+            "pass_count": 3,
+            "fail_count": 0,
+            "wrong_fetch_dispatch_count": 0,
+            "scene_set": "saved_anchor_planner_v1",
+            "route_counts": {
+                analyzer.ROUTE_FETCH_READY: 1,
+                analyzer.ROUTE_RECOVERY_OR_REAIM: 2,
+            },
+            "results": [
+                {"scene_id": "saved_anchor_left05", "route_label": analyzer.ROUTE_RECOVERY_OR_REAIM},
+                {"scene_id": "saved_anchor_right05", "route_label": analyzer.ROUTE_RECOVERY_OR_REAIM},
+                {"scene_id": "saved_anchor_zero", "route_label": analyzer.ROUTE_FETCH_READY},
+            ],
+        },
+    )
+    missions: list[Path] = []
+    visual_packages: list[Path] = []
+    for run in range(3):
+        for scene_id, route in (
+            ("saved_anchor_left05", analyzer.ROUTE_RECOVERY_OR_REAIM),
+            ("saved_anchor_right05", analyzer.ROUTE_RECOVERY_OR_REAIM),
+            ("saved_anchor_zero", analyzer.ROUTE_FETCH_READY),
+        ):
+            mission = root / f"session_{run}_{scene_id}" / "mission_verdict.json"
+            _mission(mission, route)
+            missions.append(mission)
+            package = root / f"repeat_run{run}_{scene_id}" / "fetch_visual_uat_package" / "package_summary.json"
+            _write_json(
+                package,
+                {
+                    "campaign_id": f"repeat_run{run}_{scene_id}",
+                    "pass": True,
+                    "mobile_watchable": True,
+                    "onboard_camera_watchable": True,
+                    "videos": [{"name": "raw_camera_browser.mp4"}],
+                },
+            )
+            visual_packages.append(package)
+
+    args = _args(
+        tmp_path,
+        planner=planner,
+        missions=missions,
+        visual_package=visual_packages[0],
+        evidence_scope=analyzer.SCOPE_SAVED_ANCHOR_REPEATABILITY,
+    )
+    args.visual_package_summary = [str(path) for path in visual_packages]
+
+    summary = analyzer.build_summary(args)
+
+    assert summary["pass"] is True
+    assert summary["milestone_interpretation"] == "saved_anchor_repeatability_green"
+    assert summary["saved_anchor_repeatability_green"] is True
+    assert summary["planner_only_route_green"] is False
+    assert summary["saved_anchor_scene_counts"] == {
+        "saved_anchor_left05": 3,
+        "saved_anchor_right05": 3,
+        "saved_anchor_zero": 3,
+    }
+
+    scorecard = tmp_path / "scorecard.md"
+    analyzer.write_scorecard(scorecard, summary)
+    text = scorecard.read_text(encoding="utf-8")
+    assert "Evidence scope: `saved_anchor_repeatability`" in text
+    assert "Saved-anchor repeatability green: `True`" in text
+
+
+def test_planner_route_uat_analyzer_blocks_incomplete_saved_anchor_repeatability_scope(tmp_path, monkeypatch):
+    monkeypatch.setattr(analyzer, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+    monkeypatch.setattr(analyzer, "REPO_ROOT", tmp_path)
+    root = analyzer.SESSION_ROOT
+    planner = root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
+    _write_json(
+        planner,
+        {
+            "campaign_id": "saved_anchor_gate",
+            "pass": True,
+            "pass_count": 3,
+            "wrong_fetch_dispatch_count": 0,
+            "route_counts": {analyzer.ROUTE_FETCH_READY: 1},
+            "results": [
+                {"scene_id": "saved_anchor_left05"},
+                {"scene_id": "saved_anchor_right05"},
+                {"scene_id": "saved_anchor_zero"},
+            ],
+        },
+    )
+    mission = root / "session_saved_anchor_zero" / "mission_verdict.json"
+    _mission(mission, analyzer.ROUTE_FETCH_READY)
+    visual_package = root / "repeat_saved_anchor_zero" / "fetch_visual_uat_package" / "package_summary.json"
+    _write_json(
+        visual_package,
+        {
+            "campaign_id": "repeat_saved_anchor_zero",
+            "pass": True,
+            "mobile_watchable": True,
+            "onboard_camera_watchable": True,
+        },
+    )
+
+    summary = analyzer.build_summary(
+        _args(
+            tmp_path,
+            planner=planner,
+            missions=[mission],
+            visual_package=visual_package,
+            evidence_scope=analyzer.SCOPE_SAVED_ANCHOR_REPEATABILITY,
+        )
+    )
+
+    assert summary["pass"] is False
+    assert summary["milestone_interpretation"] == "saved_anchor_repeatability_incomplete"
+    assert summary["saved_anchor_scene_counts"] == {
+        "saved_anchor_left05": 0,
+        "saved_anchor_right05": 0,
+        "saved_anchor_zero": 1,
+    }
 
 
 def test_planner_route_uat_analyzer_treats_robot_posture_first_contact_flags_as_watch(tmp_path, monkeypatch):
