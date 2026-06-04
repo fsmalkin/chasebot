@@ -436,6 +436,20 @@ larger setup angles, and forward-only setup pressure, plus hardware-transfer
 packaging in parallel. Hold contact-control changes until that matrix exposes
 a reproduced route-family stage gap.
 
+June 4 hard mixed-scenario proof: `hard_mixed_fetch_planner_v1` is now the
+named pressure matrix for planner-routed UAT. The analyzer scorecard is
+`artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The matrix covers wide-angle direct local fetch, opposite-side Nav2-first
+setup, large-angle recovery/re-aim, scan/defer, and safe no-go with two rows
+per route family. The live replay passed route contracts `10/10`, visual
+packages `10/10`, executable deliveries `6/6`, route-only proofs `4/4`, clean
+setup/contact/execution analysis, and first-contact blockers `0`; executable
+closest approaches ranged from `0.194m` to `0.197m`. Raw-camera and topdown
+sequence review matched the telemetry. Continue with LLM-shadow route
+classification over this hard matrix and hardware-transfer packaging while
+using reproduced hard-matrix failures as the trigger for local contact-control
+changes.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

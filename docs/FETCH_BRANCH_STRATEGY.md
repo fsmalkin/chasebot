@@ -282,6 +282,17 @@ Planner-routed moonshot update, June 2:
   the planner-routed UAT harness. The next branch work is a harder mixed
   scenario matrix plus hardware-transfer packaging. Alternative architectures
   remain reserve lanes for reproduced stage gaps in that harder matrix.
+- hard mixed-scenario confirmation:
+  `scripts/fetch_planner_handoff_gate.py` now exposes
+  `hard_mixed_fetch_planner_v1`, a named two-per-route hard matrix covering
+  wide-angle local fetch, opposite-side Nav2-first setup, large-angle recovery,
+  scan/defer, and safe no-go. The first live replay is green at
+  `artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`:
+  route contracts `10/10`, visual packages `10/10`, executable deliveries
+  `6/6`, route-only proofs `4/4`, clean analyzer status, and first-contact
+  blockers `0`. Branch decision: keep this spike active for LLM-shadow
+  classification and hardware-transfer packaging. Hold alternative architecture
+  work for reproduced hard-matrix failures.
 - frozen planner-layout replay fix:
   fresh seed `seed20260608_scene24_fetch_ready_local` first failed as a manual
   target-layout replay because the runner used the old constant-push defaults

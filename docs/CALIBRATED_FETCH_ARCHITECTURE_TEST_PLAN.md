@@ -235,6 +235,19 @@ route-only proofs `4/4`, clean analyzer status, and first-contact blockers
 stress hard geometry and planner refusal boundaries before additional contact
 controller work.
 
+June 4 hard mixed-scenario route-owner evidence now closes that next gate.
+`hard_mixed_fetch_planner_v1` is the named two-per-route pressure matrix for
+wide-angle local fetch, opposite-side Nav2-first setup, large-angle
+recovery/re-aim, scan/defer, and safe no-go. The live replay analyzer is
+`artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+It passed route contracts `10/10`, visual packages `10/10`, executable
+deliveries `6/6`, route-only proofs `4/4`, clean analyzer status, and
+first-contact blockers `0`, with executable closest approaches in
+`0.194m..0.197m`. Treat this as hard route-family visual UAT and architecture
+support. Promotion still requires the canonical saved-layout and seeded-gate
+ladder for any changed executor; the next calibrated architecture work is
+LLM-shadow route comparison plus hardware-transfer packaging.
+
 ## Research Thread Output
 
 Before starting another implementation spike, produce a findings matrix across

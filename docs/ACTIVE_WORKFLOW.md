@@ -534,6 +534,33 @@ June 4, 2026 second rough-seed mixed route-family UAT:
   setup-angle cases, plus hardware-transfer packaging. Keep contact-control
   tuning behind reproducible route-family stage gaps.
 
+June 4, 2026 hard mixed-scenario route-family UAT:
+
+- Handoff command:
+  `python scripts\fetch_planner_handoff_gate.py --campaign-id dry_hard_mixed_fetch_planner_v1_20260604 --scene-set hard_mixed_fetch_planner_v1 --random-cases 10 --seed 20260604 --dry-run`
+- Replay command:
+  `python scripts\fetch_planner_route_replay_batch.py --campaign-id live_hard_mixed_route_family_20260604 --gate-summary artifacts\session\dry_hard_mixed_fetch_planner_v1_20260604\fetch_planner_handoff_gate\gate_summary.json --route fetch_ready_local --route nav2_reposition_first --route recovery_or_reaim --route scan_or_perceive_first --route ambiguous_or_unsafe_no_go --max-per-route 2 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --route-only-sample-duration-s 6 --timeout-s 240 --package-timeout-s 180`
+- Replay scorecard:
+  `artifacts/session/live_hard_mixed_route_family_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: hard matrix route contracts `10/10`, visual packages `10/10`,
+  executable deliveries `6/6`, route-only proofs `4/4`, clean analyzer status,
+  and first-contact blockers `0`.
+- Hard coverage: two wide-angle `fetch_ready_local` rows, two opposite-side
+  `nav2_reposition_first` rows, two large-angle high-debt
+  `recovery_or_reaim` rows, two scan/defer rows, and two safe no-go rows.
+  Executable closest approach range was `0.194m..0.197m`.
+- Visual review: inspected raw-camera plus topdown keyframe sheets for all ten
+  sessions. The opposite-side Nav2, wide-angle fetch-ready, and large-angle
+  recovery rows visibly delivered into the circle. Scan/defer and no-go rows
+  stayed stopped with local fetch withheld.
+- Evidence meaning: the planner-routed architecture now clears a deliberately
+  hard named matrix as well as random mixed-route breadth. The next work should
+  compare LLM-shadow route classification on this hard matrix and start the
+  hardware-transfer package; keep local-contact changes gated on reproduced
+  failures.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

@@ -743,6 +743,18 @@ angles, forward-only positioning, and LLM/planner refusal boundaries. Contact
 servo changes should follow a reproduced route-family stage gap rather than a
 single rough visual impression.
 
+The hard mixed-scenario matrix is now green:
+`artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The named `hard_mixed_fetch_planner_v1` profile adds deliberate pressure cases:
+wide-angle local fetch, opposite-side Nav2-first setup, large-angle
+recovery/re-aim, scan/defer, and safe no-go. The live matrix passed route
+contracts `10/10`, visual packages `10/10`, executable deliveries `6/6`,
+route-only proofs `4/4`, clean setup/contact/execution quality, and
+first-contact blockers `0`. Policy implication: preserve the route-gated
+planner stack as the primary path. The next useful AI work is LLM-shadow
+classification over this hard matrix, with deterministic guards still owning
+execution.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

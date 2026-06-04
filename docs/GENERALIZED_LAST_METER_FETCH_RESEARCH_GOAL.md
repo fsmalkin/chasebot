@@ -1055,6 +1055,18 @@ scenario geometry, especially opposite-side-of-circle starts, large setup
 angles, forward-only setup pressure, and unknown-scene refusal boundaries.
 Alternative architectures remain reserve lanes for reproduced stage gaps.
 
+`hard_mixed_fetch_planner_v1` is now a named hard route-family gate:
+`artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+It deliberately covers wide-angle direct local fetch, opposite-side
+Nav2-first setup, large-angle recovery/re-aim, scan/defer, and safe no-go with
+two rows per route family. The live matrix passed route contracts `10/10`,
+visual packages `10/10`, executable deliveries `6/6`, route-only proofs
+`4/4`, clean execution/setup/contact analysis, and first-contact blockers
+`0`. Raw-camera plus topdown sequence review matched the telemetry. This
+evidence further supports the planner-gated architecture and reduces the need
+for a broad architecture pause. The next research step is LLM-shadow route
+classification over the hard matrix plus hardware-transfer planning.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

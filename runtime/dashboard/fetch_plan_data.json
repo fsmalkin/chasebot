@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 4:18 PM ET",
+  "updated_label": "Updated June 4, 2026, 4:52 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Second rough mixed-family seed green",
-  "status_detail": "The planner-routed stack now has a seven-seed preservation bar plus two rough-seed, two-per-route mixed route-family UAT packages. Seed20260633 and seed20260632 both covered two live samples for fetch-ready, Nav2-first, recovery/re-aim, scan/defer, and safe no-go routes. The latest seed20260632 replay passed 10/10 route contracts, 10/10 browser-watchable visual packages, 6/6 executable deliveries, and 4/4 planner-only withholding proofs with clean analyzer status and frame-sequence review that matched telemetry.",
+  "status_label": "Hard mixed-scenario UAT green",
+  "status_detail": "The planner-routed stack now has a named hard mixed-scenario matrix in addition to the seven-seed preservation bar and two rough-seed, two-per-route random UAT packages. The hard matrix deliberately covered wide-angle direct fetch, opposite-side Nav2-first setup, large-angle recovery/re-aim, stale or low-confidence scan/defer, and safe no-go rows. It passed 10/10 route contracts, 10/10 browser-watchable visual packages, 6/6 executable deliveries, and 4/4 planner-only withholding proofs with clean analyzer status and keyframe review that matched telemetry.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,56 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Hard mixed-scenario UAT is green",
+      "status": "hard_mixed_fetch_planner_v1 replay: 10/10 route contracts and 10/10 visual packages",
+      "tone": "green",
+      "summary": "The new hard matrix turns the latest architecture question into a repeatable named gate. It includes two wide-angle fetch-ready cases, two opposite-side Nav2-first cases, two high-debt large-angle recovery cases, two scan/defer cases, and two safe no-go cases. Live replay passed every route contract: executable routes delivered into the visible circle, planner-only routes withheld local fetch, and frame-sequence review across all ten sheets matched telemetry.",
+      "metrics": [
+        "Planner handoff: 10/10 pass; route_counts=2 per route; wrong_fetch=0",
+        "Live replay: selected=10; route_success=10; visual_package_pass=10",
+        "Executable routes: fetch_ready_local 2/2, nav2_reposition_first 2/2, recovery_or_reaim 2/2",
+        "Planner-only routes: scan_or_perceive_first 2/2 and ambiguous_or_unsafe_no_go 2/2 with local fetch withheld",
+        "Analyzer: randomized_route_owner_visual_uat_green; execution clean; setup clean; contact clean; first-contact blockers=0",
+        "Executable closest approach range: 0.194m..0.197m",
+        "Evidence role: hard route-family visual UAT; promotion_evidence=false; preservation still comes from saved anchors, seeded gates, and regression manifest"
+      ],
+      "links": [
+        {
+          "label": "Hard matrix analyzer scorecard",
+          "url": "/artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Hard matrix replay scorecard",
+          "url": "/artifacts/session/live_hard_mixed_route_family_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Hard matrix planner scorecard",
+          "url": "/artifacts/session/dry_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "Opposite-side Nav2 left onboard proof",
+          "url": "/artifacts/session/20260604T203417248539Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Opposite-side Nav2 right onboard proof",
+          "url": "/artifacts/session/20260604T203555632236Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Large-angle recovery right onboard proof",
+          "url": "/artifacts/session/20260604T203953975060Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Safe no-go blocked-corridor onboard proof",
+          "url": "/artifacts/session/20260604T204612460133Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Opposite-side Nav2 left contact sheet",
+          "url": "/artifacts/session/20260604T203417248539Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ],
+      "preview_image": "/artifacts/session/20260604T203417248539Z/visual/keyframe_review_contact_sheet.png"
+    },
     {
       "title": "Second rough mixed-family seed is green",
       "status": "Seed 20260632 replay: 10/10 route contracts and 10/10 visual packages",
@@ -1261,6 +1311,110 @@
   ],
   "running_video_proof": [
     {
+      "title": "Hard mixed-scenario UAT bundle",
+      "summary": "Ten named hard cases cover wide-angle fetch-ready, opposite-side Nav2-first, large-angle recovery, scan/defer, and safe no-go behavior.",
+      "primary_video": {
+        "label": "Opposite-side Nav2 left onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T203417248539Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The route-gated planner stack handles deliberate hard geometry across all five current route families, with executable routes delivering and planner-only routes withholding local fetch by contract.",
+      "limits": "This is hard route-family visual UAT and promotion_evidence=false; saved anchors, seeded gates, and the regression manifest remain the preservation bar.",
+      "links": [
+        {
+          "label": "Hard matrix analyzer scorecard",
+          "url": "/artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Hard matrix replay scorecard",
+          "url": "/artifacts/session/live_hard_mixed_route_family_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Hard matrix planner scorecard",
+          "url": "/artifacts/session/dry_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "Wide-angle fetch-ready left onboard MP4",
+          "url": "/artifacts/session/20260604T203042393045Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Wide-angle fetch-ready right onboard MP4",
+          "url": "/artifacts/session/20260604T203232307892Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Opposite-side Nav2 left onboard MP4",
+          "url": "/artifacts/session/20260604T203417248539Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Opposite-side Nav2 right onboard MP4",
+          "url": "/artifacts/session/20260604T203555632236Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Large-angle recovery left onboard MP4",
+          "url": "/artifacts/session/20260604T203735939108Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Large-angle recovery right onboard MP4",
+          "url": "/artifacts/session/20260604T203953975060Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Low-confidence scan/defer onboard MP4",
+          "url": "/artifacts/session/20260604T204206502081Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Stale opposite scan/defer onboard MP4",
+          "url": "/artifacts/session/20260604T204330097814Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Far-target safe no-go onboard MP4",
+          "url": "/artifacts/session/20260604T204457832512Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Blocked-corridor safe no-go onboard MP4",
+          "url": "/artifacts/session/20260604T204612460133Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Wide-angle fetch-ready left contact sheet",
+          "url": "/artifacts/session/20260604T203042393045Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Wide-angle fetch-ready right contact sheet",
+          "url": "/artifacts/session/20260604T203232307892Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Opposite-side Nav2 left contact sheet",
+          "url": "/artifacts/session/20260604T203417248539Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Opposite-side Nav2 right contact sheet",
+          "url": "/artifacts/session/20260604T203555632236Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Large-angle recovery left contact sheet",
+          "url": "/artifacts/session/20260604T203735939108Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Large-angle recovery right contact sheet",
+          "url": "/artifacts/session/20260604T203953975060Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Low-confidence scan/defer contact sheet",
+          "url": "/artifacts/session/20260604T204206502081Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Stale opposite scan/defer contact sheet",
+          "url": "/artifacts/session/20260604T204330097814Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Far-target safe no-go contact sheet",
+          "url": "/artifacts/session/20260604T204457832512Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Blocked-corridor safe no-go contact sheet",
+          "url": "/artifacts/session/20260604T204612460133Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
       "title": "Seed 20260632 two-per-route mixed UAT bundle",
       "summary": "Ten sessions cover two live samples each for fetch-ready, recovery/re-aim, scan/defer, safe no-go, and Nav2-first setup on a second rough seed.",
       "primary_video": {
@@ -1634,6 +1788,110 @@
     }
   ],
   "recent_video_proof": [
+    {
+      "title": "Hard mixed-scenario UAT bundle",
+      "summary": "Ten named hard cases cover wide-angle fetch-ready, opposite-side Nav2-first, large-angle recovery, scan/defer, and safe no-go behavior.",
+      "primary_video": {
+        "label": "Opposite-side Nav2 left onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T203417248539Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The route-gated planner stack handles deliberate hard geometry across all five current route families, with executable routes delivering and planner-only routes withholding local fetch by contract.",
+      "limits": "This is hard route-family visual UAT and promotion_evidence=false; saved anchors, seeded gates, and the regression manifest remain the preservation bar.",
+      "links": [
+        {
+          "label": "Hard matrix analyzer scorecard",
+          "url": "/artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Hard matrix replay scorecard",
+          "url": "/artifacts/session/live_hard_mixed_route_family_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Hard matrix planner scorecard",
+          "url": "/artifacts/session/dry_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "Wide-angle fetch-ready left onboard MP4",
+          "url": "/artifacts/session/20260604T203042393045Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Wide-angle fetch-ready right onboard MP4",
+          "url": "/artifacts/session/20260604T203232307892Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Opposite-side Nav2 left onboard MP4",
+          "url": "/artifacts/session/20260604T203417248539Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Opposite-side Nav2 right onboard MP4",
+          "url": "/artifacts/session/20260604T203555632236Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Large-angle recovery left onboard MP4",
+          "url": "/artifacts/session/20260604T203735939108Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Large-angle recovery right onboard MP4",
+          "url": "/artifacts/session/20260604T203953975060Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Low-confidence scan/defer onboard MP4",
+          "url": "/artifacts/session/20260604T204206502081Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Stale opposite scan/defer onboard MP4",
+          "url": "/artifacts/session/20260604T204330097814Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Far-target safe no-go onboard MP4",
+          "url": "/artifacts/session/20260604T204457832512Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Blocked-corridor safe no-go onboard MP4",
+          "url": "/artifacts/session/20260604T204612460133Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Wide-angle fetch-ready left contact sheet",
+          "url": "/artifacts/session/20260604T203042393045Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Wide-angle fetch-ready right contact sheet",
+          "url": "/artifacts/session/20260604T203232307892Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Opposite-side Nav2 left contact sheet",
+          "url": "/artifacts/session/20260604T203417248539Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Opposite-side Nav2 right contact sheet",
+          "url": "/artifacts/session/20260604T203555632236Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Large-angle recovery left contact sheet",
+          "url": "/artifacts/session/20260604T203735939108Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Large-angle recovery right contact sheet",
+          "url": "/artifacts/session/20260604T203953975060Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Low-confidence scan/defer contact sheet",
+          "url": "/artifacts/session/20260604T204206502081Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Stale opposite scan/defer contact sheet",
+          "url": "/artifacts/session/20260604T204330097814Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Far-target safe no-go contact sheet",
+          "url": "/artifacts/session/20260604T204457832512Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Blocked-corridor safe no-go contact sheet",
+          "url": "/artifacts/session/20260604T204612460133Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
     {
       "title": "Seed 20260632 two-per-route mixed UAT bundle",
       "summary": "Ten sessions cover two live samples each for fetch-ready, recovery/re-aim, scan/defer, safe no-go, and Nav2-first setup on a second rough seed.",
@@ -3429,137 +3687,137 @@
     }
   ],
   "next_steps": [
-    "Run a harder mixed-scenario UAT matrix that deliberately includes opposite-side-of-circle, large setup-angle, and forward-only setup cases before changing contact/control code.",
-    "Keep the seven-seed manifest plus the two rough mixed-family UAT packages as the preservation bar before crediting route-owner, recovery-window, visual-packaging, or contact-servo changes.",
+    "Run LLM-shadow classification on hard_mixed_fetch_planner_v1 and compare route/rationale against deterministic guard routing before giving LLM outputs live authority.",
     "Draft the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, model provenance checks, and visual-evidence capture on robot hardware.",
+    "Keep the seven-seed manifest, two rough mixed-family UAT packages, and hard mixed matrix as the preservation bar before crediting route-owner, recovery-window, visual-packaging, or contact-servo changes.",
     "Measure the runtime cost of the longer recovery window and decide whether hardware UAT needs a tighter progress-based timeout instead of a fixed duration.",
     "Investigate container-side ffmpeg availability as evidence hardening; host-side browser video recovery is working but remains a packaging dependency."
   ],
   "uat_review_bundle": {
-    "title": "Second rough-seed mixed-family browser UAT bundle",
-    "summary": "Review these ten seed20260632 mixed-route samples as the latest UAT package. The intended read is architectural: the planner chooses an executable route that delivers into the circle or a planner-only route that safely withholds local fetch. This package is visual UAT, not promotion evidence.",
+    "title": "Hard mixed-scenario browser UAT bundle",
+    "summary": "Review these ten hard_mixed_fetch_planner_v1 samples as the latest UAT package. The intended read is architectural: hard but bounded executable routes still deliver, while scan/defer and no-go routes visibly withhold local fetch. This package is visual UAT, not promotion evidence.",
     "route_samples": [
       {
-        "label": "Recovery / re-aim sample A",
-        "route": "recovery_or_reaim",
-        "session_id": "20260604T195613554217Z",
-        "reason": "High-risk recovery row delivered with closest approach 0.197m.",
-        "video_url": "/artifacts/session/20260604T195613554217Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T195613554217Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T195613554217Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T195613554217Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Nav2-first setup sample A",
-        "route": "nav2_reposition_first",
-        "session_id": "20260604T195823339660Z",
-        "reason": "Nav2-first row delivered with closest approach 0.198m.",
-        "video_url": "/artifacts/session/20260604T195823339660Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T195823339660Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T195823339660Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T195823339660Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Scan/defer route-only sample A",
-        "route": "scan_or_perceive_first",
-        "session_id": "20260604T200001370421Z",
-        "reason": "Planner-only scan/defer row withheld local fetch and stayed stopped.",
-        "video_url": "/artifacts/session/20260604T200001370421Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T200001370421Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T200001370421Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T200001370421Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Scan/defer route-only sample B",
-        "route": "scan_or_perceive_first",
-        "session_id": "20260604T200107618888Z",
-        "reason": "Second scan/defer row withheld local fetch and stayed stopped.",
-        "video_url": "/artifacts/session/20260604T200107618888Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T200107618888Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T200107618888Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T200107618888Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Fetch-ready local sample A",
+        "label": "Wide-angle fetch-ready left",
         "route": "fetch_ready_local",
-        "session_id": "20260604T200214374450Z",
-        "reason": "Direct local-ready row delivered with closest approach 0.198m.",
-        "video_url": "/artifacts/session/20260604T200214374450Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T200214374450Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T200214374450Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T200214374450Z/visual/keyframe_review_contact_sheet.png"
+        "session_id": "20260604T203042393045Z",
+        "reason": "Wide-angle local-ready case delivered at 0.195m.",
+        "video_url": "/artifacts/session/20260604T203042393045Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T203042393045Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T203042393045Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T203042393045Z/visual/keyframe_review_contact_sheet.png"
       },
       {
-        "label": "Nav2-first setup sample B",
-        "route": "nav2_reposition_first",
-        "session_id": "20260604T200334934829Z",
-        "reason": "Second Nav2-first row delivered with closest approach 0.195m.",
-        "video_url": "/artifacts/session/20260604T200334934829Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T200334934829Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T200334934829Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T200334934829Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Recovery / re-aim sample B",
-        "route": "recovery_or_reaim",
-        "session_id": "20260604T200514836044Z",
-        "reason": "Second high-risk recovery row delivered with closest approach 0.195m.",
-        "video_url": "/artifacts/session/20260604T200514836044Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T200514836044Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T200514836044Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T200514836044Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Safe no-go route-only sample A",
-        "route": "ambiguous_or_unsafe_no_go",
-        "session_id": "20260604T200729169659Z",
-        "reason": "Planner-only no-go row withheld local fetch and stayed stopped.",
-        "video_url": "/artifacts/session/20260604T200729169659Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T200729169659Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T200729169659Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T200729169659Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Safe no-go route-only sample B",
-        "route": "ambiguous_or_unsafe_no_go",
-        "session_id": "20260604T200914935963Z",
-        "reason": "Second no-go row withheld local fetch and stayed stopped.",
-        "video_url": "/artifacts/session/20260604T200914935963Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T200914935963Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T200914935963Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T200914935963Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Fetch-ready local sample B",
+        "label": "Wide-angle fetch-ready right",
         "route": "fetch_ready_local",
-        "session_id": "20260604T201034376519Z",
-        "reason": "Clean direct local-ready row delivered with closest approach 0.197m.",
-        "video_url": "/artifacts/session/20260604T201034376519Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T201034376519Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T201034376519Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T201034376519Z/visual/keyframe_review_contact_sheet.png"
+        "session_id": "20260604T203232307892Z",
+        "reason": "Second wide-angle local-ready case delivered at 0.196m.",
+        "video_url": "/artifacts/session/20260604T203232307892Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T203232307892Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T203232307892Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T203232307892Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Opposite-side Nav2 left",
+        "route": "nav2_reposition_first",
+        "session_id": "20260604T203417248539Z",
+        "reason": "Opposite-side Nav2-first case delivered at 0.194m.",
+        "video_url": "/artifacts/session/20260604T203417248539Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T203417248539Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T203417248539Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T203417248539Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Opposite-side Nav2 right",
+        "route": "nav2_reposition_first",
+        "session_id": "20260604T203555632236Z",
+        "reason": "Second opposite-side Nav2-first case delivered at 0.197m.",
+        "video_url": "/artifacts/session/20260604T203555632236Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T203555632236Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T203555632236Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T203555632236Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Large-angle recovery left",
+        "route": "recovery_or_reaim",
+        "session_id": "20260604T203735939108Z",
+        "reason": "High-debt recovery case delivered at 0.197m.",
+        "video_url": "/artifacts/session/20260604T203735939108Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T203735939108Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T203735939108Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T203735939108Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Large-angle recovery right",
+        "route": "recovery_or_reaim",
+        "session_id": "20260604T203953975060Z",
+        "reason": "Second high-debt recovery case delivered at 0.196m.",
+        "video_url": "/artifacts/session/20260604T203953975060Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T203953975060Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T203953975060Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T203953975060Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Low-confidence scan/defer",
+        "route": "scan_or_perceive_first",
+        "session_id": "20260604T204206502081Z",
+        "reason": "Planner-only low-confidence case withheld local fetch.",
+        "video_url": "/artifacts/session/20260604T204206502081Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T204206502081Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T204206502081Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T204206502081Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Stale opposite scan/defer",
+        "route": "scan_or_perceive_first",
+        "session_id": "20260604T204330097814Z",
+        "reason": "Planner-only stale opposite-side case withheld local fetch.",
+        "video_url": "/artifacts/session/20260604T204330097814Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T204330097814Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T204330097814Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T204330097814Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Far-target safe no-go",
+        "route": "ambiguous_or_unsafe_no_go",
+        "session_id": "20260604T204457832512Z",
+        "reason": "Planner-only far-target case withheld local fetch.",
+        "video_url": "/artifacts/session/20260604T204457832512Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T204457832512Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T204457832512Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T204457832512Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Blocked-corridor safe no-go",
+        "route": "ambiguous_or_unsafe_no_go",
+        "session_id": "20260604T204612460133Z",
+        "reason": "Planner-only blocked-corridor case withheld local fetch.",
+        "video_url": "/artifacts/session/20260604T204612460133Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T204612460133Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T204612460133Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T204612460133Z/visual/keyframe_review_contact_sheet.png"
       }
     ],
     "review_checklist": [
-      "Start with onboard raw camera and decide whether the selected route is executable fetch or planner-only stopped-scene proof.",
-      "For executable routes, confirm setup, first contact, push/coast, and terminal delivery into the visible circle across the frame sequence.",
-      "For planner-only routes, confirm local fetch stays withheld and the scene remains visually stopped.",
-      "Compare the topdown sheet against telemetry for ball-target distance, robot-ball separation, and route owner.",
-      "Treat this as route-family visual UAT with promotion_evidence=false.",
+      "Start with the two opposite-side Nav2 clips, then compare their topdown sheets against the planner route and delivery distance.",
+      "Confirm the wide-angle local-ready and large-angle recovery rows show setup, contact, push/coast, and terminal delivery into the visible circle.",
+      "Confirm scan/defer and no-go rows keep local fetch withheld and remain visually stopped.",
+      "Compare each route owner against the hard matrix scorecard before drawing subsystem conclusions.",
+      "Treat this as hard route-family visual UAT with promotion_evidence=false.",
       "Escalate only reproducible visual/telemetry mismatches into architecture reconsideration."
     ],
     "links": [
       {
-        "label": "Seed 20260632 analyzer scorecard",
-        "url": "/artifacts/session/analysis_mixed_route_family_2per_route_seed20260632_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        "label": "Hard matrix analyzer scorecard",
+        "url": "/artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
       },
       {
-        "label": "Seed 20260632 replay scorecard",
-        "url": "/artifacts/session/live_mixed_route_family_2per_route_seed20260632_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        "label": "Hard matrix replay scorecard",
+        "url": "/artifacts/session/live_hard_mixed_route_family_20260604/fetch_planner_route_replay_batch/scorecard.md"
       },
       {
-        "label": "Seed 20260632 parent planner gate scorecard",
-        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260632_breadth_20260604_planner/fetch_planner_handoff_gate/scorecard.md"
+        "label": "Hard matrix planner scorecard",
+        "url": "/artifacts/session/dry_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md"
       },
       {
         "label": "Seven-seed regression manifest",

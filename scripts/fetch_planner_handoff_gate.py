@@ -61,6 +61,7 @@ ROUTE_EXECUTORS = {
 FETCH_TARGET_POSE = {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.30}
 PLANNER_GATE_KIND = "fetch_planner_handoff_gate"
 PLANNER_MIXED_PROFILE = "planner_mixed_v1"
+HARD_SCENE_SET = "hard_mixed_fetch_planner_v1"
 OPENAI_TOOL_NAME = "emit_fetch_planner_route"
 CONTACT_QUALITY_CLEAN_LATERAL_M = 0.030
 CONTACT_QUALITY_CLEAN_YAW_DEG = 3.0
@@ -297,6 +298,9 @@ def generate_random_scenes(
     random_cases: int,
     scene_set: str = DEFAULT_SCENE_SET,
 ) -> list[dict[str, Any]]:
+    if str(scene_set or "").strip() == HARD_SCENE_SET:
+        return generate_hard_scenes(random_cases=random_cases, scene_set=scene_set)
+
     rng = random.Random(int(seed))
     case_count = max(int(random_cases), 1)
     route_plan = list(ROUTE_LABELS)
@@ -384,6 +388,162 @@ def generate_random_scenes(
         _refresh_local_fetch_envelope(scene)
         scenes.append(scene)
     return scenes
+
+
+def _fixed_target_relative_scene(
+    *,
+    route_label: str,
+    scene_id: str,
+    distance_m: float,
+    angle_deg: float,
+    standoff_m: float,
+    lateral_m: float,
+    yaw_error_deg: float,
+    scene_set: str,
+    ball_confidence: float = 0.98,
+    target_confidence: float = 0.99,
+    state_age_s: float = 0.15,
+    corridor_blocked: bool = False,
+    corridor_clearance_m: float = 0.35,
+    unsafe_drift_m: float = 0.0,
+) -> dict[str, Any]:
+    scene = _target_relative_scene(
+        rng=random.Random(1),
+        route_label=route_label,
+        scene_id=scene_id,
+        distance_range=(float(distance_m), float(distance_m)),
+        angle_range_deg=(float(angle_deg), float(angle_deg)),
+        standoff_range=(float(standoff_m), float(standoff_m)),
+        lateral_range=(float(lateral_m), float(lateral_m)),
+        yaw_error_range_deg=(float(yaw_error_deg), float(yaw_error_deg)),
+        ball_confidence=float(ball_confidence),
+        target_confidence=float(target_confidence),
+        state_age_s=float(state_age_s),
+        corridor_blocked=bool(corridor_blocked),
+        corridor_clearance_m=float(corridor_clearance_m),
+        unsafe_drift_m=float(unsafe_drift_m),
+    )
+    scene["scene_set"] = scene_set
+    _refresh_local_fetch_envelope(scene)
+    return scene
+
+
+def generate_hard_scenes(*, random_cases: int = 10, scene_set: str = HARD_SCENE_SET) -> list[dict[str, Any]]:
+    """Return a deterministic hard mixed matrix for route-owner UAT pressure."""
+
+    scenes = [
+        _fixed_target_relative_scene(
+            route_label=ROUTE_FETCH_READY,
+            scene_id="hard_fetch_ready_wide_left_01",
+            distance_m=0.72,
+            angle_deg=-38.0,
+            standoff_m=0.42,
+            lateral_m=0.045,
+            yaw_error_deg=5.4,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_FETCH_READY,
+            scene_id="hard_fetch_ready_wide_right_02",
+            distance_m=0.73,
+            angle_deg=38.0,
+            standoff_m=0.43,
+            lateral_m=-0.044,
+            yaw_error_deg=-5.5,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="hard_nav2_opposite_side_left_01",
+            distance_m=0.62,
+            angle_deg=170.0,
+            standoff_m=1.08,
+            lateral_m=0.08,
+            yaw_error_deg=12.0,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="hard_nav2_opposite_side_right_02",
+            distance_m=0.62,
+            angle_deg=-170.0,
+            standoff_m=1.12,
+            lateral_m=-0.10,
+            yaw_error_deg=-13.0,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_RECOVERY_OR_REAIM,
+            scene_id="hard_recovery_large_angle_left_01",
+            distance_m=0.68,
+            angle_deg=42.0,
+            standoff_m=0.84,
+            lateral_m=0.22,
+            yaw_error_deg=32.0,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_RECOVERY_OR_REAIM,
+            scene_id="hard_recovery_large_angle_right_02",
+            distance_m=0.68,
+            angle_deg=-45.0,
+            standoff_m=0.78,
+            lateral_m=-0.21,
+            yaw_error_deg=-33.0,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_SCAN_OR_PERCEIVE,
+            scene_id="hard_scan_low_confidence_01",
+            distance_m=0.66,
+            angle_deg=35.0,
+            standoff_m=0.40,
+            lateral_m=0.03,
+            yaw_error_deg=4.0,
+            ball_confidence=0.35,
+            state_age_s=0.20,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_SCAN_OR_PERCEIVE,
+            scene_id="hard_scan_stale_opposite_02",
+            distance_m=0.62,
+            angle_deg=-160.0,
+            standoff_m=0.42,
+            lateral_m=-0.02,
+            yaw_error_deg=-4.0,
+            ball_confidence=0.95,
+            state_age_s=4.0,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_NO_GO,
+            scene_id="hard_no_go_far_target_01",
+            distance_m=1.35,
+            angle_deg=60.0,
+            standoff_m=0.40,
+            lateral_m=0.06,
+            yaw_error_deg=6.0,
+            corridor_clearance_m=0.20,
+            unsafe_drift_m=0.20,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_NO_GO,
+            scene_id="hard_no_go_blocked_corridor_02",
+            distance_m=0.68,
+            angle_deg=-30.0,
+            standoff_m=0.38,
+            lateral_m=-0.03,
+            yaw_error_deg=-4.0,
+            corridor_blocked=True,
+            corridor_clearance_m=0.06,
+            unsafe_drift_m=0.22,
+            scene_set=scene_set,
+        ),
+    ]
+    case_count = max(int(random_cases), 1)
+    return scenes[:case_count]
 
 
 def _scene_payloads_from_file(path: Path) -> list[dict[str, Any]]:

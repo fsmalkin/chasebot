@@ -192,6 +192,72 @@ def test_generated_nav2_scenes_start_outside_recovery_band():
     )
 
 
+def test_hard_scene_set_covers_deliberate_route_pressure_cases():
+    scenes = gate.generate_random_scenes(
+        seed=123,
+        random_cases=10,
+        scene_set=gate.HARD_SCENE_SET,
+    )
+
+    assert len(scenes) == 10
+    assert {scene["scene_id"] for scene in scenes} >= {
+        "hard_nav2_opposite_side_left_01",
+        "hard_nav2_opposite_side_right_02",
+        "hard_recovery_large_angle_left_01",
+        "hard_scan_stale_opposite_02",
+    }
+    assert {
+        route: sum(1 for scene in scenes if scene["expected_route_label"] == route)
+        for route in gate.ROUTE_LABELS
+    } == {route: 2 for route in gate.ROUTE_LABELS}
+    assert all(
+        gate.deterministic_route_label(scene) == scene["expected_route_label"]
+        for scene in scenes
+    )
+
+    nav2_angles = [
+        abs(scene["geometry"]["ball_target_angle_deg"])
+        for scene in scenes
+        if scene["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+    ]
+    assert nav2_angles == [170.0, 170.0]
+    assert all(
+        scene["geometry"]["robot_ball_distance_m"] >= gate.NAV2_REPOSITION_MIN_ROBOT_BALL_DISTANCE_M
+        for scene in scenes
+        if scene["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+    )
+
+
+def test_planner_gate_scores_hard_scene_set(tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+    args = SimpleNamespace(
+        campaign_id="planner_gate_hard_matrix",
+        scene_set=gate.HARD_SCENE_SET,
+        scene_descriptor_json=[],
+        scene_dir="",
+        random_cases=10,
+        seed=123,
+        planner_mode=gate.PLANNER_MODE_DETERMINISTIC,
+        dry_run=True,
+        openai_model=gate.DEFAULT_OPENAI_MODEL,
+        openai_api_key="",
+        openai_base_url=gate.DEFAULT_OPENAI_BASE_URL,
+        openai_org_id="",
+        openai_project_id="",
+        reasoning_effort=gate.DEFAULT_REASONING_EFFORT,
+        timeout_s=30.0,
+    )
+
+    summary = gate.run_gate(args)
+
+    assert summary["pass"] is True
+    assert summary["scene_set"] == gate.HARD_SCENE_SET
+    assert summary["random_cases"] == 10
+    assert summary["wrong_fetch_dispatch_count"] == 0
+    assert summary["expected_route_counts"] == {route: 2 for route in gate.ROUTE_LABELS}
+    assert summary["route_counts"] == {route: 2 for route in gate.ROUTE_LABELS}
+
+
 def test_decision_records_route_quality_for_planner_artifacts():
     scene = next(
         item for item in gate.generate_random_scenes(seed=20260612, random_cases=10)

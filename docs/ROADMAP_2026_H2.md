@@ -995,6 +995,18 @@ roadmap slice is a harder mixed-scenario UAT matrix that deliberately includes
 opposite-side-of-circle starts, larger setup angles, and forward-only setup
 pressure, while hardware-transfer packaging starts in parallel.
 
+June 4 hard mixed-scenario evidence: `hard_mixed_fetch_planner_v1` is now a
+named repeatable gate, and its first live replay is green at
+`artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The matrix covered wide-angle local fetch, opposite-side Nav2-first setup,
+large-angle recovery/re-aim, scan/defer, and safe no-go with two rows per
+route family. It passed route contracts `10/10`, visual packages `10/10`,
+executable deliveries `6/6`, route-only proofs `4/4`, clean analyzer status,
+and first-contact blockers `0`; executable closest approaches ranged from
+`0.194m` to `0.197m`. The roadmap keeps planner-gated route ownership as the
+primary path. The next roadmap slice is LLM-shadow route classification over
+the hard matrix plus hardware-transfer packaging.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
