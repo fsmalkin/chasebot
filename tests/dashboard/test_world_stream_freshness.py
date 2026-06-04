@@ -482,9 +482,13 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Seeded promotion gate green"
+    assert payload["status_label"] == "Two seeded promotion gates green"
+    assert payload["uat_review_bundle"]["route_samples"][0]["video_url"].startswith("/artifacts/session/")
     assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")
     html = (dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan.html").read_text(encoding="utf-8")
+    assert "UAT Review Bundle" in html
+    assert "uat_review_bundle" in html
+    assert "renderUatBundle" in html
     assert "Running / Recent Video Proof" in html
     assert "runningProof" in html
     assert "running_proof" in html

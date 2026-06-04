@@ -271,6 +271,23 @@ June 4, 2026 second-seed planner-routed breadth check:
   launch because Docker exhausted predefined bridge subnets. Unused Chasecar
   dashboard/gate networks were removed; the rerun is the behavior evidence.
 
+June 4, 2026 browser UAT bundle:
+
+- Page:
+  `http://100.112.221.6:8883/fetch-plan`
+- Scope: the living plan now includes a dedicated UAT review bundle with three
+  route samples from seed `20260628`: recovery/re-aim, Nav2-first, and
+  fetch-ready local. Each sample leads with the onboard browser MP4 and links to
+  topdown telemetry plus the session-local contact sheet.
+- Review sequence: watch onboard first, compare the contact sheet, then use the
+  seed `20260627` and `20260628` parent/analyzer scorecards for the broader
+  milestone claim.
+- Validation: desktop and mobile rendered checks passed through isolated
+  Playwright after the in-app Browser bridge failed during setup. The contact
+  sheet interaction opens
+  `artifacts/session/20260604T151923053290Z/visual/keyframe_review_contact_sheet.png`
+  from the UAT bundle.
+
 June 4, 2026 recovery/re-aim route-boundary correction:
 
 - Code boundary: `nav2_reposition_first` remains the route that owns real Nav2

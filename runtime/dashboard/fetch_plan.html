@@ -291,6 +291,64 @@ h1 {
   gap: 10px;
   margin-top: 16px;
 }
+.uat-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 14px;
+  margin-top: 16px;
+}
+.uat-panel {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.uat-panel h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.uat-panel p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+.uat-sample-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+.uat-sample-card {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.uat-sample-card h4 {
+  margin: 0;
+  font-size: 13px;
+}
+.uat-sample-card p {
+  margin: 7px 0 0;
+  font-size: 12px;
+}
+.uat-video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #080c0a;
+}
+.review-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.review-list li {
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
 .video-proof-card, .watch-card, .step-card {
   padding: 14px;
   background: var(--panel);
@@ -355,7 +413,7 @@ h1 {
   color: var(--bad);
 }
 @media (max-width: 980px) {
-  .intro, .two-col, .evidence-grid, .flow, .ladder, .video-proof-grid, .watch-grid, .next-grid {
+  .intro, .two-col, .evidence-grid, .flow, .ladder, .uat-grid, .uat-sample-grid, .video-proof-grid, .watch-grid, .next-grid {
     grid-template-columns: 1fr;
   }
   .topbar {
@@ -428,6 +486,23 @@ h1 {
     <p class="eyebrow">Latest Broad Evidence</p>
     <h2>Route-owner UAT progress</h2>
     <div class="evidence-grid" id="evidence"></div>
+  </section>
+
+  <section class="section" id="uat-review-bundle">
+    <p class="eyebrow">UAT Review Bundle</p>
+    <h2 id="uatTitle">Browser review path</h2>
+    <p id="uatSummary">Loading UAT bundle...</p>
+    <div class="uat-grid">
+      <article class="uat-panel">
+        <h3>Route samples to watch</h3>
+        <div class="uat-sample-grid" id="uatSamples"></div>
+      </article>
+      <article class="uat-panel">
+        <h3>Review checklist</h3>
+        <ul class="review-list" id="uatChecklist"></ul>
+        <div class="links" id="uatLinks"></div>
+      </article>
+    </div>
   </section>
 
   <section class="section" id="recent-video-proof">
@@ -508,6 +583,38 @@ function renderEvidence(items) {
   });
 }
 
+function renderUatBundle(bundle) {
+  document.getElementById('uatTitle').textContent = bundle.title || 'Browser review path';
+  document.getElementById('uatSummary').textContent = bundle.summary || '';
+  const sampleRoot = document.getElementById('uatSamples');
+  sampleRoot.textContent = '';
+  (bundle.route_samples || []).forEach((sample) => {
+    const card = node('article', 'uat-sample-card');
+    card.appendChild(node('h4', '', sample.label || 'Route sample'));
+    card.appendChild(node('p', '', sample.reason || ''));
+    if (sample.video_url) {
+      const video = node('video', 'uat-video');
+      video.controls = true;
+      video.preload = 'metadata';
+      video.src = sample.video_url;
+      video.setAttribute('aria-label', sample.label || 'UAT route sample');
+      card.appendChild(video);
+    }
+    addLinks(card, [
+      { label: 'Onboard', url: sample.video_url },
+      { label: 'Topdown', url: sample.topdown_url },
+      { label: 'Contact sheet', url: sample.contact_sheet_url },
+    ].filter((link) => link.url));
+    sampleRoot.appendChild(card);
+  });
+  const checklistRoot = document.getElementById('uatChecklist');
+  checklistRoot.textContent = '';
+  (bundle.review_checklist || []).forEach((item) => checklistRoot.appendChild(node('li', '', item)));
+  const linkRoot = document.getElementById('uatLinks');
+  linkRoot.textContent = '';
+  addLinks(linkRoot, bundle.links || []);
+}
+
 function renderVideoProof(items) {
   const root = document.getElementById('videoProof');
   root.textContent = '';
@@ -566,6 +673,7 @@ function render(data) {
   renderTitledItems(document.getElementById('architecture'), data.architecture_direction || [], 'flow-item');
   renderTitledItems(document.getElementById('ladder'), data.evidence_ladder || [], 'ladder-item');
   renderEvidence(data.latest_evidence || []);
+  renderUatBundle(data.uat_review_bundle || {});
   renderVideoProof(proofItems(data));
   renderTitledItems(document.getElementById('watches'), data.watch_areas || [], 'watch-card');
   renderNextSteps(data.next_steps || []);

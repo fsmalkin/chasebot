@@ -1885,5 +1885,66 @@
     "Draft the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, model provenance checks, and visual-evidence capture on robot hardware.",
     "Run the next breadth seed only after the UAT bundle is easy to review, so failures or wins are visually inspectable by default.",
     "Investigate container-side ffmpeg availability as evidence hardening; host-side browser video recovery is working but remains a packaging dependency."
-  ]
+  ],
+  "uat_review_bundle": {
+    "title": "Two-green-seed browser UAT bundle",
+    "summary": "Review the latest route samples first, then use the parent seed scorecards to confirm the broader claim. The intended read is simple: the planner routes the scene, the chosen setup owner gets the robot into a forward contact path, and local bounded fetch pushes the calibrated ball into the delivery circle.",
+    "route_samples": [
+      {
+        "label": "Recovery / re-aim sample",
+        "route": "recovery_or_reaim",
+        "session_id": "20260604T151923053290Z",
+        "reason": "Shows lateral/yaw setup debt being cleaned up before the bounded forward push.",
+        "video_url": "/artifacts/session/20260604T151923053290Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T151923053290Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T151923053290Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T151923053290Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Nav2-first sample",
+        "route": "nav2_reposition_first",
+        "session_id": "20260604T152806933422Z",
+        "reason": "Shows planner-owned setup via Nav2 before handoff to local contact push.",
+        "video_url": "/artifacts/session/20260604T152806933422Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T152806933422Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T152806933422Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T152806933422Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Fetch-ready local sample",
+        "route": "fetch_ready_local",
+        "session_id": "20260604T152216704001Z",
+        "reason": "Shows the direct local line-servo path when the planner classifies the scene as contact-ready.",
+        "video_url": "/artifacts/session/20260604T152216704001Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T152216704001Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T152216704001Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T152216704001Z/visual/keyframe_review_contact_sheet.png"
+      }
+    ],
+    "review_checklist": [
+      "Start with onboard raw camera: verify setup, first contact, push, and final approach without trusting telemetry alone.",
+      "Use the contact sheet for the same session to compare onboard and topdown frames across the full run.",
+      "Use the parent scorecards to verify the broader claim: both seed 20260627 and seed 20260628 are 30/30 planner and 6/6 live executable green.",
+      "Treat the first seed20260628 Docker subnet failure as infrastructure evidence before mission launch; the rerun is the behavior evidence.",
+      "Keep the next engineering decision focused on UAT packaging and hardware transfer because current sim breadth is strong enough for that slice."
+    ],
+    "links": [
+      {
+        "label": "Seed 20260628 parent scorecard",
+        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
+      },
+      {
+        "label": "Seed 20260628 analyzer",
+        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+      },
+      {
+        "label": "Seed 20260627 parent scorecard",
+        "url": "/artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
+      },
+      {
+        "label": "Living JSON",
+        "url": "/fetch_plan_data.json"
+      }
+    ]
+  }
 }
