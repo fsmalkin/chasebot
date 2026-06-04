@@ -414,8 +414,15 @@ route family at
 The batch passed route contracts `5/5`, visual packages `5/5`, executable
 deliveries `3/3`, route-only proofs `2/2`, clean analyzer status, and
 first-contact blockers `0`. This covers the live scan/defer and safe no-go
-families by contract, so the next autonomous step is at least two live samples
-per route family before contact-control changes.
+families by contract.
+
+June 4 two-per-route mixed-family proof: the scaled seed `20260633` replay is
+green at
+`artifacts/session/analysis_mixed_route_family_2per_route_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+It passed route contracts `10/10`, visual packages `10/10`, executable
+deliveries `6/6`, route-only proofs `4/4`, clean analyzer status, and
+first-contact blockers `0`. The next autonomous step is a second rough mixed
+seed or hardware-transfer packaging before contact-control changes.
 
 ## Evidence Reset
 

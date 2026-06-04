@@ -1031,6 +1031,16 @@ first-contact blockers `0`. The executable rows delivered at closest approach
 planner route ownership first, deterministic subsystem execution second, and
 contact-control changes only after a larger mixed-family breadth replay.
 
+The same seed `20260633` now has a two-per-route mixed-family UAT pass:
+`artifacts/session/analysis_mixed_route_family_2per_route_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The resumed replay selected `10` rows, skipped the existing `5` green rows,
+and added the second sample for each route family. It passed route contracts
+`10/10`, visual packages `10/10`, executable deliveries `6/6`, route-only
+proofs `4/4`, clean analyzer status, and first-contact blockers `0`.
+Executable closest approach stayed within `0.194m..0.197m`. This moves the
+next research question from this seed to either a second rough mixed-family
+seed or hardware-transfer packaging.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

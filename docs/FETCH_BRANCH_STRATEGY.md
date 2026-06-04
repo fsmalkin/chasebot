@@ -264,8 +264,13 @@ Planner-routed moonshot update, June 2:
   `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`:
   one live row per route family, route contracts `5/5`, visual packages `5/5`,
   executable deliveries `3/3`, route-only proofs `2/2`, and first-contact
-  blockers `0`. The next patch should scale this mixed-family batch to at
-  least two live samples per route before contact-quality tuning.
+  blockers `0`. The scaled mixed proof is
+  `artifacts/session/analysis_mixed_route_family_2per_route_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`:
+  two live rows per route family, route contracts `10/10`, visual packages
+  `10/10`, executable deliveries `6/6`, route-only proofs `4/4`, and
+  first-contact blockers `0`. The next patch should repeat mixed-family breadth
+  on a second rough seed or package the stack for hardware-transfer review
+  before contact-quality tuning.
 - frozen planner-layout replay fix:
   fresh seed `seed20260608_scene24_fetch_ready_local` first failed as a manual
   target-layout replay because the runner used the old constant-push defaults

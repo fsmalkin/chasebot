@@ -482,13 +482,13 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Mixed route-family UAT green"
-    assert payload["latest_evidence"][0]["title"] == "Mixed route-family UAT is green"
+    assert payload["status_label"] == "Two-per-route mixed-family UAT green"
+    assert payload["latest_evidence"][0]["title"] == "Two-per-route mixed-family UAT is green"
     assert payload["latest_evidence"][0]["links"][0]["url"].endswith(
         "/fetch_planner_route_uat_analyzer/scorecard.md"
     )
     assert payload["uat_review_bundle"]["route_samples"][0]["route"] == "fetch_ready_local"
-    assert payload["uat_review_bundle"]["route_samples"][4]["route"] == "nav2_reposition_first"
+    assert payload["uat_review_bundle"]["route_samples"][9]["route"] == "nav2_reposition_first"
     assert payload["uat_review_bundle"]["route_samples"][0]["video_url"].startswith("/artifacts/session/")
     assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")
     html = (dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan.html").read_text(encoding="utf-8")

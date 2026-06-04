@@ -488,6 +488,25 @@ June 4, 2026 mixed route-family UAT:
   larger mixed-family replay with at least two live samples per route before
   contact-control changes.
 
+June 4, 2026 two-per-route mixed route-family UAT:
+
+- Command:
+  `python scripts\fetch_planner_route_replay_batch.py --campaign-id live_mixed_route_family_uat_seed20260633_20260604 --gate-summary artifacts\session\live_planner_seeded_generalization_gate_seed20260633_breadth_20260604_planner\fetch_planner_handoff_gate\gate_summary.json --route fetch_ready_local --route nav2_reposition_first --route recovery_or_reaim --route scan_or_perceive_first --route ambiguous_or_unsafe_no_go --max-per-route 2 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --route-only-sample-duration-s 6 --timeout-s 180 --package-timeout-s 180 --resume-skip-existing`
+- Replay scorecard:
+  `artifacts/session/live_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/analysis_mixed_route_family_2per_route_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: selected `10`, skipped existing `5`, route contracts `10/10`,
+  visual packages `10/10`, executable deliveries `6/6`, route-only proofs
+  `4/4`, analyzer clean, and first-contact blockers `0`.
+- Route read: every route family now has two live samples satisfying its own
+  contract. Executable closest approach range is `0.194m..0.197m`.
+- Visual review: inspected the five new raw-camera plus topdown contact sheets.
+  The three new executable rows showed setup/contact/delivery; the two new
+  planner-only rows showed stopped-scene proof with local fetch withheld.
+- Evidence meaning: seed `20260633` now has enough route-family breadth for the
+  next question to move to another rough seed or hardware-transfer packaging.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

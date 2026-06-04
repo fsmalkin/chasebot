@@ -723,6 +723,14 @@ scale mixed route-family breadth before contact-control tuning; the next useful
 gate is at least two live samples per route family with the same visual and
 route-contract scoring.
 
+The two-per-route version of the same seed is now green:
+`artifacts/session/analysis_mixed_route_family_2per_route_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+It passed route contracts `10/10`, visual packages `10/10`, executable
+deliveries `6/6`, route-only proofs `4/4`, clean analyzer status, and
+first-contact blockers `0`. Policy implication: keep this branch on
+route-family breadth and hardware-transfer packaging; use a second rough seed
+as the next evidence gate before contact-control tuning.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

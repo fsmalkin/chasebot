@@ -973,6 +973,15 @@ route-only proofs `2/2`; analyzer status was clean with first-contact blockers
 `0`. The next roadmap slice is a larger mixed-family replay with at least two
 live samples per route family before contact-control changes.
 
+June 4 two-per-route mixed-family evidence: seed `20260633` now has the larger
+mixed replay green at
+`artifacts/session/analysis_mixed_route_family_2per_route_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The resumed run selected `10` rows, reused `5` existing green packages, and
+passed route contracts `10/10`, visual packages `10/10`, executable deliveries
+`6/6`, route-only proofs `4/4`, clean analyzer status, and first-contact
+blockers `0`. The next roadmap slice should repeat mixed-family breadth on a
+second rough seed or package the current stack for hardware-transfer review.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
