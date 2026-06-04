@@ -291,6 +291,10 @@ def test_replay_batch_fresh_dashboard_session_binds_visual_session(tmp_path, mon
                 "session_id": "session_fresh",
                 "compose_project": "project_fresh",
                 "environment_state": "environment_ready",
+                "phase": "environment_ready",
+                "sim_gate_ready": True,
+                "world_stream_ready": True,
+                "operator_view_ready": True,
             }
         }
 
@@ -339,3 +343,56 @@ def test_replay_batch_fresh_dashboard_session_binds_visual_session(tmp_path, mon
     assert summary["rows"][0]["expected_session_id"] == "session_fresh"
     assert summary["rows"][0]["compose_project"] == "project_fresh"
     assert summary["rows"][0]["mission"]["session_id"] == "session_fresh"
+
+
+def test_replay_batch_records_dashboard_start_failure_reason(tmp_path, monkeypatch):
+    monkeypatch.setattr(batch, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(batch, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+
+    gate_root = tmp_path / "artifacts" / "session" / "gate" / gate.PLANNER_GATE_KIND
+    scene = next(
+        item
+        for item in gate.generate_random_scenes(seed=20260613, random_cases=10)
+        if item["expected_route_label"] == gate.ROUTE_FETCH_READY
+    )
+    scene_path = gate_root / "scene_descriptors" / f"{scene['scene_id']}.json"
+    _write_json(scene_path, scene)
+    decision = gate.decide_scene(scene)
+    gate_summary = gate_root / "gate_summary.json"
+    _write_json(gate_summary, {"results": [{**decision, "scene_path": str(scene_path)}]})
+
+    monkeypatch.setattr(batch, "stop_dashboard_environment", lambda *_args, **_kwargs: {"state": {"environment_state": "stopped"}})
+    monkeypatch.setattr(
+        batch,
+        "start_dashboard_environment",
+        lambda _args: {
+            "request": {"ok": True},
+            "state": {
+                "environment_state": "error",
+                "phase": "environment_starting",
+                "last_error": "Truth probe did not report robot visibility.",
+            },
+        },
+    )
+
+    def fail_run(_command, *, timeout_s):
+        raise AssertionError("dashboard start failure should not launch the live runner")
+
+    monkeypatch.setattr(batch, "_run_command", fail_run)
+
+    summary = batch.run_batch(
+        _make_args(
+            gate_summary=str(gate_summary),
+            dashboard_url="http://dash",
+            fresh_dashboard_session_per_run=True,
+            max_per_route=1,
+            dry_run=False,
+            stop_on_fail=True,
+        )
+    )
+
+    assert summary["pass"] is False
+    assert summary["selected_count"] == 1
+    assert summary["rows"][0]["returncode"] == -1
+    assert "environment_state=error" in summary["rows"][0]["failure_reason"]
+    assert "Truth probe did not report robot visibility." in summary["rows"][0]["failure_reason"]

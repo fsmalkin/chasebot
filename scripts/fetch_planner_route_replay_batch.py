@@ -170,6 +170,30 @@ def _extract_marker(output: str, marker: str) -> str:
     return ""
 
 
+def dashboard_start_failure_reason(dashboard_start: dict[str, Any]) -> str:
+    state = dashboard_start.get("state") if isinstance(dashboard_start.get("state"), dict) else {}
+    request = dashboard_start.get("request") if isinstance(dashboard_start.get("request"), dict) else {}
+    reason_parts = ["fresh_dashboard_session_start_failed"]
+    for key in ("environment_state", "phase", "last_error"):
+        value = str(state.get(key, "") or "").strip()
+        if value:
+            reason_parts.append(f"{key}={value}")
+    request_error = str(request.get("error", "") or "").strip()
+    if request_error:
+        reason_parts.append(f"request_error={request_error}")
+    return "; ".join(reason_parts)
+
+
+def dashboard_environment_ready(state: dict[str, Any]) -> bool:
+    return bool(
+        str(state.get("environment_state", "") or "") == "environment_ready"
+        and str(state.get("phase", "") or "") == "environment_ready"
+        and state.get("sim_gate_ready")
+        and state.get("world_stream_ready")
+        and state.get("operator_view_ready")
+    )
+
+
 def _session_id_for_artifact(path: Path) -> str:
     try:
         rel = path.resolve().relative_to(SESSION_ROOT.resolve())
@@ -383,6 +407,7 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
                     "dashboard_stop_before_package": {},
                     "dry_run": bool(args.dry_run),
                     "returncode": 0,
+                    "failure_reason": "",
                     "mission_summary_path": "",
                     "visual_package_summary_path": artifact_display_path(existing_package_path),
                     "mission": {},
@@ -410,6 +435,7 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
             start_state = dashboard_start.get("state") if isinstance(dashboard_start.get("state"), dict) else {}
             run_compose_project = str(start_state.get("compose_project", "") or start_state.get("launcher_project", "") or "")
             expected_session_id = str(start_state.get("session_id", "") or "")
+            dashboard_ready = dashboard_environment_ready(start_state)
         command = build_replay_command(
             python_exe=str(args.python_exe or sys.executable),
             layout_path=layout_path,
@@ -434,6 +460,7 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
             "dashboard_stop_before_package": {},
             "dry_run": bool(args.dry_run),
             "returncode": None,
+            "failure_reason": "",
             "mission_summary_path": "",
             "visual_package_summary_path": "",
             "mission": {},
@@ -443,9 +470,12 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
             "resume_skip_existing": False,
         }
         if not args.dry_run:
-            if bool(args.fresh_dashboard_session_per_run) and (not run_compose_project or not expected_session_id):
+            if bool(args.fresh_dashboard_session_per_run) and (
+                not run_compose_project or not expected_session_id or not dashboard_ready
+            ):
                 row["returncode"] = -1
-                row["stderr_tail"] = "fresh_dashboard_session_start_failed"
+                row["failure_reason"] = dashboard_start_failure_reason(dashboard_start)
+                row["stderr_tail"] = str(row["failure_reason"])
                 rows.append(row)
                 if bool(args.stop_on_fail):
                     break
@@ -569,6 +599,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"- `{row.get('scene_id', '')}` route=`{row.get('route_label', '')}` "
             f"dry_run=`{row.get('dry_run', False)}` rc=`{row.get('returncode', '')}` "
             f"resume_skip_existing=`{row.get('resume_skip_existing', False)}` "
+            f"failure=`{row.get('failure_reason', '')}` "
             f"session=`{row.get('expected_session_id', '')}` "
             f"mission_pass=`{mission.get('pass', '')}` visual_pass=`{package.get('pass', '')}`"
             f"{quality_text}{closest_text}{mission_link}{package_link}"

@@ -157,6 +157,7 @@ python scripts\fetch_planner_route_replay_batch.py `
   --gate-summary artifacts\session\<planner_gate>\fetch_planner_handoff_gate\gate_summary.json `
   --max-per-route 0 `
   --resume-skip-existing `
+  --stop-on-fail `
   --fresh-dashboard-session-per-run `
   --dashboard-url http://127.0.0.1:8875
 ```
