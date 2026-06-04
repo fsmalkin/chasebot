@@ -341,6 +341,26 @@ repeatability preserved and `18/18` seeded live missions plus `18/18` visual
 packages preserved. Run this analyzer before broadening the route-owner stack,
 swapping executors, changing timeouts, or claiming hardware-transfer readiness.
 
+June 4 broad-UAT recovery repair: the breadth queue now selects rougher seeded
+route-owner rows behind the regression manifest:
+`artifacts/session/analysis_planner_moonshot_breadth_queue_20260604/fetch_moonshot_breadth_queue/scorecard.md`.
+Seed `20260630` exposed the first broad recovery stage gap on
+`seed20260630_scene28_recovery_or_reaim`: the initial live replay failed at
+`0.557m`, first contact was missing, and visual review confirmed zero ball
+motion. The diagnosis is a setup/first-contact recovery yaw-hold stall. The
+bounded repair adds recovery line-acquire yaw crawl only while the robot is in
+the guarded line-acquire pocket, still far enough from contact, near the
+recovery lateral boundary, below the existing close-acquire yaw cap, and before
+ball motion. The targeted replay passed with browser-watchable proof, clean
+first-contact flags, and `0.198m` closest approach:
+`artifacts/session/live_seed20260630_scene28_recovery_crawl_repair_20260604/fetch_planner_route_replay_batch/scorecard.md`.
+The full seed `20260630` breadth rerun then passed at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260630_recovery_crawl_full_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`:
+planner routing was `30/30`, `wrong_fetch=0`, executable missions were `6/6`,
+visual packages were `6/6`, the analyzer was clean, and live closest approach
+stayed within `0.194m..0.198m`. Treat this as broad randomized route-owner UAT
+evidence behind the regression manifest.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

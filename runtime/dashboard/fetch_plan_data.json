@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 1:02 PM ET",
+  "updated_label": "Updated June 4, 2026, 1:44 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Regression set green",
-  "status_detail": "The planner-routed stack now has a named regression set for the current milestone. Saved anchors are green at 3/3 each, seeds 20260627, 20260628, and 20260629 each delivered 30/30 planner routing, 6/6 live executable missions, 6/6 browser-watchable visual packages, clean analyzer status, and sequence-reviewed onboard/topdown proof. The manifest also preserves seed20260629 scene01 and scene05 as boundary rows for clean Nav2 setup-abort fallback and high-debt recovery duration.",
+  "status_label": "Seed 20260630 breadth green",
+  "status_detail": "The planner-routed stack now has a named regression set and a rougher broad-UAT seed. Saved anchors and seeds 20260627, 20260628, and 20260629 remain the preservation bar. Seed 20260630 first exposed a true setup/first-contact recovery yaw-hold stall; a bounded recovery line-acquire crawl repaired that stage gap. The full seed 20260630 breadth gate now passes: 30/30 planner routing, wrong_fetch=0, 6/6 executable missions, 6/6 browser-watchable visual packages, clean analyzer status, and closest approaches from 0.194m to 0.198m.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,66 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Seed 20260630 breadth gate is green",
+      "status": "30/30 planner routing, 6/6 executable missions, 6/6 visual packages",
+      "tone": "green",
+      "summary": "The broad-UAT queue deliberately selected harder randomized rows behind the green regression manifest. Seed 20260630 first stopped on scene28, a high-debt recovery_or_reaim case where the robot sat in recovery yaw-hold, ball motion stayed zero, and delivery stayed at 0.557m. The repair adds a narrow recovery line-acquire yaw-crawl only when the robot is still far enough from contact, lateral error is near the recovery boundary, yaw debt is below the existing close-acquire cap, and no ball motion has occurred. The full seed rerun is now green across two recovery_or_reaim, two nav2_reposition_first, and two fetch_ready_local rows, with visual packages and clean first-contact analysis for all executable rows.",
+      "metrics": [
+        "Breadth queue: recommended seed 20260630; selected 2 fetch_ready_local, 2 nav2_reposition_first, 2 recovery_or_reaim rough rows",
+        "Initial rough replay: seed20260630_scene28_recovery_or_reaim failed at 0.557m; ball start and end poses matched; first_contact_index=null",
+        "Failure label: setup/first-contact recovery yaw-hold stall, not a geometry or visual mismatch",
+        "Repair: recovery_line_acquire_yaw_crawl activates only in the guarded line-acquire pocket",
+        "Full rerun: planner=30/30; wrong_fetch=0; executable missions=6/6; visual packages=6/6",
+        "Route coverage: recovery_or_reaim 2/2, nav2_reposition_first 2/2, fetch_ready_local 2/2",
+        "Analyzer: execution clean, setup clean, contact clean, first-contact blockers 0",
+        "Closest approach range across live rows: 0.194m..0.198m",
+        "Evidence role: broad randomized route-owner UAT; keep regression manifest as the preservation bar"
+      ],
+      "links": [
+        {
+          "label": "Breadth queue scorecard",
+          "url": "/artifacts/session/analysis_planner_moonshot_breadth_queue_20260604/fetch_moonshot_breadth_queue/scorecard.md"
+        },
+        {
+          "label": "Initial failed seed 20260630 gate scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260630_breadth_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Full seed 20260630 gate scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260630_recovery_crawl_full_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Full seed 20260630 replay scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260630_recovery_crawl_full_20260604_replay/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Full seed 20260630 analyzer scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260630_recovery_crawl_full_20260604_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Scene28 recovery onboard proof",
+          "url": "/artifacts/session/20260604T173227370900Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene28 recovery topdown proof",
+          "url": "/artifacts/session/20260604T173227370900Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "Scene21 recovery onboard proof",
+          "url": "/artifacts/session/20260604T173415746975Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene27 Nav2-first onboard proof",
+          "url": "/artifacts/session/20260604T173551755455Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene01 fetch-ready onboard proof",
+          "url": "/artifacts/session/20260604T173852484670Z/visual/raw_camera_browser.mp4"
+        }
+      ],
+      "preview_image": "/artifacts/session/20260604T173227370900Z/visual/keyframe_review_contact_sheet.png"
+    },
     {
       "title": "Moonshot regression set is green",
       "status": "Saved anchors plus three seeded gates preserved",
@@ -869,6 +929,90 @@
   ],
   "running_video_proof": [],
   "recent_video_proof": [
+    {
+      "title": "Seed 20260630 scene28 recovery proof",
+      "summary": "Session 20260604T173227370900Z is the repaired high-risk recovery_or_reaim row from the full broad-UAT seed.",
+      "primary_video": {
+        "label": "Scene28 recovery onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T173227370900Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The bounded recovery line-acquire crawl can escape the earlier yaw-hold stall, establish clean first contact, and push the calibrated ball into the delivery circle.",
+      "limits": "This is one row inside the six-row seed20260630 breadth gate. Use the parent gate and analyzer for the full claim.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T173227370900Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T173227370900Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T173227370900Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/20260604T173227370900Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260630 scene27 Nav2-first proof",
+      "summary": "Session 20260604T173551755455Z is a Nav2-reposition-first row from the full seed20260630 breadth gate.",
+      "primary_video": {
+        "label": "Scene27 Nav2-first onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T173551755455Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The planner can route a medium-risk setup through Nav2-first ownership, then complete bounded local contact into the circle.",
+      "limits": "This validates one Nav2-first sample inside the six-row broad-UAT seed.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T173551755455Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T173551755455Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T173551755455Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/20260604T173551755455Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260630 scene01 fetch-ready proof",
+      "summary": "Session 20260604T173852484670Z is a fetch_ready_local row from the full seed20260630 breadth gate.",
+      "primary_video": {
+        "label": "Scene01 fetch-ready onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T173852484670Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The direct local line-servo path remains clean for medium-risk yaw setup debt after the recovery crawl patch.",
+      "limits": "This is the local-fetch sample inside a mixed route-owner breadth package.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T173852484670Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T173852484670Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T173852484670Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/20260604T173852484670Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
     {
       "title": "Seed 20260628 scene03 recovery proof",
       "summary": "Session 20260604T151923053290Z is a recovery_or_reaim row from the second promotion-green seeded gate.",
@@ -1991,56 +2135,56 @@
     "Investigate container-side ffmpeg availability as evidence hardening; host-side browser video recovery is working but remains a packaging dependency."
   ],
   "uat_review_bundle": {
-    "title": "Three-green-seed browser UAT bundle",
-    "summary": "Review the latest route samples first, then use the parent seed scorecards to confirm the broader claim. The intended read is simple: the planner routes the scene, the chosen setup owner gets the robot into a forward contact path, and local bounded fetch pushes the calibrated ball into the delivery circle. The seed20260629 recovery sample shows the latest high-debt repair.",
+    "title": "Seed 20260630 breadth browser UAT bundle",
+    "summary": "Review the seed20260630 route samples first, then use the parent seed scorecards to confirm the broader claim. The intended read is simple: the planner routes the scene, the chosen setup owner gets the robot into a forward contact path, and local bounded fetch pushes the calibrated ball into the delivery circle. The recovery samples show the latest yaw-hold repair under harder randomized setup debt.",
     "route_samples": [
       {
-        "label": "Recovery / re-aim sample",
+        "label": "Recovery / re-aim sample A",
         "route": "recovery_or_reaim",
-        "session_id": "20260604T151923053290Z",
-        "reason": "Shows lateral/yaw setup debt being cleaned up before the bounded forward push.",
-        "video_url": "/artifacts/session/20260604T151923053290Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T151923053290Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T151923053290Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T151923053290Z/visual/keyframe_review_contact_sheet.png"
+        "session_id": "20260604T173227370900Z",
+        "reason": "Shows the repaired high-debt recovery row that previously stalled in yaw-hold with zero ball motion.",
+        "video_url": "/artifacts/session/20260604T173227370900Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T173227370900Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T173227370900Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T173227370900Z/visual/keyframe_review_contact_sheet.png"
       },
       {
         "label": "Nav2-first sample",
         "route": "nav2_reposition_first",
-        "session_id": "20260604T152806933422Z",
-        "reason": "Shows planner-owned setup via Nav2 before handoff to local contact push.",
-        "video_url": "/artifacts/session/20260604T152806933422Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T152806933422Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T152806933422Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T152806933422Z/visual/keyframe_review_contact_sheet.png"
+        "session_id": "20260604T173551755455Z",
+        "reason": "Shows planner-owned setup via Nav2 before handoff to local contact push inside the new rough seed.",
+        "video_url": "/artifacts/session/20260604T173551755455Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T173551755455Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T173551755455Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T173551755455Z/visual/keyframe_review_contact_sheet.png"
       },
       {
         "label": "Fetch-ready local sample",
         "route": "fetch_ready_local",
-        "session_id": "20260604T152216704001Z",
-        "reason": "Shows the direct local line-servo path when the planner classifies the scene as contact-ready.",
-        "video_url": "/artifacts/session/20260604T152216704001Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T152216704001Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T152216704001Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T152216704001Z/visual/keyframe_review_contact_sheet.png"
+        "session_id": "20260604T173852484670Z",
+        "reason": "Shows the direct local line-servo path when the planner classifies the scene as contact-ready in the rough seed.",
+        "video_url": "/artifacts/session/20260604T173852484670Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T173852484670Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T173852484670Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T173852484670Z/visual/keyframe_review_contact_sheet.png"
       },
       {
-        "label": "Repaired recovery sample",
+        "label": "Recovery / re-aim sample B",
         "route": "recovery_or_reaim",
-        "session_id": "20260604T163650197166Z",
-        "reason": "Shows the high-debt recovery case that needed a longer bounded window before the ball reached the circle.",
-        "video_url": "/artifacts/session/20260604T163650197166Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260604T163650197166Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260604T163650197166Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260604T163650197166Z/visual/keyframe_review_contact_sheet.png"
+        "session_id": "20260604T173415746975Z",
+        "reason": "Shows a second high-risk recovery row passing after the same bounded line-acquire crawl change.",
+        "video_url": "/artifacts/session/20260604T173415746975Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T173415746975Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T173415746975Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T173415746975Z/visual/keyframe_review_contact_sheet.png"
       }
     ],
     "review_checklist": [
       "Start with onboard raw camera: verify setup, first contact, push, and final approach without trusting telemetry alone.",
       "Use the contact sheet for the same session to compare onboard and topdown frames across the full run.",
-      "Use the parent scorecards to verify the broader claim: seeds 20260627, 20260628, and 20260629 are each 30/30 planner and 6/6 live executable green.",
+      "Use the parent scorecards to verify the broader claim: seeds 20260627, 20260628, 20260629, and the rougher seed 20260630 are each 30/30 planner and 6/6 live executable green.",
       "Treat the first seed20260628 Docker subnet failure as infrastructure evidence before mission launch; the rerun is the behavior evidence.",
-      "Keep the next engineering decision focused on UAT packaging and hardware transfer because current sim breadth is strong enough for that slice."
+      "Keep the next engineering decision focused on another rough-seed breadth pass plus hardware-transfer packaging because current sim breadth is now stronger than the prior three-green-seed bundle."
     ],
     "links": [
       {

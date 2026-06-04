@@ -1049,6 +1049,13 @@ def line_servo_command(
     lateral_corrected_yaw = normalize_angle_rad(line_yaw - lateral_reaim)
     lateral_reaim_release_m = effective_contact_lateral_ready_m * 1.03
     contact_ready = abs(robot_lateral_error) <= effective_contact_lateral_ready_m and abs(line_yaw_error) <= float(contact_yaw_ready_rad)
+    ball_motion_m = 0.0
+    if ball_start_pose is not None:
+        ball_motion_m = math.hypot(
+            ball_x - float(ball_start_pose.get("x", ball_x) or ball_x),
+            ball_y - float(ball_start_pose.get("y", ball_y) or ball_y),
+        )
+    ball_moved = bool(ball_motion_m >= float(motion_threshold_m))
     recovery_contact_lateral_trim_active = bool(
         clean_route_label == ROUTE_RECOVERY_OR_REAIM
         and distance_to_contact <= 0.08
@@ -1090,6 +1097,14 @@ def line_servo_command(
             )
         )
     )
+    recovery_line_acquire_yaw_crawl_active = bool(
+        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        and not ball_moved
+        and recovery_line_acquire_yaw_hold_active
+        and 0.20 < distance_to_contact <= 0.24
+        and abs(robot_lateral_error) >= max(effective_contact_lateral_ready_m * 2.0, recovery_line_acquire_lateral_m * 0.70)
+        and abs(line_yaw_error) <= recovery_close_line_acquire_yaw_hold_threshold_rad
+    )
     local_line_acquire_yaw_hold_active = bool(
         clean_route_label == ROUTE_FETCH_READY
         and 0.18 < distance_to_contact <= 0.24
@@ -1122,7 +1137,10 @@ def line_servo_command(
     recovery_contact_yaw_hold_active = bool(
         clean_route_label == ROUTE_RECOVERY_OR_REAIM
         and (
-            recovery_line_acquire_yaw_hold_active
+            (
+                recovery_line_acquire_yaw_hold_active
+                and not recovery_line_acquire_yaw_crawl_active
+            )
             or (
                 0.10 < distance_to_contact <= 0.18
                 and abs(robot_lateral_error) <= effective_contact_lateral_ready_m
@@ -1131,13 +1149,6 @@ def line_servo_command(
         and not contact_ready
         and abs(line_yaw_error) > recovery_contact_yaw_hold_threshold_rad
     )
-    ball_motion_m = 0.0
-    if ball_start_pose is not None:
-        ball_motion_m = math.hypot(
-            ball_x - float(ball_start_pose.get("x", ball_x) or ball_x),
-            ball_y - float(ball_start_pose.get("y", ball_y) or ball_y),
-        )
-    ball_moved = bool(ball_motion_m >= float(motion_threshold_m))
     if ball_moved:
         yaw_misaligned_after_motion = abs(line_yaw_error) > max(float(contact_yaw_ready_rad) * 1.50, 0.10)
         if abs(robot_lateral_error) > effective_contact_lateral_ready_m or yaw_misaligned_after_motion:
@@ -1165,6 +1176,10 @@ def line_servo_command(
         phase = "recovery_contact_yaw_hold"
         desired_yaw = line_yaw
         base_linear = 0.0
+    elif recovery_line_acquire_yaw_crawl_active:
+        phase = "recovery_line_acquire_yaw_crawl"
+        desired_yaw = line_yaw
+        base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
     elif (
         clean_route_label == "recovery_or_reaim"
         and distance_to_setup <= recovery_setup_pocket_m
@@ -1255,15 +1270,18 @@ def line_servo_command(
         and distance_to_contact > 0.20
     )
     recovery_yaw_crawl = bool(
-        clean_route_label == ROUTE_RECOVERY_OR_REAIM
-        and not ball_moved
-        and not recovery_yaw_hold
-        and not recovery_contact_yaw_hold_active
-        and (
-            abs(yaw_error) > 0.55
-            or (
-                distance_to_contact < 0.14
-                and abs(robot_lateral_error) > effective_contact_lateral_ready_m
+        recovery_line_acquire_yaw_crawl_active
+        or (
+            clean_route_label == ROUTE_RECOVERY_OR_REAIM
+            and not ball_moved
+            and not recovery_yaw_hold
+            and not recovery_contact_yaw_hold_active
+            and (
+                abs(yaw_error) > 0.55
+                or (
+                    distance_to_contact < 0.14
+                    and abs(robot_lateral_error) > effective_contact_lateral_ready_m
+                )
             )
         )
     )
@@ -1272,8 +1290,9 @@ def line_servo_command(
         base_linear = 0.0
         linear_floor = 0.0
     elif recovery_yaw_crawl:
-        phase = f"{phase}_yaw_crawl"
-        crawl_cap = 0.018 if distance_to_contact < 0.14 else 0.025
+        if not recovery_line_acquire_yaw_crawl_active:
+            phase = f"{phase}_yaw_crawl"
+        crawl_cap = 0.018 if recovery_line_acquire_yaw_crawl_active or distance_to_contact < 0.14 else 0.025
         base_linear = min(max(base_linear, float(min_linear_x_mps)), crawl_cap)
     linear_x = clamp(base_linear, linear_floor, float(max_linear_x_mps))
     if local_contact_yaw_hold_active or recovery_contact_yaw_hold_active:
@@ -1301,6 +1320,7 @@ def line_servo_command(
         "local_contact_yaw_hold_threshold_rad": round(float(local_contact_yaw_hold_threshold_rad), 6),
         "recovery_close_settle_active": recovery_close_settle_active,
         "recovery_line_acquire_yaw_hold_active": recovery_line_acquire_yaw_hold_active,
+        "recovery_line_acquire_yaw_crawl_active": recovery_line_acquire_yaw_crawl_active,
         "recovery_line_acquire_yaw_hold_threshold_rad": round(
             float(recovery_line_acquire_yaw_hold_threshold_rad), 6
         ),

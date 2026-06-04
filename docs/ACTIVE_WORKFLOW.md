@@ -348,6 +348,28 @@ June 4, 2026 moonshot regression manifest:
   seeded gates, `18/18` seeded live mission passes, `18/18` seeded visual
   packages, and browser-watchable proof for the known boundary rows.
 
+June 4, 2026 broad-UAT recovery repair:
+
+- Breadth queue:
+  `artifacts/session/analysis_planner_moonshot_breadth_queue_20260604/fetch_moonshot_breadth_queue/scorecard.md`
+- Initial rough-row failure:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260630_breadth_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Targeted repair replay:
+  `artifacts/session/live_seed20260630_scene28_recovery_crawl_repair_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Result: `seed20260630_scene28_recovery_or_reaim` failed once as a
+  setup/first-contact recovery yaw-hold stall with no ball motion, then passed
+  after a bounded recovery line-acquire yaw-crawl repair. The repaired run
+  delivered to `0.198m`, passed visual packaging, and produced clean
+  first-contact flags.
+- Full breadth rerun:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260630_recovery_crawl_full_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Full rerun result: planner routing `30/30`, `wrong_fetch=0`, executable
+  missions `6/6`, visual packages `6/6`, analyzer clean, first-contact blockers
+  `0`, and closest approach range `0.194m..0.198m`.
+- Evidence meaning: this is broad randomized route-owner UAT evidence. Keep the
+  regression manifest as the preservation bar for future route-owner,
+  recovery-window, and contact-servo changes.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

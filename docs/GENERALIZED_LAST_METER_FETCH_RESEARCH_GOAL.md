@@ -934,6 +934,27 @@ planner-routed route ownership with Nav2, bounded local recovery/fetch, and
 visual keyframe review as a gate; alternatives stay alive as fallback lanes
 when this manifest or broader UAT exposes a reproducible stage gap.
 
+June 4, 2026 broad-UAT recovery repair update: the breadth queue selected seed
+`20260630` as the next rough randomized route-owner package after the regression
+manifest:
+`artifacts/session/analysis_planner_moonshot_breadth_queue_20260604/fetch_moonshot_breadth_queue/scorecard.md`.
+The first live row, `seed20260630_scene28_recovery_or_reaim`, failed for a
+true setup/first-contact reason: the robot entered recovery yaw-hold, first
+contact was missing, the ball start/end poses matched, and visual keyframe
+review agreed with telemetry. The repair added a narrow recovery line-acquire
+yaw crawl, preserving the staged architecture and direct visual review. The
+targeted repair replay passed at
+`artifacts/session/live_seed20260630_scene28_recovery_crawl_repair_20260604/fetch_planner_route_replay_batch/scorecard.md`;
+the mission delivered to `0.198m` closest approach with clean first-contact
+flags and browser-watchable onboard/topdown proof. The full seed `20260630`
+breadth rerun passed at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260630_recovery_crawl_full_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+It delivered `30/30` planner routing, `wrong_fetch=0`, `6/6` executable
+missions, `6/6` visual packages, clean analyzer status, and live closest
+approach from `0.194m` to `0.198m`. The next evidence step is another rough
+seed or a hardware-transfer packaging pass, while the regression manifest stays
+the preservation bar.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:
