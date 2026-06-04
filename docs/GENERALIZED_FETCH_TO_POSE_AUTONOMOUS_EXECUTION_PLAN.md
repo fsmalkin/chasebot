@@ -198,6 +198,20 @@ first-contact blockers were `0`; closest approaches ranged from `0.194m` to
 The seeded random gate is now the remaining promotion-grade proof before
 claiming generalized fetch-to-pose readiness.
 
+June 4 planner-routed random slice after repeatability: seed `20260627` passed
+the fresh mixed planner gate with `30/30` route decisions and `0` wrong
+fetch-ready dispatches:
+`artifacts/session/dev_route_quality_gate_seed20260627_post_repeatability_30case_20260604/fetch_planner_handoff_gate/scorecard.md`.
+The live executable slice passed `6/6` across two `fetch_ready_local`, two
+`nav2_reposition_first`, and two `recovery_or_reaim` rows:
+`artifacts/session/analysis_route_quality_seed20260627_exec6_post_repeatability_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+Execution, setup, and contact quality were clean; first-contact blockers were
+`0`; closest approaches ranged from `0.194m` to `0.196m`. The visual montage is
+`artifacts/session/analysis_route_quality_seed20260627_exec6_post_repeatability_20260604/fetch_planner_route_uat_analyzer/seed20260627_exec6_keyframe_montage.png`.
+This is green randomized route-owner visual UAT. The next implementation step
+is a formal planner-routed seeded generalization gate surface that can carry the
+canonical promotion semantics.
+
 June 4 harness hardening: route replay now returns immediately when dashboard
 startup reports `environment_state=error`, preserving truth-probe failures as
 infrastructure evidence before mission launch. Dashboard startup now allows a

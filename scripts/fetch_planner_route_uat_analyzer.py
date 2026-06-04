@@ -408,7 +408,11 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     execution_quality_status = (
         "blocker" if first_contact_blockers else "watch" if execution_watch_count else "clean"
     )
-    anchor_counts = saved_anchor_scene_counts(planner_gates, visual_packages)
+    anchor_counts = (
+        saved_anchor_scene_counts(planner_gates, visual_packages)
+        if evidence_scope == SCOPE_SAVED_ANCHOR_REPEATABILITY
+        else {}
+    )
     saved_anchor_repeatability_green = bool(
         evidence_scope == SCOPE_SAVED_ANCHOR_REPEATABILITY
         and gate_green
@@ -479,9 +483,6 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- Promotion evidence: `{summary.get('promotion_evidence', False)}`",
         f"- Mission green: `{summary.get('mission_green', False)}`",
         f"- Visual package green: `{summary.get('visual_package_green', False)}`",
-        f"- Saved-anchor repeatability green: `{summary.get('saved_anchor_repeatability_green', False)}`",
-        f"- Repeatability runs per anchor: `{summary.get('repeatability_runs_per_anchor', 0)}`",
-        f"- Saved-anchor scene counts: `{summary.get('saved_anchor_scene_counts', {})}`",
         f"- Execution quality: `{summary.get('execution_quality_status', '')}`",
         f"- Execution watches: `{summary.get('execution_watch_count', 0)}`",
         f"- Setup quality: `{summary.get('setup_quality_status', '')}`",
@@ -494,6 +495,12 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         "",
         "## Route Coverage",
     ]
+    if summary.get("evidence_scope") == SCOPE_SAVED_ANCHOR_REPEATABILITY:
+        lines[9:9] = [
+            f"- Saved-anchor repeatability green: `{summary.get('saved_anchor_repeatability_green', False)}`",
+            f"- Repeatability runs per anchor: `{summary.get('repeatability_runs_per_anchor', 0)}`",
+            f"- Saved-anchor scene counts: `{summary.get('saved_anchor_scene_counts', {})}`",
+        ]
     for row in list_value(summary.get("route_rows")):
         lines.append(
             f"- route=`{row.get('route_label', '')}` planner=`{row.get('planner_count', 0)}` "

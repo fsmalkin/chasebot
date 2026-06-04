@@ -151,6 +151,8 @@ def test_planner_route_uat_analyzer_scores_green_randomized_route_uat(tmp_path, 
     assert "Setup watches" in text
     assert "setup_watch=`1`" in text
     assert "recoveries=`1/1`" in text
+    assert "Saved-anchor repeatability green" not in text
+    assert "Saved-anchor scene counts" not in text
 
 
 def test_planner_route_uat_analyzer_preserves_route_quality_predictions(tmp_path, monkeypatch):

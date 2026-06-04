@@ -1,6 +1,6 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 3:28 AM ET",
+  "updated_label": "Updated June 4, 2026, 3:58 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
   "status_label": "Living plan and progress tracker",
   "status_detail": "This page summarizes current direction and evidence. It is route-owner UAT progress, not release or promotion evidence.",
@@ -49,6 +49,63 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Seed 20260627 planner-routed random slice",
+      "status": "30/30 planner gate and 6/6 executable live routes delivered clean",
+      "tone": "green",
+      "summary": "After saved-anchor repeatability, seed 20260627 exercised the planner-routed stack on a fresh mixed random set. The planner gate classified 30 scenes across all five route classes with zero wrong fetch dispatches. The live slice replayed two recovery_or_reaim, two nav2_reposition_first, and two fetch_ready_local rows through fresh dashboard sessions. All six missions passed with browser-watchable visual packages, clean setup/contact quality, and zero first-contact blockers.",
+      "metrics": [
+        "Planner handoff gate: 30/30, wrong_fetch=0; route split fetch_ready_local 7, nav2_reposition_first 7, recovery_or_reaim 6, scan_or_perceive_first 7, ambiguous_or_unsafe_no_go 3",
+        "Live executable replay: 6/6 mission pass; 6/6 visual package pass",
+        "Route coverage: fetch_ready_local 2/2 clean, nav2_reposition_first 2/2 clean, recovery_or_reaim 2/2 clean",
+        "Quality: execution clean, setup clean, contact clean, contact watches 0, first-contact blockers 0",
+        "Closest approach range: 0.194m..0.196m under the 0.300m contract",
+        "Interpretation: randomized_route_owner_visual_uat_green; promotion_evidence remains false until the planner-routed seeded gate surface is formalized"
+      ],
+      "links": [
+        {
+          "label": "Seed 20260627 analyzer scorecard",
+          "url": "/artifacts/session/analysis_route_quality_seed20260627_exec6_post_repeatability_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Seed 20260627 keyframe montage",
+          "url": "/artifacts/session/analysis_route_quality_seed20260627_exec6_post_repeatability_20260604/fetch_planner_route_uat_analyzer/seed20260627_exec6_keyframe_montage.png"
+        },
+        {
+          "label": "Seed 20260627 replay scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260627_exec6_post_repeatability_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Seed 20260627 planner gate scorecard",
+          "url": "/artifacts/session/dev_route_quality_gate_seed20260627_post_repeatability_30case_20260604/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "Recovery sample onboard proof",
+          "url": "/artifacts/session/20260604T073834606940Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Recovery sample contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260627_exec6_post_repeatability_20260604_seed20260627_scene04_recovery_or_reaim/fetch_visual_uat_package/keyframe_reviews/20260604T073834606940Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Nav2 sample onboard proof",
+          "url": "/artifacts/session/20260604T075211757997Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Nav2 sample contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260627_exec6_post_repeatability_20260604_seed20260627_scene11_nav2_reposition_first/fetch_visual_uat_package/keyframe_reviews/20260604T075211757997Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Local sample onboard proof",
+          "url": "/artifacts/session/20260604T074651713675Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Local sample contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260627_exec6_post_repeatability_20260604_seed20260627_scene08_fetch_ready_local/fetch_visual_uat_package/keyframe_reviews/20260604T074651713675Z_keyframe_review_contact_sheet.png"
+        }
+      ],
+      "preview_image": "/artifacts/session/analysis_route_quality_seed20260627_exec6_post_repeatability_20260604/fetch_planner_route_uat_analyzer/seed20260627_exec6_keyframe_montage.png"
+    },
     {
       "title": "Saved-anchor planner-routed repeatability proof",
       "status": "9/9 saved-anchor repeatability delivered with browser-watchable visual packages",
@@ -1525,7 +1582,7 @@
     }
   ],
   "next_steps": [
-        "Run the seeded random fetch_generalization_gate 6 x 1 for the planner-gated route-owner stack.",
+    "Formalize the planner-routed seeded generalization gate surface so random route-owner UAT can graduate from route-owner visual evidence to the canonical promotion ladder.",
     "Use seed20260624 scene24 and seed20260626 scene03 as local-fetch smoothness candidates only after saved-layout coverage shows the same risk.",
     "Keep Docker health and dashboard truth-probe readiness as infrastructure watches before long live batches.",
     "Keep Nav2 and recovery as active route owners because seed20260625 and the completed seed20260626 rows both show clean samples in those lanes.",

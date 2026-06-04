@@ -167,7 +167,26 @@ June 4, 2026 planner-routed saved-anchor repeatability:
 - Result: `saved_anchor_repeatability_green`, `9/9` live mission passes,
   `9/9` browser-watchable visual packages, `0` first-contact blockers, clean
   setup/contact quality, closest approach range `0.194m..0.198m`.
-- Remaining promotion rung: seeded random `fetch_generalization_gate`, `6 x 1`.
+- Remaining promotion rung: a planner-routed seeded generalization gate with
+  canonical promotion semantics.
+
+June 4, 2026 seed `20260627` planner-routed random slice:
+
+- Planner gate:
+  `artifacts/session/dev_route_quality_gate_seed20260627_post_repeatability_30case_20260604/fetch_planner_handoff_gate/scorecard.md`
+- Analyzer:
+  `artifacts/session/analysis_route_quality_seed20260627_exec6_post_repeatability_20260604/fetch_planner_route_uat_analyzer/scorecard.md`
+- Contact-sheet montage:
+  `artifacts/session/analysis_route_quality_seed20260627_exec6_post_repeatability_20260604/fetch_planner_route_uat_analyzer/seed20260627_exec6_keyframe_montage.png`
+- Result: the fresh mixed planner gate passed `30/30` with `0` wrong
+  fetch-ready dispatches across all five route labels. The live executable
+  slice passed `6/6`, with two clean rows each for `fetch_ready_local`,
+  `nav2_reposition_first`, and `recovery_or_reaim`; closest approaches ranged
+  from `0.194m` to `0.196m`.
+- Evidence meaning: this is randomized route-owner visual UAT. It strengthens
+  confidence in the planner-routed stack and keeps `promotion_evidence=false`
+  until the planner-routed seeded gate surface carries the canonical `6 x 1`
+  promotion contract.
 
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing

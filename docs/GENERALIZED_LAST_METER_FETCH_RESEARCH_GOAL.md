@@ -803,6 +803,22 @@ visual review montage is
 The seeded random gate is now the remaining promotion-grade proof for the
 planner-routed architecture.
 
+June 4, 2026 seed `20260627` randomized route-owner update: the planner-routed
+stack passed a fresh mixed random handoff gate with `30/30` route decisions and
+`0` wrong fetch-ready dispatches:
+`artifacts/session/dev_route_quality_gate_seed20260627_post_repeatability_30case_20260604/fetch_planner_handoff_gate/scorecard.md`.
+The executable replay slice passed `6/6` with fresh dashboard sessions: two
+`fetch_ready_local`, two `nav2_reposition_first`, and two `recovery_or_reaim`
+rows all delivered inside the `0.300m` contract:
+`artifacts/session/analysis_route_quality_seed20260627_exec6_post_repeatability_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+Execution, setup, and contact quality were clean; first-contact blockers were
+`0`; closest approaches ranged from `0.194m` to `0.196m`. Sequence review is
+captured in:
+`artifacts/session/analysis_route_quality_seed20260627_exec6_post_repeatability_20260604/fetch_planner_route_uat_analyzer/seed20260627_exec6_keyframe_montage.png`.
+Use this as green randomized route-owner visual UAT. Promotion remains pending
+until the planner-routed seeded generalization gate carries canonical `6 x 1`
+semantics.
+
 June 4, 2026 infrastructure note: two failed live attempts on stale dashboard
 ports reproduced truth-probe startup failures before mission dispatch. The
 route replay harness now preserves those as dashboard-start failures and returns
