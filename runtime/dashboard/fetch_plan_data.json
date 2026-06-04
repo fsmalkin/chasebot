@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 6:22 PM ET",
+  "updated_label": "Updated June 4, 2026, 6:28 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
   "status_label": "Supervised LLM route-owner visual UAT green",
-  "status_detail": "The route planner now has provider-backed supervised-guarded route evidence and live hard-matrix visual UAT tied to the supervised gate. The hard route replay passed 10/10 route contracts with 6/6 executable deliveries, 4/4 planner-only route proofs, and 10/10 browser-watchable visual packages. The broader supervised manifest remains green as guarded fallback evidence across 220 provider-backed cases.",
+  "status_detail": "The route planner now has provider-backed supervised-guarded route evidence, live hard-matrix visual UAT tied to the supervised gate, and a targeted low-confidence veto proof. The hard route replay passed 10/10 route contracts with 6/6 executable deliveries, 4/4 planner-only route proofs, and 10/10 browser-watchable visual packages. The confidence-veto case withheld local fetch and passed route-only visual proof.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -60,6 +60,7 @@
         "Visual packages: pass=10/10; mobile=true; onboard=true",
         "Executable closest approach: 0.193m..0.197m",
         "Planner source: supervised hard gate provider ok=10/10; accepted=10/10; wrong fetch-ready dispatches=0",
+        "Targeted veto proof: confidence 0.87 scan/perceive case withheld local fetch and passed route-only visual proof",
         "Promotion evidence remains false; next proof should broaden live supervised route-owner UAT beyond the named hard matrix"
       ],
       "links": [
@@ -86,6 +87,14 @@
         {
           "label": "No-go route-only onboard proof",
           "url": "/artifacts/session/20260604T221937497570Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Low-confidence veto route-only proof",
+          "url": "/artifacts/session/live_supervised_confidence_veto_seed20260629_scene13_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Low-confidence veto onboard video",
+          "url": "/artifacts/session/20260604T222638636393Z/visual/raw_camera_browser.mp4"
         }
       ],
       "preview_image": "/artifacts/session/20260604T220856339217Z/visual/keyframe_review_contact_sheet.png"

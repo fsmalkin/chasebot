@@ -651,6 +651,26 @@ June 4, 2026 supervised hard route-owner visual UAT:
   visual UAT proof. Promotion still requires broader live supervised
   route-owner batches plus canonical saved-layout and seeded-random gates.
 
+June 4, 2026 low-confidence veto route-only proof:
+
+- Replay command:
+  `python scripts\fetch_planner_route_replay_batch.py --campaign-id live_supervised_confidence_veto_seed20260629_scene13_20260604 --gate-summary artifacts\session\supervised_llm_mixed_fetch_planner_seed20260629_provider_20260604\fetch_planner_handoff_gate\gate_summary.json --scene-id seed20260629_scene13_scan_or_perceive_first --route scan_or_perceive_first --max-per-route 1 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --route-only-sample-duration-s 6 --timeout-s 180 --package-timeout-s 180`
+- Replay scorecard:
+  `artifacts/session/live_supervised_confidence_veto_seed20260629_scene13_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Visual package:
+  `artifacts/session/live_supervised_confidence_veto_seed20260629_scene13_20260604_seed20260629_scene13_scan_or_perceive_first/fetch_visual_uat_package/scorecard.md`
+- Result: selected `1`, route-only pass `1/1`, visual package pass `1/1`,
+  local fetch withheld, closest approach `0.740m`, and promotion evidence
+  `False`.
+- Visual review: inspected the frame-sequence contact sheet at
+  `artifacts/session/20260604T222638636393Z/visual/keyframe_review_contact_sheet.png`.
+  The robot stayed stable, the target remained visible ahead, and local fetch
+  stayed withheld.
+- Evidence meaning: this proves the supervised fallback behavior on a real
+  low-confidence case. The model proposed the correct scan/perceive route below
+  the `0.90` confidence threshold, the guard withheld LLM authority, and the
+  deterministic route-only contract still passed.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes
