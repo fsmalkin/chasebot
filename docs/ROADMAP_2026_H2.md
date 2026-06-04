@@ -1064,6 +1064,16 @@ included the confidence-veto scan case. The next roadmap choice is a second
 generated-seed live batch for breadth or the canonical saved-layout and
 seeded-random promotion ladder for consolidation.
 
+The second generated-seed supervised route-owner batch is green with one quality
+watch:
+`artifacts/session/analysis_supervised_mixed_route_family_seed20260631_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+Seed `20260631` also passed route contracts `10/10`, visual packages `10/10`,
+executable deliveries `6/6`, and route-only proofs `4/4`. One recovery/re-aim
+row carried pre-contact lateral/yaw watch flags while still delivering. The
+roadmap implication is clear: route selection and route contracts are green
+enough for broader evidence, while recovery setup smoothness remains the
+highest-value quality backlog.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

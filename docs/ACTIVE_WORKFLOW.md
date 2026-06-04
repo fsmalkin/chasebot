@@ -696,6 +696,28 @@ June 4, 2026 generated-seed supervised route-owner visual UAT:
   second generated seed or the canonical saved-layout/seeded-random promotion
   ladder if product timing favors consolidation.
 
+June 4, 2026 second generated-seed supervised route-owner visual UAT:
+
+- Replay command:
+  `python scripts\fetch_planner_route_replay_batch.py --campaign-id live_supervised_mixed_route_family_seed20260631_20260604 --gate-summary artifacts\session\supervised_llm_mixed_fetch_planner_seed20260631_provider_20260604\fetch_planner_handoff_gate\gate_summary.json --route fetch_ready_local --route nav2_reposition_first --route recovery_or_reaim --route scan_or_perceive_first --route ambiguous_or_unsafe_no_go --max-per-route 2 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --route-only-sample-duration-s 6 --timeout-s 180 --package-timeout-s 180`
+- Replay scorecard:
+  `artifacts/session/live_supervised_mixed_route_family_seed20260631_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/analysis_supervised_mixed_route_family_seed20260631_20260604/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: route contracts `10/10`, visual packages `10/10`, executable
+  deliveries `6/6`, route-only proofs `4/4`, first-contact blockers `0`, and
+  executable closest approach `0.193m..0.196m`.
+- Watch: analyzer marked execution/setup/contact `watch` because
+  `seed20260631_scene06_recovery_or_reaim` delivered with pre-contact
+  lateral/yaw flags.
+- Visual review: inspected generated recovery-watch, clean fetch-ready, Nav2,
+  scan/perceive, and no-go sheets. The watch case showed a wider setup
+  correction before visible delivery; it did not show a failed push. The
+  route-only sheets showed local fetch withheld.
+- Evidence meaning: generated-seed supervised live UAT now has two green seeds.
+  The current residual quality backlog is recovery/re-aim setup smoothness,
+  while route selection and route contracts remain green.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes
