@@ -93,6 +93,25 @@ def test_deterministic_classifier_separates_reposition_recovery_and_fetch_ready(
     assert by_expected[gate.ROUTE_RECOVERY_OR_REAIM]["local_fetch_envelope"]["eligible"] is False
 
 
+def test_deterministic_classifier_routes_moderate_setup_debt_to_recovery():
+    scene = {
+        "perception": {"ball_confidence": 0.98, "target_confidence": 0.99, "state_age_s": 0.15},
+        "corridor": {"blocked": False, "clearance_m": 0.35, "unsafe_drift_m": 0.0},
+        "geometry": {
+            "ball_target_distance_m": 0.612365,
+            "ball_target_angle_deg": -13.762086,
+            "robot_ball_distance_m": 0.372459,
+            "robot_lateral_error_m": 0.071829,
+            "robot_yaw_error_deg": -11.385805,
+        },
+    }
+
+    gate._refresh_local_fetch_envelope(scene)
+
+    assert gate.deterministic_route_label(scene) == gate.ROUTE_RECOVERY_OR_REAIM
+    assert scene["local_fetch_envelope"]["eligible"] is False
+
+
 def test_route_quality_scores_clean_fetch_ready_and_recovery_watch():
     scenes = gate.generate_random_scenes(seed=321, random_cases=20)
     by_expected = {scene["expected_route_label"]: scene for scene in scenes}

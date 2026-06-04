@@ -64,8 +64,8 @@ PLANNER_MIXED_PROFILE = "planner_mixed_v1"
 OPENAI_TOOL_NAME = "emit_fetch_planner_route"
 CONTACT_QUALITY_CLEAN_LATERAL_M = 0.030
 CONTACT_QUALITY_CLEAN_YAW_DEG = 3.0
-FETCH_READY_LATERAL_LIMIT_M = 0.120
-FETCH_READY_YAW_LIMIT_DEG = 18.0
+FETCH_READY_LATERAL_LIMIT_M = 0.050
+FETCH_READY_YAW_LIMIT_DEG = 6.0
 RECOVERY_LATERAL_LIMIT_M = 0.240
 RECOVERY_YAW_LIMIT_DEG = 35.0
 NAV2_REPOSITION_STANDOFF_LIMIT_M = 1.350
@@ -183,8 +183,8 @@ def _target_relative_scene(
     local_envelope = (
         0.34 <= distance_m <= 0.85
         and 0.24 <= robot_ball_distance_m <= 0.52
-        and abs(lateral_m) <= 0.12
-        and abs(yaw_error_deg) <= 18.0
+        and abs(lateral_m) <= FETCH_READY_LATERAL_LIMIT_M
+        and abs(yaw_error_deg) <= FETCH_READY_YAW_LIMIT_DEG
         and not corridor_blocked
         and corridor_clearance_m >= 0.12
         and ball_confidence >= 0.65
@@ -234,8 +234,8 @@ def _refresh_local_fetch_envelope(scene: dict[str, Any]) -> None:
     eligible = (
         0.34 <= float(geometry.get("ball_target_distance_m", 999.0) or 999.0) <= 0.85
         and 0.24 <= float(geometry.get("robot_ball_distance_m", 999.0) or 999.0) <= 0.52
-        and float(geometry.get("robot_lateral_error_m", 999.0) or 999.0) <= 0.12
-        and abs(float(geometry.get("robot_yaw_error_deg", 999.0) or 999.0)) <= 18.0
+        and float(geometry.get("robot_lateral_error_m", 999.0) or 999.0) <= FETCH_READY_LATERAL_LIMIT_M
+        and abs(float(geometry.get("robot_yaw_error_deg", 999.0) or 999.0)) <= FETCH_READY_YAW_LIMIT_DEG
         and not bool(corridor.get("blocked", False))
         and float(corridor.get("clearance_m", 0.0) or 0.0) >= 0.12
         and float(perception.get("ball_confidence", 0.0) or 0.0) >= 0.65
@@ -276,8 +276,8 @@ def generate_random_scenes(
                 distance_range=(0.45, 0.75),
                 angle_range_deg=(-25.0, 25.0),
                 standoff_range=(0.28, 0.44),
-                lateral_range=(-0.08, 0.08),
-                yaw_error_range_deg=(-12.0, 12.0),
+                lateral_range=(-0.04, 0.04),
+                yaw_error_range_deg=(-5.0, 5.0),
             )
         elif route_label == ROUTE_NAV2_REPOSITION:
             scene = _target_relative_scene(
@@ -317,7 +317,10 @@ def generate_random_scenes(
                 yaw_error_range_deg=(-34.0, 34.0),
             )
             geometry = scene["geometry"]
-            if float(geometry["robot_lateral_error_m"]) <= 0.12 and abs(float(geometry["robot_yaw_error_deg"])) <= 18.0:
+            if (
+                float(geometry["robot_lateral_error_m"]) <= FETCH_READY_LATERAL_LIMIT_M
+                and abs(float(geometry["robot_yaw_error_deg"])) <= FETCH_READY_YAW_LIMIT_DEG
+            ):
                 sign = -1.0 if float(geometry["robot_lateral_signed_m"]) < 0 else 1.0
                 geometry["robot_lateral_signed_m"] = round(0.18 * sign, 6)
                 geometry["robot_lateral_error_m"] = 0.18
@@ -403,7 +406,11 @@ def deterministic_route_label(scene: dict[str, Any]) -> str:
         return ROUTE_NO_GO
     if not (0.34 <= ball_target_distance_m <= 0.85):
         return ROUTE_NO_GO
-    if 0.24 <= robot_ball_distance_m <= 0.52 and lateral_error_m <= 0.12 and yaw_error_deg <= 18.0:
+    if (
+        0.24 <= robot_ball_distance_m <= 0.52
+        and lateral_error_m <= FETCH_READY_LATERAL_LIMIT_M
+        and yaw_error_deg <= FETCH_READY_YAW_LIMIT_DEG
+    ):
         return ROUTE_FETCH_READY
     if robot_ball_distance_m <= 0.70 and lateral_error_m <= 0.24 and yaw_error_deg <= 35.0:
         return ROUTE_RECOVERY_OR_REAIM
