@@ -353,6 +353,15 @@ Planner-routed moonshot update, June 2:
   clean analyzer status, and `promotion_evidence=true`. This branch now has
   three randomized promotion-green seeds: `20260627`, `20260628`, and
   `20260629`.
+- regression manifest update, June 4:
+  `scripts/fetch_moonshot_regression_manifest.py` now makes the branch's
+  preservation bar explicit. The green manifest at
+  `artifacts/session/analysis_planner_moonshot_regression_set_20260604/fetch_moonshot_regression_manifest/scorecard.md`
+  verifies saved-anchor repeatability, the setup/contact audit, the three
+  promoted seeded gates, and the two seed `20260629` boundary rows. Use this
+  analyzer as the branch-local regression gate before route-owner swaps,
+  executor moonshots, recovery-window changes, visual-packaging changes, or
+  hardware-transfer claims.
 
 Saved-anchor requalification update, later June 1:
 

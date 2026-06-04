@@ -744,6 +744,13 @@ Use deterministic and randomized experiments for different jobs:
    reposition, scan/perception, re-aim/recovery, or no-go. Score those cases on
    correct subsystem routing and guard agreement before scoring any delivery
    result.
+7. The planner-routed moonshot regression manifest is the current preservation
+   bar for architecture changes. Run
+   `python scripts/fetch_moonshot_regression_manifest.py --campaign-id <id>`
+   before claiming progress after route-owner, recovery, timeout, visual
+   packaging, or contact-servo changes. The default manifest verifies saved
+   anchors, seeds `20260627`, `20260628`, and `20260629`, plus the two repaired
+   seed `20260629` boundary rows.
 
 ## Trajectory Limiter Direction
 

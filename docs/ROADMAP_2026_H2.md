@@ -885,10 +885,16 @@ Nav2-first, and recovery/re-aim routes:
 The analyzer stayed clean for execution, setup, and contact quality with `0`
 first-contact blockers:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260628_full_visual_rerun_20260604_analysis/fetch_planner_route_uat_analyzer/scorecard.md`.
-The roadmap now treats the sim milestone as two-green-seed strong evidence. The
-next milestone slice is a browser-watchable UAT review bundle, regression gates
-for seeds `20260627` and `20260628`, and a hardware-transfer plan for the
-planner-routed route-owner stack.
+The roadmap now treats the sim milestone as multi-seed strong evidence. Seed
+`20260629` added the third promotion-green parent gate after repairing the
+clean Nav2 setup-abort fallback and the high-debt recovery window:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The regression manifest captures the current preservation bar:
+`artifacts/session/analysis_planner_moonshot_regression_set_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
+It verifies saved anchors, seeds `20260627`, `20260628`, and `20260629`, and
+the two repaired seed `20260629` boundary rows. The next milestone slice is
+hardware-transfer planning and broader browser-watchable UAT, with the manifest
+run before route-owner or contact-servo changes are credited.
 
 Route-quality scorer evidence, later June 3: the planner handoff now emits a
 route-quality score, predicted contact quality, first-contact risk, flags, and

@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 12:13 PM ET",
+  "updated_label": "Updated June 4, 2026, 1:02 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Three seeded promotion gates green",
-  "status_detail": "The planner-routed stack now has three promotion-green randomized sim seeds for the current milestone. Seeds 20260627, 20260628, and 20260629 each delivered 30/30 planner routing, 6/6 live executable missions, 6/6 browser-watchable visual packages, clean analyzer status, and sequence-reviewed onboard/topdown proof. Seed 20260629 first exposed a Nav2 setup-abort boundary and a high-debt recovery duration miss; the repaired parent gate is green after clean-abort fallback hardening and a longer bounded recovery window.",
+  "status_label": "Regression set green",
+  "status_detail": "The planner-routed stack now has a named regression set for the current milestone. Saved anchors are green at 3/3 each, seeds 20260627, 20260628, and 20260629 each delivered 30/30 planner routing, 6/6 live executable missions, 6/6 browser-watchable visual packages, clean analyzer status, and sequence-reviewed onboard/topdown proof. The manifest also preserves seed20260629 scene01 and scene05 as boundary rows for clean Nav2 setup-abort fallback and high-debt recovery duration.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,47 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Moonshot regression set is green",
+      "status": "Saved anchors plus three seeded gates preserved",
+      "tone": "green",
+      "summary": "The new regression manifest converts the recent green evidence into a compact preservation bar. It verifies saved-anchor repeatability, the setup/contact audit, seeds 20260627, 20260628, and 20260629, plus the two repaired seed20260629 boundary rows. This lets us continue the planner-routed architecture without losing the ability to catch regressions from route-owner, recovery-window, visual-packaging, or contact-servo changes.",
+      "metrics": [
+        "Manifest: planner_routed_moonshot_regression_set_green; issue_count=0",
+        "Saved anchors: zero/left05/right05 each 3/3; closest range 0.194m..0.198m",
+        "Seeded gates: 3/3 promotion green; 90/90 planner routing; wrong_fetch=0",
+        "Live seeded missions: 18/18 passed; visual packages 18/18 passed",
+        "Boundary rows preserved: seed20260629_scene01_nav2_reposition_first and seed20260629_scene05_recovery_or_reaim",
+        "Evidence role: regression preservation while alternatives remain fallback lanes"
+      ],
+      "links": [
+        {
+          "label": "Regression manifest scorecard",
+          "url": "/artifacts/session/analysis_planner_moonshot_regression_set_20260604/fetch_moonshot_regression_manifest/scorecard.md"
+        },
+        {
+          "label": "Regression manifest summary",
+          "url": "/artifacts/session/analysis_planner_moonshot_regression_set_20260604/fetch_moonshot_regression_manifest/regression_summary.json"
+        },
+        {
+          "label": "Scene01 Nav2 fallback onboard proof",
+          "url": "/artifacts/session/20260604T161803168736Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene01 keyframe review",
+          "url": "/artifacts/session/20260604T161803168736Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Scene05 recovery onboard proof",
+          "url": "/artifacts/session/20260604T163650197166Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene05 keyframe review",
+          "url": "/artifacts/session/20260604T163650197166Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ],
+      "preview_image": "/artifacts/session/20260604T163650197166Z/visual/keyframe_review_contact_sheet.png"
+    },
     {
       "title": "Third planner-routed seeded gate is green after boundary repairs",
       "status": "Seed 20260629: 30/30 planner routing, 6/6 live missions, 6/6 visual packages",
@@ -1943,8 +1984,8 @@
     }
   ],
   "next_steps": [
-    "Promote saved anchors plus seeds 20260627, 20260628, and 20260629 into the regression set for route-owner or contact-servo changes.",
-    "Use seed20260629 scene01 and scene05 as boundary regression rows: Nav2 clean-abort fallback and high-debt recovery duration.",
+    "Run the moonshot regression manifest before crediting route-owner, recovery-window, visual-packaging, or contact-servo changes.",
+    "Expand browser-watchable UAT with the manifest as the preservation bar, especially scenarios that require route selection rather than direct local fetch.",
     "Draft the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, model provenance checks, and visual-evidence capture on robot hardware.",
     "Measure the runtime cost of the longer recovery window and decide whether hardware UAT needs a tighter progress-based timeout instead of a fixed duration.",
     "Investigate container-side ffmpeg availability as evidence hardening; host-side browser video recovery is working but remains a packaging dependency."

@@ -482,8 +482,11 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Three seeded promotion gates green"
-    assert payload["latest_evidence"][0]["title"] == "Third planner-routed seeded gate is green after boundary repairs"
+    assert payload["status_label"] == "Regression set green"
+    assert payload["latest_evidence"][0]["title"] == "Moonshot regression set is green"
+    assert payload["latest_evidence"][0]["links"][0]["url"].endswith(
+        "/fetch_moonshot_regression_manifest/scorecard.md"
+    )
     assert payload["uat_review_bundle"]["route_samples"][0]["video_url"].startswith("/artifacts/session/")
     assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")
     html = (dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan.html").read_text(encoding="utf-8")

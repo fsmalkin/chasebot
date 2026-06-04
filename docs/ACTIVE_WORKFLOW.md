@@ -331,6 +331,23 @@ June 4, 2026 planner-routed readyfix evidence:
   crashing the delivery runner, after the fetch-ready visual row exposed a
   Gazebo remove-service timeout before mission dispatch.
 
+June 4, 2026 moonshot regression manifest:
+
+- Command:
+  `python scripts\fetch_moonshot_regression_manifest.py --campaign-id analysis_planner_moonshot_regression_set_20260604`
+- Scorecard:
+  `artifacts/session/analysis_planner_moonshot_regression_set_20260604/fetch_moonshot_regression_manifest/scorecard.md`
+- Result: `planner_routed_moonshot_regression_set_green`. The analyzer verifies
+  saved-anchor repeatability, setup/contact audit health, seeds `20260627`,
+  `20260628`, and `20260629`, and the two seed `20260629` boundary rows
+  `seed20260629_scene01_nav2_reposition_first` and
+  `seed20260629_scene05_recovery_or_reaim`.
+- Evidence meaning: this analyzer is the compact preservation bar for future
+  route-owner, recovery, timeout, visual-packaging, and contact-servo changes.
+  A green manifest preserves `9/9` saved-anchor repeatability, three promoted
+  seeded gates, `18/18` seeded live mission passes, `18/18` seeded visual
+  packages, and browser-watchable proof for the known boundary rows.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

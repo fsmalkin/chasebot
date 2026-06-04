@@ -329,6 +329,18 @@ proof on a fresh service port. Keep this distinction explicit: truth/visual
 startup failure blocks evidence collection and belongs to
 infrastructure triage before fetch-control interpretation.
 
+June 4 moonshot regression manifest: the current planner-routed stack now has
+a compact regression set for future moonshot changes:
+`artifacts/session/analysis_planner_moonshot_regression_set_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
+The analyzer reads the current saved-anchor repeatability summary, the
+setup/contact audit, the three promotion-green seeded gates (`20260627`,
+`20260628`, and `20260629`), and the two seed `20260629` boundary rows that
+forced the latest repairs. The result is
+`planner_routed_moonshot_regression_set_green`, with `9/9` saved-anchor
+repeatability preserved and `18/18` seeded live missions plus `18/18` visual
+packages preserved. Run this analyzer before broadening the route-owner stack,
+swapping executors, changing timeouts, or claiming hardware-transfer readiness.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

@@ -917,6 +917,23 @@ fast on `environment_state=error`; the dashboard truth probe allows cold Gazebo
 starts before declaring failure. Future truth/visual startup failures belong to
 evidence-collection infrastructure triage before fetch-control interpretation.
 
+June 4, 2026 third-seed and regression-manifest update: seed `20260629`
+converted the next research question from architecture selection to regression
+preservation. The seed first exposed a clean pre-contact Nav2 setup abort on
+`seed20260629_scene01_nav2_reposition_first`; the repaired fallback then
+delivered that row inside the contract. The same seed exposed a high-debt
+`recovery_or_reaim` duration boundary on `seed20260629_scene05_recovery_or_reaim`;
+the longer bounded recovery window repaired that row while preserving the
+delivery stop. The final parent gate is green at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The regression manifest is green at
+`artifacts/session/analysis_planner_moonshot_regression_set_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
+It verifies saved anchors, seeds `20260627`, `20260628`, and `20260629`, and
+the two repaired boundary rows. The recommended architecture remains
+planner-routed route ownership with Nav2, bounded local recovery/fetch, and
+visual keyframe review as a gate; alternatives stay alive as fallback lanes
+when this manifest or broader UAT exposes a reproducible stage gap.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:
