@@ -370,6 +370,28 @@ June 4, 2026 broad-UAT recovery repair:
   regression manifest as the preservation bar for future route-owner,
   recovery-window, and contact-servo changes.
 
+June 4, 2026 second rough-seed breadth proof:
+
+- Full seed `20260631` gate:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260631_breadth_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Result: planner routing `30/30`, `wrong_fetch=0`, executable missions `6/6`,
+  visual packages `6/6`, analyzer clean, first-contact blockers `0`, and
+  closest approach range `0.194m..0.197m`.
+- Visual review: checked both recovery rows, both Nav2-first rows, and a
+  fetch-ready row through raw-camera plus topdown contact sheets before updating
+  the dashboard.
+
+June 4, 2026 five-seed regression manifest:
+
+- Command:
+  `python scripts\fetch_moonshot_regression_manifest.py --campaign-id analysis_planner_moonshot_regression_set_five_seed_20260604`
+- Scorecard:
+  `artifacts/session/analysis_planner_moonshot_regression_set_five_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`
+- Result: `planner_routed_moonshot_regression_set_green`; seeded gates `5/5`,
+  live seeded missions `30/30`, and visual packages `30/30`.
+- Evidence meaning: this is now the preservation bar before the next route-owner,
+  controller, visual-packaging, or hardware-transfer change.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

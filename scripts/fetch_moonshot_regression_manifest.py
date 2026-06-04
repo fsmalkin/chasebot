@@ -41,6 +41,16 @@ DEFAULT_SEEDED_GATES = (
         "artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604/"
         "fetch_planner_seeded_generalization_gate/gate_summary.json",
     ),
+    (
+        "seed20260630",
+        "artifacts/session/live_planner_seeded_generalization_gate_seed20260630_recovery_crawl_full_20260604/"
+        "fetch_planner_seeded_generalization_gate/gate_summary.json",
+    ),
+    (
+        "seed20260631",
+        "artifacts/session/live_planner_seeded_generalization_gate_seed20260631_breadth_20260604/"
+        "fetch_planner_seeded_generalization_gate/gate_summary.json",
+    ),
 )
 DEFAULT_BOUNDARY_REPLAY_SUMMARY = (
     "artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604_replay/"

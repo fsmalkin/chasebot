@@ -268,6 +268,18 @@ def test_moonshot_regression_manifest_scores_green_evidence(tmp_path, monkeypatc
     assert "seed_scene_nav2" in text
 
 
+def test_default_seeded_gates_include_rough_breadth_seeds():
+    labels = [label for label, _path in manifest.DEFAULT_SEEDED_GATES]
+
+    assert labels == [
+        "seed20260627",
+        "seed20260628",
+        "seed20260629",
+        "seed20260630",
+        "seed20260631",
+    ]
+
+
 def test_moonshot_regression_manifest_fails_closed_on_boundary_visual_gap(tmp_path, monkeypatch):
     session_root = _patch_roots(tmp_path, monkeypatch)
     _green_saved_anchor(session_root)

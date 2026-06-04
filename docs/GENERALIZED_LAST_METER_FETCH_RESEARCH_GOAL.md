@@ -955,6 +955,21 @@ approach from `0.194m` to `0.198m`. The next evidence step is another rough
 seed or a hardware-transfer packaging pass, while the regression manifest stays
 the preservation bar.
 
+June 4, 2026 second rough-seed breadth update: seed `20260631` passed the same
+post-repair route-owner gate at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260631_breadth_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+It delivered `30/30` planner routing, `wrong_fetch=0`, `6/6` executable
+missions, `6/6` visual packages, clean analyzer status, and closest approach
+from `0.194m` to `0.197m`. Visual keyframe review checked both high-risk
+recovery rows, both Nav2-first rows, and a fetch-ready row.
+
+June 4, 2026 five-seed preservation update: the regression manifest now
+includes seeds `20260627` through `20260631` by default:
+`artifacts/session/analysis_planner_moonshot_regression_set_five_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
+It is green with `5/5` seeded gates, `30/30` live seeded missions, `30/30`
+visual packages, and the repaired `20260629` boundary rows preserved. Continue
+the moonshot from this broader preservation bar.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

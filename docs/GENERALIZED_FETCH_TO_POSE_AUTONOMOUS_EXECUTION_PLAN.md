@@ -361,6 +361,22 @@ visual packages were `6/6`, the analyzer was clean, and live closest approach
 stayed within `0.194m..0.198m`. Treat this as broad randomized route-owner UAT
 evidence behind the regression manifest.
 
+June 4 second rough-seed breadth proof: seed `20260631` passed the same broad
+route-owner gate after the recovery yaw-crawl repair:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260631_breadth_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner routed `30/30` mixed scenes with `wrong_fetch=0`; the live replay
+passed `6/6` executable rows across two `recovery_or_reaim`, two
+`nav2_reposition_first`, and two `fetch_ready_local` cases; visual packages were
+`6/6`; the analyzer was clean with first-contact blockers `0`; and closest
+approach stayed within `0.194m..0.197m`.
+
+June 4 five-seed regression manifest: the manifest now preserves seeds
+`20260627` through `20260631`:
+`artifacts/session/analysis_planner_moonshot_regression_set_five_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
+The result is green with seeded gates `5/5`, live seeded missions `30/30`, and
+visual packages `30/30`. Use this manifest as the preservation bar before the
+next controller, route-owner, visual-packaging, or hardware-transfer change.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence
