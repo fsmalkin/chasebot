@@ -840,6 +840,24 @@ The planner child passed `30/30`; replay stopped on
 scoring remains unattempted. The architecture decision remains unchanged until
 the same gate runs through live mission and visual packages.
 
+June 4, 2026 visual-evidence startup fix and promotion-green rerun:
+`allow_operator_view_degraded` previously set `operator_view_required=false`,
+and the dashboard interpreted that as permission to skip every visual surface.
+Replay batches now request `visual_evidence_required=true` whenever visual
+packages are enabled, so optional/degraded Xpra no longer disables
+`world_stream_controller.py` or `visual_demo_observer.py`. The fixed live parent
+gate
+`artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+passed with `promotion_evidence=true`. Planner routing was `30/30` with `0`
+wrong fetch-ready dispatches; live replay was `6/6` missions and `6/6`
+browser-watchable visual packages across two `fetch_ready_local`, two
+`nav2_reposition_first`, and two `recovery_or_reaim` rows; the analyzer reported
+clean execution/setup/contact quality and `0` first-contact blockers. The six
+raw/topdown keyframe sheets were reviewed across setup, contact, push, and
+terminal arrival and agree with telemetry. This is the current promotion-grade
+sim evidence for the planner-routed architecture; the next research step is
+seed breadth and hardware-transfer planning, not a route-owner reset.
+
 June 4, 2026 recovery/re-aim route-boundary update: the same seed `20260627`
 later exposed a cleaner architecture lesson. A `recovery_or_reaim` route should
 use the local bounded recovery routine from the generated robot pose, while

@@ -233,6 +233,18 @@ Classify this as dashboard/compose startup evidence; fetch-control scoring
 remains unattempted. The next autonomous step is repairing or bypassing that
 startup path, then rerunning the same parent gate.
 
+The fixed live wrapper run,
+`live_planner_seeded_generalization_gate_full_visual_fix_20260604`, clears that
+promotion surface:
+`artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The dashboard now separates optional Xpra operator-view health from required
+recorded visual evidence, so visual packages start `world_stream_controller.py`
+and `visual_demo_observer.py` even when Xpra is optional. The parent gate passed
+with `promotion_evidence=true`: `30/30` planner decisions, `6/6` live missions,
+`6/6` browser-watchable visual packages, clean execution/setup/contact quality,
+and `0` first-contact blockers. The next autonomous step is seed breadth under
+the same evidence contract, followed by hardware-transfer planning.
+
 June 4 recovery/re-aim ownership correction: the latest seed `20260627`
 failure clarified the stage boundary. `nav2_reposition_first` owns real Nav2
 setup before local fetch; `recovery_or_reaim` now stays local and runs the

@@ -226,6 +226,27 @@ Live attempt, same morning:
   remains unattempted. Repair or bypass the dashboard/compose fresh-session
   startup path, then rerun the same parent gate.
 
+Live rerun after visual-evidence startup fix:
+
+- Gate:
+  `artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Replay:
+  `artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: planner child passed `30/30` with `0` wrong fetch-ready dispatches.
+  Replay passed `6/6` live executable rows with `6/6` browser-watchable visual
+  packages across two `fetch_ready_local`, two `nav2_reposition_first`, and two
+  `recovery_or_reaim` rows. The analyzer reports clean execution/setup/contact
+  quality and `0` first-contact blockers.
+- Evidence meaning: `planner_routed_seeded_generalization_promotion_green`,
+  `promotion_evidence=true` for the current sim milestone. The six raw/topdown
+  keyframe sheets were sequence-reviewed and agree with the telemetry.
+- Fix-forward note: replay batches now ask the dashboard for
+  `visual_evidence_required=true` whenever visual packages are enabled, so
+  optional/degraded Xpra no longer disables `world_stream_controller.py` or
+  `visual_demo_observer.py`.
+
 June 4, 2026 recovery/re-aim route-boundary correction:
 
 - Code boundary: `nav2_reposition_first` remains the route that owns real Nav2

@@ -139,6 +139,7 @@ def start_dashboard_environment(args: argparse.Namespace) -> dict[str, Any]:
         "surface_profile": str(args.surface_profile or ""),
         "robot_sdf_name": str(args.robot_sdf_name or ""),
         "operator_view_required": not bool(getattr(args, "allow_operator_view_degraded", False)),
+        "visual_evidence_required": not bool(getattr(args, "no_visual_package", False)),
     }
     response = post_dashboard_json(str(args.dashboard_url or ""), "/api/env/start", body, timeout_s=60.0)
     state = wait_for_dashboard_state(

@@ -663,6 +663,17 @@ stage-owner direction: planner chooses the owner, Nav2 handles admissible
 setup, and local forward-only fetch owns contact/push. Promotion still belongs
 to the canonical seeded gate surface with `promotion_evidence=true`.
 
+June 4 promotion-green update: the canonical seeded gate surface is now green
+for seed `20260627` after the dashboard visual-evidence startup fix:
+`artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The fixed replay path keeps Xpra optional while requiring recorded visual
+evidence. The parent gate reports `promotion_evidence=true`, with `30/30`
+planner decisions, `6/6` live missions, `6/6` visual packages, clean
+execution/setup/contact quality, and `0` first-contact blockers. Use this as
+the current milestone-grade sim proof for the planner-routed stack. The next
+policy work is seed breadth, local smoothness only when it reproduces under the
+same gate, and hardware-transfer planning.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

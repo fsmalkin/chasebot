@@ -864,6 +864,17 @@ The same run converted stale-model cleanup timeouts into recorded runner status
 instead of pre-mission crashes, which keeps future visual evidence batches
 recoverable with `--resume-skip-existing`.
 
+June 4 promotion-green evidence: the canonical parent seeded gate now passed
+after the visual-evidence startup fix:
+`artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner-routed stack delivered `30/30` planner routing, `6/6` live
+executable missions, `6/6` browser-watchable visual packages, clean
+execution/setup/contact quality, `0` first-contact blockers, and
+`promotion_evidence=true`. The roadmap now advances from repair to breadth:
+rerun the same parent gate on at least one additional seed, keep seed
+`20260627` and saved anchors as regression gates, and begin hardware-transfer
+planning for the route-owner split.
+
 Route-quality scorer evidence, later June 3: the planner handoff now emits a
 route-quality score, predicted contact quality, first-contact risk, flags, and
 recommended next stage. The roughest executable route replay from seed

@@ -410,6 +410,7 @@ def test_start_dashboard_environment_can_request_operator_view_degraded(monkeypa
             "world_stream_ready": True,
             "operator_view_ready": False,
             "operator_view_required": False,
+            "visual_evidence_required": True,
             "operator_view_status": "degraded",
         }
 
@@ -425,7 +426,42 @@ def test_start_dashboard_environment_can_request_operator_view_degraded(monkeypa
 
     assert posted["path"] == "/api/env/start"
     assert posted["payload"]["operator_view_required"] is False
+    assert posted["payload"]["visual_evidence_required"] is True
     assert result["state"]["operator_view_status"] == "degraded"
+
+
+def test_start_dashboard_environment_skips_visual_evidence_when_no_package(monkeypatch):
+    posted = {}
+
+    def fake_post(dashboard_url, path, payload, *, timeout_s):
+        posted.update({"payload": payload})
+        return {"ok": True}
+
+    monkeypatch.setattr(batch, "post_dashboard_json", fake_post)
+    monkeypatch.setattr(
+        batch,
+        "wait_for_dashboard_state",
+        lambda *_args, **_kwargs: {
+            "environment_state": "environment_ready",
+            "phase": "environment_ready",
+            "sim_gate_ready": True,
+            "operator_view_ready": False,
+            "operator_view_required": False,
+            "operator_view_status": "degraded_optional",
+            "visual_evidence_required": False,
+        },
+    )
+
+    batch.start_dashboard_environment(
+        _make_args(
+            dashboard_url="http://dash",
+            allow_operator_view_degraded=True,
+            no_visual_package=True,
+        )
+    )
+
+    assert posted["payload"]["operator_view_required"] is False
+    assert posted["payload"]["visual_evidence_required"] is False
 
 
 def test_replay_batch_records_dashboard_start_failure_reason(tmp_path, monkeypatch):

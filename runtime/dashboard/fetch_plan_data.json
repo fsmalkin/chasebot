@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 4:33 AM ET",
+  "updated_label": "Updated June 4, 2026, 10:58 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Living plan and progress tracker",
-  "status_detail": "This page summarizes current direction and evidence. It is route-owner UAT progress, not release or promotion evidence.",
+  "status_label": "Seeded promotion gate green",
+  "status_detail": "The planner-routed stack now has promotion-grade seeded evidence for the current sim milestone: 30/30 planner routing, 6/6 live executable missions, 6/6 browser-watchable visual packages, clean analyzer status, and sequence-reviewed onboard/topdown proof. Hardware transfer and broader seed breadth remain next.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -50,67 +50,84 @@
   ],
   "latest_evidence": [
     {
-      "title": "Live seeded gate reached an infrastructure blocker",
-      "status": "Planner child passed 30/30; fresh dashboard startup blocked before mission execution",
-      "tone": "yellow",
-      "summary": "The new planner-routed seeded gate wrapper was run live for seed 20260627. The planner child passed the full 30-scene handoff gate with zero wrong fetch dispatches. The replay child stopped on the first selected recovery_or_reaim row because the fresh dashboard session stayed in environment_starting before any mission or visual package could run. This is infrastructure evidence; fetch-control scoring remains unattempted.",
-      "metrics": [
-        "Parent gate: planner_routed_seeded_generalization_incomplete; promotion_evidence=false",
-        "Planner child: 30/30, wrong_fetch=0",
-        "Replay child: selected_count=1 because stop-on-fail halted at the first row",
-        "First failed row: seed20260627_scene04_recovery_or_reaim",
-        "Failure: fresh_dashboard_session_start_failed; environment_state=starting; phase=environment_starting",
-        "Next step: repair or bypass dashboard/compose fresh-session startup, then rerun the same parent gate"
-      ],
-      "links": [
-        {
-          "label": "Live parent gate scorecard",
-          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260627_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
-        },
-        {
-          "label": "Live parent gate summary",
-          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260627_20260604/fetch_planner_seeded_generalization_gate/gate_summary.json"
-        },
-        {
-          "label": "Live replay child scorecard",
-          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260627_20260604_replay/fetch_planner_route_replay_batch/scorecard.md"
-        },
-        {
-          "label": "Live planner child scorecard",
-          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260627_20260604_planner/fetch_planner_handoff_gate/scorecard.md"
-        }
-      ]
-    },
-    {
-      "title": "Planner-routed seeded gate surface is ready",
-      "status": "Dry-run composed the 30-scene planner gate and six executable replay rows",
+      "title": "Planner-routed seeded gate is promotion green",
+      "status": "30/30 planner routing, 6/6 live missions, 6/6 visual packages, analyzer clean",
       "tone": "green",
-      "summary": "The new scripts/fetch_planner_seeded_generalization_gate.py wrapper now owns the next promotion surface. It composes the mixed planner handoff gate, executable route replay batch, and live route UAT analyzer under one parent artifact. The dry-run passed for seed 20260627 with 30/30 planner decisions, zero wrong fetch dispatches, and six selected executable rows across local fetch, Nav2 reposition-first, and recovery/re-aim.",
+      "summary": "The fixed visual-evidence startup path reran seed 20260627 through the canonical planner-routed seeded gate. The planner child routed all 30 mixed scenes correctly with zero wrong fetch-ready dispatches. The live replay selected two rows each for recovery_or_reaim, nav2_reposition_first, and fetch_ready_local; every mission delivered inside the 0.300m contract and every row produced browser-watchable onboard, topdown, and world-stream proof. The analyzer reports clean execution, setup, and contact quality with zero first-contact blockers, and the parent gate sets promotion_evidence=true.",
       "metrics": [
-        "Parent gate: planner_routed_seeded_generalization_dry_run_ready",
-        "Planner child: 30/30, wrong_fetch=0, route split fetch_ready_local 7, nav2_reposition_first 7, recovery_or_reaim 6, scan_or_perceive_first 7, ambiguous_or_unsafe_no_go 3",
-        "Replay child: selected_count=6, requested_route_count fetch_ready_local 2, nav2_reposition_first 2, recovery_or_reaim 2",
-        "Promotion rule: live fresh-dashboard run plus route analyzer must be clean before promotion_evidence=true",
-        "Next command: run the same wrapper live with --fresh-dashboard-session-per-run and --stop-on-fail"
+        "Parent gate: planner_routed_seeded_generalization_promotion_green; promotion_evidence=true",
+        "Planner child: 30/30, wrong_fetch=0; route split fetch_ready_local 7, nav2_reposition_first 7, recovery_or_reaim 6, scan_or_perceive_first 7, ambiguous_or_unsafe_no_go 3",
+        "Replay child: selected_count=6; mission_pass_count=6; visual_package_pass_count=6",
+        "Route coverage: fetch_ready_local 2/2, nav2_reposition_first 2/2, recovery_or_reaim 2/2",
+        "Analyzer: execution clean, setup clean, contact clean, first-contact blockers 0",
+        "Visual audit: six keyframe sheets reviewed across setup, contact, push, and terminal arrival; raw/topdown sequences agree with telemetry"
       ],
       "links": [
         {
           "label": "Parent seeded gate scorecard",
-          "url": "/artifacts/session/dev_planner_seeded_generalization_gate_dry_run_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
         },
         {
           "label": "Parent seeded gate summary",
-          "url": "/artifacts/session/dev_planner_seeded_generalization_gate_dry_run_20260604/fetch_planner_seeded_generalization_gate/gate_summary.json"
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604/fetch_planner_seeded_generalization_gate/gate_summary.json"
         },
         {
-          "label": "Child planner gate scorecard",
-          "url": "/artifacts/session/dev_planner_seeded_generalization_gate_dry_run_20260604_planner/fetch_planner_handoff_gate/scorecard.md"
+          "label": "Replay batch scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604_replay/fetch_planner_route_replay_batch/scorecard.md"
         },
         {
-          "label": "Child replay batch scorecard",
-          "url": "/artifacts/session/dev_planner_seeded_generalization_gate_dry_run_20260604_replay/fetch_planner_route_replay_batch/scorecard.md"
+          "label": "Analyzer scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Scene04 recovery onboard proof",
+          "url": "/artifacts/session/20260604T144624320615Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene07 Nav2 onboard proof",
+          "url": "/artifacts/session/20260604T145025576869Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene09 local onboard proof",
+          "url": "/artifacts/session/20260604T145332225937Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene11 Nav2 contact sheet",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604_replay_seed20260627_scene11_nav2_reposition_first/fetch_visual_uat_package/keyframe_reviews/20260604T145451170797Z_keyframe_review_contact_sheet.png"
         }
-      ]
+      ],
+      "preview_image": "/artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604_replay_seed20260627_scene11_nav2_reposition_first/fetch_visual_uat_package/keyframe_reviews/20260604T145451170797Z_keyframe_review_contact_sheet.png"
+    },
+    {
+      "title": "Visual evidence startup path fixed",
+      "status": "Optional Xpra no longer disables recorded proof",
+      "tone": "green",
+      "summary": "The previous full gate produced passing missions but no videos because allow_operator_view_degraded set operator_view_required=false and the dashboard treated that as a request to skip every visual surface. The dashboard now separates optional Xpra from required recorded evidence. Replay batches request visual_evidence_required=true whenever visual packages are enabled, so world stream and visual_demo_observer start even when the operator view is optional.",
+      "metrics": [
+        "Targeted probe: live_visual_evidence_startup_fix_probe_20260604 passed mission and visual package",
+        "Visual package: mobile_watchable=true and onboard_camera_watchable=true",
+        "Recorder output: raw_camera_browser.mp4, topdown_telemetry_browser.mp4, world_stream.mp4, and keyframe_review_contact_sheet.png",
+        "Regression tests cover replay payload, visual-only dashboard startup, and compose service selection"
+      ],
+      "links": [
+        {
+          "label": "Targeted probe scorecard",
+          "url": "/artifacts/session/live_visual_evidence_startup_fix_probe_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Targeted onboard proof",
+          "url": "/artifacts/session/20260604T144312126325Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Targeted topdown proof",
+          "url": "/artifacts/session/20260604T144312126325Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "Targeted contact sheet",
+          "url": "/artifacts/session/live_visual_evidence_startup_fix_probe_20260604_seed20260627_scene08_fetch_ready_local/fetch_visual_uat_package/keyframe_reviews/20260604T144312126325Z_keyframe_review_contact_sheet.png"
+        }
+      ],
+      "preview_image": "/artifacts/session/live_visual_evidence_startup_fix_probe_20260604_seed20260627_scene08_fetch_ready_local/fetch_visual_uat_package/keyframe_reviews/20260604T144312126325Z_keyframe_review_contact_sheet.png"
     },
     {
       "title": "Seed 20260627 planner-routed random slice",
@@ -706,6 +723,90 @@
   ],
   "running_video_proof": [],
   "recent_video_proof": [
+    {
+      "title": "Seeded gate scene04 recovery proof",
+      "summary": "Session 20260604T144624320615Z is the first recovery_or_reaim row from the promotion-green seeded gate.",
+      "primary_video": {
+        "label": "Scene04 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T144624320615Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The recovery owner can set up, contact, and push the ball into the delivery circle under the current seeded promotion gate. The raw/topdown keyframe sheet agrees with the closest-approach telemetry.",
+      "limits": "This is one row inside a six-row promotion-green gate. Use the parent gate and analyzer for the milestone claim.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T144624320615Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T144624320615Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T144624320615Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604_replay_seed20260627_scene04_recovery_or_reaim/fetch_visual_uat_package/keyframe_reviews/20260604T144624320615Z_keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
+      "title": "Seeded gate scene07 Nav2-first proof",
+      "summary": "Session 20260604T145025576869Z is a Nav2-reposition-first row from the promotion-green seeded gate.",
+      "primary_video": {
+        "label": "Scene07 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T145025576869Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The planner can assign setup to Nav2, then hand contact back to bounded local fetch. The sequence shows the ball entering the centerline and finishing at the circle.",
+      "limits": "This validates the route-owner handoff for the seeded gate slice. Additional seeds remain the breadth target.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T145025576869Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T145025576869Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T145025576869Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604_replay_seed20260627_scene07_nav2_reposition_first/fetch_visual_uat_package/keyframe_reviews/20260604T145025576869Z_keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
+      "title": "Seeded gate scene09 local-fetch proof",
+      "summary": "Session 20260604T145332225937Z is a fetch_ready_local row from the promotion-green seeded gate.",
+      "primary_video": {
+        "label": "Scene09 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T145332225937Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The direct local route can execute a short, clean push into the circle when the planner classifies the scene inside the local envelope.",
+      "limits": "Local fetch is judged only inside the planner-approved envelope; out-of-envelope starts remain planner, Nav2, recovery, scan, or no-go cases.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T145332225937Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T145332225937Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T145332225937Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604_replay_seed20260627_scene09_fetch_ready_local/fetch_visual_uat_package/keyframe_reviews/20260604T145332225937Z_keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
     {
       "title": "Seed 20260626 scene29 final local proof",
       "summary": "Session 20260604T055300369612Z is the final executable row in the completed seed20260626 broad replay.",
@@ -1645,12 +1746,12 @@
     }
   ],
   "next_steps": [
-    "Repair or bypass the dashboard/compose fresh-session startup path that left the live seeded gate in environment_starting.",
-    "Rerun scripts/fetch_planner_seeded_generalization_gate.py live for seed 20260627 with fresh dashboard sessions and stop-on-fail after startup is healthy.",
-    "Use seed20260624 scene24 and seed20260626 scene03 as local-fetch smoothness candidates only after saved-layout coverage shows the same risk.",
-    "Keep Docker health and dashboard truth-probe readiness as infrastructure watches before long live batches.",
-    "Keep Nav2 and recovery as active route owners because seed20260625 and the completed seed20260626 rows both show clean samples in those lanes.",
+    "Consolidate the promotion-green seeded gate by committing the visual-evidence startup fix, fixture refresh, tests, and planning updates.",
+    "Run at least one additional planner-routed seeded gate with a new seed and the same fresh-dashboard visual package contract to test breadth beyond seed 20260627.",
+    "Keep saved anchors and seed 20260627 as regression gates before any controller change; preserve browser-watchable onboard, topdown, world-stream, and keyframe-sheet proof for every row.",
+    "Use local-fetch smoothness candidates only after they reproduce across saved anchors or additional seeded gates.",
+    "Keep Nav2 and recovery as active route owners because the promotion-green gate now includes clean samples in both lanes.",
     "Keep sequence review onboard-first: start/setup, pre-contact, first contact, mid-push or coast, terminal arrival, and final rest.",
-    "Preserve promotion_evidence=false for route-owner UAT until canonical saved-layout and seeded-random promotion gates rerun."
+    "Start hardware-transfer planning after another breadth seed confirms the route-owner split under the same evidence contract."
   ]
 }

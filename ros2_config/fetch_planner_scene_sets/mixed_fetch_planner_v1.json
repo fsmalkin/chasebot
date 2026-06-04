@@ -13,7 +13,7 @@
         "robot_ball_distance_m": 0.440072,
         "robot_lateral_error_m": 0.048614,
         "robot_lateral_signed_m": -0.048614,
-        "robot_yaw_error_deg": 10.29802
+        "robot_yaw_error_deg": 3.0
       },
       "local_fetch_envelope": {
         "delivery_radius_m": 0.3,
@@ -22,7 +22,7 @@
         "requires_robot_owned_contact": true
       },
       "perception": {"ball_confidence": 0.98, "state_age_s": 0.15, "target_confidence": 0.99},
-      "robot_pose": {"x": -0.046567, "y": 0.315711, "yaw": -0.173583, "z": 0.0},
+      "robot_pose": {"x": -0.046567, "y": 0.315711, "yaw": -0.300939, "z": 0.0},
       "scene_id": "frozen_fetch_ready_local_01",
       "scene_set": "mixed_fetch_planner_v1",
       "seed": 20260530,

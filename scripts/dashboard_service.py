@@ -113,6 +113,7 @@ OPERATOR_VIEW_PORT_END = 14520
 OPERATOR_VIEW_HEARTBEAT_STALE_S = 5.0
 REQUIRED_GATE_SERVICES = ("sim-gate", "world-viewer", "gate-stack", "operator-view")
 CORE_GATE_SERVICES = ("sim-gate", "gate-stack")
+VISUAL_EVIDENCE_GATE_SERVICES = ("sim-gate", "world-viewer", "gate-stack")
 HEADLESS_SOAK_GATE_SERVICES = ("sim-gate", "gate-stack")
 SELF_CONTAINED_SCENARIO_IDS = {
     "visit_route_planning",
@@ -713,6 +714,7 @@ class DashboardController:
         self.peer_project_cleanup = peer_project_cleanup if peer_project_cleanup in {"exclusive", "none"} else "exclusive"
         self.headless_worker_mode = bool(headless_worker_mode)
         self.operator_view_required = True
+        self.visual_evidence_required = not self.headless_worker_mode
         self.control_mode = (os.environ.get("CHASECAR_DASHBOARD_CONTROL_MODE", DEFAULT_CONTROL_MODE).strip() or DEFAULT_CONTROL_MODE)
         try:
             self.docker = choose_docker_cli()
@@ -845,6 +847,7 @@ class DashboardController:
                 "operator_view_status": "disabled",
                 "operator_view_failure_class": "",
                 "operator_view_required": True,
+                "visual_evidence_required": self.visual_evidence_required,
                 "validation_dir": "",
                 "command_history_path": "",
                 "multi_target_progress_path": "",
@@ -1599,9 +1602,15 @@ class DashboardController:
         return stale_projects
 
     def _required_gate_services(self) -> tuple[str, ...]:
+        if self.headless_worker_mode:
+            return HEADLESS_SOAK_GATE_SERVICES
+        if bool(getattr(self, "operator_view_required", True)):
+            return REQUIRED_GATE_SERVICES
+        if bool(getattr(self, "visual_evidence_required", True)):
+            return VISUAL_EVIDENCE_GATE_SERVICES
         if not bool(getattr(self, "operator_view_required", True)):
             return CORE_GATE_SERVICES
-        return HEADLESS_SOAK_GATE_SERVICES if self.headless_worker_mode else REQUIRED_GATE_SERVICES
+        return REQUIRED_GATE_SERVICES
 
     def _extract_host_port_bind_failure_port(self, output: str) -> Optional[int]:
         match = HOST_PORT_BIND_FAILURE_RE.search(output or "")
@@ -2991,6 +3000,9 @@ class DashboardController:
             "operator_view_required" in overrides
             and not truthy_value(overrides.get("operator_view_required"))
         )
+        self.visual_evidence_required = bool(
+            truthy_value(overrides.get("visual_evidence_required", self.operator_view_required))
+        ) and not self.headless_worker_mode
         self.lifecycle_cancel.clear()
         self._update_state(
             environment_state="starting",
@@ -3009,6 +3021,7 @@ class DashboardController:
             world_stream_recovery_state="idle",
             world_stream_restart_in_progress=False,
             operator_view_required=self.operator_view_required,
+            visual_evidence_required=self.visual_evidence_required,
         )
         self._record_operator_event("Environment starting.", category="environment")
         self.lifecycle_thread = threading.Thread(target=self._start_environment_worker, name="dashboard-start", daemon=True)
@@ -3979,11 +3992,15 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
         # Only bring up sim/gate services. In host_powershell mode the
         # dashboard-control and brain-supervisor-shadow run on the host, so
         # starting them inside compose would cause a port conflict on 8860.
-        compose_services = ["sim-gate", "gate-stack", "dashboard-utility"]
         if self.headless_worker_mode:
             compose_services = ["sim-gate", "gate-stack"]
-        elif bool(getattr(self, "operator_view_required", True)):
-            compose_services.extend(["world-viewer", "operator-view"])
+        else:
+            compose_services = ["sim-gate"]
+            if bool(getattr(self, "visual_evidence_required", True)):
+                compose_services.append("world-viewer")
+            compose_services.extend(["gate-stack", "dashboard-utility"])
+            if bool(getattr(self, "operator_view_required", True)):
+                compose_services.append("operator-view")
         args.extend(compose_services)
         proc = self._popen_docker_compose(project_name, *args, env=env)
         self.active_env_proc = proc
@@ -4027,8 +4044,15 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     f"Cleaned stale dashboard projects before startup: {', '.join(startup_cleanup_projects)}.",
                     category="environment",
                 )
-            operator_view_status = "disabled" if self.headless_worker_mode else "starting"
+            operator_view_status = (
+                "disabled"
+                if self.headless_worker_mode
+                else "starting"
+                if bool(getattr(self, "operator_view_required", True))
+                else "degraded_optional"
+            )
             operator_view_required = bool(getattr(self, "operator_view_required", True))
+            visual_evidence_required = bool(getattr(self, "visual_evidence_required", True)) and not self.headless_worker_mode
             self._update_state(
                 environment_state="starting",
                 scenario_state="idle",
@@ -4048,6 +4072,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                 operator_view_status=operator_view_status,
                 operator_view_failure_class="",
                 operator_view_required=operator_view_required,
+                visual_evidence_required=visual_evidence_required,
                 validation_dir=str(validation_dir),
                 command_history_path=str(validation_dir / "command_history.jsonl"),
                 multi_target_progress_path=str(validation_dir / "multi_target_progress.json"),
@@ -4097,12 +4122,12 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
             for attempt in range(2):
                 world_stream_port = (
                     0
-                    if self.headless_worker_mode
+                    if self.headless_worker_mode or not visual_evidence_required
                     else find_free_port(8891, 8921, exclude_ports=failed_world_stream_ports)
                 )
                 operator_view_port = (
                     0
-                    if self.headless_worker_mode
+                    if self.headless_worker_mode or not operator_view_required
                     else find_free_port(
                         OPERATOR_VIEW_PORT_START,
                         OPERATOR_VIEW_PORT_END,
@@ -4127,6 +4152,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     operator_view_status=operator_view_status,
                     operator_view_failure_class="",
                     operator_view_required=operator_view_required,
+                    visual_evidence_required=visual_evidence_required,
                     environment_message="starting authoritative environment",
                     environment_failure_class="",
                     gate_service_states={},
@@ -4223,7 +4249,7 @@ echo "TRUTH_LOG=$LOG_FILE"
                     gate_service_states=gate_service_states,
                 )
 
-            if not operator_view_required:
+            if not visual_evidence_required:
                 self._update_state(
                     environment_state="environment_ready",
                     scenario_state="ready",
@@ -4240,6 +4266,7 @@ echo "TRUTH_LOG=$LOG_FILE"
                     operator_view_status="degraded_optional",
                     operator_view_failure_class="",
                     operator_view_required=False,
+                    visual_evidence_required=False,
                     world_stream_recovery_state="idle",
                     world_stream_restart_in_progress=False,
                     world_stream_last_restart_error="",
@@ -4318,57 +4345,47 @@ echo "TRUTH_LOG=$LOG_FILE"
                 )
 
             dashboard_url = f"http://127.0.0.1:{self.port}/dashboard.html"
-            operator_view_script = self._operator_view_launch_script(
-                session_id=session_id,
-                visual_dir_container=visual_dir_container,
-                dashboard_url=dashboard_url,
-            )
-            operator_view_info = self._run_container_helper(self.operator_view_container_id, operator_view_script, "OPERATOR_VIEW")
-            if int(operator_view_info.get("exit_code", 0) or 0) != 0:
-                if not operator_view_required:
-                    self._update_state(
-                        operator_view_ready=False,
-                        operator_view_status="degraded",
-                        operator_view_failure_class="operator_view_start_failed",
-                    )
-                    self._record_operator_event(
-                        "Operator view failed to start; continuing because recorded-evidence startup does not require Xpra.",
-                        category="warn",
-                    )
-                else:
+            operator_view_info: Dict[str, Any] = {"output": ""}
+            if operator_view_required:
+                operator_view_script = self._operator_view_launch_script(
+                    session_id=session_id,
+                    visual_dir_container=visual_dir_container,
+                    dashboard_url=dashboard_url,
+                )
+                operator_view_info = self._run_container_helper(self.operator_view_container_id, operator_view_script, "OPERATOR_VIEW")
+                if int(operator_view_info.get("exit_code", 0) or 0) != 0:
                     raise EnvironmentStartupError(
                         f"Operator view helper failed. {operator_view_info['output']}".strip(),
                         environment_failure_class="operator_view_start_failed",
                         operator_view_failure_class="operator_view_start_failed",
                         gate_service_states=gate_service_states,
                     )
-            elif not self._wait_for_operator_view_ready(30.0):
-                operator_view_state = self._operator_view_snapshot(visual_dir, self.state)
-                operator_view_failure_class = str(
-                    operator_view_state.get("failure_class", "") or "operator_view_start_failed"
-                )
-                if not operator_view_required:
-                    self._update_state(
-                        operator_view_ready=False,
-                        operator_view_status="degraded",
-                        operator_view_failure_class=operator_view_failure_class,
+                if not self._wait_for_operator_view_ready(30.0):
+                    operator_view_state = self._operator_view_snapshot(visual_dir, self.state)
+                    operator_view_failure_class = str(
+                        operator_view_state.get("failure_class", "") or "operator_view_start_failed"
                     )
-                    self._record_operator_event(
-                        "Operator view did not become ready; continuing because recorded-evidence startup does not require Xpra.",
-                        category="warn",
-                    )
-                else:
                     raise EnvironmentStartupError(
                         f"Operator view did not become ready. {operator_view_info['output']}".strip(),
                         environment_failure_class="operator_view_start_failed",
                         operator_view_failure_class=operator_view_failure_class,
                         gate_service_states=gate_service_states,
                     )
-            else:
                 self._update_state(
                     operator_view_ready=True,
                     operator_view_status="ready",
                     operator_view_failure_class="",
+                )
+            else:
+                self._update_state(
+                    operator_view_ready=False,
+                    operator_view_status="degraded_optional",
+                    operator_view_failure_class="",
+                    operator_view_url="",
+                )
+                self._record_operator_event(
+                    "Recorded visual evidence starting with optional Xpra operator view disabled.",
+                    category="environment",
                 )
             with self.state_lock:
                 operator_view_ready = bool(self.state.get("operator_view_ready", False))
@@ -4417,11 +4434,12 @@ echo "VISUAL_LOG=$LOG_FILE"
                 scenario_message="ready",
                 world_stream_url=f"http://127.0.0.1:{world_stream_port}/vnc.html?autoconnect=1&resize=scale&path=websockify",
                 operator_view_backend="xpra",
-                operator_view_url=f"http://127.0.0.1:{operator_view_port}/",
+                operator_view_url=f"http://127.0.0.1:{operator_view_port}/" if operator_view_port else "",
                 operator_view_ready=operator_view_ready,
                 operator_view_status=operator_view_status or ("ready" if operator_view_ready else "degraded"),
                 operator_view_failure_class=operator_view_failure_class,
                 operator_view_required=operator_view_required,
+                visual_evidence_required=visual_evidence_required,
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
                 world_stream_last_restart_error="",

@@ -278,6 +278,8 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
     controller.intent_ack_path = controller.runtime_dir / "intent_ack.json"
     controller.peer_project_cleanup = "exclusive"
     controller.headless_worker_mode = False
+    controller.operator_view_required = True
+    controller.visual_evidence_required = True
     controller.docker = "docker"
     controller.compose_file = REPO_ROOT / "docker-compose.yml"
     controller.host_repo_mount_source = ""
@@ -386,6 +388,8 @@ def _make_controller(tmp_path: Path) -> dashboard_service.DashboardController:
         "operator_view_ready": True,
         "operator_view_status": "ready",
         "operator_view_failure_class": "",
+        "operator_view_required": True,
+        "visual_evidence_required": True,
         "validation_dir": "",
         "command_history_path": "",
         "multi_target_progress_path": "",
@@ -478,7 +482,7 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Living plan and progress tracker"
+    assert payload["status_label"] == "Seeded promotion gate green"
     assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")
     html = (dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan.html").read_text(encoding="utf-8")
     assert "Running / Recent Video Proof" in html
@@ -3973,6 +3977,7 @@ def test_start_environment_worker_retries_once_after_host_port_bind_failure(tmp_
 def test_start_environment_worker_can_degrade_optional_operator_view(tmp_path, monkeypatch):
     controller = _make_controller(tmp_path)
     controller.operator_view_required = False
+    controller.visual_evidence_required = True
     controller._clear_llm_proof_runtime_state = lambda: None
     controller._clear_visit_mission_runtime_state = lambda: None
     controller._write_operator_status = lambda **_kwargs: None
@@ -3986,7 +3991,8 @@ def test_start_environment_worker_can_degrade_optional_operator_view(tmp_path, m
         setattr(controller, "operator_view_container_id", "operator-view"),
     )
     controller._run_environment_compose_up = lambda *_args, **_kwargs: (0, "ok")
-    controller._run_container_helper = lambda *_args, **_kwargs: {"output": "ok"}
+    helper_prefixes: list[str] = []
+    controller._run_container_helper = lambda _container_id, _script, prefix: helper_prefixes.append(prefix) or {"output": "ok"}
     controller._wait_for_truth_ready = lambda timeout_s: True
     controller._wait_for_world_stream_ready = lambda timeout_s: True
     controller._wait_for_operator_view_ready = lambda timeout_s: False
@@ -4012,10 +4018,12 @@ def test_start_environment_worker_can_degrade_optional_operator_view(tmp_path, m
 
     assert controller.state["environment_state"] == "environment_ready"
     assert controller.state["operator_view_required"] is False
+    assert controller.state["visual_evidence_required"] is True
     assert controller.state["operator_view_ready"] is False
-    assert controller.state["operator_view_status"] == "degraded"
-    assert controller.state["operator_view_failure_class"] == "xpra_http_unavailable"
-    assert any("Operator view did not become ready" in message for message, _category in events)
+    assert controller.state["operator_view_status"] == "degraded_optional"
+    assert controller.state["operator_view_failure_class"] == ""
+    assert helper_prefixes == ["TRUTH", "WORLD_STREAM", "VISUAL"]
+    assert any("Recorded visual evidence starting with optional Xpra" in message for message, _category in events)
 
 
 def test_world_stream_restart_ready_uses_live_world_state_not_snapshot(tmp_path):
@@ -4102,6 +4110,42 @@ def test_run_environment_compose_up_headless_worker_skips_visual_services(tmp_pa
             "--no-build",
             "sim-gate",
             "gate-stack",
+        )
+    ]
+
+
+def test_run_environment_compose_up_keeps_world_stream_for_visual_evidence_without_operator_view(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.control_mode = "docker_socket"
+    controller.build_on_next_start = False
+    controller.operator_view_required = False
+    controller.visual_evidence_required = True
+
+    popen_calls: list[tuple[str, ...]] = []
+    controller._run_docker_compose = lambda *_args, **_kwargs: None
+
+    class _Proc:
+        returncode = 0
+
+        def communicate(self, timeout=None):
+            return ("ok", "")
+
+    controller._popen_docker_compose = lambda project_name, *args, env=None: popen_calls.append((project_name, *args)) or _Proc()
+
+    rc, output = controller._run_environment_compose_up("chasecar_dashboard_test", {"WORLD_STREAM_PORT": "8891"})
+
+    assert rc == 0
+    assert output == "ok"
+    assert popen_calls == [
+        (
+            "chasecar_dashboard_test",
+            "up",
+            "-d",
+            "--no-build",
+            "sim-gate",
+            "world-viewer",
+            "gate-stack",
+            "dashboard-utility",
         )
     ]
 
