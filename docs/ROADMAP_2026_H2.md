@@ -1074,6 +1074,16 @@ roadmap implication is clear: route selection and route contracts are green
 enough for broader evidence, while recovery setup smoothness remains the
 highest-value quality backlog.
 
+The third generated-seed supervised route-owner batch is green and clean:
+`artifacts/session/analysis_supervised_mixed_route_family_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+Seed `20260633` passed route contracts `10/10`, visual packages `10/10`,
+executable deliveries `6/6`, and route-only proofs `4/4`; analyzer execution,
+setup, and contact quality were all clean. The selected rows included a
+recovery/re-aim confidence-veto case that fell back to deterministic routing and
+still delivered. The roadmap now has enough generated-seed visual breadth to
+shift toward canonical saved-layout and seeded-random promotion gates, with
+seed `20260631` preserved as the quality-watch backlog.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

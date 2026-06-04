@@ -718,6 +718,32 @@ June 4, 2026 second generated-seed supervised route-owner visual UAT:
   The current residual quality backlog is recovery/re-aim setup smoothness,
   while route selection and route contracts remain green.
 
+June 4, 2026 third generated-seed supervised route-owner visual UAT:
+
+- Replay command:
+  `python scripts\fetch_planner_route_replay_batch.py --campaign-id live_supervised_mixed_route_family_seed20260633_20260604 --gate-summary artifacts\session\supervised_llm_mixed_fetch_planner_seed20260633_provider_20260604\fetch_planner_handoff_gate\gate_summary.json --route fetch_ready_local --route nav2_reposition_first --route recovery_or_reaim --route scan_or_perceive_first --route ambiguous_or_unsafe_no_go --max-per-route 2 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --route-only-sample-duration-s 6 --timeout-s 180 --package-timeout-s 180`
+- Replay scorecard:
+  `artifacts/session/live_supervised_mixed_route_family_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/analysis_supervised_mixed_route_family_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: route contracts `10/10`, visual packages `10/10`, executable
+  deliveries `6/6`, route-only proofs `4/4`, analyzer clean,
+  setup/contact watches `0`, first-contact blockers `0`, and executable
+  closest approach `0.196m..0.197m`.
+- Coverage: two live samples each for `fetch_ready_local`,
+  `nav2_reposition_first`, `recovery_or_reaim`, `scan_or_perceive_first`, and
+  `ambiguous_or_unsafe_no_go`. The selected set included
+  `seed20260633_scene15_recovery_or_reaim`, a supervised confidence-veto case
+  that fell back to the deterministic recovery route and still delivered.
+- Visual review: inspected frame-sequence contact sheets for fetch-ready,
+  recovery/re-aim, Nav2, scan/perceive, and no-go rows. Executable cases showed
+  setup, contact, push/coast, and delivery; route-only rows showed local fetch
+  withheld.
+- Evidence meaning: generated-seed supervised live UAT now has three green
+  seeds. This strengthens the planner-plus-guard architecture and shifts the
+  next evidence step toward canonical saved-layout and seeded-random gates,
+  unless operator confidence needs one more breadth seed first.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes
