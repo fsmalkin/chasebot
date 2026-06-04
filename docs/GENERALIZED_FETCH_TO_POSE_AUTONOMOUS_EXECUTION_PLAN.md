@@ -392,6 +392,23 @@ keep pure Nav2, learned local control, and larger VLA/world-model control as
 fallback lanes until this six-seed preservation bar exposes a reproducible
 stage gap.
 
+June 4 seven-seed breadth checkpoint: seed `20260633` passed the fourth rough
+post-repair route-owner gate:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260633_breadth_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+Planner routing was `30/30` with `wrong_fetch=0`; the route mix included
+`10` no-go classifications and `4` scan/perception classifications; live
+executable rows were `6/6`; visual packages were `6/6`; and closest approach
+stayed within `0.193m..0.196m`. All six executable rows were predicted as
+contact-quality watches, then analyzed clean after live execution and visual
+review. The regression manifest now preserves seeds `20260627` through
+`20260633`:
+`artifacts/session/analysis_planner_moonshot_regression_set_seven_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
+The result is green with seeded gates `7/7`, live seeded missions `42/42`, and
+visual packages `42/42`. Keep the planner-routed stack as the primary path; the
+next broadening target is live route-family coverage for
+`scan_or_perceive_first` and `ambiguous_or_unsafe_no_go`, while the local
+contact path remains under the seven-seed preservation bar.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

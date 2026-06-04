@@ -278,6 +278,7 @@ def test_default_seeded_gates_include_rough_breadth_seeds():
         "seed20260630",
         "seed20260631",
         "seed20260632",
+        "seed20260633",
     ]
 
 

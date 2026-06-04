@@ -990,6 +990,25 @@ authority. The six-seed manifest is the current preservation bar:
 It is green with seeds `20260627` through `20260632`, seeded gates `6/6`, live
 seeded missions `36/36`, and visual packages `36/36`.
 
+June 4, 2026 seven-seed breadth update: seed `20260633` passed the next rough
+breadth gate at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260633_breadth_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+It delivered `30/30` planner routing, `wrong_fetch=0`, `6/6` executable
+missions, `6/6` visual packages, clean analyzer status, first-contact blockers
+`0`, and closest approach from `0.193m` to `0.196m`. This seed is useful
+because the planner saw `10` no-go classifications and `4` scan/perception
+classifications while the six selected executable rows were all predicted as
+contact-quality watches and then cleared live execution.
+
+The seven-seed manifest is now the current preservation bar:
+`artifacts/session/analysis_planner_moonshot_regression_set_seven_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
+It is green with seeds `20260627` through `20260633`, seeded gates `7/7`, live
+seeded missions `42/42`, and visual packages `42/42`. The architecture remains
+planner-routed route ownership. The next useful architecture expansion is live
+evidence for the planner-only route families, especially
+`scan_or_perceive_first` and `ambiguous_or_unsafe_no_go`, before another local
+contact-control moonshot.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:
