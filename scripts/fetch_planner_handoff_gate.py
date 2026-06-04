@@ -232,15 +232,15 @@ def _refresh_local_fetch_envelope(scene: dict[str, Any]) -> None:
     corridor = scene.get("corridor") if isinstance(scene.get("corridor"), dict) else {}
     geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
     eligible = (
-        0.34 <= float(geometry.get("ball_target_distance_m", 999.0) or 999.0) <= 0.85
-        and 0.24 <= float(geometry.get("robot_ball_distance_m", 999.0) or 999.0) <= 0.52
-        and float(geometry.get("robot_lateral_error_m", 999.0) or 999.0) <= FETCH_READY_LATERAL_LIMIT_M
-        and abs(float(geometry.get("robot_yaw_error_deg", 999.0) or 999.0)) <= FETCH_READY_YAW_LIMIT_DEG
+        0.34 <= _finite_float(geometry.get("ball_target_distance_m"), 999.0) <= 0.85
+        and 0.24 <= _finite_float(geometry.get("robot_ball_distance_m"), 999.0) <= 0.52
+        and _finite_float(geometry.get("robot_lateral_error_m"), 999.0) <= FETCH_READY_LATERAL_LIMIT_M
+        and abs(_finite_float(geometry.get("robot_yaw_error_deg"), 999.0)) <= FETCH_READY_YAW_LIMIT_DEG
         and not bool(corridor.get("blocked", False))
-        and float(corridor.get("clearance_m", 0.0) or 0.0) >= 0.12
-        and float(perception.get("ball_confidence", 0.0) or 0.0) >= 0.65
-        and float(perception.get("target_confidence", 0.0) or 0.0) >= 0.65
-        and float(perception.get("state_age_s", 999.0) or 999.0) <= 2.0
+        and _finite_float(corridor.get("clearance_m"), 0.0) >= 0.12
+        and _finite_float(perception.get("ball_confidence"), 0.0) >= 0.65
+        and _finite_float(perception.get("target_confidence"), 0.0) >= 0.65
+        and _finite_float(perception.get("state_age_s"), 999.0) <= 2.0
     )
     envelope = scene.get("local_fetch_envelope") if isinstance(scene.get("local_fetch_envelope"), dict) else {}
     scene["local_fetch_envelope"] = {
@@ -389,16 +389,16 @@ def deterministic_route_label(scene: dict[str, Any]) -> str:
     perception = scene.get("perception") if isinstance(scene.get("perception"), dict) else {}
     corridor = scene.get("corridor") if isinstance(scene.get("corridor"), dict) else {}
     geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
-    ball_conf = float(perception.get("ball_confidence", 0.0) or 0.0)
-    target_conf = float(perception.get("target_confidence", 0.0) or 0.0)
-    state_age_s = float(perception.get("state_age_s", 999.0) or 999.0)
+    ball_conf = _finite_float(perception.get("ball_confidence"), 0.0)
+    target_conf = _finite_float(perception.get("target_confidence"), 0.0)
+    state_age_s = _finite_float(perception.get("state_age_s"), 999.0)
     blocked = bool(corridor.get("blocked", False))
-    clearance_m = float(corridor.get("clearance_m", 0.0) or 0.0)
-    unsafe_drift_m = float(corridor.get("unsafe_drift_m", 0.0) or 0.0)
-    ball_target_distance_m = float(geometry.get("ball_target_distance_m", 999.0) or 999.0)
-    robot_ball_distance_m = float(geometry.get("robot_ball_distance_m", 999.0) or 999.0)
-    lateral_error_m = float(geometry.get("robot_lateral_error_m", 999.0) or 999.0)
-    yaw_error_deg = abs(float(geometry.get("robot_yaw_error_deg", 999.0) or 999.0))
+    clearance_m = _finite_float(corridor.get("clearance_m"), 0.0)
+    unsafe_drift_m = _finite_float(corridor.get("unsafe_drift_m"), 0.0)
+    ball_target_distance_m = _finite_float(geometry.get("ball_target_distance_m"), 999.0)
+    robot_ball_distance_m = _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
+    lateral_error_m = _finite_float(geometry.get("robot_lateral_error_m"), 999.0)
+    yaw_error_deg = abs(_finite_float(geometry.get("robot_yaw_error_deg"), 999.0))
 
     if ball_conf < 0.65 or target_conf < 0.65 or state_age_s > 2.0:
         return ROUTE_SCAN_OR_PERCEIVE

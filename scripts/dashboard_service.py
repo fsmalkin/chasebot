@@ -84,6 +84,7 @@ TRUTH_TARGET_MODEL_NAMES = (
 TRUTH_TARGET_MODEL_PREFIX = "visit_mission_target_"
 WORLD_STREAM_RESTART_COOLDOWN_S = 20.0
 WORLD_STREAM_RESTART_MAX_ATTEMPTS = 3
+TRUTH_PROBE_READY_TIMEOUT_S = 180.0
 WORLD_STREAM_STALE_DEBOUNCE_S = 3.0
 WORLD_STREAM_WATCHDOG_POLL_S = 1.0
 WORLD_STREAM_TRANSPORT_WINDOW_S = 5.0
@@ -3956,7 +3957,7 @@ echo "TRUTH_LOG=$LOG_FILE"
                     environment_failure_class="truth_probe_start_failed",
                     gate_service_states=gate_service_states,
                 )
-            if not self._wait_for_truth_ready(20.0):
+            if not self._wait_for_truth_ready(TRUTH_PROBE_READY_TIMEOUT_S):
                 truth_failure_text = self._truth_probe_startup_failure_text()
                 raise EnvironmentStartupError(
                     f"Truth probe did not report ready state. {truth_failure_text} {truth_info['output']}".strip(),

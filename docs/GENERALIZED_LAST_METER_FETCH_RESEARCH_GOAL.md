@@ -781,6 +781,25 @@ AI-assisted candidates add two pre-promotion requirements:
 2. an onboard-inference plan compatible with the canonical
    `tensorrt_int8` backend before hardware-transfer claims
 
+June 4, 2026 saved-anchor route-owner update: the planner-routed moonshot now
+has a corrected one-run saved-anchor visual proof. The saved-anchor handoff
+gate passed `3/3` after the planner guard stopped treating exact `0.0`
+lateral/yaw values as missing:
+`artifacts/session/dev_planner_saved_anchor_handoff_gate_zero_numeric_fix_20260604/fetch_planner_handoff_gate/scorecard.md`.
+The live replay passed `3/3` with browser-watchable visual packages:
+`artifacts/session/live_planner_saved_anchor_replay_zero_numeric_fix_8881_20260604/fetch_planner_route_replay_batch/scorecard.md`.
+Use this as current route-owner UAT evidence: `zero` is `fetch_ready_local`;
+`left05` and `right05` are `recovery_or_reaim`; all three delivered inside the
+`0.300m` contract with sequence-reviewed onboard/topdown proof. Promotion still
+requires saved-anchor repeatability and seeded random proof.
+
+June 4, 2026 infrastructure note: two failed live attempts on stale dashboard
+ports reproduced truth-probe startup failures before mission dispatch. The
+route replay harness now preserves those as dashboard-start failures and returns
+fast on `environment_state=error`; the dashboard truth probe allows cold Gazebo
+starts before declaring failure. Future truth/visual startup failures belong to
+evidence-collection infrastructure triage before fetch-control interpretation.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

@@ -112,6 +112,25 @@ def test_deterministic_classifier_routes_moderate_setup_debt_to_recovery():
     assert scene["local_fetch_envelope"]["eligible"] is False
 
 
+def test_deterministic_classifier_keeps_exact_centerline_anchor_fetch_ready():
+    scene = {
+        "perception": {"ball_confidence": 0.98, "target_confidence": 0.99, "state_age_s": 0.15},
+        "corridor": {"blocked": False, "clearance_m": 0.35, "unsafe_drift_m": 0.0},
+        "geometry": {
+            "ball_target_distance_m": 0.57,
+            "ball_target_angle_deg": 0.0,
+            "robot_ball_distance_m": 0.38,
+            "robot_lateral_error_m": 0.0,
+            "robot_yaw_error_deg": 0.0,
+        },
+    }
+
+    gate._refresh_local_fetch_envelope(scene)
+
+    assert gate.deterministic_route_label(scene) == gate.ROUTE_FETCH_READY
+    assert scene["local_fetch_envelope"]["eligible"] is True
+
+
 def test_route_quality_scores_clean_fetch_ready_and_recovery_watch():
     scenes = gate.generate_random_scenes(seed=321, random_cases=20)
     by_expected = {scene["expected_route_label"]: scene for scene in scenes}

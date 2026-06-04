@@ -1,6 +1,6 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 1:58 AM ET",
+  "updated_label": "Updated June 4, 2026, 2:50 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
   "status_label": "Living plan and progress tracker",
   "status_detail": "This page summarizes current direction and evidence. It is route-owner UAT progress, not release or promotion evidence.",
@@ -49,6 +49,54 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Saved-anchor planner-routed one-run proof",
+      "status": "3/3 saved anchors delivered with visual packages; planner gate 3/3 after zero-value geometry fix",
+      "tone": "green",
+      "summary": "The canonical zero/left05/right05 anchors now run through the planner-routed stack, replacing the legacy corridor-push wrapper. The planner handoff gate classifies zero as fetch_ready_local and the off-axis anchors as recovery_or_reaim, with zero wrong fetch dispatches. A fresh-port live replay on dashboard 8881 delivered all three anchors with browser-watchable onboard videos and keyframe sheets. This is saved-anchor visual UAT; promotion still requires repeatability and the seeded gate.",
+      "metrics": [
+        "Planner saved-anchor gate: 3/3, wrong_fetch=0; zero classified fetch_ready_local after fixing exact 0.0 lateral/yaw handling",
+        "Live one-run saved anchors: 3/3 mission pass; 3/3 visual package pass; no mission failures",
+        "Closest approach: left05 0.195m, right05 0.190m, zero 0.193m under the 0.300m contract",
+        "Routes exercised: recovery_or_reaim 2/2, fetch_ready_local 1/1; off-axis anchors remain setup-quality watches by design",
+        "Harness hardening: replay batch fails fast on dashboard start errors; dashboard truth probe now allows cold Gazebo starts before declaring failure"
+      ],
+      "links": [
+        {
+          "label": "Saved-anchor replay scorecard",
+          "url": "/artifacts/session/live_planner_saved_anchor_replay_zero_numeric_fix_8881_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Saved-anchor planner gate scorecard",
+          "url": "/artifacts/session/dev_planner_saved_anchor_handoff_gate_zero_numeric_fix_20260604/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "Left05 onboard proof",
+          "url": "/artifacts/session/20260604T063620421197Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Left05 contact sheet",
+          "url": "/artifacts/session/live_planner_saved_anchor_replay_zero_numeric_fix_8881_20260604_saved_anchor_left05/fetch_visual_uat_package/keyframe_reviews/20260604T063620421197Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Right05 onboard proof",
+          "url": "/artifacts/session/20260604T064057172171Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Right05 contact sheet",
+          "url": "/artifacts/session/live_planner_saved_anchor_replay_zero_numeric_fix_8881_20260604_saved_anchor_right05/fetch_visual_uat_package/keyframe_reviews/20260604T064057172171Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Zero onboard proof",
+          "url": "/artifacts/session/20260604T064608574848Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Zero contact sheet",
+          "url": "/artifacts/session/live_planner_saved_anchor_replay_zero_numeric_fix_8881_20260604_saved_anchor_zero/fetch_visual_uat_package/keyframe_reviews/20260604T064608574848Z_keyframe_review_contact_sheet.png"
+        }
+      ],
+      "preview_image": "/artifacts/session/live_planner_saved_anchor_replay_zero_numeric_fix_8881_20260604_saved_anchor_zero/fetch_visual_uat_package/keyframe_reviews/20260604T064608574848Z_keyframe_review_contact_sheet.png"
+    },
     {
       "title": "Seed 20260626 completed broad route-owner replay",
       "status": "20/20 executable routes delivered; 19/20 clean; 1 mild local-fetch contact watch",

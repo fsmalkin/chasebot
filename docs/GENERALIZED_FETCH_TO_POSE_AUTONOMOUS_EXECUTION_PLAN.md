@@ -173,6 +173,28 @@ Contact quality is a watch item rather than a blocker because delivery and ball
 trajectory are coherent, first-contact blockers are `0`, and pre-contact
 lateral/yaw posture still needs smoothing.
 
+June 4 saved-anchor planner-routed proof: the canonical `zero`, `left05`, and
+`right05` anchors now run through the planner-routed route owner, replacing the
+legacy architecture-revisit wrapper. The handoff gate passed `3/3` after fixing
+exact `0.0` geometry handling, so `zero` remains `fetch_ready_local` and the
+off-axis anchors route to `recovery_or_reaim`:
+`artifacts/session/dev_planner_saved_anchor_handoff_gate_zero_numeric_fix_20260604/fetch_planner_handoff_gate/scorecard.md`.
+The live one-run replay passed `3/3` with visual packages:
+`artifacts/session/live_planner_saved_anchor_replay_zero_numeric_fix_8881_20260604/fetch_planner_route_replay_batch/scorecard.md`.
+Closest approaches were `0.195m` for `left05`, `0.190m` for `right05`, and
+`0.193m` for `zero`. Sequence review of the onboard/topdown sheets confirmed
+visible delivery into the circle for all three anchors. This is saved-anchor
+visual UAT. Promotion still requires saved-anchor repeatability and seeded
+random proof.
+
+June 4 harness hardening: route replay now returns immediately when dashboard
+startup reports `environment_state=error`, preserving truth-probe failures as
+infrastructure evidence before mission launch. Dashboard startup now allows a
+longer cold Gazebo truth-probe window, which recovered the saved-anchor live
+proof on a fresh service port. Keep this distinction explicit: truth/visual
+startup failure blocks evidence collection and belongs to
+infrastructure triage before fetch-control interpretation.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

@@ -396,3 +396,25 @@ def test_replay_batch_records_dashboard_start_failure_reason(tmp_path, monkeypat
     assert summary["rows"][0]["returncode"] == -1
     assert "environment_state=error" in summary["rows"][0]["failure_reason"]
     assert "Truth probe did not report robot visibility." in summary["rows"][0]["failure_reason"]
+
+
+def test_wait_for_dashboard_state_returns_start_error_without_full_timeout(monkeypatch):
+    monkeypatch.setattr(
+        batch,
+        "dashboard_state",
+        lambda *_args, **_kwargs: {
+            "environment_state": "error",
+            "phase": "environment_starting",
+            "last_error": "Truth probe did not report robot visibility.",
+        },
+    )
+
+    def fail_sleep(_duration):
+        raise AssertionError("error state should return before sleeping")
+
+    monkeypatch.setattr(batch.time, "sleep", fail_sleep)
+
+    state = batch.wait_for_dashboard_state("http://dash", timeout_s=420.0, want_ready=True)
+
+    assert state["environment_state"] == "error"
+    assert "Truth probe" in state["last_error"]

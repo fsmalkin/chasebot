@@ -114,6 +114,8 @@ def wait_for_dashboard_state(
                 and state.get("operator_view_ready")
             )
             stopped = env_state in {"stopped", "error"} or phase == "stopped"
+            if want_ready and env_state == "error":
+                return state
             if (want_ready and ready) or (want_stopped and stopped):
                 return state
             if not want_ready and not want_stopped:
