@@ -380,6 +380,129 @@ def test_llm_shadow_gate_provider_ok_sets_ready_when_guard_agrees(tmp_path, monk
     assert summary["guard_disagreement_count"] == 0
 
 
+def test_llm_supervised_guarded_accepts_only_guard_agreeing_high_confidence(monkeypatch):
+    scene = next(
+        item for item in gate.generate_random_scenes(seed=456, random_cases=10)
+        if item["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+    )
+
+    def fake_call_openai_responses(**_kwargs):
+        return {
+            "output": [
+                {
+                    "type": "function_call",
+                    "name": gate.OPENAI_TOOL_NAME,
+                    "arguments": (
+                        '{"route_label": "nav2_reposition_first", '
+                        '"rationale_short": "matches guard", "confidence": 0.96}'
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr(gate, "call_openai_responses", fake_call_openai_responses)
+
+    decision = gate.decide_scene(
+        scene,
+        planner_mode=gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED,
+        openai_api_key="test-key",
+    )
+
+    assert decision["route_label"] == gate.ROUTE_NAV2_REPOSITION
+    assert decision["planner_mode_effective"] == gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED
+    assert decision["provider_status"] == "ok"
+    assert decision["llm_supervised_guard"]["accepted"] is True
+    assert decision["llm_supervised_guard"]["veto_reasons"] == []
+
+
+def test_llm_supervised_guarded_vetoes_disagreement_and_keeps_guard_route(monkeypatch):
+    scene = next(
+        item for item in gate.generate_random_scenes(seed=456, random_cases=10)
+        if item["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+    )
+
+    def fake_call_openai_responses(**_kwargs):
+        return {
+            "output": [
+                {
+                    "type": "function_call",
+                    "name": gate.OPENAI_TOOL_NAME,
+                    "arguments": (
+                        '{"route_label": "fetch_ready_local", '
+                        '"rationale_short": "too eager", "confidence": 0.99}'
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr(gate, "call_openai_responses", fake_call_openai_responses)
+
+    decision = gate.decide_scene(
+        scene,
+        planner_mode=gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED,
+        openai_api_key="test-key",
+    )
+
+    assert decision["route_label"] == gate.ROUTE_NAV2_REPOSITION
+    assert decision["planner_mode_effective"] == "deterministic_fallback"
+    assert decision["provider_status"] == "ok"
+    assert decision["wrong_fetch_ready_dispatch"] is False
+    assert decision["llm_supervised_guard"]["accepted"] is False
+    assert decision["llm_supervised_guard"]["decision"] == "vetoed"
+    assert "guard_disagreement" in decision["llm_supervised_guard"]["veto_reasons"]
+
+
+def test_llm_supervised_gate_summary_reports_accepts(tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+    expected_routes = iter(
+        scene["expected_route_label"]
+        for scene in gate.generate_random_scenes(seed=123, random_cases=10, scene_set=gate.HARD_SCENE_SET)
+    )
+
+    def fake_call_openai_responses(**_kwargs):
+        route_label = next(expected_routes)
+        return {
+            "output": [
+                {
+                    "type": "function_call",
+                    "name": gate.OPENAI_TOOL_NAME,
+                    "arguments": (
+                        '{"route_label": "%s", "rationale_short": "fixture route", "confidence": 0.95}'
+                        % route_label
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr(gate, "call_openai_responses", fake_call_openai_responses)
+    args = SimpleNamespace(
+        campaign_id="planner_gate_llm_supervised_provider_ok",
+        scene_set=gate.HARD_SCENE_SET,
+        scene_descriptor_json=[],
+        scene_dir="",
+        random_cases=10,
+        seed=123,
+        planner_mode=gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED,
+        dry_run=True,
+        openai_model=gate.DEFAULT_OPENAI_MODEL,
+        openai_api_key="test-key",
+        openai_base_url=gate.DEFAULT_OPENAI_BASE_URL,
+        openai_org_id="",
+        openai_project_id="",
+        reasoning_effort=gate.DEFAULT_REASONING_EFFORT,
+        timeout_s=30.0,
+    )
+
+    summary = gate.run_gate(args)
+
+    assert summary["pass"] is True
+    assert summary["llm_supervised_ready"] is True
+    assert summary["llm_supervised_accept_count"] == 10
+    assert summary["llm_supervised_veto_count"] == 0
+    assert summary["provider_status_counts"] == {"ok": 10}
+    assert summary["planner_mode_effective_counts"] == {gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED: 10}
+
+
 def test_fetch_ready_layout_writer_preserves_planner_scene(tmp_path):
     scene = next(
         item for item in gate.generate_random_scenes(seed=789, random_cases=10)

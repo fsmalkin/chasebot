@@ -3123,7 +3123,7 @@ class DashboardController:
                     return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": "random_seed must be an integer"}
         if planner_gated_random:
             planner_mode = str(overrides.get("planner_mode", fetch_planner_gate.PLANNER_MODE_DETERMINISTIC) or "").strip()
-            if planner_mode not in {fetch_planner_gate.PLANNER_MODE_DETERMINISTIC, fetch_planner_gate.PLANNER_MODE_LLM_SHADOW}:
+            if planner_mode not in set(fetch_planner_gate.PLANNER_MODES):
                 return HTTPStatus.BAD_REQUEST, {"accepted": False, "error": f"unknown planner_mode: {planner_mode}"}
             scenario_overrides["planner_gated_random"] = True
             scenario_overrides["planner_mode"] = planner_mode

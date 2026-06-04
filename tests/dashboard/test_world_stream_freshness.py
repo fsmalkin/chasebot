@@ -482,10 +482,10 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "LLM-shadow 220-case route rollup green"
-    assert payload["latest_evidence"][0]["title"] == "LLM-shadow 220-case route rollup is green"
+    assert payload["status_label"] == "Supervised LLM route guard hard proof green"
+    assert payload["latest_evidence"][0]["title"] == "Supervised LLM route guard hard proof is green"
     assert payload["latest_evidence"][0]["links"][0]["url"].endswith(
-        "/fetch_planner_llm_shadow_evidence/scorecard.md"
+        "/fetch_planner_handoff_gate/scorecard.md"
     )
     route_samples = payload["uat_review_bundle"]["route_samples"]
     assert len(route_samples) == 10
@@ -2823,6 +2823,45 @@ def test_request_golf_fetch_planner_gated_random_accepts_mode(monkeypatch, tmp_p
     assert controller.pending_scenario_overrides["planner_gated_random"] is True
     assert controller.pending_scenario_overrides["planner_mode"] == dashboard_service.fetch_planner_gate.PLANNER_MODE_LLM_SHADOW
     assert controller.pending_scenario_overrides["random_seed"] == 456
+    assert started
+
+
+def test_request_golf_fetch_planner_gated_random_accepts_supervised_mode(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["environment_state"] = "environment_ready"
+    controller.state["scenario_state"] = "ready"
+    controller._refresh_control_plane_state = lambda force=False: None
+    started: list[object] = []
+
+    class _FakeThread:
+        def __init__(self, target, name, daemon):
+            self.target = target
+            self.name = name
+            self.daemon = daemon
+            started.append(self)
+
+        def start(self) -> None:
+            return None
+
+        def is_alive(self) -> bool:
+            return False
+
+    monkeypatch.setattr(dashboard_service.threading, "Thread", _FakeThread)
+
+    status, payload = controller.request_scenario_run(
+        dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_SCENARIO_ID,
+        {
+            "planner_gated_random": True,
+            "planner_mode": dashboard_service.fetch_planner_gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED,
+            "random_seed": "456",
+        },
+    )
+
+    assert status == 202
+    assert payload["accepted"] is True
+    assert controller.pending_scenario_overrides["planner_mode"] == (
+        dashboard_service.fetch_planner_gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED
+    )
     assert started
 
 

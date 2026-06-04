@@ -1029,6 +1029,15 @@ had one transient read timeout on the first pass and cleared on a longer-timeout
 rerun. The next roadmap slice packages the supervised-live route-selection
 threshold, fallback policy, and hardware-transfer plan.
 
+The first supervised route guard proof is green at
+`artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+The `llm_supervised_guarded` mode accepted `10/10` hard-matrix model proposals,
+vetoed `0`, kept guard agreement at `10/10`, and produced wrong fetch-ready
+dispatches `0`. The dry proof establishes the acceptance policy before live
+authority: provider success, confidence threshold, and deterministic guard
+agreement are all required. The next roadmap slice repeats supervised dry
+scoring across the seven-seed manifest.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

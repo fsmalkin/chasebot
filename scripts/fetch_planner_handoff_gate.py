@@ -34,6 +34,12 @@ DEFAULT_RANDOM_CASES = 20
 DEFAULT_SEED = 20260530
 PLANNER_MODE_DETERMINISTIC = "deterministic"
 PLANNER_MODE_LLM_SHADOW = "llm_shadow"
+PLANNER_MODE_LLM_SUPERVISED_GUARDED = "llm_supervised_guarded"
+PLANNER_MODES = (
+    PLANNER_MODE_DETERMINISTIC,
+    PLANNER_MODE_LLM_SHADOW,
+    PLANNER_MODE_LLM_SUPERVISED_GUARDED,
+)
 ROUTE_FETCH_READY = "fetch_ready_local"
 ROUTE_NAV2_REPOSITION = "nav2_reposition_first"
 ROUTE_SCAN_OR_PERCEIVE = "scan_or_perceive_first"
@@ -63,6 +69,7 @@ PLANNER_GATE_KIND = "fetch_planner_handoff_gate"
 PLANNER_MIXED_PROFILE = "planner_mixed_v1"
 HARD_SCENE_SET = "hard_mixed_fetch_planner_v1"
 OPENAI_TOOL_NAME = "emit_fetch_planner_route"
+LLM_SUPERVISED_MIN_CONFIDENCE = 0.90
 CONTACT_QUALITY_CLEAN_LATERAL_M = 0.030
 CONTACT_QUALITY_CLEAN_YAW_DEG = 3.0
 FETCH_READY_LATERAL_LIMIT_M = 0.050
@@ -97,7 +104,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument(
         "--planner-mode",
-        choices=(PLANNER_MODE_DETERMINISTIC, PLANNER_MODE_LLM_SHADOW),
+        choices=PLANNER_MODES,
         default=PLANNER_MODE_DETERMINISTIC,
     )
     parser.add_argument("--dry-run", action="store_true")
@@ -864,8 +871,12 @@ def decide_scene(
     rationale = "Deterministic guard classified the scene."
     confidence = 1.0
     planner_mode_effective = PLANNER_MODE_DETERMINISTIC
+    llm_route_label = ""
+    llm_rationale = ""
+    llm_confidence = 0.0
+    llm_supervised_guard: dict[str, Any] = {}
 
-    if planner_mode == PLANNER_MODE_LLM_SHADOW:
+    if planner_mode in {PLANNER_MODE_LLM_SHADOW, PLANNER_MODE_LLM_SUPERVISED_GUARDED}:
         provider_request = build_llm_shadow_request(
             scene=scene,
             model=openai_model,
@@ -887,9 +898,12 @@ def decide_scene(
                     project_id=openai_project_id,
                 )
                 route = extract_llm_route(provider_response)
-                route_label = route["route_label"]
-                rationale = route["rationale_short"]
-                confidence = float(route["confidence"])
+                llm_route_label = route["route_label"]
+                llm_rationale = route["rationale_short"]
+                llm_confidence = float(route["confidence"])
+                route_label = llm_route_label
+                rationale = llm_rationale
+                confidence = llm_confidence
                 provider_status = "ok"
                 planner_mode_effective = PLANNER_MODE_LLM_SHADOW
             except Exception as exc:
@@ -898,6 +912,44 @@ def decide_scene(
                 planner_mode_effective = "deterministic_fallback"
                 rationale = "LLM shadow failed validation; deterministic guard provided the route."
                 confidence = 0.0
+
+        if planner_mode == PLANNER_MODE_LLM_SUPERVISED_GUARDED:
+            veto_reasons: list[str] = []
+            if provider_status != "ok":
+                veto_reasons.append("provider_not_ok")
+            if llm_route_label and llm_route_label != guard_route:
+                veto_reasons.append("guard_disagreement")
+            if not llm_route_label:
+                veto_reasons.append("missing_llm_route")
+            if llm_confidence < LLM_SUPERVISED_MIN_CONFIDENCE:
+                veto_reasons.append("confidence_below_threshold")
+            accepted = not veto_reasons
+            if accepted:
+                route_label = llm_route_label
+                rationale = (
+                    f"LLM supervised route accepted under deterministic guard agreement. {llm_rationale}"
+                ).strip()
+                confidence = llm_confidence
+                planner_mode_effective = PLANNER_MODE_LLM_SUPERVISED_GUARDED
+            else:
+                route_label = guard_route
+                rationale = (
+                    "LLM supervised route vetoed; deterministic guard provided the route. "
+                    f"Reasons: {', '.join(veto_reasons)}."
+                )
+                confidence = llm_confidence if provider_status == "ok" else 0.0
+                planner_mode_effective = "deterministic_fallback"
+            llm_supervised_guard = {
+                "mode": PLANNER_MODE_LLM_SUPERVISED_GUARDED,
+                "accepted": bool(accepted),
+                "decision": "accepted" if accepted else "vetoed",
+                "veto_reasons": veto_reasons,
+                "confidence_threshold": LLM_SUPERVISED_MIN_CONFIDENCE,
+                "llm_route_label": llm_route_label,
+                "guard_route_label": guard_route,
+                "llm_confidence": round(float(llm_confidence), 6),
+                "provider_status": provider_status,
+            }
 
     route_admissibility = route_admissibility_for_scene(scene, route_label)
     if bool(route_admissibility.get("changed", False)):
@@ -930,6 +982,7 @@ def decide_scene(
         "confidence": round(float(confidence), 6),
         "route_quality": route_quality,
         "route_admissibility": route_admissibility,
+        "llm_supervised_guard": llm_supervised_guard,
         "provider_status": provider_status,
         "provider_error": provider_error,
         "provider_request": provider_request,
@@ -1069,6 +1122,18 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     wrong_fetch_dispatch_count = sum(1 for result in results if bool(result.get("wrong_fetch_ready_dispatch", False)))
     guard_agreement_count = sum(1 for result in results if bool(result.get("guard_agrees", False)))
     guard_disagreement_count = len(results) - guard_agreement_count
+    llm_supervised_accept_count = sum(
+        1
+        for result in results
+        if isinstance(result.get("llm_supervised_guard"), dict)
+        and bool(result["llm_supervised_guard"].get("accepted", False))
+    )
+    llm_supervised_veto_count = sum(
+        1
+        for result in results
+        if isinstance(result.get("llm_supervised_guard"), dict)
+        and str(result["llm_supervised_guard"].get("decision", "") or "") == "vetoed"
+    )
     provider_status_counts: dict[str, int] = {}
     planner_mode_effective_counts: dict[str, int] = {}
     for result in results:
@@ -1080,6 +1145,15 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     llm_shadow_ready = bool(
         str(args.planner_mode) == PLANNER_MODE_LLM_SHADOW
         and llm_shadow_provider_ok_count == len(results)
+        and guard_disagreement_count == 0
+        and pass_count == len(results)
+        and wrong_fetch_dispatch_count == 0
+    )
+    llm_supervised_ready = bool(
+        str(args.planner_mode) == PLANNER_MODE_LLM_SUPERVISED_GUARDED
+        and llm_shadow_provider_ok_count == len(results)
+        and llm_supervised_accept_count == len(results)
+        and llm_supervised_veto_count == 0
         and guard_disagreement_count == 0
         and pass_count == len(results)
         and wrong_fetch_dispatch_count == 0
@@ -1110,6 +1184,9 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "planner_mode_effective_counts": planner_mode_effective_counts,
         "llm_shadow_provider_ok_count": llm_shadow_provider_ok_count,
         "llm_shadow_ready": llm_shadow_ready,
+        "llm_supervised_accept_count": llm_supervised_accept_count,
+        "llm_supervised_veto_count": llm_supervised_veto_count,
+        "llm_supervised_ready": llm_supervised_ready,
         "route_counts": route_counts,
         "expected_route_counts": expected_counts,
         "results": results,
@@ -1137,6 +1214,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- provider status counts: `{summary.get('provider_status_counts', {})}`",
         f"- effective planner modes: `{summary.get('planner_mode_effective_counts', {})}`",
         f"- llm_shadow_ready: `{summary.get('llm_shadow_ready', False)}`",
+        f"- llm_supervised accepted/vetoed: `{summary.get('llm_supervised_accept_count', 0)}/{summary.get('llm_supervised_veto_count', 0)}`",
+        f"- llm_supervised_ready: `{summary.get('llm_supervised_ready', False)}`",
         "",
         "## Routes",
         "",

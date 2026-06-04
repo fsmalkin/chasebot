@@ -471,6 +471,13 @@ dispatches stayed at `0`. Seed `20260630` had one transient provider timeout on
 the first pass and cleared on the longer-timeout rerun. The next autonomous step
 is defining supervised-live route-selection thresholds and fallback policy.
 
+The supervised route guard now has a first hard-matrix proof:
+`artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+In `llm_supervised_guarded` mode, the provider returned `ok` for all ten hard
+scenes, accepted proposals `10/10`, vetoed `0`, matched the deterministic guard
+`10/10`, and produced wrong fetch-ready dispatches `0`. Run the same supervised
+dry mode over the seven-seed manifest before live route-selection authority.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

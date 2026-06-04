@@ -602,6 +602,20 @@ June 4, 2026 LLM-shadow seven-seed manifest rollup:
   hardware-transfer review. Deterministic guards and bounded executors remain
   the live authority.
 
+June 4, 2026 supervised LLM route guard proof:
+
+- Command:
+  `python scripts\fetch_planner_handoff_gate.py --campaign-id supervised_llm_hard_mixed_fetch_planner_v1_20260604 --scene-set hard_mixed_fetch_planner_v1 --random-cases 10 --seed 20260604 --planner-mode llm_supervised_guarded --dry-run --timeout-s 90`
+- Scorecard:
+  `artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`
+- Result: provider `ok` on `10/10`, route pass/fail `10/0`, guard agreement
+  `10/10`, supervised accept/veto `10/0`, and wrong fetch-ready dispatches `0`.
+- Evidence meaning: the first supervised policy accepts LLM route output only
+  under provider success, confidence threshold, and deterministic guard
+  agreement. This is still dry route-selection evidence; live motion remains
+  deterministic and guarded. The next gate is supervised dry scoring across the
+  seven-seed manifest.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

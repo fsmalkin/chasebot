@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 5:21 PM ET",
+  "updated_label": "Updated June 4, 2026, 5:26 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "LLM-shadow 220-case route rollup green",
-  "status_detail": "The real LLM-shadow planner now has a full hard-plus-seven-seed manifest route-selection rollup. It passed 220/220 route classifications, provider status was ok on 220/220 cases after a clean timeout rerun for seed 20260630, guard agreement was 220/220, and wrong fetch-ready dispatches stayed at 0. This supports LLM/world-state planning as a high-level route classifier while deterministic guards and bounded executors remain the live authority.",
+  "status_label": "Supervised LLM route guard hard proof green",
+  "status_detail": "The route planner now has both a full 220-case LLM-shadow manifest and a first supervised-guarded dry proof. In supervised mode on the hard matrix, the provider returned ok on 10/10 cases, the model matched the deterministic guard on 10/10, all 10 proposals were accepted, vetoes were 0, and wrong fetch-ready dispatches stayed at 0. Live execution remains guarded; this proves the acceptance/veto policy shape before broader supervised dry gates.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,39 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Supervised LLM route guard hard proof is green",
+      "status": "llm_supervised_guarded hard matrix: 10/10 accepted, 0 vetoes",
+      "tone": "green",
+      "summary": "The first supervised-guarded route-selection proof accepted the model only when provider status was ok, confidence cleared the threshold, and the route matched the deterministic guard. On the hard mixed matrix, all ten proposals were accepted, guard agreement was 10/10, and wrong fetch-ready dispatches stayed at zero. This makes the live-authority boundary explicit: the LLM can propose high-level routes, while deterministic guards still veto and bounded executors still move the robot.",
+      "metrics": [
+        "Supervised hard gate: pass=true; route pass/fail=10/0",
+        "Provider: ok=10/10; effective planner modes={llm_supervised_guarded: 10}",
+        "Accept/veto: accepted=10; vetoed=0; confidence threshold=0.90",
+        "Guard agreement: 10/10; wrong fetch-ready dispatches=0",
+        "Precondition evidence: shadow manifest remains green at 220/220 across hard matrix + seven seeds",
+        "Authority: dry route-selection proof only; live execution remains deterministic and guarded"
+      ],
+      "links": [
+        {
+          "label": "Supervised LLM hard matrix scorecard",
+          "url": "/artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "LLM-shadow 220-case manifest scorecard",
+          "url": "/artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md"
+        },
+        {
+          "label": "Hard live analyzer scorecard",
+          "url": "/artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Opposite-side Nav2 left onboard proof",
+          "url": "/artifacts/session/20260604T203417248539Z/visual/raw_camera_browser.mp4"
+        }
+      ],
+      "preview_image": "/artifacts/session/20260604T203417248539Z/visual/keyframe_review_contact_sheet.png"
+    },
     {
       "title": "LLM-shadow 220-case route rollup is green",
       "status": "hard matrix + seven-seed manifest: 220/220 routes, 220/220 guard agreement",
@@ -3724,7 +3757,7 @@
     }
   ],
   "next_steps": [
-    "Define the supervised-live route-selection threshold and fallback policy from the 220-case shadow manifest, then package a hardware-transfer review for the planner-routed stack.",
+    "Run llm_supervised_guarded dry gates over the seven-seed manifest, then package the supervised-live route-selection threshold and hardware-transfer review.",
     "Draft the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, model provenance checks, and visual-evidence capture on robot hardware.",
     "Keep the seven-seed manifest, two rough mixed-family UAT packages, and hard mixed matrix as the preservation bar before crediting route-owner, recovery-window, visual-packaging, or contact-servo changes.",
     "Measure the runtime cost of the longer recovery window and decide whether hardware UAT needs a tighter progress-based timeout instead of a fixed duration.",
@@ -3844,6 +3877,10 @@
       "Escalate only reproducible visual/telemetry mismatches into architecture reconsideration."
     ],
     "links": [
+      {
+        "label": "Supervised LLM hard matrix scorecard",
+        "url": "/artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md"
+      },
       {
         "label": "LLM-shadow 220-case manifest scorecard",
         "url": "/artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md"

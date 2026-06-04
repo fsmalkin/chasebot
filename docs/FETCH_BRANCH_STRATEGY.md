@@ -313,6 +313,12 @@ Planner-routed moonshot update, June 2:
   longer-timeout rerun. Branch decision: define supervised-live
   route-selection thresholds and fallback policy before giving LLM output live
   authority.
+- supervised LLM route guard proof:
+  `artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`
+  validates `llm_supervised_guarded` on the hard matrix. It accepted `10/10`
+  model proposals, vetoed `0`, kept guard agreement `10/10`, and kept wrong
+  fetch-ready dispatches `0`. Next branch work is supervised dry scoring across
+  the seven-seed manifest, then hardware-transfer review.
 - frozen planner-layout replay fix:
   fresh seed `seed20260608_scene24_fetch_ready_local` first failed as a manual
   target-layout replay because the runner used the old constant-push defaults

@@ -777,6 +777,13 @@ pass/fail `220/0`, and wrong fetch-ready dispatches `0`. Keep the model in
 supervised route selection until the live threshold and fallback policy are
 specified.
 
+The first supervised route guard proof is also green:
+`artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+The guarded mode accepted LLM proposals only when provider success, confidence,
+and deterministic guard agreement all held. On the hard matrix it accepted
+`10/10`, vetoed `0`, and kept wrong fetch-ready dispatches at `0`. The next AI
+control step is supervised dry scoring over the seven-seed manifest.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

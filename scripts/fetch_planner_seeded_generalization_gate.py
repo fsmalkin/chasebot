@@ -386,7 +386,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scene-set", default=planner_gate.DEFAULT_SCENE_SET)
     parser.add_argument("--scene-descriptor-json", action="append", default=[])
     parser.add_argument("--scene-dir", default="")
-    parser.add_argument("--planner-mode", choices=(planner_gate.PLANNER_MODE_DETERMINISTIC, planner_gate.PLANNER_MODE_LLM_SHADOW), default=planner_gate.PLANNER_MODE_DETERMINISTIC)
+    parser.add_argument("--planner-mode", choices=planner_gate.PLANNER_MODES, default=planner_gate.PLANNER_MODE_DETERMINISTIC)
     parser.add_argument("--openai-model", default=planner_gate.DEFAULT_OPENAI_MODEL)
     parser.add_argument("--openai-api-key", default=os.environ.get("OPENAI_API_KEY", ""))
     parser.add_argument("--openai-base-url", default=os.environ.get("OPENAI_BASE_URL", planner_gate.DEFAULT_OPENAI_BASE_URL))

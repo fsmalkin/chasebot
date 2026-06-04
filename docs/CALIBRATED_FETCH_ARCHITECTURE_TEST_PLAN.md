@@ -271,6 +271,13 @@ dispatches `0`. Seed `20260630` required a longer-timeout rerun after one
 transient provider read timeout. Treat this as shadow route-selection evidence;
 live authority still requires a supervised threshold and fallback policy.
 
+The first supervised guard proof is green:
+`artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+`llm_supervised_guarded` accepted `10/10` hard-matrix proposals, vetoed `0`,
+matched the deterministic guard `10/10`, and produced wrong fetch-ready
+dispatches `0`. Treat this as dry supervised route-selection evidence; the next
+calibrated gate is supervised dry scoring over the seven-seed manifest.
+
 ## Research Thread Output
 
 Before starting another implementation spike, produce a findings matrix across

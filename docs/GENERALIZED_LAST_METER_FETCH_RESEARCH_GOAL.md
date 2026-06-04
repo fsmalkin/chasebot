@@ -1084,6 +1084,13 @@ fetch-ready dispatches `0`. Seed `20260630` had one transient read timeout that
 cleared on rerun. The next research step is defining the supervised-live
 route-selection threshold and hardware-transfer plan.
 
+The first supervised route guard proof is now green:
+`artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+`llm_supervised_guarded` accepted the hard-matrix model route output `10/10`,
+vetoed `0`, kept guard agreement `10/10`, and kept wrong fetch-ready dispatches
+at `0`. This establishes the route-level acceptance policy in dry mode before
+any live LLM route authority.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:
