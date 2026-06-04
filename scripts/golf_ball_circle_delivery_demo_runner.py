@@ -857,12 +857,29 @@ def line_servo_command(
         and abs(robot_lateral_error) > effective_contact_lateral_ready_m * 1.50
         and abs(line_yaw_error) <= 0.45
     )
+    recovery_line_acquire_yaw_hold_active = bool(
+        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        and 0.18 < distance_to_contact <= 0.24
+        and not contact_ready
+        and abs(robot_lateral_error) <= recovery_line_acquire_lateral_m
+        and abs(line_yaw_error) > max(float(contact_yaw_ready_rad) * 4.0, 0.22)
+    )
+    recovery_contact_yaw_hold_threshold_rad = (
+        max(float(contact_yaw_ready_rad) * 4.0, 0.22)
+        if recovery_line_acquire_yaw_hold_active
+        else float(contact_yaw_ready_rad)
+    )
     recovery_contact_yaw_hold_active = bool(
         clean_route_label == ROUTE_RECOVERY_OR_REAIM
-        and 0.10 < distance_to_contact <= 0.18
+        and (
+            recovery_line_acquire_yaw_hold_active
+            or (
+                0.10 < distance_to_contact <= 0.18
+                and abs(robot_lateral_error) <= effective_contact_lateral_ready_m
+            )
+        )
         and not contact_ready
-        and abs(robot_lateral_error) <= effective_contact_lateral_ready_m
-        and abs(line_yaw_error) > 0.25
+        and abs(line_yaw_error) > recovery_contact_yaw_hold_threshold_rad
     )
     ball_motion_m = 0.0
     if ball_start_pose is not None:
@@ -1025,7 +1042,9 @@ def line_servo_command(
         "recovery_final_reaim_active": recovery_final_reaim_active,
         "local_close_settle_active": local_close_settle_active,
         "recovery_close_settle_active": recovery_close_settle_active,
+        "recovery_line_acquire_yaw_hold_active": recovery_line_acquire_yaw_hold_active,
         "recovery_contact_yaw_hold_active": recovery_contact_yaw_hold_active,
+        "recovery_contact_yaw_hold_threshold_rad": round(float(recovery_contact_yaw_hold_threshold_rad), 6),
         "recovery_contact_lateral_trim_active": recovery_contact_lateral_trim_active,
         "lateral_reaim_rad": round(float(lateral_reaim), 6),
         "lateral_reaim_release_m": round(float(lateral_reaim_release_m), 6),

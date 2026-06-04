@@ -1,6 +1,6 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 3, 2026, 7:33 PM ET",
+  "updated_label": "Updated June 3, 2026, 8:20 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
   "status_label": "Living plan and progress tracker",
   "status_detail": "This page summarizes current direction and evidence. It is route-owner UAT progress, not release or promotion evidence.",
@@ -49,6 +49,70 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Seed 20260622 recovery yaw-hold validation",
+      "status": "7/7 recovery routes delivered clean after yaw-hold threshold fix",
+      "tone": "green",
+      "summary": "The fresh seed20260622 broad replay delivered 20/20 executable rows and exposed one recovery contact-quality watch. Tightening recovery yaw hold cleared the scene22 watch in targeted repro, then all seven recovery_or_reaim rows from the seed delivered cleanly with zero setup, execution, contact, or first-contact watches.",
+      "metrics": [
+        "Planner gate: 30/30, wrong_fetch=0",
+        "Fresh broad replay before final yaw threshold: 20/20 delivered; 1 recovery watch",
+        "Recovery slice after final yaw threshold: 7/7 delivered; setup watches 0; execution watches 0; contact watches 0; first-contact blockers 0",
+        "Scene22 first-contact yaw improved from about 34.5deg to 2.2deg across targeted repros",
+        "Promotion evidence remains false until canonical saved-layout and seeded-random promotion gates rerun"
+      ],
+      "links": [
+        {
+          "label": "Recovery-slice scorecard",
+          "url": "/artifacts/session/analysis_route_quality_seed20260622_recovery_yaw_hold_7case_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Recovery-slice summary JSON",
+          "url": "/artifacts/session/analysis_route_quality_seed20260622_recovery_yaw_hold_7case_20260604/fetch_planner_route_uat_analyzer/route_uat_summary.json"
+        },
+        {
+          "label": "Recovery keyframe montage",
+          "url": "/artifacts/session/analysis_route_quality_seed20260622_recovery_yaw_hold_7case_20260604/fetch_planner_route_uat_analyzer/seed20260622_recovery_yaw_hold_7case_keyframe_montage.png"
+        },
+        {
+          "label": "Scene22 clean onboard proof",
+          "url": "/artifacts/session/20260604T001641961992Z/visual/raw_camera_browser.mp4"
+        }
+      ],
+      "preview_image": "/artifacts/session/analysis_route_quality_seed20260622_recovery_yaw_hold_7case_20260604/fetch_planner_route_uat_analyzer/seed20260622_recovery_yaw_hold_7case_keyframe_montage.png"
+    },
+    {
+      "title": "Seed 20260622 fresh broad route-owner batch before yaw-hold threshold",
+      "status": "20/20 executable routes delivered; 1 recovery yaw watch",
+      "tone": "watch",
+      "summary": "This fresh broad seed proves breadth after the lateral-trim patch: local, Nav2-reposition, and recovery routes all delivered. It also exposed scene22 as a recovery setup/yaw-quality gap, which drove the yaw-hold threshold fix and recovery-slice rerun.",
+      "metrics": [
+        "Planner gate: 30/30, wrong_fetch=0",
+        "Live executable routes: 20/20 delivered",
+        "Route spread: fetch_ready_local 4/4, nav2_reposition_first 9/9, recovery_or_reaim 7/7",
+        "Quality watches: setup 1, execution 1, contact 1; first-contact blockers 0",
+        "Watch row: scene22 recovery_or_reaim, closest 0.197m, first-contact yaw/lateral quality debt"
+      ],
+      "links": [
+        {
+          "label": "Broad-batch scorecard",
+          "url": "/artifacts/session/analysis_route_quality_seed20260622_all_exec20_lateral_trim_20260603/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Broad-batch summary JSON",
+          "url": "/artifacts/session/analysis_route_quality_seed20260622_all_exec20_lateral_trim_20260603/fetch_planner_route_uat_analyzer/route_uat_summary.json"
+        },
+        {
+          "label": "Broad-batch keyframe montage",
+          "url": "/artifacts/session/analysis_route_quality_seed20260622_all_exec20_lateral_trim_20260603/fetch_planner_route_uat_analyzer/seed20260622_all_exec20_lateral_trim_keyframe_montage.png"
+        },
+        {
+          "label": "Replay batch scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260622_all_exec20_lateral_trim_20260603/fetch_planner_route_replay_batch/scorecard.md"
+        }
+      ],
+      "preview_image": "/artifacts/session/analysis_route_quality_seed20260622_all_exec20_lateral_trim_20260603/fetch_planner_route_uat_analyzer/seed20260622_all_exec20_lateral_trim_keyframe_montage.png"
+    },
     {
       "title": "Seed 20260621 recovery lateral-trim validation",
       "status": "5/5 recovery routes delivered clean after lateral trim",
@@ -265,6 +329,59 @@
   ],
   "running_video_proof": [],
   "recent_video_proof": [
+    {
+      "title": "Seed 20260622 recovery yaw-hold clean slice",
+      "summary": "The seven-row recovery replay validates the yaw-hold threshold fix across every recovery_or_reaim row in seed20260622.",
+      "preview_image": "/artifacts/session/analysis_route_quality_seed20260622_recovery_yaw_hold_7case_20260604/fetch_planner_route_uat_analyzer/seed20260622_recovery_yaw_hold_7case_keyframe_montage.png",
+      "proves": "Recovery delivered 7/7 with contact watches 0, setup watches 0, execution watches 0, and first-contact blockers 0. Scene22, the prior watch row, delivered clean in the slice.",
+      "limits": "This validates the recovery route after the yaw-hold fix. It remains route-owner visual UAT with promotion_evidence=false.",
+      "links": [
+        {
+          "label": "Recovery-slice scorecard",
+          "url": "/artifacts/session/analysis_route_quality_seed20260622_recovery_yaw_hold_7case_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Recovery keyframe montage",
+          "url": "/artifacts/session/analysis_route_quality_seed20260622_recovery_yaw_hold_7case_20260604/fetch_planner_route_uat_analyzer/seed20260622_recovery_yaw_hold_7case_keyframe_montage.png"
+        },
+        {
+          "label": "Replay batch scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260622_recovery_yaw_hold_7case_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Summary JSON",
+          "url": "/artifacts/session/analysis_route_quality_seed20260622_recovery_yaw_hold_7case_20260604/fetch_planner_route_uat_analyzer/route_uat_summary.json"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260622 scene22 clean yaw-hold repro",
+      "summary": "Session 20260604T001641961992Z is the targeted proof that the recovery yaw-hold threshold clears the previous scene22 first-contact watch.",
+      "primary_video": {
+        "label": "Scene22 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T001641961992Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The row delivered with closest 0.194m, no contact flags, stable_contact_approach_pass=True, first_contact_quality_pass=True, and first-contact yaw about 2.2deg.",
+      "limits": "This is a targeted repro inside route-owner UAT. Broader milestone promotion still needs canonical saved-layout and seeded-random gates.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T001641961992Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T001641961992Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260622_scene22_yaw_hold_threshold_repro_20260604_seed20260622_scene22_recovery_or_reaim/fetch_visual_uat_package/keyframe_reviews/20260604T001641961992Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Visual scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260622_scene22_yaw_hold_threshold_repro_20260604_seed20260622_scene22_recovery_or_reaim/fetch_visual_uat_package/scorecard.md"
+        }
+      ]
+    },
     {
       "title": "Seed 20260621 recovery lateral-trim montage and scorecard",
       "summary": "The recovery-only replay reran all five seed20260621 recovery_or_reaim rows after the lateral-trim patch. The montage gives an onboard/topdown sequence review for each recovery row.",
@@ -749,8 +866,8 @@
   ],
   "watch_areas": [
     {
-      "label": "Recovery contact quality across new seeds",
-      "body": "Seed20260621 recovery rows are clean after lateral trim. Keep recovery contact under watch across fresh broad seeds so the fix generalizes beyond the repaired slice."
+      "label": "Recovery quality across fresh seeds",
+      "body": "Seed20260621 and seed20260622 recovery slices are clean after lateral-trim and yaw-hold fixes. Keep recovery under watch across the next fresh broad seed and canonical gates."
     },
     {
       "label": "Yaw and lateral setup quality",
@@ -762,10 +879,10 @@
     }
   ],
   "next_steps": [
-    "Use seed20260621 recovery lateral-trim evidence as the current recovery-contact baseline.",
-    "Run a fresh broad generated seed with the lateral trim in place, then compare setup, execution, contact, and first-contact watches against seeds 20260619 through 20260621.",
+    "Treat seed20260622 recovery yaw-hold validation as the current route-owner recovery baseline.",
+    "Run one more fresh broad generated seed; if setup, execution, contact, and first-contact watches stay clean, move back to canonical saved-layout and seeded-random promotion gates.",
     "Keep sequence review onboard-first: start/setup, pre-contact, first contact, mid-push or coast, terminal arrival, and final rest.",
     "Prioritize new control work only when a watch reproduces visually and geometrically across fresh broad evidence.",
-    "Rerun canonical saved layouts and seeded-random promotion gates after route-owner quality stays clean across multiple broad batches."
+    "Preserve promotion_evidence=false for route-owner UAT until the canonical promotion ladder reruns."
   ]
 }
