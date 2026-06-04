@@ -39,6 +39,7 @@ def _make_args(**overrides):
         "timeout_s": 180.0,
         "package_timeout_s": 120.0,
         "no_visual_package": False,
+        "resume_skip_existing": False,
         "stop_on_fail": False,
     }
     payload.update(overrides)
@@ -179,6 +180,86 @@ def test_replay_batch_live_mock_records_mission_and_visual_package(tmp_path, mon
     assert summary["mission_pass_count"] == 1
     assert summary["visual_package_pass_count"] == 1
     assert summary["rows"][0]["mission"]["closest_approach_distance_m"] == 0.196
+    assert summary["rows"][0]["visual_package"]["pass"] is True
+
+
+def test_replay_batch_resume_skip_existing_visual_package(tmp_path, monkeypatch):
+    monkeypatch.setattr(batch, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(batch, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+
+    gate_root = tmp_path / "artifacts" / "session" / "gate" / gate.PLANNER_GATE_KIND
+    scene = next(
+        item
+        for item in gate.generate_random_scenes(seed=20260612, random_cases=10)
+        if item["expected_route_label"] == gate.ROUTE_FETCH_READY
+    )
+    scene_path = gate_root / "scene_descriptors" / f"{scene['scene_id']}.json"
+    _write_json(scene_path, scene)
+    decision = gate.decide_scene(scene)
+    gate_summary = gate_root / "gate_summary.json"
+    _write_json(gate_summary, {"results": [{**decision, "scene_path": str(scene_path)}]})
+
+    campaign_id = "resume_campaign"
+    mission = tmp_path / "artifacts" / "session" / "session_resume" / "golf_ball_circle_delivery" / "run" / "mission_verdict.json"
+    _write_json(
+        mission,
+        {
+            "pass": True,
+            "fetch_to_pose_pass": True,
+            "planner_route_label": gate.ROUTE_FETCH_READY,
+            "route_executor": gate.ROUTE_EXECUTOR_LOCAL_FETCH,
+            "shot_outcome": {
+                "reason": "trajectory_intersects_delivery_radius",
+                "closest_approach_distance_m": 0.192,
+            },
+            "approach_contact_metrics": {
+                "flags": [],
+                "first_contact_quality_flags": [],
+                "stable_contact_approach_pass": True,
+                "first_contact_quality_pass": True,
+            },
+        },
+    )
+    package_summary = (
+        tmp_path
+        / "artifacts"
+        / "session"
+        / f"{campaign_id}_{decision['scene_id']}"
+        / "fetch_visual_uat_package"
+        / "package_summary.json"
+    )
+    _write_json(
+        package_summary,
+        {
+            "campaign_id": f"{campaign_id}_{decision['scene_id']}",
+            "pass": True,
+            "scorecard_path": f"artifacts/session/{campaign_id}_{decision['scene_id']}/fetch_visual_uat_package/scorecard.md",
+            "missions": [{"path": str(mission)}],
+        },
+    )
+
+    def fail_run(_command, *, timeout_s):
+        raise AssertionError("resume should not launch live runner or package command")
+
+    monkeypatch.setattr(batch, "_run_command", fail_run)
+
+    summary = batch.run_batch(
+        _make_args(
+            campaign_id=campaign_id,
+            gate_summary=str(gate_summary),
+            max_per_route=1,
+            dry_run=False,
+            resume_skip_existing=True,
+        )
+    )
+
+    assert summary["pass"] is True
+    assert summary["selected_count"] == 1
+    assert summary["skipped_existing_count"] == 1
+    assert summary["mission_pass_count"] == 1
+    assert summary["visual_package_pass_count"] == 1
+    assert summary["rows"][0]["resume_skip_existing"] is True
+    assert summary["rows"][0]["mission"]["closest_approach_distance_m"] == 0.192
     assert summary["rows"][0]["visual_package"]["pass"] is True
 
 

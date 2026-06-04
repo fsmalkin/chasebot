@@ -146,6 +146,21 @@ the sim before packaging, and writes a package-local
 `keyframe_review_contact_sheet.png`. Review that sheet across the run sequence
 before reporting pass/fail.
 
+For infrastructure-interrupted route-owner batches, resume with the same
+campaign id and add `--resume-skip-existing`. The runner reuses passing
+`fetch_visual_uat_package/package_summary.json` artifacts for completed scenes
+and starts Docker/dashboard work only for missing or non-passing rows:
+
+```powershell
+python scripts\fetch_planner_route_replay_batch.py `
+  --campaign-id <same-id> `
+  --gate-summary artifacts\session\<planner_gate>\fetch_planner_handoff_gate\gate_summary.json `
+  --max-per-route 0 `
+  --resume-skip-existing `
+  --fresh-dashboard-session-per-run `
+  --dashboard-url http://127.0.0.1:8875
+```
+
 June 1, 2026 corrected saved-anchor one-run rebuild:
 
 - Campaigns:

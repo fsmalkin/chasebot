@@ -291,6 +291,18 @@ def build_visual_package_command(
     ]
 
 
+def existing_visual_package_summary_path(campaign_id: str, scene_id: str) -> Path:
+    return SESSION_ROOT / f"{campaign_id}_{_safe_id(scene_id)}" / "fetch_visual_uat_package" / "package_summary.json"
+
+
+def mission_summary_path_from_visual_package(package: dict[str, Any]) -> Path | None:
+    missions = package.get("missions") if isinstance(package.get("missions"), list) else []
+    if not missions or not isinstance(missions[0], dict):
+        return None
+    raw_path = str(missions[0].get("path", "") or "").strip()
+    return resolve_path(raw_path) if raw_path else None
+
+
 def _run_command(command: list[str], *, timeout_s: float) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
@@ -351,6 +363,40 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
     for index, result in enumerate(selected, start=1):
         scene_id = str(result.get("scene_id", "") or f"scene{index:02d}")
         layout_path = write_layout_for_result(root, result)
+        if bool(args.resume_skip_existing) and not args.dry_run and not bool(args.no_visual_package):
+            existing_package_path = existing_visual_package_summary_path(campaign_id, scene_id)
+            existing_package = read_json(existing_package_path) if existing_package_path.is_file() else {}
+            if bool(existing_package.get("pass", False)):
+                row = {
+                    "index": index,
+                    "scene_id": scene_id,
+                    "route_label": str(result.get("route_label", "") or ""),
+                    "route_executor": str(result.get("route_executor", "") or ""),
+                    "route_quality": result.get("route_quality", {}) if isinstance(result.get("route_quality"), dict) else {},
+                    "layout_path": artifact_display_path(layout_path),
+                    "command": [],
+                    "fresh_dashboard_session_per_run": bool(args.fresh_dashboard_session_per_run),
+                    "expected_session_id": "",
+                    "compose_project": "",
+                    "dashboard_start": {},
+                    "dashboard_stop_before_start": {},
+                    "dashboard_stop_before_package": {},
+                    "dry_run": bool(args.dry_run),
+                    "returncode": 0,
+                    "mission_summary_path": "",
+                    "visual_package_summary_path": artifact_display_path(existing_package_path),
+                    "mission": {},
+                    "visual_package": existing_package,
+                    "stdout_tail": "resume_skip_existing_visual_package",
+                    "stderr_tail": "",
+                    "resume_skip_existing": True,
+                }
+                mission_summary_path = mission_summary_path_from_visual_package(existing_package)
+                if mission_summary_path and mission_summary_path.is_file():
+                    row["mission_summary_path"] = artifact_display_path(mission_summary_path)
+                    row["mission"] = summarize_mission(mission_summary_path)
+                rows.append(row)
+                continue
         run_compose_project = str(args.compose_project or "")
         expected_session_id = ""
         dashboard_start: dict[str, Any] = {}
@@ -394,6 +440,7 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
             "visual_package": {},
             "stdout_tail": "",
             "stderr_tail": "",
+            "resume_skip_existing": False,
         }
         if not args.dry_run:
             if bool(args.fresh_dashboard_session_per_run) and (not run_compose_project or not expected_session_id):
@@ -459,8 +506,10 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
         "campaign_id": campaign_id,
         "dry_run": bool(args.dry_run),
         "fresh_dashboard_session_per_run": bool(args.fresh_dashboard_session_per_run),
+        "resume_skip_existing": bool(args.resume_skip_existing),
         "gate_summary_path": artifact_display_path(gate_summary_path),
         "selected_count": len(rows),
+        "skipped_existing_count": sum(1 for row in rows if bool(row.get("resume_skip_existing", False))),
         "requested_route_count": {route: sum(1 for row in rows if row.get("route_label") == route) for route in EXECUTABLE_ROUTES},
         "mission_pass_count": mission_pass_count,
         "mission_fail_count": mission_fail_count,
@@ -487,8 +536,10 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- campaign_id: `{summary.get('campaign_id', '')}`",
         f"- dry_run: `{summary.get('dry_run', False)}`",
         f"- fresh_dashboard_session_per_run: `{summary.get('fresh_dashboard_session_per_run', False)}`",
+        f"- resume_skip_existing: `{summary.get('resume_skip_existing', False)}`",
         f"- pass: `{summary.get('pass', False)}`",
         f"- selected_count: `{summary.get('selected_count', 0)}`",
+        f"- skipped_existing_count: `{summary.get('skipped_existing_count', 0)}`",
         f"- mission_pass_count: `{summary.get('mission_pass_count', 0)}`",
         f"- mission_fail_count: `{summary.get('mission_fail_count', 0)}`",
         f"- visual_package_pass_count: `{summary.get('visual_package_pass_count', 0)}`",
@@ -517,6 +568,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         lines.append(
             f"- `{row.get('scene_id', '')}` route=`{row.get('route_label', '')}` "
             f"dry_run=`{row.get('dry_run', False)}` rc=`{row.get('returncode', '')}` "
+            f"resume_skip_existing=`{row.get('resume_skip_existing', False)}` "
             f"session=`{row.get('expected_session_id', '')}` "
             f"mission_pass=`{mission.get('pass', '')}` visual_pass=`{package.get('pass', '')}`"
             f"{quality_text}{closest_text}{mission_link}{package_link}"
@@ -547,6 +599,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout-s", type=float, default=180.0)
     parser.add_argument("--package-timeout-s", type=float, default=120.0)
     parser.add_argument("--no-visual-package", action="store_true")
+    parser.add_argument(
+        "--resume-skip-existing",
+        action="store_true",
+        help="Reuse passing visual packages already present for this campaign/scene instead of rerunning those rows.",
+    )
     parser.add_argument("--stop-on-fail", action="store_true")
     return parser.parse_args()
 

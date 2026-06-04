@@ -71,6 +71,10 @@
           "url": "/artifacts/session/analysis_route_quality_seed20260626_partial9_timeout_hardened_20260604/fetch_planner_route_uat_analyzer/route_uat_summary.json"
         },
         {
+          "label": "Resumable partial replay scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260626_all_exec20_timeout_hardened_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
           "label": "Planner gate summary JSON",
           "url": "/artifacts/session/dev_route_quality_gate_seed20260626_timeout_hardened_30case_20260604/fetch_planner_handoff_gate/gate_summary.json"
         },
@@ -1413,7 +1417,7 @@
   ],
   "next_steps": [
     "Restore Docker Desktop health and verify docker ps before launching more live sim.",
-    "Finish seed20260626 coverage with a resumed targeted batch or rerun the full broad seed if resume plumbing is cheaper than selective replay.",
+    "Finish seed20260626 coverage with `--resume-skip-existing` so the nine completed visual packages are reused and only missing rows launch live sim.",
     "Use seed20260624 scene24 and seed20260626 scene03 as local-fetch smoothness candidates after a completed broad replay confirms the watch rate.",
     "Keep Nav2 and recovery as active route owners because seed20260625 and the completed seed20260626 rows both show clean samples in those lanes.",
     "Keep sequence review onboard-first: start/setup, pre-contact, first contact, mid-push or coast, terminal arrival, and final rest.",
