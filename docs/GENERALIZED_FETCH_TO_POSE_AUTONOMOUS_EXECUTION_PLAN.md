@@ -233,6 +233,40 @@ Classify this as dashboard/compose startup evidence; fetch-control scoring
 remains unattempted. The next autonomous step is repairing or bypassing that
 startup path, then rerunning the same parent gate.
 
+June 4 recovery/re-aim ownership correction: the latest seed `20260627`
+failure clarified the stage boundary. `nav2_reposition_first` owns real Nav2
+setup before local fetch; `recovery_or_reaim` now stays local and runs the
+bounded forward-only re-aim routine from the generated robot pose. The exact
+previously failing `seed20260627_scene04_recovery_or_reaim` row passed after
+this change:
+`artifacts/session/live_recovery_reaim_local_setup_scene04_20260604/fetch_planner_route_replay_batch/scorecard.md`.
+The mission delivered with closest approach `0.193732m`, clean first-contact
+quality, stable contact approach, and `nav2_reposition_before_fetch=false`.
+The browser-watchable visual package is
+`artifacts/session/live_recovery_reaim_local_setup_scene04_20260604_seed20260627_scene04_recovery_or_reaim/fetch_visual_uat_package/scorecard.md`.
+This is targeted UAT evidence for the corrected recovery route, while the full
+planner-routed seeded gate remains the next promotion-grade proof.
+
+June 4 planner-routed readyfix evidence: the repaired gate path now has live
+mission evidence plus representative visual UAT. The planner child
+`live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_planner`
+passed `30/30` with `0` wrong fetch-ready dispatches. The mission-only replay
+`live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_replay`
+passed `6/6` executable rows across `recovery_or_reaim`, `fetch_ready_local`,
+and `nav2_reposition_first`; the most important Nav2 row aborted before
+contact, moved the ball `0.0m`, fell back to bounded local recovery, and still
+delivered at `0.197m`. The representative browser-visual replay
+`live_planner_seeded_generalization_gate_visual_recheck_20260604` passed `4/4`
+with browser-watchable packages and frame-sequence review across recovery,
+fetch-ready, and Nav2-first rows. Treat this as green route-owner UAT and
+Nav2-fallback boundary evidence. The promotion-grade task remains a canonical
+parent seeded gate run that carries visual packaging through the wrapper and
+sets `promotion_evidence=true`.
+
+Harness hardening from the same run: Gazebo stale-model removal is now
+timeout-safe, returning `rc=124` and preserving runner control flow instead of
+crashing before mission dispatch.
+
 June 4 harness hardening: route replay now returns immediately when dashboard
 startup reports `environment_state=error`, preserving truth-probe failures as
 infrastructure evidence before mission launch. Dashboard startup now allows a

@@ -28,6 +28,8 @@ from golf_ball_circle_delivery_demo_runner import NAV2_REPOSITION_BEHAVIOR_TREE 
 from golf_ball_circle_delivery_demo_runner import parse_nav2_reposition_result  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import summarize_line_servo_effective_command  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import transform_nav2_reposition_layout_to_current_robot  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import nav2_precontact_fallback_to_local_recovery_decision  # noqa: E402
+import passive_ball_roll_calibration_runner as passive_runner  # noqa: E402
 
 
 def test_shot_outcome_uses_segment_intersection_for_delivery_circle():
@@ -77,6 +79,20 @@ def test_docker_exec_service_returns_timeout_result(monkeypatch):
     assert "partial-out" in output
     assert "partial-err" in output
     assert "timeout_after_s=10.000" in output
+
+
+def test_passive_docker_exec_returns_timeout_result(monkeypatch):
+    def fake_run(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd=["docker", "compose"], timeout=20.0, output="remove-out", stderr="remove-err")
+
+    monkeypatch.setattr(passive_runner.subprocess, "run", fake_run)
+
+    rc, output = passive_runner.docker_exec("project", "gz service remove", timeout_s=20.0)
+
+    assert rc == 124
+    assert "remove-out" in output
+    assert "remove-err" in output
+    assert "timeout_after_s=20.000" in output
 
 
 def test_apply_target_layout_sets_ball_pose_from_layout(tmp_path):
@@ -145,6 +161,8 @@ def _route_default_args(**overrides):
         "nav2_reposition_timeout_s": 24.0,
         "nav2_reposition_server_wait_s": 8.0,
         "nav2_reposition_pose_wait_s": 3.0,
+        "nav2_reposition_continue_on_failure": False,
+        "disable_nav2_precontact_fallback": False,
         "robot_x": 0.06,
         "robot_y": 0.0,
         "robot_yaw": 0.0,
@@ -209,7 +227,100 @@ def test_planner_route_defaults_enable_nav2_setup_for_frozen_reposition_layout()
     assert args.robot_yaw == pytest.approx(0.0)
 
 
-def test_planner_route_defaults_extend_recovery_execution_window():
+def test_planner_route_defaults_downgrade_near_field_nav2_layout_to_recovery():
+    args = _route_default_args()
+    layout = {
+        "planner_route_label": "nav2_reposition_first",
+        "route_executor": "nav2_forward_reposition_then_fetch",
+        "random_draw": {
+            "planner_route_label": "nav2_reposition_first",
+            "route_executor": "nav2_forward_reposition_then_fetch",
+            "ball_target_distance_m": 0.680424,
+            "robot_ball_distance_m": 0.846004,
+            "robot_lateral_error_m": 0.100922,
+            "robot_yaw_error_deg": -4.807588,
+            "robot_pose": {"x": -0.533879, "y": -0.346212, "yaw": 0.211588},
+        },
+    }
+
+    defaults = apply_planner_route_execution_defaults(args, layout, explicit_args=set())
+
+    assert defaults["applied"] is True
+    assert defaults["planner_route_requested_label"] == "nav2_reposition_first"
+    assert defaults["planner_route_label"] == "recovery_or_reaim"
+    assert defaults["route_executor"] == "bounded_recovery_reaim"
+    assert defaults["route_admissibility"]["changed"] is True
+    assert args.planner_route_label == "recovery_or_reaim"
+    assert args.route_executor == "bounded_recovery_reaim"
+    assert args.nav2_reposition_before_fetch is False
+    assert args.nav2_reposition_transform_layout_to_current_robot is False
+    assert args.drive_duration_s == pytest.approx(78.0)
+    assert args.sample_duration_s == pytest.approx(82.0)
+    assert args.robot_x == pytest.approx(-0.533879)
+    assert args.robot_y == pytest.approx(-0.346212)
+    assert args.robot_yaw == pytest.approx(0.211588)
+
+
+def test_nav2_precontact_fallback_accepts_clean_abort_inside_local_envelope():
+    args = _route_default_args(
+        planner_route_label="nav2_reposition_first",
+        route_executor="nav2_forward_reposition_then_fetch",
+        ball_x=0.38,
+        ball_y=0.0,
+        zone_x=0.95,
+        zone_y=0.0,
+    )
+    samples = [
+        {
+            "robot_pose": {"x": -0.64, "y": 0.08, "yaw": 0.0, "z": 0.0},
+            "ball_pose": {"x": 0.38, "y": 0.0, "yaw": 0.0, "z": 0.021336},
+        }
+    ]
+
+    decision = nav2_precontact_fallback_to_local_recovery_decision(
+        args=args,
+        target_layout={},
+        pre_fetch_reposition={"success": False, "status_text": "STATUS_ABORTED"},
+        pre_fetch_reposition_samples=samples,
+    )
+
+    assert decision["eligible"] is True
+    assert decision["reason"] == "pre_contact_nav2_failure_inside_local_recovery_envelope"
+    assert decision["fallback_route_label"] == "recovery_or_reaim"
+    assert decision["geometry"]["source"] == "post_nav2_pose_sample"
+    assert decision["geometry"]["robot_ball_distance_m"] == pytest.approx(1.023132)
+    assert decision["ball_motion_m"] == pytest.approx(0.0)
+
+
+def test_nav2_precontact_fallback_rejects_ball_motion_before_handoff():
+    args = _route_default_args(
+        planner_route_label="nav2_reposition_first",
+        route_executor="nav2_forward_reposition_then_fetch",
+        ball_x=0.38,
+        ball_y=0.0,
+        zone_x=0.95,
+        zone_y=0.0,
+    )
+    samples = [
+        {
+            "robot_pose": {"x": -0.64, "y": 0.08, "yaw": 0.0, "z": 0.0},
+            "ball_pose": {"x": 0.43, "y": 0.0, "yaw": 0.0, "z": 0.021336},
+        }
+    ]
+
+    decision = nav2_precontact_fallback_to_local_recovery_decision(
+        args=args,
+        target_layout={},
+        pre_fetch_reposition={"success": False, "status_text": "STATUS_ABORTED"},
+        pre_fetch_reposition_samples=samples,
+    )
+
+    assert decision["eligible"] is False
+    assert decision["reason"] == "nav2_moved_ball_before_fallback"
+    assert decision["ball_motion_m"] == pytest.approx(0.05)
+
+
+def test_planner_route_defaults_extend_recovery_execution_window_without_nav2_setup():
     args = _route_default_args()
     layout = {
         "planner_route_label": "recovery_or_reaim",
@@ -220,7 +331,7 @@ def test_planner_route_defaults_extend_recovery_execution_window():
     defaults = apply_planner_route_execution_defaults(args, layout, explicit_args=set())
 
     assert defaults["applied"] is True
-    assert args.nav2_reposition_before_fetch is True
+    assert args.nav2_reposition_before_fetch is False
     assert args.drive_duration_s == pytest.approx(78.0)
     assert args.sample_duration_s == pytest.approx(82.0)
 

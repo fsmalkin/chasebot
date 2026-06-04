@@ -840,6 +840,40 @@ The planner child passed `30/30`; replay stopped on
 scoring remains unattempted. The architecture decision remains unchanged until
 the same gate runs through live mission and visual packages.
 
+June 4, 2026 recovery/re-aim route-boundary update: the same seed `20260627`
+later exposed a cleaner architecture lesson. A `recovery_or_reaim` route should
+use the local bounded recovery routine from the generated robot pose, while
+`nav2_reposition_first` remains the owner for real Nav2 setup before local
+fetch. The exact `seed20260627_scene04_recovery_or_reaim` row passed after the
+boundary correction:
+`artifacts/session/live_recovery_reaim_local_setup_scene04_20260604/fetch_planner_route_replay_batch/scorecard.md`.
+Visual UAT package:
+`artifacts/session/live_recovery_reaim_local_setup_scene04_20260604_seed20260627_scene04_recovery_or_reaim/fetch_visual_uat_package/scorecard.md`.
+The run delivered inside the `0.300m` contract at `0.193732m`, with clean
+first-contact quality, stable contact approach, and
+`nav2_reposition_before_fetch=false`. Treat this as targeted proof for the
+stage boundary, then rerun the full planner-routed seeded gate for promotion
+evidence.
+
+June 4, 2026 readyfix evidence update: the same route-owner architecture now
+has a clean representative visual package and a separate mission-only fallback
+proof. Planner gate
+`live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_planner`
+passed `30/30` with `0` wrong fetch-ready dispatches. Mission replay
+`live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_replay`
+passed `6/6`; it included a Nav2-first row where Nav2 aborted before contact,
+ball motion stayed `0.0m`, bounded local recovery took over, and delivery
+finished at `0.197m`. Visual replay
+`live_planner_seeded_generalization_gate_visual_recheck_20260604` passed `4/4`
+with browser-watchable packages and frame-sequence review across recovery,
+fetch-ready, and Nav2-first rows. This supports the planner-gated stack and
+the Nav2/local handoff boundary. It remains UAT evidence because the parent
+seeded gate still needs a canonical live visual run with `promotion_evidence=true`.
+
+The same readyfix hardened stale-model cleanup so a Gazebo remove-service
+timeout records `rc=124` instead of terminating the fetch runner before mission
+dispatch.
+
 June 4, 2026 infrastructure note: two failed live attempts on stale dashboard
 ports reproduced truth-probe startup failures before mission dispatch. The
 route replay harness now preserves those as dashboard-start failures and returns

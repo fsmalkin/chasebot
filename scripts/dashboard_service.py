@@ -84,7 +84,8 @@ TRUTH_TARGET_MODEL_NAMES = (
 TRUTH_TARGET_MODEL_PREFIX = "visit_mission_target_"
 WORLD_STREAM_RESTART_COOLDOWN_S = 20.0
 WORLD_STREAM_RESTART_MAX_ATTEMPTS = 3
-TRUTH_PROBE_READY_TIMEOUT_S = 180.0
+TRUTH_PROBE_READY_TIMEOUT_S = 420.0
+VISUAL_OBSERVER_READY_TIMEOUT_S = 90.0
 WORLD_STREAM_STALE_DEBOUNCE_S = 3.0
 WORLD_STREAM_WATCHDOG_POLL_S = 1.0
 WORLD_STREAM_TRANSPORT_WINDOW_S = 5.0
@@ -99,6 +100,7 @@ VISUAL_UAT_PACKAGE_KIND = "fetch_visual_uat_package"
 STAGE_QUALITY_AUDIT_KIND = "fetch_saved_anchor_setup_contact_audit"
 GATE_SERVICE_READY_TIMEOUT_S = 25.0
 GATE_SERVICE_POLL_S = 0.5
+COMPOSE_UP_PROCESS_TIMEOUT_S = 420.0
 DEFAULT_CONTROL_MODE = "host_powershell"
 DEFAULT_SIM_LANE = "jetty_gate"
 DEFAULT_BRIDGE_ROS_DISTRO = "jazzy"
@@ -110,6 +112,7 @@ OPERATOR_VIEW_PORT_START = 14500
 OPERATOR_VIEW_PORT_END = 14520
 OPERATOR_VIEW_HEARTBEAT_STALE_S = 5.0
 REQUIRED_GATE_SERVICES = ("sim-gate", "world-viewer", "gate-stack", "operator-view")
+CORE_GATE_SERVICES = ("sim-gate", "gate-stack")
 HEADLESS_SOAK_GATE_SERVICES = ("sim-gate", "gate-stack")
 SELF_CONTAINED_SCENARIO_IDS = {
     "visit_route_planning",
@@ -709,6 +712,7 @@ class DashboardController:
         self.intent_ack_path = self.runtime_dir / "intent_ack.json"
         self.peer_project_cleanup = peer_project_cleanup if peer_project_cleanup in {"exclusive", "none"} else "exclusive"
         self.headless_worker_mode = bool(headless_worker_mode)
+        self.operator_view_required = True
         self.control_mode = (os.environ.get("CHASECAR_DASHBOARD_CONTROL_MODE", DEFAULT_CONTROL_MODE).strip() or DEFAULT_CONTROL_MODE)
         try:
             self.docker = choose_docker_cli()
@@ -840,6 +844,7 @@ class DashboardController:
                 "operator_view_ready": False,
                 "operator_view_status": "disabled",
                 "operator_view_failure_class": "",
+                "operator_view_required": True,
                 "validation_dir": "",
                 "command_history_path": "",
                 "multi_target_progress_path": "",
@@ -1594,6 +1599,8 @@ class DashboardController:
         return stale_projects
 
     def _required_gate_services(self) -> tuple[str, ...]:
+        if not bool(getattr(self, "operator_view_required", True)):
+            return CORE_GATE_SERVICES
         return HEADLESS_SOAK_GATE_SERVICES if self.headless_worker_mode else REQUIRED_GATE_SERVICES
 
     def _extract_host_port_bind_failure_port(self, output: str) -> Optional[int]:
@@ -2032,6 +2039,50 @@ class DashboardController:
         planner_wrong_fetch_dispatch_count = int(planner.get("wrong_fetch_dispatch_count", 0) or 0) if planner else 0
         planner_fetch_dispatch_count = int(planner.get("fetch_dispatch_count", 0) or 0) if planner else 0
 
+        def _is_planner_seeded_gate(payload: Dict[str, Any]) -> bool:
+            return str(payload.get("type", "") or "") == "fetch_planner_seeded_generalization_gate"
+
+        planner_seeded_path, planner_seeded = self._latest_session_artifact_json(
+            ("fetch_planner_seeded_generalization_gate", "gate_summary.json"),
+            predicate=_is_planner_seeded_gate,
+        )
+        planner_seeded_pass = bool(planner_seeded.get("pass", False)) if planner_seeded else False
+        planner_seeded_dry_run = bool(planner_seeded.get("dry_run", False)) if planner_seeded else False
+        planner_seeded_promotion = bool(planner_seeded.get("promotion_evidence", False)) if planner_seeded else False
+        planner_seeded_first_failure = (
+            planner_seeded.get("replay_first_failure", {})
+            if planner_seeded and isinstance(planner_seeded.get("replay_first_failure"), dict)
+            else {}
+        )
+        planner_seeded_replay_summary = (
+            planner_seeded.get("replay_summary", {})
+            if planner_seeded and isinstance(planner_seeded.get("replay_summary"), dict)
+            else {}
+        )
+        planner_seeded_analyzer_summary = (
+            planner_seeded.get("analyzer_summary", {})
+            if planner_seeded and isinstance(planner_seeded.get("analyzer_summary"), dict)
+            else {}
+        )
+
+        def _is_planner_route_replay_batch(payload: Dict[str, Any]) -> bool:
+            return str(payload.get("type", "") or "") == "fetch_planner_route_replay_batch"
+
+        route_replay_path, route_replay = self._latest_session_artifact_json(
+            ("fetch_planner_route_replay_batch", "batch_summary.json"),
+            predicate=_is_planner_route_replay_batch,
+        )
+        route_replay_rows = (
+            route_replay.get("rows", [])
+            if route_replay and isinstance(route_replay.get("rows"), list)
+            else []
+        )
+        route_replay_pass = bool(route_replay.get("pass", False)) if route_replay else False
+        route_replay_dry_run = bool(route_replay.get("dry_run", False)) if route_replay else False
+        route_replay_selected_count = int(route_replay.get("selected_count", 0) or 0) if route_replay else 0
+        route_replay_mission_pass_count = int(route_replay.get("mission_pass_count", 0) or 0) if route_replay else 0
+        route_replay_visual_pass_count = int(route_replay.get("visual_package_pass_count", 0) or 0) if route_replay else 0
+
         def _is_stage_quality_audit(payload: Dict[str, Any]) -> bool:
             return (
                 str(payload.get("type", "") or "") == STAGE_QUALITY_AUDIT_KIND
@@ -2121,14 +2172,113 @@ class DashboardController:
                 )
             except OSError:
                 seeded_context_stale_after_stage_audit = False
+        planner_seeded_newer_than_fetch_evidence = False
+        if planner_seeded_path is not None and not planner_seeded_dry_run:
+            comparison_paths = [path for path in (evidence_path, stage_quality_path, probe_path) if path is not None]
+            try:
+                if not comparison_paths:
+                    planner_seeded_newer_than_fetch_evidence = True
+                else:
+                    planner_seeded_mtime = planner_seeded_path.stat().st_mtime
+                    planner_seeded_newer_than_fetch_evidence = all(
+                        planner_seeded_mtime >= path.stat().st_mtime for path in comparison_paths
+                    )
+            except OSError:
+                planner_seeded_newer_than_fetch_evidence = False
+        planner_seeded_current_blocking = bool(
+            planner_seeded
+            and planner_seeded_newer_than_fetch_evidence
+            and not planner_seeded_pass
+            and not planner_seeded_dry_run
+        )
+        route_replay_newer_than_planner_seeded = False
+        if route_replay_path is not None and planner_seeded_path is not None:
+            try:
+                route_replay_newer_than_planner_seeded = route_replay_path.stat().st_mtime >= planner_seeded_path.stat().st_mtime
+            except OSError:
+                route_replay_newer_than_planner_seeded = False
+        elif route_replay_path is not None:
+            route_replay_newer_than_planner_seeded = True
+        route_replay_newer_than_fetch_evidence = False
+        if route_replay_path is not None and not route_replay_dry_run:
+            comparison_paths = [path for path in (evidence_path, stage_quality_path, probe_path) if path is not None]
+            try:
+                if not comparison_paths:
+                    route_replay_newer_than_fetch_evidence = True
+                else:
+                    route_replay_mtime = route_replay_path.stat().st_mtime
+                    route_replay_newer_than_fetch_evidence = all(
+                        route_replay_mtime >= path.stat().st_mtime for path in comparison_paths
+                    )
+            except OSError:
+                route_replay_newer_than_fetch_evidence = False
+        route_replay_repairs_seeded_failure = False
+        failed_scene = str(planner_seeded_first_failure.get("scene_id", "") or "")
+        failed_route = str(planner_seeded_first_failure.get("route_label", "") or "")
+        if (
+            planner_seeded_current_blocking
+            and route_replay_pass
+            and not route_replay_dry_run
+            and route_replay_newer_than_planner_seeded
+            and failed_scene
+            and failed_route
+        ):
+            for row in route_replay_rows:
+                if not isinstance(row, dict):
+                    continue
+                mission = row.get("mission") if isinstance(row.get("mission"), dict) else {}
+                package = row.get("visual_package") if isinstance(row.get("visual_package"), dict) else {}
+                if (
+                    str(row.get("scene_id", "") or "") == failed_scene
+                    and str(row.get("route_label", "") or "") == failed_route
+                    and bool(mission.get("pass", False))
+                    and bool(package.get("pass", False))
+                ):
+                    route_replay_repairs_seeded_failure = True
+                    break
+        if route_replay_repairs_seeded_failure:
+            planner_seeded_current_blocking = False
+        route_replay_supersedes_incomplete_seeded_gate = bool(
+            planner_seeded_current_blocking
+            and route_replay_pass
+            and not route_replay_dry_run
+            and route_replay_newer_than_planner_seeded
+            and not failed_scene
+            and route_replay_selected_count > 0
+            and route_replay_mission_pass_count == route_replay_selected_count
+            and route_replay_visual_pass_count == route_replay_selected_count
+        )
+        if route_replay_supersedes_incomplete_seeded_gate:
+            planner_seeded_current_blocking = False
+        route_replay_current_pending_gate = bool(
+            route_replay
+            and route_replay_pass
+            and not route_replay_dry_run
+            and route_replay_newer_than_fetch_evidence
+            and route_replay_newer_than_planner_seeded
+            and not planner_seeded_promotion
+        )
         promotion_evidence = (
             bool(evidence.get("promotion_evidence", False))
             and seeded_model_valid
             and saved_invalid_model_count == 0
             and stage_quality_invalid_model_count == 0
             and not seeded_context_stale_after_stage_audit
+            and not planner_seeded_current_blocking
+            and not route_replay_repairs_seeded_failure
+            and not route_replay_current_pending_gate
         ) if evidence else False
         recommended_next_action = str(evidence.get("recommended_next_action", "") or "") if evidence else ""
+        if planner_seeded_current_blocking:
+            recommended_next_action = (
+                "repair_planner_routed_recovery_reaim_executor"
+                if failed_route == fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM
+                else "repair_planner_routed_live_executor"
+            )
+        elif route_replay_repairs_seeded_failure:
+            recommended_next_action = "rerun_full_planner_routed_seeded_gate"
+        elif route_replay_current_pending_gate:
+            recommended_next_action = "rerun_full_planner_routed_seeded_gate"
         if stage_quality_payload and stage_quality_blockers:
             recommended_next_action = "repair_setup_contact_before_guarded_live"
         elif stage_quality_payload and stage_quality_terminal_candidates:
@@ -2140,8 +2290,41 @@ class DashboardController:
                 else recommended_next_action or "continue_saved_anchor_ladder"
             )
         milestone_interpretation = str(evidence.get("milestone_interpretation", "") or "") if evidence else ""
+        if planner_seeded_current_blocking:
+            milestone_interpretation = str(
+                planner_seeded.get("milestone_interpretation", "planner_routed_seeded_generalization_incomplete")
+                or "planner_routed_seeded_generalization_incomplete"
+            )
+        elif route_replay_repairs_seeded_failure:
+            milestone_interpretation = "planner_routed_recovery_reaim_repaired_seeded_gate_pending"
+        elif route_replay_current_pending_gate:
+            milestone_interpretation = "planner_route_replay_green_seeded_gate_pending"
 
-        if stage_quality_payload and stage_quality_invalid_model_count:
+        if planner_seeded_current_blocking:
+            status = "bad"
+            failed_scene = failed_scene or "latest live replay"
+            failed_route = failed_route or "planner-routed"
+            analyzer_status = str(planner_seeded_analyzer_summary.get("execution_quality_status", "") or "")
+            replay_pass_count = int(planner_seeded_replay_summary.get("mission_pass_count", 0) or 0)
+            replay_fail_count = int(planner_seeded_replay_summary.get("mission_fail_count", 0) or 0)
+            quality_text = f" ({analyzer_status})" if analyzer_status else ""
+            headline = (
+                f"Broad planner-routed UAT is incomplete: {failed_route} failed at {failed_scene}; "
+                f"live replay {replay_pass_count}/{replay_pass_count + replay_fail_count}{quality_text}."
+            )
+        elif route_replay_repairs_seeded_failure:
+            status = "warn"
+            headline = (
+                f"Targeted {failed_route} repair passed for {failed_scene}; "
+                "rerun the full planner-routed seeded gate for promotion evidence."
+            )
+        elif route_replay_current_pending_gate:
+            status = "warn"
+            headline = (
+                f"Latest planner-route replay batch passed {route_replay_mission_pass_count}/{route_replay_selected_count}; "
+                "rerun the full planner-routed seeded gate for promotion evidence."
+            )
+        elif stage_quality_payload and stage_quality_invalid_model_count:
             status = "bad"
             headline = f"Stage-quality audit has {stage_quality_invalid_model_count} saved anchor lacking calibrated model provenance; rerun saved anchors."
         elif stage_quality_payload and stage_quality_blockers:
@@ -2255,6 +2438,56 @@ class DashboardController:
                 "fetch_dispatch_count": planner_fetch_dispatch_count,
                 "wrong_fetch_dispatch_count": planner_wrong_fetch_dispatch_count,
                 "route_counts": planner.get("route_counts", {}) if planner and isinstance(planner.get("route_counts"), dict) else {},
+            },
+            "planner_seeded_gate": {
+                "campaign_id": str(planner_seeded.get("campaign_id", "") or "") if planner_seeded else "",
+                "path": self._artifact_display_path(planner_seeded_path),
+                "scorecard_path": str(planner_seeded.get("scorecard_path", "") or "") if planner_seeded else "",
+                "pass": planner_seeded_pass,
+                "dry_run": planner_seeded_dry_run,
+                "promotion_evidence": planner_seeded_promotion,
+                "current_blocking": planner_seeded_current_blocking,
+                "newer_than_fetch_evidence": planner_seeded_newer_than_fetch_evidence,
+                "seed": planner_seeded.get("seed") if planner_seeded else None,
+                "random_cases": int(planner_seeded.get("random_cases", 0) or 0) if planner_seeded else 0,
+                "expected_executable_count": int(planner_seeded.get("expected_executable_count", 0) or 0) if planner_seeded else 0,
+                "planner_gate_pass": bool(planner_seeded.get("planner_gate_pass", False)) if planner_seeded else False,
+                "replay_pass": bool(planner_seeded.get("replay_pass", False)) if planner_seeded else False,
+                "analyzer_pass": bool(planner_seeded.get("analyzer_pass", False)) if planner_seeded else False,
+                "first_failure": planner_seeded_first_failure,
+                "replay_summary": planner_seeded_replay_summary,
+                "analyzer_summary": planner_seeded_analyzer_summary,
+                "interpretation": str(planner_seeded.get("milestone_interpretation", "") or "") if planner_seeded else "",
+            },
+            "planner_route_replay_batch": {
+                "campaign_id": str(route_replay.get("campaign_id", "") or "") if route_replay else "",
+                "path": self._artifact_display_path(route_replay_path),
+                "scorecard_path": str(route_replay.get("scorecard_path", "") or "") if route_replay else "",
+                "pass": route_replay_pass,
+                "dry_run": route_replay_dry_run,
+                "selected_count": route_replay_selected_count,
+                "mission_pass_count": route_replay_mission_pass_count,
+                "visual_package_pass_count": route_replay_visual_pass_count,
+                "repairs_latest_seeded_failure": route_replay_repairs_seeded_failure,
+                "supersedes_incomplete_seeded_gate": route_replay_supersedes_incomplete_seeded_gate,
+                "newer_than_fetch_evidence": route_replay_newer_than_fetch_evidence,
+                "current_pending_seeded_gate": route_replay_current_pending_gate,
+                "rows": [
+                    {
+                        "scene_id": str(row.get("scene_id", "") or ""),
+                        "route_label": str(row.get("route_label", "") or ""),
+                        "route_executor": str(row.get("route_executor", "") or ""),
+                        "returncode": row.get("returncode"),
+                        "mission_pass": bool((row.get("mission") or {}).get("pass", False))
+                        if isinstance(row.get("mission"), dict)
+                        else False,
+                        "visual_pass": bool((row.get("visual_package") or {}).get("pass", False))
+                        if isinstance(row.get("visual_package"), dict)
+                        else False,
+                    }
+                    for row in route_replay_rows
+                    if isinstance(row, dict)
+                ],
             },
             "stage_quality_audit": {
                 "campaign_id": str(stage_quality_payload.get("campaign_id", "") or "") if stage_quality_payload else "",
@@ -2734,6 +2967,7 @@ class DashboardController:
 
     def request_start(self, overrides: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
         self._mark_operator_activity("env_start")
+        overrides = dict(overrides or {})
         with self.state_lock:
             env_state = self.state["environment_state"]
         if env_state == "environment_ready":
@@ -2753,6 +2987,10 @@ class DashboardController:
                 pass
             else:
                 return HTTPStatus.CONFLICT, {"accepted": False, "error": "lifecycle busy"}
+        self.operator_view_required = not (
+            "operator_view_required" in overrides
+            and not truthy_value(overrides.get("operator_view_required"))
+        )
         self.lifecycle_cancel.clear()
         self._update_state(
             environment_state="starting",
@@ -2770,6 +3008,7 @@ class DashboardController:
             target_transition_active=False,
             world_stream_recovery_state="idle",
             world_stream_restart_in_progress=False,
+            operator_view_required=self.operator_view_required,
         )
         self._record_operator_event("Environment starting.", category="environment")
         self.lifecycle_thread = threading.Thread(target=self._start_environment_worker, name="dashboard-start", daemon=True)
@@ -3740,13 +3979,29 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
         # Only bring up sim/gate services. In host_powershell mode the
         # dashboard-control and brain-supervisor-shadow run on the host, so
         # starting them inside compose would cause a port conflict on 8860.
-        compose_services = ["sim-gate", "world-viewer", "gate-stack", "dashboard-utility", "operator-view"]
+        compose_services = ["sim-gate", "gate-stack", "dashboard-utility"]
         if self.headless_worker_mode:
             compose_services = ["sim-gate", "gate-stack"]
+        elif bool(getattr(self, "operator_view_required", True)):
+            compose_services.extend(["world-viewer", "operator-view"])
         args.extend(compose_services)
         proc = self._popen_docker_compose(project_name, *args, env=env)
         self.active_env_proc = proc
-        output, _ = proc.communicate()
+        try:
+            output, _ = proc.communicate(timeout=COMPOSE_UP_PROCESS_TIMEOUT_S)
+        except subprocess.TimeoutExpired as exc:
+            output = str(exc.output or "")
+            gate_service_states = self._wait_for_required_gate_services(project_name, GATE_SERVICE_READY_TIMEOUT_S)
+            self._terminate_process(proc)
+            self.active_env_proc = None
+            if self._gate_services_ready(gate_service_states):
+                return 0, (output + "\ncompose_up_timeout_recovered_required_services_running").strip()
+            failure_class, failure_message = self._classify_gate_service_states(gate_service_states)
+            return 124, (
+                output
+                + "\ncompose_up_timeout"
+                + (f"; {failure_class}: {failure_message}" if failure_message else "")
+            ).strip()
         self.active_env_proc = None
         if returncode := proc.returncode:
             return returncode, output
@@ -3773,6 +4028,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     category="environment",
                 )
             operator_view_status = "disabled" if self.headless_worker_mode else "starting"
+            operator_view_required = bool(getattr(self, "operator_view_required", True))
             self._update_state(
                 environment_state="starting",
                 scenario_state="idle",
@@ -3791,6 +4047,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                 operator_view_ready=False,
                 operator_view_status=operator_view_status,
                 operator_view_failure_class="",
+                operator_view_required=operator_view_required,
                 validation_dir=str(validation_dir),
                 command_history_path=str(validation_dir / "command_history.jsonl"),
                 multi_target_progress_path=str(validation_dir / "multi_target_progress.json"),
@@ -3869,6 +4126,7 @@ echo "OPERATOR_VIEW_LOG=$LOG_FILE"
                     operator_view_ready=False,
                     operator_view_status=operator_view_status,
                     operator_view_failure_class="",
+                    operator_view_required=operator_view_required,
                     environment_message="starting authoritative environment",
                     environment_failure_class="",
                     gate_service_states={},
@@ -3965,6 +4223,43 @@ echo "TRUTH_LOG=$LOG_FILE"
                     gate_service_states=gate_service_states,
                 )
 
+            if not operator_view_required:
+                self._update_state(
+                    environment_state="environment_ready",
+                    scenario_state="ready",
+                    environment_message="environment ready",
+                    environment_failure_class="",
+                    world_file=env.get("WORLD_FILE", DEFAULT_WORLD_FILE),
+                    surface_profile=env.get("CHASECAR_SURFACE_PROFILE", DEFAULT_SURFACE_PROFILE),
+                    gate_service_states=gate_service_states,
+                    scenario_message="ready",
+                    world_stream_url="",
+                    operator_view_backend="disabled",
+                    operator_view_url="",
+                    operator_view_ready=False,
+                    operator_view_status="degraded_optional",
+                    operator_view_failure_class="",
+                    operator_view_required=False,
+                    world_stream_recovery_state="idle",
+                    world_stream_restart_in_progress=False,
+                    world_stream_last_restart_error="",
+                    idle_shutdown_idle_since_utc="",
+                    idle_shutdown_deadline_utc="",
+                    idle_shutdown_remaining_s=None,
+                    idle_shutdown_state="watching" if self.idle_shutdown_enabled else "disabled",
+                )
+                self._record_operator_event("Environment ready (optional visual surfaces disabled).", category="environment")
+                self._write_operator_status(
+                    phase="environment_ready",
+                    target_id="",
+                    target_transition_active=False,
+                    status_text="Environment ready",
+                )
+                self._write_lock_file()
+                self.build_on_next_start = False
+                pending_scenario_ready_to_launch = True
+                return
+
             if self.headless_worker_mode:
                 self._update_state(
                     environment_state="environment_ready",
@@ -4030,20 +4325,60 @@ echo "TRUTH_LOG=$LOG_FILE"
             )
             operator_view_info = self._run_container_helper(self.operator_view_container_id, operator_view_script, "OPERATOR_VIEW")
             if int(operator_view_info.get("exit_code", 0) or 0) != 0:
-                raise EnvironmentStartupError(
-                    f"Operator view helper failed. {operator_view_info['output']}".strip(),
-                    environment_failure_class="operator_view_start_failed",
-                    operator_view_failure_class="operator_view_start_failed",
-                    gate_service_states=gate_service_states,
-                )
-            if not self._wait_for_operator_view_ready(30.0):
+                if not operator_view_required:
+                    self._update_state(
+                        operator_view_ready=False,
+                        operator_view_status="degraded",
+                        operator_view_failure_class="operator_view_start_failed",
+                    )
+                    self._record_operator_event(
+                        "Operator view failed to start; continuing because recorded-evidence startup does not require Xpra.",
+                        category="warn",
+                    )
+                else:
+                    raise EnvironmentStartupError(
+                        f"Operator view helper failed. {operator_view_info['output']}".strip(),
+                        environment_failure_class="operator_view_start_failed",
+                        operator_view_failure_class="operator_view_start_failed",
+                        gate_service_states=gate_service_states,
+                    )
+            elif not self._wait_for_operator_view_ready(30.0):
                 operator_view_state = self._operator_view_snapshot(visual_dir, self.state)
+                operator_view_failure_class = str(
+                    operator_view_state.get("failure_class", "") or "operator_view_start_failed"
+                )
+                if not operator_view_required:
+                    self._update_state(
+                        operator_view_ready=False,
+                        operator_view_status="degraded",
+                        operator_view_failure_class=operator_view_failure_class,
+                    )
+                    self._record_operator_event(
+                        "Operator view did not become ready; continuing because recorded-evidence startup does not require Xpra.",
+                        category="warn",
+                    )
+                else:
+                    raise EnvironmentStartupError(
+                        f"Operator view did not become ready. {operator_view_info['output']}".strip(),
+                        environment_failure_class="operator_view_start_failed",
+                        operator_view_failure_class=operator_view_failure_class,
+                        gate_service_states=gate_service_states,
+                    )
+            else:
+                self._update_state(
+                    operator_view_ready=True,
+                    operator_view_status="ready",
+                    operator_view_failure_class="",
+                )
+            with self.state_lock:
+                operator_view_ready = bool(self.state.get("operator_view_ready", False))
+                operator_view_status = str(self.state.get("operator_view_status", "") or "")
+                operator_view_failure_class = str(self.state.get("operator_view_failure_class", "") or "")
+            if operator_view_required and not operator_view_ready:
                 raise EnvironmentStartupError(
                     f"Operator view did not become ready. {operator_view_info['output']}".strip(),
                     environment_failure_class="operator_view_start_failed",
-                    operator_view_failure_class=str(
-                        operator_view_state.get("failure_class", "") or "operator_view_start_failed"
-                    ),
+                    operator_view_failure_class=operator_view_failure_class or "operator_view_start_failed",
                     gate_service_states=gate_service_states,
                 )
 
@@ -4066,7 +4401,7 @@ echo "VISUAL_LOG=$LOG_FILE"
                     environment_failure_class="visual_observer_start_failed",
                     gate_service_states=gate_service_states,
                 )
-            if not self._wait_for_visual_ready(20.0):
+            if not self._wait_for_visual_ready(VISUAL_OBSERVER_READY_TIMEOUT_S):
                 raise EnvironmentStartupError(
                     f"Visual observer did not emit dashboard frames. {visual_info['output']}".strip(),
                     environment_failure_class="visual_observer_start_failed",
@@ -4083,9 +4418,10 @@ echo "VISUAL_LOG=$LOG_FILE"
                 world_stream_url=f"http://127.0.0.1:{world_stream_port}/vnc.html?autoconnect=1&resize=scale&path=websockify",
                 operator_view_backend="xpra",
                 operator_view_url=f"http://127.0.0.1:{operator_view_port}/",
-                operator_view_ready=True,
-                operator_view_status="ready",
-                operator_view_failure_class="",
+                operator_view_ready=operator_view_ready,
+                operator_view_status=operator_view_status or ("ready" if operator_view_ready else "degraded"),
+                operator_view_failure_class=operator_view_failure_class,
+                operator_view_required=operator_view_required,
                 world_stream_recovery_state="idle",
                 world_stream_restart_in_progress=False,
                 world_stream_last_restart_error="",
@@ -5284,10 +5620,7 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             random_draw = self._write_planner_gated_fetch_layout(scenario, planner_handoff=planner_handoff)
             target_layout_json = str(random_draw.get("target_layout_json", target_layout_json))
             artifact_kind = GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
-            nav2_setup_first_routes = {
-                fetch_planner_gate.ROUTE_NAV2_REPOSITION,
-                fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
-            }
+            nav2_setup_first_routes = {fetch_planner_gate.ROUTE_NAV2_REPOSITION}
             planner_route_execution = self._planner_route_execution_payload(
                 decision,
                 local_fetch_dispatched=True,
@@ -5300,6 +5633,8 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
                 reason=(
                     "planner route required bounded Nav2 setup before local contact fetch"
                     if route_label in nav2_setup_first_routes
+                    else "planner route permitted bounded local re-aim execution"
+                    if route_label == fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM
                     else "planner route permitted bounded local execution"
                 ),
                 forward_only_pre_contact=runner_script == "golf_ball_circle_delivery_demo_runner.py",
@@ -5351,7 +5686,7 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
             if (
                 planner_route_execution
                 and str(planner_route_execution.get("route_label", ""))
-                in {fetch_planner_gate.ROUTE_NAV2_REPOSITION, fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM}
+                == fetch_planner_gate.ROUTE_NAV2_REPOSITION
             ):
                 command.extend(["--robot-x", "0.000000"])
                 command.extend(["--robot-y", "0.000000"])
@@ -5378,10 +5713,7 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
                 command.extend(["--line-servo-push-linear-x-mps", "0.055000"])
                 command.extend(["--line-servo-max-angular-z-rps", "0.180000"])
                 command.extend(["--line-servo-yaw-gain", "1.200000"])
-                if str(planner_route_execution.get("route_label", "")) in {
-                    fetch_planner_gate.ROUTE_NAV2_REPOSITION,
-                    fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
-                }:
+                if str(planner_route_execution.get("route_label", "")) == fetch_planner_gate.ROUTE_NAV2_REPOSITION:
                     command.append("--nav2-reposition-before-fetch")
                     command.extend(["--nav2-reposition-frame-id", "odom"])
                     command.extend(["--nav2-reposition-goal-frame-mode", "nav2_relative"])

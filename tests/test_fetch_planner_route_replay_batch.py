@@ -29,6 +29,7 @@ def _make_args(**overrides):
         "dashboard_url": "",
         "compose_project": "",
         "fresh_dashboard_session_per_run": False,
+        "allow_operator_view_degraded": False,
         "world_file": "yolo_test_world_v6_calibrated_golf_turf.world",
         "surface_profile": "calibrated_golf_turf",
         "robot_sdf_name": "jetbot_core_ignition_v1.7.0.sdf",
@@ -343,6 +344,88 @@ def test_replay_batch_fresh_dashboard_session_binds_visual_session(tmp_path, mon
     assert summary["rows"][0]["expected_session_id"] == "session_fresh"
     assert summary["rows"][0]["compose_project"] == "project_fresh"
     assert summary["rows"][0]["mission"]["session_id"] == "session_fresh"
+
+
+def test_dashboard_environment_ready_accepts_operator_view_degraded_only_when_allowed():
+    state = {
+        "environment_state": "environment_ready",
+        "phase": "environment_ready",
+        "sim_gate_ready": True,
+        "world_stream_ready": True,
+        "operator_view_ready": False,
+        "operator_view_required": False,
+        "operator_view_status": "degraded",
+    }
+
+    assert batch.dashboard_environment_ready(state) is False
+    assert batch.dashboard_environment_ready(state, allow_operator_view_degraded=True) is True
+
+    state["operator_view_status"] = "error"
+    assert batch.dashboard_environment_ready(state, allow_operator_view_degraded=True) is True
+
+    state["operator_view_status"] = "degraded_optional"
+    assert batch.dashboard_environment_ready(state, allow_operator_view_degraded=True) is True
+
+    state["operator_view_required"] = True
+    assert batch.dashboard_environment_ready(state, allow_operator_view_degraded=True) is False
+
+
+def test_dashboard_environment_ready_trusts_dashboard_after_world_stream_goes_stale():
+    state = {
+        "environment_state": "environment_ready",
+        "phase": "environment_ready",
+        "sim_gate_ready": True,
+        "world_stream_ready": False,
+        "world_stream_renderable": False,
+        "operator_view_ready": False,
+        "operator_view_required": False,
+        "operator_view_status": "degraded",
+    }
+
+    assert batch.dashboard_environment_ready(state, allow_operator_view_degraded=True) is True
+
+
+def test_start_dashboard_environment_can_request_operator_view_degraded(monkeypatch):
+    posted = {}
+
+    def fake_post(dashboard_url, path, payload, *, timeout_s):
+        posted.update(
+            {
+                "dashboard_url": dashboard_url,
+                "path": path,
+                "payload": payload,
+                "timeout_s": timeout_s,
+            }
+        )
+        return {"ok": True}
+
+    def fake_wait(dashboard_url, *, timeout_s, poll_s, want_ready, allow_operator_view_degraded, **_kwargs):
+        assert dashboard_url == "http://dash"
+        assert want_ready is True
+        assert allow_operator_view_degraded is True
+        return {
+            "environment_state": "environment_ready",
+            "phase": "environment_ready",
+            "sim_gate_ready": True,
+            "world_stream_ready": True,
+            "operator_view_ready": False,
+            "operator_view_required": False,
+            "operator_view_status": "degraded",
+        }
+
+    monkeypatch.setattr(batch, "post_dashboard_json", fake_post)
+    monkeypatch.setattr(batch, "wait_for_dashboard_state", fake_wait)
+
+    result = batch.start_dashboard_environment(
+        _make_args(
+            dashboard_url="http://dash",
+            allow_operator_view_degraded=True,
+        )
+    )
+
+    assert posted["path"] == "/api/env/start"
+    assert posted["payload"]["operator_view_required"] is False
+    assert result["state"]["operator_view_status"] == "degraded"
 
 
 def test_replay_batch_records_dashboard_start_failure_reason(tmp_path, monkeypatch):

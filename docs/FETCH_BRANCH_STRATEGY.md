@@ -206,10 +206,11 @@ Planner-routed moonshot update, June 2:
 - executable lanes:
   `fetch_ready_local`, `nav2_reposition_first`, and `recovery_or_reaim`
   dispatch the forward-only golf delivery runner with route metadata and a
-  pre-contact forward-motion guard; `nav2_reposition_first` and
-  `recovery_or_reaim` use real Nav2 setup before local fetch; `ambiguous_or_unsafe_no_go`
-  records an executed safe no-go; `scan_or_perceive_first` records a
-  planner-owned refresh/abstain outcome
+  pre-contact forward-motion guard; `nav2_reposition_first` uses real Nav2
+  setup before local fetch; `recovery_or_reaim` uses the bounded local re-aim
+  routine from the generated robot pose; `ambiguous_or_unsafe_no_go` records
+  an executed safe no-go; `scan_or_perceive_first` records a planner-owned
+  refresh/abstain outcome
 - current recovery evidence:
   the exact recovery layout that stalled without contact at `0.739814m` closest
   (`20260603T040615017369Z`) now passes at `0.196169m` closest
@@ -238,6 +239,16 @@ Planner-routed moonshot update, June 2:
   `artifacts/session/uat_random_planner_routes_seed20260607_exec6_20260603/fetch_visual_uat_package/scorecard.md`
   Route UAT analyzer:
   `artifacts/session/route_uat_random_seed20260607_exec6_analyzer_20260603/fetch_planner_route_uat_analyzer/scorecard.md`
+- June 4 recovery/re-aim boundary evidence:
+  the exact seed `20260627` recovery row that previously failed before contact
+  passed after `recovery_or_reaim` stopped invoking real Nav2 pre-fetch setup.
+  The run used the generated robot pose, `nav2_reposition_before_fetch=false`,
+  clean first-contact quality, stable contact approach, and closest approach
+  `0.193732m`.
+  Replay batch:
+  `artifacts/session/live_recovery_reaim_local_setup_scene04_20260604/fetch_planner_route_replay_batch/scorecard.md`.
+  Visual package:
+  `artifacts/session/live_recovery_reaim_local_setup_scene04_20260604_seed20260627_scene04_recovery_or_reaim/fetch_visual_uat_package/scorecard.md`.
 - video recovery:
   `fetch_visual_uat_package.py` now rebuilds browser-safe onboard, top-down, and
   world-stream clips from saved frame sequences when recorder MP4s are missing,
@@ -307,6 +318,20 @@ Planner-routed moonshot update, June 2:
   recovery first-contact smoothing, because the high-risk recovery case still
   shows visible off-axis contact while Nav2 reposition produced clean first
   contact under the same roughest-selector harness.
+- readyfix update, June 4:
+  seed `20260627` now has a green representative route-owner UAT package and
+  stronger mission-only gate evidence. Planner child
+  `live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_planner`
+  passed `30/30`; mission-only replay passed `6/6` and proved the
+  Nav2-abort-to-local-recovery boundary; visual replay
+  `live_planner_seeded_generalization_gate_visual_recheck_20260604` passed
+  `4/4` with browser-watchable packages across recovery, fetch-ready, and
+  Nav2-first rows. Keep this branch as the active planner-gated route-owner
+  lane, and keep promotion pending until the parent seeded gate carries the
+  canonical live visual package with `promotion_evidence=true`.
+- harness update:
+  stale-model cleanup timeouts now return recorded timeout status instead of
+  killing the delivery runner before mission dispatch.
 
 Saved-anchor requalification update, later June 1:
 

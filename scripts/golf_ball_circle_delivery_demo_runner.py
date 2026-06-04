@@ -40,7 +40,12 @@ ROUTE_EXECUTOR_LOCAL_FETCH = "local_fetch_to_pose"
 ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH = "nav2_forward_reposition_then_fetch"
 ROUTE_EXECUTOR_RECOVERY = "bounded_recovery_reaim"
 EXECUTABLE_PLANNER_FETCH_ROUTES = {ROUTE_FETCH_READY, ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM}
-NAV2_SETUP_PLANNER_ROUTES = {ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM}
+NAV2_SETUP_PLANNER_ROUTES = {ROUTE_NAV2_REPOSITION}
+RECOVERY_LATERAL_LIMIT_M = 0.240
+RECOVERY_YAW_LIMIT_DEG = 35.0
+RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M = 0.900
+NAV2_FALLBACK_ROBOT_BALL_DISTANCE_LIMIT_M = 1.200
+NAV2_FALLBACK_BALL_MOTION_LIMIT_M = 0.020
 ROUTE_EXECUTOR_BY_LABEL = {
     ROUTE_FETCH_READY: ROUTE_EXECUTOR_LOCAL_FETCH,
     ROUTE_NAV2_REPOSITION: ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
@@ -141,6 +146,198 @@ def _set_route_default(args: argparse.Namespace, explicit_args: set[str], attr: 
         setattr(args, attr, value)
 
 
+def _finite_float(value: Any, default: float = 0.0) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    if not math.isfinite(number):
+        return float(default)
+    return number
+
+
+def _nav2_layout_prefers_local_recovery(target_layout: dict[str, Any]) -> dict[str, Any]:
+    random_draw = target_layout.get("random_draw") if isinstance(target_layout.get("random_draw"), dict) else {}
+    ball_target_distance_m = _finite_float(random_draw.get("ball_target_distance_m"), 999.0)
+    robot_ball_distance_m = _finite_float(random_draw.get("robot_ball_distance_m"), 999.0)
+    lateral_error_m = _finite_float(
+        random_draw.get("robot_lateral_error_m", abs(_finite_float(random_draw.get("robot_lateral_signed_m"), 999.0))),
+        999.0,
+    )
+    yaw_error_deg = abs(_finite_float(random_draw.get("robot_yaw_error_deg"), 999.0))
+    prefers_recovery = bool(
+        0.34 <= ball_target_distance_m <= 0.85
+        and 0.24 <= robot_ball_distance_m <= RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
+        and lateral_error_m <= RECOVERY_LATERAL_LIMIT_M
+        and yaw_error_deg <= RECOVERY_YAW_LIMIT_DEG
+    )
+    return {
+        "changed": prefers_recovery,
+        "reason": "near_field_setup_prefers_bounded_recovery_reaim" if prefers_recovery else "nav2_route_admissible",
+        "robot_ball_distance_m": round(float(robot_ball_distance_m), 6),
+        "ball_target_distance_m": round(float(ball_target_distance_m), 6),
+        "robot_lateral_error_m": round(float(lateral_error_m), 6),
+        "robot_yaw_error_deg": round(float(yaw_error_deg), 6),
+        "thresholds": {
+            "recovery_robot_ball_distance_limit_m": RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M,
+            "recovery_lateral_limit_m": RECOVERY_LATERAL_LIMIT_M,
+            "recovery_yaw_limit_deg": RECOVERY_YAW_LIMIT_DEG,
+        },
+    }
+
+
+def _route_geometry_from_poses(
+    *,
+    robot_pose: dict[str, Any],
+    ball_pose: dict[str, Any],
+    target_x: float,
+    target_y: float,
+) -> dict[str, Any]:
+    robot_xy = pose_xy_yaw(robot_pose)
+    ball_xy = pose_xy_yaw(ball_pose)
+    if robot_xy is None or ball_xy is None:
+        return {"available": False, "reason": "missing_robot_or_ball_pose"}
+    line_yaw = math.atan2(float(target_y) - ball_xy["y"], float(target_x) - ball_xy["x"])
+    robot_ball_distance_m = math.hypot(robot_xy["x"] - ball_xy["x"], robot_xy["y"] - ball_xy["y"])
+    ball_target_distance_m = math.hypot(float(target_x) - ball_xy["x"], float(target_y) - ball_xy["y"])
+    lateral_error_m = abs(
+        signed_lateral_error_m(
+            robot_xy["x"],
+            robot_xy["y"],
+            origin_x=ball_xy["x"],
+            origin_y=ball_xy["y"],
+            line_yaw_rad=line_yaw,
+        )
+    )
+    yaw_error_deg = abs(math.degrees(normalize_angle_rad(line_yaw - robot_xy["yaw"])))
+    return {
+        "available": True,
+        "source": "post_nav2_pose_sample",
+        "robot_pose": robot_xy,
+        "ball_pose": ball_xy,
+        "ball_target_distance_m": round(float(ball_target_distance_m), 6),
+        "robot_ball_distance_m": round(float(robot_ball_distance_m), 6),
+        "robot_lateral_error_m": round(float(lateral_error_m), 6),
+        "robot_yaw_error_deg": round(float(yaw_error_deg), 6),
+        "line_yaw_deg": round(math.degrees(line_yaw), 6),
+    }
+
+
+def _route_geometry_from_layout(target_layout: dict[str, Any]) -> dict[str, Any]:
+    random_draw = target_layout.get("random_draw") if isinstance(target_layout.get("random_draw"), dict) else {}
+    if not random_draw:
+        return {"available": False, "reason": "missing_random_draw_geometry"}
+    return {
+        "available": True,
+        "source": "target_layout.random_draw",
+        "ball_target_distance_m": round(float(_finite_float(random_draw.get("ball_target_distance_m"), 999.0)), 6),
+        "robot_ball_distance_m": round(float(_finite_float(random_draw.get("robot_ball_distance_m"), 999.0)), 6),
+        "robot_lateral_error_m": round(
+            float(
+                _finite_float(
+                    random_draw.get(
+                        "robot_lateral_error_m",
+                        abs(_finite_float(random_draw.get("robot_lateral_signed_m"), 999.0)),
+                    ),
+                    999.0,
+                )
+            ),
+            6,
+        ),
+        "robot_yaw_error_deg": round(abs(float(_finite_float(random_draw.get("robot_yaw_error_deg"), 999.0))), 6),
+    }
+
+
+def _fallback_geometry_is_admissible(geometry: dict[str, Any]) -> bool:
+    return bool(
+        geometry.get("available")
+        and 0.34 <= _finite_float(geometry.get("ball_target_distance_m"), 999.0) <= 0.85
+        and 0.24
+        <= _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
+        <= NAV2_FALLBACK_ROBOT_BALL_DISTANCE_LIMIT_M
+        and _finite_float(geometry.get("robot_lateral_error_m"), 999.0) <= RECOVERY_LATERAL_LIMIT_M
+        and _finite_float(geometry.get("robot_yaw_error_deg"), 999.0) <= RECOVERY_YAW_LIMIT_DEG
+    )
+
+
+def nav2_precontact_fallback_to_local_recovery_decision(
+    *,
+    args: argparse.Namespace,
+    target_layout: dict[str, Any],
+    pre_fetch_reposition: dict[str, Any],
+    pre_fetch_reposition_samples: list[dict[str, Any]],
+) -> dict[str, Any]:
+    route_label = str(getattr(args, "planner_route_label", "") or "").strip()
+    disabled = bool(getattr(args, "disable_nav2_precontact_fallback", False))
+    decision: dict[str, Any] = {
+        "eligible": False,
+        "applied": False,
+        "reason": "not_evaluated",
+        "requested_route_label": route_label,
+        "fallback_route_label": ROUTE_RECOVERY_OR_REAIM,
+        "fallback_route_executor": ROUTE_EXECUTOR_RECOVERY,
+        "thresholds": {
+            "ball_motion_limit_m": NAV2_FALLBACK_BALL_MOTION_LIMIT_M,
+            "robot_ball_distance_limit_m": NAV2_FALLBACK_ROBOT_BALL_DISTANCE_LIMIT_M,
+            "lateral_limit_m": RECOVERY_LATERAL_LIMIT_M,
+            "yaw_limit_deg": RECOVERY_YAW_LIMIT_DEG,
+        },
+    }
+    if disabled:
+        decision["reason"] = "fallback_disabled"
+        return decision
+    if route_label != ROUTE_NAV2_REPOSITION:
+        decision["reason"] = "route_not_nav2_reposition"
+        return decision
+    if bool(pre_fetch_reposition.get("success", False)):
+        decision["reason"] = "nav2_reposition_succeeded"
+        return decision
+    if bool(getattr(args, "nav2_reposition_continue_on_failure", False)):
+        decision["reason"] = "nav2_continue_on_failure_requested"
+        return decision
+
+    ball_motion_m = 0.0
+    post_geometry: dict[str, Any] = {"available": False, "reason": "missing_post_nav2_pose_sample"}
+    for sample in pre_fetch_reposition_samples:
+        ball_pose = pose_xy_yaw(sample.get("ball_pose") if isinstance(sample.get("ball_pose"), dict) else None)
+        if ball_pose is not None:
+            ball_motion_m = max(
+                ball_motion_m,
+                math.hypot(ball_pose["x"] - float(args.ball_x), ball_pose["y"] - float(args.ball_y)),
+            )
+        robot_pose_raw = sample.get("robot_pose") if isinstance(sample.get("robot_pose"), dict) else None
+        ball_pose_raw = sample.get("ball_pose") if isinstance(sample.get("ball_pose"), dict) else None
+        if robot_pose_raw is not None and ball_pose_raw is not None:
+            post_geometry = _route_geometry_from_poses(
+                robot_pose=robot_pose_raw,
+                ball_pose=ball_pose_raw,
+                target_x=float(args.zone_x),
+                target_y=float(args.zone_y),
+            )
+
+    decision["ball_motion_m"] = round(float(ball_motion_m), 6)
+    if ball_motion_m > NAV2_FALLBACK_BALL_MOTION_LIMIT_M:
+        decision["reason"] = "nav2_moved_ball_before_fallback"
+        decision["geometry"] = post_geometry
+        return decision
+
+    layout_geometry = _route_geometry_from_layout(target_layout)
+    geometry = post_geometry if bool(post_geometry.get("available", False)) else layout_geometry
+    decision["geometry"] = geometry
+    decision["layout_geometry"] = layout_geometry
+    decision["post_nav2_geometry"] = post_geometry
+    if not bool(geometry.get("available", False)):
+        decision["reason"] = str(geometry.get("reason", "missing_fallback_geometry"))
+        return decision
+    if not _fallback_geometry_is_admissible(geometry):
+        decision["reason"] = "outside_local_recovery_fallback_envelope"
+        return decision
+
+    decision["eligible"] = True
+    decision["reason"] = "pre_contact_nav2_failure_inside_local_recovery_envelope"
+    return decision
+
+
 def apply_planner_route_execution_defaults(
     args: argparse.Namespace,
     target_layout: dict[str, Any],
@@ -165,6 +362,14 @@ def apply_planner_route_execution_defaults(
         or random_draw.get("route_executor", "")
         or ROUTE_EXECUTOR_BY_LABEL.get(route_label, "")
     ).strip()
+    requested_route_label = route_label
+    requested_route_executor = route_executor
+    route_admissibility = {"changed": False, "reason": "route_admissible"}
+    if route_label == ROUTE_NAV2_REPOSITION:
+        route_admissibility = _nav2_layout_prefers_local_recovery(target_layout)
+        if bool(route_admissibility.get("changed", False)):
+            route_label = ROUTE_RECOVERY_OR_REAIM
+            route_executor = ROUTE_EXECUTOR_RECOVERY
     _set_route_default(args, explicit_args, "planner_route_label", route_label, "--planner-route-label")
     _set_route_default(args, explicit_args, "route_executor", route_executor, "--route-executor")
     robot_pose = random_draw.get("robot_pose") if isinstance(random_draw.get("robot_pose"), dict) else {}
@@ -241,8 +446,11 @@ def apply_planner_route_execution_defaults(
         _set_route_default(args, explicit_args, "robot_yaw", float(robot_pose.get("yaw", args.robot_yaw) or 0.0), "--robot-yaw")
     return {
         "applied": True,
+        "planner_route_requested_label": requested_route_label,
+        "route_executor_requested": requested_route_executor,
         "planner_route_label": route_label,
         "route_executor": route_executor,
+        "route_admissibility": route_admissibility,
         "drive_mode": str(args.drive_mode),
         "nav2_reposition_before_fetch": bool(args.nav2_reposition_before_fetch),
         "route_quality": (
@@ -1954,6 +2162,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--nav2-reposition-server-wait-s", type=float, default=8.0)
     parser.add_argument("--nav2-reposition-pose-wait-s", type=float, default=3.0)
     parser.add_argument("--nav2-reposition-continue-on-failure", action="store_true")
+    parser.add_argument("--disable-nav2-precontact-fallback", action="store_true")
     parser.add_argument("--forward-only-pre-contact-required", action="store_true")
     parser.add_argument("--stop-on-delivery", action="store_true")
     parser.add_argument("--delivery-stop-radius-m", type=float, default=0.0)
@@ -2084,6 +2293,11 @@ def main() -> int:
         "reason": "nav2_reposition_before_fetch_disabled",
     }
     pre_fetch_reposition_samples: list[dict[str, Any]] = []
+    nav2_precontact_fallback: dict[str, Any] = {
+        "eligible": False,
+        "applied": False,
+        "reason": "nav2_reposition_before_fetch_disabled",
+    }
     fetch_skipped_after_reposition = False
     if bool(args.nav2_reposition_before_fetch):
         world_setup_pose = build_nav2_reposition_setup_pose(
@@ -2161,8 +2375,30 @@ def main() -> int:
             pre_fetch_reposition["post_reposition_robot_pose"] = last_sample.get("robot_pose")
             pre_fetch_reposition["post_reposition_ball_pose"] = last_sample.get("ball_pose")
             append_jsonl(artifact_dir / "pre_fetch_reposition_trace.jsonl", pre_fetch_reposition_samples)
-        if not bool(pre_fetch_reposition.get("success", False)) and not bool(args.nav2_reposition_continue_on_failure):
-            fetch_skipped_after_reposition = True
+        if bool(pre_fetch_reposition.get("success", False)):
+            nav2_precontact_fallback = {
+                "eligible": False,
+                "applied": False,
+                "reason": "nav2_reposition_succeeded",
+            }
+        elif not bool(args.nav2_reposition_continue_on_failure):
+            nav2_precontact_fallback = nav2_precontact_fallback_to_local_recovery_decision(
+                args=args,
+                target_layout=target_layout,
+                pre_fetch_reposition=pre_fetch_reposition,
+                pre_fetch_reposition_samples=pre_fetch_reposition_samples,
+            )
+            if bool(nav2_precontact_fallback.get("eligible", False)):
+                nav2_precontact_fallback["applied"] = True
+                args.planner_route_label = ROUTE_RECOVERY_OR_REAIM
+                args.route_executor = ROUTE_EXECUTOR_RECOVERY
+                _set_route_default(args, explicit_args, "drive_duration_s", 78.0, "--drive-duration-s")
+                _set_route_default(args, explicit_args, "sample_duration_s", 82.0, "--sample-duration-s")
+                pre_fetch_reposition["fallback_to_local_recovery"] = nav2_precontact_fallback
+                pre_fetch_reposition["local_fetch_continued_after_nav2_failure"] = True
+            else:
+                fetch_skipped_after_reposition = True
+                pre_fetch_reposition["fallback_to_local_recovery"] = nav2_precontact_fallback
         write_json(artifact_dir / "pre_fetch_reposition.json", pre_fetch_reposition)
 
     update_runtime(
@@ -2174,6 +2410,8 @@ def main() -> int:
         latest_feedback=(
             "Nav2 reposition failed; local contact fetch is blocked."
             if fetch_skipped_after_reposition
+            else "Nav2 setup failed cleanly; bounded local recovery is taking over."
+            if bool(nav2_precontact_fallback.get("applied", False))
             else "Driving the robot forward to collect and deliver the golf ball."
         ),
     )
@@ -2325,6 +2563,7 @@ def main() -> int:
         "executor_actual": "golf_ball_circle_delivery_demo_runner",
         "route_quality": route_quality,
         "pre_fetch_reposition": pre_fetch_reposition,
+        "nav2_precontact_fallback": nav2_precontact_fallback,
         "nav2_reposition_before_fetch": bool(args.nav2_reposition_before_fetch),
         "nav2_reposition_required": bool(args.nav2_reposition_before_fetch),
         "nav2_reposition_success": pre_fetch_reposition.get("success"),
@@ -2453,6 +2692,8 @@ def main() -> int:
             f"- Nav2 reposition before fetch: `{bool(args.nav2_reposition_before_fetch)}` "
             f"`{pre_fetch_reposition.get('dispatch_status', 'skipped')}` "
             f"`{pre_fetch_reposition.get('status_text', '')}`",
+            f"- Nav2 pre-contact fallback: `{bool(nav2_precontact_fallback.get('applied', False))}` "
+            f"`{nav2_precontact_fallback.get('reason', '')}`",
             f"- Drive mode: `{args.drive_mode}`",
             f"- Delivery stop radius: `{delivery_stop_radius_m:.3f}m`",
             f"- Model provenance: `{bool(model_provenance.get('model_provenance_valid', False))}` "
@@ -2471,6 +2712,7 @@ def main() -> int:
             "stop": stop_payload,
             "planner_route": route_metadata,
             "pre_fetch_reposition": pre_fetch_reposition,
+            "nav2_precontact_fallback": nav2_precontact_fallback,
             "fetch_skipped_after_reposition": bool(fetch_skipped_after_reposition),
         },
     )

@@ -40,6 +40,7 @@ def _args(**overrides):
         "dashboard_url": "http://127.0.0.1:8879",
         "compose_project": "",
         "fresh_dashboard_session_per_run": True,
+        "allow_operator_view_degraded": False,
         "world_file": "yolo_test_world_v6_calibrated_golf_turf.world",
         "surface_profile": "calibrated_golf_turf",
         "robot_sdf_name": "jetbot_core_ignition_v1.7.0.sdf",
@@ -140,3 +141,15 @@ def test_planner_seeded_generalization_extracts_first_replay_failure():
         "failure_reason": "fresh_dashboard_session_start_failed",
         "expected_session_id": "session_a",
     }
+
+
+def test_seeded_gate_passes_operator_view_degraded_option_to_replay(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    args = _args(allow_operator_view_degraded=True)
+    replay_args = seeded_gate.build_replay_args(
+        args,
+        campaign_id="seeded_gate_replay",
+        gate_summary=tmp_path / "gate_summary.json",
+    )
+
+    assert replay_args.allow_operator_view_degraded is True

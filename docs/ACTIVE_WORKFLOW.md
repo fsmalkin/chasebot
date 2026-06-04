@@ -226,6 +226,49 @@ Live attempt, same morning:
   remains unattempted. Repair or bypass the dashboard/compose fresh-session
   startup path, then rerun the same parent gate.
 
+June 4, 2026 recovery/re-aim route-boundary correction:
+
+- Code boundary: `nav2_reposition_first` remains the route that owns real Nav2
+  setup before local fetch. `recovery_or_reaim` now keeps the generated robot
+  pose and lets the bounded forward-only `line_servo` recovery routine perform
+  the local re-aim, first-contact alignment, and push.
+- Regression proof:
+  `artifacts/session/live_recovery_reaim_local_setup_scene04_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Visual package:
+  `artifacts/session/live_recovery_reaim_local_setup_scene04_20260604_seed20260627_scene04_recovery_or_reaim/fetch_visual_uat_package/scorecard.md`
+- Result: the exact seed `20260627` scene04 `recovery_or_reaim` row that
+  previously failed before contact now passes live with `nav2_reposition_before_fetch=false`,
+  clean first-contact quality, stable contact approach, and closest approach
+  `0.193732m`.
+- Evidence meaning: the corrected route boundary repairs the prior
+  before-contact recovery abort. `promotion_evidence` remains `false` until the
+  full planner-routed seeded gate reruns with six live executable rows and
+  browser-watchable packages.
+
+June 4, 2026 planner-routed readyfix evidence:
+
+- Planner child:
+  `artifacts/session/live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_planner/fetch_planner_handoff_gate/scorecard.md`
+- Mission-only seeded gate:
+  `artifacts/session/live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Representative browser-visual replay:
+  `artifacts/session/live_planner_seeded_generalization_gate_visual_recheck_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Result: the planner child passed `30/30` with `0` wrong fetch-ready
+  dispatches. The mission-only replay passed `6/6` executable rows across
+  `recovery_or_reaim`, `fetch_ready_local`, and `nav2_reposition_first`; one
+  Nav2 row aborted before contact, moved the ball `0.0m`, fell back to bounded
+  local recovery, and delivered at `0.197m`. The representative full-visual
+  replay then passed `4/4` with browser-watchable packages and frame-sequence
+  review across recovery, fetch-ready, and Nav2-first rows; closest approaches
+  were `0.193m..0.197m`.
+- Evidence meaning: route ownership is currently green for UAT and the
+  Nav2-to-local fallback boundary has live mission proof. Promotion remains
+  pending until the parent seeded gate itself runs with canonical visual
+  packaging semantics and sets `promotion_evidence=true`.
+- Harness fix: stale model cleanup now returns timeout status instead of
+  crashing the delivery runner, after the fetch-ready visual row exposed a
+  Gazebo remove-service timeout before mission dispatch.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

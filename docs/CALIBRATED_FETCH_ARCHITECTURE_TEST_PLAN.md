@@ -194,6 +194,17 @@ Treat the high-risk recovery case as the next contact-smoothing target; treat
 the clean-first-contact Nav2 run as supporting evidence for Nav2 setup
 ownership inside the broader planner-routed architecture.
 
+June 4 readyfix evidence strengthens the planner-gated candidate. Planner child
+`live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_planner`
+passed `30/30`; mission replay
+`live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_replay`
+passed `6/6` and included a Nav2-first abort that left the ball unmoved before
+bounded local recovery delivered at `0.197m`. Browser-visual replay
+`live_planner_seeded_generalization_gate_visual_recheck_20260604` passed `4/4`
+with same-session browser-watchable packages and reviewed keyframe sheets.
+Classify this as route-owner UAT green. The canonical parent seeded gate still
+owns promotion evidence.
+
 ## Research Thread Output
 
 Before starting another implementation spike, produce a findings matrix across

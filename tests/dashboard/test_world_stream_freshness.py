@@ -1090,6 +1090,39 @@ def test_truth_probe_defaults_include_visit_prefix(monkeypatch):
     assert args.target_model_prefix == "visit_mission_target_"
 
 
+def test_truth_probe_samples_pose_info_when_dynamic_pose_is_empty(monkeypatch):
+    dynamic_topic = "/world/yolo_test_world/dynamic_pose/info"
+    pose_topic = "/world/yolo_test_world/pose/info"
+    pose_payload = '''
+pose {
+  name: "jetbot"
+  position {
+    x: 0.1
+  }
+  orientation {
+    w: 1
+  }
+}
+'''
+
+    def fake_sample(topic):
+        if topic == dynamic_topic:
+            return True, ""
+        if topic == pose_topic:
+            return True, pose_payload
+        return False, "unexpected topic"
+
+    monkeypatch.setattr(sim_truth_probe, "sample_pose_topic", fake_sample)
+
+    ok, payload, sampled_topic, errors = sim_truth_probe.sample_first_pose_payload([dynamic_topic, pose_topic])
+
+    assert ok is True
+    assert payload == pose_payload
+    assert sampled_topic == pose_topic
+    assert errors == {dynamic_topic: ""}
+    assert sim_truth_probe.parse_pose_message(payload)[0]["name"] == "jetbot"
+
+
 def test_truth_probe_select_target_poses_reports_all_matching_candidates():
     poses = [
         {"name": "jetbot", "position": {"x": 0.0, "y": 0.0}},
@@ -1885,6 +1918,302 @@ def test_dashboard_fetch_progress_promotion_evidence_overrides_stage_quality_wat
     assert progress["promotion_evidence"] is True
     assert "promotion-grade" in progress["headline"]
     assert progress["recommended_next_action"] == "package_mobile_visual_uat"
+
+
+def test_dashboard_fetch_progress_fresh_planner_seeded_gate_blocks_stale_promotion(tmp_path, monkeypatch):
+    session_root = tmp_path / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    controller = _make_controller(tmp_path)
+    controller._fetch_progress_cache = {}
+    controller._fetch_progress_cache_at = 0.0
+
+    _write_json(
+        session_root / "stage_audit" / "fetch_saved_anchor_setup_contact_audit" / "audit_summary.json",
+        {
+            "type": "fetch_saved_anchor_setup_contact_audit",
+            "campaign_id": "stage_audit",
+            "stage_quality_green": True,
+            "saved_anchor_count": 3,
+            "stage_quality_pass_count": 3,
+            "setup_contact_blocker_count": 0,
+            "setup_capture_blocker_count": 0,
+            "first_contact_blocker_count": 0,
+            "push_coast_blocker_count": 0,
+            "invalid_model_provenance_count": 0,
+        },
+    )
+    _write_json(
+        session_root / "fetch_evidence" / "fetch_seeded_gate_evidence_analyzer" / "evidence_summary.json",
+        {
+            "type": "fetch_seeded_gate_evidence_analyzer",
+            "campaign_id": "old_guarded_live_evidence",
+            "recommended_next_action": "package_mobile_visual_uat",
+            "milestone_interpretation": "guarded_live_seeded_gate_promotion_ready",
+            "promotion_evidence": True,
+            "seeded_shadow_gate": {
+                "campaign_id": "old_guarded_seeded_gate",
+                "mode": "guarded_live",
+                "pass_count": 6,
+                "fail_count": 0,
+                "model_provenance_valid": True,
+                "model_provenance_invalid_count": 0,
+            },
+        },
+    )
+    _write_json(
+        session_root / "broad_gate" / "fetch_planner_seeded_generalization_gate" / "gate_summary.json",
+        {
+            "type": "fetch_planner_seeded_generalization_gate",
+            "campaign_id": "broad_gate",
+            "dry_run": False,
+            "seed": 20260627,
+            "random_cases": 30,
+            "expected_executable_count": 6,
+            "pass": False,
+            "promotion_evidence": False,
+            "planner_gate_pass": True,
+            "replay_pass": False,
+            "analyzer_pass": False,
+            "milestone_interpretation": "planner_routed_seeded_generalization_incomplete",
+            "replay_first_failure": {
+                "scene_id": "seed20260627_scene04_recovery_or_reaim",
+                "route_label": "recovery_or_reaim",
+                "returncode": 2,
+            },
+            "replay_summary": {"mission_pass_count": 0, "mission_fail_count": 1},
+            "analyzer_summary": {"execution_quality_status": "blocker"},
+        },
+    )
+
+    progress = controller.get_state()["fetch_progress"]
+
+    assert progress["status"] == "bad"
+    assert progress["promotion_evidence"] is False
+    assert "Broad planner-routed UAT is incomplete" in progress["headline"]
+    assert progress["recommended_next_action"] == "repair_planner_routed_recovery_reaim_executor"
+    assert progress["planner_seeded_gate"]["current_blocking"] is True
+    assert progress["planner_seeded_gate"]["first_failure"]["route_label"] == "recovery_or_reaim"
+
+
+def test_dashboard_fetch_progress_targeted_replay_repairs_latest_seeded_failure(tmp_path, monkeypatch):
+    session_root = tmp_path / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    controller = _make_controller(tmp_path)
+    controller._fetch_progress_cache = {}
+    controller._fetch_progress_cache_at = 0.0
+
+    _write_json(
+        session_root / "fetch_evidence" / "fetch_seeded_gate_evidence_analyzer" / "evidence_summary.json",
+        {
+            "type": "fetch_seeded_gate_evidence_analyzer",
+            "campaign_id": "old_guarded_live_evidence",
+            "recommended_next_action": "package_mobile_visual_uat",
+            "promotion_evidence": True,
+            "seeded_shadow_gate": {
+                "campaign_id": "old_guarded_seeded_gate",
+                "pass_count": 6,
+                "fail_count": 0,
+                "model_provenance_valid": True,
+                "model_provenance_invalid_count": 0,
+            },
+        },
+    )
+    _write_json(
+        session_root / "broad_gate" / "fetch_planner_seeded_generalization_gate" / "gate_summary.json",
+        {
+            "type": "fetch_planner_seeded_generalization_gate",
+            "campaign_id": "broad_gate",
+            "dry_run": False,
+            "pass": False,
+            "promotion_evidence": False,
+            "replay_first_failure": {
+                "scene_id": "seed20260627_scene04_recovery_or_reaim",
+                "route_label": "recovery_or_reaim",
+                "returncode": 2,
+            },
+            "replay_summary": {"mission_pass_count": 0, "mission_fail_count": 1},
+        },
+    )
+    _write_json(
+        session_root / "targeted_repair" / "fetch_planner_route_replay_batch" / "batch_summary.json",
+        {
+            "type": "fetch_planner_route_replay_batch",
+            "campaign_id": "targeted_repair",
+            "dry_run": False,
+            "pass": True,
+            "selected_count": 1,
+            "mission_pass_count": 1,
+            "visual_package_pass_count": 1,
+            "rows": [
+                {
+                    "scene_id": "seed20260627_scene04_recovery_or_reaim",
+                    "route_label": "recovery_or_reaim",
+                    "route_executor": "bounded_recovery_reaim",
+                    "returncode": 0,
+                    "mission": {"pass": True},
+                    "visual_package": {"pass": True},
+                }
+            ],
+        },
+    )
+
+    progress = controller.get_state()["fetch_progress"]
+
+    assert progress["status"] == "warn"
+    assert progress["promotion_evidence"] is False
+    assert "Targeted recovery_or_reaim repair passed" in progress["headline"]
+    assert progress["recommended_next_action"] == "rerun_full_planner_routed_seeded_gate"
+    assert progress["planner_seeded_gate"]["current_blocking"] is False
+    assert progress["planner_route_replay_batch"]["repairs_latest_seeded_failure"] is True
+
+
+def test_dashboard_fetch_progress_latest_route_replay_keeps_seeded_gate_pending_after_dry_run(tmp_path, monkeypatch):
+    session_root = tmp_path / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    controller = _make_controller(tmp_path)
+    controller._fetch_progress_cache = {}
+    controller._fetch_progress_cache_at = 0.0
+
+    _write_json(
+        session_root / "fetch_evidence" / "fetch_seeded_gate_evidence_analyzer" / "evidence_summary.json",
+        {
+            "type": "fetch_seeded_gate_evidence_analyzer",
+            "campaign_id": "old_guarded_live_evidence",
+            "recommended_next_action": "package_mobile_visual_uat",
+            "promotion_evidence": True,
+            "seeded_shadow_gate": {
+                "campaign_id": "old_guarded_seeded_gate",
+                "pass_count": 6,
+                "fail_count": 0,
+                "model_provenance_valid": True,
+                "model_provenance_invalid_count": 0,
+            },
+        },
+    )
+    _write_json(
+        session_root / "dry_parent" / "fetch_planner_seeded_generalization_gate" / "gate_summary.json",
+        {
+            "type": "fetch_planner_seeded_generalization_gate",
+            "campaign_id": "dry_parent",
+            "dry_run": True,
+            "pass": True,
+            "promotion_evidence": False,
+        },
+    )
+    _write_json(
+        session_root / "latest_route_replay" / "fetch_planner_route_replay_batch" / "batch_summary.json",
+        {
+            "type": "fetch_planner_route_replay_batch",
+            "campaign_id": "latest_route_replay",
+            "dry_run": False,
+            "pass": True,
+            "selected_count": 1,
+            "mission_pass_count": 1,
+            "visual_package_pass_count": 1,
+            "rows": [
+                {
+                    "scene_id": "seed20260627_scene04_recovery_or_reaim",
+                    "route_label": "recovery_or_reaim",
+                    "route_executor": "bounded_recovery_reaim",
+                    "returncode": 0,
+                    "mission": {"pass": True},
+                    "visual_package": {"pass": True},
+                }
+            ],
+        },
+    )
+
+    progress = controller.get_state()["fetch_progress"]
+
+    assert progress["status"] == "warn"
+    assert progress["promotion_evidence"] is False
+    assert "Latest planner-route replay batch passed 1/1" in progress["headline"]
+    assert progress["recommended_next_action"] == "rerun_full_planner_routed_seeded_gate"
+    assert progress["planner_route_replay_batch"]["current_pending_seeded_gate"] is True
+
+
+def test_dashboard_fetch_progress_green_visual_replay_supersedes_incomplete_seeded_parent(tmp_path, monkeypatch):
+    session_root = tmp_path / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    controller = _make_controller(tmp_path)
+    controller._fetch_progress_cache = {}
+    controller._fetch_progress_cache_at = 0.0
+
+    _write_json(
+        session_root / "fetch_evidence" / "fetch_seeded_gate_evidence_analyzer" / "evidence_summary.json",
+        {
+            "type": "fetch_seeded_gate_evidence_analyzer",
+            "campaign_id": "old_guarded_live_evidence",
+            "recommended_next_action": "package_mobile_visual_uat",
+            "promotion_evidence": True,
+            "seeded_shadow_gate": {
+                "campaign_id": "old_guarded_seeded_gate",
+                "pass_count": 6,
+                "fail_count": 0,
+                "model_provenance_valid": True,
+                "model_provenance_invalid_count": 0,
+            },
+        },
+    )
+    _write_json(
+        session_root / "mission_only_parent" / "fetch_planner_seeded_generalization_gate" / "gate_summary.json",
+        {
+            "type": "fetch_planner_seeded_generalization_gate",
+            "campaign_id": "mission_only_parent",
+            "dry_run": False,
+            "pass": False,
+            "promotion_evidence": False,
+            "planner_gate_pass": True,
+            "replay_pass": False,
+            "replay_first_failure": {},
+            "replay_summary": {
+                "selected_count": 4,
+                "mission_pass_count": 4,
+                "mission_fail_count": 0,
+                "visual_package_pass_count": 0,
+            },
+        },
+    )
+    _write_json(
+        session_root / "visual_recheck" / "fetch_planner_route_replay_batch" / "batch_summary.json",
+        {
+            "type": "fetch_planner_route_replay_batch",
+            "campaign_id": "visual_recheck",
+            "dry_run": False,
+            "pass": True,
+            "selected_count": 4,
+            "mission_pass_count": 4,
+            "visual_package_pass_count": 4,
+            "rows": [
+                {
+                    "scene_id": "seed20260627_scene04_recovery_or_reaim",
+                    "route_label": "recovery_or_reaim",
+                    "route_executor": "bounded_recovery_reaim",
+                    "returncode": 0,
+                    "mission": {"pass": True},
+                    "visual_package": {"pass": True},
+                },
+                {
+                    "scene_id": "seed20260627_scene09_fetch_ready_local",
+                    "route_label": "fetch_ready_local",
+                    "route_executor": "local_fetch_to_pose",
+                    "returncode": 0,
+                    "mission": {"pass": True},
+                    "visual_package": {"pass": True},
+                },
+            ],
+        },
+    )
+
+    progress = controller.get_state()["fetch_progress"]
+
+    assert progress["status"] == "warn"
+    assert progress["promotion_evidence"] is False
+    assert "Latest planner-route replay batch passed 4/4" in progress["headline"]
+    assert progress["recommended_next_action"] == "rerun_full_planner_routed_seeded_gate"
+    assert progress["planner_seeded_gate"]["current_blocking"] is False
+    assert progress["planner_route_replay_batch"]["current_pending_seeded_gate"] is True
+    assert progress["planner_route_replay_batch"]["supersedes_incomplete_seeded_gate"] is True
 
 
 def test_dashboard_fetch_progress_prefers_terminal_stage_audit_over_stale_seeded_context(tmp_path, monkeypatch):
@@ -3132,7 +3461,8 @@ def test_run_golf_fetch_planner_gated_recovery_route_dispatches_forward_layout(t
     assert result["route_label"] == dashboard_service.fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM
     assert result["route_executor"] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_RECOVERY
     assert result["planner_route_executed"] is True
-    assert result["planner_route_execution"]["outcome"] == "nav2_reposition_then_forward_only_fetch_runner_dispatched"
+    assert result["planner_route_execution"]["outcome"] == "forward_only_fetch_runner_dispatched"
+    assert result["planner_route_execution"]["reason"] == "planner route permitted bounded local re-aim execution"
     assert result["forward_only_pre_contact_required"] is True
     assert result["forward_only_pre_contact"] is True
     assert layout["layout_family"] == "planner_gated_recovery_or_reaim"
@@ -3144,13 +3474,13 @@ def test_run_golf_fetch_planner_gated_recovery_route_dispatches_forward_layout(t
     assert "--route-executor" in command
     assert command[command.index("--route-executor") + 1] == dashboard_service.fetch_planner_gate.ROUTE_EXECUTOR_RECOVERY
     assert "--forward-only-pre-contact-required" in command
-    assert command[command.index("--robot-x") + 1] == "0.000000"
-    assert command[command.index("--robot-y") + 1] == "0.000000"
-    assert command[command.index("--robot-yaw") + 1] == "0.000000"
+    assert command[command.index("--robot-x") + 1] == f"{float(scene['robot_pose']['x']):.6f}"
+    assert command[command.index("--robot-y") + 1] == f"{float(scene['robot_pose']['y']):.6f}"
+    assert command[command.index("--robot-yaw") + 1] == f"{float(scene['robot_pose']['yaw']):.6f}"
     assert "--drive-mode" in command
     assert command[command.index("--drive-mode") + 1] == "line_servo"
-    assert "--nav2-reposition-before-fetch" in command
-    assert "--nav2-reposition-transform-layout-to-current-robot" in command
+    assert "--nav2-reposition-before-fetch" not in command
+    assert "--nav2-reposition-transform-layout-to-current-robot" not in command
     assert "--stop-on-delivery" in command
     assert command[command.index("--delivery-stop-radius-m") + 1] == "0.200000"
     assert command[command.index("--artifact-kind") + 1] == dashboard_service.GOLF_BALL_CIRCLE_DELIVERY_RANDOM_ARTIFACT_KIND
@@ -3640,6 +3970,54 @@ def test_start_environment_worker_retries_once_after_host_port_bind_failure(tmp_
     assert "Retrying startup after host port 8891 bind failure." in messages
 
 
+def test_start_environment_worker_can_degrade_optional_operator_view(tmp_path, monkeypatch):
+    controller = _make_controller(tmp_path)
+    controller.operator_view_required = False
+    controller._clear_llm_proof_runtime_state = lambda: None
+    controller._clear_visit_mission_runtime_state = lambda: None
+    controller._write_operator_status = lambda **_kwargs: None
+    controller._write_lock_file = lambda: None
+    controller._remove_lock_file = lambda: None
+    controller._teardown_environment = lambda env=None: None
+    controller._refresh_session_container_ids = lambda project_name: (
+        setattr(controller, "sim_gate_container_id", "sim-gate"),
+        setattr(controller, "gate_stack_container_id", "gate-stack"),
+        setattr(controller, "world_viewer_container_id", "world-viewer"),
+        setattr(controller, "operator_view_container_id", "operator-view"),
+    )
+    controller._run_environment_compose_up = lambda *_args, **_kwargs: (0, "ok")
+    controller._run_container_helper = lambda *_args, **_kwargs: {"output": "ok"}
+    controller._wait_for_truth_ready = lambda timeout_s: True
+    controller._wait_for_world_stream_ready = lambda timeout_s: True
+    controller._wait_for_operator_view_ready = lambda timeout_s: False
+    controller._wait_for_visual_ready = lambda timeout_s: True
+    controller._wait_for_required_gate_services = lambda *_args, **_kwargs: {
+        "sim-gate": {"service": "sim-gate", "status": "running", "container_id": "sim-gate-1"},
+        "world-viewer": {"service": "world-viewer", "status": "running", "container_id": "world-viewer-1"},
+        "gate-stack": {"service": "gate-stack", "status": "running", "container_id": "gate-stack-1"},
+        "operator-view": {"service": "operator-view", "status": "running", "container_id": "operator-view-1"},
+    }
+    controller._operator_view_snapshot = lambda *_args, **_kwargs: {
+        "ready": False,
+        "status": "error",
+        "failure_class": "xpra_http_unavailable",
+    }
+    monkeypatch.setattr(dashboard_service, "find_free_port", lambda start, end, *, exclude_ports=None: start)
+    monkeypatch.setattr(dashboard_service, "make_session_id", lambda: "20260320T201500Z")
+
+    events: list[tuple[str, str]] = []
+    controller._record_operator_event = lambda message, category="info", source="dashboard": events.append((message, category))
+
+    controller._start_environment_worker()
+
+    assert controller.state["environment_state"] == "environment_ready"
+    assert controller.state["operator_view_required"] is False
+    assert controller.state["operator_view_ready"] is False
+    assert controller.state["operator_view_status"] == "degraded"
+    assert controller.state["operator_view_failure_class"] == "xpra_http_unavailable"
+    assert any("Operator view did not become ready" in message for message, _category in events)
+
+
 def test_world_stream_restart_ready_uses_live_world_state_not_snapshot(tmp_path):
     controller = _make_controller(tmp_path)
     _write_world_state(
@@ -3670,7 +4048,7 @@ def test_run_environment_compose_up_uses_no_build_when_reusing_local_images(tmp_
     class _Proc:
         returncode = 0
 
-        def communicate(self):
+        def communicate(self, timeout=None):
             return ("ok", "")
 
     controller._popen_docker_compose = lambda project_name, *args, env=None: popen_calls.append((project_name, *args)) or _Proc()
@@ -3707,7 +4085,7 @@ def test_run_environment_compose_up_headless_worker_skips_visual_services(tmp_pa
     class _Proc:
         returncode = 0
 
-        def communicate(self):
+        def communicate(self, timeout=None):
             return ("ok", "")
 
     controller._popen_docker_compose = lambda project_name, *args, env=None: popen_calls.append((project_name, *args)) or _Proc()
@@ -3728,6 +4106,66 @@ def test_run_environment_compose_up_headless_worker_skips_visual_services(tmp_pa
     ]
 
 
+def test_run_environment_compose_up_recovers_timeout_when_services_are_running(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.control_mode = "docker_socket"
+    controller.build_on_next_start = False
+    controller._run_docker_compose = lambda *_args, **_kwargs: None
+    controller._docker_image_exists = lambda _image_ref: True
+    controller._wait_for_required_gate_services = lambda *_args, **_kwargs: {
+        "sim-gate": {"service": "sim-gate", "status": "running", "container_id": "sim-gate-1"},
+        "world-viewer": {"service": "world-viewer", "status": "running", "container_id": "world-viewer-1"},
+        "gate-stack": {"service": "gate-stack", "status": "running", "container_id": "gate-stack-1"},
+        "operator-view": {"service": "operator-view", "status": "running", "container_id": "operator-view-1"},
+    }
+    terminated = []
+    controller._terminate_process = lambda proc: terminated.append(proc)
+
+    class _Proc:
+        returncode = None
+
+        def communicate(self, timeout=None):
+            raise subprocess.TimeoutExpired(cmd=["docker", "compose"], timeout=timeout, output="still waiting")
+
+    proc = _Proc()
+    controller._popen_docker_compose = lambda *_args, **_kwargs: proc
+
+    rc, output = controller._run_environment_compose_up("chasecar_dashboard_test", {"WORLD_STREAM_PORT": "8891"})
+
+    assert rc == 0
+    assert "compose_up_timeout_recovered_required_services_running" in output
+    assert terminated == [proc]
+
+
+def test_run_environment_compose_up_reports_timeout_when_services_are_not_ready(tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.control_mode = "docker_socket"
+    controller.build_on_next_start = False
+    controller._run_docker_compose = lambda *_args, **_kwargs: None
+    controller._docker_image_exists = lambda _image_ref: True
+    controller._wait_for_required_gate_services = lambda *_args, **_kwargs: {
+        "sim-gate": {"service": "sim-gate", "status": "running", "container_id": "sim-gate-1"},
+        "world-viewer": {"service": "world-viewer", "status": "created", "container_id": "world-viewer-1"},
+        "gate-stack": {"service": "gate-stack", "status": "running", "container_id": "gate-stack-1"},
+        "operator-view": {"service": "operator-view", "status": "running", "container_id": "operator-view-1"},
+    }
+    controller._terminate_process = lambda _proc: None
+
+    class _Proc:
+        returncode = None
+
+        def communicate(self, timeout=None):
+            raise subprocess.TimeoutExpired(cmd=["docker", "compose"], timeout=timeout, output="")
+
+    controller._popen_docker_compose = lambda *_args, **_kwargs: _Proc()
+
+    rc, output = controller._run_environment_compose_up("chasecar_dashboard_test", {"WORLD_STREAM_PORT": "8891"})
+
+    assert rc == 124
+    assert "compose_up_timeout" in output
+    assert "world-viewer=created" in output
+
+
 def test_run_environment_compose_up_uses_build_when_requested(tmp_path):
     controller = _make_controller(tmp_path)
     controller.control_mode = "docker_socket"
@@ -3740,7 +4178,7 @@ def test_run_environment_compose_up_uses_build_when_requested(tmp_path):
     class _Proc:
         returncode = 0
 
-        def communicate(self):
+        def communicate(self, timeout=None):
             return ("ok", "")
 
     controller._popen_docker_compose = lambda project_name, *args, env=None: popen_calls.append((project_name, *args)) or _Proc()
@@ -3776,7 +4214,7 @@ def test_run_environment_compose_up_skips_build_when_local_gate_images_exist(tmp
     class _Proc:
         returncode = 0
 
-        def communicate(self):
+        def communicate(self, timeout=None):
             return ("ok", "")
 
     controller._popen_docker_compose = lambda project_name, *args, env=None: popen_calls.append((project_name, *args)) or _Proc()

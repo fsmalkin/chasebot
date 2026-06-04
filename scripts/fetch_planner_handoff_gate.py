@@ -68,6 +68,8 @@ FETCH_READY_LATERAL_LIMIT_M = 0.050
 FETCH_READY_YAW_LIMIT_DEG = 6.0
 RECOVERY_LATERAL_LIMIT_M = 0.240
 RECOVERY_YAW_LIMIT_DEG = 35.0
+RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M = 0.900
+NAV2_REPOSITION_MIN_ROBOT_BALL_DISTANCE_M = RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
 NAV2_REPOSITION_STANDOFF_LIMIT_M = 1.350
 
 
@@ -143,6 +145,46 @@ def _quality_ratio(value: float, clean: float, limit: float) -> float:
     limit = max(float(limit), clean + 1.0e-9)
     excess = max(abs(float(value)) - clean, 0.0)
     return max(0.0, min(1.0, excess / (limit - clean)))
+
+
+def _recovery_admissible_from_geometry(geometry: dict[str, Any]) -> bool:
+    ball_target_distance_m = _finite_float(geometry.get("ball_target_distance_m"), 999.0)
+    robot_ball_distance_m = _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
+    lateral_error_m = _finite_float(geometry.get("robot_lateral_error_m"), 999.0)
+    yaw_error_deg = abs(_finite_float(geometry.get("robot_yaw_error_deg"), 999.0))
+    return bool(
+        0.34 <= ball_target_distance_m <= 0.85
+        and 0.24 <= robot_ball_distance_m <= RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
+        and lateral_error_m <= RECOVERY_LATERAL_LIMIT_M
+        and yaw_error_deg <= RECOVERY_YAW_LIMIT_DEG
+    )
+
+
+def route_admissibility_for_scene(scene: dict[str, Any], route_label: str) -> dict[str, Any]:
+    route = str(route_label or "").strip()
+    geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
+    robot_ball_distance_m = _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
+    effective_route = route
+    reason = "route_admissible"
+    changed = False
+
+    if route == ROUTE_NAV2_REPOSITION and _recovery_admissible_from_geometry(geometry):
+        effective_route = ROUTE_RECOVERY_OR_REAIM
+        reason = "near_field_setup_prefers_bounded_recovery_reaim"
+        changed = True
+
+    return {
+        "requested_route_label": route,
+        "route_label": effective_route,
+        "route_executor": executor_for_route(effective_route),
+        "changed": bool(changed),
+        "reason": reason,
+        "robot_ball_distance_m": round(float(robot_ball_distance_m), 6),
+        "thresholds": {
+            "recovery_robot_ball_distance_limit_m": RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M,
+            "nav2_reposition_min_robot_ball_distance_m": NAV2_REPOSITION_MIN_ROBOT_BALL_DISTANCE_M,
+        },
+    }
 
 
 def _target_relative_scene(
@@ -286,7 +328,7 @@ def generate_random_scenes(
                 scene_id=scene_id,
                 distance_range=(0.45, 0.75),
                 angle_range_deg=(-30.0, 30.0),
-                standoff_range=(0.80, 1.25),
+                standoff_range=(1.05, 1.30),
                 lateral_range=(-0.12, 0.12),
                 yaw_error_range_deg=(-14.0, 14.0),
             )
@@ -312,7 +354,7 @@ def generate_random_scenes(
                 scene_id=scene_id,
                 distance_range=(0.45, 0.75),
                 angle_range_deg=(-30.0, 30.0),
-                standoff_range=(0.28, 0.48),
+                standoff_range=(0.28, 0.86),
                 lateral_range=(-0.24, 0.24),
                 yaw_error_range_deg=(-34.0, 34.0),
             )
@@ -412,7 +454,11 @@ def deterministic_route_label(scene: dict[str, Any]) -> str:
         and yaw_error_deg <= FETCH_READY_YAW_LIMIT_DEG
     ):
         return ROUTE_FETCH_READY
-    if robot_ball_distance_m <= 0.70 and lateral_error_m <= 0.24 and yaw_error_deg <= 35.0:
+    if (
+        robot_ball_distance_m <= RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
+        and lateral_error_m <= RECOVERY_LATERAL_LIMIT_M
+        and yaw_error_deg <= RECOVERY_YAW_LIMIT_DEG
+    ):
         return ROUTE_RECOVERY_OR_REAIM
     return ROUTE_NAV2_REPOSITION
 
@@ -470,14 +516,18 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
     elif route == ROUTE_RECOVERY_OR_REAIM:
         lateral_ratio = _quality_ratio(lateral_m, FETCH_READY_LATERAL_LIMIT_M, RECOVERY_LATERAL_LIMIT_M)
         yaw_ratio = _quality_ratio(yaw_deg, FETCH_READY_YAW_LIMIT_DEG, RECOVERY_YAW_LIMIT_DEG)
-        standoff_ratio = _quality_ratio(robot_ball_m, 0.52, 0.70)
+        standoff_ratio = _quality_ratio(robot_ball_m, 0.52, RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M)
         severity = max(lateral_ratio, yaw_ratio, standoff_ratio)
         flags.append("bounded_recovery_required")
         if lateral_m > CONTACT_QUALITY_CLEAN_LATERAL_M:
             flags.append("initial_lateral_setup_debt")
         if yaw_deg > CONTACT_QUALITY_CLEAN_YAW_DEG:
             flags.append("initial_yaw_setup_debt")
-        if lateral_m > RECOVERY_LATERAL_LIMIT_M or yaw_deg > RECOVERY_YAW_LIMIT_DEG or robot_ball_m > 0.70:
+        if (
+            lateral_m > RECOVERY_LATERAL_LIMIT_M
+            or yaw_deg > RECOVERY_YAW_LIMIT_DEG
+            or robot_ball_m > RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
+        ):
             flags.append("outside_recovery_envelope")
             status = "blocker"
             risk = "high"
@@ -491,12 +541,23 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
         angle_ratio = _quality_ratio(ball_target_angle_deg, 20.0, 45.0)
         severity = max(standoff_ratio, angle_ratio)
         flags.append("nav2_reposition_required")
-        if robot_ball_m > NAV2_REPOSITION_STANDOFF_LIMIT_M:
+        if robot_ball_m < NAV2_REPOSITION_MIN_ROBOT_BALL_DISTANCE_M:
+            flags.append("nav2_reposition_near_field_not_admissible")
+            status = "blocker"
+            risk = "high"
+            recommendations.extend(["bounded_reaim_before_push", "pre_contact_smoothing"])
+            score = 24.0
+        elif robot_ball_m > NAV2_REPOSITION_STANDOFF_LIMIT_M:
             flags.append("nav2_setup_distance_watch")
-        status = "watch"
-        risk = "medium" if severity >= 0.55 else "low"
-        recommendations.extend(["nav2_forward_reposition", "verify_setup_pose_before_push"])
-        score = 84.0 - 28.0 * severity
+            status = "watch"
+            risk = "medium" if severity >= 0.55 else "low"
+            recommendations.extend(["nav2_forward_reposition", "verify_setup_pose_before_push"])
+            score = 84.0 - 28.0 * severity
+        else:
+            status = "watch"
+            risk = "medium" if severity >= 0.55 else "low"
+            recommendations.extend(["nav2_forward_reposition", "verify_setup_pose_before_push"])
+            score = 84.0 - 28.0 * severity
     elif route == ROUTE_SCAN_OR_PERCEIVE:
         status = "blocker"
         risk = "unavailable"
@@ -541,6 +602,8 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
             "fetch_ready_yaw_limit_deg": FETCH_READY_YAW_LIMIT_DEG,
             "recovery_lateral_limit_m": RECOVERY_LATERAL_LIMIT_M,
             "recovery_yaw_limit_deg": RECOVERY_YAW_LIMIT_DEG,
+            "recovery_robot_ball_distance_limit_m": RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M,
+            "nav2_reposition_min_robot_ball_distance_m": NAV2_REPOSITION_MIN_ROBOT_BALL_DISTANCE_M,
         },
     }
 
@@ -676,6 +739,14 @@ def decide_scene(
                 rationale = "LLM shadow failed validation; deterministic guard provided the route."
                 confidence = 0.0
 
+    route_admissibility = route_admissibility_for_scene(scene, route_label)
+    if bool(route_admissibility.get("changed", False)):
+        route_label = str(route_admissibility.get("route_label", route_label) or route_label)
+        rationale = (
+            f"{rationale} Deterministic route admissibility changed execution to {route_label}: "
+            f"{route_admissibility.get('reason', '')}."
+        )
+
     fetch_dispatch = route_label == ROUTE_FETCH_READY
     correct = bool(route_label == expected_route)
     wrong_fetch_dispatch = bool(fetch_dispatch and expected_route != ROUTE_FETCH_READY)
@@ -698,6 +769,7 @@ def decide_scene(
         "rationale_short": rationale,
         "confidence": round(float(confidence), 6),
         "route_quality": route_quality,
+        "route_admissibility": route_admissibility,
         "provider_status": provider_status,
         "provider_error": provider_error,
         "provider_request": provider_request,

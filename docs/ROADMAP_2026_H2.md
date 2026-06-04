@@ -833,6 +833,37 @@ posture and recovery first-contact alignment. The next roadmap step is a
 route-quality scorer plus pre-contact smoothing under the same harness, then
 the canonical saved-layout and seeded-random promotion gates.
 
+June 4 recovery/re-aim boundary correction: the route-owner ladder now assigns
+real Nav2 setup to `nav2_reposition_first` and assigns bounded local re-aim to
+`recovery_or_reaim`. The exact seed `20260627` recovery scene that had failed
+before contact passed after this boundary change with
+`nav2_reposition_before_fetch=false`, clean first-contact quality, stable
+contact approach, and closest approach `0.193732m`.
+Replay batch:
+`artifacts/session/live_recovery_reaim_local_setup_scene04_20260604/fetch_planner_route_replay_batch/scorecard.md`.
+Visual package:
+`artifacts/session/live_recovery_reaim_local_setup_scene04_20260604_seed20260627_scene04_recovery_or_reaim/fetch_visual_uat_package/scorecard.md`.
+The corrected route boundary repairs the latest before-contact recovery abort.
+The roadmap still requires a full planner-routed seeded gate rerun before
+promotion.
+
+June 4 readyfix evidence: the route-owner stack now has a broader green UAT
+package on seed `20260627`. The planner child
+`live_planner_seeded_generalization_gate_mission_only_readyfix_20260604_planner`
+passed `30/30` with zero wrong fetch-ready dispatches, and the mission-only
+replay passed `6/6` across the three executable route owners. That run proved
+the Nav2 failure boundary: one Nav2-first case aborted before contact, left the
+ball unmoved, fell back to bounded local recovery, and delivered at `0.197m`.
+The browser-visual replay
+`live_planner_seeded_generalization_gate_visual_recheck_20260604` passed `4/4`
+with browser-watchable packages and sequence-reviewed contact sheets across
+recovery, fetch-ready, and Nav2-first cases. Treat this as route-owner UAT
+green and keep promotion gated on the canonical parent seeded gate surface.
+
+The same run converted stale-model cleanup timeouts into recorded runner status
+instead of pre-mission crashes, which keeps future visual evidence batches
+recoverable with `--resume-skip-existing`.
+
 Route-quality scorer evidence, later June 3: the planner handoff now emits a
 route-quality score, predicted contact quality, first-contact risk, flags, and
 recommended next stage. The roughest executable route replay from seed

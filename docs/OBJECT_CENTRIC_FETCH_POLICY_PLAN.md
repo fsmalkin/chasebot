@@ -651,6 +651,18 @@ Closest approach was `0.194274m..0.196471m`. Use this as breadth evidence for
 the planner-routed local-random lane; canonical saved-layout and seeded-random
 promotion gates remain the milestone proof.
 
+June 4 readyfix evidence: seed `20260627` now supports the planner-routed lane
+with both mission-only and browser-visual proof. The planner child passed
+`30/30` with zero wrong fetch-ready dispatches, the mission-only replay passed
+`6/6` across recovery, fetch-ready, and Nav2-first owners, and one Nav2 abort
+case cleanly fell back to bounded local recovery after `0.0m` ball motion. The
+representative visual replay
+`live_planner_seeded_generalization_gate_visual_recheck_20260604` passed `4/4`
+with browser-watchable packages and frame-sequence review. This confirms the
+stage-owner direction: planner chooses the owner, Nav2 handles admissible
+setup, and local forward-only fetch owns contact/push. Promotion still belongs
+to the canonical seeded gate surface with `promotion_evidence=true`.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

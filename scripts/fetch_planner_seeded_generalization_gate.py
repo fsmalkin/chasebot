@@ -105,6 +105,7 @@ def build_replay_args(args: argparse.Namespace, *, campaign_id: str, gate_summar
         dashboard_url=str(args.dashboard_url or ""),
         compose_project=str(args.compose_project or ""),
         fresh_dashboard_session_per_run=bool(args.fresh_dashboard_session_per_run),
+        allow_operator_view_degraded=bool(getattr(args, "allow_operator_view_degraded", False)),
         world_file=str(args.world_file or "yolo_test_world_v6_calibrated_golf_turf.world"),
         surface_profile=str(args.surface_profile or "calibrated_golf_turf"),
         robot_sdf_name=str(args.robot_sdf_name or "jetbot_core_ignition_v1.7.0.sdf"),
@@ -401,6 +402,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dashboard-url", default="http://127.0.0.1:8879")
     parser.add_argument("--compose-project", default="")
     parser.add_argument("--fresh-dashboard-session-per-run", action="store_true")
+    parser.add_argument(
+        "--allow-operator-view-degraded",
+        action="store_true",
+        help="Allow fresh dashboard sessions to proceed when the Xpra operator view is degraded but recorded visual evidence can still be produced.",
+    )
     parser.add_argument("--world-file", default="yolo_test_world_v6_calibrated_golf_turf.world")
     parser.add_argument("--surface-profile", default="calibrated_golf_turf")
     parser.add_argument("--robot-sdf-name", default="jetbot_core_ignition_v1.7.0.sdf")

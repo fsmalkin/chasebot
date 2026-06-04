@@ -97,6 +97,7 @@ def wait_for_dashboard_state(
     poll_s: float = 5.0,
     want_ready: bool = False,
     want_stopped: bool = False,
+    allow_operator_view_degraded: bool = False,
 ) -> dict[str, Any]:
     deadline = time.monotonic() + max(float(timeout_s), 1.0)
     last_state: dict[str, Any] = {}
@@ -110,8 +111,10 @@ def wait_for_dashboard_state(
                 env_state == "environment_ready"
                 and phase == "environment_ready"
                 and state.get("sim_gate_ready")
-                and state.get("world_stream_ready")
-                and state.get("operator_view_ready")
+                and operator_view_acceptable(
+                    state,
+                    allow_operator_view_degraded=allow_operator_view_degraded,
+                )
             )
             stopped = env_state in {"stopped", "error"} or phase == "stopped"
             if want_ready and env_state == "error":
@@ -135,6 +138,7 @@ def start_dashboard_environment(args: argparse.Namespace) -> dict[str, Any]:
         "world_file": str(args.world_file or ""),
         "surface_profile": str(args.surface_profile or ""),
         "robot_sdf_name": str(args.robot_sdf_name or ""),
+        "operator_view_required": not bool(getattr(args, "allow_operator_view_degraded", False)),
     }
     response = post_dashboard_json(str(args.dashboard_url or ""), "/api/env/start", body, timeout_s=60.0)
     state = wait_for_dashboard_state(
@@ -142,6 +146,7 @@ def start_dashboard_environment(args: argparse.Namespace) -> dict[str, Any]:
         timeout_s=float(args.env_ready_timeout_s),
         poll_s=5.0,
         want_ready=True,
+        allow_operator_view_degraded=bool(getattr(args, "allow_operator_view_degraded", False)),
     )
     return {"request": response, "state": state}
 
@@ -186,13 +191,31 @@ def dashboard_start_failure_reason(dashboard_start: dict[str, Any]) -> str:
     return "; ".join(reason_parts)
 
 
-def dashboard_environment_ready(state: dict[str, Any]) -> bool:
+def operator_view_acceptable(state: dict[str, Any], *, allow_operator_view_degraded: bool = False) -> bool:
+    if bool(state.get("operator_view_ready", False)):
+        return True
+    if not allow_operator_view_degraded:
+        return False
+    if bool(state.get("operator_view_required", True)):
+        return False
+    return str(state.get("operator_view_status", "") or "") in {
+        "degraded",
+        "degraded_optional",
+        "error",
+        "stopped",
+        "disabled",
+    }
+
+
+def dashboard_environment_ready(state: dict[str, Any], *, allow_operator_view_degraded: bool = False) -> bool:
     return bool(
         str(state.get("environment_state", "") or "") == "environment_ready"
         and str(state.get("phase", "") or "") == "environment_ready"
         and state.get("sim_gate_ready")
-        and state.get("world_stream_ready")
-        and state.get("operator_view_ready")
+        and operator_view_acceptable(
+            state,
+            allow_operator_view_degraded=allow_operator_view_degraded,
+        )
     )
 
 
@@ -402,6 +425,7 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
                     "layout_path": artifact_display_path(layout_path),
                     "command": [],
                     "fresh_dashboard_session_per_run": bool(args.fresh_dashboard_session_per_run),
+                    "allow_operator_view_degraded": bool(getattr(args, "allow_operator_view_degraded", False)),
                     "expected_session_id": "",
                     "compose_project": "",
                     "dashboard_start": {},
@@ -437,7 +461,10 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
             start_state = dashboard_start.get("state") if isinstance(dashboard_start.get("state"), dict) else {}
             run_compose_project = str(start_state.get("compose_project", "") or start_state.get("launcher_project", "") or "")
             expected_session_id = str(start_state.get("session_id", "") or "")
-            dashboard_ready = dashboard_environment_ready(start_state)
+            dashboard_ready = dashboard_environment_ready(
+                start_state,
+                allow_operator_view_degraded=bool(getattr(args, "allow_operator_view_degraded", False)),
+            )
         command = build_replay_command(
             python_exe=str(args.python_exe or sys.executable),
             layout_path=layout_path,
@@ -455,6 +482,7 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
             "layout_path": artifact_display_path(layout_path),
             "command": command,
             "fresh_dashboard_session_per_run": bool(args.fresh_dashboard_session_per_run),
+            "allow_operator_view_degraded": bool(getattr(args, "allow_operator_view_degraded", False)),
             "expected_session_id": expected_session_id,
             "compose_project": run_compose_project,
             "dashboard_start": dashboard_start,
@@ -538,6 +566,7 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
         "campaign_id": campaign_id,
         "dry_run": bool(args.dry_run),
         "fresh_dashboard_session_per_run": bool(args.fresh_dashboard_session_per_run),
+        "allow_operator_view_degraded": bool(getattr(args, "allow_operator_view_degraded", False)),
         "resume_skip_existing": bool(args.resume_skip_existing),
         "gate_summary_path": artifact_display_path(gate_summary_path),
         "selected_count": len(rows),
@@ -568,6 +597,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- campaign_id: `{summary.get('campaign_id', '')}`",
         f"- dry_run: `{summary.get('dry_run', False)}`",
         f"- fresh_dashboard_session_per_run: `{summary.get('fresh_dashboard_session_per_run', False)}`",
+        f"- allow_operator_view_degraded: `{summary.get('allow_operator_view_degraded', False)}`",
         f"- resume_skip_existing: `{summary.get('resume_skip_existing', False)}`",
         f"- pass: `{summary.get('pass', False)}`",
         f"- selected_count: `{summary.get('selected_count', 0)}`",
@@ -622,6 +652,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dashboard-url", default="")
     parser.add_argument("--compose-project", default="")
     parser.add_argument("--fresh-dashboard-session-per-run", action="store_true")
+    parser.add_argument(
+        "--allow-operator-view-degraded",
+        action="store_true",
+        help="Allow fresh dashboard sessions to proceed when the Xpra operator view is degraded but recorded visual evidence can still be produced.",
+    )
     parser.add_argument("--world-file", default="yolo_test_world_v6_calibrated_golf_turf.world")
     parser.add_argument("--surface-profile", default="calibrated_golf_turf")
     parser.add_argument("--robot-sdf-name", default="jetbot_core_ignition_v1.7.0.sdf")

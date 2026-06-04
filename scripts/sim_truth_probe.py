@@ -105,6 +105,17 @@ def sample_pose_topic(topic: str) -> tuple[bool, str]:
     return True, completed.stdout or ""
 
 
+def sample_first_pose_payload(topics: list[str]) -> tuple[bool, str, str, dict[str, str]]:
+    errors: dict[str, str] = {}
+    for topic in topics:
+        ok, payload = sample_pose_topic(topic)
+        text = payload or ""
+        if ok and text.strip():
+            return True, text, topic, errors
+        errors[topic] = text.strip()
+    return False, "", topics[0] if topics else "", errors
+
+
 def select_target_poses(
     poses: list[dict[str, object]],
     target_candidates: list[str],
@@ -146,6 +157,9 @@ def main() -> int:
     target_candidates = [item.strip() for item in args.target_model_names.split(",") if item.strip()]
     target_prefixes = [p.strip() for p in (args.target_model_prefix or "").split(",") if p.strip()]
     topic = args.topic or f"/world/{args.world_name}/dynamic_pose/info"
+    pose_topics = [topic]
+    if not args.topic:
+        pose_topics.append(f"/world/{args.world_name}/pose/info")
     started = time.monotonic()
     deadline = started + max(args.duration_s, 1.0)
     timeline: list[dict[str, object]] = []
@@ -168,11 +182,13 @@ def main() -> int:
     latest_target_names_seen: list[str] = []
 
     while not stop_requested and time.monotonic() < deadline:
-        ok, payload = sample_pose_topic(topic)
+        ok, payload, sampled_topic, topic_errors = sample_first_pose_payload(pose_topics)
         elapsed = round(time.monotonic() - started, 3)
         record: dict[str, object] = {
             "t_s": elapsed,
             "topic_ok": ok,
+            "topic": sampled_topic,
+            "topic_errors": topic_errors,
             "robot_truth_pose": None,
             "true_target_pose": None,
             "target_model_name": "",
@@ -213,6 +229,9 @@ def main() -> int:
             "target_poses_by_name": dict(latest_target_poses_by_name),
             "target_names_seen": list(latest_target_names_seen),
             "target_model_candidates": target_candidates,
+            "pose_topics": pose_topics,
+            "latest_sampled_topic": sampled_topic,
+            "latest_topic_errors": topic_errors,
         }
         state_path.write_text(json.dumps(state_payload, indent=2), encoding="utf-8")
         time.sleep(max(args.poll_period_s, 0.1))
@@ -229,6 +248,7 @@ def main() -> int:
         "target_poses_by_name": dict(latest_target_poses_by_name),
         "target_names_seen": list(latest_target_names_seen),
         "target_model_candidates": target_candidates,
+        "pose_topics": pose_topics,
         "pass": latest_robot is not None and latest_target is not None,
         "state_path": str(state_path),
         "timeline_path": str(timeline_path),
