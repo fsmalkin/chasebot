@@ -1086,6 +1086,34 @@ def test_line_servo_command_keeps_close_recovery_yaw_hold_until_contact_ready():
     assert command["angular_z_rps"] > 0.0
 
 
+def test_line_servo_command_holds_scene16_recovery_line_acquire_before_bad_contact():
+    command = line_servo_command(
+        robot_pose={"x": 0.048842093837524046, "y": -0.052551161111039434, "yaw": -0.6515225996204963},
+        ball_pose={"x": 0.317743, "y": -0.100578, "yaw": 0.0},
+        target_x=0.989887,
+        target_y=-0.022502,
+        ball_start_pose={"x": 0.317743, "y": -0.100578, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=0.05236,
+        route_label="recovery_or_reaim",
+    )
+
+    assert command["phase"] == "recovery_contact_yaw_hold"
+    assert command["recovery_line_acquire_yaw_hold_active"] is True
+    assert command["recovery_contact_yaw_hold_active"] is True
+    assert command["distance_to_contact_m"] == pytest.approx(0.170793, abs=1.0e-6)
+    assert command["robot_lateral_error_m"] == pytest.approx(0.078733, abs=1.0e-6)
+    assert command["line_yaw_error_rad"] == pytest.approx(0.767164, abs=1.0e-6)
+    assert command["linear_x_mps"] == 0.0
+    assert command["desired_yaw_rad"] == pytest.approx(command["line_yaw_rad"], abs=1.0e-6)
+    assert command["angular_z_rps"] > 0.0
+
+
 def test_line_servo_command_crawls_out_of_recovery_setup_oscillation():
     command = line_servo_command(
         robot_pose={"x": -0.006171, "y": -0.054051, "yaw": -1.799786},

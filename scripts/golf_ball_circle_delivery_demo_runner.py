@@ -857,12 +857,22 @@ def line_servo_command(
         and abs(robot_lateral_error) > effective_contact_lateral_ready_m * 1.50
         and abs(line_yaw_error) <= 0.45
     )
+    recovery_line_acquire_yaw_hold_threshold_rad = max(float(contact_yaw_ready_rad) * 4.0, 0.22)
+    recovery_close_line_acquire_yaw_hold_threshold_rad = max(float(contact_yaw_ready_rad) * 8.0, 0.55)
     recovery_line_acquire_yaw_hold_active = bool(
         clean_route_label == ROUTE_RECOVERY_OR_REAIM
-        and 0.18 < distance_to_contact <= 0.24
         and not contact_ready
         and abs(robot_lateral_error) <= recovery_line_acquire_lateral_m
-        and abs(line_yaw_error) > max(float(contact_yaw_ready_rad) * 4.0, 0.22)
+        and (
+            (
+                0.18 < distance_to_contact <= 0.24
+                and abs(line_yaw_error) > recovery_line_acquire_yaw_hold_threshold_rad
+            )
+            or (
+                0.14 < distance_to_contact <= 0.18
+                and abs(line_yaw_error) > recovery_close_line_acquire_yaw_hold_threshold_rad
+            )
+        )
     )
     local_line_acquire_yaw_hold_active = bool(
         clean_route_label == ROUTE_FETCH_READY
@@ -1075,6 +1085,12 @@ def line_servo_command(
         "local_contact_yaw_hold_threshold_rad": round(float(local_contact_yaw_hold_threshold_rad), 6),
         "recovery_close_settle_active": recovery_close_settle_active,
         "recovery_line_acquire_yaw_hold_active": recovery_line_acquire_yaw_hold_active,
+        "recovery_line_acquire_yaw_hold_threshold_rad": round(
+            float(recovery_line_acquire_yaw_hold_threshold_rad), 6
+        ),
+        "recovery_close_line_acquire_yaw_hold_threshold_rad": round(
+            float(recovery_close_line_acquire_yaw_hold_threshold_rad), 6
+        ),
         "recovery_contact_yaw_hold_active": recovery_contact_yaw_hold_active,
         "recovery_contact_yaw_hold_threshold_rad": round(float(recovery_contact_yaw_hold_threshold_rad), 6),
         "recovery_contact_lateral_trim_active": recovery_contact_lateral_trim_active,

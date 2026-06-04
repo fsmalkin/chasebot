@@ -1,6 +1,6 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 3, 2026, 10:18 PM ET",
+  "updated_label": "Updated June 3, 2026, 10:46 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
   "status_label": "Living plan and progress tracker",
   "status_detail": "This page summarizes current direction and evidence. It is route-owner UAT progress, not release or promotion evidence.",
@@ -49,6 +49,42 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Seed 20260623 recovery line-acquire hold slice",
+      "status": "6/6 recovery routes delivered; 5/6 clean; scene16 narrowed to yaw watch",
+      "tone": "watch",
+      "summary": "The recovery line-acquire hold now catches high-yaw recovery setup before the robot enters contact. Seed20260623 recovery_or_reaim delivered all six rows with browser-watchable packages and zero blockers. Scene16 improved from lateral-plus-yaw bad contact into a delivery pass with lateral knock-away cleared and one remaining pre-contact yaw watch.",
+      "metrics": [
+        "Recovery slice: 6/6 delivered; visual packages 6/6",
+        "Clean recovery rows: 5/6",
+        "Remaining watch: scene16, closest 0.195m, pre_contact_yaw_error only",
+        "Targeted scene16 first-contact lateral improved from 0.074555m to about 0.0275m; max ball lateral stayed under 0.002m in the targeted repro",
+        "Rejected very-close terminal yaw hold: it created lateral knock-away and trajectory-angle flags, so the next repair belongs earlier in setup or trim logic"
+      ],
+      "links": [
+        {
+          "label": "Recovery-slice analyzer scorecard",
+          "url": "/artifacts/session/analysis_route_quality_seed20260623_recovery_slice_line_acquire_hold_rows_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Recovery-slice analyzer summary JSON",
+          "url": "/artifacts/session/analysis_route_quality_seed20260623_recovery_slice_line_acquire_hold_rows_20260604/fetch_planner_route_uat_analyzer/route_uat_summary.json"
+        },
+        {
+          "label": "Recovery replay batch scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260623_recovery_slice_line_acquire_hold_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Scene16 onboard proof",
+          "url": "/artifacts/session/20260604T023631734621Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene16 contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260623_recovery_slice_line_acquire_hold_20260604_seed20260623_scene16_recovery_or_reaim/fetch_visual_uat_package/keyframe_reviews/20260604T023631734621Z_keyframe_review_contact_sheet.png"
+        }
+      ],
+      "preview_image": "/artifacts/session/live_route_quality_seed20260623_recovery_slice_line_acquire_hold_20260604_seed20260623_scene16_recovery_or_reaim/fetch_visual_uat_package/keyframe_reviews/20260604T023631734621Z_keyframe_review_contact_sheet.png"
+    },
     {
       "title": "Seed 20260623 tightened planner split broad batch",
       "status": "22/22 executable routes delivered; local fetch clean; 1 recovery watch",
@@ -362,6 +398,70 @@
   "running_video_proof": [],
   "recent_video_proof": [
     {
+      "title": "Seed 20260623 scene16 recovery yaw watch after line-acquire hold",
+      "summary": "Session 20260604T023631734621Z is the latest scene16 recovery proof after the line-acquire hold patch.",
+      "primary_video": {
+        "label": "Scene16 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T023631734621Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The row delivers inside contract from a high-lateral recovery setup. The patch clears the visible lateral knock-away pattern and reduces the issue to a remaining pre-contact yaw watch: closest 0.195m, first-contact blockers 0, and no broad contact failure.",
+      "limits": "This is route-owner UAT with promotion_evidence=false. The very-close terminal yaw-hold experiment made contact worse, so the next refinement should compare more high-lateral recovery rows before changing terminal contact behavior.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T023631734621Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T023631734621Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "World stream MP4",
+          "url": "/artifacts/session/20260604T023631734621Z/visual/world_stream.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260623_recovery_slice_line_acquire_hold_20260604_seed20260623_scene16_recovery_or_reaim/fetch_visual_uat_package/keyframe_reviews/20260604T023631734621Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Visual scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260623_recovery_slice_line_acquire_hold_20260604_seed20260623_scene16_recovery_or_reaim/fetch_visual_uat_package/scorecard.md"
+        },
+        {
+          "label": "Mission verdict",
+          "url": "/artifacts/session/20260604T023631734621Z/golf_ball_circle_delivery/20260604T023649836868Z/mission_verdict.json"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260623 scene27 clean recovery proof",
+      "summary": "Session 20260604T023834039189Z is a clean recovery row from the same six-case recovery slice.",
+      "primary_video": {
+        "label": "Scene27 onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260604T023834039189Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The same recovery route can set up, capture, and push cleanly into the circle: closest 0.194m, setup clean, execution clean, contact clean, and first-contact quality pass.",
+      "limits": "This row supports the recovery slice, while milestone promotion still requires a fresh broad seed and canonical saved-layout plus seeded-random gates.",
+      "links": [
+        {
+          "label": "Onboard raw camera MP4",
+          "url": "/artifacts/session/20260604T023834039189Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Topdown telemetry MP4",
+          "url": "/artifacts/session/20260604T023834039189Z/visual/topdown_telemetry_browser.mp4"
+        },
+        {
+          "label": "Contact sheet",
+          "url": "/artifacts/session/live_route_quality_seed20260623_recovery_slice_line_acquire_hold_20260604_seed20260623_scene27_recovery_or_reaim/fetch_visual_uat_package/keyframe_reviews/20260604T023834039189Z_keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Visual scorecard",
+          "url": "/artifacts/session/live_route_quality_seed20260623_recovery_slice_line_acquire_hold_20260604_seed20260623_scene27_recovery_or_reaim/fetch_visual_uat_package/scorecard.md"
+        }
+      ]
+    },
+    {
       "title": "Seed 20260623 tightened planner split montage",
       "summary": "The tightened planner split broad run gives the latest onboard/topdown sequence review across 22 executable route-owner rows.",
       "preview_image": "/artifacts/session/analysis_route_quality_seed20260623_all_exec22_tight_fetch_20260604/fetch_planner_route_uat_analyzer/seed20260623_all_exec22_tight_fetch_keyframe_montage.png",
@@ -565,7 +665,7 @@
         },
         {
           "label": "Contact sheet",
-          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_terminal_recovery_fix_20260603_seed20260620_scene21_fetch_ready_local/fetch_visual_uat_package/keyframe_reviews/20260603T221114148182Z_keyframe_review_contact_sheet.png"
+          "url": "/artifacts/session/live_route_quality_seed20260620_all_exec18_terminal_recovery_fix_20260603_seed20260620_scene21_fetch_ready_local/fetch_visual_uat_package/keyframe_reviews/20260603T220928828695Z_keyframe_review_contact_sheet.png"
         },
         {
           "label": "Visual scorecard",
@@ -947,8 +1047,8 @@
   ],
   "watch_areas": [
     {
-      "label": "Recovery setup path for high-lateral cases",
-      "body": "Seed20260623 scene16 shows recovery can deliver from high lateral debt but still contacts before clean alignment. Treat this as a recovery setup path problem, not a local-fetch problem."
+      "label": "Recovery yaw and trim handoff",
+      "body": "Seed20260623 scene16 is now a narrowed recovery yaw watch: delivery passes, lateral knock-away is cleared, and the remaining debt appears near the setup-to-contact handoff."
     },
     {
       "label": "Planner split between local and recovery",
@@ -960,9 +1060,9 @@
     }
   ],
   "next_steps": [
-    "Freeze seed20260623 scene16 as the next recovery setup quality target.",
-    "Repair recovery high-lateral setup by changing the path/setup owner before final contact, not by adding a close-contact shove.",
-    "Rerun the seed20260623 recovery slice after the repair, then rerun a fresh broad generated seed.",
+    "Keep seed20260623 scene16 as a recovery yaw/trim watch, not a blocker.",
+    "Compare additional high-lateral recovery rows before changing terminal contact behavior; the very-close yaw-hold experiment is rejected by live evidence.",
+    "Run a fresh broad generated seed with the line-acquire hold, then rerun full executable seed20260623 if the fresh seed stays clean or watch-only.",
     "Keep sequence review onboard-first: start/setup, pre-contact, first contact, mid-push or coast, terminal arrival, and final rest.",
     "Preserve promotion_evidence=false for route-owner UAT until canonical saved-layout and seeded-random promotion gates rerun."
   ]
