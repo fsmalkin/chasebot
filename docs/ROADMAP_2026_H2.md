@@ -1056,6 +1056,14 @@ coherent fetch-ready, Nav2 opposite-side, recovery large-angle, and no-go
 behavior. The roadmap now advances to broader live supervised route-owner UAT
 before canonical promotion gates.
 
+The first generated-seed supervised route-owner batch is also green:
+`artifacts/session/analysis_supervised_mixed_route_family_seed20260629_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+Seed `20260629` passed route contracts `10/10`, visual packages `10/10`,
+executable deliveries `6/6`, and route-only proofs `4/4`; the selected set also
+included the confidence-veto scan case. The next roadmap choice is a second
+generated-seed live batch for breadth or the canonical saved-layout and
+seeded-random promotion ladder for consolidation.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`
