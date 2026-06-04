@@ -405,9 +405,17 @@ review. The regression manifest now preserves seeds `20260627` through
 `artifacts/session/analysis_planner_moonshot_regression_set_seven_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
 The result is green with seeded gates `7/7`, live seeded missions `42/42`, and
 visual packages `42/42`. Keep the planner-routed stack as the primary path; the
-next broadening target is live route-family coverage for
-`scan_or_perceive_first` and `ambiguous_or_unsafe_no_go`, while the local
+next broadening target is larger mixed route-family coverage while the local
 contact path remains under the seven-seed preservation bar.
+
+June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
+route family at
+`artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The batch passed route contracts `5/5`, visual packages `5/5`, executable
+deliveries `3/3`, route-only proofs `2/2`, clean analyzer status, and
+first-contact blockers `0`. This covers the live scan/defer and safe no-go
+families by contract, so the next autonomous step is at least two live samples
+per route family before contact-control changes.
 
 ## Evidence Reset
 

@@ -962,6 +962,17 @@ gap while preserving `promotion_evidence=false`. The next roadmap slice is a
 mixed route-family UAT batch over additional seeds, where executable routes
 must deliver and route-only rows must refuse/defer cleanly.
 
+June 4 mixed route-family UAT evidence: the first one-per-family mixed replay is
+green at
+`artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The live batch selected `fetch_ready_local`, `recovery_or_reaim`,
+`scan_or_perceive_first`, `ambiguous_or_unsafe_no_go`, and
+`nav2_reposition_first` from seed `20260633`. It passed route contracts `5/5`,
+browser-watchable visual packages `5/5`, executable deliveries `3/3`, and
+route-only proofs `2/2`; analyzer status was clean with first-contact blockers
+`0`. The next roadmap slice is a larger mixed-family replay with at least two
+live samples per route family before contact-control changes.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

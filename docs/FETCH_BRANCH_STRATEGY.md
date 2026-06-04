@@ -255,14 +255,17 @@ Planner-routed moonshot update, June 2:
   empty, or invalid. Scorecards list those recoveries explicitly.
 - next branch decision:
   keep this branch disposable while using the seven-seed executable regression
-  manifest and the seed `20260633` route-only proof as the current UAT
-  baseline. The latest non-fetch proof is
+  manifest and the seed `20260633` mixed route-family proof as the current UAT
+  baseline. The non-fetch proof is
   `artifacts/session/live_planner_only_route_proof_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md`:
   one `scan_or_perceive_first` row and one `ambiguous_or_unsafe_no_go` row
   passed with local fetch withheld, browser-watchable packages, `59` samples
-  each, and measured robot/ball motion `0.000m`. The next patch should scale a
-  mixed route-family UAT batch before contact-quality tuning because the
-  branch now has proof for both executable fetch and correct refusal/defer.
+  each, and measured robot/ball motion `0.000m`. The mixed proof is
+  `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`:
+  one live row per route family, route contracts `5/5`, visual packages `5/5`,
+  executable deliveries `3/3`, route-only proofs `2/2`, and first-contact
+  blockers `0`. The next patch should scale this mixed-family batch to at
+  least two live samples per route before contact-quality tuning.
 - frozen planner-layout replay fix:
   fresh seed `seed20260608_scene24_fetch_ready_local` first failed as a manual
   target-layout replay because the runner used the old constant-push defaults

@@ -463,6 +463,31 @@ June 4, 2026 planner-only route proof:
   fetch success for executable routes and correct withholding for route-only
   routes.
 
+June 4, 2026 mixed route-family UAT:
+
+- Command:
+  `python scripts\fetch_planner_route_replay_batch.py --campaign-id live_mixed_route_family_uat_seed20260633_20260604 --gate-summary artifacts\session\live_planner_seeded_generalization_gate_seed20260633_breadth_20260604_planner\fetch_planner_handoff_gate\gate_summary.json --route fetch_ready_local --route nav2_reposition_first --route recovery_or_reaim --route scan_or_perceive_first --route ambiguous_or_unsafe_no_go --max-per-route 1 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --route-only-sample-duration-s 6 --timeout-s 180 --package-timeout-s 180`
+- Replay scorecard:
+  `artifacts/session/live_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: mixed route contracts `5/5`, visual packages `5/5`, executable
+  deliveries `3/3`, route-only proofs `2/2`, analyzer clean, and
+  first-contact blockers `0`.
+- Route read: `fetch_ready_local`, `recovery_or_reaim`, and
+  `nav2_reposition_first` delivered with closest approach
+  `0.195m..0.197m`. `scan_or_perceive_first` and
+  `ambiguous_or_unsafe_no_go` withheld local fetch and passed
+  `planner_route_only_pass=true`.
+- Visual review: inspected raw-camera plus topdown contact sheets for all five
+  sessions. The executable rows showed setup, first contact, push, and
+  terminal delivery into the visible circle. The planner-only rows showed
+  visible stopped scenes with no local fetch dispatch.
+- Evidence meaning: the planner-routed architecture now has live proof across
+  all five route families in one batch. The next useful broadening target is a
+  larger mixed-family replay with at least two live samples per route before
+  contact-control changes.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

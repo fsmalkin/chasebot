@@ -1017,6 +1017,20 @@ with `promotion_evidence=false`; the next useful architecture expansion is a
 mixed route-family UAT batch over additional seeds before another local
 contact-control moonshot.
 
+June 4 mixed route-family UAT now validates the full planner handoff surface in
+one live batch:
+`artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The replay selected one seed `20260633` row per route family from
+`fetch_ready_local`, `recovery_or_reaim`, `scan_or_perceive_first`,
+`ambiguous_or_unsafe_no_go`, and `nav2_reposition_first`. It passed mixed route
+contracts `5/5`, visual packages `5/5`, executable deliveries `3/3`,
+route-only proofs `2/2`, clean execution/setup/contact analysis, and
+first-contact blockers `0`. The executable rows delivered at closest approach
+`0.195m..0.197m`; the planner-only rows withheld local fetch and passed
+`planner_route_only_pass=true`. This supports the current architecture choice:
+planner route ownership first, deterministic subsystem execution second, and
+contact-control changes only after a larger mixed-family breadth replay.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

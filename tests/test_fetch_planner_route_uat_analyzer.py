@@ -41,6 +41,10 @@ def _mission(
     route: str,
     *,
     closest: float = 0.19,
+    fetch_to_pose_pass: bool = True,
+    local_fetch_dispatched: bool = True,
+    planner_route_only_pass: bool = False,
+    planner_route_outcome: str = "",
     flags: list[str] | None = None,
     first_flags: list[str] | None = None,
     route_quality: dict | None = None,
@@ -51,8 +55,12 @@ def _mission(
             "session_id": path.parent.name,
             "planner_route_label": route,
             "route_executor": f"{route}_executor",
-            "fetch_to_pose_pass": True,
-            "mission_completed_pass": True,
+            "fetch_to_pose_pass": fetch_to_pose_pass,
+            "local_fetch_dispatched": local_fetch_dispatched,
+            "planner_route_only_pass": planner_route_only_pass,
+            "planner_route_executed": planner_route_only_pass,
+            "planner_route_execution": {"outcome": planner_route_outcome} if planner_route_outcome else {},
+            "mission_completed_pass": bool(fetch_to_pose_pass or planner_route_only_pass),
             "shot_outcome": {
                 "closest_approach_distance_m": closest,
                 "reason": "trajectory_intersects_delivery_radius",
@@ -153,6 +161,109 @@ def test_planner_route_uat_analyzer_scores_green_randomized_route_uat(tmp_path, 
     assert "recoveries=`1/1`" in text
     assert "Saved-anchor repeatability green" not in text
     assert "Saved-anchor scene counts" not in text
+
+
+def test_planner_route_uat_analyzer_scores_live_planner_only_route_proofs(tmp_path, monkeypatch):
+    monkeypatch.setattr(analyzer, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+    monkeypatch.setattr(analyzer, "REPO_ROOT", tmp_path)
+    root = analyzer.SESSION_ROOT
+    planner = root / "planner" / "fetch_planner_handoff_gate" / "gate_summary.json"
+    _write_json(
+        planner,
+        {
+            "campaign_id": "planner",
+            "pass": True,
+            "pass_count": 5,
+            "fail_count": 0,
+            "random_cases": 5,
+            "wrong_fetch_dispatch_count": 0,
+            "fetch_dispatch_count": 3,
+            "scene_source": "generated",
+            "seed": 20260633,
+            "route_counts": {
+                analyzer.ROUTE_FETCH_READY: 1,
+                analyzer.ROUTE_NAV2_REPOSITION: 1,
+                analyzer.ROUTE_RECOVERY_OR_REAIM: 1,
+                analyzer.ROUTE_SCAN_OR_PERCEIVE: 1,
+                analyzer.ROUTE_NO_GO: 1,
+            },
+        },
+    )
+    missions = [
+        root / "fetch_session" / "mission_verdict.json",
+        root / "nav2_session" / "mission_verdict.json",
+        root / "recovery_session" / "mission_verdict.json",
+        root / "scan_session" / "mission_verdict.json",
+        root / "no_go_session" / "mission_verdict.json",
+    ]
+    _mission(missions[0], analyzer.ROUTE_FETCH_READY)
+    _mission(missions[1], analyzer.ROUTE_NAV2_REPOSITION)
+    _mission(missions[2], analyzer.ROUTE_RECOVERY_OR_REAIM)
+    _mission(
+        missions[3],
+        analyzer.ROUTE_SCAN_OR_PERCEIVE,
+        closest=0.681,
+        fetch_to_pose_pass=False,
+        local_fetch_dispatched=False,
+        planner_route_only_pass=True,
+        planner_route_outcome="scan_or_perception_refresh_selected",
+        flags=["missing_first_contact_motion"],
+        first_flags=["missing_first_contact"],
+        route_quality={"predicted_contact_quality": "blocker", "predicted_first_contact_risk": "unavailable"},
+    )
+    _mission(
+        missions[4],
+        analyzer.ROUTE_NO_GO,
+        closest=1.711,
+        fetch_to_pose_pass=False,
+        local_fetch_dispatched=False,
+        planner_route_only_pass=True,
+        planner_route_outcome="safe_no_go_selected",
+        flags=["missing_first_contact_motion", "pre_contact_lateral_error", "pre_contact_yaw_error"],
+        first_flags=["missing_first_contact"],
+        route_quality={"predicted_contact_quality": "blocker", "predicted_first_contact_risk": "unavailable"},
+    )
+    visual_package = root / "uat" / "fetch_visual_uat_package" / "package_summary.json"
+    _write_json(
+        visual_package,
+        {
+            "campaign_id": "uat",
+            "type": "fetch_visual_uat_package",
+            "pass": True,
+            "mobile_watchable": True,
+            "onboard_camera_watchable": True,
+            "visual_confirmation_seen": True,
+            "local_fetch_visual_confirmed": True,
+            "milestone_interpretation": "mobile_visual_uat_ready_not_promotion",
+            "promotion_evidence": False,
+            "warnings": ["visual_confirmation_keyframe_recovery"],
+            "video_recovery": [{"attempted": True, "ok": True}],
+            "videos": [{"name": "raw_camera_browser.mp4"}],
+            "scorecard_path": "artifacts/session/uat/fetch_visual_uat_package/scorecard.md",
+        },
+    )
+
+    summary = analyzer.build_summary(_args(tmp_path, planner=planner, missions=missions, visual_package=visual_package))
+
+    assert summary["pass"] is True
+    assert summary["mission_green"] is True
+    assert summary["first_contact_blocker_count"] == 0
+    assert summary["setup_watch_count"] == 0
+    assert summary["contact_quality_status"] == "clean"
+    rows = {row["route_label"]: row for row in summary["route_rows"]}
+    assert rows[analyzer.ROUTE_SCAN_OR_PERCEIVE]["coverage_status"] == "planner_only_live_passed"
+    assert rows[analyzer.ROUTE_SCAN_OR_PERCEIVE]["live_pass_count"] == 1
+    assert rows[analyzer.ROUTE_SCAN_OR_PERCEIVE]["live_fetch_pass_count"] == 0
+    assert rows[analyzer.ROUTE_SCAN_OR_PERCEIVE]["live_route_only_pass_count"] == 1
+    assert rows[analyzer.ROUTE_NO_GO]["coverage_status"] == "planner_only_live_passed"
+    assert rows[analyzer.ROUTE_NO_GO]["live_blocker_count"] == 0
+
+    scorecard = tmp_path / "scorecard.md"
+    analyzer.write_scorecard(scorecard, summary)
+    text = scorecard.read_text(encoding="utf-8")
+    assert "route=`scan_or_perceive_first`" in text
+    assert "route_only_pass=`1`" in text
+    assert "contract_pass=`True` fetch_pass=`False` route_only_pass=`True` local_fetch=`False`" in text
 
 
 def test_planner_route_uat_analyzer_preserves_route_quality_predictions(tmp_path, monkeypatch):

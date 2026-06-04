@@ -211,24 +211,57 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     delivery_pass = bool(
         payload.get("fetch_to_pose_pass", verdict.get("fetch_to_pose_pass", first_run.get("fetch_to_pose_pass", False)))
     )
+    local_fetch_dispatched = bool(
+        payload.get(
+            "local_fetch_dispatched",
+            verdict.get("local_fetch_dispatched", first_run.get("local_fetch_dispatched", True)),
+        )
+    )
+    planner_route_only_pass = bool(
+        payload.get(
+            "planner_route_only_pass",
+            verdict.get("planner_route_only_pass", first_run.get("planner_route_only_pass", False)),
+        )
+    )
+    planner_route_executed = bool(
+        payload.get(
+            "planner_route_executed",
+            verdict.get("planner_route_executed", first_run.get("planner_route_executed", False)),
+        )
+    )
+    route_execution = (
+        payload.get("planner_route_execution", {})
+        if isinstance(payload.get("planner_route_execution"), dict)
+        else {}
+    )
+    if isinstance(verdict.get("planner_route_execution"), dict):
+        route_execution = {**route_execution, **verdict["planner_route_execution"]}
+    planner_route_outcome = pick_text(route_execution.get("outcome"), payload.get("planner_route_outcome"))
+    planner_only_route = route_label in PLANNER_ONLY_ROUTES
+    planner_only_contract_pass = bool(
+        planner_only_route and planner_route_only_pass and not local_fetch_dispatched
+    )
+    route_contract_pass = bool(planner_only_contract_pass if planner_only_route else delivery_pass)
     setup_watch_flags = [flag for flag in flags if flag in SETUP_WATCH_FLAGS]
     contact_watch_flags = [flag for flag in flags if flag in CONTACT_WATCH_FLAGS]
     contact_watch_flags.extend(
         flag for flag in flags if flag not in SETUP_WATCH_FLAGS and flag not in CONTACT_WATCH_FLAGS
     )
     severe_first_flags = [flag for flag in first_flags if flag in FIRST_CONTACT_BLOCKER_FLAGS]
-    if severe_first_flags or not delivery_pass:
+    if planner_only_contract_pass:
+        contact_quality = "clean"
+    elif severe_first_flags or not delivery_pass:
         contact_quality = "blocker"
     elif first_flags or contact_watch_flags:
         contact_quality = "watch"
     else:
         contact_quality = "clean"
-    setup_quality = "watch" if setup_watch_flags else "clean"
+    setup_quality = "clean" if planner_only_contract_pass else "watch" if setup_watch_flags else "clean"
     execution_quality = (
         "blocker"
         if contact_quality == "blocker"
         else "watch"
-        if setup_watch_flags or contact_quality == "watch"
+        if setup_quality == "watch" or contact_quality == "watch"
         else "clean"
     )
     return {
@@ -246,8 +279,14 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         ),
         "route_quality_flags": [str(item) for item in list_value(route_quality.get("flags"))],
         "fetch_to_pose_pass": delivery_pass,
+        "route_contract_pass": route_contract_pass,
+        "planner_only_route": planner_only_route,
+        "local_fetch_dispatched": local_fetch_dispatched,
+        "planner_route_only_pass": planner_route_only_pass,
+        "planner_route_executed": planner_route_executed,
+        "planner_route_outcome": planner_route_outcome,
         "mission_completed_pass": bool(
-            payload.get("mission_completed_pass", verdict.get("mission_completed_pass", delivery_pass))
+            payload.get("mission_completed_pass", verdict.get("mission_completed_pass", route_contract_pass))
         ),
         "closest_approach_distance_m": round(closest, 6) if closest is not None else None,
         "outcome_reason": pick_text(payload.get("reason"), verdict.get("reason"), shot.get("reason")),
@@ -357,7 +396,9 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     route_rows = []
     for route in ROUTE_LABELS:
         live_rows = live_by_route.get(route, [])
-        pass_count = sum(1 for item in live_rows if item.get("fetch_to_pose_pass"))
+        pass_count = sum(1 for item in live_rows if item.get("route_contract_pass"))
+        fetch_pass_count = sum(1 for item in live_rows if item.get("fetch_to_pose_pass"))
+        route_only_pass_count = sum(1 for item in live_rows if item.get("planner_route_only_pass"))
         clean_count = sum(1 for item in live_rows if item.get("contact_quality") == "clean")
         watch_count = sum(1 for item in live_rows if item.get("contact_quality") == "watch")
         blocker_count = sum(1 for item in live_rows if item.get("contact_quality") == "blocker")
@@ -371,6 +412,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
                 "planner_count": int(route_counts.get(route, 0) or 0),
                 "live_count": len(live_rows),
                 "live_pass_count": pass_count,
+                "live_fetch_pass_count": fetch_pass_count,
+                "live_route_only_pass_count": route_only_pass_count,
                 "live_clean_count": clean_count,
                 "live_watch_count": watch_count,
                 "live_blocker_count": blocker_count,
@@ -380,7 +423,9 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
                 "predicted_blocker_count": predicted_blocker_count,
                 "coverage_status": (
                     "live_executable_passed"
-                    if route in EXECUTABLE_FETCH_ROUTES and pass_count > 0
+                    if route in EXECUTABLE_FETCH_ROUTES and fetch_pass_count > 0
+                    else "planner_only_live_passed"
+                    if route in PLANNER_ONLY_ROUTES and live_rows and pass_count == len(live_rows)
                     else "planner_only_classified"
                     if route in PLANNER_ONLY_ROUTES and int(route_counts.get(route, 0) or 0) > 0
                     else "missing_live_executable"
@@ -393,12 +438,19 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         any(item.get("fetch_to_pose_pass") for item in live_by_route.get(route, []))
         for route in EXECUTABLE_FETCH_ROUTES
     )
-    planner_only_green = all(int(route_counts.get(route, 0) or 0) > 0 for route in PLANNER_ONLY_ROUTES)
+    planner_only_green = all(
+        int(route_counts.get(route, 0) or 0) > 0
+        and (
+            not live_by_route.get(route)
+            or all(item.get("route_contract_pass") for item in live_by_route.get(route, []))
+        )
+        for route in PLANNER_ONLY_ROUTES
+    )
     visual_green = bool(visual_packages) and all(
         item.get("pass") and item.get("mobile_watchable") and item.get("onboard_camera_watchable")
         for item in visual_packages
     )
-    mission_green = bool(missions) and all(mission.get("fetch_to_pose_pass") for mission in missions)
+    mission_green = bool(missions) and all(mission.get("route_contract_pass") for mission in missions)
     first_contact_blockers = sum(1 for mission in missions if mission.get("contact_quality") == "blocker")
     contact_watch_count = sum(1 for mission in missions if mission.get("contact_quality") == "watch")
     setup_watch_count = sum(1 for mission in missions if mission.get("setup_quality") == "watch")
@@ -505,6 +557,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         lines.append(
             f"- route=`{row.get('route_label', '')}` planner=`{row.get('planner_count', 0)}` "
             f"live=`{row.get('live_count', 0)}` pass=`{row.get('live_pass_count', 0)}` "
+            f"fetch_pass=`{row.get('live_fetch_pass_count', 0)}` "
+            f"route_only_pass=`{row.get('live_route_only_pass_count', 0)}` "
             f"clean=`{row.get('live_clean_count', 0)}` watch=`{row.get('live_watch_count', 0)}` "
             f"setup_watch=`{row.get('live_setup_watch_count', 0)}` "
             f"exec_watch=`{row.get('live_execution_watch_count', 0)}` "
@@ -531,7 +585,10 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         first_flags = ",".join(mission.get("first_contact_quality_flags", []) or [])
         lines.append(
             f"- route=`{mission.get('route_label', '')}` session=`{mission.get('session_id', '')}` "
-            f"pass=`{mission.get('fetch_to_pose_pass', False)}` closest=`{closest_text}` "
+            f"contract_pass=`{mission.get('route_contract_pass', False)}` "
+            f"fetch_pass=`{mission.get('fetch_to_pose_pass', False)}` "
+            f"route_only_pass=`{mission.get('planner_route_only_pass', False)}` "
+            f"local_fetch=`{mission.get('local_fetch_dispatched', True)}` closest=`{closest_text}` "
             f"predicted=`{mission.get('predicted_contact_quality', '')}` "
             f"risk=`{mission.get('predicted_first_contact_risk', '')}` "
             f"score=`{mission.get('route_quality_score', '')}` "

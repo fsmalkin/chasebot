@@ -711,6 +711,18 @@ success: executable routes must deliver inside the radius, while scan/no-go
 routes must materialize the scene, withhold local fetch, and keep the robot and
 ball stopped. Keep contact-control tuning behind that mixed-route breadth check.
 
+June 4 mixed route-family UAT update: the first one-per-family live batch is
+green at
+`artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The batch covered `fetch_ready_local`, `recovery_or_reaim`,
+`scan_or_perceive_first`, `ambiguous_or_unsafe_no_go`, and
+`nav2_reposition_first` from seed `20260633`. It scored route contracts `5/5`,
+visual packages `5/5`, executable deliveries `3/3`, route-only proofs `2/2`,
+clean analyzer status, and first-contact blockers `0`. Policy implication:
+scale mixed route-family breadth before contact-control tuning; the next useful
+gate is at least two live samples per route family with the same visual and
+route-contract scoring.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose
