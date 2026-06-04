@@ -674,6 +674,29 @@ the current milestone-grade sim proof for the planner-routed stack. The next
 policy work is seed breadth, local smoothness only when it reproduces under the
 same gate, and hardware-transfer planning.
 
+June 4 seed `20260629` boundary repairs: seed `20260629` keeps the stage-owner
+architecture intact while exposing two useful route-owner boundaries. The
+planner child routed `30/30` scenes correctly with `0` wrong fetch-ready
+dispatches, then the first live `nav2_reposition_first` row aborted before
+fetch and produced no first-contact trace. That row is useful because it failed
+before ball contact, with `0.0m` ball motion and otherwise-safe geometry. The
+clean pre-contact abort fallback now admits rows out to `1.300m` robot-ball
+separation while preserving the ball-motion, lateral, yaw, and ball-target
+gates. The exact row,
+`seed20260629_scene01_nav2_reposition_first`, passed in
+`live_seed20260629_scene01_nav2_abort_fallback_repro_20260604`, with closest
+approach `0.195562m`, clean first-contact flags, stable contact approach, and
+browser-watchable onboard/topdown/world proof. The resumed parent gate then
+found `seed20260629_scene05_recovery_or_reaim`: high setup debt consumed about a
+minute before first contact, leaving too little push time under the old recovery
+window. The longer bounded recovery window repaired scene05 while preserving
+delivery-stop behavior. The final parent gate is green at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+with `promotion_evidence=true`. Policy implication: keep Nav2 as the preferred
+setup owner for admissible Nav2-first scenes, keep deterministic recovery as the
+fallback for clean pre-contact aborts and high-debt setup, and add seed20260629
+scene01/scene05 to the regression set.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

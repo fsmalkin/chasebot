@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 11:38 AM ET",
+  "updated_label": "Updated June 4, 2026, 12:13 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Two seeded promotion gates green",
-  "status_detail": "The planner-routed stack now has two promotion-green randomized sim seeds for the current milestone: seed 20260627 and seed 20260628 each delivered 30/30 planner routing, 6/6 live executable missions, 6/6 browser-watchable visual packages, clean analyzer status, and sequence-reviewed onboard/topdown proof. The next work is a browser UAT bundle, regression preservation, and hardware-transfer planning.",
+  "status_label": "Three seeded promotion gates green",
+  "status_detail": "The planner-routed stack now has three promotion-green randomized sim seeds for the current milestone. Seeds 20260627, 20260628, and 20260629 each delivered 30/30 planner routing, 6/6 live executable missions, 6/6 browser-watchable visual packages, clean analyzer status, and sequence-reviewed onboard/topdown proof. Seed 20260629 first exposed a Nav2 setup-abort boundary and a high-debt recovery duration miss; the repaired parent gate is green after clean-abort fallback hardening and a longer bounded recovery window.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,61 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Third planner-routed seeded gate is green after boundary repairs",
+      "status": "Seed 20260629: 30/30 planner routing, 6/6 live missions, 6/6 visual packages",
+      "tone": "green",
+      "summary": "Seed 20260629 first exposed two useful boundaries: a transient Nav2 setup abort before fetch on scene01 and a high-debt recovery miss on scene05 after first contact arrived too late in the old recovery window. The repair keeps the architecture staged: clean pre-contact Nav2 aborts can fall back to deterministic recovery inside guarded geometry, and recovery_or_reaim now has a longer bounded execution window while delivery stop remains authoritative. The resumed parent gate is promotion-green with clean execution, setup, contact, and first-contact metrics across two Nav2-first, two fetch-ready local, and two recovery/re-aim rows.",
+      "metrics": [
+        "Parent gate: planner_routed_seeded_generalization_promotion_green; promotion_evidence=true",
+        "Planner child: 30/30, wrong_fetch=0; route split fetch_ready_local 6, nav2_reposition_first 4, recovery_or_reaim 10, scan_or_perceive_first 5, ambiguous_or_unsafe_no_go 5",
+        "Replay child: selected_count=6; mission_pass_count=6; visual_package_pass_count=6",
+        "Route coverage: fetch_ready_local 2/2, nav2_reposition_first 2/2, recovery_or_reaim 2/2",
+        "Analyzer: execution clean, setup clean, contact clean, first-contact blockers 0",
+        "Repair 1: clean pre-contact Nav2 abort fallback admits otherwise-safe rows out to 1.300m robot-ball separation while preserving ball-motion, lateral, yaw, and ball-target bounds",
+        "Repair 2: recovery_or_reaim uses a longer bounded execution window so high setup-debt rows still have post-contact push time; delivery stop remains active",
+        "Resume note: the final parent gate reused three already-passing visual rows, reran the repaired scene05 recovery row, and executed the remaining selected rows fresh"
+      ],
+      "links": [
+        {
+          "label": "Seed 20260629 parent gate scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260629 parent gate summary",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604/fetch_planner_seeded_generalization_gate/gate_summary.json"
+        },
+        {
+          "label": "Seed 20260629 replay scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604_replay/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Seed 20260629 analyzer scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Scene05 repaired recovery onboard proof",
+          "url": "/artifacts/session/20260604T163650197166Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene05 repaired recovery contact sheet",
+          "url": "/artifacts/session/20260604T163650197166Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Scene08 recovery onboard proof",
+          "url": "/artifacts/session/20260604T164132837864Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Scene08 recovery contact sheet",
+          "url": "/artifacts/session/20260604T164132837864Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Original failed Nav2 contact sheet",
+          "url": "/artifacts/session/20260604T155938736788Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ],
+      "preview_image": "/artifacts/session/20260604T163650197166Z/visual/keyframe_review_contact_sheet.png"
+    },
     {
       "title": "Second planner-routed seeded gate is green",
       "status": "Seed 20260628: 30/30 planner routing, 6/6 live missions, 6/6 visual packages",
@@ -1855,6 +1910,14 @@
   ],
   "watch_areas": [
     {
+      "label": "Nav2-first setup abort fallback",
+      "body": "Seed20260629 scene01 failed once when Nav2 aborted before contact and the prior fallback envelope rejected the otherwise-safe row at 1.222m robot-ball separation. The repaired full parent gate is green, and clean pre-contact Nav2 abort fallback now admits rows out to 1.300m while preserving ball-motion, lateral, yaw, and ball-target bounds. Keep scene01 in regression coverage."
+    },
+    {
+      "label": "High-debt recovery duration",
+      "body": "Seed20260629 scene05 showed that recovery can spend about a minute reaching first contact, leaving too little push time under the old window. The longer bounded recovery window repaired scene05 and the full seed20260629 parent gate is green. Watch wall-clock cost and preserve delivery-stop behavior during hardware-transfer planning."
+    },
+    {
       "label": "Docker Desktop live-sim health",
       "body": "Seed20260626 exposed Docker Desktop and dashboard startup instability before the resumed run completed. The runner now supports artifact-aware resume, fail-fast startup, and dashboard readiness diagnostics. Keep Docker health as an infrastructure watch before canonical gates."
     },
@@ -1880,15 +1943,15 @@
     }
   ],
   "next_steps": [
-    "Package a short browser UAT review page section that highlights seed 20260627 and seed 20260628 with onboard-first videos and contact sheets.",
-    "Keep saved anchors plus seeds 20260627 and 20260628 as regression gates for any route-owner or contact-servo change.",
+    "Promote saved anchors plus seeds 20260627, 20260628, and 20260629 into the regression set for route-owner or contact-servo changes.",
+    "Use seed20260629 scene01 and scene05 as boundary regression rows: Nav2 clean-abort fallback and high-debt recovery duration.",
     "Draft the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, model provenance checks, and visual-evidence capture on robot hardware.",
-    "Run the next breadth seed only after the UAT bundle is easy to review, so failures or wins are visually inspectable by default.",
+    "Measure the runtime cost of the longer recovery window and decide whether hardware UAT needs a tighter progress-based timeout instead of a fixed duration.",
     "Investigate container-side ffmpeg availability as evidence hardening; host-side browser video recovery is working but remains a packaging dependency."
   ],
   "uat_review_bundle": {
-    "title": "Two-green-seed browser UAT bundle",
-    "summary": "Review the latest route samples first, then use the parent seed scorecards to confirm the broader claim. The intended read is simple: the planner routes the scene, the chosen setup owner gets the robot into a forward contact path, and local bounded fetch pushes the calibrated ball into the delivery circle.",
+    "title": "Three-green-seed browser UAT bundle",
+    "summary": "Review the latest route samples first, then use the parent seed scorecards to confirm the broader claim. The intended read is simple: the planner routes the scene, the chosen setup owner gets the robot into a forward contact path, and local bounded fetch pushes the calibrated ball into the delivery circle. The seed20260629 recovery sample shows the latest high-debt repair.",
     "route_samples": [
       {
         "label": "Recovery / re-aim sample",
@@ -1919,12 +1982,22 @@
         "topdown_url": "/artifacts/session/20260604T152216704001Z/visual/topdown_telemetry_browser.mp4",
         "world_url": "/artifacts/session/20260604T152216704001Z/visual/world_stream.mp4",
         "contact_sheet_url": "/artifacts/session/20260604T152216704001Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Repaired recovery sample",
+        "route": "recovery_or_reaim",
+        "session_id": "20260604T163650197166Z",
+        "reason": "Shows the high-debt recovery case that needed a longer bounded window before the ball reached the circle.",
+        "video_url": "/artifacts/session/20260604T163650197166Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260604T163650197166Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260604T163650197166Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260604T163650197166Z/visual/keyframe_review_contact_sheet.png"
       }
     ],
     "review_checklist": [
       "Start with onboard raw camera: verify setup, first contact, push, and final approach without trusting telemetry alone.",
       "Use the contact sheet for the same session to compare onboard and topdown frames across the full run.",
-      "Use the parent scorecards to verify the broader claim: both seed 20260627 and seed 20260628 are 30/30 planner and 6/6 live executable green.",
+      "Use the parent scorecards to verify the broader claim: seeds 20260627, 20260628, and 20260629 are each 30/30 planner and 6/6 live executable green.",
       "Treat the first seed20260628 Docker subnet failure as infrastructure evidence before mission launch; the rerun is the behavior evidence.",
       "Keep the next engineering decision focused on UAT packaging and hardware transfer because current sim breadth is strong enough for that slice."
     ],
@@ -1940,6 +2013,10 @@
       {
         "label": "Seed 20260627 parent scorecard",
         "url": "/artifacts/session/live_planner_seeded_generalization_gate_full_visual_fix_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
+      },
+      {
+        "label": "Seed 20260629 parent scorecard",
+        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
       },
       {
         "label": "Living JSON",

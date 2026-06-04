@@ -254,8 +254,8 @@ def test_planner_route_defaults_downgrade_near_field_nav2_layout_to_recovery():
     assert args.route_executor == "bounded_recovery_reaim"
     assert args.nav2_reposition_before_fetch is False
     assert args.nav2_reposition_transform_layout_to_current_robot is False
-    assert args.drive_duration_s == pytest.approx(78.0)
-    assert args.sample_duration_s == pytest.approx(82.0)
+    assert args.drive_duration_s == pytest.approx(118.0)
+    assert args.sample_duration_s == pytest.approx(122.0)
     assert args.robot_x == pytest.approx(-0.533879)
     assert args.robot_y == pytest.approx(-0.346212)
     assert args.robot_yaw == pytest.approx(0.211588)
@@ -289,6 +289,37 @@ def test_nav2_precontact_fallback_accepts_clean_abort_inside_local_envelope():
     assert decision["fallback_route_label"] == "recovery_or_reaim"
     assert decision["geometry"]["source"] == "post_nav2_pose_sample"
     assert decision["geometry"]["robot_ball_distance_m"] == pytest.approx(1.023132)
+    assert decision["ball_motion_m"] == pytest.approx(0.0)
+
+
+def test_nav2_precontact_fallback_accepts_seed20260629_clean_abort_boundary():
+    args = _route_default_args(
+        planner_route_label="nav2_reposition_first",
+        route_executor="nav2_forward_reposition_then_fetch",
+        ball_x=1.220412,
+        ball_y=-0.069372,
+        zone_x=1.691683,
+        zone_y=-0.076119,
+    )
+    samples = [
+        {
+            "robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0, "z": 0.0},
+            "ball_pose": {"x": 1.220412, "y": -0.069372, "yaw": 0.0, "z": 0.021336},
+        }
+    ]
+
+    decision = nav2_precontact_fallback_to_local_recovery_decision(
+        args=args,
+        target_layout={},
+        pre_fetch_reposition={"success": False, "status_text": "STATUS_ABORTED"},
+        pre_fetch_reposition_samples=samples,
+    )
+
+    assert decision["eligible"] is True
+    assert decision["reason"] == "pre_contact_nav2_failure_inside_local_recovery_envelope"
+    assert decision["fallback_route_label"] == "recovery_or_reaim"
+    assert decision["geometry"]["robot_ball_distance_m"] == pytest.approx(1.222382)
+    assert decision["thresholds"]["robot_ball_distance_limit_m"] == pytest.approx(1.3)
     assert decision["ball_motion_m"] == pytest.approx(0.0)
 
 
@@ -332,8 +363,8 @@ def test_planner_route_defaults_extend_recovery_execution_window_without_nav2_se
 
     assert defaults["applied"] is True
     assert args.nav2_reposition_before_fetch is False
-    assert args.drive_duration_s == pytest.approx(78.0)
-    assert args.sample_duration_s == pytest.approx(82.0)
+    assert args.drive_duration_s == pytest.approx(118.0)
+    assert args.sample_duration_s == pytest.approx(122.0)
 
 
 def test_planner_route_defaults_preserve_explicit_cli_overrides():

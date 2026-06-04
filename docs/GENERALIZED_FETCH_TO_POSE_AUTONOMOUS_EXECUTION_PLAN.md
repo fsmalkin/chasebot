@@ -290,6 +290,33 @@ after saved-anchor repeatability. Next execution work is UAT packaging,
 regression preservation, and hardware-transfer planning for the planner-routed
 route-owner split.
 
+June 4 seed `20260629` boundary repairs and third green gate: seed `20260629`
+exposed two useful setup/execution boundaries after the first two green seeds.
+The planner child still passed `30/30` with `0` wrong fetch-ready dispatches,
+but the first live row `seed20260629_scene01_nav2_reposition_first` aborted
+before fetch, moved the ball `0.0m`, and produced no first-contact trace:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260629_full_visual_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The failing geometry was otherwise clean: robot-ball distance `1.222382m`,
+ball-target distance `0.47132m`, lateral setup debt about `0.052m`, and yaw
+debt under `1deg`. The clean-abort fallback envelope now admits otherwise-safe
+Nav2-first rows out to `1.300m` robot-ball separation while preserving the ball
+motion, lateral, yaw, and ball-target gates. The exact scene then passed in
+`live_seed20260629_scene01_nav2_abort_fallback_repro_20260604`, with closest
+approach `0.195562m`, clean first-contact flags, stable contact approach, and
+browser-watchable onboard/topdown/world proof:
+`artifacts/session/live_seed20260629_scene01_nav2_abort_fallback_repro_20260604/fetch_planner_route_replay_batch/scorecard.md`.
+The resumed parent gate then found a second boundary at
+`seed20260629_scene05_recovery_or_reaim`: high setup debt consumed about a
+minute before first contact, leaving too little push time under the old recovery
+window. Extending only the bounded recovery route window repaired that row while
+preserving delivery-stop behavior. The final resumed parent gate is now green:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+It reports `promotion_evidence=true`, `30/30` planner routing, `6/6` live
+missions, `6/6` browser-watchable packages, clean execution/setup/contact
+quality, and `0` first-contact blockers. This gives the sim milestone three
+independent randomized promotion-green seeds: `20260627`, `20260628`, and
+`20260629`.
+
 Harness hardening from the same run: Gazebo stale-model removal is now
 timeout-safe, returning `rc=124` and preserving runner control flow instead of
 crashing before mission dispatch.

@@ -44,8 +44,10 @@ NAV2_SETUP_PLANNER_ROUTES = {ROUTE_NAV2_REPOSITION}
 RECOVERY_LATERAL_LIMIT_M = 0.240
 RECOVERY_YAW_LIMIT_DEG = 35.0
 RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M = 0.900
-NAV2_FALLBACK_ROBOT_BALL_DISTANCE_LIMIT_M = 1.200
+NAV2_FALLBACK_ROBOT_BALL_DISTANCE_LIMIT_M = 1.300
 NAV2_FALLBACK_BALL_MOTION_LIMIT_M = 0.020
+RECOVERY_ROUTE_DRIVE_DURATION_S = 118.0
+RECOVERY_ROUTE_SAMPLE_DURATION_S = 122.0
 ROUTE_EXECUTOR_BY_LABEL = {
     ROUTE_FETCH_READY: ROUTE_EXECUTOR_LOCAL_FETCH,
     ROUTE_NAV2_REPOSITION: ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
@@ -385,8 +387,8 @@ def apply_planner_route_execution_defaults(
     _set_route_default(args, explicit_args, "drive_mode", "line_servo", "--drive-mode")
     _set_route_default(args, explicit_args, "drive_linear_x_mps", 0.1, "--drive-linear-x-mps")
     if route_label == ROUTE_RECOVERY_OR_REAIM:
-        route_drive_duration_s = 78.0
-        route_sample_duration_s = 82.0
+        route_drive_duration_s = RECOVERY_ROUTE_DRIVE_DURATION_S
+        route_sample_duration_s = RECOVERY_ROUTE_SAMPLE_DURATION_S
     elif route_label == ROUTE_NAV2_REPOSITION:
         route_drive_duration_s = 74.0
         route_sample_duration_s = 78.0
@@ -2392,8 +2394,20 @@ def main() -> int:
                 nav2_precontact_fallback["applied"] = True
                 args.planner_route_label = ROUTE_RECOVERY_OR_REAIM
                 args.route_executor = ROUTE_EXECUTOR_RECOVERY
-                _set_route_default(args, explicit_args, "drive_duration_s", 78.0, "--drive-duration-s")
-                _set_route_default(args, explicit_args, "sample_duration_s", 82.0, "--sample-duration-s")
+                _set_route_default(
+                    args,
+                    explicit_args,
+                    "drive_duration_s",
+                    RECOVERY_ROUTE_DRIVE_DURATION_S,
+                    "--drive-duration-s",
+                )
+                _set_route_default(
+                    args,
+                    explicit_args,
+                    "sample_duration_s",
+                    RECOVERY_ROUTE_SAMPLE_DURATION_S,
+                    "--sample-duration-s",
+                )
                 pre_fetch_reposition["fallback_to_local_recovery"] = nav2_precontact_fallback
                 pre_fetch_reposition["local_fetch_continued_after_nav2_failure"] = True
             else:

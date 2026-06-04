@@ -332,6 +332,27 @@ Planner-routed moonshot update, June 2:
 - harness update:
   stale-model cleanup timeouts now return recorded timeout status instead of
   killing the delivery runner before mission dispatch.
+- seed `20260629` boundary repairs, June 4:
+  seed `20260629` kept the planner handoff green at `30/30` with
+  `0` wrong fetch-ready dispatches, then stopped on the first live
+  `nav2_reposition_first` row after Nav2 aborted before fetch with no ball
+  motion and no first-contact trace. The exact row
+  `seed20260629_scene01_nav2_reposition_first` now passes in
+  `live_seed20260629_scene01_nav2_abort_fallback_repro_20260604`, with closest
+  approach `0.195562m`, clean first-contact flags, stable contact approach, and
+  browser-watchable onboard/topdown/world proof. The clean pre-contact abort
+  fallback now admits otherwise-safe rows out to `1.300m` robot-ball separation,
+  preserving the ball-motion, lateral, yaw, and ball-target gates. The resumed
+  parent gate then exposed and repaired a second boundary:
+  `seed20260629_scene05_recovery_or_reaim` reached clean first contact after
+  about a minute, so the old recovery window left too little push time. The
+  longer bounded recovery window repaired scene05 while preserving
+  delivery-stop behavior. The final parent gate is green at
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+  with `30/30` planner routing, `6/6` live missions, `6/6` visual packages,
+  clean analyzer status, and `promotion_evidence=true`. This branch now has
+  three randomized promotion-green seeds: `20260627`, `20260628`, and
+  `20260629`.
 
 Saved-anchor requalification update, later June 1:
 

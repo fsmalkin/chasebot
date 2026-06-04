@@ -205,6 +205,24 @@ with same-session browser-watchable packages and reviewed keyframe sheets.
 Classify this as route-owner UAT green. The canonical parent seeded gate still
 owns promotion evidence.
 
+June 4 seed `20260629` boundary repairs: the planner child passed `30/30` with
+`0` wrong fetch-ready dispatches, then the first live `nav2_reposition_first`
+row aborted before fetch with no first-contact trace. The clean abort moved the
+ball `0.0m`, so it classifies as a setup-owner resilience gap. The fallback gate
+now admits otherwise-safe clean pre-contact Nav2 aborts out to `1.300m`
+robot-ball separation while preserving ball-motion, lateral, yaw, and
+ball-target bounds. The exact row passed in
+`live_seed20260629_scene01_nav2_abort_fallback_repro_20260604`, with closest
+approach `0.195562m`, clean first-contact flags, stable contact approach, and
+browser-watchable visual proof. The resumed parent gate then exposed
+`seed20260629_scene05_recovery_or_reaim`: high setup debt consumed about a
+minute before first contact, leaving too little push time. The longer bounded
+recovery window repaired that row while preserving delivery-stop behavior. The
+final parent gate
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+is promotion-green with `30/30` planner routing, `6/6` live missions, `6/6`
+visual packages, clean analyzer status, and `0` first-contact blockers.
+
 ## Research Thread Output
 
 Before starting another implementation spike, produce a findings matrix across
