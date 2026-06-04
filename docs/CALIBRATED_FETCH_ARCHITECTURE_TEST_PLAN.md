@@ -255,6 +255,14 @@ The real provider matched the deterministic guard `10/10`, provider status was
 The next calibrated architecture work repeats shadow comparison on rough mixed
 seeds and the seven-seed manifest while hardware-transfer packaging starts.
 
+The first rough-seed LLM-shadow rollup is green:
+`artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
+It aggregates the hard matrix and rough mixed seeds `20260632` / `20260633`,
+with `70/70` provider-ok classifications, `70/70` guard agreement, route
+pass/fail `70/0`, and wrong fetch-ready dispatches `0`. The remaining
+calibrated planner work is seven-seed shadow expansion plus hardware-transfer
+packaging.
+
 ## Research Thread Output
 
 Before starting another implementation spike, produce a findings matrix across

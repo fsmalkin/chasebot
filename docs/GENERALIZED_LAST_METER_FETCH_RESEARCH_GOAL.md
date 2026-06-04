@@ -1072,8 +1072,12 @@ The real provider returned `ok` for all ten scenes, agreed with the
 deterministic guard `10/10`, produced zero wrong fetch-ready dispatches, and set
 `llm_shadow_ready=True`. This is shadow-only high-level route evidence. Live
 execution still belongs to deterministic guards and bounded route owners. The
-next research step is repeating LLM-shadow comparison over rough mixed seeds and
-the seven-seed manifest while hardware-transfer planning starts in parallel.
+rough-seed rollup is also green at
+`artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`:
+hard matrix plus seeds `20260632` and `20260633`, `70/70` provider-ok route
+classifications, `70/70` guard agreement, and wrong fetch-ready dispatches `0`.
+The next research step is extending the rollup across the remaining seven-seed
+manifest while hardware-transfer planning starts in parallel.
 
 ## Definition Of Done For The Research Thread
 

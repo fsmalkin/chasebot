@@ -458,6 +458,14 @@ covers the rough mixed-family seeds and seven-seed manifest. Continue
 hardware-transfer packaging in parallel, and use reproduced hard-matrix failures
 as the trigger for local contact-control changes.
 
+The first LLM-shadow rollup now covers the hard matrix plus rough mixed seeds
+`20260632` and `20260633`:
+`artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
+It passed `70/70` route classifications, provider status was `ok` on every row,
+guard agreement was `70/70`, and wrong fetch-ready dispatches stayed at `0`.
+The next autonomous step is extending this shadow route-selection proof across
+the remaining seven-seed manifest gates before supervised live route selection.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

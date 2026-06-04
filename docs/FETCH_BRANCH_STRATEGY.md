@@ -296,8 +296,14 @@ Planner-routed moonshot update, June 2:
   shows the real shadow provider matched the deterministic hard-matrix guard
   `10/10`, with provider status `ok` on every row, wrong fetch dispatches `0`,
   and `llm_shadow_ready=True`. Branch decision: keep this spike active for
-  broader shadow comparison and hardware-transfer packaging. Hold alternative
-  architecture work for reproduced hard-matrix failures.
+  broader shadow comparison and hardware-transfer packaging.
+- LLM-shadow rough-seed rollup:
+  `artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`
+  combines the hard matrix and rough mixed seeds `20260632` / `20260633`. It is
+  green at `70/70` provider-ok route classifications, `70/70` guard agreement,
+  route pass/fail `70/0`, and wrong fetch-ready dispatches `0`. Hold alternative
+  architecture work for reproduced hard-matrix failures; next branch work is
+  seven-seed shadow expansion and hardware-transfer packaging.
 - frozen planner-layout replay fix:
   fresh seed `seed20260608_scene24_fetch_ready_local` first failed as a manual
   target-layout replay because the runner used the old constant-push defaults

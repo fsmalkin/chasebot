@@ -1012,9 +1012,16 @@ hard mixed-scenario route guard at
 Provider status was `ok` on `10/10` cases, guard agreement was `10/10`, wrong
 fetch-ready dispatches stayed at `0`, and `llm_shadow_ready=True`. This supports
 LLM/world-state planning as a high-level route classifier while deterministic
-guards and bounded executors keep live authority. The next roadmap slice repeats
-LLM-shadow scoring across rough mixed seeds and the seven-seed manifest, then
-packages the hardware-transfer plan.
+guards and bounded executors keep live authority.
+
+The first LLM-shadow rollup is green at
+`artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
+It combines the hard matrix with rough mixed seeds `20260632` and `20260633`:
+three gates, `70` total scenes, provider `ok` on `70/70`, guard agreement
+`70/70`, route pass/fail `70/0`, and wrong fetch-ready dispatches `0`. The next
+roadmap slice expands the rollup across the remaining seven-seed manifest gates,
+then packages the supervised-live route-selection threshold and hardware-transfer
+plan.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`

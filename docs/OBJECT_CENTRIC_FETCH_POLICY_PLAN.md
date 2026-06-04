@@ -762,6 +762,14 @@ route classifier and rationale source first. Deterministic guards still own
 live execution until the same shadow bar clears rough mixed seeds and the
 seven-seed manifest.
 
+That rough mixed-seed shadow bar is now green:
+`artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
+The rollup combines the hard matrix with seeds `20260632` and `20260633` for
+`70` total route classifications. Provider status was `ok` on `70/70`, guard
+agreement was `70/70`, route pass/fail was `70/0`, and wrong fetch-ready
+dispatches were `0`. Keep the model in shadow/supervised route selection until
+the remaining seven-seed manifest clears the same bar.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose
