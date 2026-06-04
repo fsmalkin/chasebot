@@ -188,6 +188,44 @@ June 4, 2026 seed `20260627` planner-routed random slice:
   until the planner-routed seeded gate surface carries the canonical `6 x 1`
   promotion contract.
 
+Planner-routed seeded generalization gate wrapper:
+
+```powershell
+python scripts\fetch_planner_seeded_generalization_gate.py `
+  --campaign-id <id> `
+  --random-cases 30 `
+  --seed <seed> `
+  --max-per-route 2 `
+  --fresh-dashboard-session-per-run `
+  --stop-on-fail
+```
+
+Dry-run proof:
+
+- Gate:
+  `artifacts/session/dev_planner_seeded_generalization_gate_dry_run_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Result: the wrapper composed the `30/30` planner handoff gate and a dry-run
+  six-row executable replay selection with two rows each for
+  `fetch_ready_local`, `nav2_reposition_first`, and `recovery_or_reaim`.
+- Evidence meaning: `planner_routed_seeded_generalization_dry_run_ready`.
+  Promotion evidence starts only after the same wrapper runs live with fresh
+  dashboard sessions, visual packages, clean execution/setup/contact quality,
+  and zero first-contact blockers.
+
+Live attempt, same morning:
+
+- Gate:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260627_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Result: planner child passed `30/30` with `0` wrong fetch-ready dispatches.
+  Replay stopped before the first mission because the fresh dashboard session
+  stayed in `environment_starting`; first failed row was
+  `seed20260627_scene04_recovery_or_reaim` with
+  `fresh_dashboard_session_start_failed; environment_state=starting;
+  phase=environment_starting`.
+- Evidence meaning: infrastructure startup blocker. Fetch-control scoring
+  remains unattempted. Repair or bypass the dashboard/compose fresh-session
+  startup path, then rerun the same parent gate.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

@@ -819,6 +819,27 @@ Use this as green randomized route-owner visual UAT. Promotion remains pending
 until the planner-routed seeded generalization gate carries canonical `6 x 1`
 semantics.
 
+June 4, 2026 planner-routed seeded gate surface update:
+`scripts/fetch_planner_seeded_generalization_gate.py` now provides the parent
+gate for the next promotion rung. It runs the mixed planner handoff gate,
+materializes the executable route replay batch, runs the route UAT analyzer
+after live mission/visual artifacts exist, and sets `promotion_evidence=true`
+only when the live surface is clean. Dry-run
+`dev_planner_seeded_generalization_gate_dry_run_20260604` passed with `30/30`
+planner decisions and six selected executable rows:
+`artifacts/session/dev_planner_seeded_generalization_gate_dry_run_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The next evidence step is the same wrapper in live fresh-dashboard mode.
+
+Live wrapper attempt
+`live_planner_seeded_generalization_gate_seed20260627_20260604` reached the
+promotion gate surface and failed before mission execution:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260627_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner child passed `30/30`; replay stopped on
+`fresh_dashboard_session_start_failed` while the first fresh session remained in
+`environment_starting`. Classify this as infrastructure evidence; fetch-control
+scoring remains unattempted. The architecture decision remains unchanged until
+the same gate runs through live mission and visual packages.
+
 June 4, 2026 infrastructure note: two failed live attempts on stale dashboard
 ports reproduced truth-probe startup failures before mission dispatch. The
 route replay harness now preserves those as dashboard-start failures and returns

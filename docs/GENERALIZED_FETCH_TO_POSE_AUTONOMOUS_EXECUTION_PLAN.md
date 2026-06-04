@@ -212,6 +212,27 @@ This is green randomized route-owner visual UAT. The next implementation step
 is a formal planner-routed seeded generalization gate surface that can carry the
 canonical promotion semantics.
 
+June 4 planner-routed seeded gate surface: `scripts/fetch_planner_seeded_generalization_gate.py`
+now composes the planner handoff gate, executable route replay batch, and route
+UAT analyzer under one parent artifact. Dry-run
+`dev_planner_seeded_generalization_gate_dry_run_20260604` passed with a
+`30/30` planner gate and six selected executable replay rows:
+`artifacts/session/dev_planner_seeded_generalization_gate_dry_run_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The live run of this wrapper is the next promotion-grade gate candidate; it
+must use fresh dashboard sessions, browser-watchable visual packages, clean
+execution/setup/contact quality, and zero first-contact blockers before
+`promotion_evidence=true`.
+
+The first live wrapper attempt,
+`live_planner_seeded_generalization_gate_seed20260627_20260604`, validated the
+planner child and exposed an infrastructure blocker before mission execution:
+the fresh dashboard session stayed in `environment_starting` on the first replay
+row. The scorecard is
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260627_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+Classify this as dashboard/compose startup evidence; fetch-control scoring
+remains unattempted. The next autonomous step is repairing or bypassing that
+startup path, then rerunning the same parent gate.
+
 June 4 harness hardening: route replay now returns immediately when dashboard
 startup reports `environment_state=error`, preserving truth-probe failures as
 infrastructure evidence before mission launch. Dashboard startup now allows a

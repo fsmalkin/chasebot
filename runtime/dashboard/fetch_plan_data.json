@@ -1,6 +1,6 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 3:58 AM ET",
+  "updated_label": "Updated June 4, 2026, 4:33 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
   "status_label": "Living plan and progress tracker",
   "status_detail": "This page summarizes current direction and evidence. It is route-owner UAT progress, not release or promotion evidence.",
@@ -49,6 +49,69 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Live seeded gate reached an infrastructure blocker",
+      "status": "Planner child passed 30/30; fresh dashboard startup blocked before mission execution",
+      "tone": "yellow",
+      "summary": "The new planner-routed seeded gate wrapper was run live for seed 20260627. The planner child passed the full 30-scene handoff gate with zero wrong fetch dispatches. The replay child stopped on the first selected recovery_or_reaim row because the fresh dashboard session stayed in environment_starting before any mission or visual package could run. This is infrastructure evidence; fetch-control scoring remains unattempted.",
+      "metrics": [
+        "Parent gate: planner_routed_seeded_generalization_incomplete; promotion_evidence=false",
+        "Planner child: 30/30, wrong_fetch=0",
+        "Replay child: selected_count=1 because stop-on-fail halted at the first row",
+        "First failed row: seed20260627_scene04_recovery_or_reaim",
+        "Failure: fresh_dashboard_session_start_failed; environment_state=starting; phase=environment_starting",
+        "Next step: repair or bypass dashboard/compose fresh-session startup, then rerun the same parent gate"
+      ],
+      "links": [
+        {
+          "label": "Live parent gate scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260627_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Live parent gate summary",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260627_20260604/fetch_planner_seeded_generalization_gate/gate_summary.json"
+        },
+        {
+          "label": "Live replay child scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260627_20260604_replay/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Live planner child scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260627_20260604_planner/fetch_planner_handoff_gate/scorecard.md"
+        }
+      ]
+    },
+    {
+      "title": "Planner-routed seeded gate surface is ready",
+      "status": "Dry-run composed the 30-scene planner gate and six executable replay rows",
+      "tone": "green",
+      "summary": "The new scripts/fetch_planner_seeded_generalization_gate.py wrapper now owns the next promotion surface. It composes the mixed planner handoff gate, executable route replay batch, and live route UAT analyzer under one parent artifact. The dry-run passed for seed 20260627 with 30/30 planner decisions, zero wrong fetch dispatches, and six selected executable rows across local fetch, Nav2 reposition-first, and recovery/re-aim.",
+      "metrics": [
+        "Parent gate: planner_routed_seeded_generalization_dry_run_ready",
+        "Planner child: 30/30, wrong_fetch=0, route split fetch_ready_local 7, nav2_reposition_first 7, recovery_or_reaim 6, scan_or_perceive_first 7, ambiguous_or_unsafe_no_go 3",
+        "Replay child: selected_count=6, requested_route_count fetch_ready_local 2, nav2_reposition_first 2, recovery_or_reaim 2",
+        "Promotion rule: live fresh-dashboard run plus route analyzer must be clean before promotion_evidence=true",
+        "Next command: run the same wrapper live with --fresh-dashboard-session-per-run and --stop-on-fail"
+      ],
+      "links": [
+        {
+          "label": "Parent seeded gate scorecard",
+          "url": "/artifacts/session/dev_planner_seeded_generalization_gate_dry_run_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Parent seeded gate summary",
+          "url": "/artifacts/session/dev_planner_seeded_generalization_gate_dry_run_20260604/fetch_planner_seeded_generalization_gate/gate_summary.json"
+        },
+        {
+          "label": "Child planner gate scorecard",
+          "url": "/artifacts/session/dev_planner_seeded_generalization_gate_dry_run_20260604_planner/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "Child replay batch scorecard",
+          "url": "/artifacts/session/dev_planner_seeded_generalization_gate_dry_run_20260604_replay/fetch_planner_route_replay_batch/scorecard.md"
+        }
+      ]
+    },
     {
       "title": "Seed 20260627 planner-routed random slice",
       "status": "30/30 planner gate and 6/6 executable live routes delivered clean",
@@ -1582,7 +1645,8 @@
     }
   ],
   "next_steps": [
-    "Formalize the planner-routed seeded generalization gate surface so random route-owner UAT can graduate from route-owner visual evidence to the canonical promotion ladder.",
+    "Repair or bypass the dashboard/compose fresh-session startup path that left the live seeded gate in environment_starting.",
+    "Rerun scripts/fetch_planner_seeded_generalization_gate.py live for seed 20260627 with fresh dashboard sessions and stop-on-fail after startup is healthy.",
     "Use seed20260624 scene24 and seed20260626 scene03 as local-fetch smoothness candidates only after saved-layout coverage shows the same risk.",
     "Keep Docker health and dashboard truth-probe readiness as infrastructure watches before long live batches.",
     "Keep Nav2 and recovery as active route owners because seed20260625 and the completed seed20260626 rows both show clean samples in those lanes.",
