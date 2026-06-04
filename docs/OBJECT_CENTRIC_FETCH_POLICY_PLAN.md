@@ -792,6 +792,13 @@ vetoes were all confidence-threshold fallbacks, so local fetch policy work can
 assume the high-level planner is guarded and return to executable route-owner
 visual UAT.
 
+The supervised hard route-owner replay is now green:
+`artifacts/session/analysis_supervised_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+It passed route contracts `10/10`, visual packages `10/10`, executable
+deliveries `6/6`, and route-only no-fetch proofs `4/4`. This keeps local fetch
+policy scoped to bounded executable routes while the LLM/guard layer handles
+route choice, scan/defer, recovery/re-aim, and no-go decisions.
+
 Approach-quality evidence must record:
 
 - per-tick robot pose/yaw and ball pose

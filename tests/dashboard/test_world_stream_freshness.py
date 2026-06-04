@@ -482,10 +482,10 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Supervised LLM route guard manifest green"
-    assert payload["latest_evidence"][0]["title"] == "Supervised LLM route guard manifest is green"
+    assert payload["status_label"] == "Supervised LLM route-owner visual UAT green"
+    assert payload["latest_evidence"][0]["title"] == "Supervised LLM hard route-owner visual UAT is green"
     assert payload["latest_evidence"][0]["links"][0]["url"].endswith(
-        "/fetch_planner_llm_supervised_evidence/scorecard.md"
+        "/fetch_planner_route_uat_analyzer/scorecard.md"
     )
     route_samples = payload["uat_review_bundle"]["route_samples"]
     assert len(route_samples) == 10

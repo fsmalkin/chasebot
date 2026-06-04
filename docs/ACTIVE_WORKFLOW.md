@@ -631,6 +631,26 @@ June 4, 2026 supervised hard-plus-seven-seed manifest:
   return to route-owner visual UAT for executable fetch, Nav2-reposition, and
   recovery/re-aim routes.
 
+June 4, 2026 supervised hard route-owner visual UAT:
+
+- Replay command:
+  `python scripts\fetch_planner_route_replay_batch.py --campaign-id live_supervised_hard_mixed_route_family_20260604 --gate-summary artifacts\session\supervised_llm_hard_mixed_fetch_planner_v1_20260604\fetch_planner_handoff_gate\gate_summary.json --route fetch_ready_local --route nav2_reposition_first --route recovery_or_reaim --route scan_or_perceive_first --route ambiguous_or_unsafe_no_go --max-per-route 2 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --route-only-sample-duration-s 6 --timeout-s 240 --package-timeout-s 180`
+- Replay scorecard:
+  `artifacts/session/live_supervised_hard_mixed_route_family_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/analysis_supervised_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: route contracts `10/10`, visual packages `10/10`, executable
+  deliveries `6/6`, route-only proofs `4/4`, analyzer clean, setup/contact
+  watches `0`, first-contact blockers `0`, and executable closest approach
+  `0.193m..0.197m`.
+- Visual review: inspected frame-sequence contact sheets for fetch-ready,
+  Nav2 opposite-side, recovery large-angle, and no-go route-only cases. The
+  executable sheets showed visible setup, contact, push, and delivery; the
+  route-only no-go sheet showed local fetch withheld with a stable scene.
+- Evidence meaning: high-level supervised routing now has live hard-matrix
+  visual UAT proof. Promotion still requires broader live supervised
+  route-owner batches plus canonical saved-layout and seeded-random gates.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

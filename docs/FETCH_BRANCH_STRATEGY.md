@@ -326,6 +326,12 @@ Planner-routed moonshot update, June 2:
   wrong fetch-ready dispatches stayed `0`, and supervised accept/veto was
   `217/3` with only `confidence_below_threshold` vetoes. Branch work now returns
   to route-owner visual UAT and hardware-transfer packaging.
+- supervised hard route-owner visual UAT:
+  `artifacts/session/analysis_supervised_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`
+  ties the supervised hard gate to live visual proof. Route contracts passed
+  `10/10`, visual packages passed `10/10`, executable deliveries passed `6/6`,
+  and route-only proofs passed `4/4`. Keep this branch on broader supervised
+  route-owner UAT before any canonical promotion claim.
 - frozen planner-layout replay fix:
   fresh seed `seed20260608_scene24_fetch_ready_local` first failed as a manual
   target-layout replay because the runner used the old constant-push defaults

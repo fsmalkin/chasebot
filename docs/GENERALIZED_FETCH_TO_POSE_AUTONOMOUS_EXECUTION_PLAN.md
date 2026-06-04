@@ -487,6 +487,14 @@ vetoes were confidence-only and fell back to the deterministic route. The next
 autonomous execution step is live route-owner visual UAT, with LLM route output
 still gated by deterministic guards.
 
+The supervised hard route-owner replay now provides that first live visual UAT:
+`artifacts/session/analysis_supervised_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+It used the supervised hard planner gate and passed route contracts `10/10`,
+visual packages `10/10`, executable deliveries `6/6`, and route-only proofs
+`4/4`. Visual frame-sequence review matched telemetry across representative
+fetch-ready, Nav2, recovery, and no-go cases. Continue with broader supervised
+route-owner live batches before canonical saved-layout promotion.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence

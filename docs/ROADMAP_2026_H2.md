@@ -1047,6 +1047,15 @@ proposals into deterministic fallback. This clears the high-level route
 selection question for the next roadmap slice: route-owner visual UAT with live
 executors and browser-watchable proof.
 
+That live slice is now green on the supervised hard matrix:
+`artifacts/session/analysis_supervised_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The replay used the `llm_supervised_guarded` hard gate, passed route contracts
+`10/10`, produced visual packages `10/10`, delivered executable routes `6/6`,
+and produced route-only proofs `4/4`. Visual frame-sequence review confirmed
+coherent fetch-ready, Nav2 opposite-side, recovery large-angle, and no-go
+behavior. The roadmap now advances to broader live supervised route-owner UAT
+before canonical promotion gates.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

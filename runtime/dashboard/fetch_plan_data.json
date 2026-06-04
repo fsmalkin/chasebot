@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 5:58 PM ET",
+  "updated_label": "Updated June 4, 2026, 6:22 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Supervised LLM route guard manifest green",
-  "status_detail": "The route planner now has provider-backed supervised-guarded evidence over the hard matrix plus seven seeded mixed-route batches. Across 220 cases, the provider returned ok on 220/220, route pass/fail was 220/0, guard agreement was 220/220, wrong fetch-ready dispatches stayed at 0, and the guard accepted 217 proposals while safely vetoing 3 confidence-only proposals into deterministic fallback.",
+  "status_label": "Supervised LLM route-owner visual UAT green",
+  "status_detail": "The route planner now has provider-backed supervised-guarded route evidence and live hard-matrix visual UAT tied to the supervised gate. The hard route replay passed 10/10 route contracts with 6/6 executable deliveries, 4/4 planner-only route proofs, and 10/10 browser-watchable visual packages. The broader supervised manifest remains green as guarded fallback evidence across 220 provider-backed cases.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -50,41 +50,45 @@
   ],
   "latest_evidence": [
     {
-      "title": "Supervised LLM route guard manifest is green",
-      "status": "hard matrix + seven seeds: 220/220 safe routes, 217 accepted, 3 confidence fallbacks",
+      "title": "Supervised LLM hard route-owner visual UAT is green",
+      "status": "10/10 route contracts, 6/6 deliveries, 4/4 route-only proofs",
       "tone": "green",
-      "summary": "The supervised-guarded route-selection proof now covers the hard mixed matrix plus seven seeded mixed-route batches. The provider returned ok on every case, the final route matched the expected route on every case, and the deterministic guard kept wrong fetch-ready dispatches at zero. Three proposals landed just below the 0.90 confidence threshold, so the guard withheld LLM authority and used deterministic fallback while preserving the same safe route.",
+      "summary": "The supervised hard replay used the `llm_supervised_guarded` hard-matrix gate as the planner source and produced fresh browser-watchable UAT across all five route families. Fetch-ready, Nav2-reposition, and recovery/re-aim routes all delivered into the circle; scan/perceive and no-go routes withheld local fetch and passed route-only proof. A frame-sequence spot check across fetch-ready, Nav2 opposite-side, recovery large-angle, and no-go sheets matched the telemetry.",
       "metrics": [
-        "Supervised rollup: pass=true; interpretation=llm_supervised_guarded_fallback_green",
-        "Cases: gates=8; total_cases=220; route pass/fail=220/0",
-        "Provider and guard: ok=220/220; guard agreement=220/220; wrong fetch-ready dispatches=0",
-        "Accept/veto: accepted=217; vetoed=3; veto reasons={confidence_below_threshold: 3}",
-        "Readiness: strict_supervised_acceptance_ready=false; supervised_guarded_fallback_ready=true",
-        "Authority: dry route-selection proof only; live motion remains deterministic and guarded"
+        "Analyzer: pass=true; interpretation=randomized_route_owner_visual_uat_green",
+        "Replay: selected=10; route_success=10; mission_pass=6; route_only_pass=4",
+        "Visual packages: pass=10/10; mobile=true; onboard=true",
+        "Executable closest approach: 0.193m..0.197m",
+        "Planner source: supervised hard gate provider ok=10/10; accepted=10/10; wrong fetch-ready dispatches=0",
+        "Promotion evidence remains false; next proof should broaden live supervised route-owner UAT beyond the named hard matrix"
       ],
       "links": [
+        {
+          "label": "Supervised hard route UAT analyzer scorecard",
+          "url": "/artifacts/session/analysis_supervised_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Supervised hard route replay scorecard",
+          "url": "/artifacts/session/live_supervised_hard_mixed_route_family_20260604/fetch_planner_route_replay_batch/scorecard.md"
+        },
         {
           "label": "Supervised LLM 220-case manifest scorecard",
           "url": "/artifacts/session/analysis_supervised_llm_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_supervised_evidence/scorecard.md"
         },
         {
-          "label": "Supervised LLM hard matrix scorecard",
-          "url": "/artifacts/session/supervised_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md"
+          "label": "Nav2 opposite-side onboard proof",
+          "url": "/artifacts/session/20260604T220856339217Z/visual/raw_camera_browser.mp4"
         },
         {
-          "label": "LLM-shadow 220-case manifest scorecard",
-          "url": "/artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md"
+          "label": "Recovery large-angle onboard proof",
+          "url": "/artifacts/session/20260604T221223133371Z/visual/raw_camera_browser.mp4"
         },
         {
-          "label": "Hard live analyzer scorecard",
-          "url": "/artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
-        },
-        {
-          "label": "Opposite-side Nav2 left onboard proof",
-          "url": "/artifacts/session/20260604T203417248539Z/visual/raw_camera_browser.mp4"
+          "label": "No-go route-only onboard proof",
+          "url": "/artifacts/session/20260604T221937497570Z/visual/raw_camera_browser.mp4"
         }
       ],
-      "preview_image": "/artifacts/session/20260604T203417248539Z/visual/keyframe_review_contact_sheet.png"
+      "preview_image": "/artifacts/session/20260604T220856339217Z/visual/keyframe_review_contact_sheet.png"
     },
     {
       "title": "LLM-shadow 220-case route rollup is green",

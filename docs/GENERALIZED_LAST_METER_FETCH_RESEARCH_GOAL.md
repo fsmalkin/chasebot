@@ -1100,6 +1100,14 @@ proposals into deterministic fallback. The research interpretation is guarded
 fallback readiness for high-level route choice; physical fetch generalization
 still depends on live route-owner visual UAT and canonical promotion gates.
 
+The first supervised hard route-owner visual UAT is now green:
+`artifacts/session/analysis_supervised_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+The replay used the supervised hard planner gate, passed `10/10` route
+contracts, produced `10/10` visual packages, delivered `6/6` executable routes,
+and passed `4/4` route-only no-fetch proofs. This strengthens the current
+architecture path: LLM-level routing plus deterministic guards can feed live
+route owners, while broader live batches and canonical gates remain open.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

@@ -286,6 +286,14 @@ and supervised accept/veto `217/3`. The three vetoes were all
 `confidence_below_threshold`, so the calibrated interpretation is guarded
 fallback readiness rather than strict all-accepted live authority.
 
+The first supervised hard route-owner live UAT is green:
+`artifacts/session/analysis_supervised_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
+It uses the supervised hard planner gate and verifies route contracts `10/10`,
+visual packages `10/10`, executable deliveries `6/6`, and route-only proofs
+`4/4`. Treat this as live route-owner UAT evidence; canonical promotion still
+requires saved-layout repeatability and seeded-random gates after broader live
+supervised batches.
+
 ## Research Thread Output
 
 Before starting another implementation spike, produce a findings matrix across
