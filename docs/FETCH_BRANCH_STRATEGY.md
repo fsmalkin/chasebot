@@ -304,6 +304,15 @@ Planner-routed moonshot update, June 2:
   route pass/fail `70/0`, and wrong fetch-ready dispatches `0`. Hold alternative
   architecture work for reproduced hard-matrix failures; next branch work is
   seven-seed shadow expansion and hardware-transfer packaging.
+- LLM-shadow seven-seed manifest:
+  `artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`
+  combines the hard matrix and generated seeds `20260627` through `20260633`.
+  It is green at `220/220` provider-ok classifications, `220/220` guard
+  agreement, route pass/fail `220/0`, and wrong fetch-ready dispatches `0`.
+  Seed `20260630` had one transient provider read timeout and cleared on a
+  longer-timeout rerun. Branch decision: define supervised-live
+  route-selection thresholds and fallback policy before giving LLM output live
+  authority.
 - frozen planner-layout replay fix:
   fresh seed `seed20260608_scene24_fetch_ready_local` first failed as a manual
   target-layout replay because the runner used the old constant-push defaults

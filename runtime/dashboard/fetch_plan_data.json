@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 5:04 PM ET",
+  "updated_label": "Updated June 4, 2026, 5:21 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "LLM-shadow 70-case route rollup green",
-  "status_detail": "The real LLM-shadow planner now has a three-gate route-selection rollup across the hard mixed matrix and both rough mixed-family UAT seeds. It passed 70/70 route classifications, provider status was ok on 70/70 cases, guard agreement was 70/70, and wrong fetch-ready dispatches stayed at 0. This supports LLM/world-state planning as a high-level route classifier while deterministic guards and bounded executors remain the live authority.",
+  "status_label": "LLM-shadow 220-case route rollup green",
+  "status_detail": "The real LLM-shadow planner now has a full hard-plus-seven-seed manifest route-selection rollup. It passed 220/220 route classifications, provider status was ok on 220/220 cases after a clean timeout rerun for seed 20260630, guard agreement was 220/220, and wrong fetch-ready dispatches stayed at 0. This supports LLM/world-state planning as a high-level route classifier while deterministic guards and bounded executors remain the live authority.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -50,34 +50,34 @@
   ],
   "latest_evidence": [
     {
-      "title": "LLM-shadow 70-case route rollup is green",
-      "status": "hard matrix + seeds 20260632/20260633: 70/70 routes, 70/70 guard agreement",
+      "title": "LLM-shadow 220-case route rollup is green",
+      "status": "hard matrix + seven-seed manifest: 220/220 routes, 220/220 guard agreement",
       "tone": "green",
-      "summary": "The LLM-shadow planner now has a reusable aggregate evidence package over three route gates: the named hard mixed-scenario matrix and the two rough mixed-family UAT seeds. The model matched deterministic guard routing on every scene across all five route families, with no wrong fetch-ready dispatches. This is the strongest current evidence for bringing AI into high-level route selection while keeping deterministic guards as the live authority.",
+      "summary": "The LLM-shadow planner now has a full manifest evidence package: the named hard mixed-scenario matrix plus seven generated mixed-route seeds. The model matched deterministic guard routing on every scene across all five route families, with no wrong fetch-ready dispatches. Seed 20260630 had one transient provider timeout on the first run and cleared on a longer-timeout rerun, so the final manifest uses the clean rerun and preserves the original as a provider-latency watch.",
       "metrics": [
-        "Rollup: gates=3; total_cases=70; route pass/fail=70/0",
-        "Provider: ok=70/70; effective planner modes={llm_shadow: 70}",
-        "Guard agreement: 70/70; guard_disagreement=0",
+        "Rollup: gates=8; total_cases=220; route pass/fail=220/0",
+        "Provider: ok=220/220; effective planner modes={llm_shadow: 220}",
+        "Guard agreement: 220/220; guard_disagreement=0",
         "Wrong fetch-ready dispatches: 0",
-        "Route totals: fetch_ready_local=11, nav2_reposition_first=13, recovery_or_reaim=15, scan_or_perceive_first=13, ambiguous_or_unsafe_no_go=18",
+        "Route totals: fetch_ready_local=42, nav2_reposition_first=39, recovery_or_reaim=51, scan_or_perceive_first=46, ambiguous_or_unsafe_no_go=42",
         "Authority: shadow route classification only; promotion_evidence=false; live execution remains deterministic and guarded"
       ],
       "links": [
         {
-          "label": "LLM-shadow 70-case rollup scorecard",
+          "label": "LLM-shadow 220-case manifest scorecard",
+          "url": "/artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md"
+        },
+        {
+          "label": "LLM-shadow 70-case rough rollup scorecard",
           "url": "/artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md"
         },
         {
-          "label": "LLM-shadow hard matrix scorecard",
-          "url": "/artifacts/session/shadow_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md"
+          "label": "LLM-shadow seed 20260630 clean rerun",
+          "url": "/artifacts/session/shadow_llm_mixed_fetch_planner_seed20260630_rerun_20260604/fetch_planner_handoff_gate/scorecard.md"
         },
         {
-          "label": "LLM-shadow seed 20260632 scorecard",
-          "url": "/artifacts/session/shadow_llm_mixed_fetch_planner_seed20260632_20260604/fetch_planner_handoff_gate/scorecard.md"
-        },
-        {
-          "label": "LLM-shadow seed 20260633 scorecard",
-          "url": "/artifacts/session/shadow_llm_mixed_fetch_planner_seed20260633_20260604/fetch_planner_handoff_gate/scorecard.md"
+          "label": "Hard live analyzer scorecard",
+          "url": "/artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
         },
         {
           "label": "Opposite-side Nav2 left onboard proof",
@@ -3724,7 +3724,7 @@
     }
   ],
   "next_steps": [
-    "Extend the LLM-shadow route rollup across the remaining seven-seed manifest gates, then define the supervised-live promotion threshold for high-level route selection.",
+    "Define the supervised-live route-selection threshold and fallback policy from the 220-case shadow manifest, then package a hardware-transfer review for the planner-routed stack.",
     "Draft the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, model provenance checks, and visual-evidence capture on robot hardware.",
     "Keep the seven-seed manifest, two rough mixed-family UAT packages, and hard mixed matrix as the preservation bar before crediting route-owner, recovery-window, visual-packaging, or contact-servo changes.",
     "Measure the runtime cost of the longer recovery window and decide whether hardware UAT needs a tighter progress-based timeout instead of a fixed duration.",
@@ -3844,6 +3844,10 @@
       "Escalate only reproducible visual/telemetry mismatches into architecture reconsideration."
     ],
     "links": [
+      {
+        "label": "LLM-shadow 220-case manifest scorecard",
+        "url": "/artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md"
+      },
       {
         "label": "LLM-shadow 70-case rollup scorecard",
         "url": "/artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md"

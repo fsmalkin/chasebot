@@ -463,8 +463,13 @@ The first LLM-shadow rollup now covers the hard matrix plus rough mixed seeds
 `artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
 It passed `70/70` route classifications, provider status was `ok` on every row,
 guard agreement was `70/70`, and wrong fetch-ready dispatches stayed at `0`.
-The next autonomous step is extending this shadow route-selection proof across
-the remaining seven-seed manifest gates before supervised live route selection.
+The full hard-plus-seven-seed manifest is also green:
+`artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
+It passed `220/220` route classifications, provider status was `ok` on the
+clean manifest inputs, guard agreement was `220/220`, and wrong fetch-ready
+dispatches stayed at `0`. Seed `20260630` had one transient provider timeout on
+the first pass and cleared on the longer-timeout rerun. The next autonomous step
+is defining supervised-live route-selection thresholds and fallback policy.
 
 ## Evidence Reset
 

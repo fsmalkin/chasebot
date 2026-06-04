@@ -583,10 +583,24 @@ June 4, 2026 LLM-shadow rough-seed rollup:
   `70/70`, guard agreement `70/70`, route pass/fail `70/0`, and wrong
   fetch-ready dispatches `0`.
 - Evidence meaning: AI route selection now has shadow evidence across the hard
-  matrix plus both rough mixed-family UAT seeds. Extend this rollup across the
-  remaining seven-seed manifest gates before considering supervised live route
-  selection. Start the hardware-transfer package in parallel, and keep
-  local-contact changes gated on reproduced hard-matrix failures.
+  matrix plus both rough mixed-family UAT seeds.
+
+June 4, 2026 LLM-shadow seven-seed manifest rollup:
+
+- Rollup:
+  `artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`
+- Inputs: the hard matrix plus generated mixed-route seeds `20260627` through
+  `20260633`. Seed `20260630` first had one provider read timeout on
+  `seed20260630_scene16_fetch_ready_local`; the longer-timeout rerun
+  `shadow_llm_mixed_fetch_planner_seed20260630_rerun_20260604` cleared it.
+- Result: eight gates, `220` total route classifications, provider `ok` on
+  `220/220`, guard agreement `220/220`, route pass/fail `220/0`, and wrong
+  fetch-ready dispatches `0`.
+- Evidence meaning: high-level LLM route selection is now shadow-green across
+  the current hard-plus-seven-seed manifest. The next work is defining the
+  supervised-live route-selection threshold and fallback policy, then packaging
+  hardware-transfer review. Deterministic guards and bounded executors remain
+  the live authority.
 
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing

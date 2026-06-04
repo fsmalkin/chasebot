@@ -263,6 +263,14 @@ pass/fail `70/0`, and wrong fetch-ready dispatches `0`. The remaining
 calibrated planner work is seven-seed shadow expansion plus hardware-transfer
 packaging.
 
+The full hard-plus-seven-seed LLM-shadow manifest is green at
+`artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
+It covers eight gates and `220` total scenes, with provider `ok` on `220/220`,
+guard agreement `220/220`, route pass/fail `220/0`, and wrong fetch-ready
+dispatches `0`. Seed `20260630` required a longer-timeout rerun after one
+transient provider read timeout. Treat this as shadow route-selection evidence;
+live authority still requires a supervised threshold and fallback policy.
+
 ## Research Thread Output
 
 Before starting another implementation spike, produce a findings matrix across

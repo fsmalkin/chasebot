@@ -482,8 +482,8 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "LLM-shadow 70-case route rollup green"
-    assert payload["latest_evidence"][0]["title"] == "LLM-shadow 70-case route rollup is green"
+    assert payload["status_label"] == "LLM-shadow 220-case route rollup green"
+    assert payload["latest_evidence"][0]["title"] == "LLM-shadow 220-case route rollup is green"
     assert payload["latest_evidence"][0]["links"][0]["url"].endswith(
         "/fetch_planner_llm_shadow_evidence/scorecard.md"
     )

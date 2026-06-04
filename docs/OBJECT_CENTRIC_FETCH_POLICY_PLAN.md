@@ -767,8 +767,15 @@ That rough mixed-seed shadow bar is now green:
 The rollup combines the hard matrix with seeds `20260632` and `20260633` for
 `70` total route classifications. Provider status was `ok` on `70/70`, guard
 agreement was `70/70`, route pass/fail was `70/0`, and wrong fetch-ready
-dispatches were `0`. Keep the model in shadow/supervised route selection until
-the remaining seven-seed manifest clears the same bar.
+dispatches were `0`.
+
+The full hard-plus-seven-seed shadow manifest now clears the same bar:
+`artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
+It covers seeds `20260627` through `20260633` plus the hard matrix, with
+`220/220` provider-ok route classifications, `220/220` guard agreement, route
+pass/fail `220/0`, and wrong fetch-ready dispatches `0`. Keep the model in
+supervised route selection until the live threshold and fallback policy are
+specified.
 
 Approach-quality evidence must record:
 

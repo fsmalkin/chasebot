@@ -1018,10 +1018,16 @@ The first LLM-shadow rollup is green at
 `artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
 It combines the hard matrix with rough mixed seeds `20260632` and `20260633`:
 three gates, `70` total scenes, provider `ok` on `70/70`, guard agreement
-`70/70`, route pass/fail `70/0`, and wrong fetch-ready dispatches `0`. The next
-roadmap slice expands the rollup across the remaining seven-seed manifest gates,
-then packages the supervised-live route-selection threshold and hardware-transfer
-plan.
+`70/70`, route pass/fail `70/0`, and wrong fetch-ready dispatches `0`.
+
+The full hard-plus-seven-seed LLM-shadow manifest is now green at
+`artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`.
+It covers the hard matrix plus seeds `20260627` through `20260633`: eight gates,
+`220` total scenes, provider `ok` on `220/220`, guard agreement `220/220`,
+route pass/fail `220/0`, and wrong fetch-ready dispatches `0`. Seed `20260630`
+had one transient read timeout on the first pass and cleared on a longer-timeout
+rerun. The next roadmap slice packages the supervised-live route-selection
+threshold, fallback policy, and hardware-transfer plan.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`

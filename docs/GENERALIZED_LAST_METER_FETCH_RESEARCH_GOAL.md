@@ -1076,8 +1076,13 @@ rough-seed rollup is also green at
 `artifacts/session/analysis_llm_shadow_hard_plus_rough_mixed_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`:
 hard matrix plus seeds `20260632` and `20260633`, `70/70` provider-ok route
 classifications, `70/70` guard agreement, and wrong fetch-ready dispatches `0`.
-The next research step is extending the rollup across the remaining seven-seed
-manifest while hardware-transfer planning starts in parallel.
+The full hard-plus-seven-seed manifest is now green at
+`artifacts/session/analysis_llm_shadow_hard_plus_seven_seed_manifest_20260604/fetch_planner_llm_shadow_evidence/scorecard.md`:
+hard matrix plus seeds `20260627` through `20260633`, `220/220` provider-ok
+classifications, `220/220` guard agreement, route pass/fail `220/0`, and wrong
+fetch-ready dispatches `0`. Seed `20260630` had one transient read timeout that
+cleared on rerun. The next research step is defining the supervised-live
+route-selection threshold and hardware-transfer plan.
 
 ## Definition Of Done For The Research Thread
 
