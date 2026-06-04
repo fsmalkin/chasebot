@@ -970,6 +970,26 @@ It is green with `5/5` seeded gates, `30/30` live seeded missions, `30/30`
 visual packages, and the repaired `20260629` boundary rows preserved. Continue
 the moonshot from this broader preservation bar.
 
+June 4, 2026 six-seed architecture checkpoint: seed `20260632` passed the next
+rough breadth gate at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260632_breadth_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+It delivered `30/30` planner routing, `wrong_fetch=0`, `6/6` executable
+missions, `6/6` visual packages, clean analyzer status, first-contact blockers
+`0`, and closest approach from `0.194m` to `0.198m`. Visual keyframe review
+checked the six selected executable rows and matched the telemetry.
+
+The current architecture decision is to continue planner-routed route ownership.
+The strongest current path is
+`scenario planner -> route family -> forward-only setup/recovery/local fetch ->
+Nav2 where useful -> visual and telemetry evidence`. Pure Nav2 remains a
+reposition/corridor owner, learned local control remains a later fallback for
+reproducible contact instability, and larger LLM/VLA/world-model work remains a
+planner, teacher-label, or scoring layer until an onboard-safe executor earns
+authority. The six-seed manifest is the current preservation bar:
+`artifacts/session/analysis_planner_moonshot_regression_set_six_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
+It is green with seeds `20260627` through `20260632`, seeded gates `6/6`, live
+seeded missions `36/36`, and visual packages `36/36`.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

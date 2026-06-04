@@ -482,8 +482,8 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Five-seed breadth manifest green"
-    assert payload["latest_evidence"][0]["title"] == "Seed 20260631 breadth gate is green"
+    assert payload["status_label"] == "Six-seed breadth manifest green"
+    assert payload["latest_evidence"][0]["title"] == "Seed 20260632 breadth gate is green"
     assert payload["latest_evidence"][0]["links"][0]["url"].endswith(
         "/fetch_planner_seeded_generalization_gate/scorecard.md"
     )

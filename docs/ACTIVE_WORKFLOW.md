@@ -392,6 +392,31 @@ June 4, 2026 five-seed regression manifest:
 - Evidence meaning: this is now the preservation bar before the next route-owner,
   controller, visual-packaging, or hardware-transfer change.
 
+June 4, 2026 six-seed breadth checkpoint:
+
+- Full seed `20260632` gate:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260632_breadth_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Result: planner routing `30/30`, `wrong_fetch=0`, executable missions `6/6`,
+  visual packages `6/6`, analyzer clean, first-contact blockers `0`, and
+  closest approach range `0.194m..0.198m`.
+- Visual review: checked both recovery rows, both Nav2-first rows, and both
+  fetch-ready rows through raw-camera plus topdown contact sheets before
+  promoting the seed into the manifest.
+
+June 4, 2026 six-seed regression manifest:
+
+- Command:
+  `python scripts\fetch_moonshot_regression_manifest.py --campaign-id analysis_planner_moonshot_regression_set_six_seed_20260604`
+- Scorecard:
+  `artifacts/session/analysis_planner_moonshot_regression_set_six_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`
+- Result: `planner_routed_moonshot_regression_set_green`; seeded gates `6/6`,
+  live seeded missions `36/36`, and visual packages `36/36`.
+- Evidence meaning: use this as the current preservation bar before route-owner,
+  controller, visual-packaging, dashboard, or hardware-transfer changes. Keep
+  planner-routed route ownership as the primary path; use alternative
+  architectures as reserve lanes when the manifest or broader route-family UAT
+  exposes a reproducible stage gap.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

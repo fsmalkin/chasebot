@@ -377,6 +377,21 @@ The result is green with seeded gates `5/5`, live seeded missions `30/30`, and
 visual packages `30/30`. Use this manifest as the preservation bar before the
 next controller, route-owner, visual-packaging, or hardware-transfer change.
 
+June 4 six-seed breadth checkpoint: seed `20260632` passed the third rough
+post-repair route-owner gate:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260632_breadth_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+Planner routing was `30/30` with `wrong_fetch=0`; live executable rows were
+`6/6`; visual packages were `6/6`; and closest approach stayed within
+`0.194m..0.198m`. Sequence review checked both recovery rows, both Nav2-first
+rows, and both fetch-ready rows through raw-camera plus topdown contact sheets.
+The regression manifest now preserves seeds `20260627` through `20260632`:
+`artifacts/session/analysis_planner_moonshot_regression_set_six_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md`.
+The result is green with seeded gates `6/6`, live seeded missions `36/36`, and
+visual packages `36/36`. Continue on the planner-routed route-owner path and
+keep pure Nav2, learned local control, and larger VLA/world-model control as
+fallback lanes until this six-seed preservation bar exposes a reproducible
+stage gap.
+
 ## Evidence Reset
 
 May 31, 2026 reset: a local fetch result counts as UAT or architecture evidence
