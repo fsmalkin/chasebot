@@ -445,10 +445,18 @@ per route family. The live replay passed route contracts `10/10`, visual
 packages `10/10`, executable deliveries `6/6`, route-only proofs `4/4`, clean
 setup/contact/execution analysis, and first-contact blockers `0`; executable
 closest approaches ranged from `0.194m` to `0.197m`. Raw-camera and topdown
-sequence review matched the telemetry. Continue with LLM-shadow route
-classification over this hard matrix and hardware-transfer packaging while
-using reproduced hard-matrix failures as the trigger for local contact-control
-changes.
+sequence review matched the telemetry.
+
+June 4 LLM-shadow hard-matrix proof: the real provider now matches deterministic
+route classification on the same hard matrix at
+`artifacts/session/shadow_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+The dry classification gate passed `10/10`, provider status was `ok` on every
+row, guard agreement was `10/10`, wrong fetch-ready dispatches were `0`, and
+`llm_shadow_ready=True`. Treat this as high-level route-selection evidence.
+Live execution remains deterministic and guarded until shadow scoring also
+covers the rough mixed-family seeds and seven-seed manifest. Continue
+hardware-transfer packaging in parallel, and use reproduced hard-matrix failures
+as the trigger for local contact-control changes.
 
 ## Evidence Reset
 

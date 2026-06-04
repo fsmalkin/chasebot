@@ -1067,6 +1067,23 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     pass_count = sum(1 for result in results if bool(result.get("correct", False)))
     fetch_dispatch_count = sum(1 for result in results if bool(result.get("should_dispatch_fetch_to_pose", False)))
     wrong_fetch_dispatch_count = sum(1 for result in results if bool(result.get("wrong_fetch_ready_dispatch", False)))
+    guard_agreement_count = sum(1 for result in results if bool(result.get("guard_agrees", False)))
+    guard_disagreement_count = len(results) - guard_agreement_count
+    provider_status_counts: dict[str, int] = {}
+    planner_mode_effective_counts: dict[str, int] = {}
+    for result in results:
+        provider_status = str(result.get("provider_status", "") or "missing")
+        planner_mode_effective = str(result.get("planner_mode_effective", "") or "missing")
+        provider_status_counts[provider_status] = provider_status_counts.get(provider_status, 0) + 1
+        planner_mode_effective_counts[planner_mode_effective] = planner_mode_effective_counts.get(planner_mode_effective, 0) + 1
+    llm_shadow_provider_ok_count = int(provider_status_counts.get("ok", 0))
+    llm_shadow_ready = bool(
+        str(args.planner_mode) == PLANNER_MODE_LLM_SHADOW
+        and llm_shadow_provider_ok_count == len(results)
+        and guard_disagreement_count == 0
+        and pass_count == len(results)
+        and wrong_fetch_dispatch_count == 0
+    )
     route_counts = {route: sum(1 for result in results if result.get("route_label") == route) for route in ROUTE_LABELS}
     expected_counts = {
         route: sum(1 for result in results if result.get("expected_route_label") == route)
@@ -1087,6 +1104,12 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "fail_count": len(results) - pass_count,
         "fetch_dispatch_count": fetch_dispatch_count,
         "wrong_fetch_dispatch_count": wrong_fetch_dispatch_count,
+        "guard_agreement_count": guard_agreement_count,
+        "guard_disagreement_count": guard_disagreement_count,
+        "provider_status_counts": provider_status_counts,
+        "planner_mode_effective_counts": planner_mode_effective_counts,
+        "llm_shadow_provider_ok_count": llm_shadow_provider_ok_count,
+        "llm_shadow_ready": llm_shadow_ready,
         "route_counts": route_counts,
         "expected_route_counts": expected_counts,
         "results": results,
@@ -1110,6 +1133,10 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- route pass/fail: `{summary.get('pass_count', 0)}/{summary.get('fail_count', 0)}`",
         f"- fetch dispatch count: `{summary.get('fetch_dispatch_count', 0)}`",
         f"- wrong fetch-ready dispatches: `{summary.get('wrong_fetch_dispatch_count', 0)}`",
+        f"- guard agreement: `{summary.get('guard_agreement_count', 0)}/{summary.get('random_cases', 0)}`",
+        f"- provider status counts: `{summary.get('provider_status_counts', {})}`",
+        f"- effective planner modes: `{summary.get('planner_mode_effective_counts', {})}`",
+        f"- llm_shadow_ready: `{summary.get('llm_shadow_ready', False)}`",
         "",
         "## Routes",
         "",

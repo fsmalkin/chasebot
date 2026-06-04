@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 4:52 PM ET",
+  "updated_label": "Updated June 4, 2026, 4:58 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Hard mixed-scenario UAT green",
-  "status_detail": "The planner-routed stack now has a named hard mixed-scenario matrix in addition to the seven-seed preservation bar and two rough-seed, two-per-route random UAT packages. The hard matrix deliberately covered wide-angle direct fetch, opposite-side Nav2-first setup, large-angle recovery/re-aim, stale or low-confidence scan/defer, and safe no-go rows. It passed 10/10 route contracts, 10/10 browser-watchable visual packages, 6/6 executable deliveries, and 4/4 planner-only withholding proofs with clean analyzer status and keyframe review that matched telemetry.",
+  "status_label": "LLM-shadow hard matrix green",
+  "status_detail": "The planner-routed stack now has real LLM-shadow classification over the named hard mixed-scenario matrix. The model matched the deterministic guard on 10/10 hard cases with provider_status ok on every row, guard agreement 10/10, and zero wrong fetch dispatches. The live hard-matrix UAT remains the visual proof: 10/10 route contracts, 10/10 browser-watchable visual packages, 6/6 executable deliveries, and 4/4 planner-only withholding proofs.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,39 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "LLM-shadow hard-matrix routing is green",
+      "status": "llm_shadow hard_mixed_fetch_planner_v1: 10/10 routes, 10/10 guard agreement",
+      "tone": "green",
+      "summary": "The real model now classifies the hard mixed-scenario matrix in shadow mode. It agrees with the deterministic guard on all ten rows: wide-angle local fetch, opposite-side Nav2-first setup, large-angle recovery/re-aim, scan/defer, and safe no-go. This supports using an LLM/world-state planner at the high-level route-selection layer while deterministic guards continue to own live execution.",
+      "metrics": [
+        "Planner mode: llm_shadow; provider_status_counts={ok: 10}; effective_modes={llm_shadow: 10}",
+        "Route pass/fail: 10/0; route_counts=2 per route family",
+        "Guard agreement: 10/10; guard_disagreement=0",
+        "Wrong fetch-ready dispatches: 0; fetch dispatch count remains 2/10",
+        "Authority: classification-only dry run; no direct cmd_vel; no live LLM actuation",
+        "Evidence role: LLM-shadow route-selection support; hard live UAT card below remains the visual motion proof"
+      ],
+      "links": [
+        {
+          "label": "LLM-shadow hard matrix scorecard",
+          "url": "/artifacts/session/shadow_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "LLM-shadow hard matrix summary",
+          "url": "/artifacts/session/shadow_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/gate_summary.json"
+        },
+        {
+          "label": "Hard live analyzer scorecard",
+          "url": "/artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Opposite-side Nav2 left onboard proof",
+          "url": "/artifacts/session/20260604T203417248539Z/visual/raw_camera_browser.mp4"
+        }
+      ],
+      "preview_image": "/artifacts/session/20260604T203417248539Z/visual/keyframe_review_contact_sheet.png"
+    },
     {
       "title": "Hard mixed-scenario UAT is green",
       "status": "hard_mixed_fetch_planner_v1 replay: 10/10 route contracts and 10/10 visual packages",
@@ -3687,7 +3720,7 @@
     }
   ],
   "next_steps": [
-    "Run LLM-shadow classification on hard_mixed_fetch_planner_v1 and compare route/rationale against deterministic guard routing before giving LLM outputs live authority.",
+    "Repeat LLM-shadow classification over the two rough mixed-family seeds and seven-seed manifest, then define the shadow-to-supervised-live promotion threshold for high-level route selection.",
     "Draft the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, model provenance checks, and visual-evidence capture on robot hardware.",
     "Keep the seven-seed manifest, two rough mixed-family UAT packages, and hard mixed matrix as the preservation bar before crediting route-owner, recovery-window, visual-packaging, or contact-servo changes.",
     "Measure the runtime cost of the longer recovery window and decide whether hardware UAT needs a tighter progress-based timeout instead of a fixed duration.",
@@ -3807,6 +3840,10 @@
       "Escalate only reproducible visual/telemetry mismatches into architecture reconsideration."
     ],
     "links": [
+      {
+        "label": "LLM-shadow hard matrix scorecard",
+        "url": "/artifacts/session/shadow_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md"
+      },
       {
         "label": "Hard matrix analyzer scorecard",
         "url": "/artifacts/session/analysis_hard_mixed_route_family_20260604/fetch_planner_route_uat_analyzer/scorecard.md"

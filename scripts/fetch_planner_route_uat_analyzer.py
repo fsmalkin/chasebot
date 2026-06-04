@@ -140,6 +140,20 @@ def summarize_planner_gate(path: Path) -> dict[str, Any]:
         "total_count": total_count,
         "wrong_fetch_dispatch_count": int(payload.get("wrong_fetch_dispatch_count", 0) or 0),
         "fetch_dispatch_count": int(payload.get("fetch_dispatch_count", 0) or 0),
+        "guard_agreement_count": int(payload.get("guard_agreement_count", 0) or 0),
+        "guard_disagreement_count": int(payload.get("guard_disagreement_count", 0) or 0),
+        "provider_status_counts": (
+            {str(key): int(value or 0) for key, value in payload.get("provider_status_counts", {}).items()}
+            if isinstance(payload.get("provider_status_counts"), dict)
+            else {}
+        ),
+        "planner_mode_effective_counts": (
+            {str(key): int(value or 0) for key, value in payload.get("planner_mode_effective_counts", {}).items()}
+            if isinstance(payload.get("planner_mode_effective_counts"), dict)
+            else {}
+        ),
+        "llm_shadow_provider_ok_count": int(payload.get("llm_shadow_provider_ok_count", 0) or 0),
+        "llm_shadow_ready": bool(payload.get("llm_shadow_ready", False)),
         "scene_source": str(payload.get("scene_source", "") or ""),
         "scene_set": str(payload.get("scene_set", "") or ""),
         "seed": payload.get("seed"),
@@ -572,6 +586,9 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"- `{gate.get('campaign_id', '')}` pass=`{gate.get('pass', False)}` "
             f"routes=`{gate.get('pass_count', 0)}/{gate.get('total_count', 0)}` "
             f"wrong_fetch=`{gate.get('wrong_fetch_dispatch_count', 0)}` "
+            f"guard_agree=`{gate.get('guard_agreement_count', 0)}/{gate.get('total_count', 0)}` "
+            f"provider=`{gate.get('provider_status_counts', {})}` "
+            f"llm_shadow_ready=`{gate.get('llm_shadow_ready', False)}` "
             f"source=`{gate.get('scene_source', '')}` seed=`{gate.get('seed', '')}` "
             f"{artifact_link(str(gate.get('path', '') or ''))}"
         )

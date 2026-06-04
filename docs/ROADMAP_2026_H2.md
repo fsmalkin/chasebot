@@ -1004,8 +1004,17 @@ route family. It passed route contracts `10/10`, visual packages `10/10`,
 executable deliveries `6/6`, route-only proofs `4/4`, clean analyzer status,
 and first-contact blockers `0`; executable closest approaches ranged from
 `0.194m` to `0.197m`. The roadmap keeps planner-gated route ownership as the
-primary path. The next roadmap slice is LLM-shadow route classification over
-the hard matrix plus hardware-transfer packaging.
+primary path.
+
+June 4 LLM-shadow route evidence: the real LLM-shadow planner now matches the
+hard mixed-scenario route guard at
+`artifacts/session/shadow_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+Provider status was `ok` on `10/10` cases, guard agreement was `10/10`, wrong
+fetch-ready dispatches stayed at `0`, and `llm_shadow_ready=True`. This supports
+LLM/world-state planning as a high-level route classifier while deterministic
+guards and bounded executors keep live authority. The next roadmap slice repeats
+LLM-shadow scoring across rough mixed seeds and the seven-seed manifest, then
+packages the hardware-transfer plan.
 
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`

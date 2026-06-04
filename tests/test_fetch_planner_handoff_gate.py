@@ -297,6 +297,89 @@ def test_llm_shadow_without_api_key_records_request_and_uses_guard_fallback():
     assert decision["should_dispatch_fetch_to_pose"] is False
 
 
+def test_llm_shadow_gate_without_api_key_reports_fallback_not_ready(tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+    args = SimpleNamespace(
+        campaign_id="planner_gate_llm_shadow_missing_key",
+        scene_set=gate.HARD_SCENE_SET,
+        scene_descriptor_json=[],
+        scene_dir="",
+        random_cases=10,
+        seed=123,
+        planner_mode=gate.PLANNER_MODE_LLM_SHADOW,
+        dry_run=True,
+        openai_model=gate.DEFAULT_OPENAI_MODEL,
+        openai_api_key="",
+        openai_base_url=gate.DEFAULT_OPENAI_BASE_URL,
+        openai_org_id="",
+        openai_project_id="",
+        reasoning_effort=gate.DEFAULT_REASONING_EFFORT,
+        timeout_s=30.0,
+    )
+
+    summary = gate.run_gate(args)
+
+    assert summary["pass"] is True
+    assert summary["llm_shadow_ready"] is False
+    assert summary["llm_shadow_provider_ok_count"] == 0
+    assert summary["provider_status_counts"] == {"skipped_missing_openai_api_key": 10}
+    assert summary["planner_mode_effective_counts"] == {"deterministic_fallback": 10}
+    assert summary["guard_agreement_count"] == 10
+    assert summary["guard_disagreement_count"] == 0
+
+
+def test_llm_shadow_gate_provider_ok_sets_ready_when_guard_agrees(tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+    expected_routes = iter(
+        scene["expected_route_label"]
+        for scene in gate.generate_random_scenes(seed=123, random_cases=10, scene_set=gate.HARD_SCENE_SET)
+    )
+
+    def fake_call_openai_responses(**_kwargs):
+        route_label = next(expected_routes)
+        return {
+            "output": [
+                {
+                    "type": "function_call",
+                    "name": gate.OPENAI_TOOL_NAME,
+                    "arguments": (
+                        '{"route_label": "%s", "rationale_short": "fixture route", "confidence": 0.99}'
+                        % route_label
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr(gate, "call_openai_responses", fake_call_openai_responses)
+    args = SimpleNamespace(
+        campaign_id="planner_gate_llm_shadow_provider_ok",
+        scene_set=gate.HARD_SCENE_SET,
+        scene_descriptor_json=[],
+        scene_dir="",
+        random_cases=10,
+        seed=123,
+        planner_mode=gate.PLANNER_MODE_LLM_SHADOW,
+        dry_run=True,
+        openai_model=gate.DEFAULT_OPENAI_MODEL,
+        openai_api_key="test-key",
+        openai_base_url=gate.DEFAULT_OPENAI_BASE_URL,
+        openai_org_id="",
+        openai_project_id="",
+        reasoning_effort=gate.DEFAULT_REASONING_EFFORT,
+        timeout_s=30.0,
+    )
+
+    summary = gate.run_gate(args)
+
+    assert summary["pass"] is True
+    assert summary["llm_shadow_ready"] is True
+    assert summary["llm_shadow_provider_ok_count"] == 10
+    assert summary["provider_status_counts"] == {"ok": 10}
+    assert summary["planner_mode_effective_counts"] == {gate.PLANNER_MODE_LLM_SHADOW: 10}
+    assert summary["guard_agreement_count"] == 10
+    assert summary["guard_disagreement_count"] == 0
+
+
 def test_fetch_ready_layout_writer_preserves_planner_scene(tmp_path):
     scene = next(
         item for item in gate.generate_random_scenes(seed=789, random_cases=10)

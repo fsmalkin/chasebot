@@ -556,10 +556,23 @@ June 4, 2026 hard mixed-scenario route-family UAT:
   recovery rows visibly delivered into the circle. Scan/defer and no-go rows
   stayed stopped with local fetch withheld.
 - Evidence meaning: the planner-routed architecture now clears a deliberately
-  hard named matrix as well as random mixed-route breadth. The next work should
-  compare LLM-shadow route classification on this hard matrix and start the
-  hardware-transfer package; keep local-contact changes gated on reproduced
-  failures.
+  hard named matrix as well as random mixed-route breadth.
+
+June 4, 2026 LLM-shadow hard-matrix route classification:
+
+- Command:
+  `python scripts\fetch_planner_handoff_gate.py --campaign-id shadow_llm_hard_mixed_fetch_planner_v1_20260604 --scene-set hard_mixed_fetch_planner_v1 --random-cases 10 --seed 20260604 --planner-mode llm_shadow --dry-run --timeout-s 60`
+- Scorecard:
+  `artifacts/session/shadow_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`
+- Result: the real provider returned `ok` on all ten hard scenes, matched the
+  deterministic guard `10/10`, kept wrong fetch-ready dispatches at `0`, and
+  set `llm_shadow_ready=True`.
+- Evidence meaning: LLM/world-state planning is now supported for high-level
+  route classification in shadow. Deterministic guards and route executors
+  remain the live authority. Repeat shadow scoring over the rough mixed seeds
+  and seven-seed manifest before considering supervised live route selection.
+  Start the hardware-transfer package in parallel, and keep local-contact
+  changes gated on reproduced hard-matrix failures.
 
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing

@@ -1064,8 +1064,16 @@ visual packages `10/10`, executable deliveries `6/6`, route-only proofs
 `4/4`, clean execution/setup/contact analysis, and first-contact blockers
 `0`. Raw-camera plus topdown sequence review matched the telemetry. This
 evidence further supports the planner-gated architecture and reduces the need
-for a broad architecture pause. The next research step is LLM-shadow route
-classification over the hard matrix plus hardware-transfer planning.
+for a broad architecture pause.
+
+LLM-shadow route classification is now green on the hard matrix:
+`artifacts/session/shadow_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+The real provider returned `ok` for all ten scenes, agreed with the
+deterministic guard `10/10`, produced zero wrong fetch-ready dispatches, and set
+`llm_shadow_ready=True`. This is shadow-only high-level route evidence. Live
+execution still belongs to deterministic guards and bounded route owners. The
+next research step is repeating LLM-shadow comparison over rough mixed seeds and
+the seven-seed manifest while hardware-transfer planning starts in parallel.
 
 ## Definition Of Done For The Research Thread
 

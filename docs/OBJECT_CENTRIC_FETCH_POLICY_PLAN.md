@@ -751,9 +751,16 @@ recovery/re-aim, scan/defer, and safe no-go. The live matrix passed route
 contracts `10/10`, visual packages `10/10`, executable deliveries `6/6`,
 route-only proofs `4/4`, clean setup/contact/execution quality, and
 first-contact blockers `0`. Policy implication: preserve the route-gated
-planner stack as the primary path. The next useful AI work is LLM-shadow
-classification over this hard matrix, with deterministic guards still owning
-execution.
+planner stack as the primary path.
+
+LLM-shadow classification is now green on that hard matrix:
+`artifacts/session/shadow_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+The real provider matched the deterministic guard `10/10`, returned
+provider status `ok` on all rows, kept wrong fetch-ready dispatches at `0`, and
+set `llm_shadow_ready=True`. Policy implication: use the model as a high-level
+route classifier and rationale source first. Deterministic guards still own
+live execution until the same shadow bar clears rough mixed seeds and the
+seven-seed manifest.
 
 Approach-quality evidence must record:
 

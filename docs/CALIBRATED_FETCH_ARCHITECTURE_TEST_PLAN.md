@@ -245,8 +245,15 @@ deliveries `6/6`, route-only proofs `4/4`, clean analyzer status, and
 first-contact blockers `0`, with executable closest approaches in
 `0.194m..0.197m`. Treat this as hard route-family visual UAT and architecture
 support. Promotion still requires the canonical saved-layout and seeded-gate
-ladder for any changed executor; the next calibrated architecture work is
-LLM-shadow route comparison plus hardware-transfer packaging.
+ladder for any changed executor.
+
+June 4 LLM-shadow hard-matrix evidence adds high-level planner support:
+`artifacts/session/shadow_llm_hard_mixed_fetch_planner_v1_20260604/fetch_planner_handoff_gate/scorecard.md`.
+The real provider matched the deterministic guard `10/10`, provider status was
+`ok` on all ten rows, wrong fetch-ready dispatches were `0`, and
+`llm_shadow_ready=True`. Treat this as shadow-only route-selection evidence.
+The next calibrated architecture work repeats shadow comparison on rough mixed
+seeds and the seven-seed manifest while hardware-transfer packaging starts.
 
 ## Research Thread Output
 
