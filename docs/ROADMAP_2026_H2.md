@@ -1452,3 +1452,15 @@ Stack smoke, saved anchors, and seed20260635 mixed-route replay all passed with
 browser-watchable evidence and visual keyframe review. The roadmap now advances
 to physical/onboard execution of the same ladder, while `hardware_proven=false`
 continues to protect the field-transfer claim.
+
+Seed20260636 broadens the current route-owner UAT proof:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260636_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The seed classified `30` generated scenes with zero wrong fetch dispatches, then
+replayed six executable rows across fetch-ready, Nav2-first, and recovery/re-aim
+owners at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260636_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`.
+All six delivered inside the `0.300m` contract, all six visual packages passed,
+and frame-sequence review found the onboard camera and topdown geometry aligned.
+The roadmap now carries two active next gates: restore provider-backed LLM
+routing for this seed when `OPENAI_API_KEY` is available, and run the same
+evidence ladder on physical/onboard hardware before changing `hardware_proven`.

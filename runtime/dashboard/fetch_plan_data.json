@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 3:17 AM ET",
+  "updated_label": "Updated June 5, 2026, 3:41 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Fresh rehearsal ladder is green",
-  "status_detail": "The current branch now has a fresh end-to-end rehearsal ladder on the robot_fidelity_orin/tensorrt_int8 sim-gate runtime target: stack smoke, saved anchors, and seed 20260635 mixed-route replay all passed through the hardware rehearsal runner. Visual keyframe review covered the raw camera and topdown sequences for the stack-smoke screenshots, all three saved anchors, and all six mixed-route runs. This strengthens the browser-watchable UAT package while keeping hardware_proven=false until physical robot-side/onboard execution and field physics are recorded.",
+  "status_label": "Second fresh breadth seed is green",
+  "status_detail": "Seed 20260636 adds a second fresh broad route-owner UAT pass on the current sim-gate stack: 30 randomized scenes classified, zero wrong fetch dispatches, 6/6 executable replay deliveries, and 6/6 visual packages across fetch-ready, Nav2-first, and recovery/re-aim routes. Frame-sequence review of all six raw-camera/topdown keyframe sheets matched the delivery geometry. Planner authority still used deterministic fallback because OPENAI_API_KEY is missing, and hardware_proven=false remains in force until physical/onboard execution and field physics are recorded.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,90 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Seed 20260636 breadth UAT is green",
+      "status": "30 classified scenes, 6 executable mixed-route runs, 6/6 delivery with visual packages",
+      "tone": "green",
+      "summary": "Seed 20260636 broadens the current route-owner evidence after the fresh rehearsal ladder. The planner gate classified 30 generated scenes with zero wrong fetch dispatches; executable replay selected two fetch-ready, two Nav2-first, and two recovery/re-aim rows. All six missions delivered inside the 0.300m contract, all six visual packages passed, and the analyzer reports clean execution, setup, and contact with zero first-contact blockers. I inspected all six raw-camera/topdown keyframe sheets; the onboard camera and topdown geometry agree through setup, first contact, push, and terminal delivery. The planner ran in deterministic fallback because OPENAI_API_KEY is missing, so provider-backed LLM authority remains an open rerun.",
+      "metrics": [
+        "Parent gate: pass=true; random_cases=30; promotion_evidence=false; planner_authority_ready=false",
+        "Planner routing: pass_count=30; fail_count=0; wrong_fetch_dispatch_count=0",
+        "Route mix: fetch_ready_local=4; nav2_reposition_first=6; scan_or_perceive_first=6; recovery_or_reaim=9; ambiguous_or_unsafe_no_go=5",
+        "Provider status: skipped_missing_openai_api_key=30; deterministic_fallback=30; llm_supervised_veto_count=30",
+        "Executable replay: selected=6; mission_pass=6; visual_package_pass=6; mission_fail=0",
+        "Replay route coverage: fetch_ready_local=2; nav2_reposition_first=2; recovery_or_reaim=2",
+        "Closest approach range: 0.193m..0.197m inside the 0.300m contract",
+        "Analyzer: execution=clean; setup=clean; contact=clean; first_contact_blocker_count=0; predicted contact quality stayed watch",
+        "Visual review: inspected all six raw-camera/topdown keyframe sheets across setup, first contact, push, and terminal delivery",
+        "Claim boundary: hardware_proven=false; provider-backed LLM routing and physical/onboard proof remain open gates"
+      ],
+      "links": [
+        {
+          "label": "Seed 20260636 parent scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260636_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260636 replay scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260636_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Seed 20260636 analyzer scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260636_breadth_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Seed 20260636 planner scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260636_breadth_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "scene02 recovery onboard video",
+          "url": "/artifacts/session/20260605T071908185252Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene03 recovery onboard video",
+          "url": "/artifacts/session/20260605T072227157645Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene04 Nav2 onboard video",
+          "url": "/artifacts/session/20260605T072440649066Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene07 fetch-ready onboard video",
+          "url": "/artifacts/session/20260605T072633943898Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene08 fetch-ready onboard video",
+          "url": "/artifacts/session/20260605T072913696023Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene15 Nav2 onboard video",
+          "url": "/artifacts/session/20260605T073337808566Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene02 recovery keyframe sheet",
+          "url": "/artifacts/session/20260605T071908185252Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene03 recovery keyframe sheet",
+          "url": "/artifacts/session/20260605T072227157645Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene04 Nav2 keyframe sheet",
+          "url": "/artifacts/session/20260605T072440649066Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene07 fetch-ready keyframe sheet",
+          "url": "/artifacts/session/20260605T072633943898Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene08 fetch-ready keyframe sheet",
+          "url": "/artifacts/session/20260605T072913696023Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene15 Nav2 keyframe sheet",
+          "url": "/artifacts/session/20260605T073337808566Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
     {
       "title": "Fresh rehearsal ladder is green",
       "status": "stack smoke, saved anchors, and seed20260635 mixed-route replay passed with visual review",
@@ -4404,6 +4488,10 @@
   ],
   "watch_areas": [
     {
+      "label": "Provider-backed LLM routing rerun",
+      "body": "Seed20260636 proves the deterministic guarded route-owner stack across another broad seed, while provider status stayed skipped_missing_openai_api_key. Restore OPENAI_API_KEY and rerun the planner gate before claiming current provider-backed authority."
+    },
+    {
       "label": "Base-controller fetch preflight",
       "body": "Scene03 first exposed a no-motion fetch when the diff-drive controller was unavailable. Executable fetch now calls /controller_manager/list_controllers before local control, records control_preflight.json, and fails before scoring when jetbot_base_controller is not active."
     },
@@ -4449,8 +4537,8 @@
     }
   ],
   "next_steps": [
+    "Rerun seed20260636 with provider-backed LLM routing once OPENAI_API_KEY is available, then compare route agreement and veto reasons against deterministic fallback.",
     "Run the physical/onboard hardware proof for the same ladder, starting with stack smoke and raw-camera/YOLO visual review.",
-    "Restore provider-backed LLM routing when OPENAI_API_KEY is available, then rerun the planner gate to compare provider-backed route choice with deterministic fallback.",
     "Keep hardware_proven=false until physical robot execution, onboard TensorRT, physical camera evidence, and field-physics proof are recorded."
   ],
   "uat_review_bundle": {

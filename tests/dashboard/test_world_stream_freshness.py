@@ -482,8 +482,9 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Fresh rehearsal ladder is green"
+    assert payload["status_label"] == "Second fresh breadth seed is green"
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
+    assert "Seed 20260636 breadth UAT is green" in evidence_by_title
     assert "Fresh rehearsal ladder is green" in evidence_by_title
     assert "Robot-side rehearsal preflight is ready" in evidence_by_title
     assert "Seed 20260635 hardware rehearsal is green" in evidence_by_title
@@ -493,6 +494,13 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert "Hardware rehearsal run plan is ready" in evidence_by_title
     assert "Hardware-transfer rehearsal package is ready" in evidence_by_title
     assert "Supervised seeded promotion refresh is green" in evidence_by_title
+    assert evidence_by_title["Seed 20260636 breadth UAT is green"]["links"][0]["url"].endswith(
+        "/fetch_planner_seeded_generalization_gate/scorecard.md"
+    )
+    assert any(
+        link["url"].endswith("/visual/raw_camera_browser.mp4")
+        for link in evidence_by_title["Seed 20260636 breadth UAT is green"]["links"]
+    )
     assert evidence_by_title["Saved-anchor fetch rehearsal is green"]["links"][0]["url"].endswith(
         "/fetch_hardware_rehearsal_runner/scorecard.md"
     )

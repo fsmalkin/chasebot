@@ -516,6 +516,22 @@ current browser-watchable rehearsal proof while preserving the hardware claim
 boundary: physical robot execution, onboard TensorRT on the robot, physical
 camera behavior, and field physics remain open.
 
+June 5 seed20260636 breadth UAT: the current route-owner stack now has a
+second fresh broad seeded pass at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260636_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner classified `30` generated scenes with `wrong_fetch_dispatch_count=0`.
+The executable replay at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260636_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+selected two `fetch_ready_local`, two `nav2_reposition_first`, and two
+`recovery_or_reaim` rows; all six delivered with visual packages and closest
+approaches from `0.193m` to `0.197m`. The analyzer at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260636_breadth_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution, setup, and contact with first-contact blockers `0`.
+Frame-sequence review of all six raw-camera/topdown sheets matched the delivery
+geometry. This broadens sim-gate UAT evidence while preserving two claim
+boundaries: provider-backed LLM routing needs a rerun after `OPENAI_API_KEY` is
+available, and physical/onboard proof still gates `hardware_proven=true`.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
