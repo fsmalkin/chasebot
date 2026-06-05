@@ -512,6 +512,25 @@ available for sequence review. That final step covers `fetch_ready_local`,
 `nav2_reposition_first`, `recovery_or_reaim`, `scan_or_perceive_first`, and
 `ambiguous_or_unsafe_no_go`.
 
+June 5 seed20260643 robot-side rehearsal evidence: the active runbook now has a
+green sim-gate robot-target rehearsal package. Stack smoke passed at
+`artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_seed20260643_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+saved anchors passed `3/3` at
+`artifacts/session/robot_side_fetch_rehearsal_saved_anchors_seed20260643_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+and the mixed all-routes batch passed at
+`artifacts/session/hardware_rehearsal_seed20260643_mixed_all_routes_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The analyzer at
+`artifacts/session/robot_side_seed20260643_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports route-owner visual UAT green: `10/10` route contracts, `6/6`
+executable deliveries, `4/4` planner-only abstentions, `10/10` visual
+packages, clean execution/setup/contact, and first-contact blockers `0`.
+Frame-sequence review covered stack-smoke screenshots, three saved-anchor
+sheets, and all ten mixed-route sheets. A narrow harness repair now treats
+Gazebo `data: true` with subprocess timeout as `timed_out_after_success`, and
+the hardware runner validates planner-only abstention rows without requiring
+fetch controller preflight. Provider-backed LLM routing and physical/onboard
+proof remain open, so `hardware_proven=false` remains in force.
+
 June 5 fresh rehearsal ladder: the full runner sequence now passes on the
 `robot_fidelity_orin` / `tensorrt_int8` sim-gate runtime target:
 `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,

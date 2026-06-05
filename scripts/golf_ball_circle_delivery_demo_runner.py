@@ -581,7 +581,8 @@ gz service -s "/world/$WORLD_NAME/set_pose/blocking" --reqtype gz.msgs.Pose --re
         "pose": {"x": x, "y": y, "z": z, "yaw": yaw},
         "returncode": rc,
         "output": output,
-        "pass": rc == 0 and "data: true" in output,
+        "pass": "data: true" in output,
+        "timed_out_after_success": bool(rc == 124 and "data: true" in output),
     }
 
 

@@ -587,6 +587,34 @@ June 5, 2026 seed20260643 robot-side runbook refresh:
   `ambiguous_or_unsafe_no_go`, so robot-side proof covers both action and
   abstention routes.
 
+June 5, 2026 seed20260643 robot-side rehearsal evidence:
+
+- Stack smoke:
+  `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_seed20260643_20260605/fetch_hardware_rehearsal_runner/scorecard.md`
+- Saved anchors:
+  `artifacts/session/robot_side_fetch_rehearsal_saved_anchors_seed20260643_20260605/fetch_hardware_rehearsal_runner/scorecard.md`
+- Mixed all-routes batch:
+  `artifacts/session/hardware_rehearsal_seed20260643_mixed_all_routes_20260605/fetch_planner_route_replay_batch/scorecard.md`
+- Mixed all-routes analyzer:
+  `artifacts/session/robot_side_seed20260643_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: stack smoke passed with D415 raw and YOLO debug screenshots; saved
+  anchors passed `3/3`; seed20260643 mixed all-routes rehearsal passed `10/10`
+  route contracts with `6/6` executable deliveries, `4/4` planner-only
+  abstentions, `10/10` visual packages, and analyzer-clean execution, setup,
+  and contact.
+- Visual review: inspected the stack-smoke screenshots, all three saved-anchor
+  keyframe sheets, and all ten mixed-route keyframe sheets. The four
+  planner-only rows visibly withheld local fetch, while recovery, Nav2-first,
+  and fetch-ready rows showed delivery into the circle with topdown agreement.
+- Harness note: the first scene05 Nav2 attempt exposed a `set_pose` subprocess
+  timeout after Gazebo returned `data: true`; `set_model_pose` now records
+  `timed_out_after_success=true` and treats the pose set as successful. The
+  hardware runner also accepts planner-only route rows without requiring fetch
+  controller preflight.
+- Claim boundary: this is green sim-gate robot-target rehearsal evidence.
+  Provider-backed LLM routing and physical/onboard proof remain open, and
+  `hardware_proven=false` remains the correct claim.
+
 June 5, 2026 fresh rehearsal ladder:
 
 - Runtime stack smoke:

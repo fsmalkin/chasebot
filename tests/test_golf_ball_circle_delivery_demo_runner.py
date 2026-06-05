@@ -30,6 +30,7 @@ from golf_ball_circle_delivery_demo_runner import parse_nav2_reposition_result  
 from golf_ball_circle_delivery_demo_runner import summarize_line_servo_effective_command  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import transform_nav2_reposition_layout_to_current_robot  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import nav2_precontact_fallback_to_local_recovery_decision  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import set_model_pose  # noqa: E402
 import passive_ball_roll_calibration_runner as passive_runner  # noqa: E402
 
 
@@ -80,6 +81,26 @@ def test_docker_exec_service_returns_timeout_result(monkeypatch):
     assert "partial-out" in output
     assert "partial-err" in output
     assert "timeout_after_s=10.000" in output
+
+
+def test_set_model_pose_accepts_timeout_after_success(monkeypatch):
+    import golf_ball_circle_delivery_demo_runner as runner
+
+    monkeypatch.setattr(runner, "docker_exec", lambda *_args, **_kwargs: (124, "data: true\n\ntimeout_after_s=10.000"))
+
+    result = set_model_pose(
+        compose_project="project",
+        world_name="world",
+        model_name="jetbot",
+        x=0.0,
+        y=0.0,
+        z=0.0,
+        yaw=0.0,
+    )
+
+    assert result["pass"] is True
+    assert result["returncode"] == 124
+    assert result["timed_out_after_success"] is True
 
 
 def test_ensure_base_controller_active_accepts_existing_active_controller(monkeypatch):

@@ -331,12 +331,18 @@ def validate_replay_batch_artifacts(batch_summary_path: str) -> dict[str, Any]:
         package_path = str(row.get("visual_package_summary_path", "") or "")
         mission, mission_issues = read_json(mission_path)
         package, package_issues = read_json(package_path)
-        bool_issue(mission_issues, bool(mission.get("pass", False)), f"{row_id}:mission_not_pass")
-        bool_issue(
-            mission_issues,
-            bool(dict_value(mission.get("control_preflight")).get("pass", False)),
-            f"{row_id}:control_preflight_not_pass",
+        planner_route_only_pass = bool(mission.get("planner_route_only_pass", False)) and not bool(
+            mission.get("local_fetch_dispatched", True)
         )
+        bool_issue(mission_issues, bool(mission.get("pass", False)), f"{row_id}:mission_not_pass")
+        if planner_route_only_pass:
+            bool_issue(mission_issues, planner_route_only_pass, f"{row_id}:planner_route_only_not_pass")
+        else:
+            bool_issue(
+                mission_issues,
+                bool(dict_value(mission.get("control_preflight")).get("pass", False)),
+                f"{row_id}:control_preflight_not_pass",
+            )
         bool_issue(package_issues, bool(package.get("pass", False)), f"{row_id}:visual_package_not_pass")
         keyframe_reviews = [dict_value(item) for item in list_value(package.get("keyframe_reviews"))]
         bool_issue(
@@ -445,6 +451,11 @@ def artifact_link(path_text: str) -> str:
     return f"[artifact](/{path_text})" if str(path_text).startswith(("artifacts/", "runtime/", "docs/")) else str(path_text)
 
 
+def artifact_link_or_empty(path_text: str) -> str:
+    link = artifact_link(path_text)
+    return link if link else "` `"
+
+
 def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
     lines = [
         "# Fetch Hardware Rehearsal Runner",
@@ -497,10 +508,10 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 "",
                 f"- pass: `{execution_artifacts.get('pass', False)}`",
                 f"- issues: `{execution_artifacts.get('issues', [])}`",
-                f"- session_dir: {artifact_link(str(execution_artifacts.get('session_dir', '')))}",
-                f"- readiness_report: {artifact_link(str(execution_artifacts.get('readiness_report', '')))}",
-                f"- seeded_gate_summary: {artifact_link(str(execution_artifacts.get('seeded_gate_summary', '')))}",
-                f"- batch_summary: {artifact_link(str(execution_artifacts.get('batch_summary', '')))}",
+                f"- session_dir: {artifact_link_or_empty(str(execution_artifacts.get('session_dir', '')))}",
+                f"- readiness_report: {artifact_link_or_empty(str(execution_artifacts.get('readiness_report', '')))}",
+                f"- seeded_gate_summary: {artifact_link_or_empty(str(execution_artifacts.get('seeded_gate_summary', '')))}",
+                f"- batch_summary: {artifact_link_or_empty(str(execution_artifacts.get('batch_summary', '')))}",
             ]
         )
         for row in list_value(execution_artifacts.get("artifacts")):

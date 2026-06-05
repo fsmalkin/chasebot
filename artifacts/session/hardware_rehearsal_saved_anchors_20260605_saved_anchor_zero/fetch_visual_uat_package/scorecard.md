@@ -22,26 +22,27 @@
 ## Videos
 
 ### Browser-Safe Onboard Camera
-- [raw_camera_browser.mp4](/artifacts/session/20260605T065910170978Z/visual/raw_camera_browser.mp4)
+- [raw_camera_browser.mp4](/artifacts/session/20260605T134708780783Z/visual/raw_camera_browser.mp4)
 
 ### Browser-Safe Context Views
-- [topdown_telemetry_browser.mp4](/artifacts/session/20260605T065910170978Z/visual/topdown_telemetry_browser.mp4)
-- [world_stream.mp4](/artifacts/session/20260605T065910170978Z/visual/world_stream.mp4)
+- [topdown_telemetry_browser.mp4](/artifacts/session/20260605T134708780783Z/visual/topdown_telemetry_browser.mp4)
+- [world_stream.mp4](/artifacts/session/20260605T134708780783Z/visual/world_stream.mp4)
 
 ## All Video Artifacts
-- [raw_camera_browser.mp4](/artifacts/session/20260605T065910170978Z/visual/raw_camera_browser.mp4)
-- [topdown_telemetry_browser.mp4](/artifacts/session/20260605T065910170978Z/visual/topdown_telemetry_browser.mp4)
-- [world_stream.mp4](/artifacts/session/20260605T065910170978Z/visual/world_stream.mp4)
+- [raw_camera_browser.mp4](/artifacts/session/20260605T134708780783Z/visual/raw_camera_browser.mp4)
+- [topdown_telemetry_browser.mp4](/artifacts/session/20260605T134708780783Z/visual/topdown_telemetry_browser.mp4)
+- [world_stream.mp4](/artifacts/session/20260605T134708780783Z/visual/world_stream.mp4)
 - `yolo_debug.mp4` validation=`not_browser_h264_yuv420p:codec=mpeg4:pix_fmt=yuv420p`
 - `raw_camera.mp4` validation=`not_browser_h264_yuv420p:codec=mpeg4:pix_fmt=yuv420p`
 - `topdown_telemetry.mp4` validation=`not_browser_h264_yuv420p:codec=mpeg4:pix_fmt=yuv420p`
 
 ## Video Recovery
-- `raw_camera_browser.mp4` source=`raw_keyframes` ok=`True` frames=`18` previous=`video_missing_or_tiny` error=``
-- `topdown_telemetry_browser.mp4` source=`topdown_keyframes` ok=`True` frames=`18` previous=`video_missing_or_tiny` error=``
+- `raw_camera_browser.mp4` source=`raw_keyframes` ok=`True` frames=`19` previous=`video_missing_or_tiny` error=``
+- `topdown_telemetry_browser.mp4` source=`topdown_keyframes` ok=`True` frames=`19` previous=`video_missing_or_tiny` error=``
+- `world_stream.mp4` source=`world_stream_frames` ok=`True` frames=`129` previous=`video_missing_or_tiny` error=``
 
 ## Visual Keyframe Reviews
-- [keyframe_review_contact_sheet.png](/artifacts/session/20260605T065910170978Z/visual/keyframe_review_contact_sheet.png) session=`20260605T065910170978Z` ok=`True` selected=`10` paired=`18` source=`raw_topdown_keyframes` error=``
+- [keyframe_review_contact_sheet.png](/artifacts/session/20260605T134708780783Z/visual/keyframe_review_contact_sheet.png) session=`20260605T134708780783Z` ok=`True` selected=`10` paired=`19` source=`raw_topdown_keyframes` error=``
 
 ## Planner Gates
 - `dev_planner_saved_anchor_handoff_gate_zero_numeric_fix_20260604` pass=`True` routes=`3/3` wrong_fetch=`0`
@@ -53,10 +54,10 @@
 - none
 
 ## Missions
-- route=`fetch_ready_local` session=`20260605T065910170978Z` fetch_to_pose=`True` route_only=`False` raw_fetch_to_pose=`True` executor=`local_fetch_to_pose` reason=`trajectory_intersects_delivery_radius` closest=`0.197m` geometry=`unknown` geometry_reason=`` model_provenance=`True` target_model=`calibrated_golf_ball` ai_mode=`` route_outcome=`` [summary](/artifacts/session/20260605T065910170978Z/golf_ball_circle_delivery/20260605T065941579997Z/mission_verdict.json)
+- route=`fetch_ready_local` session=`20260605T134708780783Z` fetch_to_pose=`True` route_only=`False` raw_fetch_to_pose=`True` executor=`local_fetch_to_pose` reason=`trajectory_intersects_delivery_radius` closest=`0.195m` geometry=`unknown` geometry_reason=`` model_provenance=`True` target_model=`calibrated_golf_ball` ai_mode=`` route_outcome=`` [summary](/artifacts/session/20260605T134708780783Z/golf_ball_circle_delivery/20260605T134816172036Z/mission_verdict.json)
 
 ## Visual Evidence
-- `artifacts/session/20260605T065910170978Z/visual` confirmation=`True` visual_demo=`False` world_stream=`True` target_persistence=`False` world_degraded=`False` world_failure=``
+- `artifacts/session/20260605T134708780783Z/visual` confirmation=`True` visual_demo=`False` world_stream=`True` target_persistence=`False` world_degraded=`False` world_failure=``
 
 ## Warnings
 - `visual_confirmation_keyframe_recovery`

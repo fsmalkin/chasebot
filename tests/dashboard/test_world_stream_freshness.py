@@ -482,8 +482,9 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Robot-side seed 20260643 runbook is ready"
+    assert payload["status_label"] == "Robot-side seed 20260643 rehearsal is green"
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
+    assert "Seed 20260643 robot-side rehearsal is green" in evidence_by_title
     assert "Seed 20260643 robot-side runbook is ready" in evidence_by_title
     assert "Seed 20260643 mixed all-routes UAT is green" in evidence_by_title
     assert "Seed 20260643 50x4 rough UAT is green" in evidence_by_title
@@ -503,6 +504,13 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert "Hardware rehearsal run plan is ready" in evidence_by_title
     assert "Hardware-transfer rehearsal package is ready" in evidence_by_title
     assert "Supervised seeded promotion refresh is green" in evidence_by_title
+    assert evidence_by_title["Seed 20260643 robot-side rehearsal is green"]["links"][0]["url"].endswith(
+        "/fetch_planner_route_replay_batch/scorecard.md"
+    )
+    assert any(
+        "scene05" in link["label"] and link["url"].endswith("/visual/raw_camera_browser.mp4")
+        for link in evidence_by_title["Seed 20260643 robot-side rehearsal is green"]["links"]
+    )
     assert evidence_by_title["Seed 20260643 robot-side runbook is ready"]["links"][0]["url"].endswith(
         "/fetch_robot_side_rehearsal_preflight/scorecard.md"
     )
@@ -633,6 +641,8 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         "recovery_or_reaim",
         "scan_or_perceive_first",
     }
+    assert any(sample["session_id"] == "20260605T141313062384Z" for sample in route_samples)
+    assert {sample["interpretation"] for sample in route_samples} == {"delivery pass", "planner-only abstention"}
     assert payload["uat_review_bundle"]["route_samples"][0]["video_url"].startswith("/artifacts/session/")
     assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")
     html = (dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan.html").read_text(encoding="utf-8")

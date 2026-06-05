@@ -1252,6 +1252,25 @@ The final robot-side rehearsal step covers both action and abstention routes:
 `fetch_ready_local`, `nav2_reposition_first`, `recovery_or_reaim`,
 `scan_or_perceive_first`, and `ambiguous_or_unsafe_no_go`.
 
+The seed20260643 robot-side rehearsal is now green in the sim-gate robot-target
+lane:
+`artifacts/session/hardware_rehearsal_seed20260643_mixed_all_routes_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The stack smoke runner is
+`artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_seed20260643_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+the saved-anchor runner is
+`artifacts/session/robot_side_fetch_rehearsal_saved_anchors_seed20260643_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+and the mixed-route analyzer is
+`artifacts/session/robot_side_seed20260643_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`.
+The package passed stack smoke, saved anchors `3/3`, and all ten mixed-route
+contracts: six executable deliveries plus four planner-only abstentions.
+Visual review covered every keyframe sheet and confirmed the route contracts:
+scan/no-go rows withheld local fetch, while recovery, Nav2-first, and
+fetch-ready rows delivered into the circle. A narrow harness repair now accepts
+Gazebo `data: true` pose results that time out after success and validates
+planner-only rows without fetch controller preflight. Provider-backed LLM
+routing and physical/onboard proof remain open; `hardware_proven=false` remains
+the correct boundary.
+
 The fresh rehearsal ladder is now green on the sim-gate runtime target:
 `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
 `artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,

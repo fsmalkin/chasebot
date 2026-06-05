@@ -219,6 +219,68 @@ def test_rehearsal_runner_validates_replay_batch_artifacts(tmp_path: Path):
     assert len(summary["artifacts"]) == 3
 
 
+def test_rehearsal_runner_accepts_planner_only_visual_artifacts_without_control_preflight(tmp_path: Path):
+    session = tmp_path / "artifacts" / "session" / "route_only_session"
+    visual = session / "visual"
+    visual.mkdir(parents=True)
+    for name in (
+        "raw_camera_browser.mp4",
+        "topdown_telemetry_browser.mp4",
+        "world_stream.mp4",
+        "keyframe_review_contact_sheet.png",
+    ):
+        (visual / name).write_bytes(b"ok")
+    mission = tmp_path / "mission_verdict.json"
+    _write_json(
+        mission,
+        {
+            "pass": True,
+            "planner_route_only_pass": True,
+            "local_fetch_dispatched": False,
+            "outcome_reason": "planner_route_only_local_fetch_withheld",
+        },
+    )
+    package = tmp_path / "package_summary.json"
+    _write_json(
+        package,
+        {
+            "pass": True,
+            "keyframe_reviews": [{"ok": True, "path": str(visual / "keyframe_review_contact_sheet.png")}],
+            "videos": [
+                {"name": "raw_camera_browser.mp4", "browser_playable": True, "path": str(visual / "raw_camera_browser.mp4")},
+                {
+                    "name": "topdown_telemetry_browser.mp4",
+                    "browser_playable": True,
+                    "path": str(visual / "topdown_telemetry_browser.mp4"),
+                },
+                {"name": "world_stream.mp4", "browser_playable": True, "path": str(visual / "world_stream.mp4")},
+            ],
+        },
+    )
+    batch = tmp_path / "batch_summary.json"
+    _write_json(
+        batch,
+        {
+            "pass": True,
+            "selected_count": 1,
+            "mission_fail_count": 0,
+            "visual_package_pass_count": 1,
+            "rows": [
+                {
+                    "scene_id": "seed_scene01_ambiguous_or_unsafe_no_go",
+                    "mission_summary_path": str(mission),
+                    "visual_package_summary_path": str(package),
+                }
+            ],
+        },
+    )
+
+    summary = runner.validate_replay_batch_artifacts(str(batch))
+
+    assert summary["pass"] is True
+    assert summary["issues"] == []
+
+
 def test_rehearsal_runner_validates_seeded_gate_artifacts(tmp_path: Path):
     session = tmp_path / "artifacts" / "session" / "seeded_row_session"
     visual = session / "visual"
