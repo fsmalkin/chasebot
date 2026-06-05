@@ -147,7 +147,12 @@ def test_planner_seeded_generalization_supervised_promotion_requires_provider_au
     }
     provider_backed_summary = {
         "pass": True,
+        "random_cases": 30,
+        "pass_count": 30,
+        "fail_count": 0,
         "provider_status_counts": {"ok": 30},
+        "guard_agreement_count": 30,
+        "wrong_fetch_dispatch_count": 0,
         "llm_supervised_ready": True,
     }
 
@@ -166,6 +171,70 @@ def test_planner_seeded_generalization_supervised_promotion_requires_provider_au
         replay_summary=replay_summary,
         analyzer_summary=analyzer_summary,
     )
+
+
+def test_planner_seeded_generalization_accepts_confidence_only_guarded_fallback_authority():
+    args = _args(
+        dry_run=False,
+        fresh_dashboard_session_per_run=True,
+        planner_mode=planner_gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED,
+    )
+    planner_summary = {
+        "pass": True,
+        "random_cases": 3,
+        "pass_count": 3,
+        "fail_count": 0,
+        "provider_status_counts": {"ok": 3},
+        "guard_agreement_count": 3,
+        "wrong_fetch_dispatch_count": 0,
+        "llm_supervised_ready": False,
+        "llm_supervised_accept_count": 2,
+        "llm_supervised_veto_count": 1,
+        "results": [
+            {
+                "llm_supervised_guard": {
+                    "decision": "vetoed",
+                    "veto_reasons": ["confidence_below_threshold"],
+                }
+            }
+        ],
+    }
+
+    assert seeded_gate.strict_planner_authority_ready(args, planner_summary) is False
+    assert seeded_gate.guarded_fallback_authority_ready(args, planner_summary) is True
+    assert seeded_gate.planner_authority_ready(args, planner_summary) is True
+    assert seeded_gate.supervised_veto_reason_counts(planner_summary) == {"confidence_below_threshold": 1}
+
+
+def test_planner_seeded_generalization_blocks_non_confidence_guarded_fallback_authority():
+    args = _args(
+        dry_run=False,
+        fresh_dashboard_session_per_run=True,
+        planner_mode=planner_gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED,
+    )
+    planner_summary = {
+        "pass": True,
+        "random_cases": 3,
+        "pass_count": 3,
+        "fail_count": 0,
+        "provider_status_counts": {"ok": 3},
+        "guard_agreement_count": 3,
+        "wrong_fetch_dispatch_count": 0,
+        "llm_supervised_ready": False,
+        "llm_supervised_accept_count": 2,
+        "llm_supervised_veto_count": 1,
+        "results": [
+            {
+                "llm_supervised_guard": {
+                    "decision": "vetoed",
+                    "veto_reasons": ["guard_disagreement"],
+                }
+            }
+        ],
+    }
+
+    assert seeded_gate.guarded_fallback_authority_ready(args, planner_summary) is False
+    assert seeded_gate.planner_authority_ready(args, planner_summary) is False
 
 
 def test_planner_seeded_generalization_extracts_first_replay_failure():

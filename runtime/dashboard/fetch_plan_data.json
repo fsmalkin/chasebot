@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 8:58 PM ET",
+  "updated_label": "Updated June 4, 2026, 9:12 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
   "status_label": "Promotion green with rough breadth watch",
-  "status_detail": "The planner-gated fetch moonshot remains promotion-green on the provider-backed supervised seed 20260633 gate. A fresh roughest-order seed 20260634 breadth pass added six more browser-watchable deliveries across recovery/re-aim, Nav2-first, and fetch-ready routes. That pass is visual UAT evidence, not promotion evidence: the current shell lacked OPENAI_API_KEY, so the supervised planner fell back to deterministic guards, and the two fetch-ready rows delivered with contact-angle/lateral-slip watches.",
+  "status_detail": "The planner-gated fetch moonshot remains promotion-green on the provider-backed supervised seed 20260633 gate. Fresh roughest-order seed 20260634 added six browser-watchable deliveries across recovery/re-aim, Nav2-first, and fetch-ready routes. Its provider rerun returned ok on all 30 planner rows and allowed guarded fallback authority: 29 model proposals were accepted, one scan/defer row used deterministic fallback for low confidence, guard agreement stayed 30/30, and wrong fetch dispatches stayed 0. Promotion remains false for this rough seed because the two direct fetch-ready deliveries carried contact-angle/lateral-slip watches.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -50,13 +50,14 @@
   ],
   "latest_evidence": [
     {
-      "title": "Roughest seed breadth pass exposes contact-watch and provider-authority gap",
-      "status": "seed 20260634: 30/30 planner fallback classifications, 6/6 deliveries, promotion false",
+      "title": "Roughest seed breadth pass is provider-backed with contact watches",
+      "status": "seed 20260634: provider ok 30/30, guarded fallback 1, executable replay 6/6, promotion false",
       "tone": "watch",
-      "summary": "Seed 20260634 deliberately selected the roughest two executable rows for each live route family. Recovery/re-aim and Nav2-first rows delivered cleanly, and both direct fetch-ready rows delivered inside the 0.300m contract with browser-watchable packages. The useful signal is evidence hygiene and contact polish: the planner provider was skipped because this shell had no OPENAI_API_KEY, and the two fetch-ready rows carried ball_lateral_knock_away plus contact_trajectory_angle_error watches despite closest approach staying near 0.198m.",
+      "summary": "Seed 20260634 deliberately selected the roughest two executable rows for each live route family. Recovery/re-aim and Nav2-first rows delivered cleanly, and both direct fetch-ready rows delivered inside the 0.300m contract with browser-watchable packages. The provider-backed rerun resolved the missing-key evidence gap: provider_status_counts={ok: 30}, guard agreement stayed 30/30, wrong fetch dispatches stayed 0, and the single fallback was a confidence-only scan/defer case. The remaining signal is contact polish: both fetch-ready rows carried ball_lateral_knock_away plus contact_trajectory_angle_error watches despite closest approach staying near 0.198m.",
       "metrics": [
-        "Parent gate: pass=true; promotion_evidence=false; planner_authority_ready=false; interpretation=planner_routed_seeded_generalization_visual_uat_green",
-        "Planner child: pass=30/30; wrong_fetch=0; provider_status_counts={skipped_missing_openai_api_key: 30}; effective mode={deterministic_fallback: 30}",
+        "Parent gate: pass=true; promotion_evidence=false; planner_authority_ready=true; interpretation=planner_routed_seeded_generalization_visual_uat_green",
+        "Planner child: provider ok=30/30; guard agreement=30/30; wrong_fetch=0; accepted/vetoed=29/1; veto reason={confidence_below_threshold: 1}",
+        "Effective planner modes: llm_supervised_guarded=29, deterministic_fallback=1; strict all-accepted authority=false; guarded fallback authority=true",
         "Executable replay: selected=6; mission_pass=6; visual_package_pass=6",
         "Route coverage: recovery_or_reaim=2/2 clean, nav2_reposition_first=2/2 clean, fetch_ready_local=2/2 delivered with contact watches",
         "Analyzer: mission green, visual green, setup clean, execution watch=2, contact watch=2, first-contact blockers=0",
@@ -64,8 +65,8 @@
       ],
       "links": [
         {
-          "label": "Seed 20260634 parent scorecard with authority-ready downgrade",
-          "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+          "label": "Seed 20260634 provider-backed parent scorecard",
+          "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_provider_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
         },
         {
           "label": "Seed 20260634 rough replay scorecard",
@@ -76,8 +77,8 @@
           "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
         },
         {
-          "label": "Fetch-ready watch onboard proof",
-          "url": "/artifacts/session/20260605T004046777671Z/visual/raw_camera_browser.mp4"
+          "label": "Provider-backed planner child scorecard",
+          "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_provider_reuse_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
         },
         {
           "label": "Fetch-ready watch contact sheet",
@@ -1981,17 +1982,17 @@
   "recent_video_proof": [
     {
       "title": "Seed 20260634 roughest breadth UAT bundle",
-      "summary": "Six fresh browser-watchable sessions exercise the roughest selected executable rows from seed 20260634. Treat the bundle as visual breadth evidence with contact-watch and provider-authority caveats.",
+      "summary": "Six fresh browser-watchable sessions exercise the roughest selected executable rows from seed 20260634. Treat the bundle as provider-backed guarded visual breadth evidence with contact-watch caveats.",
       "primary_video": {
         "label": "Fetch-ready watch onboard raw camera browser MP4",
         "url": "/artifacts/session/20260605T004046777671Z/visual/raw_camera_browser.mp4"
       },
       "proves": "The deterministic route owners still deliver the roughest selected recovery, Nav2, and fetch-ready rows inside the 0.300m contract after visual frame review.",
-      "limits": "This bundle is not provider-backed LLM promotion evidence because the planner child skipped the provider for missing OPENAI_API_KEY. The two fetch-ready rows delivered with lateral/contact-angle watches, so contact smoothness remains active work.",
+      "limits": "This bundle is not promotion evidence because the two fetch-ready rows delivered with lateral/contact-angle watches. The provider-backed planner layer is healthy for guarded routing: ok=30/30 with one confidence-only scan/defer fallback.",
       "links": [
         {
-          "label": "Parent scorecard",
-          "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+          "label": "Provider-backed parent scorecard",
+          "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_provider_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
         },
         {
           "label": "Analyzer scorecard",
@@ -3894,11 +3895,11 @@
   "watch_areas": [
     {
       "label": "Supervised provider authority",
-      "body": "Seed20260634 proved the parent gate now downgrades supervised runs when the provider is unavailable. Restore provider credentials for the shell before claiming LLM-backed route authority on the next rough seed."
+      "body": "Seed20260634 provider rerun cleared the missing-key gap: provider ok=30/30, guard agreement=30/30, wrong_fetch=0, and one confidence-only scan/defer fallback. Strict all-accepted authority remains false, while guarded fallback authority is ready."
     },
     {
       "label": "Rough fetch-ready contact smoothness",
-      "body": "Seed20260634 fetch-ready scenes 04 and 28 delivered at about 0.198m but carried ball_lateral_knock_away and contact_trajectory_angle_error flags. Treat these as contact-smoothness work after provider-backed repeatability is refreshed."
+      "body": "Seed20260634 fetch-ready scenes 04 and 28 delivered at about 0.198m with provider-backed guarded routing, but both carried ball_lateral_knock_away and contact_trajectory_angle_error flags. Treat these as contact-smoothness work after preserving the current evidence set."
     },
     {
       "label": "Nav2-first setup abort fallback",
@@ -3934,10 +3935,10 @@
     }
   ],
   "next_steps": [
-    "Restore provider credentials in the execution shell and rerun one roughest-order llm_supervised_guarded seed so planner_authority_ready=true on fresh evidence.",
-    "Keep seed20260634 scenes 04 and 28 as local-fetch contact-smoothness watch rows; improve only after provider-backed repeatability confirms the watch rate.",
+    "Keep seed20260634 scenes 04 and 28 as local-fetch contact-smoothness watch rows; improve only after the provider-backed guarded fallback evidence is preserved.",
     "Draft the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, model provenance checks, and visual-evidence capture on robot hardware.",
-    "Keep the provider-backed seed20260633 promotion gate, hard mixed matrix, three supervised generated-seed UAT batches, and rough seed20260634 watch bundle as the current preservation bar.",
+    "Decide whether the product bar needs strict all-accepted LLM route authority, or whether provider-backed guarded fallback is the preferred safety model for low-confidence scenes.",
+    "Keep the provider-backed seed20260633 promotion gate, hard mixed matrix, three supervised generated-seed UAT batches, and seed20260634 rough guarded-fallback watch bundle as the current preservation bar.",
     "Measure the runtime cost of the longer recovery window and decide whether hardware UAT needs a tighter progress-based timeout instead of a fixed duration.",
     "Investigate container-side ffmpeg availability as evidence hardening; host-side browser video recovery is working but remains a packaging dependency."
   ],

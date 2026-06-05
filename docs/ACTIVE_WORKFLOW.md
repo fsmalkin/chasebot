@@ -773,22 +773,23 @@ June 4, 2026 supervised seeded generalization promotion gate:
 
 June 5, 2026 roughest supervised-seed breadth check:
 
-- Parent gate with explicit authority downgrade:
-  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Parent gate with provider-backed guarded fallback authority:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_provider_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
 - Replay:
   `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
 - Analyzer:
-  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_provider_reuse_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
 - Result: visual UAT green and promotion evidence false. The gate delivered
   `6/6` executable rows and produced `6/6` visual packages with `0`
   first-contact blockers. Recovery and Nav2 rows were clean; the two direct
   fetch-ready rows delivered near `0.198m` and carried
   `ball_lateral_knock_away` plus `contact_trajectory_angle_error` watches.
-- Authority note: the execution shell lacked `OPENAI_API_KEY`, so the child
-  planner used deterministic fallback for all `30` generated scenes. The parent
-  gate now surfaces `planner_authority_ready=false`, provider status counts,
-  and effective planner-mode counts. For `llm_supervised_guarded` promotion,
-  require `planner_authority_ready=true`.
+- Authority note: the provider-backed reuse pass returned provider `ok` for
+  all `30` planner rows, guard agreement `30/30`, wrong fetch dispatches `0`,
+  and `planner_authority_ready=true`. Strict all-accepted model authority is
+  false because one `scan_or_perceive_first` row used deterministic fallback for
+  `confidence_below_threshold`; route agreement remains green under guarded
+  fallback authority.
 - Visual review: inspected all six contact sheets across setup, contact,
   push/coast, and delivery. The videos are plausible and match the analyzer
   watches; there is no visual/geometry mismatch.

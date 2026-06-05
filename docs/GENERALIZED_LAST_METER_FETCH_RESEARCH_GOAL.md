@@ -1117,15 +1117,17 @@ frame review agreed with telemetry. Recovery and Nav2 rows stayed clean; the
 direct fetch-ready rows delivered near `0.198m` and kept
 `ball_lateral_knock_away` / `contact_trajectory_angle_error` watches.
 
-This run also tightened the evidence ladder. The current shell had no
-`OPENAI_API_KEY`, so the supervised planner child used deterministic fallback
-for all `30` generated scenes. The seeded parent gate now surfaces
-`planner_authority_ready=false`, includes provider status counts in the parent
-scorecard, and blocks promotion evidence when `llm_supervised_guarded` lacks
-provider-backed authority. The architecture direction remains planner-gated
-route ownership with deterministic execution; the next proof should restore
-provider credentials and rerun a roughest-order supervised seed before contact
-smoothness work expands.
+The provider-backed reuse pass now closes the credential gap:
+`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_provider_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The provider returned `ok` for all `30` generated scenes, guard agreement stayed
+`30/30`, wrong fetch dispatches stayed `0`, and the parent scorecard reports
+`planner_authority_ready=true`. Strict all-accepted authority remains false
+because one `scan_or_perceive_first` row used deterministic fallback for
+`confidence_below_threshold`; this is guarded fallback authority rather than a
+route-disagreement failure. The architecture direction remains planner-gated
+route ownership with deterministic execution; the next focused control work is
+direct local-fetch contact smoothness, with hardware-transfer planning in
+parallel.
 
 ## Definition Of Done For The Research Thread
 

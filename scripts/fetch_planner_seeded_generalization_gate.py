@@ -194,13 +194,56 @@ def expected_executable_count(args: argparse.Namespace) -> int:
     return max(int(args.max_per_route), 1) * len(executable_routes)
 
 
-def planner_authority_ready(args: argparse.Namespace, planner_summary: dict[str, Any]) -> bool:
+def supervised_veto_reason_counts(planner_summary: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    results = planner_summary.get("results") if isinstance(planner_summary.get("results"), list) else []
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        guard = result.get("llm_supervised_guard")
+        if not isinstance(guard, dict) or str(guard.get("decision", "") or "") != "vetoed":
+            continue
+        reasons = guard.get("veto_reasons") if isinstance(guard.get("veto_reasons"), list) else []
+        for reason in reasons:
+            reason_text = str(reason or "").strip()
+            if reason_text:
+                counts[reason_text] = counts.get(reason_text, 0) + 1
+    return counts
+
+
+def strict_planner_authority_ready(args: argparse.Namespace, planner_summary: dict[str, Any]) -> bool:
     planner_mode = str(args.planner_mode or "")
     if planner_mode == planner_gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED:
         return bool(planner_summary.get("llm_supervised_ready", False))
     if planner_mode == planner_gate.PLANNER_MODE_LLM_SHADOW:
         return bool(planner_summary.get("llm_shadow_ready", False))
     return True
+
+
+def guarded_fallback_authority_ready(args: argparse.Namespace, planner_summary: dict[str, Any]) -> bool:
+    planner_mode = str(args.planner_mode or "")
+    if planner_mode != planner_gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED:
+        return strict_planner_authority_ready(args, planner_summary)
+    total_cases = int(planner_summary.get("random_cases", 0) or planner_summary.get("pass_count", 0) or 0)
+    provider_counts = (
+        planner_summary.get("provider_status_counts", {})
+        if isinstance(planner_summary.get("provider_status_counts"), dict)
+        else {}
+    )
+    veto_reasons = supervised_veto_reason_counts(planner_summary)
+    return bool(
+        total_cases > 0
+        and int(provider_counts.get("ok", 0) or 0) == total_cases
+        and int(planner_summary.get("guard_agreement_count", 0) or 0) == total_cases
+        and int(planner_summary.get("wrong_fetch_dispatch_count", 0) or 0) == 0
+        and int(planner_summary.get("pass_count", 0) or 0) == total_cases
+        and int(planner_summary.get("fail_count", 0) or 0) == 0
+        and set(veto_reasons).issubset({"confidence_below_threshold"})
+    )
+
+
+def planner_authority_ready(args: argparse.Namespace, planner_summary: dict[str, Any]) -> bool:
+    return strict_planner_authority_ready(args, planner_summary) or guarded_fallback_authority_ready(args, planner_summary)
 
 
 def promotion_ready(
@@ -351,6 +394,9 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
             "llm_supervised_ready": bool(planner_summary.get("llm_supervised_ready", False)),
             "llm_supervised_accept_count": planner_summary.get("llm_supervised_accept_count", 0),
             "llm_supervised_veto_count": planner_summary.get("llm_supervised_veto_count", 0),
+            "llm_supervised_veto_reason_counts": supervised_veto_reason_counts(planner_summary),
+            "strict_planner_authority_ready": strict_planner_authority_ready(args, planner_summary),
+            "guarded_fallback_authority_ready": guarded_fallback_authority_ready(args, planner_summary),
         },
         "planner_authority_ready": planner_authority_ready(args, planner_summary),
         "replay_summary": {

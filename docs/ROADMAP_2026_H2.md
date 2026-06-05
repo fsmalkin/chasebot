@@ -1330,16 +1330,16 @@ milestone proof. A new roughest-order seed `20260634` pass adds useful breadth:
 six executable rows delivered with browser-watchable visual packages, including
 two recovery rows, two Nav2-first rows, and two direct fetch-ready rows.
 
-The checkpoint also sets the next sequencing rule. Seed `20260634` ran in a
-shell without `OPENAI_API_KEY`, so the supervised planner child used
-deterministic fallback and the parent gate now reports
-`planner_authority_ready=false`. That run is visual UAT breadth evidence, while
-provider-backed LLM authority remains tied to the earlier seed `20260633` gate.
-The two direct fetch-ready rows delivered near `0.198m` and carried lateral
-knock-away plus contact-trajectory watches, so contact smoothness stays on the
-watchlist.
+The checkpoint also sets the next sequencing rule. The provider-backed reuse
+pass for seed `20260634` returned provider `ok` on all `30` generated scenes,
+kept guard agreement at `30/30`, kept wrong fetch dispatches at `0`, and reports
+`planner_authority_ready=true`. Strict all-accepted model authority remains
+false because one scan/defer scene used deterministic fallback for
+`confidence_below_threshold`; this is acceptable guarded fallback behavior, and
+it preserves the deterministic safety layer for low-confidence scenes. The two
+direct fetch-ready rows delivered near `0.198m` and carried lateral knock-away
+plus contact-trajectory watches, so contact smoothness stays on the watchlist.
 
-Next work should restore provider credentials for the execution shell, rerun one
-roughest-order `llm_supervised_guarded` seed with `planner_authority_ready=true`,
-and then choose between local-fetch contact smoothness and hardware-transfer
-packaging. A broad architecture reset is not warranted by the current evidence.
+Next work should preserve the current provider-backed evidence set, then choose
+between direct local-fetch contact smoothness and hardware-transfer packaging. A
+broad architecture reset is not warranted by the current evidence.

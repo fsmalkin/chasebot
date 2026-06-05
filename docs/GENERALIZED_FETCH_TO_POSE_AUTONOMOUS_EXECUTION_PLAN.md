@@ -755,13 +755,16 @@ two fetch-ready rows delivered inside the `0.300m` contract and carried
 `ball_lateral_knock_away` plus `contact_trajectory_angle_error` watches, which
 keeps direct local-fetch contact smoothness active.
 
-The same run exposed an evidence-authority gap. The shell lacked
-`OPENAI_API_KEY`, so `llm_supervised_guarded` fell back to deterministic guard
-routing for all `30` planner rows. The parent seeded gate now reports
-`planner_authority_ready=false` and keeps `promotion_evidence=false` whenever a
-supervised run lacks provider-backed authority. The next provider-backed proof
-should restore credentials in the execution shell and rerun one roughest-order
-supervised seed before expanding contact-control changes.
+The provider-backed reuse pass resolved the earlier evidence-authority gap:
+`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_provider_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The provider returned `ok` for all `30` planner rows, guard agreement stayed
+`30/30`, wrong fetch dispatches stayed `0`, and the parent seeded gate now
+reports `planner_authority_ready=true`. Strict all-accepted authority remains
+false because one `scan_or_perceive_first` row used deterministic fallback for
+`confidence_below_threshold`; the repo treats that as guarded fallback
+authority, consistent with the LLM-supervised evidence rollup. The next control
+work is direct local-fetch contact smoothness, while hardware-transfer planning
+can start from the provider-backed guarded route-owner stack.
 
 ## Gates
 
