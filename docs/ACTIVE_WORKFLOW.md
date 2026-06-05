@@ -3227,6 +3227,21 @@ Milestone 3 pass criteria include:
        `artifacts/session/hardware_rehearsal_seed20260648_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
      - visual review: stack-smoke screenshots, all three saved-anchor
        keyframe sheets, and all fifteen mixed-route keyframe sheets inspected
+     - additional fresh breadth check:
+       `artifacts/session/live_planner_seeded_generalization_gate_seed20260649_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+     - seed20260649 result: `100/100` planner routes across all five route
+       families, `0` wrong fetch dispatches, deterministic fallback because
+       `OPENAI_API_KEY` was unavailable, `9/9` executable deliveries across
+       recovery, Nav2-first, and fetch-ready rows, `9/9` visual packages, clean
+       execution/setup/contact, `0` contact watches, and `0` first-contact
+       blockers
+     - seed20260649 replay/analyzer:
+       `artifacts/session/live_planner_seeded_generalization_gate_seed20260649_breadth_100x3_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+       and
+       `artifacts/session/live_planner_seeded_generalization_gate_seed20260649_breadth_100x3_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+     - seed20260649 visual review: all nine raw-camera/topdown keyframe sheets
+       inspected across setup, first contact, mid-push/coast, terminal arrival,
+       and final rest
      - claim boundary: this is robot-fidelity/sim-gate rehearsal evidence;
        `hardware_proven=false` until physical robot execution, onboard
        TensorRT proof, physical camera evidence, and field physics are recorded
