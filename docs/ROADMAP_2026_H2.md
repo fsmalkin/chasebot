@@ -1477,6 +1477,19 @@ recovery rows. The roadmap sequence stays the same: rerun provider-backed LLM
 routing when credentials are available, then run physical/onboard proof before
 claiming hardware transfer.
 
+Seed20260640 converts an infrastructure failure into stronger rough-gate
+evidence:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260640_rough_breadth_preflight_fix_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The first seed20260640 attempt stopped before motion because the base-controller
+preflight repaired the controller near the deadline but exited before a final
+active-state re-list. The runner now performs that final list check before
+failing closed. The repaired rerun classified `30` scenes with zero wrong fetch
+dispatches and passed nine executable rows across recovery/re-aim, Nav2-first,
+and fetch-ready owners. All nine visual packages passed, and frame-sequence
+review found the onboard camera and topdown geometry aligned. The roadmap
+sequence still prioritizes provider-backed LLM reruns and physical/onboard proof
+before hardware-transfer claims.
+
 Seed20260639 raises the stress level again with roughest-row selection:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
 The seed classified `30` generated scenes with zero wrong fetch dispatches, then

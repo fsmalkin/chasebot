@@ -118,6 +118,33 @@ def test_ensure_base_controller_active_records_repair_success(monkeypatch):
     assert "Configured and activated" in result["output_tail"]
 
 
+def test_ensure_base_controller_active_final_relist_after_repair_window(monkeypatch):
+    import golf_ball_circle_delivery_demo_runner as runner
+
+    calls = []
+
+    def fake_exec(compose_project, service, script, *, timeout_s):
+        calls.append((compose_project, service, script, timeout_s))
+        return (
+            0,
+            "ListControllers_Response(controller=[])\n"
+            "Configured and activated jetbot_base_controller\n"
+            "ListControllers_Response(controller=[ControllerState(name='jetbot_base_controller', state='active')])\n"
+            "BASE_CONTROLLER_ACTIVE=1\n",
+        )
+
+    monkeypatch.setattr(runner, "docker_exec_service", fake_exec)
+
+    result = ensure_base_controller_active(compose_project="project", timeout_s=1.0)
+
+    assert result["pass"] is True
+    assert result["repaired"] is True
+    script = calls[0][2]
+    final_check = script.split("done", maxsplit=1)[1]
+    assert "/controller_manager/list_controllers" in final_check
+    assert "BASE_CONTROLLER_ACTIVE=0" in final_check
+
+
 def test_ensure_base_controller_active_fails_closed_when_unavailable(monkeypatch):
     import golf_ball_circle_delivery_demo_runner as runner
 

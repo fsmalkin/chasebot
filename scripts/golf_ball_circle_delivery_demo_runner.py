@@ -647,6 +647,15 @@ while [ "$SECONDS" -le "$deadline" ]; do
   fi
   sleep 1
 done
+if timeout 6 ros2 service call /controller_manager/list_controllers controller_manager_msgs/srv/ListControllers "{{}}" >"$LIST_OUT" 2>&1; then
+  cat "$LIST_OUT"
+  if grep -Eq "name=['\\\"]?$CONTROLLER_NAME['\\\"]?.*state=['\\\"]?active['\\\"]?" "$LIST_OUT"; then
+    echo BASE_CONTROLLER_ACTIVE=1
+    exit 0
+  fi
+else
+  cat "$LIST_OUT" || true
+fi
 echo BASE_CONTROLLER_ACTIVE=0
 exit 2
 """

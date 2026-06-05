@@ -547,6 +547,20 @@ geometry, including two high-risk recovery rows. This strengthens the broad
 sim-gate UAT floor while leaving provider-backed LLM routing and physical
 hardware-transfer proof as the active gates.
 
+June 5 seed20260640 preflight repair and rough breadth UAT: seed `20260640`
+first exposed a base-controller preflight race in
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260640_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The first selected row stopped before motion after the controller was configured
+and activated near the deadline without a final active-state proof. The runner
+now performs a final `/controller_manager/list_controllers` check after repair
+before failing closed. The repaired rerun at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260640_rough_breadth_preflight_fix_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+classified `30` scenes with `wrong_fetch_dispatch_count=0`, selected nine
+rough executable rows, and passed `9/9` deliveries with `9/9` visual packages.
+The analyzer reports clean execution, setup, and contact with first-contact
+blockers `0`. Frame-sequence review of all nine raw-camera/topdown sheets
+matched the delivery geometry, including the repaired scene20 row.
+
 June 5 seed20260639 rough breadth UAT: the current route-owner stack now has a
 cleaner roughest-row seeded pass at
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

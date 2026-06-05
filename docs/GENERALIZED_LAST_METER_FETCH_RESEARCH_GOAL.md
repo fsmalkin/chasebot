@@ -1284,7 +1284,21 @@ push, and terminal delivery. The two high-risk recovery rows still showed
 coherent ball/target/robot geometry. Provider-backed LLM routing and
 physical/onboard hardware-transfer proof remain the active open gates.
 
-Seed20260639 adds the strongest roughest-row breadth evidence so far:
+Seed20260640 adds preflight-repair evidence plus another roughest-row breadth
+pass:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260640_rough_breadth_preflight_fix_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The first seed20260640 attempt exposed a base-controller preflight race: the
+controller was configured and activated near the deadline, but the runner exited
+before a final active-state re-list. The runner now re-lists controllers after
+repair before failing closed. The repaired gate classified `30` generated scenes
+with zero wrong fetch dispatches, then passed `9/9` executable rows across three
+`recovery_or_reaim`, three `nav2_reposition_first`, and three
+`fetch_ready_local` routes. Visual packages passed `9/9`, the analyzer reports
+clean execution/setup/contact, and frame-sequence review of all nine
+raw-camera/topdown sheets matched the delivery geometry. Provider-backed LLM
+routing and physical/onboard proof remain open.
+
+Seed20260639 adds the prior roughest-row breadth evidence:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
 The gate classified `30` generated scenes with zero wrong fetch dispatches. The
 live executable replay at

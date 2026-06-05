@@ -647,6 +647,45 @@ June 5, 2026 seed20260637 breadth UAT:
   unavailable, so provider-backed LLM routing and physical/onboard proof remain
   open.
 
+June 5, 2026 seed20260640 preflight repair rough breadth UAT:
+
+- Initial command:
+  `python scripts\fetch_planner_seeded_generalization_gate.py --campaign-id live_planner_seeded_generalization_gate_seed20260640_rough_breadth_20260605 --seed 20260640 --random-cases 30 --planner-mode llm_supervised_guarded --quality-order roughest --max-per-route 3 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail`
+- Initial result: planner gate `30/30` with `wrong_fetch_dispatch_count=0`,
+  then the first replay row,
+  `seed20260640_scene20_recovery_or_reaim`, stopped before motion. The
+  control preflight at
+  `artifacts/session/20260605T101202259947Z/golf_ball_circle_delivery/20260605T101447287352Z/control_preflight.json`
+  recorded `pass=false`, `BASE_CONTROLLER_ACTIVE=0`, and output showing
+  `Configured and activated jetbot_base_controller`.
+- Repair: `ensure_base_controller_active` now performs a final
+  `/controller_manager/list_controllers` check after the repair loop before it
+  fails closed. This preserves the active-controller proof requirement while
+  covering activation that lands near the preflight deadline.
+- Repaired command:
+  `python scripts\fetch_planner_seeded_generalization_gate.py --campaign-id live_planner_seeded_generalization_gate_seed20260640_rough_breadth_preflight_fix_20260605 --seed 20260640 --random-cases 30 --planner-mode llm_supervised_guarded --quality-order roughest --max-per-route 3 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail`
+- Repaired parent scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260640_rough_breadth_preflight_fix_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Repaired replay scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260640_rough_breadth_preflight_fix_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Repaired analyzer scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260640_rough_breadth_preflight_fix_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+- Repaired result: parent gate `pass=true`, `random_cases=30`,
+  `wrong_fetch_dispatch_count=0`, executable replay `9/9`, visual packages
+  `9/9`, analyzer execution/setup/contact clean, and first-contact blockers
+  `0`.
+- Route coverage: replay selected three `recovery_or_reaim`, three
+  `nav2_reposition_first`, and three `fetch_ready_local` rows. The generated
+  route mix also held seven `ambiguous_or_unsafe_no_go` and eight
+  `scan_or_perceive_first` scenes for route-withholding coverage.
+- Visual review: inspected all nine raw-camera/topdown keyframe sheets. The
+  onboard camera and topdown geometry agreed through setup, first contact,
+  push, and terminal delivery. The repaired scene20 row now drives, contacts,
+  and delivers.
+- Claim boundary: this is rough sim-gate route-owner UAT. Planner authority ran
+  through deterministic fallback because `OPENAI_API_KEY` was unavailable, so
+  provider-backed LLM routing and physical/onboard proof remain open.
+
 June 5, 2026 seed20260639 rough breadth UAT:
 
 - Command:
