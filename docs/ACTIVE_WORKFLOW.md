@@ -771,6 +771,28 @@ June 4, 2026 supervised seeded generalization promotion gate:
   summary can reuse already-validated child evidence after infrastructure retry
   without rerunning live sim or relaxing promotion requirements.
 
+June 5, 2026 roughest supervised-seed breadth check:
+
+- Parent gate with explicit authority downgrade:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Replay:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: visual UAT green and promotion evidence false. The gate delivered
+  `6/6` executable rows and produced `6/6` visual packages with `0`
+  first-contact blockers. Recovery and Nav2 rows were clean; the two direct
+  fetch-ready rows delivered near `0.198m` and carried
+  `ball_lateral_knock_away` plus `contact_trajectory_angle_error` watches.
+- Authority note: the execution shell lacked `OPENAI_API_KEY`, so the child
+  planner used deterministic fallback for all `30` generated scenes. The parent
+  gate now surfaces `planner_authority_ready=false`, provider status counts,
+  and effective planner-mode counts. For `llm_supervised_guarded` promotion,
+  require `planner_authority_ready=true`.
+- Visual review: inspected all six contact sheets across setup, contact,
+  push/coast, and delivery. The videos are plausible and match the analyzer
+  watches; there is no visual/geometry mismatch.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

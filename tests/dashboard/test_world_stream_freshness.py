@@ -482,8 +482,10 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Supervised seeded gate promotion green"
-    assert payload["latest_evidence"][0]["title"] == "Supervised seeded generalization gate is promotion green"
+    assert payload["status_label"] == "Promotion green with rough breadth watch"
+    assert payload["latest_evidence"][0]["title"] == (
+        "Roughest seed breadth pass exposes contact-watch and provider-authority gap"
+    )
     assert payload["latest_evidence"][0]["links"][0]["url"].endswith(
         "/fetch_planner_seeded_generalization_gate/scorecard.md"
     )

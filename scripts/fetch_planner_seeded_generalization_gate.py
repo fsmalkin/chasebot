@@ -194,6 +194,15 @@ def expected_executable_count(args: argparse.Namespace) -> int:
     return max(int(args.max_per_route), 1) * len(executable_routes)
 
 
+def planner_authority_ready(args: argparse.Namespace, planner_summary: dict[str, Any]) -> bool:
+    planner_mode = str(args.planner_mode or "")
+    if planner_mode == planner_gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED:
+        return bool(planner_summary.get("llm_supervised_ready", False))
+    if planner_mode == planner_gate.PLANNER_MODE_LLM_SHADOW:
+        return bool(planner_summary.get("llm_shadow_ready", False))
+    return True
+
+
 def promotion_ready(
     *,
     args: argparse.Namespace,
@@ -209,6 +218,7 @@ def promotion_ready(
         and not list(args.route or [])
         and bool(args.fresh_dashboard_session_per_run)
         and bool(planner_summary.get("pass", False))
+        and planner_authority_ready(args, planner_summary)
         and bool(replay_summary.get("pass", False))
         and bool(analyzer_summary.get("pass", False))
         and selected_count >= expected_count
@@ -334,7 +344,15 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
             "fail_count": planner_summary.get("fail_count", 0),
             "wrong_fetch_dispatch_count": planner_summary.get("wrong_fetch_dispatch_count", 0),
             "route_counts": planner_summary.get("route_counts", {}),
+            "provider_status_counts": planner_summary.get("provider_status_counts", {}),
+            "planner_mode_effective_counts": planner_summary.get("planner_mode_effective_counts", {}),
+            "llm_shadow_ready": bool(planner_summary.get("llm_shadow_ready", False)),
+            "llm_shadow_provider_ok_count": planner_summary.get("llm_shadow_provider_ok_count", 0),
+            "llm_supervised_ready": bool(planner_summary.get("llm_supervised_ready", False)),
+            "llm_supervised_accept_count": planner_summary.get("llm_supervised_accept_count", 0),
+            "llm_supervised_veto_count": planner_summary.get("llm_supervised_veto_count", 0),
         },
+        "planner_authority_ready": planner_authority_ready(args, planner_summary),
         "replay_summary": {
             "selected_count": replay_summary.get("selected_count", 0),
             "mission_pass_count": replay_summary.get("mission_pass_count", 0),
@@ -376,6 +394,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- expected_executable_count: `{summary.get('expected_executable_count', '')}`",
         f"- pass: `{summary.get('pass', False)}`",
         f"- promotion_evidence: `{summary.get('promotion_evidence', False)}`",
+        f"- planner_authority_ready: `{summary.get('planner_authority_ready', False)}`",
         f"- interpretation: `{summary.get('milestone_interpretation', '')}`",
         "",
         "## Child Evidence",

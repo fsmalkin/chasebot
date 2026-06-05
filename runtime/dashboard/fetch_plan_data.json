@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 4, 2026, 8:18 PM ET",
+  "updated_label": "Updated June 4, 2026, 8:58 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Supervised seeded gate promotion green",
-  "status_detail": "The planner-gated fetch moonshot now has provider-backed supervised routing, broad generated-seed visual UAT, and a supervised seeded executable promotion gate. Seed 20260633 passed planner routing 30/30, executable replay 6/6, browser-watchable visual packages 6/6, clean execution/setup/contact analysis, and promotion_evidence=true. Saved anchors and deterministic seeded gates remain prior supporting evidence.",
+  "status_label": "Promotion green with rough breadth watch",
+  "status_detail": "The planner-gated fetch moonshot remains promotion-green on the provider-backed supervised seed 20260633 gate. A fresh roughest-order seed 20260634 breadth pass added six more browser-watchable deliveries across recovery/re-aim, Nav2-first, and fetch-ready routes. That pass is visual UAT evidence, not promotion evidence: the current shell lacked OPENAI_API_KEY, so the supervised planner fell back to deterministic guards, and the two fetch-ready rows delivered with contact-angle/lateral-slip watches.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,55 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Roughest seed breadth pass exposes contact-watch and provider-authority gap",
+      "status": "seed 20260634: 30/30 planner fallback classifications, 6/6 deliveries, promotion false",
+      "tone": "watch",
+      "summary": "Seed 20260634 deliberately selected the roughest two executable rows for each live route family. Recovery/re-aim and Nav2-first rows delivered cleanly, and both direct fetch-ready rows delivered inside the 0.300m contract with browser-watchable packages. The useful signal is evidence hygiene and contact polish: the planner provider was skipped because this shell had no OPENAI_API_KEY, and the two fetch-ready rows carried ball_lateral_knock_away plus contact_trajectory_angle_error watches despite closest approach staying near 0.198m.",
+      "metrics": [
+        "Parent gate: pass=true; promotion_evidence=false; planner_authority_ready=false; interpretation=planner_routed_seeded_generalization_visual_uat_green",
+        "Planner child: pass=30/30; wrong_fetch=0; provider_status_counts={skipped_missing_openai_api_key: 30}; effective mode={deterministic_fallback: 30}",
+        "Executable replay: selected=6; mission_pass=6; visual_package_pass=6",
+        "Route coverage: recovery_or_reaim=2/2 clean, nav2_reposition_first=2/2 clean, fetch_ready_local=2/2 delivered with contact watches",
+        "Analyzer: mission green, visual green, setup clean, execution watch=2, contact watch=2, first-contact blockers=0",
+        "Visual review: six contact sheets show plausible setup/contact/push/delivery; the two fetch-ready sheets match the lateral-slip watch rather than a delivery miss"
+      ],
+      "links": [
+        {
+          "label": "Seed 20260634 parent scorecard with authority-ready downgrade",
+          "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260634 rough replay scorecard",
+          "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_20260605_replay/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Seed 20260634 analyzer scorecard",
+          "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Fetch-ready watch onboard proof",
+          "url": "/artifacts/session/20260605T004046777671Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Fetch-ready watch contact sheet",
+          "url": "/artifacts/session/20260605T004046777671Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Nav2 rough onboard proof",
+          "url": "/artifacts/session/20260605T003604463392Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Recovery rough onboard proof",
+          "url": "/artifacts/session/20260605T003148312011Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Provider-backed promotion parent scorecard",
+          "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260633_reuse_promotion_20260604/fetch_planner_seeded_generalization_gate/scorecard.md"
+        }
+      ],
+      "preview_image": "/artifacts/session/20260605T004046777671Z/visual/keyframe_review_contact_sheet.png"
+    },
     {
       "title": "Supervised seeded generalization gate is promotion green",
       "status": "seed 20260633: planner 30/30, executable replay 6/6, visual packages 6/6",
@@ -1931,6 +1980,54 @@
   ],
   "recent_video_proof": [
     {
+      "title": "Seed 20260634 roughest breadth UAT bundle",
+      "summary": "Six fresh browser-watchable sessions exercise the roughest selected executable rows from seed 20260634. Treat the bundle as visual breadth evidence with contact-watch and provider-authority caveats.",
+      "primary_video": {
+        "label": "Fetch-ready watch onboard raw camera browser MP4",
+        "url": "/artifacts/session/20260605T004046777671Z/visual/raw_camera_browser.mp4"
+      },
+      "proves": "The deterministic route owners still deliver the roughest selected recovery, Nav2, and fetch-ready rows inside the 0.300m contract after visual frame review.",
+      "limits": "This bundle is not provider-backed LLM promotion evidence because the planner child skipped the provider for missing OPENAI_API_KEY. The two fetch-ready rows delivered with lateral/contact-angle watches, so contact smoothness remains active work.",
+      "links": [
+        {
+          "label": "Parent scorecard",
+          "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Analyzer scorecard",
+          "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Recovery A onboard MP4",
+          "url": "/artifacts/session/20260605T002900976592Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Recovery B onboard MP4",
+          "url": "/artifacts/session/20260605T003148312011Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Nav2 A onboard MP4",
+          "url": "/artifacts/session/20260605T003409978373Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Nav2 B onboard MP4",
+          "url": "/artifacts/session/20260605T003604463392Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Fetch-ready A onboard MP4",
+          "url": "/artifacts/session/20260605T003832060418Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Fetch-ready B onboard MP4",
+          "url": "/artifacts/session/20260605T004046777671Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Fetch-ready B contact sheet",
+          "url": "/artifacts/session/20260605T004046777671Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
       "title": "Hard mixed-scenario UAT bundle",
       "summary": "Ten named hard cases cover wide-angle fetch-ready, opposite-side Nav2-first, large-angle recovery, scan/defer, and safe no-go behavior.",
       "primary_video": {
@@ -3796,6 +3893,14 @@
   ],
   "watch_areas": [
     {
+      "label": "Supervised provider authority",
+      "body": "Seed20260634 proved the parent gate now downgrades supervised runs when the provider is unavailable. Restore provider credentials for the shell before claiming LLM-backed route authority on the next rough seed."
+    },
+    {
+      "label": "Rough fetch-ready contact smoothness",
+      "body": "Seed20260634 fetch-ready scenes 04 and 28 delivered at about 0.198m but carried ball_lateral_knock_away and contact_trajectory_angle_error flags. Treat these as contact-smoothness work after provider-backed repeatability is refreshed."
+    },
+    {
       "label": "Nav2-first setup abort fallback",
       "body": "Seed20260629 scene01 failed once when Nav2 aborted before contact and the prior fallback envelope rejected the otherwise-safe row at 1.222m robot-ball separation. The repaired full parent gate is green, and clean pre-contact Nav2 abort fallback now admits rows out to 1.300m while preserving ball-motion, lateral, yaw, and ball-target bounds. Keep scene01 in regression coverage."
     },
@@ -3829,9 +3934,10 @@
     }
   ],
   "next_steps": [
-    "Run llm_supervised_guarded dry gates over the seven-seed manifest, then package the supervised-live route-selection threshold and hardware-transfer review.",
+    "Restore provider credentials in the execution shell and rerun one roughest-order llm_supervised_guarded seed so planner_authority_ready=true on fresh evidence.",
+    "Keep seed20260634 scenes 04 and 28 as local-fetch contact-smoothness watch rows; improve only after provider-backed repeatability confirms the watch rate.",
     "Draft the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, model provenance checks, and visual-evidence capture on robot hardware.",
-    "Keep the seven-seed manifest, two rough mixed-family UAT packages, and hard mixed matrix as the preservation bar before crediting route-owner, recovery-window, visual-packaging, or contact-servo changes.",
+    "Keep the provider-backed seed20260633 promotion gate, hard mixed matrix, three supervised generated-seed UAT batches, and rough seed20260634 watch bundle as the current preservation bar.",
     "Measure the runtime cost of the longer recovery window and decide whether hardware UAT needs a tighter progress-based timeout instead of a fixed duration.",
     "Investigate container-side ffmpeg availability as evidence hardening; host-side browser video recovery is working but remains a packaging dependency."
   ],

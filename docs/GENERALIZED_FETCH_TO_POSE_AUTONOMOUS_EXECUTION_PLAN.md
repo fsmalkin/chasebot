@@ -745,6 +745,24 @@ Clip-review reframe, later June 1:
     videos for guarded-live seeded case04.
 26. Freeze reproduced seeded/random failures into named layouts before tuning.
 
+June 5 roughest-seed breadth and authority update: seed `20260634` adds a
+roughest-order breadth pass for the planner-routed stack:
+`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The replay delivered `6/6` executable rows with `6/6` browser-watchable visual
+packages across `recovery_or_reaim`, `nav2_reposition_first`, and
+`fetch_ready_local`. The two recovery rows and two Nav2 rows were clean. The
+two fetch-ready rows delivered inside the `0.300m` contract and carried
+`ball_lateral_knock_away` plus `contact_trajectory_angle_error` watches, which
+keeps direct local-fetch contact smoothness active.
+
+The same run exposed an evidence-authority gap. The shell lacked
+`OPENAI_API_KEY`, so `llm_supervised_guarded` fell back to deterministic guard
+routing for all `30` planner rows. The parent seeded gate now reports
+`planner_authority_ready=false` and keeps `promotion_evidence=false` whenever a
+supervised run lacks provider-backed authority. The next provider-backed proof
+should restore credentials in the execution shell and rerun one roughest-order
+supervised seed before expanding contact-control changes.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches

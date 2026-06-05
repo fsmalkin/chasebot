@@ -1108,6 +1108,25 @@ and passed `4/4` route-only no-fetch proofs. This strengthens the current
 architecture path: LLM-level routing plus deterministic guards can feed live
 route owners, while broader live batches and canonical gates remain open.
 
+June 5 roughest-seed authority and contact-watch update: seed `20260634`
+extends breadth with a roughest-order live replay:
+`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+It passed the visual UAT surface with `6/6` deliveries and `6/6` visual
+packages across two recovery, two Nav2-first, and two fetch-ready rows. Visual
+frame review agreed with telemetry. Recovery and Nav2 rows stayed clean; the
+direct fetch-ready rows delivered near `0.198m` and kept
+`ball_lateral_knock_away` / `contact_trajectory_angle_error` watches.
+
+This run also tightened the evidence ladder. The current shell had no
+`OPENAI_API_KEY`, so the supervised planner child used deterministic fallback
+for all `30` generated scenes. The seeded parent gate now surfaces
+`planner_authority_ready=false`, includes provider status counts in the parent
+scorecard, and blocks promotion evidence when `llm_supervised_guarded` lacks
+provider-backed authority. The architecture direction remains planner-gated
+route ownership with deterministic execution; the next proof should restore
+provider credentials and rerun a roughest-order supervised seed before contact
+smoothness work expands.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

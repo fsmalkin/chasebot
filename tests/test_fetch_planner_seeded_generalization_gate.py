@@ -121,6 +121,53 @@ def test_planner_seeded_generalization_promotion_requires_full_clean_live_surfac
     )
 
 
+def test_planner_seeded_generalization_supervised_promotion_requires_provider_authority():
+    args = _args(
+        dry_run=False,
+        fresh_dashboard_session_per_run=True,
+        planner_mode=planner_gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED,
+    )
+    replay_summary = {
+        "pass": True,
+        "selected_count": 6,
+        "mission_pass_count": 6,
+        "visual_package_pass_count": 6,
+    }
+    analyzer_summary = {
+        "pass": True,
+        "execution_quality_status": "clean",
+        "setup_quality_status": "clean",
+        "contact_quality_status": "clean",
+        "first_contact_blocker_count": 0,
+    }
+    missing_provider_summary = {
+        "pass": True,
+        "provider_status_counts": {"skipped_missing_openai_api_key": 30},
+        "llm_supervised_ready": False,
+    }
+    provider_backed_summary = {
+        "pass": True,
+        "provider_status_counts": {"ok": 30},
+        "llm_supervised_ready": True,
+    }
+
+    assert not seeded_gate.planner_authority_ready(args, missing_provider_summary)
+    assert not seeded_gate.promotion_ready(
+        args=args,
+        planner_summary=missing_provider_summary,
+        replay_summary=replay_summary,
+        analyzer_summary=analyzer_summary,
+    )
+
+    assert seeded_gate.planner_authority_ready(args, provider_backed_summary)
+    assert seeded_gate.promotion_ready(
+        args=args,
+        planner_summary=provider_backed_summary,
+        replay_summary=replay_summary,
+        analyzer_summary=analyzer_summary,
+    )
+
+
 def test_planner_seeded_generalization_extracts_first_replay_failure():
     failure = seeded_gate.first_replay_failure(
         {
@@ -219,6 +266,7 @@ def test_seeded_gate_can_reuse_child_summaries_for_parent_promotion(tmp_path, mo
 
     assert summary["pass"] is True
     assert summary["promotion_evidence"] is True
+    assert summary["planner_authority_ready"] is True
     assert summary["milestone_interpretation"] == "planner_routed_seeded_generalization_promotion_green"
     assert summary["planner_summary_path"].endswith("/planner/fetch_planner_handoff_gate/gate_summary.json")
     assert summary["replay_summary_path"].endswith("/replay/fetch_planner_route_replay_batch/batch_summary.json")

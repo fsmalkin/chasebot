@@ -1321,3 +1321,25 @@ Acceptance:
 1. replay comparison report for candidate onboard models against visit-and-gather traces
 2. shadow-lane evidence that the top local model makes comparable high-level decisions
 3. live end-to-end gather proof with the promoted local planner, or a documented decision to stay cloud-backed for this milestone
+
+## June 5, 2026 Fetch-To-Pose Moonshot Checkpoint
+
+The planner-routed fetch moonshot remains on the current architecture path. The
+provider-backed supervised seed `20260633` gate is still the promotion-green
+milestone proof. A new roughest-order seed `20260634` pass adds useful breadth:
+six executable rows delivered with browser-watchable visual packages, including
+two recovery rows, two Nav2-first rows, and two direct fetch-ready rows.
+
+The checkpoint also sets the next sequencing rule. Seed `20260634` ran in a
+shell without `OPENAI_API_KEY`, so the supervised planner child used
+deterministic fallback and the parent gate now reports
+`planner_authority_ready=false`. That run is visual UAT breadth evidence, while
+provider-backed LLM authority remains tied to the earlier seed `20260633` gate.
+The two direct fetch-ready rows delivered near `0.198m` and carried lateral
+knock-away plus contact-trajectory watches, so contact smoothness stays on the
+watchlist.
+
+Next work should restore provider credentials for the execution shell, rerun one
+roughest-order `llm_supervised_guarded` seed with `planner_authority_ready=true`,
+and then choose between local-fetch contact smoothness and hardware-transfer
+packaging. A broad architecture reset is not warranted by the current evidence.
