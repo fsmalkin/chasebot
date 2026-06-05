@@ -482,8 +482,14 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Seed 20260647 mixed all-routes 3x UAT is green"
+    assert payload["status_label"] == "Seed 20260647 green; provider rerun preflight is waiting on OPENAI_API_KEY"
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
+    assert "Provider rerun preflight is waiting on OPENAI_API_KEY" in evidence_by_title
+    assert evidence_by_title["Provider rerun preflight is waiting on OPENAI_API_KEY"]["tone"] == "yellow"
+    assert any(
+        link["url"].endswith("/fetch_planner_provider_rerun_readiness/scorecard.md")
+        for link in evidence_by_title["Provider rerun preflight is waiting on OPENAI_API_KEY"]["links"]
+    )
     assert "Seed 20260647 mixed all-routes 3x UAT is green" in evidence_by_title
     assert "Seed 20260646 mixed all-routes 3x UAT is green" in evidence_by_title
     assert "Seed 20260645 mixed all-routes UAT is green" in evidence_by_title

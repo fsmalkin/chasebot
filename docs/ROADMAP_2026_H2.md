@@ -1523,6 +1523,14 @@ uses seed20260647 as the widest sim-gate route-owner UAT package, while the
 next evidence gates remain provider-backed LLM routing and physical/onboard
 proof.
 
+Provider-rerun readiness now has its own scorecard:
+`artifacts/session/provider_rerun_readiness_seed20260647_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`.
+The check confirms the seed20260647 fallback evidence and dashboard UAT package
+are ready for a provider-backed rerun, then blocks on `missing_openai_api_key`.
+The roadmap sequence is now credential restore, provider-backed seed20260647
+planner gate, explicit all-routes replay, analyzer comparison, and then
+physical/onboard rehearsal.
+
 The fresh rehearsal ladder is now green on the sim-gate runtime target:
 `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
 `artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,

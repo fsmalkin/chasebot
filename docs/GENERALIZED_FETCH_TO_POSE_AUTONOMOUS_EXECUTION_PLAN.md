@@ -1140,6 +1140,15 @@ contracts. Seed20260647 is now the widest sim-gate route-owner UAT package for
 the planner-routed moonshot path; provider-backed LLM routing and
 physical/onboard proof remain the next gates.
 
+Provider-rerun readiness is now explicit:
+`artifacts/session/provider_rerun_readiness_seed20260647_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`.
+The preflight verifies that seed20260647 fallback evidence and the dashboard
+UAT bundle are ready for a provider-backed rerun, then fails closed on the
+current machine because `OPENAI_API_KEY` is absent. Treat this as the active
+provider gate: add credentials, rerun the generated `llm_supervised_guarded`
+seed20260647 commands, then compare provider agreement, guard vetoes, and the
+same all-routes visual replay before changing any planner-authority claim.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches

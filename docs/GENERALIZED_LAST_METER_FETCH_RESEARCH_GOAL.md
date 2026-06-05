@@ -1386,6 +1386,15 @@ contract. This is the strongest current sim-gate route-owner UAT package for
 the planner-routed moonshot path. Provider-backed LLM routing and
 physical/onboard proof remain open.
 
+The provider-rerun preflight makes the next LLM gate concrete:
+`artifacts/session/provider_rerun_readiness_seed20260647_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`.
+The preflight passes the fallback-evidence and dashboard checks, then blocks on
+`missing_openai_api_key`. The broad plan stays unchanged: seed20260647 is the
+baseline for the next provider-backed `llm_supervised_guarded` rerun, and
+provider authority remains unproven until that rerun produces provider-ok
+decisions, guard agreement, zero wrong fetch dispatches, and the same
+browser-watchable all-routes replay.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

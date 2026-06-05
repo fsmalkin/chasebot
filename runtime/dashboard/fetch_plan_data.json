@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 2:20 PM ET",
+  "updated_label": "Updated June 5, 2026, 2:45 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Seed 20260647 mixed all-routes 3x UAT is green",
-  "status_detail": "Seed20260647 is the latest and widest fresh mixed-route sim-gate checkpoint. The planner classified 80 generated scenes across all five route families with zero wrong fetch dispatches under deterministic fallback because OPENAI_API_KEY is missing. The mixed all-routes replay passed 15/15 route contracts: 9/9 executable deliveries plus 6/6 planner-only scan/no-go abstentions, with 15/15 visual packages and frame-sequence review of every keyframe sheet. Provider-backed LLM routing and physical/onboard proof remain open, so hardware_proven stays false.",
+  "status_label": "Seed 20260647 green; provider rerun preflight is waiting on OPENAI_API_KEY",
+  "status_detail": "Seed20260647 remains the latest and widest fresh mixed-route sim-gate checkpoint: 80 generated planner scenes, zero wrong fetch dispatches, and 15/15 mixed all-route visual replay. The provider-rerun readiness preflight confirms the fallback evidence and dashboard bundle are ready, then fails closed because OPENAI_API_KEY is missing. Provider-backed LLM routing and physical/onboard proof remain open, so hardware_proven stays false.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,33 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Provider rerun preflight is waiting on OPENAI_API_KEY",
+      "status": "blocked prerequisite: seed20260647 fallback evidence and dashboard are ready; provider key is missing",
+      "tone": "yellow",
+      "summary": "The new provider-rerun readiness preflight checks whether the latest seed20260647 mixed-route package can be rerun with provider-backed llm_supervised_guarded routing. Current fallback evidence is green: 80 generated scenes, all five route families represented, zero wrong fetch dispatches, and the dashboard UAT bundle has 15 browser-watchable samples. The preflight fails closed because OPENAI_API_KEY is absent, so provider-backed planner authority remains unproven and hardware_proven stays false.",
+      "metrics": [
+        "Preflight: provider_rerun_ready=false; readiness_level=provider_rerun_blocked",
+        "Blocker: missing_openai_api_key",
+        "Fallback evidence: seed=20260647; random_cases=80; route families=5/5; wrong_fetch_dispatch_count=0",
+        "Dashboard evidence: status references seed20260647; uat_sample_count=15",
+        "Claim boundary: provider_backed_authority_proven=false; promotion_evidence=false; hardware_proven=false"
+      ],
+      "links": [
+        {
+          "label": "Provider rerun readiness scorecard",
+          "url": "/artifacts/session/provider_rerun_readiness_seed20260647_20260605/fetch_planner_provider_rerun_readiness/scorecard.md"
+        },
+        {
+          "label": "Provider rerun readiness summary",
+          "url": "/artifacts/session/provider_rerun_readiness_seed20260647_20260605/fetch_planner_provider_rerun_readiness/provider_rerun_readiness_summary.json"
+        },
+        {
+          "label": "Seed 20260647 mixed all-routes UAT bundle",
+          "url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        }
+      ]
+    },
     {
       "title": "Seed 20260647 mixed all-routes 3x UAT is green",
       "status": "fresh widest seed: 80-scene planner breadth plus 15/15 all-route visual replay",
@@ -5740,8 +5767,8 @@
     }
   ],
   "next_steps": [
-    "Rerun the seed20260647 mixed all-routes 3x gate with provider-backed LLM routing once OPENAI_API_KEY is available, then compare route agreement and veto reasons against deterministic fallback.",
-    "Run the same mixed all-routes evidence ladder on physical/onboard hardware: stack smoke, saved anchors, then seed20260647 route-family rehearsal.",
+    "Provide OPENAI_API_KEY, then run the generated provider-rerun commands from the provider readiness scorecard for seed20260647.",
+    "After provider-backed routing passes, run the same mixed all-routes evidence ladder on physical/onboard hardware: stack smoke, saved anchors, then seed20260647 route-family rehearsal.",
     "Inspect raw_camera, topdown_telemetry, world_stream, and keyframe sheets across each physical/onboard run before trusting telemetry.",
     "Keep hardware_proven=false until physical robot execution, onboard TensorRT, physical camera evidence, and field-physics proof are recorded."
   ],

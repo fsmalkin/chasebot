@@ -3182,6 +3182,13 @@ Milestone 3 pass criteria include:
      - claim boundary: this is fresh sim-gate breadth evidence under
        deterministic fallback; provider-backed LLM routing and physical/onboard
        proof remain open
+     - provider-rerun readiness:
+       `artifacts/session/provider_rerun_readiness_seed20260647_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`
+     - provider gate status: fallback evidence and dashboard checks are ready;
+       the current blocker is `missing_openai_api_key`
+     - next provider sequence: restore `OPENAI_API_KEY`, run the generated
+       seed20260647 `llm_supervised_guarded` planner gate, run explicit
+       all-routes replay, then analyze provider agreement and guard vetoes
 30. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/scorecard.md`
