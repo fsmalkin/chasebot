@@ -492,6 +492,10 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert evidence_by_title["Seed 20260650 fresh breadth UAT is green"]["tone"] == "green"
     assert evidence_by_title["Seed 20260649 fresh breadth UAT is green"]["tone"] == "green"
     assert evidence_by_title["Seed 20260648 hardware rehearsal is green"]["tone"] == "green"
+    watch_by_label = {item["label"]: item for item in payload["watch_areas"]}
+    assert "300 generated planner scenes" in watch_by_label["Provider-backed LLM routing rerun"]["body"]
+    assert payload["uat_review_bundle"]["title"] == "Seed 20260648 mixed all-routes video bundle"
+    assert "three-seed rollup" in payload["uat_review_bundle"]["summary"]
     assert any(
         link["url"].endswith("/fetch_hardware_transfer_readiness/scorecard.md")
         for link in evidence_by_title["Seed 20260648 hardware rehearsal is green"]["links"]

@@ -5980,7 +5980,7 @@
     },
     {
       "label": "Provider-backed LLM routing rerun",
-      "body": "Seeds 20260636 through 20260648 prove the deterministic guarded route-owner stack across fresh broad seeds after harness repairs. Seed20260648 is the widest current sim-gate route-owner UAT package: 100 generated planner scenes plus three visual rows per route family. Provider status stayed skipped_missing_openai_api_key, so restore OPENAI_API_KEY and rerun the planner gate before claiming current provider-backed authority."
+      "body": "The deterministic guarded route-owner stack now has a three-seed breadth rollup over seeds 20260648, 20260649, and 20260650: 300 generated planner scenes, 27/27 executable visual deliveries, zero wrong fetch dispatches, zero contact watches, and zero first-contact blockers. Provider status stayed skipped_missing_openai_api_key, so restore OPENAI_API_KEY and rerun the planner gate before claiming current provider-backed authority."
     },
     {
       "label": "Base-controller fetch preflight",
@@ -6029,15 +6029,15 @@
   ],
   "next_steps": [
     "Record provider-backed rerun evidence after OPENAI_API_KEY is available, using seed20260650 plus the seed20260648 hardware-rehearsal baseline for comparison.",
-    "Repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT and physical camera evidence.",
-    "Provide OPENAI_API_KEY, then run the generated provider-rerun commands from the provider readiness scorecard for seed20260648.",
-    "After provider-backed routing passes, repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT and physical camera evidence.",
+    "Repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT, physical camera evidence, and field-physics notes.",
+    "Provide OPENAI_API_KEY, then run the provider-rerun commands against the current breadth baseline and compare provider agreement, guard vetoes, and route decisions.",
+    "After provider-backed routing passes, rerun the mixed all-routes evidence ladder on physical/onboard hardware.",
     "Inspect raw_camera, topdown_telemetry, world_stream, and keyframe sheets across each physical/onboard run before trusting telemetry.",
     "Keep hardware_proven=false until physical robot execution, onboard TensorRT, physical camera evidence, and field-physics proof are recorded."
   ],
   "uat_review_bundle": {
-    "title": "Seed 20260648 mixed all-routes 3x UAT bundle",
-    "summary": "Browser-watchable proof from the widest fresh mixed-route sim seed so far: six planner-only abstentions and nine executable deliveries across all route families, with every keyframe sheet visually reviewed.",
+    "title": "Seed 20260648 mixed all-routes video bundle",
+    "summary": "Browser-watchable proof from the current hardware-rehearsal seed: six planner-only abstentions and nine executable deliveries across all route families, with every keyframe sheet visually reviewed. The broader deterministic breadth baseline is now the three-seed rollup over seeds 20260648 through 20260650.",
     "route_samples": [
       {
         "label": "seed20260648_scene01_ambiguous_or_unsafe_no_go",
