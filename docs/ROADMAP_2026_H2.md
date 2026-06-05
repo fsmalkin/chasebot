@@ -1477,6 +1477,17 @@ recovery rows. The roadmap sequence stays the same: rerun provider-backed LLM
 routing when credentials are available, then run physical/onboard proof before
 claiming hardware transfer.
 
+Seed20260643 raises the broad rough-gate evidence bar:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The seed classified `50` scenes with zero wrong fetch dispatches, replayed
+twelve rough executable rows across four recovery/re-aim, four Nav2-first, and
+four fetch-ready owners, and passed all twelve deliveries with browser-watchable
+visual packages. Closest approaches stayed in `0.191m..0.198m`, and
+frame-sequence review found the onboard camera and topdown geometry aligned.
+The roadmap sequence now has a stronger sim-gate UAT floor; provider-backed LLM
+reruns and physical/onboard proof remain the active gates before
+hardware-transfer claims.
+
 Seed20260642 adds a fresh broad pass through the repaired rough-gate lane:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260642_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
 The seed classified `30` scenes with zero wrong fetch dispatches, replayed every

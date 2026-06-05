@@ -647,6 +647,33 @@ June 5, 2026 seed20260637 breadth UAT:
   unavailable, so provider-backed LLM routing and physical/onboard proof remain
   open.
 
+June 5, 2026 seed20260643 expanded rough breadth UAT:
+
+- Command:
+  `python scripts\fetch_planner_seeded_generalization_gate.py --campaign-id live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605 --seed 20260643 --random-cases 50 --planner-mode llm_supervised_guarded --quality-order roughest --max-per-route 4 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail`
+- Parent scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Replay scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: parent gate `pass=true`, `random_cases=50`,
+  `wrong_fetch_dispatch_count=0`, executable replay `12/12`, visual packages
+  `12/12`, analyzer execution/setup/contact clean, and first-contact blockers
+  `0`.
+- Route coverage: replay selected four `recovery_or_reaim`, four
+  `nav2_reposition_first`, and four `fetch_ready_local` rows. The generated
+  route mix also held seven `ambiguous_or_unsafe_no_go` and eight
+  `scan_or_perceive_first` scenes for route-withholding coverage.
+- Visual review: inspected all twelve raw-camera/topdown keyframe sheets. The
+  onboard camera and topdown geometry agreed through setup, first contact,
+  push, and terminal delivery. Closest approaches stayed in
+  `0.191m..0.198m`.
+- Claim boundary: this is the broadest rough sim-gate route-owner UAT pass so
+  far. Planner authority ran through deterministic fallback because
+  `OPENAI_API_KEY` was unavailable, so provider-backed LLM routing and
+  physical/onboard proof remain open.
+
 June 5, 2026 seed20260642 rough breadth UAT:
 
 - Command:
