@@ -747,7 +747,7 @@ Clip-review reframe, later June 1:
 
 June 5 roughest-seed breadth and authority update: seed `20260634` adds a
 roughest-order breadth pass for the planner-routed stack:
-`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_provider_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
 The replay delivered `6/6` executable rows with `6/6` browser-watchable visual
 packages across `recovery_or_reaim`, `nav2_reposition_first`, and
 `fetch_ready_local`. The two recovery rows and two Nav2 rows were clean. The
@@ -765,6 +765,26 @@ false because one `scan_or_perceive_first` row used deterministic fallback for
 authority, consistent with the LLM-supervised evidence rollup. The next control
 work is direct local-fetch contact smoothness, while hardware-transfer planning
 can start from the provider-backed guarded route-owner stack.
+
+The targeted contact-smoothing recheck is now clean:
+`artifacts/session/live_fetch_ready_contact_smoothing_recheck_seed20260634_20260605/fetch_planner_route_uat_analyzer/scorecard.md`.
+Planner-route defaults apply `line_servo_contact_lateral_ready_m=0.024` only to
+`fetch_ready_local` layouts whose route-quality metadata requests
+`pre_contact_smoothing`; clean fetch-ready layouts keep `0.028m`. The two rough
+fetch-ready watch rows reran as `2/2` deliveries with clean execution, setup,
+contact, and first-contact metrics. Scene04 max ball lateral error improved
+from `0.049686m` to `0.000224m`; scene28 improved from `0.058755m` to
+`0.000273m`. Contact-angle error dropped from roughly `-7deg` to near `0deg`
+on both rows.
+
+The full rough executable route-family preservation rerun also passed:
+`artifacts/session/live_fetch_ready_contact_smoothing_full_rough_analysis_seed20260634_20260605/fetch_planner_route_uat_analyzer/scorecard.md`.
+It delivered `6/6` missions and `6/6` browser-watchable visual packages across
+two recovery/re-aim, two Nav2-first, and two fetch-ready rows. The analyzer
+reports clean execution, setup, and contact quality with `0` contact watches and
+`0` first-contact blockers. Treat this as rough route-owner UAT preservation
+evidence with `promotion_evidence=false`; the next canonical seeded/saved-layout
+promotion refresh should include the smoothing default.
 
 ## Gates
 

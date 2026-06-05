@@ -406,15 +406,40 @@ def apply_planner_route_execution_defaults(
         route_sample_duration_s = 74.0
     _set_route_default(args, explicit_args, "drive_duration_s", route_drive_duration_s, "--drive-duration-s")
     _set_route_default(args, explicit_args, "sample_duration_s", route_sample_duration_s, "--sample-duration-s")
+    route_quality = (
+        random_draw.get("route_quality", {})
+        if isinstance(random_draw.get("route_quality"), dict)
+        else target_layout.get("route_quality", {})
+        if isinstance(target_layout.get("route_quality"), dict)
+        else {}
+    )
     _set_route_default(args, explicit_args, "line_servo_push_linear_x_mps", 0.055, "--line-servo-push-linear-x-mps")
     _set_route_default(args, explicit_args, "line_servo_max_angular_z_rps", 0.18, "--line-servo-max-angular-z-rps")
     _set_route_default(args, explicit_args, "line_servo_yaw_gain", 1.2, "--line-servo-yaw-gain")
     _set_route_default(args, explicit_args, "line_servo_min_linear_x_mps", 0.012, "--line-servo-min-linear-x-mps")
+    route_quality_recommendations = route_quality.get("recommendations") if isinstance(route_quality, dict) else []
+    route_quality_flags = route_quality.get("flags") if isinstance(route_quality, dict) else []
+    route_quality_status = str(route_quality.get("predicted_contact_quality", "") or "").strip()
+    pre_contact_smoothing_requested = bool(
+        route_label == ROUTE_FETCH_READY
+        and (
+            (
+                isinstance(route_quality_recommendations, list)
+                and "pre_contact_smoothing" in {str(item) for item in route_quality_recommendations}
+            )
+            or (
+                isinstance(route_quality_flags, list)
+                and "initial_lateral_setup_debt" in {str(item) for item in route_quality_flags}
+            )
+            or route_quality_status == "watch"
+        )
+    )
+    contact_lateral_ready_default_m = 0.024 if pre_contact_smoothing_requested else 0.028
     _set_route_default(
         args,
         explicit_args,
         "line_servo_contact_lateral_ready_m",
-        0.028,
+        contact_lateral_ready_default_m,
         "--line-servo-contact-lateral-ready-m",
     )
     _set_route_default(
@@ -464,17 +489,12 @@ def apply_planner_route_execution_defaults(
         "route_admissibility": route_admissibility,
         "drive_mode": str(args.drive_mode),
         "nav2_reposition_before_fetch": bool(args.nav2_reposition_before_fetch),
-        "route_quality": (
-            random_draw.get("route_quality", {})
-            if isinstance(random_draw.get("route_quality"), dict)
-            else target_layout.get("route_quality", {})
-            if isinstance(target_layout.get("route_quality"), dict)
-            else {}
-        ),
+        "route_quality": route_quality,
         "line_servo_quality_defaults": {
             "min_linear_x_mps": round(float(args.line_servo_min_linear_x_mps), 6),
             "contact_lateral_ready_m": round(float(args.line_servo_contact_lateral_ready_m), 6),
             "contact_yaw_ready_deg": round(float(args.line_servo_contact_yaw_ready_deg), 6),
+            "pre_contact_smoothing_requested": bool(pre_contact_smoothing_requested),
         },
         "robot_pose": {
             "x": round(float(args.robot_x), 6),

@@ -198,10 +198,35 @@ def test_planner_route_defaults_turn_frozen_fetch_layout_into_line_servo():
     assert args.line_servo_min_linear_x_mps == pytest.approx(0.012)
     assert args.line_servo_contact_lateral_ready_m == pytest.approx(0.028)
     assert args.line_servo_contact_yaw_ready_deg == pytest.approx(3.0)
+    assert defaults["line_servo_quality_defaults"]["pre_contact_smoothing_requested"] is False
     assert args.nav2_reposition_before_fetch is False
     assert args.robot_x == pytest.approx(-0.109148)
     assert args.robot_y == pytest.approx(-0.035637)
     assert args.robot_yaw == pytest.approx(0.253126)
+
+
+def test_planner_route_defaults_tighten_fetch_ready_contact_for_smoothing_watch():
+    args = _route_default_args()
+    layout = {
+        "planner_route_label": "fetch_ready_local",
+        "route_executor": "local_fetch_to_pose",
+        "random_draw": {
+            "planner_route_label": "fetch_ready_local",
+            "robot_pose": {"x": -0.058007, "y": 0.004356, "yaw": 0.090413},
+            "route_quality": {
+                "predicted_contact_quality": "watch",
+                "flags": ["initial_lateral_setup_debt"],
+                "recommendations": ["local_line_servo_contact", "pre_contact_smoothing"],
+            },
+        },
+    }
+
+    defaults = apply_planner_route_execution_defaults(args, layout, explicit_args=set())
+
+    assert defaults["applied"] is True
+    assert args.line_servo_contact_lateral_ready_m == pytest.approx(0.024)
+    assert defaults["line_servo_quality_defaults"]["contact_lateral_ready_m"] == pytest.approx(0.024)
+    assert defaults["line_servo_quality_defaults"]["pre_contact_smoothing_requested"] is True
 
 
 def test_planner_route_defaults_enable_nav2_setup_for_frozen_reposition_layout():

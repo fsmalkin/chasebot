@@ -1110,7 +1110,7 @@ route owners, while broader live batches and canonical gates remain open.
 
 June 5 roughest-seed authority and contact-watch update: seed `20260634`
 extends breadth with a roughest-order live replay:
-`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260634_roughest_provider_reuse_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
 It passed the visual UAT surface with `6/6` deliveries and `6/6` visual
 packages across two recovery, two Nav2-first, and two fetch-ready rows. Visual
 frame review agreed with telemetry. Recovery and Nav2 rows stayed clean; the
@@ -1128,6 +1128,25 @@ route-disagreement failure. The architecture direction remains planner-gated
 route ownership with deterministic execution; the next focused control work is
 direct local-fetch contact smoothness, with hardware-transfer planning in
 parallel.
+
+June 5 targeted contact-smoothing recheck: the direct local-fetch watch rows now
+have a clean repair proof:
+`artifacts/session/live_fetch_ready_contact_smoothing_recheck_seed20260634_20260605/fetch_planner_route_uat_analyzer/scorecard.md`.
+Planner-route defaults tighten `fetch_ready_local` contact readiness to
+`0.024m` only when route-quality metadata requests `pre_contact_smoothing`.
+Scene04 and scene28 reran with browser-watchable onboard/topdown proof and
+cleared execution, setup, contact, and first-contact watches. Max ball lateral
+error fell to `0.000224m` and `0.000273m`, respectively, and contact-angle
+error fell to near `0deg`.
+
+The full rough executable route-family preservation rerun is now green:
+`artifacts/session/live_fetch_ready_contact_smoothing_full_rough_analysis_seed20260634_20260605/fetch_planner_route_uat_analyzer/scorecard.md`.
+It delivered `6/6` missions with `6/6` visual packages across recovery/re-aim,
+Nav2-first, and fetch-ready rows, and the analyzer reports clean execution,
+setup, and contact quality with `0` first-contact blockers. This preserves the
+rough route-owner UAT lane with `promotion_evidence=false`; the promotion lane
+should refresh through the canonical seeded/saved-layout gates with smoothing
+active.
 
 ## Definition Of Done For The Research Thread
 

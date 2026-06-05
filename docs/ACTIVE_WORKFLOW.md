@@ -794,6 +794,42 @@ June 5, 2026 roughest supervised-seed breadth check:
   push/coast, and delivery. The videos are plausible and match the analyzer
   watches; there is no visual/geometry mismatch.
 
+June 5, 2026 fetch-ready contact-smoothing recheck:
+
+- Implementation: `fetch_ready_local` layouts whose route-quality metadata
+  requests `pre_contact_smoothing` now use
+  `line_servo_contact_lateral_ready_m=0.024` through planner-route defaults.
+  Clean fetch-ready layouts keep the existing `0.028m` contact-readiness
+  default, and explicit CLI values still take precedence.
+- Targeted evidence:
+  `artifacts/session/live_fetch_ready_contact_smoothing_recheck_seed20260634_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+- Scene04 visual package:
+  `artifacts/session/live_fetch_ready_contact_smoothing_seed20260634_scene04_scene28_20260605_seed20260634_scene04_fetch_ready_local/fetch_visual_uat_package/scorecard.md`
+- Scene28 replay:
+  `artifacts/session/live_fetch_ready_contact_smoothing_seed20260634_scene28_20260605/fetch_planner_route_replay_batch/scorecard.md`
+- Result: the two rough fetch-ready watch rows delivered `2/2` with clean
+  execution, setup, contact, and first-contact metrics. Scene04 max ball
+  lateral error improved from `0.049686m` to `0.000224m`, and contact-angle
+  error improved from `-7.260deg` to `0.015deg`. Scene28 max ball lateral error
+  improved from `0.058755m` to `0.000273m`, and contact-angle error improved
+  from `-6.799deg` to `0.012deg`.
+- Visual review: inspected both smoothed frame-sequence contact sheets. The
+  onboard and topdown frames show centered forward contact into the delivery
+  circle, matching the clean telemetry.
+- Full preservation rerun:
+  `artifacts/session/live_fetch_ready_contact_smoothing_seed20260634_full_rough_20260605/fetch_planner_route_replay_batch/scorecard.md`
+- Full preservation analyzer:
+  `artifacts/session/live_fetch_ready_contact_smoothing_full_rough_analysis_seed20260634_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+- Full preservation result: the rough executable route-family slice delivered
+  `6/6` missions with `6/6` visual packages across recovery/re-aim, Nav2-first,
+  and fetch-ready rows. The analyzer reports clean execution, setup, contact,
+  `0` contact watches, and `0` first-contact blockers. Scene04 max ball lateral
+  error was `0.000187m`; scene28 was `0.000247m`.
+- Interpretation: treat the seed `20260634` full rerun as rough route-owner UAT
+  preservation evidence with `promotion_evidence=false`. Keep the provider-backed
+  seed `20260633` parent as the current promotion-green milestone proof until
+  the next canonical seeded/saved-layout promotion refresh includes smoothing.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

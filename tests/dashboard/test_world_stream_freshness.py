@@ -482,12 +482,12 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Promotion green with rough breadth watch"
+    assert payload["status_label"] == "Promotion green with rough seed clean rerun"
     assert payload["latest_evidence"][0]["title"] == (
-        "Roughest seed breadth pass is provider-backed with contact watches"
+        "Full rough seed rerun clears contact watches"
     )
     assert payload["latest_evidence"][0]["links"][0]["url"].endswith(
-        "/fetch_planner_seeded_generalization_gate/scorecard.md"
+        "/fetch_planner_route_uat_analyzer/scorecard.md"
     )
     route_samples = payload["uat_review_bundle"]["route_samples"]
     assert len(route_samples) == 6

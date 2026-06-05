@@ -1340,6 +1340,23 @@ it preserves the deterministic safety layer for low-confidence scenes. The two
 direct fetch-ready rows delivered near `0.198m` and carried lateral knock-away
 plus contact-trajectory watches, so contact smoothness stays on the watchlist.
 
-Next work should preserve the current provider-backed evidence set, then choose
-between direct local-fetch contact smoothness and hardware-transfer packaging. A
-broad architecture reset is not warranted by the current evidence.
+The first contact-smoothness slice is now clean on the two rough fetch-ready
+watch rows:
+`artifacts/session/live_fetch_ready_contact_smoothing_recheck_seed20260634_20260605/fetch_planner_route_uat_analyzer/scorecard.md`.
+The route-owner default tightens `fetch_ready_local` contact readiness to
+`0.024m` only when route-quality metadata asks for `pre_contact_smoothing`.
+Scene04 and scene28 reran with browser-watchable proof, delivered `2/2`, and
+cleared execution, setup, contact, and first-contact watches; max ball lateral
+error fell to roughly zero on both rows.
+
+The full seed `20260634` rough executable route-family rerun now preserves that
+repair:
+`artifacts/session/live_fetch_ready_contact_smoothing_full_rough_analysis_seed20260634_20260605/fetch_planner_route_uat_analyzer/scorecard.md`.
+It delivered `6/6` missions and `6/6` visual packages across recovery/re-aim,
+Nav2-first, and fetch-ready rows, with clean execution, setup, and contact
+quality. The current evidence supports continuing the planner-gated route-owner
+architecture.
+
+Next work should package the hardware-transfer plan for the planner-routed
+route-owner stack and fold the smoothed rough analyzer into the preservation bar
+for the next canonical promotion refresh.
