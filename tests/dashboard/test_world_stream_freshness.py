@@ -517,8 +517,13 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert provider_card["tone"] == "yellow"
     assert "three-seed breadth rollup" in provider_card["status"]
     assert "seed=20260650" in " ".join(provider_card["metrics"])
+    assert "provider-vs-baseline comparison analyzer" in " ".join(provider_card["metrics"]).lower()
     assert any(
         "provider_rerun_readiness_rollup_seed20260650_20260605" in link["url"]
+        for link in provider_card["links"]
+    )
+    assert any(
+        "provider_rerun_comparison_pre_provider_seed20260650_20260605" in link["url"]
         for link in provider_card["links"]
     )
     assert "Seed 20260648 mixed all-routes 3x UAT is green" in evidence_by_title

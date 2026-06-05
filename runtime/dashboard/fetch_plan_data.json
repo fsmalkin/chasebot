@@ -255,7 +255,7 @@
       "title": "Provider rerun preflight is waiting on OPENAI_API_KEY",
       "status": "blocked prerequisite: three-seed breadth rollup, latest seed, and dashboard are ready; provider key is missing",
       "tone": "yellow",
-      "summary": "The provider-rerun readiness preflight now targets the current breadth floor: the three-seed rollup across seeds 20260648, 20260649, and 20260650, plus seed20260650 as the concrete provider rerun seed. Rollup evidence is green with 300 generated planner scenes, zero wrong fetch dispatches, 27/27 executable visual deliveries, zero contact watches, and zero first-contact blockers. The dashboard surface and latest fallback seed checks pass. The preflight fails closed because OPENAI_API_KEY is absent, so provider-backed planner authority remains unproven and hardware_proven stays false.",
+      "summary": "The provider-rerun readiness preflight targets the current breadth floor: the three-seed rollup across seeds 20260648, 20260649, and 20260650, plus seed20260650 as the concrete provider rerun seed. Rollup evidence is green with 300 generated planner scenes, zero wrong fetch dispatches, 27/27 executable visual deliveries, zero contact watches, and zero first-contact blockers. The readiness scorecard now emits the full provider sequence: provider planner gate, explicit all-routes replay, route UAT analyzer, and provider-vs-baseline comparison. The current comparison artifact proves the replay/analyzer are green and fails only because provider status is skipped_missing_openai_api_key.",
       "metrics": [
         "Preflight: provider_rerun_ready=false; readiness_level=provider_rerun_blocked",
         "Blocker: missing_openai_api_key",
@@ -263,6 +263,9 @@
         "Rollup quality: wrong_fetch_dispatches=0; contact_watches=0; first_contact_blockers=0",
         "Concrete provider rerun target: seed=20260650; random_cases=100; route families=5/5",
         "Dashboard evidence: breadth rollup status present; uat_sample_count=15",
+        "Comparison gate: provider planner status, guard agreement/vetoes, route deltas from seed20260650 baseline, replay pass, and route UAT quality",
+        "Current pre-provider comparison: replay green and route UAT clean; provider planner blocked by skipped_missing_openai_api_key",
+        "Provider-vs-baseline comparison analyzer is now the final provider rerun evidence gate",
         "Claim boundary: provider_backed_authority_proven=false; promotion_evidence=false; hardware_proven=false"
       ],
       "links": [
@@ -273,6 +276,14 @@
         {
           "label": "Provider rerun readiness summary",
           "url": "/artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/provider_rerun_readiness_summary.json"
+        },
+        {
+          "label": "Pre-provider comparison summary",
+          "url": "/artifacts/session/provider_rerun_comparison_pre_provider_seed20260650_20260605/fetch_planner_provider_rerun_comparison/provider_rerun_comparison_summary.json"
+        },
+        {
+          "label": "Pre-provider comparison scorecard",
+          "url": "/artifacts/session/provider_rerun_comparison_pre_provider_seed20260650_20260605/fetch_planner_provider_rerun_comparison/scorecard.md"
         },
         {
           "label": "Three-seed breadth rollup scorecard",
@@ -6038,7 +6049,7 @@
     }
   ],
   "next_steps": [
-    "Provide OPENAI_API_KEY, then run the rollup-backed provider rerun on seed20260650 and compare provider agreement, guard vetoes, route decisions, and mixed all-routes visual replay against the three-seed deterministic baseline.",
+    "Provide OPENAI_API_KEY, then run the rollup-backed provider rerun on seed20260650, run the provider-vs-baseline comparison analyzer, and compare provider agreement, guard vetoes, route deltas, and mixed all-routes visual replay against the three-seed deterministic baseline.",
     "Repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT, physical camera evidence, and field-physics notes.",
     "After provider-backed routing passes, rerun the mixed all-routes evidence ladder on physical/onboard hardware.",
     "Inspect raw_camera, topdown_telemetry, world_stream, and keyframe sheets across each physical/onboard run before trusting telemetry.",

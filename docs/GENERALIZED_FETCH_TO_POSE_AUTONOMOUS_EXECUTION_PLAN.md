@@ -1259,6 +1259,13 @@ rerun seed20260650 in `llm_supervised_guarded` mode, replay three roughest rows
 per route family, and compare provider decisions against the deterministic
 rollup before changing the planner-authority claim.
 
+The provider comparison step is now executable:
+`artifacts/session/provider_rerun_comparison_pre_provider_seed20260650_20260605/fetch_planner_provider_rerun_comparison/scorecard.md`.
+It checks provider status, guard agreement and veto reasons, route deltas from
+the matching seed20260650 baseline, replay success, and route UAT quality. The
+current pre-provider artifact confirms the visual replay path is green and
+isolates the open blocker to provider credentials.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches

@@ -1551,6 +1551,15 @@ blocks only on `missing_openai_api_key`. The roadmap sequence is credential
 restore, provider-backed seed20260650 planner gate, explicit all-routes replay,
 analyzer comparison, and then physical/onboard rehearsal.
 
+The provider-vs-baseline comparison analyzer now defines that analyzer
+comparison step:
+`artifacts/session/provider_rerun_comparison_pre_provider_seed20260650_20260605/fetch_planner_provider_rerun_comparison/scorecard.md`.
+The current pre-provider comparison proves the replay and route UAT checks are
+green while provider status is unavailable. Once credentials are restored, run
+the same analyzer to compare provider status, guard vetoes, route deltas,
+visual replay, and route UAT quality before the roadmap advances to
+physical/onboard proof.
+
 The fresh rehearsal ladder is now green on the sim-gate runtime target:
 `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
 `artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,

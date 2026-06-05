@@ -146,6 +146,8 @@ def test_provider_rerun_readiness_passes_when_key_and_fallback_evidence_are_read
     assert summary["blockers"] == []
     assert "--planner-mode llm_supervised_guarded" in summary["next_commands"]["planner_gate"]
     assert "--route ambiguous_or_unsafe_no_go" in summary["next_commands"]["explicit_all_routes_replay"]
+    assert "fetch_planner_provider_rerun_comparison.py" in summary["next_commands"]["provider_rerun_comparison"]
+    assert "--seed 20260650" in summary["next_commands"]["provider_rerun_comparison"]
 
 
 def test_provider_rerun_readiness_requires_all_route_families(tmp_path: Path):

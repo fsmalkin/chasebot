@@ -1499,6 +1499,14 @@ with `llm_supervised_guarded` routing and compares provider agreement, guard
 vetoes, route decisions, and mixed all-routes visual replay against the
 deterministic rollup baseline.
 
+Provider comparison now has a concrete analyzer:
+`artifacts/session/provider_rerun_comparison_pre_provider_seed20260650_20260605/fetch_planner_provider_rerun_comparison/scorecard.md`.
+The current pre-provider comparison passes the baseline, replay, and route UAT
+checks, then fails on provider status because the available seed20260650
+planner artifact still used deterministic fallback. After credentials are
+available, rerun the same analyzer on the provider-backed planner, replay, and
+route UAT artifacts before updating any planner-authority claim.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

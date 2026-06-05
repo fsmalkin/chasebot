@@ -256,9 +256,12 @@ def build_rerun_commands(args: argparse.Namespace) -> dict[str, str]:
     planner_campaign = f"provider_planner_seed{seed}_breadth_{int(args.random_cases)}x{int(args.max_per_route)}_{suffix}"
     replay_campaign = f"provider_planner_seed{seed}_mixed_all_routes_{int(args.max_per_route)}x_{suffix}"
     analysis_campaign = f"provider_planner_seed{seed}_mixed_all_routes_analysis_{suffix}"
+    comparison_campaign = f"provider_planner_seed{seed}_provider_rerun_comparison_{suffix}"
     planner_summary = (
         f"artifacts\\session\\{planner_campaign}_planner\\fetch_planner_handoff_gate\\gate_summary.json"
     )
+    replay_summary = f"artifacts\\session\\{replay_campaign}\\fetch_planner_route_replay_batch\\batch_summary.json"
+    route_uat_summary = f"artifacts\\session\\{analysis_campaign}\\fetch_planner_route_uat_analyzer\\route_uat_summary.json"
     return {
         "planner_gate": (
             "python scripts\\fetch_planner_seeded_generalization_gate.py "
@@ -283,6 +286,13 @@ def build_rerun_commands(args: argparse.Namespace) -> dict[str, str]:
             f"--campaign-id {analysis_campaign} --planner-summary {planner_summary} "
             "--mission-summary <each batch row mission_summary_path> "
             "--visual-package-summary <each batch row visual_package_summary_path>"
+        ),
+        "provider_rerun_comparison": (
+            "python scripts\\fetch_planner_provider_rerun_comparison.py "
+            f"--campaign-id {comparison_campaign} --seed {seed} "
+            f"--provider-planner-summary {planner_summary} "
+            f"--provider-replay-summary {replay_summary} "
+            f"--provider-route-uat-summary {route_uat_summary}"
         ),
     }
 

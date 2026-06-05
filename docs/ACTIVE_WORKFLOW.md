@@ -3274,6 +3274,10 @@ Milestone 3 pass criteria include:
      - next provider sequence: restore `OPENAI_API_KEY`, run the generated
        seed20260650 `llm_supervised_guarded` planner gate, run explicit
        all-routes replay, then analyze provider agreement and guard vetoes
+     - provider comparison analyzer:
+       `artifacts/session/provider_rerun_comparison_pre_provider_seed20260650_20260605/fetch_planner_provider_rerun_comparison/scorecard.md`
+     - comparison gate status: current replay and route UAT checks are green;
+       provider status remains blocked by missing credentials
      - claim boundary: this is robot-fidelity/sim-gate rehearsal evidence;
        `hardware_proven=false` until physical robot execution, onboard
        TensorRT proof, physical camera evidence, and field physics are recorded
