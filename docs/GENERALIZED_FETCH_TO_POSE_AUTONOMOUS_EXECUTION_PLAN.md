@@ -547,6 +547,20 @@ geometry, including two high-risk recovery rows. This strengthens the broad
 sim-gate UAT floor while leaving provider-backed LLM routing and physical
 hardware-transfer proof as the active gates.
 
+June 5 seed20260642 rough breadth UAT: seed `20260642` extends the broad
+route-owner visual UAT ladder after the controller-preflight, timeout-capture,
+and startup-retry repairs. The parent gate at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260642_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+classified `30` scenes with `wrong_fetch_dispatch_count=0`, selected every
+available rough executable row up to the per-route cap, and passed `8/8`
+deliveries with `8/8` visual packages. The live rows covered three
+`recovery_or_reaim`, three `nav2_reposition_first`, and two
+`fetch_ready_local` routes. The analyzer reports clean execution, setup, and
+contact with first-contact blockers `0`. Frame-sequence review of all eight
+raw-camera/topdown sheets matched the delivery geometry, and closest approaches
+stayed in `0.194m..0.198m`. Provider-backed LLM routing and physical/onboard
+proof remain open.
+
 June 5 seed20260641 timeout/startup hardening and rough breadth UAT: seed
 `20260641` first exposed two harness issues. The initial run crashed the parent
 gate on a live-run `TimeoutExpired`; the replay runner now records that as

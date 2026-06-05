@@ -1284,6 +1284,19 @@ push, and terminal delivery. The two high-risk recovery rows still showed
 coherent ball/target/robot geometry. Provider-backed LLM routing and
 physical/onboard hardware-transfer proof remain the active open gates.
 
+Seed20260642 adds another roughest-row breadth pass through the hardened
+route-owner stack:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260642_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The gate classified `30` generated scenes with zero wrong fetch dispatches, then
+passed `8/8` executable rows across three `recovery_or_reaim`, three
+`nav2_reposition_first`, and two `fetch_ready_local` routes. Visual packages
+passed `8/8`, the analyzer reports clean execution/setup/contact, and
+frame-sequence review of all eight raw-camera/topdown sheets matched the
+delivery geometry. Closest approaches stayed in `0.194m..0.198m`. This keeps
+the current direction intact: planner-routed setup plus bounded local fetch is
+working across fresh broad sim seeds, while provider-backed LLM routing and
+physical/onboard proof remain open.
+
 Seed20260641 adds timeout/startup hardening plus another roughest-row breadth
 pass:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260641_rough_breadth_startup_retry_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
