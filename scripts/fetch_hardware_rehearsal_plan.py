@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 PLAN_KIND = "fetch_hardware_rehearsal_plan"
 DEFAULT_READINESS_SUMMARY = (
-    "artifacts/session/analysis_fetch_hardware_transfer_readiness_seed20260643_mixed_all_routes_20260605/"
+    "artifacts/session/hardware_transfer_readiness_seed20260648_dashboard_20260605/"
     "fetch_hardware_transfer_readiness/hardware_transfer_readiness_summary.json"
 )
 DEFAULT_SAVED_ANCHOR_GATE = (
@@ -23,9 +23,10 @@ DEFAULT_SAVED_ANCHOR_GATE = (
     "fetch_planner_handoff_gate/gate_summary.json"
 )
 DEFAULT_SEEDED_GATE = (
-    "artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605_planner/"
+    "artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605_planner/"
     "fetch_planner_handoff_gate/gate_summary.json"
 )
+CURRENT_REHEARSAL_SEED = "20260648"
 DEFAULT_DASHBOARD_URL = "http://127.0.0.1:8883"
 
 
@@ -151,7 +152,7 @@ def build_rehearsal_steps(args: argparse.Namespace) -> list[dict[str, Any]]:
             ],
         },
         {
-            "id": "seed20260643_mixed_all_routes_rehearsal",
+            "id": f"seed{CURRENT_REHEARSAL_SEED}_mixed_all_routes_rehearsal",
             "purpose": (
                 "Repeat the current broad mixed all-routes seed across fetch-ready, Nav2-first, "
                 "recovery/re-aim, scan/perceive, and no-go route owners."
@@ -179,7 +180,7 @@ def build_rehearsal_steps(args: argparse.Namespace) -> list[dict[str, Any]]:
                     "--quality-order",
                     "roughest",
                     "--max-per-route",
-                    "2",
+                    "3",
                     "--dashboard-url",
                     dashboard_url,
                     "--fresh-dashboard-session-per-run",
@@ -248,7 +249,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "rehearsal_pass_contract": {
             "saved_anchors": "zero/left05/right05 one-run pass with browser-watchable onboard/context video",
             "seeded_mixed_route": (
-                "seed20260643 mixed all-routes sample pass across fetch_ready_local, "
+                f"seed{CURRENT_REHEARSAL_SEED} mixed all-routes sample pass across fetch_ready_local, "
                 "nav2_reposition_first, recovery_or_reaim, scan_or_perceive_first, "
                 "and ambiguous_or_unsafe_no_go"
             ),
@@ -324,7 +325,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seeded-gate", default=DEFAULT_SEEDED_GATE)
     parser.add_argument("--dashboard-url", default=DEFAULT_DASHBOARD_URL)
     parser.add_argument("--saved-anchor-campaign-id", default="hardware_rehearsal_saved_anchors_20260605")
-    parser.add_argument("--seeded-campaign-id", default="hardware_rehearsal_seed20260643_mixed_all_routes_20260605")
+    parser.add_argument("--seeded-campaign-id", default=f"hardware_rehearsal_seed{CURRENT_REHEARSAL_SEED}_mixed_all_routes_20260605")
     return parser.parse_args()
 
 

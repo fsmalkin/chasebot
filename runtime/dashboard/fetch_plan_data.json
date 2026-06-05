@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 3:33 PM ET",
+  "updated_label": "Updated June 5, 2026, 3:39 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
   "status_label": "Seed 20260648 green; hardware rehearsal-ready; provider rerun waits on OPENAI_API_KEY",
-  "status_detail": "Seed20260648 is the latest and widest fresh mixed-route sim-gate checkpoint: 100 generated planner scenes, zero wrong fetch dispatches, and 15/15 mixed all-route visual replay. The hardware-transfer readiness checker now accepts the current dashboard surface and reports hardware_transfer_ready=true while hardware_proven=false. The provider-rerun readiness preflight targets seed20260648 and fails closed because OPENAI_API_KEY is missing. Provider-backed LLM routing and physical/onboard proof remain open.",
+  "status_detail": "Seed20260648 is the latest and widest fresh mixed-route sim-gate checkpoint: 100 generated planner scenes, zero wrong fetch dispatches, and 15/15 mixed all-route visual replay. The hardware-transfer readiness checker, rehearsal plan, and runner preflight now accept the current dashboard surface and report ready for rehearsal while hardware_proven=false. The provider-rerun readiness preflight targets seed20260648 and fails closed because OPENAI_API_KEY is missing. Provider-backed LLM routing and physical/onboard proof remain open.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -53,9 +53,10 @@
       "title": "Hardware-transfer readiness is green for rehearsal",
       "status": "ready for robot-side rehearsal; physical/onboard proof remains open",
       "tone": "green",
-      "summary": "The hardware-transfer readiness checker now accepts the current seed20260648 dashboard evidence and the preserved regression manifest. It reports pass=true, hardware_transfer_ready=true, and hardware_proven=false. The next robot-side rehearsal must still produce onboard TensorRT execution, physical camera video, field-physics evidence, and same-session visual packages before any hardware claim advances.",
+      "summary": "The hardware-transfer readiness checker, rehearsal-plan generator, and runner preflight now accept the current seed20260648 dashboard evidence and preserved regression manifest. They report rehearsal-ready while hardware_proven=false. The next robot-side rehearsal must still produce onboard TensorRT execution, physical camera video, field-physics evidence, and same-session visual packages before any hardware claim advances.",
       "metrics": [
         "Readiness: pass=true; hardware_transfer_ready=true; readiness_level=ready_for_hardware_rehearsal",
+        "Runbook: hardware_rehearsal_plan_ready=true; runner preflight pass=true; next_action=execute_runtime_stack_smoke",
         "Dashboard evidence: seed20260648 status accepted; uat_sample_count=15",
         "Regression preservation: seeded_gate_count=8; seeded_live_mission_pass_count=48; seeded_visual_package_pass_count=48",
         "Required rehearsal: saved anchors one-run plus one seed20260648 mixed all-routes sample",
@@ -69,6 +70,14 @@
         {
           "label": "Hardware-transfer readiness summary",
           "url": "/artifacts/session/hardware_transfer_readiness_seed20260648_dashboard_20260605/fetch_hardware_transfer_readiness/hardware_transfer_readiness_summary.json"
+        },
+        {
+          "label": "Seed 20260648 hardware rehearsal plan scorecard",
+          "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_plan_seed20260648_20260605/fetch_hardware_rehearsal_plan/scorecard.md"
+        },
+        {
+          "label": "Seed 20260648 hardware rehearsal runner preflight",
+          "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_runner_seed20260648_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
         },
         {
           "label": "Seed 20260648 mixed all-routes UAT bundle",
@@ -5853,8 +5862,9 @@
     }
   ],
   "next_steps": [
+    "Run the seed20260648 hardware rehearsal runbook preflighted in the dashboard: runtime stack smoke, saved anchors, then seed20260648 route-family rehearsal.",
     "Provide OPENAI_API_KEY, then run the generated provider-rerun commands from the provider readiness scorecard for seed20260648.",
-    "After provider-backed routing passes, run the same mixed all-routes evidence ladder on physical/onboard hardware: stack smoke, saved anchors, then seed20260648 route-family rehearsal.",
+    "After provider-backed routing passes, repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT and physical camera evidence.",
     "Inspect raw_camera, topdown_telemetry, world_stream, and keyframe sheets across each physical/onboard run before trusting telemetry.",
     "Keep hardware_proven=false until physical robot execution, onboard TensorRT, physical camera evidence, and field-physics proof are recorded."
   ],

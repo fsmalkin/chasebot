@@ -61,7 +61,7 @@ def test_hardware_rehearsal_plan_is_ready_from_green_readiness(tmp_path: Path):
     assert [step["id"] for step in summary["planned_steps"]] == [
         "runtime_stack_smoke",
         "saved_anchor_one_run_fetch_rehearsal",
-        "seed20260643_mixed_all_routes_rehearsal",
+        "seed20260648_mixed_all_routes_rehearsal",
     ]
 
 
@@ -105,5 +105,7 @@ def test_hardware_rehearsal_scorecard_includes_commands(tmp_path: Path):
     text = scorecard.read_text(encoding="utf-8")
     assert "scripts/run_first_uat.ps1" in text
     assert "scripts/fetch_planner_route_replay_batch.py" in text
+    assert "seed20260648_mixed_all_routes_rehearsal" in text
+    assert "--max-per-route 3" in text
     assert "scan_or_perceive_first" in text
     assert "hardware_proven: `False`" in text

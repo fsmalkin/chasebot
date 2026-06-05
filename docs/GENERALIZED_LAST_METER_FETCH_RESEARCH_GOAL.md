@@ -1413,10 +1413,18 @@ The current hardware-transfer readiness scorecard
 `artifacts/session/hardware_transfer_readiness_seed20260648_dashboard_20260605/fetch_hardware_transfer_readiness/scorecard.md`
 accepts the seed20260648 dashboard surface and reports
 `hardware_transfer_ready=true`, `readiness_level=ready_for_hardware_rehearsal`,
-and `hardware_proven=false`. The next hardware-facing sequence is saved anchors
-one-run, then one seed20260648 mixed all-routes rehearsal with onboard
-TensorRT, physical camera video, field-physics evidence, and same-session
-visual packages before any hardware claim advances.
+and `hardware_proven=false`. The next hardware-facing sequence is runtime stack
+smoke, saved anchors one-run, then one seed20260648 mixed all-routes rehearsal
+with onboard TensorRT, physical camera video, field-physics evidence, and
+same-session visual packages before any hardware claim advances.
+
+The seed20260648 hardware rehearsal runbook is also refreshed and preflighted:
+`artifacts/session/analysis_fetch_hardware_rehearsal_plan_seed20260648_20260605/fetch_hardware_rehearsal_plan/scorecard.md`
+and
+`artifacts/session/analysis_fetch_hardware_rehearsal_runner_seed20260648_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The runner reports `next_action=execute_runtime_stack_smoke`, so the runnable
+hardware sequence is runtime stack smoke, saved anchors, then seed20260648
+mixed all-routes rehearsal.
 
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
