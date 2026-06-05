@@ -120,6 +120,7 @@ def evaluate_step_preflight(step: dict[str, Any]) -> dict[str, Any]:
         "executable": executable,
         "script_path": script_path,
         "required_artifacts": required_artifacts,
+        "post_run_analyzer": dict_value(step.get("post_run_analyzer")),
     }
 
 
@@ -180,6 +181,108 @@ def extract_marker_path(output: str, marker: str) -> str:
     if not match:
         return ""
     return match.group(1).strip()
+
+
+def analyzer_campaign_id(step: dict[str, Any], batch_summary_path: str) -> str:
+    analyzer = dict_value(step.get("post_run_analyzer"))
+    configured = str(analyzer.get("campaign_id", "") or "").strip()
+    if configured:
+        return configured
+    batch_path = resolve_path(batch_summary_path)
+    campaign = batch_path.parent.parent.name if batch_path.name else ""
+    return f"{campaign}_analysis" if campaign else f"fetch_hardware_rehearsal_analysis_{current_utc_stamp()}"
+
+
+def run_post_run_analyzer(step: dict[str, Any], execution: dict[str, Any], *, timeout_s: int) -> dict[str, Any]:
+    analyzer = dict_value(step.get("post_run_analyzer"))
+    if str(analyzer.get("type", "") or "") != "fetch_planner_route_uat_analyzer":
+        return {}
+    batch_summary_path = str(execution.get("batch_summary_path", "") or "")
+    planner_summary_path = str(analyzer.get("planner_summary_path", "") or "")
+    if not batch_summary_path or not planner_summary_path:
+        return {
+            "type": "fetch_planner_route_uat_analyzer",
+            "pass": False,
+            "issues": [issue for issue in [
+                "post_run_analyzer_batch_summary_missing" if not batch_summary_path else "",
+                "post_run_analyzer_planner_summary_missing" if not planner_summary_path else "",
+            ] if issue],
+        }
+
+    batch, batch_issues = read_json(batch_summary_path)
+    rows = [dict_value(row) for row in list_value(batch.get("rows")) if isinstance(row, dict)]
+    command = [
+        "python",
+        "scripts/fetch_planner_route_uat_analyzer.py",
+        "--campaign-id",
+        analyzer_campaign_id(step, batch_summary_path),
+        "--planner-summary",
+        artifact_display_path(planner_summary_path),
+    ]
+    for row in rows:
+        mission_summary_path = str(row.get("mission_summary_path", "") or "")
+        visual_package_summary_path = str(row.get("visual_package_summary_path", "") or "")
+        if mission_summary_path:
+            command.extend(["--mission-summary", artifact_display_path(mission_summary_path)])
+        if visual_package_summary_path:
+            command.extend(["--visual-package-summary", artifact_display_path(visual_package_summary_path)])
+
+    issues = [issue for issue in batch_issues if issue]
+    bool_issue(issues, bool(rows), "post_run_analyzer_batch_rows_missing")
+    bool_issue(issues, resolve_path(planner_summary_path).is_file(), "post_run_analyzer_planner_summary_missing")
+    if issues:
+        return {
+            "type": "fetch_planner_route_uat_analyzer",
+            "pass": False,
+            "issues": issues,
+            "command": command,
+            "batch_summary_path": artifact_display_path(batch_summary_path),
+            "planner_summary_path": artifact_display_path(planner_summary_path),
+        }
+
+    started_utc = utc_now()
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=max(timeout_s, 1),
+        )
+        summary_path = extract_marker_path(completed.stdout, "FETCH_PLANNER_ROUTE_UAT_ANALYZER_SUMMARY")
+        summary, summary_issues = read_json(summary_path) if summary_path else ({}, ["post_run_analyzer_summary_missing"])
+        run_issues = list(summary_issues)
+        bool_issue(run_issues, completed.returncode == 0, "post_run_analyzer_command_failed")
+        bool_issue(run_issues, bool(summary.get("pass", False)), "post_run_analyzer_summary_not_pass")
+        return {
+            "type": "fetch_planner_route_uat_analyzer",
+            "started_utc": started_utc,
+            "ended_utc": utc_now(),
+            "pass": not run_issues,
+            "issues": run_issues,
+            "returncode": completed.returncode,
+            "command": command,
+            "stdout_tail": completed.stdout[-4000:],
+            "stderr_tail": completed.stderr[-4000:],
+            "summary_path": artifact_display_path(summary_path) if summary_path else "",
+            "scorecard_path": artifact_display_path(summary.get("scorecard_path", "")) if summary else "",
+            "batch_summary_path": artifact_display_path(batch_summary_path),
+            "planner_summary_path": artifact_display_path(planner_summary_path),
+        }
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "type": "fetch_planner_route_uat_analyzer",
+            "started_utc": started_utc,
+            "ended_utc": utc_now(),
+            "pass": False,
+            "issues": ["post_run_analyzer_timed_out"],
+            "returncode": 124,
+            "command": command,
+            "stdout_tail": (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else "",
+            "stderr_tail": (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else "",
+            "batch_summary_path": artifact_display_path(batch_summary_path),
+            "planner_summary_path": artifact_display_path(planner_summary_path),
+        }
 
 
 def nested_value(payload: dict[str, Any], path_text: str) -> Any:
@@ -405,6 +508,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     preflight_pass = not issues and all(bool(row.get("pass", False)) for row in preflights)
     execution = {}
     execution_artifacts = {}
+    post_run_analyzer = {}
     if bool(args.execute):
         if len(selected_steps) != 1:
             issues.append("execute_requires_exactly_one_step")
@@ -415,6 +519,14 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
             execution_artifacts = validate_execution_artifacts(selected_steps[0], execution)
             if not bool(execution_artifacts.get("pass", False)):
                 issues.append("execution_artifact_contract_failed")
+            if bool(execution.get("pass", False)) and dict_value(selected_steps[0].get("post_run_analyzer")):
+                post_run_analyzer = run_post_run_analyzer(
+                    selected_steps[0],
+                    execution,
+                    timeout_s=int(args.timeout_s),
+                )
+                if not bool(post_run_analyzer.get("pass", False)):
+                    issues.append("post_run_analyzer_failed")
     mode = "execute" if bool(args.execute) else "preflight"
     pass_value = not issues and preflight_pass and (not args.execute or bool(execution.get("pass", False)))
     return {
@@ -437,6 +549,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "step_preflights": preflights,
         "execution": execution,
         "execution_artifacts": execution_artifacts,
+        "post_run_analyzer": post_run_analyzer,
         "next_action": (
             "execute_runtime_stack_smoke"
             if pass_value and mode == "preflight"
@@ -481,6 +594,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 f"- `{row.get('id', '')}` pass=`{row.get('pass', False)}` issues=`{row.get('issues', [])}`",
                 f"  - command: `{row.get('command', '')}`",
                 f"  - required_artifacts: `{row.get('required_artifacts', [])}`",
+                f"  - post_run_analyzer: `{row.get('post_run_analyzer', {})}`",
             ]
         )
     execution = dict_value(summary.get("execution"))
@@ -521,6 +635,23 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 f"- `{row.get('spec', '')}` pass=`{row.get('pass', False)}` "
                 f"issues=`{row.get('issues', [])}` {artifact_link(str(row.get('path', '')))}"
             )
+    post_run_analyzer = dict_value(summary.get("post_run_analyzer"))
+    if post_run_analyzer:
+        lines.extend(
+            [
+                "",
+                "## Post-Run Analyzer",
+                "",
+                f"- type: `{post_run_analyzer.get('type', '')}`",
+                f"- pass: `{post_run_analyzer.get('pass', False)}`",
+                f"- issues: `{post_run_analyzer.get('issues', [])}`",
+                f"- returncode: `{post_run_analyzer.get('returncode', '')}`",
+                f"- summary: {artifact_link_or_empty(str(post_run_analyzer.get('summary_path', '')))}",
+                f"- scorecard: {artifact_link_or_empty(str(post_run_analyzer.get('scorecard_path', '')))}",
+                f"- batch_summary: {artifact_link_or_empty(str(post_run_analyzer.get('batch_summary_path', '')))}",
+                f"- planner_summary: {artifact_link_or_empty(str(post_run_analyzer.get('planner_summary_path', '')))}",
+            ]
+        )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

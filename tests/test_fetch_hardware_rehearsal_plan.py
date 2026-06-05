@@ -68,12 +68,16 @@ def test_hardware_rehearsal_plan_is_ready_from_green_readiness(tmp_path: Path):
 def test_hardware_rehearsal_plan_requires_visual_and_controller_artifacts(tmp_path: Path):
     summary = rehearsal.build_summary(_green_fixture(tmp_path))
     saved_anchor = summary["planned_steps"][1]
+    seeded = summary["planned_steps"][2]
 
     assert "control_preflight.json" in saved_anchor["required_artifacts"]
     assert "visual/raw_camera_browser.mp4" in saved_anchor["required_artifacts"]
     assert "visual/keyframe_review_contact_sheet.png" in saved_anchor["required_artifacts"]
     assert "--fresh-dashboard-session-per-run" in saved_anchor["command"]
     assert "--stop-on-fail" in saved_anchor["command"]
+    assert seeded["post_run_analyzer"]["type"] == "fetch_planner_route_uat_analyzer"
+    assert seeded["post_run_analyzer"]["planner_summary_path"].endswith("seeded_gate.json")
+    assert seeded["post_run_analyzer"]["required"] is True
 
 
 def test_hardware_rehearsal_plan_fails_closed_when_readiness_is_not_green(tmp_path: Path):

@@ -353,3 +353,120 @@ def test_rehearsal_runner_validates_seeded_gate_artifacts(tmp_path: Path):
     assert summary["issues"] == []
     assert summary["seeded_gate_summary"].endswith("gate_summary.json")
     assert any(row["spec"] == "seeded_gate_replay_batch_validation" for row in summary["artifacts"])
+
+
+def test_rehearsal_runner_runs_post_run_analyzer_for_replay_batch(tmp_path: Path, monkeypatch):
+    session = tmp_path / "artifacts" / "session" / "row_session"
+    visual = session / "visual"
+    visual.mkdir(parents=True)
+    for name in (
+        "raw_camera_browser.mp4",
+        "topdown_telemetry_browser.mp4",
+        "world_stream.mp4",
+        "keyframe_review_contact_sheet.png",
+    ):
+        (visual / name).write_bytes(b"ok")
+    mission = tmp_path / "mission_verdict.json"
+    _write_json(mission, {"pass": True, "control_preflight": {"pass": True}})
+    package = tmp_path / "package_summary.json"
+    _write_json(
+        package,
+        {
+            "pass": True,
+            "keyframe_reviews": [{"ok": True, "path": str(visual / "keyframe_review_contact_sheet.png")}],
+            "videos": [
+                {"name": "raw_camera_browser.mp4", "browser_playable": True, "path": str(visual / "raw_camera_browser.mp4")},
+                {
+                    "name": "topdown_telemetry_browser.mp4",
+                    "browser_playable": True,
+                    "path": str(visual / "topdown_telemetry_browser.mp4"),
+                },
+                {"name": "world_stream.mp4", "browser_playable": True, "path": str(visual / "world_stream.mp4")},
+            ],
+        },
+    )
+    batch = tmp_path / "batch_summary.json"
+    _write_json(
+        batch,
+        {
+            "pass": True,
+            "selected_count": 1,
+            "mission_fail_count": 0,
+            "visual_package_pass_count": 1,
+            "rows": [
+                {
+                    "scene_id": "seed20260648_scene01_fetch_ready_local",
+                    "mission_summary_path": str(mission),
+                    "visual_package_summary_path": str(package),
+                }
+            ],
+        },
+    )
+    planner = tmp_path / "planner_gate.json"
+    _write_json(planner, {"pass": True})
+    analyzer_summary = tmp_path / "route_uat_summary.json"
+    analyzer_scorecard = tmp_path / "scorecard.md"
+    _write_json(analyzer_summary, {"pass": True, "scorecard_path": str(analyzer_scorecard)})
+    analyzer_scorecard.write_text("# analyzer\n", encoding="utf-8")
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        return SimpleNamespace(
+            returncode=0,
+            stdout=f"FETCH_PLANNER_ROUTE_UAT_ANALYZER_SUMMARY={analyzer_summary}\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(runner.subprocess, "run", fake_run)
+    step = {
+        "id": "seed20260648_mixed_all_routes_rehearsal",
+        "post_run_analyzer": {
+            "type": "fetch_planner_route_uat_analyzer",
+            "planner_summary_path": str(planner),
+            "campaign_id": "hardware_seed_analysis",
+        },
+    }
+    execution = {"batch_summary_path": str(batch)}
+
+    summary = runner.run_post_run_analyzer(step, execution, timeout_s=5)
+
+    assert summary["pass"] is True
+    assert summary["summary_path"].endswith("route_uat_summary.json")
+    assert "--planner-summary" in captured["command"]
+    assert str(mission) in captured["command"]
+    assert str(package) in captured["command"]
+
+
+def test_rehearsal_runner_execute_fails_when_required_post_run_analyzer_fails(tmp_path: Path, monkeypatch):
+    script = _script(tmp_path, "step.py")
+    plan = _plan(
+        tmp_path,
+        planned_steps=[
+            {
+                "id": "seed20260648_mixed_all_routes_rehearsal",
+                "command": f"python {script}",
+                "required_artifacts": ["fetch_planner_route_replay_batch/batch_summary.json"],
+                "post_run_analyzer": {
+                    "type": "fetch_planner_route_uat_analyzer",
+                    "planner_summary_path": str(tmp_path / "missing_planner.json"),
+                    "campaign_id": "hardware_seed_analysis",
+                },
+            }
+        ],
+    )
+
+    monkeypatch.setattr(
+        runner,
+        "run_step",
+        lambda step, timeout_s: {"id": step["id"], "pass": True, "returncode": 0, "batch_summary_path": str(tmp_path / "missing_batch.json")},
+    )
+    monkeypatch.setattr(runner, "validate_execution_artifacts", lambda step, execution: {"pass": True, "issues": []})
+
+    summary = runner.build_summary(
+        _args(tmp_path, plan_summary=str(plan), step_id="seed20260648_mixed_all_routes_rehearsal", execute=True)
+    )
+
+    assert summary["pass"] is False
+    assert "post_run_analyzer_failed" in summary["issues"]
+    assert summary["post_run_analyzer"]["pass"] is False

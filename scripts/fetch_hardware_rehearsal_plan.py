@@ -196,6 +196,12 @@ def build_rehearsal_steps(args: argparse.Namespace) -> list[dict[str, Any]]:
                 "visual/topdown_telemetry_browser.mp4",
                 "visual/keyframe_review_contact_sheet.png",
             ],
+            "post_run_analyzer": {
+                "type": "fetch_planner_route_uat_analyzer",
+                "planner_summary_path": artifact_display_path(args.seeded_gate),
+                "campaign_id": f"{args.seeded_campaign_id}_analysis",
+                "required": True,
+            },
         },
     ]
 
@@ -305,6 +311,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 f"- promotion_evidence: `{step.get('promotion_evidence', False)}`",
                 f"- command: `{step.get('command', '')}`",
                 f"- required_artifacts: `{step.get('required_artifacts', [])}`",
+                f"- post_run_analyzer: `{step.get('post_run_analyzer', {})}`",
                 "",
             ]
         )
