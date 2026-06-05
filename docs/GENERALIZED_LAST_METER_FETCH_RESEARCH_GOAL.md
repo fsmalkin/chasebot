@@ -1357,6 +1357,20 @@ control; the targeted repro
 and resumed mixed batch passed. Treat this as a setup-service harness watch,
 while keeping the architecture read green under sim-gate deterministic fallback.
 
+Seed20260646 expands the fresh mixed route-family evidence to three live rows
+per route:
+`artifacts/session/live_planner_seed20260646_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The planner child classified `50` generated scenes with all five route labels
+represented and zero wrong fetch dispatches. The explicit mixed replay passed
+`15/15` route contracts: nine executable deliveries and six planner-only
+abstentions. The supporting analyzer
+`artifacts/session/live_planner_seed20260646_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution/setup/contact and `0` first-contact blockers.
+Frame-sequence review covered all fifteen keyframe sheets and matched the route
+contract. This is now the widest sim-gate route-owner UAT package for the
+planner-routed moonshot path. Provider-backed LLM routing and physical/onboard
+proof remain open.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

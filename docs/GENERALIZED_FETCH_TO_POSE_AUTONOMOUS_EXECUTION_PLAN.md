@@ -1112,6 +1112,20 @@ and resumed mixed batch passed, so the result is tracked as a setup-service
 harness watch. The claim boundary remains unchanged: provider-backed LLM
 routing needs `OPENAI_API_KEY`, and physical/onboard proof is still open.
 
+Seed `20260646` raises the mixed-route breadth from two to three rows per
+route family:
+`artifacts/session/live_planner_seed20260646_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The planner child classified `50` generated scenes with all five route families
+represented and zero wrong fetch dispatches. The explicit mixed replay selected
+three rows per route family and passed `15/15` route contracts: `9/9`
+executable deliveries plus `6/6` planner-only scan/no-go abstentions. The
+analyzer at
+`artifacts/session/live_planner_seed20260646_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution, setup, contact, and `0` first-contact blockers.
+Frame-sequence review covered all fifteen keyframe sheets and matched the route
+contracts. Treat this as the widest current sim-gate route-owner UAT package;
+provider-backed LLM routing and physical/onboard proof remain the next gates.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches

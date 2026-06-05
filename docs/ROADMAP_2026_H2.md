@@ -1494,6 +1494,20 @@ the architecture evidence remains green. The roadmap still advances through
 provider-backed LLM routing and physical/onboard proof before hardware-transfer
 claims.
 
+Seed20260646 raises the mixed all-routes breadth to three live rows per route
+family:
+`artifacts/session/live_planner_seed20260646_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The planner child classified `50` generated scenes across all five route
+families with zero wrong fetch dispatches. The explicit mixed replay passed
+`15/15` route contracts with nine executable deliveries, six planner-only
+abstentions, and fifteen visual packages. The analyzer at
+`artifacts/session/live_planner_seed20260646_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution, setup, contact, and `0` first-contact blockers.
+Frame-sequence review covered all fifteen keyframe sheets. The roadmap now
+uses seed20260646 as the widest sim-gate route-owner UAT package, while the
+next evidence gates remain provider-backed LLM routing and physical/onboard
+proof.
+
 The fresh rehearsal ladder is now green on the sim-gate runtime target:
 `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
 `artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,

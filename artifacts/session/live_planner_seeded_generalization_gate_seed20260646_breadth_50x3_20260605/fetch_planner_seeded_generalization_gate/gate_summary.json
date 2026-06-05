@@ -1,0 +1,80 @@
+{
+  "analyzer_campaign_id": "live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605_analysis",
+  "analyzer_pass": true,
+  "analyzer_ran": true,
+  "analyzer_scorecard_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md",
+  "analyzer_summary": {
+    "contact_quality_status": "clean",
+    "execution_quality_status": "clean",
+    "first_contact_blocker_count": 0,
+    "milestone_interpretation": "randomized_route_owner_visual_uat_green",
+    "setup_quality_status": "clean"
+  },
+  "analyzer_summary_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605_analysis/fetch_planner_route_uat_analyzer/route_uat_summary.json",
+  "campaign_id": "live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605",
+  "dry_run": false,
+  "expected_executable_count": 9,
+  "fresh_dashboard_session_per_run": true,
+  "generated_utc": "2026-06-05T16:56:15.997674+00:00",
+  "max_per_route": 3,
+  "milestone_interpretation": "planner_routed_seeded_generalization_visual_uat_green",
+  "pass": true,
+  "planner_authority_ready": false,
+  "planner_campaign_id": "live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605_planner",
+  "planner_gate_pass": true,
+  "planner_mode": "llm_supervised_guarded",
+  "planner_scorecard_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605_planner/fetch_planner_handoff_gate/scorecard.md",
+  "planner_summary": {
+    "fail_count": 0,
+    "guarded_fallback_authority_ready": false,
+    "llm_shadow_provider_ok_count": 0,
+    "llm_shadow_ready": false,
+    "llm_supervised_accept_count": 0,
+    "llm_supervised_ready": false,
+    "llm_supervised_veto_count": 50,
+    "llm_supervised_veto_reason_counts": {
+      "confidence_below_threshold": 50,
+      "missing_llm_route": 50,
+      "provider_not_ok": 50
+    },
+    "pass_count": 50,
+    "planner_mode_effective_counts": {
+      "deterministic_fallback": 50
+    },
+    "provider_status_counts": {
+      "skipped_missing_openai_api_key": 50
+    },
+    "route_counts": {
+      "ambiguous_or_unsafe_no_go": 11,
+      "fetch_ready_local": 8,
+      "nav2_reposition_first": 11,
+      "recovery_or_reaim": 9,
+      "scan_or_perceive_first": 11
+    },
+    "strict_planner_authority_ready": false,
+    "wrong_fetch_dispatch_count": 0
+  },
+  "planner_summary_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605_planner/fetch_planner_handoff_gate/gate_summary.json",
+  "promotion_evidence": false,
+  "random_cases": 50,
+  "replay_campaign_id": "live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605_replay",
+  "replay_first_failure": {},
+  "replay_pass": true,
+  "replay_scorecard_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605_replay/fetch_planner_route_replay_batch/scorecard.md",
+  "replay_summary": {
+    "mission_fail_count": 0,
+    "mission_pass_count": 9,
+    "requested_route_count": {
+      "fetch_ready_local": 3,
+      "nav2_reposition_first": 3,
+      "recovery_or_reaim": 3
+    },
+    "selected_count": 9,
+    "visual_package_pass_count": 9
+  },
+  "replay_summary_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605_replay/fetch_planner_route_replay_batch/batch_summary.json",
+  "scorecard_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md",
+  "seed": 20260646,
+  "summary_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605/fetch_planner_seeded_generalization_gate/gate_summary.json",
+  "type": "fetch_planner_seeded_generalization_gate"
+}

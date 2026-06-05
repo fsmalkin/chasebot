@@ -3164,12 +3164,12 @@ Milestone 3 pass criteria include:
    - detailed per-tick shot evidence belongs in `state_history.jsonl`, while milestone/result events belong in `gather_sequence.jsonl`
    - current planner-routed mixed-route breadth package:
      - parent seeded gate:
-       `artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+       `artifacts/session/live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
      - mixed all-routes replay:
-       `artifacts/session/live_planner_seed20260645_mixed_all_routes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md`
+       `artifacts/session/live_planner_seed20260646_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`
      - mixed all-routes analyzer:
-       `artifacts/session/live_planner_seed20260645_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
-     - review rule: inspect all ten keyframe sheets across planner-only
+       `artifacts/session/live_planner_seed20260646_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+     - review rule: inspect all fifteen keyframe sheets across planner-only
        abstentions and executable delivery routes before using the summary as
        evidence
      - setup-service watch:
