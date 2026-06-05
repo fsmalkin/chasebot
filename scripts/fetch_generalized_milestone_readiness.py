@@ -195,7 +195,7 @@ def summarize_dashboard_audit(path_text: str) -> dict[str, Any]:
         int_value(payload.get("uat_sample_pass_count")) == int_value(payload.get("uat_sample_count")),
         "uat_sample_pass_count_mismatch",
     )
-    issue_unless(issues, int_value(payload.get("evidence_card_count")) >= 8, "evidence_card_count_below_8")
+    issue_unless(issues, int_value(payload.get("evidence_card_count")) >= 9, "evidence_card_count_below_9")
     issue_unless(
         issues,
         int_value(payload.get("evidence_card_pass_count")) == int_value(payload.get("evidence_card_count")),

@@ -78,8 +78,8 @@ def _green_dashboard_audit(path: Path) -> Path:
             "pass": True,
             "uat_sample_count": 15,
             "uat_sample_pass_count": 15,
-            "evidence_card_count": 8,
-            "evidence_card_pass_count": 8,
+            "evidence_card_count": 9,
+            "evidence_card_pass_count": 9,
             "route_counts": {
                 "fetch_ready_local": 3,
                 "nav2_reposition_first": 3,

@@ -533,7 +533,7 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         for link in evidence_by_title["Dashboard visual evidence audit is green"]["links"]
     )
     assert "15/15 UAT samples" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
-    assert "8/8 required current evidence cards" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
+    assert "9/9 required current evidence cards" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
     assert any(
         "planner_geometry_breadth_audit_seeds20260648_20260650_20260605" in link["url"]
         for link in evidence_by_title["Planner geometry breadth audit is green"]["links"]
@@ -579,6 +579,14 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert any(
         "provider_rerun_comparison_pre_provider_seed20260650_20260605" in link["url"]
         for link in provider_card["links"]
+    )
+    assert "Provider launch checklist is ready" in evidence_by_title
+    launch_card = evidence_by_title["Provider launch checklist is ready"]
+    assert launch_card["tone"] == "yellow"
+    assert "provider_launch_ready=false" in " ".join(launch_card["metrics"])
+    assert any(
+        "provider_launch_checklist_seed20260650_20260605" in link["url"]
+        for link in launch_card["links"]
     )
     assert "Seed 20260648 mixed all-routes 3x UAT is green" in evidence_by_title
     assert "Seed 20260647 mixed all-routes 3x UAT is green" in evidence_by_title

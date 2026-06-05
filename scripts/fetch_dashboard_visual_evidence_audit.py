@@ -32,6 +32,7 @@ REQUIRED_EVIDENCE_TITLES = (
     "Robot-side physical runbook is current",
     "Seed 20260648 hardware rehearsal is green",
     "Provider rerun preflight is waiting on OPENAI_API_KEY",
+    "Provider launch checklist is ready",
     "Operator UAT watchlist is ready",
 )
 

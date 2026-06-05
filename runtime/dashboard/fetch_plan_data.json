@@ -115,14 +115,14 @@
     },
     {
       "title": "Dashboard visual evidence audit is green",
-      "status": "15/15 UAT samples and 8/8 required current evidence cards resolve to browser-watchable artifacts",
+      "status": "15/15 UAT samples and 9/9 required current evidence cards resolve to browser-watchable artifacts",
       "tone": "green",
-      "summary": "The dashboard visual evidence audit now verifies the current browser-facing proof layer, including breadth rollup, geometry breadth, milestone readiness, physical/onboard proof-gap, robot-side runbook, hardware rehearsal, provider preflight, and operator UAT watchlist evidence cards. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and eight required current evidence cards. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
+      "summary": "The dashboard visual evidence audit now verifies the current browser-facing proof layer, including breadth rollup, geometry breadth, milestone readiness, physical/onboard proof-gap, robot-side runbook, hardware rehearsal, provider preflight, provider launch checklist, and operator UAT watchlist evidence cards. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and nine required current evidence cards. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
       "metrics": [
         "Audit: pass=true; interpretation=dashboard_visual_evidence_links_green",
         "UAT bundle: 15/15 samples pass link audit",
         "Route coverage: ambiguous_or_unsafe_no_go=3; scan_or_perceive_first=3; recovery_or_reaim=3; nav2_reposition_first=3; fetch_ready_local=3",
-        "Required current evidence cards: 8/8 pass link audit",
+        "Required current evidence cards: 9/9 pass link audit",
         "Artifacts checked per sample: raw_camera_browser, topdown_telemetry, world_stream, keyframe_review_contact_sheet, visual package scorecard",
         "Claim boundary: visual link/provenance audit only; promotion_evidence=false; hardware_proven=false"
       ],
@@ -185,7 +185,7 @@
         "Milestone audit: pass=true; operator_uat_ready=true; milestone_complete=false",
         "Green evidence: three-seed deterministic breadth rollup, planner geometry breadth, operator UAT watchlist, dashboard visual evidence audit, seed20260648 robot-fidelity hardware rehearsal",
         "Geometry breadth: 300 scenes; all five route families; all major setup flags; distance, angle, lateral, standoff, and yaw spans above thresholds",
-        "Dashboard/UAT proof: 15/15 UAT samples and 8/8 current evidence cards pass link audit",
+        "Dashboard/UAT proof: 15/15 UAT samples and 9/9 current evidence cards pass link audit",
         "Provider boundary: provider_backed_authority_proven=false until OPENAI_API_KEY rerun and provider-vs-baseline comparison pass",
         "Hardware boundary: hardware_proven=false until physical/onboard TensorRT run, physical camera evidence, and field physics proof are recorded"
       ],
@@ -484,6 +484,33 @@
         {
           "label": "Seed 20260648 mixed all-routes UAT bundle",
           "url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        }
+      ]
+    },
+    {
+      "title": "Provider launch checklist is ready",
+      "status": "provider-backed run sequence is packaged; OPENAI_API_KEY still gates launch",
+      "tone": "yellow",
+      "summary": "The provider launch checklist turns the pending LLM-backed planner rerun into an executable sequence with expected artifacts and refresh steps. It records the planner gate, mixed all-routes replay, route UAT analysis, provider-vs-baseline comparison, and dashboard proof refresh commands. The launch plan is ready, while provider_launch_ready=false until OPENAI_API_KEY is present and the provider preflight clears its blockers.",
+      "metrics": [
+        "Checklist: pass=true; launch_plan_ready=true; provider_launch_ready=false",
+        "Current blocker: missing_openai_api_key",
+        "Run sequence: provider planner gate, visual replay, route UAT analysis, provider comparison, dashboard proof refresh",
+        "Expected artifacts: provider planner summary, replay summary, route UAT summary, provider comparison summary, scorecards for each layer",
+        "Claim boundary: provider_backed_authority_proven=false until provider artifacts pass; promotion_evidence=false; hardware_proven=false"
+      ],
+      "links": [
+        {
+          "label": "Provider launch checklist scorecard",
+          "url": "/artifacts/session/provider_launch_checklist_seed20260650_20260605/fetch_provider_launch_checklist/scorecard.md"
+        },
+        {
+          "label": "Provider launch checklist summary",
+          "url": "/artifacts/session/provider_launch_checklist_seed20260650_20260605/fetch_provider_launch_checklist/provider_launch_checklist_summary.json"
+        },
+        {
+          "label": "Provider rerun readiness scorecard",
+          "url": "/artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/scorecard.md"
         }
       ]
     },
