@@ -459,6 +459,18 @@ and YOLO debug overlay. The first attempt exposed CRLF in
 covered by a line-ending regression test. The next step is saved-anchor fetch
 rehearsal with raw-camera/topdown/world video evidence.
 
+June 5 saved-anchor fetch rehearsal: the second hardware-rehearsal step is
+green:
+`artifacts/session/live_fetch_hardware_rehearsal_saved_anchors_batch_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The replay batch scorecard is
+`artifacts/session/hardware_rehearsal_saved_anchors_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+Saved-anchor `left05`, `right05`, and `zero` passed `3/3` with browser-playable
+raw-camera/topdown/world videos, keyframe contact sheets, control preflight, and
+mission verdict artifacts. Visual review matched telemetry for setup, first
+contact, push, and delivery-circle arrival. The remaining rehearsal step is
+seed20260635 mixed-route execution across fetch-ready, Nav2-first, and
+recovery/re-aim owners.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.

@@ -144,6 +144,8 @@ def run_step(step: dict[str, Any], *, timeout_s: int) -> dict[str, Any]:
             "stdout_tail": completed.stdout[-4000:],
             "stderr_tail": completed.stderr[-4000:],
             "session_dir": extract_session_dir(completed.stdout),
+            "batch_summary_path": extract_marker_path(completed.stdout, "FETCH_PLANNER_ROUTE_REPLAY_BATCH_SUMMARY"),
+            "seeded_gate_summary_path": extract_marker_path(completed.stdout, "FETCH_PLANNER_SEEDED_GENERALIZATION_GATE_SUMMARY"),
             "timed_out": False,
         }
     except subprocess.TimeoutExpired as exc:
@@ -156,12 +158,25 @@ def run_step(step: dict[str, Any], *, timeout_s: int) -> dict[str, Any]:
             "stdout_tail": (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else "",
             "stderr_tail": (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else "",
             "session_dir": extract_session_dir(exc.stdout or "") if isinstance(exc.stdout, str) else "",
+            "batch_summary_path": extract_marker_path(exc.stdout or "", "FETCH_PLANNER_ROUTE_REPLAY_BATCH_SUMMARY")
+            if isinstance(exc.stdout, str)
+            else "",
+            "seeded_gate_summary_path": extract_marker_path(exc.stdout or "", "FETCH_PLANNER_SEEDED_GENERALIZATION_GATE_SUMMARY")
+            if isinstance(exc.stdout, str)
+            else "",
             "timed_out": True,
         }
 
 
 def extract_session_dir(output: str) -> str:
     match = re.search(r"Session directory:\s*(.+)", output or "")
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
+def extract_marker_path(output: str, marker: str) -> str:
+    match = re.search(rf"{re.escape(marker)}=(.+)", output or "")
     if not match:
         return ""
     return match.group(1).strip()
@@ -209,6 +224,9 @@ def validate_artifact_spec(spec: str, *, session_dir: str, readiness: dict[str, 
 
 
 def validate_execution_artifacts(step: dict[str, Any], execution: dict[str, Any]) -> dict[str, Any]:
+    batch_summary_path = str(execution.get("batch_summary_path", "") or "")
+    if batch_summary_path:
+        return validate_replay_batch_artifacts(batch_summary_path)
     session_dir = str(execution.get("session_dir", "") or "")
     readiness_path = Path(session_dir) / "readiness_report.json" if session_dir else Path()
     readiness, readiness_issues = read_json(readiness_path) if session_dir else ({}, ["missing_session_dir"])
@@ -224,6 +242,83 @@ def validate_execution_artifacts(step: dict[str, Any], execution: dict[str, Any]
         "session_dir": artifact_display_path(session_dir) if session_dir else "",
         "readiness_report": artifact_display_path(readiness_path) if session_dir else "",
         "artifacts": rows,
+    }
+
+
+def validate_replay_batch_artifacts(batch_summary_path: str) -> dict[str, Any]:
+    batch, issues = read_json(batch_summary_path)
+    bool_issue(issues, bool(batch.get("pass", False)), "batch_summary_not_pass")
+    rows = [dict_value(row) for row in list_value(batch.get("rows")) if isinstance(row, dict)]
+    selected_count = int(batch.get("selected_count") or 0)
+    visual_package_pass_count = int(batch.get("visual_package_pass_count") or 0)
+    mission_fail_count = int(batch.get("mission_fail_count") or 0)
+    bool_issue(issues, selected_count > 0, "batch_selected_count_zero")
+    bool_issue(issues, mission_fail_count == 0, "batch_mission_fail_count_nonzero")
+    bool_issue(issues, visual_package_pass_count == selected_count, "batch_visual_package_count_mismatch")
+    artifact_rows: list[dict[str, Any]] = [
+        {
+            "spec": "batch_summary",
+            "path": artifact_display_path(batch_summary_path),
+            "pass": not issues,
+            "issues": list(issues),
+        }
+    ]
+    for row in rows:
+        row_id = str(row.get("scene_id", "") or row.get("label", "") or "row")
+        mission_path = str(row.get("mission_summary_path", "") or "")
+        package_path = str(row.get("visual_package_summary_path", "") or "")
+        mission, mission_issues = read_json(mission_path)
+        package, package_issues = read_json(package_path)
+        bool_issue(mission_issues, bool(mission.get("pass", False)), f"{row_id}:mission_not_pass")
+        bool_issue(
+            mission_issues,
+            bool(dict_value(mission.get("control_preflight")).get("pass", False)),
+            f"{row_id}:control_preflight_not_pass",
+        )
+        bool_issue(package_issues, bool(package.get("pass", False)), f"{row_id}:visual_package_not_pass")
+        keyframe_reviews = [dict_value(item) for item in list_value(package.get("keyframe_reviews"))]
+        bool_issue(
+            package_issues,
+            any(bool(item.get("ok", False)) and resolve_path(str(item.get("path", ""))).is_file() for item in keyframe_reviews),
+            f"{row_id}:keyframe_review_missing",
+        )
+        videos = [dict_value(item) for item in list_value(package.get("videos"))]
+        for video_name in ("raw_camera_browser.mp4", "topdown_telemetry_browser.mp4", "world_stream.mp4"):
+            bool_issue(
+                package_issues,
+                any(
+                    str(video.get("name", "")) == video_name
+                    and bool(video.get("browser_playable", False))
+                    and resolve_path(str(video.get("path", ""))).is_file()
+                    for video in videos
+                ),
+                f"{row_id}:{video_name}_missing_or_unplayable",
+            )
+        artifact_rows.append(
+            {
+                "spec": f"{row_id}:mission_summary",
+                "path": artifact_display_path(mission_path) if mission_path else "",
+                "pass": not mission_issues,
+                "issues": mission_issues,
+            }
+        )
+        artifact_rows.append(
+            {
+                "spec": f"{row_id}:visual_package",
+                "path": artifact_display_path(package_path) if package_path else "",
+                "pass": not package_issues,
+                "issues": package_issues,
+            }
+        )
+        issues.extend(mission_issues)
+        issues.extend(package_issues)
+    return {
+        "pass": not issues,
+        "issues": issues,
+        "batch_summary": artifact_display_path(batch_summary_path),
+        "session_dir": "",
+        "readiness_report": "",
+        "artifacts": artifact_rows,
     }
 
 
@@ -327,6 +422,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 f"- returncode: `{execution.get('returncode', '')}`",
                 f"- timed_out: `{execution.get('timed_out', False)}`",
                 f"- session_dir: `{execution.get('session_dir', '')}`",
+                f"- batch_summary_path: `{execution.get('batch_summary_path', '')}`",
             ]
         )
     execution_artifacts = dict_value(summary.get("execution_artifacts"))
@@ -340,6 +436,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 f"- issues: `{execution_artifacts.get('issues', [])}`",
                 f"- session_dir: {artifact_link(str(execution_artifacts.get('session_dir', '')))}",
                 f"- readiness_report: {artifact_link(str(execution_artifacts.get('readiness_report', '')))}",
+                f"- batch_summary: {artifact_link(str(execution_artifacts.get('batch_summary', '')))}",
             ]
         )
         for row in list_value(execution_artifacts.get("artifacts")):

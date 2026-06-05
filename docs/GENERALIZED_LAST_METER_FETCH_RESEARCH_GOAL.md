@@ -1211,6 +1211,13 @@ found a CRLF shell-script boundary in `uat/orchestrator/run_uat_orchestrator.sh`
 the source is now LF-pinned and regression-tested. The next research gate is
 saved-anchor fetch rehearsal with delivery videos.
 
+The saved-anchor fetch rehearsal is now green:
+`artifacts/session/live_fetch_hardware_rehearsal_saved_anchors_batch_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The batch delivered `left05`, `right05`, and `zero` with `3/3` mission passes,
+`3/3` visual packages, controller preflight, raw/topdown/world videos, and
+keyframe sheets. Visual review found coherent delivery evidence for all three.
+The next research gate is seed20260635 mixed-route rehearsal.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

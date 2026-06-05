@@ -162,3 +162,58 @@ def test_rehearsal_runner_reads_bom_json(tmp_path: Path):
 
     assert issues == []
     assert payload["pass"] is True
+
+
+def test_rehearsal_runner_validates_replay_batch_artifacts(tmp_path: Path):
+    session = tmp_path / "artifacts" / "session" / "row_session"
+    visual = session / "visual"
+    visual.mkdir(parents=True)
+    for name in (
+        "raw_camera_browser.mp4",
+        "topdown_telemetry_browser.mp4",
+        "world_stream.mp4",
+        "keyframe_review_contact_sheet.png",
+    ):
+        (visual / name).write_bytes(b"ok")
+    mission = tmp_path / "mission_verdict.json"
+    _write_json(mission, {"pass": True, "control_preflight": {"pass": True}})
+    package = tmp_path / "package_summary.json"
+    _write_json(
+        package,
+        {
+            "pass": True,
+            "keyframe_reviews": [{"ok": True, "path": str(visual / "keyframe_review_contact_sheet.png")}],
+            "videos": [
+                {"name": "raw_camera_browser.mp4", "browser_playable": True, "path": str(visual / "raw_camera_browser.mp4")},
+                {
+                    "name": "topdown_telemetry_browser.mp4",
+                    "browser_playable": True,
+                    "path": str(visual / "topdown_telemetry_browser.mp4"),
+                },
+                {"name": "world_stream.mp4", "browser_playable": True, "path": str(visual / "world_stream.mp4")},
+            ],
+        },
+    )
+    batch = tmp_path / "batch_summary.json"
+    _write_json(
+        batch,
+        {
+            "pass": True,
+            "selected_count": 1,
+            "mission_fail_count": 0,
+            "visual_package_pass_count": 1,
+            "rows": [
+                {
+                    "scene_id": "saved_anchor_zero",
+                    "mission_summary_path": str(mission),
+                    "visual_package_summary_path": str(package),
+                }
+            ],
+        },
+    )
+
+    summary = runner.validate_replay_batch_artifacts(str(batch))
+
+    assert summary["pass"] is True
+    assert summary["issues"] == []
+    assert len(summary["artifacts"]) == 3

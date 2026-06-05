@@ -520,6 +520,23 @@ June 5, 2026 runtime stack smoke rehearsal:
   `robot_fidelity_orin` and `tensorrt_int8`. The next rehearsal step is
   saved-anchor fetch execution with raw-camera/topdown/world video.
 
+June 5, 2026 saved-anchor fetch rehearsal:
+
+- Command:
+  `python scripts\fetch_hardware_rehearsal_runner.py --campaign-id live_fetch_hardware_rehearsal_saved_anchors_batch_contract_20260605 --step-id saved_anchor_one_run_fetch_rehearsal --execute --timeout-s 2400`
+- Runner scorecard:
+  `artifacts/session/live_fetch_hardware_rehearsal_saved_anchors_batch_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`
+- Batch scorecard:
+  `artifacts/session/hardware_rehearsal_saved_anchors_20260605/fetch_planner_route_replay_batch/scorecard.md`
+- Result: saved anchors `3/3`, mission pass `3/3`, visual packages `3/3`,
+  mission failures `0`, and artifact-contract validation green.
+- Visual review: inspected the left05, right05, and zero raw/topdown keyframe
+  sheets. All three show coherent setup, first contact, push, and delivery
+  circle arrival that matches topdown geometry.
+- Evidence meaning: saved-anchor fetch rehearsal is green with browser-watchable
+  onboard/context videos. The next rehearsal step is seed20260635 mixed-route
+  execution.
+
 June 4, 2026 planner-only route proof:
 
 - Command:

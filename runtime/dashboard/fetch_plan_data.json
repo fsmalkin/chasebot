@@ -50,6 +50,53 @@
   ],
   "latest_evidence": [
     {
+      "title": "Saved-anchor fetch rehearsal is green",
+      "status": "zero, left05, right05 delivered with browser-watchable video",
+      "tone": "green",
+      "summary": "The second hardware-rehearsal step now executes through the runner and validates replay-batch artifacts. Saved-anchor left05, right05, and zero all passed fetch_to_pose, generated control-preflight evidence, produced browser-playable raw-camera/topdown/world videos, and produced keyframe contact sheets. Visual review across the sheets shows coherent setup, first contact, push, and delivery-circle arrival without the earlier geometry/video mismatch.",
+      "metrics": [
+        "Runner execution: pass=true; artifact contract pass=true; returncode=0",
+        "Batch: selected=3; mission_pass=3; visual_package_pass=3; mission_fail=0",
+        "Routes: left05=recovery_or_reaim, right05=recovery_or_reaim, zero=fetch_ready_local",
+        "Closest approach from batch scorecard: left05 0.195m, right05 0.196m, zero 0.198m",
+        "Visual review: inspected left05, right05, and zero raw/topdown keyframe sheets"
+      ],
+      "links": [
+        {
+          "label": "Saved-anchor runner scorecard",
+          "url": "/artifacts/session/live_fetch_hardware_rehearsal_saved_anchors_batch_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "Saved-anchor batch scorecard",
+          "url": "/artifacts/session/hardware_rehearsal_saved_anchors_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "left05 onboard video",
+          "url": "/artifacts/session/20260605T055724424217Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "right05 onboard video",
+          "url": "/artifacts/session/20260605T055934384996Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "zero onboard video",
+          "url": "/artifacts/session/20260605T060135357824Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "left05 keyframe sheet",
+          "url": "/artifacts/session/20260605T055724424217Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "right05 keyframe sheet",
+          "url": "/artifacts/session/20260605T055934384996Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "zero keyframe sheet",
+          "url": "/artifacts/session/20260605T060135357824Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
       "title": "Runtime stack smoke executed with artifact contract",
       "status": "runtime_stack_smoke passed after LF orchestrator fix",
       "tone": "green",
@@ -4216,7 +4263,7 @@
     }
   ],
   "next_steps": [
-    "Run the saved-anchor fetch rehearsal after the runtime stack smoke: zero, left05, and right05 through the planner-routed fetch stack with controller preflight, raw-camera/topdown/world video, and keyframe sequence review.",
+    "Run the seed20260635 mixed-route rehearsal after the saved-anchor fetch rehearsal: two fetch-ready, two Nav2-first, and two recovery/re-aim rows with raw-camera/topdown/world video and keyframe sequence review.",
     "Use the seed20260635 preflight regression manifest as the default green bar before future route-owner, contact-servo, visual-packaging, or hardware-transfer moonshots.",
     "Keep hardware-transfer claims at rehearsal-ready until robot-side live execution, onboard TensorRT execution, physical camera evidence, and field-physics proof are recorded.",
     "Keep provider-backed guarded fallback as the high-level planner authority model unless product requirements demand strict all-accepted LLM routing.",

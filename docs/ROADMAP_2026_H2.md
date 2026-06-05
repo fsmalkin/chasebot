@@ -1415,3 +1415,10 @@ The run validates `robot_fidelity_orin`, `tensorrt_int8`, coordinate UAT, and
 milestone screenshots after fixing the orchestrator LF boundary. The next
 roadmap action is saved-anchor fetch rehearsal with browser-watchable delivery
 video.
+
+The saved-anchor fetch rehearsal is now green:
+`artifacts/session/live_fetch_hardware_rehearsal_saved_anchors_batch_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The batch delivered `left05`, `right05`, and `zero` with `3/3` mission passes
+and `3/3` visual packages. The next roadmap action is seed20260635 mixed-route
+rehearsal with two rows each across fetch-ready, Nav2-first, and
+recovery/re-aim execution.
