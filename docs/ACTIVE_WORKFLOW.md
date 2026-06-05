@@ -3187,8 +3187,20 @@ Milestone 3 pass criteria include:
      - provider gate status: fallback evidence and dashboard checks are ready;
        the current blocker is `missing_openai_api_key`
      - next provider sequence: restore `OPENAI_API_KEY`, run the generated
-       seed20260647 `llm_supervised_guarded` planner gate, run explicit
+       seed20260648 `llm_supervised_guarded` planner gate, run explicit
        all-routes replay, then analyze provider agreement and guard vetoes
+     - latest widened fallback package:
+       `artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+     - latest widened replay/analyzer:
+       `artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`
+       and
+       `artifacts/session/live_planner_seed20260648_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+     - seed20260648 result: `100/100` planner routes, `0` wrong fetch
+       dispatches, `15/15` all-routes visual replay, clean
+       execution/setup/contact, and `0` first-contact blockers
+     - current provider-rerun readiness:
+       `artifacts/session/provider_rerun_readiness_seed20260648_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`
+     - current provider blocker: `missing_openai_api_key`
 30. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/scorecard.md`

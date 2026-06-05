@@ -24,8 +24,8 @@ def _args(tmp_path: Path, **overrides):
         "campaign_id": "provider_ready",
         "latest_fallback_planner_summary": str(tmp_path / "planner" / "gate_summary.json"),
         "dashboard_plan": str(tmp_path / "dashboard.json"),
-        "seed": 20260647,
-        "random_cases": 80,
+        "seed": 20260648,
+        "random_cases": 100,
         "max_per_route": 3,
         "dashboard_url": "http://127.0.0.1:8883",
         "campaign_suffix": "20260605",
@@ -40,18 +40,18 @@ def _green_planner(path: Path) -> Path:
         path,
         {
             "pass": True,
-            "seed": 20260647,
-            "random_cases": 80,
-            "pass_count": 80,
+            "seed": 20260648,
+            "random_cases": 100,
+            "pass_count": 100,
             "wrong_fetch_dispatch_count": 0,
-            "provider_status_counts": {"skipped_missing_openai_api_key": 80},
-            "planner_mode_effective_counts": {"deterministic_fallback": 80},
+            "provider_status_counts": {"skipped_missing_openai_api_key": 100},
+            "planner_mode_effective_counts": {"deterministic_fallback": 100},
             "route_counts": {
-                "ambiguous_or_unsafe_no_go": 16,
-                "fetch_ready_local": 18,
-                "nav2_reposition_first": 11,
-                "recovery_or_reaim": 22,
-                "scan_or_perceive_first": 13,
+                "ambiguous_or_unsafe_no_go": 19,
+                "fetch_ready_local": 19,
+                "nav2_reposition_first": 21,
+                "recovery_or_reaim": 16,
+                "scan_or_perceive_first": 25,
             },
         },
     )
@@ -61,8 +61,8 @@ def _green_dashboard(path: Path) -> Path:
     return _write_json(
         path,
         {
-            "status_label": "Seed 20260647 mixed all-routes 3x UAT is green",
-            "status_detail": "Seed20260647 classified 80 generated scenes.",
+            "status_label": "Seed 20260648 mixed all-routes 3x UAT is green",
+            "status_detail": "Seed20260648 classified 100 generated scenes.",
             "uat_review_bundle": {
                 "route_samples": [
                     {
@@ -115,13 +115,13 @@ def test_provider_rerun_readiness_requires_all_route_families(tmp_path: Path):
         Path(args.latest_fallback_planner_summary),
         {
             "pass": True,
-            "seed": 20260647,
-            "random_cases": 80,
-            "pass_count": 80,
+            "seed": 20260648,
+            "random_cases": 100,
+            "pass_count": 100,
             "wrong_fetch_dispatch_count": 0,
-            "provider_status_counts": {"skipped_missing_openai_api_key": 80},
-            "planner_mode_effective_counts": {"deterministic_fallback": 80},
-            "route_counts": {"fetch_ready_local": 80},
+            "provider_status_counts": {"skipped_missing_openai_api_key": 100},
+            "planner_mode_effective_counts": {"deterministic_fallback": 100},
+            "route_counts": {"fetch_ready_local": 100},
         },
     )
 

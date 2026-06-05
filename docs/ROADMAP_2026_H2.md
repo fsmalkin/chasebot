@@ -1531,6 +1531,16 @@ The roadmap sequence is now credential restore, provider-backed seed20260647
 planner gate, explicit all-routes replay, analyzer comparison, and then
 physical/onboard rehearsal.
 
+Seed20260648 is the current widest sim-gate route-owner UAT package:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+It classified `100/100` generated scenes, preserved all five route families,
+kept wrong fetch dispatches at `0`, and passed the explicit `15/15` all-routes
+visual replay:
+`artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The provider-rerun scorecard now targets this seed and blocks only on
+`missing_openai_api_key`:
+`artifacts/session/provider_rerun_readiness_seed20260648_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`.
+
 The fresh rehearsal ladder is now green on the sim-gate runtime target:
 `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
 `artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,

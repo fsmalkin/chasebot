@@ -1149,6 +1149,22 @@ provider gate: add credentials, rerun the generated `llm_supervised_guarded`
 seed20260647 commands, then compare provider agreement, guard vetoes, and the
 same all-routes visual replay before changing any planner-authority claim.
 
+Seed `20260648` raises the deterministic fallback breadth floor to `100`
+generated planner scenes:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner child classified all `100` scenes with zero wrong fetch dispatches
+and all five route families represented. The explicit mixed replay
+`artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`
+passed `15/15` route contracts: `9/9` executable deliveries plus `6/6`
+planner-only abstentions. The analyzer
+`artifacts/session/live_planner_seed20260648_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution, setup, contact, and `0` first-contact blockers.
+Frame-sequence review covered all fifteen keyframe sheets and matched the
+route contracts. The matching provider-rerun preflight
+`artifacts/session/provider_rerun_readiness_seed20260648_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`
+passes fallback-evidence and dashboard checks, then blocks only on
+`missing_openai_api_key`.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches

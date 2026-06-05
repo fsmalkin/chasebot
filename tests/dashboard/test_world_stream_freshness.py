@@ -482,7 +482,7 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Seed 20260647 green; provider rerun preflight is waiting on OPENAI_API_KEY"
+    assert payload["status_label"] == "Seed 20260648 green; provider rerun preflight is waiting on OPENAI_API_KEY"
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
     assert "Provider rerun preflight is waiting on OPENAI_API_KEY" in evidence_by_title
     assert evidence_by_title["Provider rerun preflight is waiting on OPENAI_API_KEY"]["tone"] == "yellow"
@@ -490,6 +490,7 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         link["url"].endswith("/fetch_planner_provider_rerun_readiness/scorecard.md")
         for link in evidence_by_title["Provider rerun preflight is waiting on OPENAI_API_KEY"]["links"]
     )
+    assert "Seed 20260648 mixed all-routes 3x UAT is green" in evidence_by_title
     assert "Seed 20260647 mixed all-routes 3x UAT is green" in evidence_by_title
     assert "Seed 20260646 mixed all-routes 3x UAT is green" in evidence_by_title
     assert "Seed 20260645 mixed all-routes UAT is green" in evidence_by_title
@@ -651,8 +652,8 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         "recovery_or_reaim",
         "scan_or_perceive_first",
     }
-    assert any(sample["session_id"] == "20260605T180328608256Z" for sample in route_samples)
-    assert any(sample["session_id"] == "20260605T181231717895Z" for sample in route_samples)
+    assert any(sample["session_id"] == "20260605T190621401318Z" for sample in route_samples)
+    assert any(sample["session_id"] == "20260605T191604499853Z" for sample in route_samples)
     assert {sample["interpretation"] for sample in route_samples} == {"delivery pass", "planner-only abstention"}
     assert payload["uat_review_bundle"]["route_samples"][0]["video_url"].startswith("/artifacts/session/")
     assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")

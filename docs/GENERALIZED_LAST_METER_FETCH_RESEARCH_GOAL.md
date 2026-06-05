@@ -1395,6 +1395,20 @@ provider authority remains unproven until that rerun produces provider-ok
 decisions, guard agreement, zero wrong fetch dispatches, and the same
 browser-watchable all-routes replay.
 
+Seed20260648 extends the fallback breadth floor to `100` generated scenes:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner child classified all `100` scenes across all five route labels with
+zero wrong fetch dispatches. The explicit mixed replay
+`artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`
+passed `15/15` route contracts: nine executable deliveries and six
+planner-only abstentions. The supporting analyzer
+`artifacts/session/live_planner_seed20260648_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution/setup/contact and `0` first-contact blockers.
+Frame-sequence review covered all fifteen keyframe sheets and matched the route
+contract. The current provider-rerun scorecard
+`artifacts/session/provider_rerun_readiness_seed20260648_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`
+now targets seed20260648 and blocks only on `missing_openai_api_key`.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

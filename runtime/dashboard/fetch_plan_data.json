@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 2:45 PM ET",
+  "updated_label": "Updated June 5, 2026, 3:25 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Seed 20260647 green; provider rerun preflight is waiting on OPENAI_API_KEY",
-  "status_detail": "Seed20260647 remains the latest and widest fresh mixed-route sim-gate checkpoint: 80 generated planner scenes, zero wrong fetch dispatches, and 15/15 mixed all-route visual replay. The provider-rerun readiness preflight confirms the fallback evidence and dashboard bundle are ready, then fails closed because OPENAI_API_KEY is missing. Provider-backed LLM routing and physical/onboard proof remain open, so hardware_proven stays false.",
+  "status_label": "Seed 20260648 green; provider rerun preflight is waiting on OPENAI_API_KEY",
+  "status_detail": "Seed20260648 is the latest and widest fresh mixed-route sim-gate checkpoint: 100 generated planner scenes, zero wrong fetch dispatches, and 15/15 mixed all-route visual replay. The provider-rerun readiness preflight targets seed20260648 and fails closed because OPENAI_API_KEY is missing. Provider-backed LLM routing and physical/onboard proof remain open, so hardware_proven stays false.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -51,28 +51,87 @@
   "latest_evidence": [
     {
       "title": "Provider rerun preflight is waiting on OPENAI_API_KEY",
-      "status": "blocked prerequisite: seed20260647 fallback evidence and dashboard are ready; provider key is missing",
+      "status": "blocked prerequisite: seed20260648 fallback evidence and dashboard are ready; provider key is missing",
       "tone": "yellow",
-      "summary": "The new provider-rerun readiness preflight checks whether the latest seed20260647 mixed-route package can be rerun with provider-backed llm_supervised_guarded routing. Current fallback evidence is green: 80 generated scenes, all five route families represented, zero wrong fetch dispatches, and the dashboard UAT bundle has 15 browser-watchable samples. The preflight fails closed because OPENAI_API_KEY is absent, so provider-backed planner authority remains unproven and hardware_proven stays false.",
+      "summary": "The provider-rerun readiness preflight now targets seed20260648, the widest fallback baseline so far. Current fallback evidence is green: 100 generated scenes, all five route families represented, zero wrong fetch dispatches, and the dashboard UAT bundle has 15 browser-watchable samples. The preflight fails closed because OPENAI_API_KEY is absent, so provider-backed planner authority remains unproven and hardware_proven stays false.",
       "metrics": [
         "Preflight: provider_rerun_ready=false; readiness_level=provider_rerun_blocked",
         "Blocker: missing_openai_api_key",
-        "Fallback evidence: seed=20260647; random_cases=80; route families=5/5; wrong_fetch_dispatch_count=0",
-        "Dashboard evidence: status references seed20260647; uat_sample_count=15",
+        "Fallback evidence: seed=20260648; random_cases=100; route families=5/5; wrong_fetch_dispatch_count=0",
+        "Dashboard evidence: status references seed20260648; uat_sample_count=15",
         "Claim boundary: provider_backed_authority_proven=false; promotion_evidence=false; hardware_proven=false"
       ],
       "links": [
         {
           "label": "Provider rerun readiness scorecard",
-          "url": "/artifacts/session/provider_rerun_readiness_seed20260647_20260605/fetch_planner_provider_rerun_readiness/scorecard.md"
+          "url": "/artifacts/session/provider_rerun_readiness_seed20260648_20260605/fetch_planner_provider_rerun_readiness/scorecard.md"
         },
         {
           "label": "Provider rerun readiness summary",
-          "url": "/artifacts/session/provider_rerun_readiness_seed20260647_20260605/fetch_planner_provider_rerun_readiness/provider_rerun_readiness_summary.json"
+          "url": "/artifacts/session/provider_rerun_readiness_seed20260648_20260605/fetch_planner_provider_rerun_readiness/provider_rerun_readiness_summary.json"
         },
         {
-          "label": "Seed 20260647 mixed all-routes UAT bundle",
-          "url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
+          "label": "Seed 20260648 mixed all-routes UAT bundle",
+          "url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260648 mixed all-routes 3x UAT is green",
+      "status": "fresh widest seed: 100-scene planner breadth plus 15/15 all-route visual replay",
+      "tone": "green",
+      "summary": "Seed20260648 expands the planner-routed moonshot evidence from 80 to 100 generated scenes while preserving three live visual rows per route family. The planner classified all 100 scenes across fetch-ready, Nav2-first, recovery/re-aim, scan/perceive, and no-go labels with zero wrong fetch dispatches under deterministic fallback because OPENAI_API_KEY is missing. The explicit mixed all-routes replay passed 15/15 route contracts: 9/9 executable deliveries plus 6/6 planner-only scan/no-go abstentions, with 15/15 browser-watchable visual packages. Frame-sequence review covered every raw-camera/topdown keyframe sheet and matched the telemetry: planner-only rows stayed stopped, while recovery, Nav2-first, and fetch-ready rows reached the delivery circle. Provider-backed LLM routing and physical/onboard proof remain open, so hardware_proven stays false.",
+      "metrics": [
+        "Planner seed: random_cases=100; pass=true; wrong_fetch_dispatch_count=0",
+        "Route mix: fetch_ready_local=19; nav2_reposition_first=21; recovery_or_reaim=16; scan_or_perceive_first=25; ambiguous_or_unsafe_no_go=19",
+        "Provider status: skipped_missing_openai_api_key=100; deterministic_fallback=100",
+        "Mixed all-routes replay: selected=15; route_success=15; mission_pass=9; route_only_pass=6; visual_package_pass=15; mission_fail=0",
+        "Route coverage: fetch_ready_local=3; nav2_reposition_first=3; recovery_or_reaim=3; scan_or_perceive_first=3; ambiguous_or_unsafe_no_go=3",
+        "Executable closest approach range: 0.180m..0.198m inside the 0.300m contract",
+        "Analyzer: pass=true; randomized_route_owner_visual_uat_green; execution/setup/contact clean; first_contact_blocker_count=0",
+        "Visual review: all fifteen keyframe sheets inspected across start/setup, first contact or abstention, mid-push/coast, terminal arrival, and final rest",
+        "Claim boundary: deterministic fallback evidence only until OPENAI_API_KEY is available; hardware_proven=false"
+      ],
+      "links": [
+        {
+          "label": "Seed 20260648 parent seeded gate scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260648 planner scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260648 mixed all-routes replay scorecard",
+          "url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Seed 20260648 mixed all-routes analyzer scorecard",
+          "url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "scene08_scan_or_perceive_first scan onboard video",
+          "url": "/artifacts/session/20260605T185524923994Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene01_ambiguous_or_unsafe_no_go no-go onboard video",
+          "url": "/artifacts/session/20260605T185303583703Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene87_recovery_or_reaim recovery onboard video",
+          "url": "/artifacts/session/20260605T190009487573Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene79_nav2_reposition_first Nav2 onboard video",
+          "url": "/artifacts/session/20260605T190621401318Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene42_fetch_ready_local fetch-ready onboard video",
+          "url": "/artifacts/session/20260605T191255716267Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene10_fetch_ready_local fetch-ready keyframe sheet",
+          "url": "/artifacts/session/20260605T191604499853Z/visual/keyframe_review_contact_sheet.png"
         }
       ]
     },
@@ -5719,7 +5778,7 @@
     },
     {
       "label": "Provider-backed LLM routing rerun",
-      "body": "Seeds 20260636 through 20260647 prove the deterministic guarded route-owner stack across fresh broad seeds after harness repairs. Seed20260647 is the widest current sim-gate route-owner UAT package: 80 generated planner scenes plus three visual rows per route family. Provider status stayed skipped_missing_openai_api_key, so restore OPENAI_API_KEY and rerun the planner gate before claiming current provider-backed authority."
+      "body": "Seeds 20260636 through 20260648 prove the deterministic guarded route-owner stack across fresh broad seeds after harness repairs. Seed20260648 is the widest current sim-gate route-owner UAT package: 100 generated planner scenes plus three visual rows per route family. Provider status stayed skipped_missing_openai_api_key, so restore OPENAI_API_KEY and rerun the planner gate before claiming current provider-backed authority."
     },
     {
       "label": "Base-controller fetch preflight",
@@ -5767,204 +5826,204 @@
     }
   ],
   "next_steps": [
-    "Provide OPENAI_API_KEY, then run the generated provider-rerun commands from the provider readiness scorecard for seed20260647.",
-    "After provider-backed routing passes, run the same mixed all-routes evidence ladder on physical/onboard hardware: stack smoke, saved anchors, then seed20260647 route-family rehearsal.",
+    "Provide OPENAI_API_KEY, then run the generated provider-rerun commands from the provider readiness scorecard for seed20260648.",
+    "After provider-backed routing passes, run the same mixed all-routes evidence ladder on physical/onboard hardware: stack smoke, saved anchors, then seed20260648 route-family rehearsal.",
     "Inspect raw_camera, topdown_telemetry, world_stream, and keyframe sheets across each physical/onboard run before trusting telemetry.",
     "Keep hardware_proven=false until physical robot execution, onboard TensorRT, physical camera evidence, and field-physics proof are recorded."
   ],
   "uat_review_bundle": {
-    "title": "Seed 20260647 mixed all-routes 3x UAT bundle",
+    "title": "Seed 20260648 mixed all-routes 3x UAT bundle",
     "summary": "Browser-watchable proof from the widest fresh mixed-route sim seed so far: six planner-only abstentions and nine executable deliveries across all route families, with every keyframe sheet visually reviewed.",
     "route_samples": [
       {
-        "label": "seed20260647_scene04_scan_or_perceive_first",
-        "route": "scan_or_perceive_first",
-        "session_id": "20260605T175011839719Z",
-        "video_url": "/artifacts/session/20260605T175011839719Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T175011839719Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T175011839719Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T175011839719Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene04_scan_or_perceive_first/fetch_visual_uat_package/scorecard.md",
-        "interpretation": "planner-only abstention"
-      },
-      {
-        "label": "seed20260647_scene08_ambiguous_or_unsafe_no_go",
+        "label": "seed20260648_scene01_ambiguous_or_unsafe_no_go",
         "route": "ambiguous_or_unsafe_no_go",
-        "session_id": "20260605T175126012181Z",
-        "video_url": "/artifacts/session/20260605T175126012181Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T175126012181Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T175126012181Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T175126012181Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene08_ambiguous_or_unsafe_no_go/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T185303583703Z",
+        "video_url": "/artifacts/session/20260605T185303583703Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T185303583703Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T185303583703Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T185303583703Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene01_ambiguous_or_unsafe_no_go/fetch_visual_uat_package/scorecard.md",
         "interpretation": "planner-only abstention"
       },
       {
-        "label": "seed20260647_scene13_ambiguous_or_unsafe_no_go",
+        "label": "seed20260648_scene02_ambiguous_or_unsafe_no_go",
         "route": "ambiguous_or_unsafe_no_go",
-        "session_id": "20260605T175239594772Z",
-        "video_url": "/artifacts/session/20260605T175239594772Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T175239594772Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T175239594772Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T175239594772Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene13_ambiguous_or_unsafe_no_go/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T185417965847Z",
+        "video_url": "/artifacts/session/20260605T185417965847Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T185417965847Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T185417965847Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T185417965847Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene02_ambiguous_or_unsafe_no_go/fetch_visual_uat_package/scorecard.md",
         "interpretation": "planner-only abstention"
       },
       {
-        "label": "seed20260647_scene16_scan_or_perceive_first",
+        "label": "seed20260648_scene08_scan_or_perceive_first",
         "route": "scan_or_perceive_first",
-        "session_id": "20260605T175358351492Z",
-        "video_url": "/artifacts/session/20260605T175358351492Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T175358351492Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T175358351492Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T175358351492Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene16_scan_or_perceive_first/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T185524923994Z",
+        "video_url": "/artifacts/session/20260605T185524923994Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T185524923994Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T185524923994Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T185524923994Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene08_scan_or_perceive_first/fetch_visual_uat_package/scorecard.md",
         "interpretation": "planner-only abstention"
       },
       {
-        "label": "seed20260647_scene19_ambiguous_or_unsafe_no_go",
+        "label": "seed20260648_scene100_scan_or_perceive_first",
+        "route": "scan_or_perceive_first",
+        "session_id": "20260605T185638213295Z",
+        "video_url": "/artifacts/session/20260605T185638213295Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T185638213295Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T185638213295Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T185638213295Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene100_scan_or_perceive_first/fetch_visual_uat_package/scorecard.md",
+        "interpretation": "planner-only abstention"
+      },
+      {
+        "label": "seed20260648_scene11_scan_or_perceive_first",
+        "route": "scan_or_perceive_first",
+        "session_id": "20260605T185746388839Z",
+        "video_url": "/artifacts/session/20260605T185746388839Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T185746388839Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T185746388839Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T185746388839Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene11_scan_or_perceive_first/fetch_visual_uat_package/scorecard.md",
+        "interpretation": "planner-only abstention"
+      },
+      {
+        "label": "seed20260648_scene12_ambiguous_or_unsafe_no_go",
         "route": "ambiguous_or_unsafe_no_go",
-        "session_id": "20260605T175513039765Z",
-        "video_url": "/artifacts/session/20260605T175513039765Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T175513039765Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T175513039765Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T175513039765Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene19_ambiguous_or_unsafe_no_go/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T185854854733Z",
+        "video_url": "/artifacts/session/20260605T185854854733Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T185854854733Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T185854854733Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T185854854733Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene12_ambiguous_or_unsafe_no_go/fetch_visual_uat_package/scorecard.md",
         "interpretation": "planner-only abstention"
       },
       {
-        "label": "seed20260647_scene41_scan_or_perceive_first",
-        "route": "scan_or_perceive_first",
-        "session_id": "20260605T175627464765Z",
-        "video_url": "/artifacts/session/20260605T175627464765Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T175627464765Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T175627464765Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T175627464765Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene41_scan_or_perceive_first/fetch_visual_uat_package/scorecard.md",
-        "interpretation": "planner-only abstention"
-      },
-      {
-        "label": "seed20260647_scene23_recovery_or_reaim",
+        "label": "seed20260648_scene87_recovery_or_reaim",
         "route": "recovery_or_reaim",
-        "session_id": "20260605T175754962977Z",
-        "video_url": "/artifacts/session/20260605T175754962977Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T175754962977Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T175754962977Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T175754962977Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene23_recovery_or_reaim/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T190009487573Z",
+        "video_url": "/artifacts/session/20260605T190009487573Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T190009487573Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T190009487573Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T190009487573Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene87_recovery_or_reaim/fetch_visual_uat_package/scorecard.md",
         "interpretation": "delivery pass"
       },
       {
-        "label": "seed20260647_scene51_recovery_or_reaim",
+        "label": "seed20260648_scene51_recovery_or_reaim",
         "route": "recovery_or_reaim",
-        "session_id": "20260605T175954376115Z",
-        "video_url": "/artifacts/session/20260605T175954376115Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T175954376115Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T175954376115Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T175954376115Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene51_recovery_or_reaim/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T190233407919Z",
+        "video_url": "/artifacts/session/20260605T190233407919Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T190233407919Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T190233407919Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T190233407919Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene51_recovery_or_reaim/fetch_visual_uat_package/scorecard.md",
         "interpretation": "delivery pass"
       },
       {
-        "label": "seed20260647_scene60_recovery_or_reaim",
+        "label": "seed20260648_scene23_recovery_or_reaim",
         "route": "recovery_or_reaim",
-        "session_id": "20260605T180145571814Z",
-        "video_url": "/artifacts/session/20260605T180145571814Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T180145571814Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T180145571814Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T180145571814Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene60_recovery_or_reaim/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T190428888961Z",
+        "video_url": "/artifacts/session/20260605T190428888961Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T190428888961Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T190428888961Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T190428888961Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene23_recovery_or_reaim/fetch_visual_uat_package/scorecard.md",
         "interpretation": "delivery pass"
       },
       {
-        "label": "seed20260647_scene27_nav2_reposition_first",
+        "label": "seed20260648_scene79_nav2_reposition_first",
         "route": "nav2_reposition_first",
-        "session_id": "20260605T180328608256Z",
-        "video_url": "/artifacts/session/20260605T180328608256Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T180328608256Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T180328608256Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T180328608256Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene27_nav2_reposition_first/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T190621401318Z",
+        "video_url": "/artifacts/session/20260605T190621401318Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T190621401318Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T190621401318Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T190621401318Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene79_nav2_reposition_first/fetch_visual_uat_package/scorecard.md",
         "interpretation": "delivery pass"
       },
       {
-        "label": "seed20260647_scene61_nav2_reposition_first",
+        "label": "seed20260648_scene36_nav2_reposition_first",
         "route": "nav2_reposition_first",
-        "session_id": "20260605T180532037989Z",
-        "video_url": "/artifacts/session/20260605T180532037989Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T180532037989Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T180532037989Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T180532037989Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene61_nav2_reposition_first/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T190830898099Z",
+        "video_url": "/artifacts/session/20260605T190830898099Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T190830898099Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T190830898099Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T190830898099Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene36_nav2_reposition_first/fetch_visual_uat_package/scorecard.md",
         "interpretation": "delivery pass"
       },
       {
-        "label": "seed20260647_scene12_nav2_reposition_first",
+        "label": "seed20260648_scene54_nav2_reposition_first",
         "route": "nav2_reposition_first",
-        "session_id": "20260605T180753512294Z",
-        "video_url": "/artifacts/session/20260605T180753512294Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T180753512294Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T180753512294Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T180753512294Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene12_nav2_reposition_first/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T191049140257Z",
+        "video_url": "/artifacts/session/20260605T191049140257Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T191049140257Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T191049140257Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T191049140257Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene54_nav2_reposition_first/fetch_visual_uat_package/scorecard.md",
         "interpretation": "delivery pass"
       },
       {
-        "label": "seed20260647_scene52_fetch_ready_local",
+        "label": "seed20260648_scene42_fetch_ready_local",
         "route": "fetch_ready_local",
-        "session_id": "20260605T180945783606Z",
-        "video_url": "/artifacts/session/20260605T180945783606Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T180945783606Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T180945783606Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T180945783606Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene52_fetch_ready_local/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T191255716267Z",
+        "video_url": "/artifacts/session/20260605T191255716267Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T191255716267Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T191255716267Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T191255716267Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene42_fetch_ready_local/fetch_visual_uat_package/scorecard.md",
         "interpretation": "delivery pass"
       },
       {
-        "label": "seed20260647_scene17_fetch_ready_local",
+        "label": "seed20260648_scene86_fetch_ready_local",
         "route": "fetch_ready_local",
-        "session_id": "20260605T181106748341Z",
-        "video_url": "/artifacts/session/20260605T181106748341Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T181106748341Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T181106748341Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T181106748341Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene17_fetch_ready_local/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T191436793488Z",
+        "video_url": "/artifacts/session/20260605T191436793488Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T191436793488Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T191436793488Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T191436793488Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene86_fetch_ready_local/fetch_visual_uat_package/scorecard.md",
         "interpretation": "delivery pass"
       },
       {
-        "label": "seed20260647_scene53_fetch_ready_local",
+        "label": "seed20260648_scene10_fetch_ready_local",
         "route": "fetch_ready_local",
-        "session_id": "20260605T181231717895Z",
-        "video_url": "/artifacts/session/20260605T181231717895Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T181231717895Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T181231717895Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T181231717895Z/visual/keyframe_review_contact_sheet.png",
-        "scorecard_url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605_seed20260647_scene53_fetch_ready_local/fetch_visual_uat_package/scorecard.md",
+        "session_id": "20260605T191604499853Z",
+        "video_url": "/artifacts/session/20260605T191604499853Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T191604499853Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T191604499853Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T191604499853Z/visual/keyframe_review_contact_sheet.png",
+        "scorecard_url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605_seed20260648_scene10_fetch_ready_local/fetch_visual_uat_package/scorecard.md",
         "interpretation": "delivery pass"
       }
     ],
     "review_checklist": [
-      "Start with no-go scene08 and scan scene04 to confirm local fetch is visibly withheld.",
-      "Review recovery scene23 for high-debt setup correction.",
-      "Review Nav2 scene27 for setup-plus-push behavior.",
-      "Review fetch-ready scene52 for direct local-fetch behavior.",
+      "Start with no-go scene01 and scan scene08 to confirm local fetch is visibly withheld.",
+      "Review recovery scene87 for high-debt setup correction.",
+      "Review Nav2 scene79 for setup-plus-push behavior.",
+      "Review fetch-ready scene42 for direct local-fetch behavior.",
       "Treat this package as wide mixed-route sim UAT until provider-backed LLM routing and physical/onboard proof are recorded."
     ],
     "links": [
       {
-        "label": "Seed 20260647 parent seeded gate scorecard",
-        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260647_breadth_80x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        "label": "Seed 20260648 parent seeded gate scorecard",
+        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
       },
       {
-        "label": "Seed 20260647 mixed all-routes replay scorecard",
-        "url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        "label": "Seed 20260648 mixed all-routes replay scorecard",
+        "url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
       },
       {
-        "label": "Seed 20260647 mixed all-routes analyzer scorecard",
-        "url": "/artifacts/session/live_planner_seed20260647_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md"
+        "label": "Seed 20260648 mixed all-routes analyzer scorecard",
+        "url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md"
       },
       {
-        "label": "Seed 20260647 planner scorecard",
-        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260647_breadth_80x3_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
+        "label": "Seed 20260648 planner scorecard",
+        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
       }
     ]
   }

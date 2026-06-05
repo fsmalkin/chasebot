@@ -22,12 +22,12 @@ ROUTE_LABELS = (
     "scan_or_perceive_first",
     "ambiguous_or_unsafe_no_go",
 )
-DEFAULT_SEED = 20260647
-DEFAULT_RANDOM_CASES = 80
+DEFAULT_SEED = 20260648
+DEFAULT_RANDOM_CASES = 100
 DEFAULT_MAX_PER_ROUTE = 3
 DEFAULT_DASHBOARD_URL = "http://127.0.0.1:8883"
 DEFAULT_PLANNER_SUMMARY = (
-    "artifacts/session/live_planner_seeded_generalization_gate_seed20260647_breadth_80x3_20260605_planner/"
+    "artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605_planner/"
     "fetch_planner_handoff_gate/gate_summary.json"
 )
 DEFAULT_DASHBOARD_PLAN = "runtime/dashboard/fetch_plan_data.json"
