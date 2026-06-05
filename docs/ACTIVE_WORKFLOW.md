@@ -3164,14 +3164,17 @@ Milestone 3 pass criteria include:
    - detailed per-tick shot evidence belongs in `state_history.jsonl`, while milestone/result events belong in `gather_sequence.jsonl`
    - current planner-routed mixed-route breadth package:
      - parent seeded gate:
-       `artifacts/session/live_planner_seeded_generalization_gate_seed20260646_breadth_50x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+       `artifacts/session/live_planner_seeded_generalization_gate_seed20260647_breadth_80x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
      - mixed all-routes replay:
-       `artifacts/session/live_planner_seed20260646_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`
+       `artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`
      - mixed all-routes analyzer:
-       `artifacts/session/live_planner_seed20260646_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+       `artifacts/session/live_planner_seed20260647_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
      - review rule: inspect all fifteen keyframe sheets across planner-only
        abstentions and executable delivery routes before using the summary as
        evidence
+     - route breadth: seed20260647 classified `80` generated scenes, selected
+       three live rows per route family, passed `15/15` route contracts, and
+       produced `15/15` browser-watchable visual packages
      - setup-service watch:
        `artifacts/session/live_planner_seed20260645_scene13_fetch_ready_repro_20260605/fetch_planner_route_replay_batch/scorecard.md`
        closed the first scene13 robot set-pose timeout as non-repro control

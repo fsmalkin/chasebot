@@ -1371,6 +1371,21 @@ contract. This is now the widest sim-gate route-owner UAT package for the
 planner-routed moonshot path. Provider-backed LLM routing and physical/onboard
 proof remain open.
 
+Seed20260647 expands the planner-routed breadth floor from `50` to `80`
+generated scenes:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260647_breadth_80x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner child classified all `80` scenes across all five route labels with
+zero wrong fetch dispatches. The explicit mixed replay
+`artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`
+passed `15/15` route contracts: nine executable deliveries and six
+planner-only abstentions. The supporting analyzer
+`artifacts/session/live_planner_seed20260647_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution/setup/contact and `0` first-contact blockers.
+Frame-sequence review covered all fifteen keyframe sheets and matched the route
+contract. This is the strongest current sim-gate route-owner UAT package for
+the planner-routed moonshot path. Provider-backed LLM routing and
+physical/onboard proof remain open.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

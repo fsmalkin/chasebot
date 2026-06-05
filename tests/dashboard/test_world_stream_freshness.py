@@ -482,8 +482,9 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Seed 20260646 mixed all-routes 3x UAT is green"
+    assert payload["status_label"] == "Seed 20260647 mixed all-routes 3x UAT is green"
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
+    assert "Seed 20260647 mixed all-routes 3x UAT is green" in evidence_by_title
     assert "Seed 20260646 mixed all-routes 3x UAT is green" in evidence_by_title
     assert "Seed 20260645 mixed all-routes UAT is green" in evidence_by_title
     assert "Seed 20260644 mixed all-routes UAT is green" in evidence_by_title
@@ -644,8 +645,8 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         "recovery_or_reaim",
         "scan_or_perceive_first",
     }
-    assert any(sample["session_id"] == "20260605T171225403064Z" for sample in route_samples)
-    assert any(sample["session_id"] == "20260605T172056831443Z" for sample in route_samples)
+    assert any(sample["session_id"] == "20260605T180328608256Z" for sample in route_samples)
+    assert any(sample["session_id"] == "20260605T181231717895Z" for sample in route_samples)
     assert {sample["interpretation"] for sample in route_samples} == {"delivery pass", "planner-only abstention"}
     assert payload["uat_review_bundle"]["route_samples"][0]["video_url"].startswith("/artifacts/session/")
     assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")

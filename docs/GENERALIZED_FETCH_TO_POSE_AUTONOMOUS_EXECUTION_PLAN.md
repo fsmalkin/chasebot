@@ -1126,6 +1126,20 @@ Frame-sequence review covered all fifteen keyframe sheets and matched the route
 contracts. Treat this as the widest current sim-gate route-owner UAT package;
 provider-backed LLM routing and physical/onboard proof remain the next gates.
 
+Seed `20260647` expands the current breadth floor from `50` to `80` generated
+planner scenes while preserving three live rows per route family:
+`artifacts/session/live_planner_seed20260647_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The planner child classified all `80` scenes with all five route families
+represented and zero wrong fetch dispatches. The explicit mixed replay passed
+`15/15` route contracts: `9/9` executable deliveries plus `6/6`
+planner-only scan/no-go abstentions. The analyzer at
+`artifacts/session/live_planner_seed20260647_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution, setup, contact, and `0` first-contact blockers.
+Frame-sequence review covered all fifteen keyframe sheets and matched the route
+contracts. Seed20260647 is now the widest sim-gate route-owner UAT package for
+the planner-routed moonshot path; provider-backed LLM routing and
+physical/onboard proof remain the next gates.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches
