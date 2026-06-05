@@ -3257,6 +3257,15 @@ Milestone 3 pass criteria include:
      - seed20260650 visual review: all nine raw-camera/topdown keyframe sheets
        inspected across setup, first contact, mid-push/coast, terminal arrival,
        and final rest
+     - current multi-seed breadth rollup:
+       `artifacts/session/analysis_fetch_planner_breadth_rollup_seeds20260648_20260650_20260605/fetch_planner_breadth_rollup/scorecard.md`
+     - rollup result: seeds `20260648`, `20260649`, and `20260650`;
+       `300/300` planner classifications, `0` wrong fetch dispatches, `27/27`
+       executable visual deliveries, `0` contact watches, and `0`
+       first-contact blockers
+     - rollup route mix: `fetch_ready_local=70`, `nav2_reposition_first=57`,
+       `recovery_or_reaim=52`, `scan_or_perceive_first=65`, and
+       `ambiguous_or_unsafe_no_go=56`
      - claim boundary: this is robot-fidelity/sim-gate rehearsal evidence;
        `hardware_proven=false` until physical robot execution, onboard
        TensorRT proof, physical camera evidence, and field physics are recorded

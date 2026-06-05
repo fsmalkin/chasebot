@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 5:23 PM ET",
+  "updated_label": "Updated June 5, 2026, 5:29 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Seed 20260650 fresh breadth green; seed 20260648 hardware rehearsal green",
-  "status_detail": "Seed20260650 adds another fresh 100-scene deterministic-fallback breadth pass after seed20260649 and the seed20260648 hardware rehearsal. The planner classified all 100 generated scenes with zero wrong fetch dispatches, selected 9 executable rows across recovery, Nav2-first, and fetch-ready routes, and passed 9/9 visual UAT packages with clean analyzer status after frame-sequence review. Seed20260648 remains the current robot-fidelity/sim-gate hardware rehearsal checkpoint. Provider-backed LLM routing still waits on OPENAI_API_KEY, and hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
+  "status_label": "Three-seed breadth rollup green; seed 20260648 hardware rehearsal green",
+  "status_detail": "The planner-routed moonshot path now has a three-seed breadth rollup over seeds 20260648, 20260649, and 20260650: 300 generated planner scenes, zero wrong fetch dispatches, 27/27 executable visual deliveries, zero contact watches, and zero first-contact blockers. Seed20260648 remains the current robot-fidelity/sim-gate hardware rehearsal checkpoint. Provider-backed LLM routing still waits on OPENAI_API_KEY, and hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,43 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Three-seed breadth rollup is green",
+      "status": "300 planner scenes, 27/27 executable visual deliveries, no contact watches",
+      "tone": "green",
+      "summary": "The new breadth rollup packages seeds 20260648, 20260649, and 20260650 into one cumulative evidence card. Across 300 generated planner scenes, route classification passed 300/300 with zero wrong fetch dispatches. The replay slices selected 27 executable rows across recovery/re-aim, Nav2-reposition-first, and fetch-ready-local routes; all 27 delivered with browser-watchable visual packages. The analyzer rollup reports zero contact watches and zero first-contact blockers. This is deterministic-fallback evidence because OPENAI_API_KEY is missing, so provider-backed planner authority and physical/onboard proof remain open.",
+      "metrics": [
+        "Seeds: 20260648, 20260649, 20260650",
+        "Planner breadth: random_cases=300; planner_pass=300; wrong_fetch_dispatches=0",
+        "Route mix: fetch_ready_local=70; nav2_reposition_first=57; recovery_or_reaim=52; scan_or_perceive_first=65; ambiguous_or_unsafe_no_go=56",
+        "Executable replay: selected=27; mission_pass=27; mission_fail=0; visual_package_pass=27",
+        "Quality: contact_watches=0; first_contact_blockers=0",
+        "Provider status: skipped_missing_openai_api_key=300; provider_backed_authority_ready=false",
+        "Claim boundary: deterministic fallback visual UAT rollup only; promotion_evidence=false; hardware_proven=false"
+      ],
+      "links": [
+        {
+          "label": "Three-seed breadth rollup scorecard",
+          "url": "/artifacts/session/analysis_fetch_planner_breadth_rollup_seeds20260648_20260650_20260605/fetch_planner_breadth_rollup/scorecard.md"
+        },
+        {
+          "label": "Three-seed breadth rollup summary",
+          "url": "/artifacts/session/analysis_fetch_planner_breadth_rollup_seeds20260648_20260650_20260605/fetch_planner_breadth_rollup/breadth_rollup_summary.json"
+        },
+        {
+          "label": "Seed 20260648 parent seeded gate scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260649 parent seeded gate scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260649_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260650 parent seeded gate scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        }
+      ]
+    },
     {
       "title": "Seed 20260648 hardware rehearsal is green",
       "status": "robot-fidelity/sim-gate rehearsal passed; physical/onboard proof remains open",

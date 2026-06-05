@@ -1239,6 +1239,17 @@ adds a consecutive 100-scene breadth pass after seed20260649 while preserving
 the same claim boundary: provider-backed LLM routing and physical/onboard proof
 remain open gates.
 
+The current multi-seed breadth rollup is green:
+`artifacts/session/analysis_fetch_planner_breadth_rollup_seeds20260648_20260650_20260605/fetch_planner_breadth_rollup/scorecard.md`.
+Across seeds `20260648`, `20260649`, and `20260650`, the planner classified
+`300/300` generated scenes, wrong fetch dispatches stayed at `0`, executable
+visual deliveries passed `27/27`, contact watches stayed at `0`, and
+first-contact blockers stayed at `0`. Route mix across the rollup is
+`fetch_ready_local=70`, `nav2_reposition_first=57`, `recovery_or_reaim=52`,
+`scan_or_perceive_first=65`, and `ambiguous_or_unsafe_no_go=56`. Treat this as
+the current deterministic-fallback breadth baseline for the moonshot branch.
+Provider-backed LLM authority and physical/onboard proof remain the open gates.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches

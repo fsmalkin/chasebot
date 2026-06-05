@@ -1478,6 +1478,17 @@ sheets matched the corrected delivery geometry. Treat this as another fresh
 breadth pass for the planner-routed stack, while provider-backed LLM routing
 and physical/onboard proof stay open.
 
+The current multi-seed breadth rollup is green:
+`artifacts/session/analysis_fetch_planner_breadth_rollup_seeds20260648_20260650_20260605/fetch_planner_breadth_rollup/scorecard.md`.
+Seeds `20260648`, `20260649`, and `20260650` combine into `300/300` planner
+classifications, `0` wrong fetch dispatches, `27/27` executable visual
+deliveries, `0` contact watches, and `0` first-contact blockers. Route mix
+across the rollup is `fetch_ready_local=70`, `nav2_reposition_first=57`,
+`recovery_or_reaim=52`, `scan_or_perceive_first=65`, and
+`ambiguous_or_unsafe_no_go=56`. Treat this as the current deterministic
+breadth baseline while provider-backed LLM routing and physical/onboard proof
+stay open.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
