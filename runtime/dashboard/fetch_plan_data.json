@@ -90,7 +90,7 @@
       "title": "Dashboard visual evidence audit is green",
       "status": "15/15 UAT samples and required current evidence cards resolve to browser-watchable artifacts",
       "tone": "green",
-      "summary": "The dashboard visual evidence audit verifies the current browser-facing proof layer after adding the milestone readiness and physical/onboard proof-gap rollups. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and the required current evidence cards for the three-seed breadth rollup, hardware rehearsal, and provider preflight. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
+      "summary": "The dashboard visual evidence audit verifies the current browser-facing proof layer after adding the milestone readiness, physical/onboard proof-gap, and robot-side runbook rollups. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and the required current evidence cards for the three-seed breadth rollup, hardware rehearsal, and provider preflight. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
       "metrics": [
         "Audit: pass=true; interpretation=dashboard_visual_evidence_links_green",
         "UAT bundle: 15/15 samples pass link audit",
@@ -102,11 +102,11 @@
       "links": [
         {
           "label": "Dashboard visual evidence audit scorecard",
-          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_physical_gap_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_robot_side_runbook_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
         },
         {
           "label": "Dashboard visual evidence audit summary",
-          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_physical_gap_20260605/fetch_dashboard_visual_evidence_audit/dashboard_visual_evidence_summary.json"
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_robot_side_runbook_20260605/fetch_dashboard_visual_evidence_audit/dashboard_visual_evidence_summary.json"
         },
         {
           "label": "Seed 20260648 mixed all-routes video bundle",
@@ -177,6 +177,33 @@
         {
           "label": "Milestone readiness scorecard",
           "url": "/artifacts/session/generalized_fetch_to_pose_milestone_readiness_20260605/fetch_generalized_milestone_readiness/scorecard.md"
+        }
+      ]
+    },
+    {
+      "title": "Robot-side physical runbook is current",
+      "status": "seed20260648 runbook now includes the physical proof claim template and gap-audit command",
+      "tone": "yellow",
+      "summary": "The robot-side rehearsal preflight is now aligned to the current seed20260648 hardware-rehearsal evidence instead of the older seed20260643 path. The runbook includes the runtime smoke, saved-anchor rehearsal, mixed all-routes rehearsal, and the follow-up physical/onboard proof-gap audit command. It also embeds the physical_claim_summary.json template required before hardware_proven can become true.",
+      "metrics": [
+        "Preflight: pass=true; local_preflight_ready=true; hardware_connected=false; hardware_proven=false",
+        "Current seed: seed20260648_mixed_all_routes_rehearsal",
+        "Required proof claim: runtime_target=robot_fidelity_orin; inference_backend=tensorrt_int8; execution_surface=physical_robot",
+        "Required physical artifacts: control_preflight, mission_verdict, raw_camera, topdown_telemetry, world_stream, keyframe_contact_sheet",
+        "Next command includes fetch_physical_onboard_proof_gap.py with --physical-claim-summary"
+      ],
+      "links": [
+        {
+          "label": "Robot-side rehearsal preflight scorecard",
+          "url": "/artifacts/session/robot_side_rehearsal_preflight_seed20260648_physical_gap_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md"
+        },
+        {
+          "label": "Robot-side rehearsal preflight summary",
+          "url": "/artifacts/session/robot_side_rehearsal_preflight_seed20260648_physical_gap_20260605/fetch_robot_side_rehearsal_preflight/robot_side_rehearsal_preflight_summary.json"
+        },
+        {
+          "label": "Physical/onboard proof gap scorecard",
+          "url": "/artifacts/session/physical_onboard_proof_gap_20260605/fetch_physical_onboard_proof_gap/scorecard.md"
         }
       ]
     },
@@ -6145,6 +6172,7 @@
   "next_steps": [
     "Use the milestone readiness rollup as the operator UAT checkpoint: sim evidence is green, provider-backed routing and physical/onboard proof remain the next gates.",
     "Use the physical/onboard proof-gap schema for the next hardware run: physical robot, onboard TensorRT, physical camera evidence, field-physics notes, and browser-watchable artifacts are all required before hardware_proven=true.",
+    "Run the current seed20260648 robot-side physical runbook, then create physical_claim_summary.json and rerun fetch_physical_onboard_proof_gap.py before any hardware_proven claim.",
     "Provide OPENAI_API_KEY, then run the rollup-backed provider rerun on seed20260650, run the provider-vs-baseline comparison analyzer, and compare provider agreement, guard vetoes, route deltas, and mixed all-routes visual replay against the three-seed deterministic baseline.",
     "Repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT, physical camera evidence, and field-physics notes.",
     "After provider-backed routing passes, rerun the mixed all-routes evidence ladder on physical/onboard hardware.",

@@ -17,14 +17,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 PREFLIGHT_KIND = "fetch_robot_side_rehearsal_preflight"
 DEFAULT_READINESS_SUMMARY = (
-    "artifacts/session/analysis_fetch_hardware_transfer_readiness_seed20260643_mixed_all_routes_20260605/"
+    "artifacts/session/hardware_transfer_readiness_seed20260648_dashboard_20260605/"
     "fetch_hardware_transfer_readiness/hardware_transfer_readiness_summary.json"
 )
 DEFAULT_REHEARSAL_PLAN = (
-    "artifacts/session/analysis_fetch_hardware_rehearsal_plan_seed20260643_20260605/"
+    "artifacts/session/analysis_fetch_hardware_rehearsal_plan_seed20260648_20260605/"
     "fetch_hardware_rehearsal_plan/hardware_rehearsal_plan_summary.json"
 )
+DEFAULT_PHYSICAL_GAP_SUMMARY = (
+    "artifacts/session/physical_onboard_proof_gap_20260605/"
+    "fetch_physical_onboard_proof_gap/physical_onboard_proof_gap_summary.json"
+)
 DEFAULT_DASHBOARD_URL = "http://100.112.221.6:8883"
+CURRENT_REHEARSAL_SEED = "20260648"
 
 
 def utc_now() -> str:
@@ -102,14 +107,22 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     issues: list[str] = []
     readiness, readiness_issues = read_json(args.readiness_summary)
     plan, plan_issues = read_json(args.rehearsal_plan)
+    physical_gap, physical_gap_issues = read_json(args.physical_gap_summary)
     issues.extend(readiness_issues)
     issues.extend(plan_issues)
+    issues.extend(physical_gap_issues)
     bool_issue(issues, bool(readiness.get("pass", False)), "readiness_summary_not_pass")
     bool_issue(issues, bool(readiness.get("hardware_transfer_ready", False)), "hardware_transfer_ready_false")
     bool_issue(issues, readiness.get("hardware_proven") is False, "readiness_should_not_claim_hardware_proven")
     bool_issue(issues, bool(plan.get("pass", False)), "rehearsal_plan_not_pass")
     bool_issue(issues, bool(plan.get("hardware_rehearsal_plan_ready", False)), "rehearsal_plan_not_ready")
     bool_issue(issues, plan.get("hardware_proven") is False, "plan_should_not_claim_hardware_proven")
+    bool_issue(issues, bool(physical_gap.get("pass", False)), "physical_gap_summary_not_pass")
+    bool_issue(
+        issues,
+        bool(physical_gap.get("physical_onboard_proof_ready", True)) is False,
+        "physical_gap_should_not_claim_proof_ready",
+    )
 
     command_checks = [command_check(command) for command in ("python", "powershell", "git")]
     script_checks = [
@@ -121,6 +134,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
             "scripts/fetch_hardware_rehearsal_runner.py",
             "scripts/fetch_planner_route_replay_batch.py",
             "scripts/fetch_planner_seeded_generalization_gate.py",
+            "scripts/fetch_physical_onboard_proof_gap.py",
         )
     ]
     issues.extend(issue for check in command_checks for issue in check["issues"])
@@ -145,6 +159,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "issues": issues,
         "readiness_summary_path": artifact_display_path(args.readiness_summary),
         "rehearsal_plan_path": artifact_display_path(args.rehearsal_plan),
+        "physical_gap_summary_path": artifact_display_path(args.physical_gap_summary),
         "dashboard_url": str(args.dashboard_url),
         "command_checks": command_checks,
         "script_checks": script_checks,
@@ -160,14 +175,34 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
             "visual/topdown_telemetry_browser.mp4",
             "visual/world_stream.mp4",
             "visual/keyframe_review_contact_sheet.png",
+            "physical_claim_summary.json with robot_fidelity_orin, tensorrt_int8, execution_surface=physical_robot",
+            "physical claim artifacts keyed as control_preflight, mission_verdict, raw_camera, topdown_telemetry, world_stream, keyframe_contact_sheet",
             "operator visual review notes for start/setup, pre-contact, first contact, mid-push, terminal arrival, final rest",
         ],
+        "physical_claim_template": {
+            "runtime_target": "robot_fidelity_orin",
+            "inference_backend": "tensorrt_int8",
+            "execution_surface": "physical_robot",
+            "physical_robot_run": True,
+            "onboard_tensorrt_execution": True,
+            "physical_camera_evidence": True,
+            "field_physics_notes": True,
+            "artifacts": {
+                "control_preflight": "<path-to-control_preflight.json>",
+                "mission_verdict": "<path-to-mission_verdict.json>",
+                "raw_camera": "<path-to-raw_camera_browser.mp4>",
+                "topdown_telemetry": "<path-to-topdown_telemetry_browser.mp4>",
+                "world_stream": "<path-to-world_stream.mp4>",
+                "keyframe_contact_sheet": "<path-to-keyframe_review_contact_sheet.png>",
+            },
+        },
         "next_commands": [
             "powershell -ExecutionPolicy Bypass -File scripts/run_dashboard_service.ps1 -BindHost 0.0.0.0 -Port 8883",
             "powershell -ExecutionPolicy Bypass -File scripts/sync_runtime_workspace.ps1 -Distro Ubuntu-24.04 -WorkspacePath '~/ros2_ws' -SkipBuild -RosDistro kilted",
-            "python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_runtime_stack_smoke_20260605 --step-id runtime_stack_smoke --execute --timeout-s 1800",
-            "python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_saved_anchors_20260605 --step-id saved_anchor_one_run_fetch_rehearsal --execute --timeout-s 2400",
-            "python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_seed20260643_mixed_all_routes_20260605 --step-id seed20260643_mixed_all_routes_rehearsal --execute --timeout-s 3600",
+            f"python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_seed{CURRENT_REHEARSAL_SEED}_runtime_stack_smoke_20260605 --step-id runtime_stack_smoke --execute --timeout-s 1800",
+            f"python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_seed{CURRENT_REHEARSAL_SEED}_saved_anchors_20260605 --step-id saved_anchor_one_run_fetch_rehearsal --execute --timeout-s 2400",
+            f"python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_seed{CURRENT_REHEARSAL_SEED}_mixed_all_routes_20260605 --step-id seed{CURRENT_REHEARSAL_SEED}_mixed_all_routes_rehearsal --execute --timeout-s 3600",
+            "python scripts/fetch_physical_onboard_proof_gap.py --campaign-id physical_onboard_proof_gap_after_robot_side_rehearsal_20260605 --physical-claim-summary <path-to-physical_claim_summary.json>",
         ],
         "claim_boundary": (
             "This preflight proves the local run package is ready to attempt robot-side rehearsal. "
@@ -194,6 +229,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- issues: `{summary.get('issues', [])}`",
         f"- readiness_summary: {artifact_link(str(summary.get('readiness_summary_path', '')))}",
         f"- rehearsal_plan: {artifact_link(str(summary.get('rehearsal_plan_path', '')))}",
+        f"- physical_gap_summary: {artifact_link(str(summary.get('physical_gap_summary_path', '')))}",
         f"- dashboard_url: {summary.get('dashboard_url', '')}",
         "",
         "## Command Checks",
@@ -209,6 +245,10 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
     lines.extend(["", "## Required Robot-Side Artifacts", ""])
     for item in summary.get("required_robot_side_artifacts", []):
         lines.append(f"- {item}")
+    lines.extend(["", "## Physical Claim Template", ""])
+    lines.append("```json")
+    lines.append(json.dumps(summary.get("physical_claim_template", {}), indent=2, sort_keys=True))
+    lines.append("```")
     lines.extend(["", "## Next Commands", ""])
     for command in summary.get("next_commands", []):
         lines.append(f"- `{command}`")
@@ -221,6 +261,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--campaign-id", default=f"fetch_robot_side_rehearsal_preflight_{current_utc_stamp()}")
     parser.add_argument("--readiness-summary", default=DEFAULT_READINESS_SUMMARY)
     parser.add_argument("--rehearsal-plan", default=DEFAULT_REHEARSAL_PLAN)
+    parser.add_argument("--physical-gap-summary", default=DEFAULT_PHYSICAL_GAP_SUMMARY)
     parser.add_argument("--dashboard-url", default=DEFAULT_DASHBOARD_URL)
     return parser.parse_args()
 

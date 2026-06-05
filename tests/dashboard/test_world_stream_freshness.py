@@ -498,6 +498,9 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         evidence_by_title["Physical/onboard proof gap is explicit"]["metrics"]
     )
     assert "hardware_proven remains false" in evidence_by_title["Physical/onboard proof gap is explicit"]["summary"]
+    assert evidence_by_title["Robot-side physical runbook is current"]["tone"] == "yellow"
+    assert "seed20260648" in evidence_by_title["Robot-side physical runbook is current"]["status"]
+    assert "physical_claim_summary.json" in evidence_by_title["Robot-side physical runbook is current"]["summary"]
     assert any(
         "generalized_fetch_to_pose_milestone_readiness_20260605" in link["url"]
         for link in evidence_by_title["Milestone readiness rollup is UAT-ready"]["links"]
@@ -507,7 +510,11 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         for link in evidence_by_title["Physical/onboard proof gap is explicit"]["links"]
     )
     assert any(
-        "dashboard_visual_evidence_audit_with_physical_gap_20260605" in link["url"]
+        "robot_side_rehearsal_preflight_seed20260648_physical_gap_20260605" in link["url"]
+        for link in evidence_by_title["Robot-side physical runbook is current"]["links"]
+    )
+    assert any(
+        "dashboard_visual_evidence_audit_with_robot_side_runbook_20260605" in link["url"]
         for link in evidence_by_title["Dashboard visual evidence audit is green"]["links"]
     )
     assert "15/15 UAT samples" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]

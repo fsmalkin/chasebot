@@ -24,6 +24,7 @@ def _args(tmp_path: Path, **overrides):
         "campaign_id": "robot_side_preflight",
         "readiness_summary": str(tmp_path / "readiness.json"),
         "rehearsal_plan": str(tmp_path / "plan.json"),
+        "physical_gap_summary": str(tmp_path / "physical_gap.json"),
         "dashboard_url": "http://100.112.221.6:8883",
     }
     payload.update(overrides)
@@ -48,6 +49,14 @@ def _green_fixture(tmp_path: Path):
             "hardware_proven": False,
         },
     )
+    _write_json(
+        Path(args.physical_gap_summary),
+        {
+            "pass": True,
+            "physical_onboard_proof_ready": False,
+            "hardware_proven": False,
+        },
+    )
     return args
 
 
@@ -60,8 +69,13 @@ def test_robot_side_preflight_ready_without_claiming_hardware_proof(tmp_path: Pa
     assert summary["hardware_proven"] is False
     assert summary["promotion_evidence"] is False
     assert "control_preflight.json" in summary["required_robot_side_artifacts"][0]
+    assert any("physical_claim_summary.json" in item for item in summary["required_robot_side_artifacts"])
+    assert summary["physical_claim_template"]["runtime_target"] == "robot_fidelity_orin"
+    assert summary["physical_claim_template"]["inference_backend"] == "tensorrt_int8"
+    assert summary["physical_claim_template"]["execution_surface"] == "physical_robot"
     assert any("fetch_hardware_rehearsal_runner.py" in command for command in summary["next_commands"])
-    assert any("seed20260643_mixed_all_routes_rehearsal" in command for command in summary["next_commands"])
+    assert any("seed20260648_mixed_all_routes_rehearsal" in command for command in summary["next_commands"])
+    assert any("fetch_physical_onboard_proof_gap.py" in command for command in summary["next_commands"])
 
 
 def test_robot_side_preflight_fails_closed_when_readiness_is_stale(tmp_path: Path):
@@ -75,6 +89,16 @@ def test_robot_side_preflight_fails_closed_when_readiness_is_stale(tmp_path: Pat
     assert "hardware_transfer_ready_false" in summary["issues"]
 
 
+def test_robot_side_preflight_fails_closed_when_physical_gap_already_claims_ready(tmp_path: Path):
+    args = _green_fixture(tmp_path)
+    _write_json(Path(args.physical_gap_summary), {"pass": True, "physical_onboard_proof_ready": True})
+
+    summary = preflight.build_summary(args)
+
+    assert summary["pass"] is False
+    assert "physical_gap_should_not_claim_proof_ready" in summary["issues"]
+
+
 def test_robot_side_preflight_scorecard_lists_next_commands(tmp_path: Path):
     scorecard = tmp_path / "scorecard.md"
     summary = preflight.build_summary(_green_fixture(tmp_path))
@@ -85,3 +109,5 @@ def test_robot_side_preflight_scorecard_lists_next_commands(tmp_path: Path):
     assert "hardware_proven: `False`" in text
     assert "run_dashboard_service.ps1" in text
     assert "keyframe_review_contact_sheet.png" in text
+    assert "Physical Claim Template" in text
+    assert "fetch_physical_onboard_proof_gap.py" in text
