@@ -647,6 +647,46 @@ June 5, 2026 seed20260637 breadth UAT:
   unavailable, so provider-backed LLM routing and physical/onboard proof remain
   open.
 
+June 5, 2026 seed20260641 timeout/startup repair rough breadth UAT:
+
+- Initial command:
+  `python scripts\fetch_planner_seeded_generalization_gate.py --campaign-id live_planner_seeded_generalization_gate_seed20260641_rough_breadth_20260605 --seed 20260641 --random-cases 30 --planner-mode llm_supervised_guarded --quality-order roughest --max-per-route 3 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail`
+- Initial result: the parent gate crashed on a Python `TimeoutExpired` while
+  running `seed20260641_scene08_nav2_reposition_first`, after earlier rows had
+  produced partial artifacts. The replay runner now converts live-run
+  `TimeoutExpired` into `returncode=124` row evidence with timeout text instead
+  of raising a parent traceback.
+- Structured failure command:
+  `python scripts\fetch_planner_seeded_generalization_gate.py --campaign-id live_planner_seeded_generalization_gate_seed20260641_rough_breadth_timeout_capture_20260605 --seed 20260641 --random-cases 30 --planner-mode llm_supervised_guarded --quality-order roughest --max-per-route 3 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail`
+- Structured failure result: the gate emitted
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260641_rough_breadth_timeout_capture_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+  with a row-level fresh-dashboard failure when `world_stream` did not become
+  ready. Fresh dashboard startup now defaults to two attempts with an
+  intervening environment stop after the first failed start.
+- Repaired command:
+  `python scripts\fetch_planner_seeded_generalization_gate.py --campaign-id live_planner_seeded_generalization_gate_seed20260641_rough_breadth_startup_retry_20260605 --seed 20260641 --random-cases 30 --planner-mode llm_supervised_guarded --quality-order roughest --max-per-route 3 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail`
+- Repaired parent scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260641_rough_breadth_startup_retry_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Repaired replay scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260641_rough_breadth_startup_retry_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Repaired analyzer scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260641_rough_breadth_startup_retry_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+- Repaired result: parent gate `pass=true`, `random_cases=30`,
+  `wrong_fetch_dispatch_count=0`, executable replay `9/9`, visual packages
+  `9/9`, analyzer execution/setup/contact clean, and first-contact blockers
+  `0`.
+- Route coverage: replay selected three `recovery_or_reaim`, three
+  `nav2_reposition_first`, and three `fetch_ready_local` rows. The generated
+  route mix also held two `ambiguous_or_unsafe_no_go` and nine
+  `scan_or_perceive_first` scenes for route-withholding coverage.
+- Visual review: inspected all nine raw-camera/topdown keyframe sheets. The
+  onboard camera and topdown geometry agreed through setup, first contact,
+  push, and terminal delivery. The previously timed-out scene08 Nav2 row now
+  passes with visible delivery.
+- Claim boundary: this is rough sim-gate route-owner UAT. Planner authority ran
+  through deterministic fallback because `OPENAI_API_KEY` was unavailable, so
+  provider-backed LLM routing and physical/onboard proof remain open.
+
 June 5, 2026 seed20260640 preflight repair rough breadth UAT:
 
 - Initial command:

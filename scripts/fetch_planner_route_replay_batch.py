@@ -147,15 +147,32 @@ def start_dashboard_environment(args: argparse.Namespace) -> dict[str, Any]:
         "operator_view_required": not bool(getattr(args, "allow_operator_view_degraded", False)),
         "visual_evidence_required": not bool(getattr(args, "no_visual_package", False)),
     }
-    response = post_dashboard_json(str(args.dashboard_url or ""), "/api/env/start", body, timeout_s=60.0)
-    state = wait_for_dashboard_state(
-        str(args.dashboard_url or ""),
-        timeout_s=float(args.env_ready_timeout_s),
-        poll_s=5.0,
-        want_ready=True,
-        allow_operator_view_degraded=bool(getattr(args, "allow_operator_view_degraded", False)),
-    )
-    return {"request": response, "state": state}
+    attempts: list[dict[str, Any]] = []
+    max_attempts = max(int(getattr(args, "env_start_attempts", 1) or 1), 1)
+    dashboard_url = str(args.dashboard_url or "")
+    for attempt_index in range(1, max_attempts + 1):
+        response = post_dashboard_json(dashboard_url, "/api/env/start", body, timeout_s=60.0)
+        state = wait_for_dashboard_state(
+            dashboard_url,
+            timeout_s=float(args.env_ready_timeout_s),
+            poll_s=5.0,
+            want_ready=True,
+            allow_operator_view_degraded=bool(getattr(args, "allow_operator_view_degraded", False)),
+        )
+        attempt = {"index": attempt_index, "request": response, "state": state}
+        attempts.append(attempt)
+        if dashboard_environment_ready(
+            state,
+            allow_operator_view_degraded=bool(getattr(args, "allow_operator_view_degraded", False)),
+        ):
+            return {"request": response, "state": state, "attempts": attempts}
+        if attempt_index < max_attempts:
+            attempt["stop_after_failed_start"] = stop_dashboard_environment(
+                dashboard_url,
+                timeout_s=float(args.env_stop_timeout_s),
+            )
+    last = attempts[-1] if attempts else {"request": {}, "state": {}}
+    return {"request": last.get("request", {}), "state": last.get("state", {}), "attempts": attempts}
 
 
 def resolve_path(raw_path: str) -> Path:
@@ -378,14 +395,26 @@ def mission_summary_path_from_visual_package(package: dict[str, Any]) -> Path | 
 
 
 def _run_command(command: list[str], *, timeout_s: float) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        command,
-        cwd=str(REPO_ROOT),
-        capture_output=True,
-        text=True,
-        timeout=max(float(timeout_s), 1.0),
-        check=False,
-    )
+    timeout = max(float(timeout_s), 1.0)
+    try:
+        return subprocess.run(
+            command,
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        stdout = exc.stdout or ""
+        stderr = exc.stderr or ""
+        if isinstance(stdout, bytes):
+            stdout = stdout.decode(errors="replace")
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode(errors="replace")
+        timeout_text = f"timeout_after_s={timeout:.3f}"
+        stderr_text = f"{stderr}\n{timeout_text}".strip()
+        return subprocess.CompletedProcess(command, 124, stdout=str(stdout or ""), stderr=stderr_text)
 
 
 def summarize_mission(path: Path) -> dict[str, Any]:
@@ -717,6 +746,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--surface-profile", default="calibrated_golf_turf")
     parser.add_argument("--robot-sdf-name", default="jetbot_core_ignition_v1.7.0.sdf")
     parser.add_argument("--env-ready-timeout-s", type=float, default=DEFAULT_ENV_READY_TIMEOUT_S)
+    parser.add_argument("--env-start-attempts", type=int, default=2)
     parser.add_argument("--env-stop-timeout-s", type=float, default=90.0)
     parser.add_argument("--fetch-delivery-radius-m", type=float, default=0.300)
     parser.add_argument("--route-only-sample-duration-s", type=float, default=5.0)

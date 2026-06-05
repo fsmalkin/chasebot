@@ -1284,6 +1284,19 @@ push, and terminal delivery. The two high-risk recovery rows still showed
 coherent ball/target/robot geometry. Provider-backed LLM routing and
 physical/onboard hardware-transfer proof remain the active open gates.
 
+Seed20260641 adds timeout/startup hardening plus another roughest-row breadth
+pass:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260641_rough_breadth_startup_retry_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The seed first exposed harness fragility: live-run timeout raised a parent
+traceback, then a structured rerun stopped on a single `world_stream` startup
+miss. The replay runner now captures timeouts as row evidence, and fresh
+dashboard startup now gets a bounded retry. The repaired gate classified `30`
+generated scenes with zero wrong fetch dispatches, then passed `9/9` executable
+rows across three `recovery_or_reaim`, three `nav2_reposition_first`, and three
+`fetch_ready_local` routes. Visual packages passed `9/9`, the analyzer reports
+clean execution/setup/contact, and frame-sequence review of all nine
+raw-camera/topdown sheets matched the delivery geometry.
+
 Seed20260640 adds preflight-repair evidence plus another roughest-row breadth
 pass:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260640_rough_breadth_preflight_fix_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

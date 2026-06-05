@@ -1477,6 +1477,19 @@ recovery rows. The roadmap sequence stays the same: rerun provider-backed LLM
 routing when credentials are available, then run physical/onboard proof before
 claiming hardware transfer.
 
+Seed20260641 converts timeout/startup fragility into stronger rough-gate
+evidence:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260641_rough_breadth_startup_retry_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The seed first exposed two harness issues: live-run timeout escaped as a parent
+traceback, then a structured rerun stopped on a one-off `world_stream` startup
+miss. The replay runner now records timeout rows with `returncode=124`, and
+fresh dashboard startup now uses a bounded retry. The repaired rerun classified
+`30` scenes with zero wrong fetch dispatches and passed nine executable rows
+across recovery/re-aim, Nav2-first, and fetch-ready owners. All nine visual
+packages passed, and frame-sequence review found the onboard camera and topdown
+geometry aligned. The roadmap sequence still prioritizes provider-backed LLM
+reruns and physical/onboard proof before hardware-transfer claims.
+
 Seed20260640 converts an infrastructure failure into stronger rough-gate
 evidence:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260640_rough_breadth_preflight_fix_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

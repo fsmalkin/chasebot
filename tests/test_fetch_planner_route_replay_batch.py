@@ -1,4 +1,5 @@
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -34,6 +35,7 @@ def _make_args(**overrides):
         "surface_profile": "calibrated_golf_turf",
         "robot_sdf_name": "jetbot_core_ignition_v1.7.0.sdf",
         "env_ready_timeout_s": batch.DEFAULT_ENV_READY_TIMEOUT_S,
+        "env_start_attempts": 2,
         "env_stop_timeout_s": 90.0,
         "fetch_delivery_radius_m": 0.3,
         "route_only_sample_duration_s": 5.0,
@@ -97,6 +99,23 @@ def test_replay_batch_default_env_ready_timeout_matches_rough_gate_evidence(monk
 
     assert args.env_ready_timeout_s == batch.DEFAULT_ENV_READY_TIMEOUT_S
     assert args.env_ready_timeout_s == 600.0
+    assert args.env_start_attempts == 2
+
+
+def test_run_command_returns_completed_process_on_timeout(monkeypatch, tmp_path):
+    monkeypatch.setattr(batch, "REPO_ROOT", tmp_path)
+
+    def fake_run(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd=["runner"], timeout=180.0, output="partial stdout", stderr="partial stderr")
+
+    monkeypatch.setattr(batch.subprocess, "run", fake_run)
+
+    completed = batch._run_command(["runner"], timeout_s=180.0)
+
+    assert completed.returncode == 124
+    assert "partial stdout" in completed.stdout
+    assert "partial stderr" in completed.stderr
+    assert "timeout_after_s=180.000" in completed.stderr
 
 
 def test_replay_batch_dry_run_can_materialize_planner_only_route_proofs(tmp_path, monkeypatch):
@@ -578,6 +597,57 @@ def test_start_dashboard_environment_can_request_operator_view_degraded(monkeypa
     assert posted["payload"]["operator_view_required"] is False
     assert posted["payload"]["visual_evidence_required"] is True
     assert result["state"]["operator_view_status"] == "degraded"
+
+
+def test_start_dashboard_environment_retries_failed_start(monkeypatch):
+    post_count = {"value": 0}
+    wait_states = [
+        {
+            "environment_state": "error",
+            "phase": "environment_starting",
+            "last_error": "World stream did not become ready.",
+        },
+        {
+            "environment_state": "environment_ready",
+            "phase": "environment_ready",
+            "session_id": "session_retry",
+            "compose_project": "project_retry",
+            "operator_view_status": "degraded",
+            "truth_summary": {"pass": True, "robot_truth_seen": True, "true_target_seen": True},
+            "world_stream_summary": {"pass": True},
+        },
+    ]
+    stops = []
+
+    def fake_post(*_args, **_kwargs):
+        post_count["value"] += 1
+        return {"accepted": True}
+
+    def fake_wait(*_args, **_kwargs):
+        return wait_states.pop(0)
+
+    def fake_stop(dashboard_url, *, timeout_s):
+        stops.append((dashboard_url, timeout_s))
+        return {"state": {"environment_state": "stopped"}}
+
+    monkeypatch.setattr(batch, "post_dashboard_json", fake_post)
+    monkeypatch.setattr(batch, "wait_for_dashboard_state", fake_wait)
+    monkeypatch.setattr(batch, "stop_dashboard_environment", fake_stop)
+
+    result = batch.start_dashboard_environment(
+        _make_args(
+            dashboard_url="http://dash",
+            allow_operator_view_degraded=True,
+            env_start_attempts=2,
+            env_stop_timeout_s=9.0,
+        )
+    )
+
+    assert post_count["value"] == 2
+    assert stops == [("http://dash", 9.0)]
+    assert len(result["attempts"]) == 2
+    assert result["attempts"][0]["stop_after_failed_start"]["state"]["environment_state"] == "stopped"
+    assert result["state"]["session_id"] == "session_retry"
 
 
 def test_start_dashboard_environment_skips_visual_evidence_when_no_package(monkeypatch):
