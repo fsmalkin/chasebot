@@ -1197,6 +1197,12 @@ rehearsal, then seed20260635 mixed-route rehearsal. The claim remains
 keyframe, and runtime-provenance artifacts from the robot-side rehearsal
 surface.
 
+The rehearsal runner preflight is also green:
+`artifacts/session/analysis_fetch_hardware_rehearsal_runner_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+It confirms the three rehearsal commands resolve locally and sets
+`execute_runtime_stack_smoke` as the next action. Treat this as launch
+readiness rather than hardware proof.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

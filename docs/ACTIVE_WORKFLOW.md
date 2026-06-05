@@ -484,6 +484,19 @@ June 5, 2026 hardware rehearsal plan:
   rehearsal. Each fetch step must include controller preflight, mission verdict,
   onboard/context video, and keyframe sequence review.
 
+June 5, 2026 hardware rehearsal runner preflight:
+
+- Command:
+  `python scripts\fetch_hardware_rehearsal_runner.py --campaign-id analysis_fetch_hardware_rehearsal_runner_preflight_20260605`
+- Scorecard:
+  `artifacts/session/analysis_fetch_hardware_rehearsal_runner_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md`
+- Result: `planner_routed_fetch_hardware_rehearsal_preflight_ready`;
+  all three rehearsal commands resolve locally and `next_action=execute_runtime_stack_smoke`.
+- Evidence meaning: the runner preflight confirms the stack-smoke, saved-anchor,
+  and seed20260635 rehearsal commands are launchable from the current repo. It
+  preserves `hardware_proven=false`; robot-side proof starts when
+  `runtime_stack_smoke` executes and produces visual/runtime artifacts.
+
 June 4, 2026 planner-only route proof:
 
 - Command:

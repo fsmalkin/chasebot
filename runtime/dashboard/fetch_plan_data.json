@@ -50,6 +50,29 @@
   ],
   "latest_evidence": [
     {
+      "title": "Hardware rehearsal runner preflight is green",
+      "status": "all rehearsal commands resolve; next action is runtime stack smoke",
+      "tone": "green",
+      "summary": "The hardware rehearsal plan now has an executable runner preflight. It verified the stack-smoke PowerShell command, saved-anchor replay command, and seed20260635 mixed-route command all resolve on this machine, and it records the required visual and controller artifacts for each step. This still keeps hardware_proven=false; the next action is to execute the runtime stack smoke and review its robot-side visual evidence.",
+      "metrics": [
+        "Runner mode: preflight; pass=true; hardware_proven=false; promotion_evidence=false",
+        "runtime_stack_smoke command resolves to scripts/run_first_uat.ps1",
+        "saved_anchor_one_run_fetch_rehearsal command resolves to scripts/fetch_planner_route_replay_batch.py",
+        "seed20260635_mixed_route_fetch_rehearsal command resolves to scripts/fetch_planner_seeded_generalization_gate.py",
+        "Next action: execute_runtime_stack_smoke"
+      ],
+      "links": [
+        {
+          "label": "Hardware rehearsal runner preflight scorecard",
+          "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_runner_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "Hardware rehearsal runner preflight summary",
+          "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_runner_preflight_20260605/fetch_hardware_rehearsal_runner/rehearsal_runner_summary.json"
+        }
+      ]
+    },
+    {
       "title": "Hardware rehearsal run plan is ready",
       "status": "three-step robot-side rehearsal contract generated",
       "tone": "green",
@@ -4162,7 +4185,7 @@
     }
   ],
   "next_steps": [
-    "Run the generated three-step hardware rehearsal plan: runtime stack smoke, saved-anchor fetch rehearsal, then seed20260635 mixed-route fetch rehearsal with browser-watchable video and keyframe sequence review.",
+    "Execute the hardware rehearsal runner's first step, runtime_stack_smoke, then inspect the raw-camera and world-stream evidence before running saved-anchor fetch rehearsal.",
     "Use the seed20260635 preflight regression manifest as the default green bar before future route-owner, contact-servo, visual-packaging, or hardware-transfer moonshots.",
     "Keep hardware-transfer claims at rehearsal-ready until robot-side live execution, onboard TensorRT execution, physical camera evidence, and field-physics proof are recorded.",
     "Keep provider-backed guarded fallback as the high-level planner authority model unless product requirements demand strict all-accepted LLM routing.",

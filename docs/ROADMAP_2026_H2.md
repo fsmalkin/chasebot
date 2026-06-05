@@ -1402,3 +1402,9 @@ Run the stack smoke first, then the saved-anchor fetch rehearsal, then the
 seed20260635 mixed-route rehearsal. Keep `hardware_proven=false` until those
 robot-side runs produce the required controller, mission, video, and keyframe
 artifacts.
+
+The rehearsal plan also has a green runner preflight:
+`artifacts/session/analysis_fetch_hardware_rehearsal_runner_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The next roadmap action is `execute_runtime_stack_smoke`; saved-anchor and
+seeded mixed-route rehearsal follow after the stack smoke records usable visual
+evidence.

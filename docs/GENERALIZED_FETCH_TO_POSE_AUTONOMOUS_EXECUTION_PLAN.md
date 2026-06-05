@@ -439,6 +439,15 @@ base-controller preflight, mission verdicts, onboard raw-camera video,
 topdown/world context, and keyframe sequence review before the hardware claim
 advances beyond rehearsal-ready.
 
+June 5 hardware rehearsal runner preflight: the three-step plan now has a
+runner preflight artifact:
+`artifacts/session/analysis_fetch_hardware_rehearsal_runner_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+It verifies that the `runtime_stack_smoke`, saved-anchor rehearsal, and
+seed20260635 mixed-route rehearsal commands resolve locally, then names
+`execute_runtime_stack_smoke` as the next action. This is launch readiness; the
+hardware proof boundary remains open until the stack smoke produces visual and
+runtime artifacts.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
