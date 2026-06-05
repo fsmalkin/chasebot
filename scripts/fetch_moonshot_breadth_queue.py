@@ -443,7 +443,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--world-file", default="yolo_test_world_v6_calibrated_golf_turf.world")
     parser.add_argument("--surface-profile", default="calibrated_golf_turf")
     parser.add_argument("--robot-sdf-name", default="jetbot_core_ignition_v1.7.0.sdf")
-    parser.add_argument("--env-ready-timeout-s", type=float, default=540.0)
+    parser.add_argument("--env-ready-timeout-s", type=float, default=replay_batch.DEFAULT_ENV_READY_TIMEOUT_S)
     parser.add_argument("--env-stop-timeout-s", type=float, default=90.0)
     parser.add_argument("--fetch-delivery-radius-m", type=float, default=0.300)
     parser.add_argument("--python-exe", default=sys.executable)

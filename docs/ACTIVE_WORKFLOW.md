@@ -676,6 +676,9 @@ June 5, 2026 seed20260638 rough breadth UAT:
   target truth missing. The same row passed on resume with
   `--env-ready-timeout-s 600`, so the interruption is infrastructure/startup
   evidence rather than a route-owner control failure.
+- Forward fix: planner route replay, seeded generalization, and breadth-queue
+  commands now default `--env-ready-timeout-s` to `600s`, matching the timeout
+  that cleared scene15. Keep shorter timeouts for explicit fast screens only.
 - Claim boundary: this is rough sim-gate route-owner UAT. Planner authority ran
   through deterministic fallback because `OPENAI_API_KEY` was unavailable, so
   provider-backed LLM routing and physical/onboard proof remain open.

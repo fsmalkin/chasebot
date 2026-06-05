@@ -43,7 +43,7 @@ def _args(tmp_path: Path, **overrides):
         "world_file": "world.sdf",
         "surface_profile": "calibrated_golf_turf",
         "robot_sdf_name": "robot.sdf",
-        "env_ready_timeout_s": 540.0,
+        "env_ready_timeout_s": seeded_gate.replay_batch.DEFAULT_ENV_READY_TIMEOUT_S,
         "env_stop_timeout_s": 90.0,
         "fetch_delivery_radius_m": 0.3,
         "python_exe": sys.executable,

@@ -33,7 +33,7 @@ def _make_args(**overrides):
         "world_file": "yolo_test_world_v6_calibrated_golf_turf.world",
         "surface_profile": "calibrated_golf_turf",
         "robot_sdf_name": "jetbot_core_ignition_v1.7.0.sdf",
-        "env_ready_timeout_s": 420.0,
+        "env_ready_timeout_s": batch.DEFAULT_ENV_READY_TIMEOUT_S,
         "env_stop_timeout_s": 90.0,
         "fetch_delivery_radius_m": 0.3,
         "route_only_sample_duration_s": 5.0,
@@ -80,6 +80,23 @@ def test_replay_batch_dry_run_materializes_one_layout_per_route(tmp_path, monkey
         assert layout["planner_route_label"] == row["route_label"]
         assert "--target-layout-json" in row["command"]
         assert row["command"][row["command"].index("--target-layout-json") + 1] == str(layout_path)
+
+
+def test_replay_batch_default_env_ready_timeout_matches_rough_gate_evidence(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "fetch_planner_route_replay_batch.py",
+            "--gate-summary",
+            "gate.json",
+        ],
+    )
+
+    args = batch.parse_args()
+
+    assert args.env_ready_timeout_s == batch.DEFAULT_ENV_READY_TIMEOUT_S
+    assert args.env_ready_timeout_s == 600.0
 
 
 def test_replay_batch_dry_run_can_materialize_planner_only_route_proofs(tmp_path, monkeypatch):
