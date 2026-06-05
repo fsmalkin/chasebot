@@ -2,7 +2,7 @@
   "campaign_id": "analysis_fetch_hardware_rehearsal_runner_seed20260648_preflight_20260605",
   "execution": {},
   "execution_artifacts": {},
-  "generated_utc": "2026-06-05T19:38:22.782151+00:00",
+  "generated_utc": "2026-06-05T19:46:18.133489+00:00",
   "hardware_proven": false,
   "issues": [],
   "milestone_interpretation": "planner_routed_fetch_hardware_rehearsal_preflight_ready",
@@ -29,7 +29,7 @@
       "script_path": "scripts/run_first_uat.ps1"
     },
     {
-      "command": "python scripts/fetch_planner_route_replay_batch.py --campaign-id hardware_rehearsal_saved_anchors_20260605 --gate-summary artifacts/session/dev_planner_saved_anchor_handoff_gate_zero_numeric_fix_20260604/fetch_planner_handoff_gate/gate_summary.json --max-per-route 3 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail",
+      "command": "python scripts/fetch_planner_route_replay_batch.py --campaign-id hardware_rehearsal_seed20260648_saved_anchors_20260605 --gate-summary artifacts/session/dev_planner_saved_anchor_handoff_gate_zero_numeric_fix_20260604/fetch_planner_handoff_gate/gate_summary.json --max-per-route 3 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail",
       "executable": "python",
       "id": "saved_anchor_one_run_fetch_rehearsal",
       "issues": [],

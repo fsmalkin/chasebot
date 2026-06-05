@@ -482,21 +482,25 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Seed 20260648 green; hardware rehearsal-ready; provider rerun waits on OPENAI_API_KEY"
+    assert payload["status_label"] == "Seed 20260648 hardware rehearsal green; provider rerun waits on OPENAI_API_KEY"
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
-    assert "Hardware-transfer readiness is green for rehearsal" in evidence_by_title
-    assert evidence_by_title["Hardware-transfer readiness is green for rehearsal"]["tone"] == "green"
+    assert "Seed 20260648 hardware rehearsal is green" in evidence_by_title
+    assert evidence_by_title["Seed 20260648 hardware rehearsal is green"]["tone"] == "green"
     assert any(
         link["url"].endswith("/fetch_hardware_transfer_readiness/scorecard.md")
-        for link in evidence_by_title["Hardware-transfer readiness is green for rehearsal"]["links"]
+        for link in evidence_by_title["Seed 20260648 hardware rehearsal is green"]["links"]
     )
     assert any(
         link["url"].endswith("/fetch_hardware_rehearsal_plan/scorecard.md")
-        for link in evidence_by_title["Hardware-transfer readiness is green for rehearsal"]["links"]
+        for link in evidence_by_title["Seed 20260648 hardware rehearsal is green"]["links"]
     )
     assert any(
         link["url"].endswith("/fetch_hardware_rehearsal_runner/scorecard.md")
-        for link in evidence_by_title["Hardware-transfer readiness is green for rehearsal"]["links"]
+        for link in evidence_by_title["Seed 20260648 hardware rehearsal is green"]["links"]
+    )
+    assert any(
+        link["url"].endswith("/fetch_planner_route_uat_analyzer/scorecard.md")
+        for link in evidence_by_title["Seed 20260648 hardware rehearsal is green"]["links"]
     )
     assert "Provider rerun preflight is waiting on OPENAI_API_KEY" in evidence_by_title
     assert evidence_by_title["Provider rerun preflight is waiting on OPENAI_API_KEY"]["tone"] == "yellow"

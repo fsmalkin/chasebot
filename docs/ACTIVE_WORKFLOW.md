@@ -3214,6 +3214,22 @@ Milestone 3 pass criteria include:
        then one seed20260648 mixed all-routes rehearsal with onboard TensorRT,
        physical camera video, field-physics evidence, and same-session visual
        packages
+     - completed seed20260648 robot-fidelity/sim-gate rehearsal:
+       `artifacts/session/live_hardware_rehearsal_seed20260648_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+       `artifacts/session/live_hardware_rehearsal_seed20260648_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+       `artifacts/session/live_hardware_rehearsal_seed20260648_mixed_all_routes_20260605/fetch_hardware_rehearsal_runner/scorecard.md`
+     - saved-anchor rehearsal result: `3/3` mission pass,
+       `3/3` visual package pass, closest approach `0.195m..0.197m`
+     - mixed all-routes rehearsal result: `15/15` route contracts,
+       `9/9` executable deliveries, `6/6` planner-only abstentions, and
+       `15/15` visual packages
+     - mixed rehearsal analyzer:
+       `artifacts/session/hardware_rehearsal_seed20260648_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+     - visual review: stack-smoke screenshots, all three saved-anchor
+       keyframe sheets, and all fifteen mixed-route keyframe sheets inspected
+     - claim boundary: this is robot-fidelity/sim-gate rehearsal evidence;
+       `hardware_proven=false` until physical robot execution, onboard
+       TensorRT proof, physical camera evidence, and field physics are recorded
 30. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/scorecard.md`

@@ -324,7 +324,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--saved-anchor-gate", default=DEFAULT_SAVED_ANCHOR_GATE)
     parser.add_argument("--seeded-gate", default=DEFAULT_SEEDED_GATE)
     parser.add_argument("--dashboard-url", default=DEFAULT_DASHBOARD_URL)
-    parser.add_argument("--saved-anchor-campaign-id", default="hardware_rehearsal_saved_anchors_20260605")
+    parser.add_argument("--saved-anchor-campaign-id", default=f"hardware_rehearsal_seed{CURRENT_REHEARSAL_SEED}_saved_anchors_20260605")
     parser.add_argument("--seeded-campaign-id", default=f"hardware_rehearsal_seed{CURRENT_REHEARSAL_SEED}_mixed_all_routes_20260605")
     return parser.parse_args()
 

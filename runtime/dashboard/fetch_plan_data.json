@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 3:39 PM ET",
+  "updated_label": "Updated June 5, 2026, 4:21 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Seed 20260648 green; hardware rehearsal-ready; provider rerun waits on OPENAI_API_KEY",
-  "status_detail": "Seed20260648 is the latest and widest fresh mixed-route sim-gate checkpoint: 100 generated planner scenes, zero wrong fetch dispatches, and 15/15 mixed all-route visual replay. The hardware-transfer readiness checker, rehearsal plan, and runner preflight now accept the current dashboard surface and report ready for rehearsal while hardware_proven=false. The provider-rerun readiness preflight targets seed20260648 and fails closed because OPENAI_API_KEY is missing. Provider-backed LLM routing and physical/onboard proof remain open.",
+  "status_label": "Seed 20260648 hardware rehearsal green; provider rerun waits on OPENAI_API_KEY",
+  "status_detail": "Seed20260648 is the latest and widest fresh mixed-route sim-gate checkpoint: 100 generated planner scenes, zero wrong fetch dispatches, and 15/15 mixed all-route visual replay. The hardware-transfer readiness checker, rehearsal plan, runner preflight, runtime stack smoke, saved anchors, and mixed all-routes rehearsal are now green on the robot-fidelity/sim-gate path while hardware_proven=false. The provider-rerun readiness preflight targets seed20260648 and fails closed because OPENAI_API_KEY is missing. Provider-backed LLM routing and physical/onboard proof remain open.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -50,16 +50,19 @@
   ],
   "latest_evidence": [
     {
-      "title": "Hardware-transfer readiness is green for rehearsal",
-      "status": "ready for robot-side rehearsal; physical/onboard proof remains open",
+      "title": "Seed 20260648 hardware rehearsal is green",
+      "status": "robot-fidelity/sim-gate rehearsal passed; physical/onboard proof remains open",
       "tone": "green",
-      "summary": "The hardware-transfer readiness checker, rehearsal-plan generator, and runner preflight now accept the current seed20260648 dashboard evidence and preserved regression manifest. They report rehearsal-ready while hardware_proven=false. The next robot-side rehearsal must still produce onboard TensorRT execution, physical camera video, field-physics evidence, and same-session visual packages before any hardware claim advances.",
+      "summary": "The seed20260648 hardware rehearsal ladder is now green on the robot-fidelity/sim-gate path. Runtime stack smoke passed with camera/debug screenshots, saved anchors passed 3/3, and the mixed all-routes rehearsal passed 15/15 route contracts with analyzer-clean execution/setup/contact. I inspected the stack-smoke screenshots, all three saved-anchor keyframe sheets, and all fifteen mixed-route keyframe sheets. Physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics remain open before hardware_proven can advance.",
       "metrics": [
         "Readiness: pass=true; hardware_transfer_ready=true; readiness_level=ready_for_hardware_rehearsal",
         "Runbook: hardware_rehearsal_plan_ready=true; runner preflight pass=true; next_action=execute_runtime_stack_smoke",
-        "Dashboard evidence: seed20260648 status accepted; uat_sample_count=15",
+        "Runtime stack smoke: pass=true; returncode=0; visual artifacts present",
+        "Saved anchors: selected=3; mission_pass=3; visual_package_pass=3; closest=0.195m..0.197m",
+        "Mixed all-routes: selected=15; mission_pass=9; route_only_pass=6; visual_package_pass=15; mission_fail=0",
+        "Mixed analyzer: randomized_route_owner_visual_uat_green; execution/setup/contact clean; first_contact_blocker_count=0",
+        "Visual review: stack screenshots, 3 saved-anchor sheets, and 15 mixed-route sheets inspected",
         "Regression preservation: seeded_gate_count=8; seeded_live_mission_pass_count=48; seeded_visual_package_pass_count=48",
-        "Required rehearsal: saved anchors one-run plus one seed20260648 mixed all-routes sample",
         "Claim boundary: hardware_proven=false; promotion_evidence=false"
       ],
       "links": [
@@ -78,6 +81,30 @@
         {
           "label": "Seed 20260648 hardware rehearsal runner preflight",
           "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_runner_seed20260648_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "Runtime stack smoke runner scorecard",
+          "url": "/artifacts/session/live_hardware_rehearsal_seed20260648_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "Saved-anchor rehearsal runner scorecard",
+          "url": "/artifacts/session/live_hardware_rehearsal_seed20260648_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "Saved-anchor rehearsal batch scorecard",
+          "url": "/artifacts/session/hardware_rehearsal_seed20260648_saved_anchors_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Mixed all-routes rehearsal runner scorecard",
+          "url": "/artifacts/session/live_hardware_rehearsal_seed20260648_mixed_all_routes_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "Mixed all-routes rehearsal batch scorecard",
+          "url": "/artifacts/session/hardware_rehearsal_seed20260648_mixed_all_routes_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Mixed all-routes rehearsal analyzer scorecard",
+          "url": "/artifacts/session/hardware_rehearsal_seed20260648_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md"
         },
         {
           "label": "Seed 20260648 mixed all-routes UAT bundle",

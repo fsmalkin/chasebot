@@ -1426,6 +1426,23 @@ The runner reports `next_action=execute_runtime_stack_smoke`, so the runnable
 hardware sequence is runtime stack smoke, saved anchors, then seed20260648
 mixed all-routes rehearsal.
 
+The seed20260648 robot-fidelity/sim-gate hardware rehearsal is now green:
+`artifacts/session/live_hardware_rehearsal_seed20260648_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+`artifacts/session/live_hardware_rehearsal_seed20260648_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+and
+`artifacts/session/live_hardware_rehearsal_seed20260648_mixed_all_routes_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+Saved anchors passed `3/3` with visual packages `3/3` and closest approach
+`0.195m..0.197m`. The mixed all-routes rehearsal passed `15/15` route
+contracts: `9/9` executable deliveries and `6/6` planner-only abstentions, with
+visual packages `15/15`. The analyzer at
+`artifacts/session/hardware_rehearsal_seed20260648_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution/setup/contact and `0` first-contact blockers.
+Frame-sequence review covered the stack-smoke screenshots, all three
+saved-anchor sheets, and all fifteen mixed-route sheets. This remains
+sim-gate rehearsal evidence; `hardware_proven=false` until physical robot
+execution, onboard TensorRT proof, physical camera evidence, and field physics
+are recorded.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
