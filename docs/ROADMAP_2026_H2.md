@@ -1084,6 +1084,18 @@ still delivered. The roadmap now has enough generated-seed visual breadth to
 shift toward canonical saved-layout and seeded-random promotion gates, with
 seed `20260631` preserved as the quality-watch backlog.
 
+The supervised seeded generalization gate is promotion green:
+`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260633_reuse_promotion_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The parent gate combines the provider-backed seed `20260633` planner child
+(`30/30` routes, `30/30` guard agreement, `0` wrong fetch-ready dispatches)
+with the successful six-row executable replay retry (`6/6` missions and `6/6`
+browser-watchable visual packages). The analyzer reports clean execution,
+setup, and contact quality with `0` first-contact blockers, so the current
+planner-gated moonshot stack now has saved-anchor support, broad generated-seed
+UAT, and supervised seeded promotion evidence. The next roadmap decision is
+product hardening versus hardware-transfer rehearsal, rather than another
+architecture reset.
+
 1. the first sandbox result remains a valid stop signal against another blind live controller-family tweak:
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/sandbox_summary.json`
    - `artifacts/session/live_plus45_escape_sandbox_20260419/gather_escape_sandbox/scorecard.md`

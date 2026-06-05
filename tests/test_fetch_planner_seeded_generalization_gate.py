@@ -24,6 +24,8 @@ def _args(**overrides):
         "scene_set": planner_gate.DEFAULT_SCENE_SET,
         "scene_descriptor_json": [],
         "scene_dir": "",
+        "reuse_planner_summary": "",
+        "reuse_replay_summary": "",
         "planner_mode": planner_gate.PLANNER_MODE_DETERMINISTIC,
         "openai_model": planner_gate.DEFAULT_OPENAI_MODEL,
         "openai_api_key": "",
@@ -153,3 +155,70 @@ def test_seeded_gate_passes_operator_view_degraded_option_to_replay(tmp_path, mo
     )
 
     assert replay_args.allow_operator_view_degraded is True
+
+
+def test_seeded_gate_can_reuse_child_summaries_for_parent_promotion(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    planner_path = tmp_path / "artifacts" / "session" / "planner" / planner_gate.PLANNER_GATE_KIND / "gate_summary.json"
+    replay_path = tmp_path / "artifacts" / "session" / "replay" / replay_batch.BATCH_KIND / "batch_summary.json"
+    seeded_gate.write_json(
+        planner_path,
+        {
+            "campaign_id": "planner",
+            "pass": True,
+            "pass_count": 30,
+            "fail_count": 0,
+            "wrong_fetch_dispatch_count": 0,
+            "route_counts": {
+                planner_gate.ROUTE_FETCH_READY: 2,
+                planner_gate.ROUTE_NAV2_REPOSITION: 2,
+                planner_gate.ROUTE_RECOVERY_OR_REAIM: 2,
+            },
+        },
+    )
+    seeded_gate.write_json(
+        replay_path,
+        {
+            "campaign_id": "replay",
+            "pass": True,
+            "selected_count": 6,
+            "mission_pass_count": 6,
+            "mission_fail_count": 0,
+            "visual_package_pass_count": 6,
+            "rows": [],
+        },
+    )
+
+    def fail_planner(*_args, **_kwargs):
+        raise AssertionError("planner should be reused")
+
+    def fail_replay(*_args, **_kwargs):
+        raise AssertionError("replay should be reused")
+
+    def clean_analyzer(*_args, **_kwargs):
+        return {
+            "pass": True,
+            "milestone_interpretation": "randomized_route_owner_visual_uat_green",
+            "execution_quality_status": "clean",
+            "setup_quality_status": "clean",
+            "contact_quality_status": "clean",
+            "first_contact_blocker_count": 0,
+        }
+
+    monkeypatch.setattr(planner_gate, "run_gate", fail_planner)
+    monkeypatch.setattr(replay_batch, "run_batch", fail_replay)
+    monkeypatch.setattr(seeded_gate, "run_analyzer", clean_analyzer)
+
+    summary = seeded_gate.run_gate(
+        _args(
+            dry_run=False,
+            reuse_planner_summary=str(planner_path),
+            reuse_replay_summary=str(replay_path),
+        )
+    )
+
+    assert summary["pass"] is True
+    assert summary["promotion_evidence"] is True
+    assert summary["milestone_interpretation"] == "planner_routed_seeded_generalization_promotion_green"
+    assert summary["planner_summary_path"].endswith("/planner/fetch_planner_handoff_gate/gate_summary.json")
+    assert summary["replay_summary_path"].endswith("/replay/fetch_planner_route_replay_batch/batch_summary.json")

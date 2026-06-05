@@ -744,6 +744,33 @@ June 4, 2026 third generated-seed supervised route-owner visual UAT:
   next evidence step toward canonical saved-layout and seeded-random gates,
   unless operator confidence needs one more breadth seed first.
 
+June 4, 2026 supervised seeded generalization promotion gate:
+
+- Initial parent gate:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260633_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Promotion parent gate after infrastructure retry/reuse:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260633_reuse_promotion_20260604/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Supervised planner child:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260633_20260604_planner/fetch_planner_handoff_gate/scorecard.md`
+- Executable replay retry:
+  `artifacts/session/live_supervised_planner_seeded_gate_seed20260633_exec6_retry_20260604/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/analysis_supervised_planner_seeded_gate_seed20260633_exec6_retry_20260604/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: `planner_routed_seeded_generalization_promotion_green`,
+  `promotion_evidence=true`, supervised planner routing `30/30`, guard
+  agreement `30/30`, wrong fetch-ready dispatches `0`, executable replay
+  `6/6`, visual packages `6/6`, clean execution/setup/contact quality, and
+  first-contact blockers `0`.
+- Visual review: inspected representative fetch-ready, recovery/re-aim, Nav2,
+  and final recovery frame-sequence contact sheets. The camera and topdown
+  sequences agree with telemetry; no visual/geometry mismatch was observed.
+- Infrastructure note: the first parent live attempt stopped after two passing
+  rows on a fresh-dashboard startup failure. The replay retry completed all six
+  executable rows. The seeded gate wrapper now supports
+  `--reuse-planner-summary` and `--reuse-replay-summary` so a parent promotion
+  summary can reuse already-validated child evidence after infrastructure retry
+  without rerunning live sim or relaxing promotion requirements.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

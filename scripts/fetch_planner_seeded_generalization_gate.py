@@ -68,6 +68,21 @@ def write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def read_json(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def resolve_path(raw_path: str) -> Path:
+    path = Path(str(raw_path or "").strip())
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    return path.resolve()
+
+
 def _ns(**kwargs: Any) -> SimpleNamespace:
     return SimpleNamespace(**kwargs)
 
@@ -247,11 +262,26 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     replay_campaign_id = f"{campaign_id}_replay"
     analyzer_campaign_id = f"{campaign_id}_analysis"
 
-    planner_summary = planner_gate.run_gate(build_planner_args(args, campaign_id=planner_campaign_id))
-    planner_path = planner_summary_path(planner_campaign_id)
-    replay_summary = replay_batch.run_batch(
-        build_replay_args(args, campaign_id=replay_campaign_id, gate_summary=planner_path)
-    )
+    reuse_planner_raw = str(getattr(args, "reuse_planner_summary", "") or "").strip()
+    if reuse_planner_raw:
+        planner_path = resolve_path(reuse_planner_raw)
+        planner_summary = read_json(planner_path)
+        planner_campaign_id = str(planner_summary.get("campaign_id", "") or planner_campaign_id)
+    else:
+        planner_summary = planner_gate.run_gate(build_planner_args(args, campaign_id=planner_campaign_id))
+        planner_path = planner_summary_path(planner_campaign_id)
+
+    reuse_replay_raw = str(getattr(args, "reuse_replay_summary", "") or "").strip()
+    if reuse_replay_raw:
+        replay_path = resolve_path(reuse_replay_raw)
+        replay_summary = read_json(replay_path)
+        replay_campaign_id = str(replay_summary.get("campaign_id", "") or replay_campaign_id)
+    else:
+        replay_summary = replay_batch.run_batch(
+            build_replay_args(args, campaign_id=replay_campaign_id, gate_summary=planner_path)
+        )
+        replay_path = replay_summary_path(replay_campaign_id)
+
     analyzer_summary: dict[str, Any] = {}
     if not bool(args.dry_run):
         analyzer_summary = run_analyzer(
@@ -294,10 +324,10 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "replay_campaign_id": replay_campaign_id,
         "analyzer_campaign_id": analyzer_campaign_id if analyzer_summary else "",
         "planner_summary_path": artifact_display_path(planner_path),
-        "replay_summary_path": artifact_display_path(replay_summary_path(replay_campaign_id)),
+        "replay_summary_path": artifact_display_path(replay_path),
         "analyzer_summary_path": artifact_display_path(analyzer_summary_path(analyzer_campaign_id)) if analyzer_summary else "",
         "planner_scorecard_path": artifact_display_path(planner_path.with_name("scorecard.md")),
-        "replay_scorecard_path": artifact_display_path(replay_summary_path(replay_campaign_id).with_name("scorecard.md")),
+        "replay_scorecard_path": artifact_display_path(replay_path.with_name("scorecard.md")),
         "analyzer_scorecard_path": artifact_display_path(analyzer_summary_path(analyzer_campaign_id).with_name("scorecard.md")) if analyzer_summary else "",
         "planner_summary": {
             "pass_count": planner_summary.get("pass_count", 0),
@@ -386,6 +416,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scene-set", default=planner_gate.DEFAULT_SCENE_SET)
     parser.add_argument("--scene-descriptor-json", action="append", default=[])
     parser.add_argument("--scene-dir", default="")
+    parser.add_argument("--reuse-planner-summary", default="")
+    parser.add_argument("--reuse-replay-summary", default="")
     parser.add_argument("--planner-mode", choices=planner_gate.PLANNER_MODES, default=planner_gate.PLANNER_MODE_DETERMINISTIC)
     parser.add_argument("--openai-model", default=planner_gate.DEFAULT_OPENAI_MODEL)
     parser.add_argument("--openai-api-key", default=os.environ.get("OPENAI_API_KEY", ""))
