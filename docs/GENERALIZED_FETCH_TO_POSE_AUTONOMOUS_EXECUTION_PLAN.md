@@ -429,6 +429,16 @@ base-controller preflight, mission verdict, onboard raw-camera video,
 topdown/world context, keyframe sequence review, and explicit TensorRT/runtime
 provenance.
 
+June 5 hardware rehearsal plan: the readiness contract is now converted into a
+three-step robot-side rehearsal plan:
+`artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/fetch_hardware_rehearsal_plan/scorecard.md`.
+The plan starts with `run_first_uat.ps1` under `robot_fidelity_orin` and
+`tensorrt_int8`, then runs the saved anchors through the planner-routed fetch
+stack, then repeats the seed20260635 mixed-route sample. It requires
+base-controller preflight, mission verdicts, onboard raw-camera video,
+topdown/world context, and keyframe sequence review before the hardware claim
+advances beyond rehearsal-ready.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.

@@ -50,6 +50,29 @@
   ],
   "latest_evidence": [
     {
+      "title": "Hardware rehearsal run plan is ready",
+      "status": "three-step robot-side rehearsal contract generated",
+      "tone": "green",
+      "summary": "The hardware rehearsal plan now turns the readiness package into executable next steps. It starts with a robot_fidelity_orin/tensorrt_int8 stack smoke, then runs the saved anchors through the planner-routed fetch stack, then repeats the seed20260635 mixed-route sample across fetch-ready, Nav2-first, and recovery/re-aim owners. The plan keeps hardware_proven=false until robot-side execution records the required visual and runtime artifacts.",
+      "metrics": [
+        "Plan analyzer: pass=true; hardware_rehearsal_plan_ready=true; hardware_proven=false",
+        "Step 1: runtime stack smoke with run_first_uat.ps1 using robot_fidelity_orin and tensorrt_int8",
+        "Step 2: saved-anchor one-run rehearsal for zero, left05, and right05 with control preflight and browser-watchable video",
+        "Step 3: seed20260635 mixed-route rehearsal with two samples per executable route family",
+        "Visual review phases: start/setup, pre-contact, first contact, mid-push/coast, terminal arrival, and final rest"
+      ],
+      "links": [
+        {
+          "label": "Hardware rehearsal plan scorecard",
+          "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/fetch_hardware_rehearsal_plan/scorecard.md"
+        },
+        {
+          "label": "Hardware rehearsal plan summary",
+          "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/fetch_hardware_rehearsal_plan/hardware_rehearsal_plan_summary.json"
+        }
+      ]
+    },
+    {
       "title": "Hardware-transfer rehearsal package is ready",
       "status": "runtime-contract gates pass; hardware_proven=false",
       "tone": "green",
@@ -4139,7 +4162,7 @@
     }
   ],
   "next_steps": [
-    "Run the first hardware-transfer rehearsal package from the new readiness contract: robot_fidelity_orin, tensorrt_int8, base-controller preflight, robot-side mission verdict, physical/onboard raw-camera video, topdown/world context, and keyframe sequence review.",
+    "Run the generated three-step hardware rehearsal plan: runtime stack smoke, saved-anchor fetch rehearsal, then seed20260635 mixed-route fetch rehearsal with browser-watchable video and keyframe sequence review.",
     "Use the seed20260635 preflight regression manifest as the default green bar before future route-owner, contact-servo, visual-packaging, or hardware-transfer moonshots.",
     "Keep hardware-transfer claims at rehearsal-ready until robot-side live execution, onboard TensorRT execution, physical camera evidence, and field-physics proof are recorded.",
     "Keep provider-backed guarded fallback as the high-level planner authority model unless product requirements demand strict all-accepted LLM routing.",

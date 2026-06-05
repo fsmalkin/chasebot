@@ -1189,6 +1189,14 @@ next milestone work is a robot-side rehearsal that records base-controller
 preflight, mission verdict, onboard raw-camera video, topdown/world context,
 frame-sequence review, and TensorRT/runtime provenance.
 
+The robot-side rehearsal now has a generated plan artifact:
+`artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/fetch_hardware_rehearsal_plan/scorecard.md`.
+It defines the next sequence as runtime stack smoke, saved-anchor fetch
+rehearsal, then seed20260635 mixed-route rehearsal. The claim remains
+`hardware_proven=false` until those runs produce controller, mission, video,
+keyframe, and runtime-provenance artifacts from the robot-side rehearsal
+surface.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

@@ -1395,3 +1395,10 @@ preflight, mission verdict, onboard camera video, topdown/world context, and
 frame-sequence review. Preserve seed `20260635`, the smoothed seed `20260634`
 rough analyzer, saved-anchor repeatability, and the hard mixed matrix before
 the next moonshot.
+
+The robot-side rehearsal now has a generated run plan:
+`artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/fetch_hardware_rehearsal_plan/scorecard.md`.
+Run the stack smoke first, then the saved-anchor fetch rehearsal, then the
+seed20260635 mixed-route rehearsal. Keep `hardware_proven=false` until those
+robot-side runs produce the required controller, mission, video, and keyframe
+artifacts.

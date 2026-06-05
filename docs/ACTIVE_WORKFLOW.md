@@ -470,6 +470,20 @@ June 5, 2026 hardware-transfer readiness package:
   sequence review, `robot_fidelity_orin`, and `tensorrt_int8` provenance before
   hardware-transfer claims advance beyond rehearsal-ready.
 
+June 5, 2026 hardware rehearsal plan:
+
+- Command:
+  `python scripts\fetch_hardware_rehearsal_plan.py --campaign-id analysis_fetch_hardware_rehearsal_plan_20260605`
+- Scorecard:
+  `artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/fetch_hardware_rehearsal_plan/scorecard.md`
+- Result: `planner_routed_fetch_hardware_rehearsal_plan_ready`;
+  `hardware_rehearsal_plan_ready=true`, `hardware_proven=false`, and
+  `promotion_evidence=false`.
+- Evidence meaning: the next run is a three-step robot-side rehearsal: runtime
+  stack smoke, saved-anchor fetch rehearsal, and seed20260635 mixed-route
+  rehearsal. Each fetch step must include controller preflight, mission verdict,
+  onboard/context video, and keyframe sequence review.
+
 June 4, 2026 planner-only route proof:
 
 - Command:
