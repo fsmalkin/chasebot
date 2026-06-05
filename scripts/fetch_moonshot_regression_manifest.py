@@ -61,6 +61,11 @@ DEFAULT_SEEDED_GATES = (
         "artifacts/session/live_planner_seeded_generalization_gate_seed20260633_breadth_20260604/"
         "fetch_planner_seeded_generalization_gate/gate_summary.json",
     ),
+    (
+        "seed20260635",
+        "artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605/"
+        "fetch_planner_seeded_generalization_gate/gate_summary.json",
+    ),
 )
 DEFAULT_BOUNDARY_REPLAY_SUMMARY = (
     "artifacts/session/live_planner_seeded_generalization_gate_seed20260629_boundary_repair_full_visual_20260604_replay/"
@@ -76,6 +81,12 @@ DEFAULT_BOUNDARY_ROWS = (
         "seed20260629_scene05_recovery_or_reaim",
         "recovery_or_reaim",
         "high_debt_recovery_duration_window",
+    ),
+)
+DEFAULT_CONTROL_PREFLIGHTS = (
+    (
+        "seed20260635_scene03_recovery_or_reaim",
+        "artifacts/session/20260605T045353381785Z/golf_ball_circle_delivery/20260605T045425493806Z/control_preflight.json",
     ),
 )
 
@@ -175,6 +186,10 @@ def parse_boundary_spec(spec: str) -> tuple[str, str, str]:
     return scene_id, route, note
 
 
+def parse_preflight_spec(spec: str) -> tuple[str, str]:
+    return parse_label_path(spec)
+
+
 def seeded_gate_specs(raw_specs: list[str]) -> list[tuple[str, str]]:
     if not raw_specs:
         return list(DEFAULT_SEEDED_GATES)
@@ -185,6 +200,12 @@ def boundary_specs(raw_specs: list[str]) -> list[tuple[str, str, str]]:
     if not raw_specs:
         return list(DEFAULT_BOUNDARY_ROWS)
     return [parse_boundary_spec(spec) for spec in raw_specs]
+
+
+def control_preflight_specs(raw_specs: list[str]) -> list[tuple[str, str]]:
+    if not raw_specs:
+        return list(DEFAULT_CONTROL_PREFLIGHTS)
+    return [parse_preflight_spec(spec) for spec in raw_specs]
 
 
 def child_payload(parent: dict[str, Any], key: str) -> tuple[dict[str, Any], str, list[str]]:
@@ -427,6 +448,29 @@ def evaluate_boundary_rows(
     return replay_result, results
 
 
+def evaluate_control_preflight(label: str, path_text: str) -> dict[str, Any]:
+    path = resolve_path(path_text)
+    payload, issues = read_json(path)
+    output_tail = str(payload.get("output_tail", "") or "")
+    bool_issue(issues, bool(payload.get("required", False)), "control_preflight_not_required")
+    bool_issue(issues, bool(payload.get("pass", False)), "control_preflight_not_pass")
+    bool_issue(issues, str(payload.get("controller_name", "")) == "jetbot_base_controller", "control_preflight_controller_mismatch")
+    bool_issue(issues, int_value(payload.get("returncode")) == 0, "control_preflight_returncode")
+    bool_issue(issues, "/controller_manager/list_controllers" in output_tail or "ListControllers_Response" in output_tail, "control_preflight_missing_list_controller_evidence")
+    bool_issue(issues, "BASE_CONTROLLER_ACTIVE=1" in output_tail, "control_preflight_missing_active_marker")
+    return {
+        "label": label,
+        "path": artifact_display_path(path),
+        "pass": not issues,
+        "issues": issues,
+        "controller_name": str(payload.get("controller_name", "")),
+        "required": bool(payload.get("required", False)),
+        "repaired": bool(payload.get("repaired", False)),
+        "returncode": int_value(payload.get("returncode")),
+        "active_marker_seen": "BASE_CONTROLLER_ACTIVE=1" in output_tail,
+    }
+
+
 def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     saved_anchor = evaluate_saved_anchor_summary(str(args.saved_anchor_summary))
     setup_contact_audit = (
@@ -443,15 +487,21 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         boundary_specs(list(args.boundary_row or [])),
         delivery_radius_m=float(args.fetch_delivery_radius_m),
     )
+    control_preflights = [
+        evaluate_control_preflight(label, path)
+        for label, path in control_preflight_specs(list(args.control_preflight or []))
+    ]
     issue_count = (
         len(saved_anchor.get("issues", []))
         + len(setup_contact_audit.get("issues", []))
         + sum(len(row.get("issues", [])) for row in seeded)
         + len(boundary_replay.get("issues", []))
         + sum(len(row.get("issues", [])) for row in boundaries)
+        + sum(len(row.get("issues", [])) for row in control_preflights)
     )
     seeded_gate_green_count = sum(1 for row in seeded if bool(row.get("pass", False)))
     boundary_green_count = sum(1 for row in boundaries if bool(row.get("pass", False)))
+    control_preflight_green_count = sum(1 for row in control_preflights if bool(row.get("pass", False)))
     pass_manifest = bool(
         saved_anchor.get("pass", False)
         and setup_contact_audit.get("pass", False)
@@ -459,6 +509,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         and seeded_gate_green_count == len(seeded)
         and boundaries
         and boundary_green_count == len(boundaries)
+        and control_preflights
+        and control_preflight_green_count == len(control_preflights)
     )
     return {
         "generated_utc": utc_now(),
@@ -478,12 +530,15 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "seeded_gates": seeded,
         "boundary_replay": boundary_replay,
         "boundary_rows": boundaries,
+        "control_preflights": control_preflights,
         "totals": {
             "issue_count": issue_count,
             "seeded_gate_count": len(seeded),
             "seeded_gate_green_count": seeded_gate_green_count,
             "boundary_row_count": len(boundaries),
             "boundary_row_green_count": boundary_green_count,
+            "control_preflight_count": len(control_preflights),
+            "control_preflight_green_count": control_preflight_green_count,
             "seeded_live_mission_pass_count": sum(int_value(row.get("mission_pass_count")) for row in seeded),
             "seeded_visual_package_pass_count": sum(int_value(row.get("visual_package_pass_count")) for row in seeded),
         },
@@ -556,6 +611,14 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             lines.append(f"  - onboard: `{row.get('onboard_video_url', '')}`")
         if row.get("keyframe_review_url"):
             lines.append(f"  - keyframes: `{row.get('keyframe_review_url', '')}`")
+    lines.extend(["", "## Control Preflights", ""])
+    for row in list_value(summary.get("control_preflights")):
+        lines.append(
+            f"- `{row.get('label', '')}` pass=`{row.get('pass', False)}` "
+            f"controller=`{row.get('controller_name', '')}` required=`{row.get('required', False)}` "
+            f"active_marker=`{row.get('active_marker_seen', False)}` repaired=`{row.get('repaired', False)}` "
+            f"issues=`{row.get('issues', [])}` {artifact_link(str(row.get('path', '') or ''))}"
+        )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -568,6 +631,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seeded-gate", action="append", default=[], help="label=path to a parent seeded gate summary.")
     parser.add_argument("--boundary-replay-summary", default=DEFAULT_BOUNDARY_REPLAY_SUMMARY)
     parser.add_argument("--boundary-row", action="append", default=[], help="scene_id=route_label:note boundary row requirement.")
+    parser.add_argument("--control-preflight", action="append", default=[], help="label=path to a required base-controller preflight JSON.")
     parser.add_argument("--fetch-delivery-radius-m", type=float, default=DEFAULT_DELIVERY_RADIUS_M)
     parser.add_argument("--min-random-cases", type=int, default=30)
     return parser.parse_args()

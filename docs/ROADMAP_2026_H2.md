@@ -950,6 +950,16 @@ packages `42/42`. Seed `20260633` adds a heavier non-fetch route mix with
 `10` no-go classifications and `4` scan/perception classifications while the
 six selected executable rows remain green.
 
+June 5 seed20260635/preflight preservation refresh: the active preservation bar
+is now
+`artifacts/session/analysis_planner_moonshot_regression_set_seed20260635_preflight_20260605/fetch_moonshot_regression_manifest/scorecard.md`.
+It verifies saved anchors, seeds `20260627` through `20260633` plus seed
+`20260635`, planner routing `240/240`, `wrong_fetch=0`, live executable
+missions `48/48`, visual packages `48/48`, the two seed `20260629` boundary
+repairs, and the seed `20260635` scene03 base-controller preflight. Future
+executor and hardware-transfer moonshots should preserve this bar before making
+new promotion claims.
+
 June 4 route-only proof: planner-owned non-fetch behavior now has live stopped-
 scene UAT evidence at
 `artifacts/session/live_planner_only_route_proof_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md`.

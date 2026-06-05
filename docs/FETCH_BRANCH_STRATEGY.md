@@ -445,9 +445,13 @@ Planner-routed moonshot update, June 2:
   status and `promotion_evidence=true`. Scene03 also exposed a base-controller
   startup race; `golf_ball_circle_delivery_demo_runner.py` now records
   `control_preflight.json`, checks `/controller_manager/list_controllers`, and
-  fails before scoring if `jetbot_base_controller` is inactive. Fold this result
-  into the branch regression manifest before the next executor moonshot or
-  hardware-transfer claim.
+  fails before scoring if `jetbot_base_controller` is inactive.
+- seed20260635/preflight regression manifest, June 5:
+  `artifacts/session/analysis_planner_moonshot_regression_set_seed20260635_preflight_20260605/fetch_moonshot_regression_manifest/scorecard.md`
+  is green with seeded gates `8/8`, live seeded missions `48/48`, visual
+  packages `48/48`, the two seed `20260629` boundary rows, and the seed
+  `20260635` scene03 base-controller preflight. Use this as the branch-local
+  regression gate before the next executor moonshot or hardware-transfer claim.
 
 Saved-anchor requalification update, later June 1:
 

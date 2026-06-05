@@ -1006,6 +1006,15 @@ It is green with seeds `20260627` through `20260633`, seeded gates `7/7`, live
 seeded missions `42/42`, and visual packages `42/42`. The architecture remains
 planner-routed route ownership.
 
+June 5, 2026 seed20260635/preflight preservation update: the current manifest is
+green at
+`artifacts/session/analysis_planner_moonshot_regression_set_seed20260635_preflight_20260605/fetch_moonshot_regression_manifest/scorecard.md`.
+It preserves seeds `20260627` through `20260633` plus seed `20260635`, seeded
+gates `8/8`, live seeded missions `48/48`, visual packages `48/48`, the two
+seed `20260629` boundary repairs, and the seed `20260635` scene03
+base-controller preflight. This is the active preservation bar for future
+planner-routed moonshots and hardware-transfer packaging.
+
 June 4 route-only proof now covers the planner-owned non-fetch families:
 `artifacts/session/live_planner_only_route_proof_seed20260633_20260604/fetch_planner_route_replay_batch/scorecard.md`.
 The batch replayed one `scan_or_perceive_first` row and one

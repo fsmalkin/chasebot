@@ -53,6 +53,16 @@ def _args(tmp_path: Path, **overrides):
             / "batch_summary.json"
         ),
         "boundary_row": ["seed_scene_nav2=nav2_reposition_first:test_boundary"],
+        "control_preflight": [
+            "seed_scene_nav2="
+            + str(
+                tmp_path
+                / "artifacts"
+                / "session"
+                / "mission"
+                / "control_preflight.json"
+            )
+        ],
         "fetch_delivery_radius_m": 0.3,
         "min_random_cases": 30,
     }
@@ -126,8 +136,20 @@ def _green_seeded_gate(session_root: Path) -> tuple[Path, Path]:
     analyzer = session_root / "seed_analysis" / "fetch_planner_route_uat_analyzer" / "route_uat_summary.json"
     mission = session_root / "mission" / "mission_verdict.json"
     package = session_root / "package" / "fetch_visual_uat_package" / "package_summary.json"
+    preflight = session_root / "mission" / "control_preflight.json"
     _write(mission, {"pass": True})
     _write(package, {"pass": True})
+    _write(
+        preflight,
+        {
+            "controller_name": "jetbot_base_controller",
+            "required": True,
+            "pass": True,
+            "repaired": False,
+            "returncode": 0,
+            "output_tail": "ListControllers_Response(...)\nBASE_CONTROLLER_ACTIVE=1\n",
+        },
+    )
     visual = {
         "pass": True,
         "mobile_watchable": True,
@@ -258,8 +280,10 @@ def test_moonshot_regression_manifest_scores_green_evidence(tmp_path, monkeypatc
     assert summary["setup_contact_audit"]["pass"] is True
     assert summary["seeded_gates"][0]["pass"] is True
     assert summary["boundary_rows"][0]["pass"] is True
+    assert summary["control_preflights"][0]["pass"] is True
     assert summary["boundary_rows"][0]["onboard_video_url"].endswith("raw_camera_browser.mp4")
     assert summary["totals"]["seeded_live_mission_pass_count"] == 6
+    assert summary["totals"]["control_preflight_green_count"] == 1
 
     scorecard = tmp_path / "scorecard.md"
     manifest.write_scorecard(scorecard, summary)
@@ -279,6 +303,7 @@ def test_default_seeded_gates_include_rough_breadth_seeds():
         "seed20260631",
         "seed20260632",
         "seed20260633",
+        "seed20260635",
     ]
 
 
@@ -306,3 +331,26 @@ def test_moonshot_regression_manifest_fails_closed_on_boundary_visual_gap(tmp_pa
     assert boundary["pass"] is False
     assert "boundary_row_outside_delivery_radius" in boundary["issues"]
     assert "boundary_row_onboard_not_watchable" in boundary["issues"]
+
+
+def test_moonshot_regression_manifest_fails_closed_on_missing_control_preflight(tmp_path, monkeypatch):
+    session_root = _patch_roots(tmp_path, monkeypatch)
+    _green_saved_anchor(session_root)
+    _green_audit(session_root)
+    _green_seeded_gate(session_root)
+    preflight = session_root / "mission" / "control_preflight.json"
+    payload, issues = manifest.read_json(preflight)
+    assert issues == []
+    payload["pass"] = False
+    payload["output_tail"] = "BASE_CONTROLLER_ACTIVE=0\n"
+    payload["returncode"] = 2
+    manifest.write_json(preflight, payload)
+
+    summary = manifest.build_summary(_args(tmp_path))
+
+    assert summary["pass"] is False
+    preflight_result = summary["control_preflights"][0]
+    assert preflight_result["pass"] is False
+    assert "control_preflight_not_pass" in preflight_result["issues"]
+    assert "control_preflight_returncode" in preflight_result["issues"]
+    assert "control_preflight_missing_active_marker" in preflight_result["issues"]

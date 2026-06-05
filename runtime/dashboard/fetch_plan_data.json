@@ -754,25 +754,30 @@
     },
     {
       "title": "Moonshot regression set is green",
-      "status": "Saved anchors plus seven seeded gates preserved",
+      "status": "Saved anchors plus eight seeded gates and base-controller preflight preserved",
       "tone": "green",
-      "summary": "The regression manifest now converts the broader green evidence into a compact preservation bar. It verifies saved-anchor repeatability, the setup/contact audit, seeds 20260627 through 20260633, plus the two repaired seed20260629 boundary rows. This lets us continue the planner-routed architecture while catching regressions from route-owner, recovery-window, visual-packaging, contact-servo, and broad-seed changes.",
+      "summary": "The regression manifest now converts the broader green evidence into a compact preservation bar with the latest seed20260635 proof included. It verifies saved-anchor repeatability, the setup/contact audit, seeds 20260627 through 20260633 plus seed20260635, the two repaired seed20260629 boundary rows, and the seed20260635 scene03 base-controller preflight. This gives future route-owner, recovery-window, visual-packaging, contact-servo, and hardware-transfer moonshots a concrete green bar to preserve.",
       "metrics": [
         "Manifest: planner_routed_moonshot_regression_set_green; issue_count=0",
         "Saved anchors: zero/left05/right05 each 3/3; closest range 0.194m..0.198m",
-        "Seeded gates: 7/7 promotion green; 210/210 planner routing; wrong_fetch=0",
-        "Live seeded missions: 42/42 passed; visual packages 42/42 passed",
+        "Seeded gates: 8/8 promotion green; 240/240 planner routing; wrong_fetch=0",
+        "Live seeded missions: 48/48 passed; visual packages 48/48 passed",
         "Boundary rows preserved: seed20260629_scene01_nav2_reposition_first and seed20260629_scene05_recovery_or_reaim",
-        "Evidence role: regression preservation while alternatives remain fallback lanes"
+        "Control preflight preserved: seed20260635_scene03_recovery_or_reaim confirmed jetbot_base_controller active before fetch scoring",
+        "Evidence role: regression preservation while hardware transfer and alternative executor lanes remain separate gates"
       ],
       "links": [
         {
           "label": "Regression manifest scorecard",
-          "url": "/artifacts/session/analysis_planner_moonshot_regression_set_seven_seed_20260604/fetch_moonshot_regression_manifest/scorecard.md"
+          "url": "/artifacts/session/analysis_planner_moonshot_regression_set_seed20260635_preflight_20260605/fetch_moonshot_regression_manifest/scorecard.md"
         },
         {
           "label": "Regression manifest summary",
-          "url": "/artifacts/session/analysis_planner_moonshot_regression_set_seven_seed_20260604/fetch_moonshot_regression_manifest/regression_summary.json"
+          "url": "/artifacts/session/analysis_planner_moonshot_regression_set_seed20260635_preflight_20260605/fetch_moonshot_regression_manifest/regression_summary.json"
+        },
+        {
+          "label": "Seed20260635 scene03 control preflight",
+          "url": "/artifacts/session/20260605T045353381785Z/golf_ball_circle_delivery/20260605T045425493806Z/control_preflight.json"
         },
         {
           "label": "Scene01 Nav2 fallback onboard proof",
@@ -4113,8 +4118,8 @@
   ],
   "next_steps": [
     "Package the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, base-controller preflight, model provenance checks, and robot-side visual-evidence capture.",
-    "Fold seed20260635, seed20260634 smoothing preservation, saved-anchor repeatability, and the hard mixed matrix into the regression manifest so future moonshots start from the current green bar.",
-    "Run one additional supervised seeded promotion refresh or a named hardware-transfer dry rehearsal only after the regression manifest includes the controller-preflight fix.",
+    "Use the seed20260635 preflight regression manifest as the default green bar before future route-owner, contact-servo, visual-packaging, or hardware-transfer moonshots.",
+    "Run one additional supervised seeded promotion refresh or a named hardware-transfer dry rehearsal only after the hardware-transfer plan names its runtime evidence contract.",
     "Keep provider-backed guarded fallback as the high-level planner authority model unless product requirements demand strict all-accepted LLM routing.",
     "Measure the runtime cost of the longer recovery window and decide whether hardware UAT needs a progress-based timeout instead of a fixed duration.",
     "Investigate container-side ffmpeg availability as evidence hardening; host-side browser video recovery works but remains a packaging dependency."

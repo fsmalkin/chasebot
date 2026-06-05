@@ -442,6 +442,19 @@ June 4, 2026 seven-seed regression manifest:
 - Evidence meaning: this is the current preservation bar for route-owner,
   controller, visual-packaging, dashboard, and hardware-transfer changes.
 
+June 5, 2026 seed20260635/preflight regression manifest:
+
+- Command:
+  `python scripts\fetch_moonshot_regression_manifest.py --campaign-id analysis_planner_moonshot_regression_set_seed20260635_preflight_20260605`
+- Scorecard:
+  `artifacts/session/analysis_planner_moonshot_regression_set_seed20260635_preflight_20260605/fetch_moonshot_regression_manifest/scorecard.md`
+- Result: `planner_routed_moonshot_regression_set_green`; seeded gates `8/8`,
+  live seeded missions `48/48`, visual packages `48/48`, boundary rows `2/2`,
+  and control preflights `1/1`.
+- Evidence meaning: this is the current preservation bar for route-owner,
+  contact-servo, visual-packaging, dashboard, controller-preflight, and
+  hardware-transfer changes.
+
 June 4, 2026 planner-only route proof:
 
 - Command:

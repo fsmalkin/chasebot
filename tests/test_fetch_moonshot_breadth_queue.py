@@ -56,6 +56,7 @@ def _args(tmp_path: Path, **overrides):
         "regression_seeded_gate": [],
         "boundary_replay_summary": "replay.json",
         "boundary_row": [],
+        "control_preflight": [],
         "min_random_cases": 30,
     }
     payload.update(overrides)

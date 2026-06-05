@@ -121,6 +121,7 @@ def build_regression_args(args: argparse.Namespace) -> SimpleNamespace:
         seeded_gate=list(args.regression_seeded_gate or []),
         boundary_replay_summary=str(args.boundary_replay_summary),
         boundary_row=list(args.boundary_row or []),
+        control_preflight=list(args.control_preflight or []),
         fetch_delivery_radius_m=float(args.fetch_delivery_radius_m),
         min_random_cases=int(args.min_random_cases),
     )
@@ -455,6 +456,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--regression-seeded-gate", action="append", default=[])
     parser.add_argument("--boundary-replay-summary", default=regression_manifest.DEFAULT_BOUNDARY_REPLAY_SUMMARY)
     parser.add_argument("--boundary-row", action="append", default=[])
+    parser.add_argument("--control-preflight", action="append", default=[])
     parser.add_argument("--min-random-cases", type=int, default=30)
     return parser.parse_args()
 

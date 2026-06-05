@@ -408,6 +408,15 @@ visual packages `42/42`. Keep the planner-routed stack as the primary path; the
 next broadening target is larger mixed route-family coverage while the local
 contact path remains under the seven-seed preservation bar.
 
+June 5 seed20260635/preflight manifest refresh: the regression manifest now
+preserves the current supervised promotion proof and controller guard:
+`artifacts/session/analysis_planner_moonshot_regression_set_seed20260635_preflight_20260605/fetch_moonshot_regression_manifest/scorecard.md`.
+It is green with seeded gates `8/8`, live seeded missions `48/48`, visual
+packages `48/48`, the two seed `20260629` boundary repairs, and one required
+base-controller preflight for seed `20260635` scene03. This is the active
+preservation bar before route-owner, contact-servo, visual-packaging, or
+hardware-transfer moonshots.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
