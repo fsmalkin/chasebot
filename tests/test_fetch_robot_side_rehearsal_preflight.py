@@ -75,6 +75,7 @@ def test_robot_side_preflight_ready_without_claiming_hardware_proof(tmp_path: Pa
     assert summary["physical_claim_template"]["execution_surface"] == "physical_robot"
     assert any("fetch_hardware_rehearsal_runner.py" in command for command in summary["next_commands"])
     assert any("seed20260648_mixed_all_routes_rehearsal" in command for command in summary["next_commands"])
+    assert any("fetch_physical_claim_from_run.py" in command for command in summary["next_commands"])
     assert any("fetch_physical_onboard_proof_gap.py" in command for command in summary["next_commands"])
 
 
@@ -110,4 +111,5 @@ def test_robot_side_preflight_scorecard_lists_next_commands(tmp_path: Path):
     assert "run_dashboard_service.ps1" in text
     assert "keyframe_review_contact_sheet.png" in text
     assert "Physical Claim Template" in text
+    assert "fetch_physical_claim_from_run.py" in text
     assert "fetch_physical_onboard_proof_gap.py" in text

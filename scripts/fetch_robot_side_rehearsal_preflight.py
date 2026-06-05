@@ -135,6 +135,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
             "scripts/fetch_planner_route_replay_batch.py",
             "scripts/fetch_planner_seeded_generalization_gate.py",
             "scripts/fetch_physical_onboard_proof_gap.py",
+            "scripts/fetch_physical_claim_from_run.py",
         )
     ]
     issues.extend(issue for check in command_checks for issue in check["issues"])
@@ -202,7 +203,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
             f"python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_seed{CURRENT_REHEARSAL_SEED}_runtime_stack_smoke_20260605 --step-id runtime_stack_smoke --execute --timeout-s 1800",
             f"python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_seed{CURRENT_REHEARSAL_SEED}_saved_anchors_20260605 --step-id saved_anchor_one_run_fetch_rehearsal --execute --timeout-s 2400",
             f"python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_seed{CURRENT_REHEARSAL_SEED}_mixed_all_routes_20260605 --step-id seed{CURRENT_REHEARSAL_SEED}_mixed_all_routes_rehearsal --execute --timeout-s 3600",
-            "python scripts/fetch_physical_onboard_proof_gap.py --campaign-id physical_onboard_proof_gap_after_robot_side_rehearsal_20260605 --physical-claim-summary <path-to-physical_claim_summary.json>",
+            "python scripts/fetch_physical_claim_from_run.py --campaign-id physical_claim_from_robot_side_rehearsal_20260605 --batch-summary <path-to-physical-batch-summary.json> --confirm-physical-robot --confirm-onboard-tensorrt --confirm-physical-camera --confirm-field-physics",
+            "python scripts/fetch_physical_onboard_proof_gap.py --campaign-id physical_onboard_proof_gap_after_robot_side_rehearsal_20260605 --physical-claim-summary artifacts/session/physical_claim_from_robot_side_rehearsal_20260605/fetch_physical_claim_from_run/physical_claim_summary.json",
         ],
         "claim_boundary": (
             "This preflight proves the local run package is ready to attempt robot-side rehearsal. "
