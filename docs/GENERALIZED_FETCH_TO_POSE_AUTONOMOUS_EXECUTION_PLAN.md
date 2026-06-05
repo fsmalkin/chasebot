@@ -1266,6 +1266,13 @@ the matching seed20260650 baseline, replay success, and route UAT quality. The
 current pre-provider artifact confirms the visual replay path is green and
 isolates the open blocker to provider credentials.
 
+The dashboard visual evidence audit now checks the operator-facing proof links:
+`artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md`.
+It verifies `15/15` UAT bundle samples with onboard, topdown, world, keyframe,
+and scorecard links, plus the required current evidence cards. Use this audit
+as the handoff proof that browser-watchable evidence is present before UAT
+review.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches

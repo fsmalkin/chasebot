@@ -1507,6 +1507,15 @@ planner artifact still used deterministic fallback. After credentials are
 available, rerun the same analyzer on the provider-backed planner, replay, and
 route UAT artifacts before updating any planner-authority claim.
 
+The dashboard visual evidence audit now verifies the browser-facing proof
+surface:
+`artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md`.
+It passes `15/15` UAT bundle samples across all five route families and checks
+the required current evidence-card links for the breadth rollup, hardware
+rehearsal, and provider preflight. Treat this as a link/provenance gate for
+operator UAT evidence; promotion and hardware claims still require their
+separate gates.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

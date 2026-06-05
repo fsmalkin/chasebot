@@ -1560,6 +1560,13 @@ the same analyzer to compare provider status, guard vetoes, route deltas,
 visual replay, and route UAT quality before the roadmap advances to
 physical/onboard proof.
 
+The dashboard visual evidence audit is green:
+`artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md`.
+It checks the current UAT review bundle and required evidence-card links,
+verifying `15/15` browser-watchable route samples across all five route
+families. This audit raises the operator handoff bar by proving the linked
+videos, keyframe sheets, and scorecards are present before UAT review.
+
 The fresh rehearsal ladder is now green on the sim-gate runtime target:
 `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
 `artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,

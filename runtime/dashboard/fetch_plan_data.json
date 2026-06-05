@@ -87,6 +87,42 @@
       ]
     },
     {
+      "title": "Dashboard visual evidence audit is green",
+      "status": "15/15 UAT samples and required current evidence cards resolve to browser-watchable artifacts",
+      "tone": "green",
+      "summary": "The dashboard visual evidence audit verifies the current browser-facing proof layer. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and the required current evidence cards for the three-seed breadth rollup, hardware rehearsal, and provider preflight. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
+      "metrics": [
+        "Audit: pass=true; interpretation=dashboard_visual_evidence_links_green",
+        "UAT bundle: 15/15 samples pass link audit",
+        "Route coverage: ambiguous_or_unsafe_no_go=3; scan_or_perceive_first=3; recovery_or_reaim=3; nav2_reposition_first=3; fetch_ready_local=3",
+        "Required evidence cards: 3/3 pass link audit",
+        "Artifacts checked per sample: raw_camera_browser, topdown_telemetry_browser, world_stream, keyframe_review_contact_sheet, visual package scorecard",
+        "Claim boundary: visual link/provenance audit only; promotion_evidence=false; hardware_proven=false"
+      ],
+      "links": [
+        {
+          "label": "Dashboard visual evidence audit scorecard",
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
+        },
+        {
+          "label": "Dashboard visual evidence audit summary",
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/dashboard_visual_evidence_summary.json"
+        },
+        {
+          "label": "Seed 20260648 mixed all-routes video bundle",
+          "url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "scene87 recovery onboard video",
+          "url": "/artifacts/session/20260605T190009487573Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene10 fetch-ready keyframe sheet",
+          "url": "/artifacts/session/20260605T191604499853Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
       "title": "Seed 20260648 hardware rehearsal is green",
       "status": "robot-fidelity/sim-gate rehearsal passed; physical/onboard proof remains open",
       "tone": "green",
@@ -6045,7 +6081,7 @@
     },
     {
       "label": "Visual keyframe review",
-      "body": "Continue inspecting start/setup, pre-contact, first contact, mid-push or coast, terminal arrival, final rest, and planner-only stopped-scene proofs. Raw onboard camera review remains the primary sanity check, with topdown/world-stream as geometry context."
+      "body": "Continue inspecting start/setup, pre-contact, first contact, mid-push or coast, terminal arrival, final rest, and planner-only stopped-scene proofs. Raw onboard camera review remains the primary sanity check, with topdown/world-stream as geometry context. The dashboard visual evidence audit now checks that the current UAT bundle and required evidence-card links resolve to browser-watchable artifacts before handoff."
     }
   ],
   "next_steps": [

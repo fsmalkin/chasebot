@@ -3278,6 +3278,10 @@ Milestone 3 pass criteria include:
        `artifacts/session/provider_rerun_comparison_pre_provider_seed20260650_20260605/fetch_planner_provider_rerun_comparison/scorecard.md`
      - comparison gate status: current replay and route UAT checks are green;
        provider status remains blocked by missing credentials
+     - dashboard visual evidence audit:
+       `artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md`
+     - dashboard audit result: `15/15` UAT review-bundle samples and required
+       current evidence-card links resolve to browser-watchable artifacts
      - claim boundary: this is robot-fidelity/sim-gate rehearsal evidence;
        `hardware_proven=false` until physical robot execution, onboard
        TensorRT proof, physical camera evidence, and field physics are recorded
