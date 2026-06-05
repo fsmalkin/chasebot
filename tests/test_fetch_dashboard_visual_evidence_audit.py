@@ -58,6 +58,7 @@ def _green_dashboard(tmp_path: Path) -> Path:
             _write(tmp_path / "artifacts" / "session" / session / rel)
     for rel in (
         "artifacts/session/rollup/fetch_planner_breadth_rollup/scorecard.md",
+        "artifacts/session/big_move/fetch_execution_first_pivot/scorecard.md",
         "artifacts/session/geometry/fetch_planner_geometry_breadth_audit/scorecard.md",
         "artifacts/session/milestone/fetch_generalized_milestone_readiness/scorecard.md",
         "artifacts/session/physical_gap/fetch_physical_onboard_proof_gap/scorecard.md",
@@ -78,6 +79,16 @@ def _green_dashboard(tmp_path: Path) -> Path:
             ],
         },
         "latest_evidence": [
+            {
+                "title": "Execution-first big move is queued",
+                "tone": "yellow",
+                "links": [
+                    {
+                        "label": "big move scorecard",
+                        "url": "/artifacts/session/big_move/fetch_execution_first_pivot/scorecard.md",
+                    }
+                ],
+            },
             {
                 "title": "Three-seed breadth rollup is green",
                 "tone": "green",
@@ -187,7 +198,7 @@ def test_dashboard_visual_evidence_audit_scores_green_bundle(tmp_path: Path, mon
     assert summary["milestone_interpretation"] == "dashboard_visual_evidence_links_green"
     assert summary["uat_sample_count"] == 2
     assert summary["uat_sample_pass_count"] == 2
-    assert summary["evidence_card_pass_count"] == 9
+    assert summary["evidence_card_pass_count"] == 10
     assert summary["all_evidence_cards_audited"] is False
     assert summary["route_counts"] == {"fetch_ready_local": 1, "nav2_reposition_first": 1}
 

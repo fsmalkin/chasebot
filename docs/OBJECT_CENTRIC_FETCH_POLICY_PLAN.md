@@ -97,6 +97,29 @@ capture/setup pose is unreachable under forward-only constraints, the planner
 selects reposition, scan, recovery, or no-go instead of letting local fetch back
 into position.
 
+June 5, 2026 big-move update: the moonshot branch has crossed the useful
+sim-gate proof threshold. The current three-seed breadth floor covers `300`
+planner scenes, all five route families, `27/27` executable visual deliveries,
+and `15/15` operator watchlist samples, with browser-watchable evidence and a
+ten-card dashboard audit. The next useful work is launch work:
+
+- provider launch: restore `OPENAI_API_KEY`, run the seed `20260650`
+  `llm_supervised_guarded` provider sequence from
+  `artifacts/session/provider_launch_checklist_seed20260650_20260605/fetch_provider_launch_checklist/scorecard.md`,
+  then compare provider decisions, guard vetoes, replay success, and route UAT
+  quality before changing the planner-authority claim
+- physical/onboard launch: run the seed `20260648` robot-side rehearsal from
+  `artifacts/session/robot_side_rehearsal_preflight_seed20260648_current_physical_gap_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`,
+  then generate the physical claim and rerun the physical proof-gap audit before
+  changing `hardware_proven`
+- sim-only work now has a higher bar: it should prepare those launches, preserve
+  their evidence, or investigate a failure produced by them
+
+This pivot keeps the long-term architecture unchanged. The LLM/world-state
+planner owns route selection; Nav2/recovery/local fetch own bounded execution;
+the monitor packages visual and geometric proof. The big move is to validate the
+stack under real provider authority and real onboard/physical constraints.
+
 May 29, 2026 architecture update, reinterpreted after the evidence reset: keep
 fetch no-shoot and robot-owned. The Nav2 corridor-push spike proved Nav2 can
 make useful bounded corridor contact. Sole-contact promotion remains blocked by

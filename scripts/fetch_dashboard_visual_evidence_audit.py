@@ -25,6 +25,7 @@ REQUIRED_SAMPLE_LINK_KEYS = (
     "scorecard_url",
 )
 REQUIRED_EVIDENCE_TITLES = (
+    "Execution-first big move is queued",
     "Three-seed breadth rollup is green",
     "Planner geometry breadth audit is green",
     "Milestone readiness rollup is UAT-ready",

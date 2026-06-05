@@ -37,6 +37,27 @@ recovery/re-aim, no-go, and direct local fetch. Treat discarded branch work as a
 low-cost search mechanism while preserving canonical 1.0x evidence for
 promotion decisions.
 
+June 5, 2026 big-move pivot: the active branch has enough sim-gate route-owner
+proof and enough browser evidence plumbing. Further work should prioritize
+execution gates over additional meta-audits. The current decision is:
+
+1. run the provider-backed route-owner rerun as soon as `OPENAI_API_KEY` is
+   present, using the packaged provider launch checklist at
+   `artifacts/session/provider_launch_checklist_seed20260650_20260605/fetch_provider_launch_checklist/scorecard.md`
+2. run the robot-side physical/onboard rehearsal as soon as the physical robot
+   lane is available, using the refreshed runbook at
+   `artifacts/session/robot_side_rehearsal_preflight_seed20260648_current_physical_gap_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`
+3. cap additional sim-only proof work unless it directly prepares one of those
+   two launches or fixes a failure from them
+4. keep the dashboard as the operator-facing UAT surface: every launch attempt
+   needs onboard-first video, keyframe sequence review, topdown/world context,
+   and a scorecard link
+
+The intended big move is a five-route-family demo package: no-go, scan/perceive,
+recovery/re-aim, Nav2-first, and fetch-ready local. Provider-backed routing
+proves planner authority; physical/onboard rehearsal proves hardware transfer.
+Either lane may run first. Milestone completion needs both.
+
 June 2, 2026 moonshot implementation target: the branch routes mixed planner
 scenes into v0 executable outcomes. `fetch_ready_local` and
 `nav2_reposition_first` dispatch the forward-only golf delivery runner with

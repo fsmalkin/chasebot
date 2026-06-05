@@ -482,8 +482,9 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Three-seed breadth rollup green; seed 20260648 hardware rehearsal green"
+    assert payload["status_label"] == "Execution-first pivot: provider launch or physical/onboard rehearsal next"
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
+    assert "Execution-first big move is queued" in evidence_by_title
     assert "Three-seed breadth rollup is green" in evidence_by_title
     assert "Planner geometry breadth audit is green" in evidence_by_title
     assert "Operator UAT watchlist is ready" in evidence_by_title
@@ -491,6 +492,16 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert "Seed 20260649 fresh breadth UAT is green" in evidence_by_title
     assert "Seed 20260648 hardware rehearsal is green" in evidence_by_title
     assert evidence_by_title["Three-seed breadth rollup is green"]["tone"] == "green"
+    assert evidence_by_title["Execution-first big move is queued"]["tone"] == "yellow"
+    assert "run provider or physical launch next" in evidence_by_title["Execution-first big move is queued"]["status"]
+    assert any(
+        "provider_launch_checklist_seed20260650_20260605" in link["url"]
+        for link in evidence_by_title["Execution-first big move is queued"]["links"]
+    )
+    assert any(
+        "robot_side_rehearsal_preflight_seed20260648_current_physical_gap_20260605" in link["url"]
+        for link in evidence_by_title["Execution-first big move is queued"]["links"]
+    )
     assert evidence_by_title["Planner geometry breadth audit is green"]["tone"] == "green"
     assert "scene_count=300" in " ".join(evidence_by_title["Planner geometry breadth audit is green"]["metrics"])
     assert evidence_by_title["Dashboard visual evidence audit is green"]["tone"] == "green"
@@ -533,7 +544,7 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         for link in evidence_by_title["Dashboard visual evidence audit is green"]["links"]
     )
     assert "15/15 UAT samples" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
-    assert "9/9 required current evidence cards" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
+    assert "10/10 required current evidence cards" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
     assert any(
         "planner_geometry_breadth_audit_seeds20260648_20260650_20260605" in link["url"]
         for link in evidence_by_title["Planner geometry breadth audit is green"]["links"]

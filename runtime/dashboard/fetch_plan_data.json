@@ -2,8 +2,8 @@
   "title": "Generalized Fetch-To-Pose Living Plan",
   "updated_label": "Updated June 5, 2026, 5:29 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Three-seed breadth rollup green; seed 20260648 hardware rehearsal green",
-  "status_detail": "The planner-routed moonshot path now has a three-seed breadth rollup over seeds 20260648, 20260649, and 20260650: 300 generated planner scenes, zero wrong fetch dispatches, 27/27 executable visual deliveries, zero contact watches, and zero first-contact blockers. Seed20260648 remains the current robot-fidelity/sim-gate hardware rehearsal checkpoint. Provider-backed LLM routing still waits on OPENAI_API_KEY, and hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
+  "status_label": "Execution-first pivot: provider launch or physical/onboard rehearsal next",
+  "status_detail": "The planner-routed moonshot path has enough sim-gate breadth and visual proof to stop optimizing around meta-evidence. Current proof covers 300 generated planner scenes, all five route families, 27/27 executable visual deliveries, 15/15 operator watchlist samples, and 9/9 required dashboard proof cards. The next big move is execution: run the provider-backed seed20260650 route-owner launch when OPENAI_API_KEY is present, or run the seed20260648 robot-side physical/onboard rehearsal when the hardware lane is available. Milestone completion still requires provider-backed planner authority and physical/onboard proof.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,37 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Execution-first big move is queued",
+      "status": "stop adding sim-only proof rails; run provider or physical launch next",
+      "tone": "yellow",
+      "summary": "The active branch has enough deterministic sim-gate route-owner proof to prioritize launch work. The provider-backed route-owner sequence is packaged and waits on OPENAI_API_KEY. The robot-side physical/onboard rehearsal is packaged and waits on physical lane availability. Additional sim-only work should prepare one of those launches or investigate a failure from them.",
+      "metrics": [
+        "Current sim proof: 300 planner scenes, five route families, 27/27 executable visual deliveries, 15/15 operator watchlist samples",
+        "Provider launch: seed20260650 llm_supervised_guarded sequence, provider-vs-baseline comparison, replay and route UAT quality gate",
+        "Physical launch: seed20260648 robot-side runtime smoke, saved anchors, mixed all-routes rehearsal, physical claim and proof-gap audit",
+        "Claim boundary: milestone_complete=false until provider_backed_authority_proven=true and hardware_proven=true",
+        "Rule: sim-only work now needs a direct launch, preservation, or failure-investigation purpose"
+      ],
+      "links": [
+        {
+          "label": "Provider launch checklist",
+          "url": "/artifacts/session/provider_launch_checklist_seed20260650_20260605/fetch_provider_launch_checklist/scorecard.md"
+        },
+        {
+          "label": "Robot-side physical runbook",
+          "url": "/artifacts/session/robot_side_rehearsal_preflight_seed20260648_current_physical_gap_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md"
+        },
+        {
+          "label": "Milestone readiness scorecard",
+          "url": "/artifacts/session/generalized_fetch_to_pose_milestone_readiness_current_proof_cards_20260605/fetch_generalized_milestone_readiness/scorecard.md"
+        },
+        {
+          "label": "Dashboard visual evidence audit",
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_current_proof_cards_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
+        }
+      ]
+    },
     {
       "title": "Three-seed breadth rollup is green",
       "status": "300 planner scenes, 27/27 executable visual deliveries, no contact watches",
@@ -115,14 +146,14 @@
     },
     {
       "title": "Dashboard visual evidence audit is green",
-      "status": "15/15 UAT samples and 9/9 required current evidence cards resolve to browser-watchable artifacts",
+      "status": "15/15 UAT samples and 10/10 required current evidence cards resolve to browser-watchable artifacts",
       "tone": "green",
-      "summary": "The dashboard visual evidence audit now verifies the current browser-facing proof layer, including breadth rollup, geometry breadth, milestone readiness, physical/onboard proof-gap, robot-side runbook, hardware rehearsal, provider preflight, provider launch checklist, and operator UAT watchlist evidence cards. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and nine required current evidence cards. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
+      "summary": "The dashboard visual evidence audit now verifies the current browser-facing proof layer, including the execution-first pivot, breadth rollup, geometry breadth, milestone readiness, physical/onboard proof-gap, robot-side runbook, hardware rehearsal, provider preflight, provider launch checklist, and operator UAT watchlist evidence cards. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and ten required current evidence cards. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
       "metrics": [
         "Audit: pass=true; interpretation=dashboard_visual_evidence_links_green",
         "UAT bundle: 15/15 samples pass link audit",
         "Route coverage: ambiguous_or_unsafe_no_go=3; scan_or_perceive_first=3; recovery_or_reaim=3; nav2_reposition_first=3; fetch_ready_local=3",
-        "Required current evidence cards: 9/9 pass link audit",
+        "Required current evidence cards: 10/10 pass link audit",
         "Artifacts checked per sample: raw_camera_browser, topdown_telemetry, world_stream, keyframe_review_contact_sheet, visual package scorecard",
         "Claim boundary: visual link/provenance audit only; promotion_evidence=false; hardware_proven=false"
       ],
@@ -180,12 +211,12 @@
       "title": "Milestone readiness rollup is UAT-ready",
       "status": "sim/operator UAT green with geometry breadth and watchlist proof; provider-backed LLM routing and physical/onboard proof still pending",
       "tone": "green",
-      "summary": "The milestone readiness rollup now consumes the current proof stack: three-seed deterministic breadth, planner geometry breadth, the 15-item operator UAT watchlist, the 8-card dashboard visual-evidence audit, provider rerun preflight/comparison, and seed20260648 robot-fidelity hardware rehearsal. It reports operator_uat_ready=true with 300 planner scenes, all five route families, all major setup flags, 15 browser-watchable current UAT samples, and hardware_transfer_ready=true. It keeps milestone_complete=false because OPENAI_API_KEY is missing for provider-backed LLM routing and hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
+      "summary": "The milestone readiness rollup now consumes the current proof stack: three-seed deterministic breadth, planner geometry breadth, the 15-item operator UAT watchlist, the 10-card dashboard visual-evidence audit, provider rerun preflight/comparison, and seed20260648 robot-fidelity hardware rehearsal. It reports operator_uat_ready=true with 300 planner scenes, all five route families, all major setup flags, 15 browser-watchable current UAT samples, and hardware_transfer_ready=true. It keeps milestone_complete=false because OPENAI_API_KEY is missing for provider-backed LLM routing and hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
       "metrics": [
         "Milestone audit: pass=true; operator_uat_ready=true; milestone_complete=false",
         "Green evidence: three-seed deterministic breadth rollup, planner geometry breadth, operator UAT watchlist, dashboard visual evidence audit, seed20260648 robot-fidelity hardware rehearsal",
         "Geometry breadth: 300 scenes; all five route families; all major setup flags; distance, angle, lateral, standoff, and yaw spans above thresholds",
-        "Dashboard/UAT proof: 15/15 UAT samples and 9/9 current evidence cards pass link audit",
+        "Dashboard/UAT proof: 15/15 UAT samples and 10/10 current evidence cards pass link audit",
         "Provider boundary: provider_backed_authority_proven=false until OPENAI_API_KEY rerun and provider-vs-baseline comparison pass",
         "Hardware boundary: hardware_proven=false until physical/onboard TensorRT run, physical camera evidence, and field physics proof are recorded"
       ],
