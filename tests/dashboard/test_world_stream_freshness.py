@@ -523,10 +523,11 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         for link in evidence_by_title["Robot-side physical runbook is current"]["links"]
     )
     assert any(
-        "dashboard_visual_evidence_audit_with_physical_claim_generator_20260605" in link["url"]
+        "dashboard_visual_evidence_audit_current_proof_cards_20260605" in link["url"]
         for link in evidence_by_title["Dashboard visual evidence audit is green"]["links"]
     )
     assert "15/15 UAT samples" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
+    assert "6/6 required current evidence cards" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
     assert evidence_by_title["Seed 20260650 fresh breadth UAT is green"]["tone"] == "green"
     assert evidence_by_title["Seed 20260649 fresh breadth UAT is green"]["tone"] == "green"
     assert evidence_by_title["Seed 20260648 hardware rehearsal is green"]["tone"] == "green"

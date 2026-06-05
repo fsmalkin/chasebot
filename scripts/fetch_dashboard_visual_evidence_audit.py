@@ -26,6 +26,9 @@ REQUIRED_SAMPLE_LINK_KEYS = (
 )
 REQUIRED_EVIDENCE_TITLES = (
     "Three-seed breadth rollup is green",
+    "Milestone readiness rollup is UAT-ready",
+    "Physical/onboard proof gap is explicit",
+    "Robot-side physical runbook is current",
     "Seed 20260648 hardware rehearsal is green",
     "Provider rerun preflight is waiting on OPENAI_API_KEY",
 )

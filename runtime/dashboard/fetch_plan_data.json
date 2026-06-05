@@ -88,25 +88,25 @@
     },
     {
       "title": "Dashboard visual evidence audit is green",
-      "status": "15/15 UAT samples and required current evidence cards resolve to browser-watchable artifacts",
+      "status": "15/15 UAT samples and 6/6 required current evidence cards resolve to browser-watchable artifacts",
       "tone": "green",
-      "summary": "The dashboard visual evidence audit verifies the current browser-facing proof layer after adding the milestone readiness, physical/onboard proof-gap, robot-side runbook, and physical-claim generator rollups. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and the required current evidence cards for the three-seed breadth rollup, hardware rehearsal, and provider preflight. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
+      "summary": "The dashboard visual evidence audit now verifies the current browser-facing proof layer, including milestone readiness, physical/onboard proof-gap, robot-side runbook, and physical-claim generator evidence cards. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and six required current evidence cards. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
       "metrics": [
         "Audit: pass=true; interpretation=dashboard_visual_evidence_links_green",
         "UAT bundle: 15/15 samples pass link audit",
         "Route coverage: ambiguous_or_unsafe_no_go=3; scan_or_perceive_first=3; recovery_or_reaim=3; nav2_reposition_first=3; fetch_ready_local=3",
-        "Required evidence cards: 3/3 pass link audit",
-        "Artifacts checked per sample: raw_camera_browser, topdown_telemetry_browser, world_stream, keyframe_review_contact_sheet, visual package scorecard",
+        "Required current evidence cards: 6/6 pass link audit",
+        "Artifacts checked per sample: raw_camera_browser, topdown_telemetry, world_stream, keyframe_review_contact_sheet, visual package scorecard",
         "Claim boundary: visual link/provenance audit only; promotion_evidence=false; hardware_proven=false"
       ],
       "links": [
         {
           "label": "Dashboard visual evidence audit scorecard",
-          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_physical_claim_generator_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_current_proof_cards_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
         },
         {
           "label": "Dashboard visual evidence audit summary",
-          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_physical_claim_generator_20260605/fetch_dashboard_visual_evidence_audit/dashboard_visual_evidence_summary.json"
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_current_proof_cards_20260605/fetch_dashboard_visual_evidence_audit/dashboard_visual_evidence_summary.json"
         },
         {
           "label": "Seed 20260648 mixed all-routes video bundle",

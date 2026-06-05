@@ -58,6 +58,9 @@ def _green_dashboard(tmp_path: Path) -> Path:
             _write(tmp_path / "artifacts" / "session" / session / rel)
     for rel in (
         "artifacts/session/rollup/fetch_planner_breadth_rollup/scorecard.md",
+        "artifacts/session/milestone/fetch_generalized_milestone_readiness/scorecard.md",
+        "artifacts/session/physical_gap/fetch_physical_onboard_proof_gap/scorecard.md",
+        "artifacts/session/runbook/fetch_robot_side_rehearsal_preflight/scorecard.md",
         "artifacts/session/hardware/fetch_hardware_rehearsal_runner/scorecard.md",
         "artifacts/session/provider/fetch_planner_provider_rerun_readiness/scorecard.md",
     ):
@@ -79,6 +82,36 @@ def _green_dashboard(tmp_path: Path) -> Path:
                     {
                         "label": "rollup scorecard",
                         "url": "/artifacts/session/rollup/fetch_planner_breadth_rollup/scorecard.md",
+                    }
+                ],
+            },
+            {
+                "title": "Milestone readiness rollup is UAT-ready",
+                "tone": "green",
+                "links": [
+                    {
+                        "label": "milestone scorecard",
+                        "url": "/artifacts/session/milestone/fetch_generalized_milestone_readiness/scorecard.md",
+                    }
+                ],
+            },
+            {
+                "title": "Physical/onboard proof gap is explicit",
+                "tone": "yellow",
+                "links": [
+                    {
+                        "label": "physical gap scorecard",
+                        "url": "/artifacts/session/physical_gap/fetch_physical_onboard_proof_gap/scorecard.md",
+                    }
+                ],
+            },
+            {
+                "title": "Robot-side physical runbook is current",
+                "tone": "yellow",
+                "links": [
+                    {
+                        "label": "runbook scorecard",
+                        "url": "/artifacts/session/runbook/fetch_robot_side_rehearsal_preflight/scorecard.md",
                     }
                 ],
             },
@@ -121,7 +154,7 @@ def test_dashboard_visual_evidence_audit_scores_green_bundle(tmp_path: Path, mon
     assert summary["milestone_interpretation"] == "dashboard_visual_evidence_links_green"
     assert summary["uat_sample_count"] == 2
     assert summary["uat_sample_pass_count"] == 2
-    assert summary["evidence_card_pass_count"] == 3
+    assert summary["evidence_card_pass_count"] == 6
     assert summary["all_evidence_cards_audited"] is False
     assert summary["route_counts"] == {"fetch_ready_local": 1, "nav2_reposition_first": 1}
 
@@ -136,6 +169,22 @@ def test_dashboard_visual_evidence_audit_fails_on_missing_keyframe_sheet(tmp_pat
 
     assert summary["pass"] is False
     assert any("contact_sheet_url:linked_file_missing" in issue for issue in summary["issues"])
+
+
+def test_dashboard_visual_evidence_audit_requires_current_proof_cards(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(audit, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(audit, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+    dashboard = _green_dashboard(tmp_path)
+    payload = audit.json.loads(dashboard.read_text(encoding="utf-8"))
+    payload["latest_evidence"] = [
+        row for row in payload["latest_evidence"] if row["title"] != "Physical/onboard proof gap is explicit"
+    ]
+    dashboard.write_text(audit.json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+    summary = audit.build_summary(_args(tmp_path))
+
+    assert summary["pass"] is False
+    assert "missing_evidence_card:Physical/onboard proof gap is explicit" in summary["issues"]
 
 
 def test_dashboard_visual_evidence_audit_fails_on_tiny_video(tmp_path: Path, monkeypatch):
