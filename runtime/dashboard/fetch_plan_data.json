@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 4:47 PM ET",
+  "updated_label": "Updated June 5, 2026, 5:23 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Seed 20260649 fresh breadth green; seed 20260648 hardware rehearsal green",
-  "status_detail": "Seed20260649 adds a fresh 100-scene deterministic-fallback breadth pass after the seed20260648 hardware rehearsal. The planner classified all 100 generated scenes with zero wrong fetch dispatches, selected 9 executable rows across recovery, Nav2-first, and fetch-ready routes, and passed 9/9 visual UAT packages with clean analyzer status after frame-sequence review. Seed20260648 remains the current robot-fidelity/sim-gate hardware rehearsal checkpoint. Provider-backed LLM routing still waits on OPENAI_API_KEY, and hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
+  "status_label": "Seed 20260650 fresh breadth green; seed 20260648 hardware rehearsal green",
+  "status_detail": "Seed20260650 adds another fresh 100-scene deterministic-fallback breadth pass after seed20260649 and the seed20260648 hardware rehearsal. The planner classified all 100 generated scenes with zero wrong fetch dispatches, selected 9 executable rows across recovery, Nav2-first, and fetch-ready routes, and passed 9/9 visual UAT packages with clean analyzer status after frame-sequence review. Seed20260648 remains the current robot-fidelity/sim-gate hardware rehearsal checkpoint. Provider-backed LLM routing still waits on OPENAI_API_KEY, and hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -109,6 +109,57 @@
         {
           "label": "Seed 20260648 mixed all-routes UAT bundle",
           "url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        }
+      ]
+    },
+    {
+      "title": "Seed 20260650 fresh breadth UAT is green",
+      "status": "fresh seed: 100-scene planner breadth plus 9/9 executable visual replay",
+      "tone": "green",
+      "summary": "Seed20260650 gives the planner-routed moonshot path a third fresh 100-scene deterministic-fallback breadth checkpoint. The planner classified all 100 generated scenes across all five route families with zero wrong fetch dispatches. Because OPENAI_API_KEY is missing, routing ran through deterministic fallback. The selected executable replay passed 9/9 deliveries across recovery/re-aim, Nav2-reposition-first, and fetch-ready-local routes, with 9/9 browser-watchable visual packages. The analyzer reports clean execution, setup, and contact, with first_contact_blocker_count=0 and contact_watch_count=0. Frame-sequence review of all nine raw-camera/topdown sheets showed coherent setup, visible ball motion, and terminal delivery geometry. This expands sim-gate UAT confidence; provider-backed LLM routing and physical/onboard proof remain open.",
+      "metrics": [
+        "Planner seed: random_cases=100; pass=true; wrong_fetch_dispatch_count=0",
+        "Route mix: fetch_ready_local=23; nav2_reposition_first=16; recovery_or_reaim=15; scan_or_perceive_first=24; ambiguous_or_unsafe_no_go=22",
+        "Provider status: skipped_missing_openai_api_key=100; deterministic_fallback=100",
+        "Executable replay: selected=9; mission_pass=9; visual_package_pass=9; mission_fail=0",
+        "Route coverage: fetch_ready_local=3; nav2_reposition_first=3; recovery_or_reaim=3",
+        "Executable closest approach range: 0.193m..0.198m inside the 0.300m contract",
+        "Analyzer: randomized_route_owner_visual_uat_green; execution/setup/contact clean; first_contact_blocker_count=0; contact_watch_count=0",
+        "Visual review: all nine keyframe sheets inspected across setup, first contact, mid-push/coast, terminal arrival, and final rest",
+        "Claim boundary: deterministic fallback evidence only until OPENAI_API_KEY is available; hardware_proven=false"
+      ],
+      "links": [
+        {
+          "label": "Seed 20260650 parent seeded gate scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260650 planner scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260650 replay scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605_replay/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Seed 20260650 analyzer scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "scene26 recovery onboard video",
+          "url": "/artifacts/session/20260605T205341138080Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene09 Nav2-first onboard video",
+          "url": "/artifacts/session/20260605T210143186106Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene99 fetch-ready onboard video",
+          "url": "/artifacts/session/20260605T211742944339Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene99 fetch-ready keyframe sheet",
+          "url": "/artifacts/session/20260605T211742944339Z/visual/keyframe_review_contact_sheet.png"
         }
       ]
     },
@@ -5940,7 +5991,7 @@
     }
   ],
   "next_steps": [
-    "Record provider-backed rerun evidence after OPENAI_API_KEY is available, using seed20260649 plus the seed20260648 hardware-rehearsal baseline for comparison.",
+    "Record provider-backed rerun evidence after OPENAI_API_KEY is available, using seed20260650 plus the seed20260648 hardware-rehearsal baseline for comparison.",
     "Repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT and physical camera evidence.",
     "Provide OPENAI_API_KEY, then run the generated provider-rerun commands from the provider readiness scorecard for seed20260648.",
     "After provider-backed routing passes, repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT and physical camera evidence.",

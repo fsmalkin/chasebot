@@ -1221,6 +1221,24 @@ sim-gate behavior. The active gates remain provider-backed LLM rerun after
 `OPENAI_API_KEY` is restored and physical/onboard proof before any
 `hardware_proven=true` claim.
 
+Seed `20260650` adds the next fresh 100-scene breadth check:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner classified all `100` generated scenes across all five route
+families with zero wrong fetch dispatches. Provider status remained
+`skipped_missing_openai_api_key=100`, so this is deterministic-fallback
+evidence. The selected executable replay passed `9/9` deliveries across
+`recovery_or_reaim`, `nav2_reposition_first`, and `fetch_ready_local`, with
+visual packages `9/9`:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`.
+The analyzer at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution/setup/contact, `0` contact watches, and `0`
+first-contact blockers. Frame-sequence review covered all nine
+raw-camera/topdown sheets and matched the corrected delivery geometry. This
+adds a consecutive 100-scene breadth pass after seed20260649 while preserving
+the same claim boundary: provider-backed LLM routing and physical/onboard proof
+remain open gates.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches

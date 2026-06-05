@@ -1461,6 +1461,23 @@ sheets matched the corrected delivery geometry. Treat this as a second
 100-scene sim-gate breadth pass, while provider-backed LLM routing and
 physical/onboard proof stay open.
 
+Seed20260650 adds the next 100-scene sim-gate breadth pass:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner classified `100/100` generated scenes across all five route
+families with zero wrong fetch dispatches under deterministic fallback because
+`OPENAI_API_KEY` was unavailable. The executable replay selected three
+`recovery_or_reaim`, three `nav2_reposition_first`, and three
+`fetch_ready_local` rows, then passed `9/9` deliveries with visual packages
+`9/9`:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`.
+The analyzer at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution/setup/contact, `0` contact watches, and `0`
+first-contact blockers. Frame-sequence review of all nine raw-camera/topdown
+sheets matched the corrected delivery geometry. Treat this as another fresh
+breadth pass for the planner-routed stack, while provider-backed LLM routing
+and physical/onboard proof stay open.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
