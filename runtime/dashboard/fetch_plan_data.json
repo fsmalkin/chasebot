@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 8:19 AM ET",
+  "updated_label": "Updated June 5, 2026, 9:29 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Third fresh breadth seed is green",
-  "status_detail": "Seed 20260637 adds another broad route-owner UAT pass on the current sim-gate stack: 30 randomized scenes classified, zero wrong fetch dispatches, 6/6 executable replay deliveries, and 6/6 visual packages across fetch-ready, Nav2-first, and recovery/re-aim routes. Frame-sequence review of all six raw-camera/topdown keyframe sheets matched the delivery geometry, including two high-risk recovery rows. Planner authority still used deterministic fallback because OPENAI_API_KEY is missing, and hardware_proven=false remains in force until physical/onboard execution and field physics are recorded.",
+  "status_label": "Rough breadth seed is green",
+  "status_detail": "Seed 20260638 raises the local sim-gate stress level with roughest-row selection: 30 randomized scenes classified, zero wrong fetch dispatches, 8/8 executable replay deliveries, and 8/8 visual packages across recovery/re-aim, Nav2-first, and fetch-ready routes. All eight rows were predicted contact-quality watches, including three high-risk recovery rows and three medium-risk Nav2-first rows. Frame-sequence review of all eight raw-camera/topdown sheets matched the delivery geometry. One initial fresh-dashboard startup timeout cleared on resume with a longer environment-ready timeout, so this is an infrastructure watch rather than a control miss.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,107 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Seed 20260638 rough breadth UAT is green",
+      "status": "roughest rows: 8 executable mixed-route runs, 8/8 delivery with visual packages",
+      "tone": "green",
+      "summary": "Seed 20260638 deliberately selected rougher executable rows instead of the easier breadth slice. The planner classified 30 generated scenes with zero wrong fetch dispatches. The replay requested up to three rows per executable route; the generated route mix contained two fetch-ready rows, so the final replay covered eight executable cases: three recovery/re-aim, three Nav2-first, and two fetch-ready. All eight delivered inside the 0.300m contract, all eight visual packages passed, and the analyzer reports clean execution, setup, and contact with zero first-contact blockers. I inspected all eight raw-camera/topdown keyframe sheets. The three high-risk recovery rows and three medium-risk Nav2 rows produced coherent delivery evidence. The first attempt hit a fresh-dashboard startup timeout on scene15; the same row passed after resume with a longer environment-ready timeout, classifying that interruption as infrastructure watch rather than control failure.",
+      "metrics": [
+        "Parent gate: pass=true; random_cases=30; promotion_evidence=false; planner_authority_ready=false",
+        "Planner routing: pass_count=30; fail_count=0; wrong_fetch_dispatch_count=0",
+        "Route mix: fetch_ready_local=2; nav2_reposition_first=6; scan_or_perceive_first=9; recovery_or_reaim=7; ambiguous_or_unsafe_no_go=6",
+        "Provider status: skipped_missing_openai_api_key=30; deterministic fallback used for all 30; llm_supervised_veto_count=30",
+        "Executable replay: selected=8; mission_pass=8; visual_package_pass=8; mission_fail=0; skipped_existing=3 from resume",
+        "Replay route coverage: fetch_ready_local=2; nav2_reposition_first=3; recovery_or_reaim=3",
+        "Risk mix: predicted_contact_quality watch=8; predicted_first_contact_risk high=3, medium=3, low=2",
+        "Closest approach range: 0.194m..0.198m inside the 0.300m contract",
+        "Analyzer: execution=clean; setup=clean; contact=clean; first_contact_blocker_count=0",
+        "Startup watch: scene15 first attempt timed out during fresh-dashboard environment start, then passed on resume with env-ready-timeout-s=600",
+        "Claim boundary: hardware_proven=false; provider-backed LLM routing and physical/onboard proof remain open gates"
+      ],
+      "links": [
+        {
+          "label": "Seed 20260638 parent scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260638 replay scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Seed 20260638 analyzer scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Seed 20260638 planner scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "scene09 recovery onboard video",
+          "url": "/artifacts/session/20260605T082051238429Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene16 recovery onboard video",
+          "url": "/artifacts/session/20260605T082636242942Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene24 recovery onboard video",
+          "url": "/artifacts/session/20260605T082935422917Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene15 Nav2 onboard video",
+          "url": "/artifacts/session/20260605T085830212640Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene03 Nav2 onboard video",
+          "url": "/artifacts/session/20260605T090418004362Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene08 Nav2 onboard video",
+          "url": "/artifacts/session/20260605T090640781973Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene23 fetch-ready onboard video",
+          "url": "/artifacts/session/20260605T090951695110Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene10 fetch-ready onboard video",
+          "url": "/artifacts/session/20260605T091204007488Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene09 recovery keyframe sheet",
+          "url": "/artifacts/session/20260605T082051238429Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene16 recovery keyframe sheet",
+          "url": "/artifacts/session/20260605T082636242942Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene24 recovery keyframe sheet",
+          "url": "/artifacts/session/20260605T082935422917Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene15 Nav2 keyframe sheet",
+          "url": "/artifacts/session/20260605T085830212640Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene03 Nav2 keyframe sheet",
+          "url": "/artifacts/session/20260605T090418004362Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene08 Nav2 keyframe sheet",
+          "url": "/artifacts/session/20260605T090640781973Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene23 fetch-ready keyframe sheet",
+          "url": "/artifacts/session/20260605T090951695110Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene10 fetch-ready keyframe sheet",
+          "url": "/artifacts/session/20260605T091204007488Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
     {
       "title": "Seed 20260637 breadth UAT is green",
       "status": "30 classified scenes, 6 executable mixed-route runs, 6/6 delivery with visual packages",
@@ -4571,8 +4672,12 @@
   ],
   "watch_areas": [
     {
+      "label": "Fresh dashboard startup timeout",
+      "body": "Seed20260638 scene15 first timed out while starting a fresh dashboard session, with robot truth visible and target truth missing. The same row passed after resume with env-ready-timeout-s=600. Treat this as an infrastructure/startup-timeout watch before rough gates, not a fetch-control failure."
+    },
+    {
       "label": "Provider-backed LLM routing rerun",
-      "body": "Seeds 20260636 and 20260637 prove the deterministic guarded route-owner stack across fresh broad seeds, while provider status stayed skipped_missing_openai_api_key. Restore OPENAI_API_KEY and rerun the planner gate before claiming current provider-backed authority."
+      "body": "Seeds 20260636, 20260637, and rough seed20260638 prove the deterministic guarded route-owner stack across fresh broad seeds, while provider status stayed skipped_missing_openai_api_key. Restore OPENAI_API_KEY and rerun the planner gate before claiming current provider-backed authority."
     },
     {
       "label": "Base-controller fetch preflight",
@@ -4620,7 +4725,8 @@
     }
   ],
   "next_steps": [
-    "Rerun seeds 20260636 and 20260637 with provider-backed LLM routing once OPENAI_API_KEY is available, then compare route agreement and veto reasons against deterministic fallback.",
+    "Rerun seeds 20260636 through 20260638 with provider-backed LLM routing once OPENAI_API_KEY is available, then compare route agreement and veto reasons against deterministic fallback.",
+    "Use env-ready-timeout-s=600 or equivalent startup-health handling for rough seeded gates so infrastructure startup latency does not mask route-owner evidence.",
     "Run the physical/onboard hardware proof for the same ladder, starting with stack smoke and raw-camera/YOLO visual review.",
     "Keep hardware_proven=false until physical robot execution, onboard TensorRT, physical camera evidence, and field-physics proof are recorded."
   ],

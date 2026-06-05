@@ -647,6 +647,39 @@ June 5, 2026 seed20260637 breadth UAT:
   unavailable, so provider-backed LLM routing and physical/onboard proof remain
   open.
 
+June 5, 2026 seed20260638 rough breadth UAT:
+
+- Command:
+  `python scripts\fetch_planner_seeded_generalization_gate.py --campaign-id live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605 --seed 20260638 --random-cases 30 --planner-mode llm_supervised_guarded --quality-order roughest --max-per-route 3 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --resume-skip-existing --env-ready-timeout-s 600 --stop-on-fail`
+- Parent scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Replay scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: parent gate `pass=true`, `random_cases=30`,
+  `wrong_fetch_dispatch_count=0`, executable replay `8/8`, visual packages
+  `8/8`, analyzer execution/setup/contact clean, and first-contact blockers
+  `0`.
+- Route coverage: replay selected three `recovery_or_reaim`, three
+  `nav2_reposition_first`, and two `fetch_ready_local` rows. The generated
+  route mix had only two fetch-ready rows, so the rough gate produced eight
+  executable rows from a `--max-per-route 3` request.
+- Risk coverage: all eight rows were predicted contact-quality watches:
+  three high-risk recovery rows, three medium-risk Nav2-first rows, and two
+  low-risk fetch-ready rows.
+- Visual review: inspected all eight raw-camera/topdown keyframe sheets. The
+  onboard camera and topdown geometry agreed through setup, first contact,
+  push, and terminal delivery.
+- Startup watch: the first attempt timed out during fresh-dashboard startup on
+  `seed20260638_scene15_nav2_reposition_first`, with robot truth visible and
+  target truth missing. The same row passed on resume with
+  `--env-ready-timeout-s 600`, so the interruption is infrastructure/startup
+  evidence rather than a route-owner control failure.
+- Claim boundary: this is rough sim-gate route-owner UAT. Planner authority ran
+  through deterministic fallback because `OPENAI_API_KEY` was unavailable, so
+  provider-backed LLM routing and physical/onboard proof remain open.
+
 June 4, 2026 planner-only route proof:
 
 - Command:

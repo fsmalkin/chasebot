@@ -1284,6 +1284,20 @@ push, and terminal delivery. The two high-risk recovery rows still showed
 coherent ball/target/robot geometry. Provider-backed LLM routing and
 physical/onboard hardware-transfer proof remain the active open gates.
 
+Seed20260638 adds roughest-row breadth evidence:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The gate classified `30` generated scenes with zero wrong fetch dispatches. The
+live executable replay at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+passed `8/8` across three `recovery_or_reaim`, three `nav2_reposition_first`,
+and two `fetch_ready_local` rows, with visual packages `8/8`. All eight rows
+were predicted contact-quality watches, including three high-risk recovery rows.
+The analyzer reports clean execution, setup, and contact with first-contact
+blockers `0`. Eight raw-camera/topdown keyframe sheets were reviewed across
+setup, first contact, push, and terminal delivery. The first scene15 attempt
+timed out during fresh-dashboard startup and passed on resume with
+`--env-ready-timeout-s 600`; treat that as startup-health evidence.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

@@ -1476,3 +1476,17 @@ found the onboard camera and topdown geometry aligned, including two high-risk
 recovery rows. The roadmap sequence stays the same: rerun provider-backed LLM
 routing when credentials are available, then run physical/onboard proof before
 claiming hardware transfer.
+
+Seed20260638 raises the stress level with roughest-row selection:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The seed classified `30` generated scenes with zero wrong fetch dispatches, then
+replayed eight executable rows across recovery/re-aim, Nav2-first, and
+fetch-ready owners at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`.
+All eight delivered, all eight visual packages passed, and frame-sequence review
+found the onboard camera and topdown geometry aligned. The first scene15 attempt
+timed out during fresh-dashboard startup and passed on resume with
+`--env-ready-timeout-s 600`; rough seeded gates should carry the longer startup
+timeout or equivalent health handling. The roadmap sequence still prioritizes
+provider-backed LLM reruns and physical/onboard proof before hardware-transfer
+claims.

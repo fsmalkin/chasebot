@@ -1,0 +1,2509 @@
+{
+  "campaign_id": "live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner",
+  "dry_run": false,
+  "expected_route_counts": {
+    "ambiguous_or_unsafe_no_go": 6,
+    "fetch_ready_local": 2,
+    "nav2_reposition_first": 6,
+    "recovery_or_reaim": 7,
+    "scan_or_perceive_first": 9
+  },
+  "fail_count": 0,
+  "fetch_dispatch_count": 2,
+  "generated_utc": "2026-06-05T08:58:28.901447+00:00",
+  "guard_agreement_count": 30,
+  "guard_disagreement_count": 0,
+  "llm_shadow_provider_ok_count": 0,
+  "llm_shadow_ready": false,
+  "llm_supervised_accept_count": 0,
+  "llm_supervised_ready": false,
+  "llm_supervised_veto_count": 30,
+  "pass": true,
+  "pass_count": 30,
+  "planner_mode": "llm_supervised_guarded",
+  "planner_mode_effective_counts": {
+    "deterministic_fallback": 30
+  },
+  "provider_status_counts": {
+    "skipped_missing_openai_api_key": 30
+  },
+  "random_cases": 30,
+  "results": [
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene01_ambiguous_or_unsafe_no_go.json",
+      "expected_route_label": "ambiguous_or_unsafe_no_go",
+      "guard_agrees": true,
+      "guard_route_label": "ambiguous_or_unsafe_no_go",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "ambiguous_or_unsafe_no_go",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene01_ambiguous_or_unsafe_no_go.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene01_ambiguous_or_unsafe_no_go.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "ambiguous_or_unsafe_no_go",
+        "robot_ball_distance_m": 0.368143,
+        "route_executor": "safe_no_go",
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "safe_no_go",
+      "route_label": "ambiguous_or_unsafe_no_go",
+      "route_quality": {
+        "flags": [
+          "corridor_unusable",
+          "target_distance_outside_local_fetch_window"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "safe_no_go"
+        ],
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 1.630324,
+          "ball_target_distance_m": 1.708327,
+          "lateral_m": 0.050472,
+          "robot_ball_distance_m": 0.368143,
+          "yaw_deg": 4.446132
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene01_ambiguous_or_unsafe_no_go",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene01_ambiguous_or_unsafe_no_go.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene02_ambiguous_or_unsafe_no_go.json",
+      "expected_route_label": "ambiguous_or_unsafe_no_go",
+      "guard_agrees": true,
+      "guard_route_label": "ambiguous_or_unsafe_no_go",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "ambiguous_or_unsafe_no_go",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene02_ambiguous_or_unsafe_no_go.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene02_ambiguous_or_unsafe_no_go.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "ambiguous_or_unsafe_no_go",
+        "robot_ball_distance_m": 0.395422,
+        "route_executor": "safe_no_go",
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "safe_no_go",
+      "route_label": "ambiguous_or_unsafe_no_go",
+      "route_quality": {
+        "flags": [
+          "corridor_unusable",
+          "target_distance_outside_local_fetch_window"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "safe_no_go"
+        ],
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 0.009287,
+          "ball_target_distance_m": 1.75712,
+          "lateral_m": 0.066893,
+          "robot_ball_distance_m": 0.395422,
+          "yaw_deg": 1.305751
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene02_ambiguous_or_unsafe_no_go",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene02_ambiguous_or_unsafe_no_go.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene03_nav2_reposition_first.json",
+      "expected_route_label": "nav2_reposition_first",
+      "guard_agrees": true,
+      "guard_route_label": "nav2_reposition_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "nav2_reposition_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene03_nav2_reposition_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene03_nav2_reposition_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "nav2_reposition_first",
+        "robot_ball_distance_m": 1.201699,
+        "route_executor": "nav2_forward_reposition_then_fetch",
+        "route_label": "nav2_reposition_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "nav2_forward_reposition_then_fetch",
+      "route_label": "nav2_reposition_first",
+      "route_quality": {
+        "flags": [
+          "nav2_reposition_required"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "medium",
+        "quality_score": 62.388,
+        "recommendations": [
+          "nav2_forward_reposition",
+          "verify_setup_pose_before_push"
+        ],
+        "route_label": "nav2_reposition_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 16.904242,
+          "ball_target_distance_m": 0.664723,
+          "lateral_m": 0.058143,
+          "robot_ball_distance_m": 1.201699,
+          "yaw_deg": 4.785719
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene03_nav2_reposition_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene03_nav2_reposition_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene04_recovery_or_reaim.json",
+      "expected_route_label": "recovery_or_reaim",
+      "guard_agrees": true,
+      "guard_route_label": "recovery_or_reaim",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "recovery_or_reaim",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene04_recovery_or_reaim.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene04_recovery_or_reaim.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "recovery_or_reaim",
+        "robot_ball_distance_m": 0.680379,
+        "route_executor": "bounded_recovery_reaim",
+        "route_label": "recovery_or_reaim",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "bounded_recovery_reaim",
+      "route_label": "recovery_or_reaim",
+      "route_quality": {
+        "flags": [
+          "bounded_recovery_required",
+          "initial_lateral_setup_debt",
+          "initial_yaw_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "medium",
+        "quality_score": 59.936,
+        "recommendations": [
+          "bounded_reaim_before_push",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "recovery_or_reaim",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 18.713628,
+          "ball_target_distance_m": 0.509445,
+          "lateral_m": 0.110318,
+          "robot_ball_distance_m": 0.680379,
+          "yaw_deg": 15.354222
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene04_recovery_or_reaim",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene04_recovery_or_reaim.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene05_ambiguous_or_unsafe_no_go.json",
+      "expected_route_label": "ambiguous_or_unsafe_no_go",
+      "guard_agrees": true,
+      "guard_route_label": "ambiguous_or_unsafe_no_go",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "ambiguous_or_unsafe_no_go",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene05_ambiguous_or_unsafe_no_go.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene05_ambiguous_or_unsafe_no_go.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "ambiguous_or_unsafe_no_go",
+        "robot_ball_distance_m": 0.498656,
+        "route_executor": "safe_no_go",
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "safe_no_go",
+      "route_label": "ambiguous_or_unsafe_no_go",
+      "route_quality": {
+        "flags": [
+          "corridor_unusable",
+          "target_distance_outside_local_fetch_window"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "safe_no_go"
+        ],
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 41.997174,
+          "ball_target_distance_m": 1.42609,
+          "lateral_m": 0.031835,
+          "robot_ball_distance_m": 0.498656,
+          "yaw_deg": 0.62505
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene05_ambiguous_or_unsafe_no_go",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene05_ambiguous_or_unsafe_no_go.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene06_nav2_reposition_first.json",
+      "expected_route_label": "nav2_reposition_first",
+      "guard_agrees": true,
+      "guard_route_label": "nav2_reposition_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "nav2_reposition_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene06_nav2_reposition_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene06_nav2_reposition_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "nav2_reposition_first",
+        "robot_ball_distance_m": 1.077673,
+        "route_executor": "nav2_forward_reposition_then_fetch",
+        "route_label": "nav2_reposition_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "nav2_forward_reposition_then_fetch",
+      "route_label": "nav2_reposition_first",
+      "route_quality": {
+        "flags": [
+          "nav2_reposition_required"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "medium",
+        "quality_score": 67.731,
+        "recommendations": [
+          "nav2_forward_reposition",
+          "verify_setup_pose_before_push"
+        ],
+        "route_label": "nav2_reposition_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 2.958733,
+          "ball_target_distance_m": 0.67878,
+          "lateral_m": 0.024164,
+          "robot_ball_distance_m": 1.077673,
+          "yaw_deg": 1.560792
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene06_nav2_reposition_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene06_nav2_reposition_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene07_recovery_or_reaim.json",
+      "expected_route_label": "recovery_or_reaim",
+      "guard_agrees": true,
+      "guard_route_label": "recovery_or_reaim",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "recovery_or_reaim",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene07_recovery_or_reaim.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene07_recovery_or_reaim.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "recovery_or_reaim",
+        "robot_ball_distance_m": 0.560205,
+        "route_executor": "bounded_recovery_reaim",
+        "route_label": "recovery_or_reaim",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "bounded_recovery_reaim",
+      "route_label": "recovery_or_reaim",
+      "route_quality": {
+        "flags": [
+          "bounded_recovery_required",
+          "initial_lateral_setup_debt",
+          "initial_yaw_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "high",
+        "quality_score": 49.391,
+        "recommendations": [
+          "bounded_reaim_before_push",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "recovery_or_reaim",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 7.720055,
+          "ball_target_distance_m": 0.482813,
+          "lateral_m": 0.163043,
+          "robot_ball_distance_m": 0.560205,
+          "yaw_deg": 2.317688
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene07_recovery_or_reaim",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene07_recovery_or_reaim.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene08_nav2_reposition_first.json",
+      "expected_route_label": "nav2_reposition_first",
+      "guard_agrees": true,
+      "guard_route_label": "nav2_reposition_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "nav2_reposition_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene08_nav2_reposition_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene08_nav2_reposition_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "nav2_reposition_first",
+        "robot_ball_distance_m": 1.115453,
+        "route_executor": "nav2_forward_reposition_then_fetch",
+        "route_label": "nav2_reposition_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "nav2_forward_reposition_then_fetch",
+      "route_label": "nav2_reposition_first",
+      "route_quality": {
+        "flags": [
+          "nav2_reposition_required"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "medium",
+        "quality_score": 66.104,
+        "recommendations": [
+          "nav2_forward_reposition",
+          "verify_setup_pose_before_push"
+        ],
+        "route_label": "nav2_reposition_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 22.712871,
+          "ball_target_distance_m": 0.642815,
+          "lateral_m": 0.0,
+          "robot_ball_distance_m": 1.115453,
+          "yaw_deg": 0.0
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene08_nav2_reposition_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene08_nav2_reposition_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene09_recovery_or_reaim.json",
+      "expected_route_label": "recovery_or_reaim",
+      "guard_agrees": true,
+      "guard_route_label": "recovery_or_reaim",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "recovery_or_reaim",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene09_recovery_or_reaim.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene09_recovery_or_reaim.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "recovery_or_reaim",
+        "robot_ball_distance_m": 0.78546,
+        "route_executor": "bounded_recovery_reaim",
+        "route_label": "recovery_or_reaim",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "bounded_recovery_reaim",
+      "route_label": "recovery_or_reaim",
+      "route_quality": {
+        "flags": [
+          "bounded_recovery_required",
+          "initial_lateral_setup_debt",
+          "initial_yaw_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "high",
+        "quality_score": 41.032,
+        "recommendations": [
+          "bounded_reaim_before_push",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "recovery_or_reaim",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 15.704148,
+          "ball_target_distance_m": 0.529171,
+          "lateral_m": 0.204839,
+          "robot_ball_distance_m": 0.78546,
+          "yaw_deg": 29.873706
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene09_recovery_or_reaim",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene09_recovery_or_reaim.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene10_fetch_ready_local.json",
+      "expected_route_label": "fetch_ready_local",
+      "guard_agrees": true,
+      "guard_route_label": "fetch_ready_local",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "fetch_ready_local",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": true,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene10_fetch_ready_local.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene10_fetch_ready_local.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "fetch_ready_local",
+        "robot_ball_distance_m": 0.439608,
+        "route_executor": "local_fetch_to_pose",
+        "route_label": "fetch_ready_local",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "local_fetch_to_pose",
+      "route_label": "fetch_ready_local",
+      "route_quality": {
+        "flags": [
+          "initial_lateral_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "low",
+        "quality_score": 92.537,
+        "recommendations": [
+          "local_line_servo_contact",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "fetch_ready_local",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 11.106236,
+          "ball_target_distance_m": 0.677636,
+          "lateral_m": 0.003554,
+          "robot_ball_distance_m": 0.439608,
+          "yaw_deg": 0.0
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene10_fetch_ready_local",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene10_fetch_ready_local.json",
+      "should_dispatch_fetch_to_pose": true,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene11_scan_or_perceive_first.json",
+      "expected_route_label": "scan_or_perceive_first",
+      "guard_agrees": true,
+      "guard_route_label": "scan_or_perceive_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "scan_or_perceive_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene11_scan_or_perceive_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene11_scan_or_perceive_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "scan_or_perceive_first",
+        "robot_ball_distance_m": 0.375769,
+        "route_executor": "scan_or_perception_refresh",
+        "route_label": "scan_or_perceive_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "scan_or_perception_refresh",
+      "route_label": "scan_or_perceive_first",
+      "route_quality": {
+        "flags": [
+          "perception_refresh_required"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "scan_or_perception_refresh"
+        ],
+        "route_label": "scan_or_perceive_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 24.003442,
+          "ball_target_distance_m": 0.62848,
+          "lateral_m": 0.002599,
+          "robot_ball_distance_m": 0.375769,
+          "yaw_deg": 0.0
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene11_scan_or_perceive_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene11_scan_or_perceive_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene12_recovery_or_reaim.json",
+      "expected_route_label": "recovery_or_reaim",
+      "guard_agrees": true,
+      "guard_route_label": "recovery_or_reaim",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "recovery_or_reaim",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene12_recovery_or_reaim.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene12_recovery_or_reaim.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "recovery_or_reaim",
+        "robot_ball_distance_m": 0.522519,
+        "route_executor": "bounded_recovery_reaim",
+        "route_label": "recovery_or_reaim",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "bounded_recovery_reaim",
+      "route_label": "recovery_or_reaim",
+      "route_quality": {
+        "flags": [
+          "bounded_recovery_required",
+          "initial_lateral_setup_debt",
+          "initial_yaw_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "high",
+        "quality_score": 45.481,
+        "recommendations": [
+          "bounded_reaim_before_push",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "recovery_or_reaim",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 16.434417,
+          "ball_target_distance_m": 0.542799,
+          "lateral_m": 0.049316,
+          "robot_ball_distance_m": 0.522519,
+          "yaw_deg": 27.817371
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene12_recovery_or_reaim",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene12_recovery_or_reaim.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene13_scan_or_perceive_first.json",
+      "expected_route_label": "scan_or_perceive_first",
+      "guard_agrees": true,
+      "guard_route_label": "scan_or_perceive_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "scan_or_perceive_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene13_scan_or_perceive_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene13_scan_or_perceive_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "scan_or_perceive_first",
+        "robot_ball_distance_m": 0.377675,
+        "route_executor": "scan_or_perception_refresh",
+        "route_label": "scan_or_perceive_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "scan_or_perception_refresh",
+      "route_label": "scan_or_perceive_first",
+      "route_quality": {
+        "flags": [
+          "perception_refresh_required"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "scan_or_perception_refresh"
+        ],
+        "route_label": "scan_or_perceive_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 6.457694,
+          "ball_target_distance_m": 0.459738,
+          "lateral_m": 0.023037,
+          "robot_ball_distance_m": 0.377675,
+          "yaw_deg": 0.0
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene13_scan_or_perceive_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene13_scan_or_perceive_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene14_nav2_reposition_first.json",
+      "expected_route_label": "nav2_reposition_first",
+      "guard_agrees": true,
+      "guard_route_label": "nav2_reposition_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "nav2_reposition_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene14_nav2_reposition_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene14_nav2_reposition_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "nav2_reposition_first",
+        "robot_ball_distance_m": 1.099703,
+        "route_executor": "nav2_forward_reposition_then_fetch",
+        "route_label": "nav2_reposition_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "nav2_forward_reposition_then_fetch",
+      "route_label": "nav2_reposition_first",
+      "route_quality": {
+        "flags": [
+          "nav2_reposition_required"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "medium",
+        "quality_score": 66.782,
+        "recommendations": [
+          "nav2_forward_reposition",
+          "verify_setup_pose_before_push"
+        ],
+        "route_label": "nav2_reposition_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 26.892251,
+          "ball_target_distance_m": 0.666258,
+          "lateral_m": 0.039949,
+          "robot_ball_distance_m": 1.099703,
+          "yaw_deg": 0.010345
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene14_nav2_reposition_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene14_nav2_reposition_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene15_nav2_reposition_first.json",
+      "expected_route_label": "nav2_reposition_first",
+      "guard_agrees": true,
+      "guard_route_label": "nav2_reposition_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "nav2_reposition_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene15_nav2_reposition_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene15_nav2_reposition_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "nav2_reposition_first",
+        "robot_ball_distance_m": 1.205508,
+        "route_executor": "nav2_forward_reposition_then_fetch",
+        "route_label": "nav2_reposition_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "nav2_forward_reposition_then_fetch",
+      "route_label": "nav2_reposition_first",
+      "route_quality": {
+        "flags": [
+          "nav2_reposition_required"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "medium",
+        "quality_score": 62.224,
+        "recommendations": [
+          "nav2_forward_reposition",
+          "verify_setup_pose_before_push"
+        ],
+        "route_label": "nav2_reposition_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 15.136864,
+          "ball_target_distance_m": 0.549055,
+          "lateral_m": 0.045507,
+          "robot_ball_distance_m": 1.205508,
+          "yaw_deg": 7.42682
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene15_nav2_reposition_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene15_nav2_reposition_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene16_recovery_or_reaim.json",
+      "expected_route_label": "recovery_or_reaim",
+      "guard_agrees": true,
+      "guard_route_label": "recovery_or_reaim",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "recovery_or_reaim",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene16_recovery_or_reaim.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene16_recovery_or_reaim.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "recovery_or_reaim",
+        "robot_ball_distance_m": 0.423683,
+        "route_executor": "bounded_recovery_reaim",
+        "route_label": "recovery_or_reaim",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "bounded_recovery_reaim",
+      "route_label": "recovery_or_reaim",
+      "route_quality": {
+        "flags": [
+          "bounded_recovery_required",
+          "initial_yaw_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "high",
+        "quality_score": 42.686,
+        "recommendations": [
+          "bounded_reaim_before_push",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "recovery_or_reaim",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 5.842593,
+          "ball_target_distance_m": 0.749842,
+          "lateral_m": 0.0,
+          "robot_ball_distance_m": 0.423683,
+          "yaw_deg": 29.950415
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene16_recovery_or_reaim",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene16_recovery_or_reaim.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene17_scan_or_perceive_first.json",
+      "expected_route_label": "scan_or_perceive_first",
+      "guard_agrees": true,
+      "guard_route_label": "scan_or_perceive_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "scan_or_perceive_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene17_scan_or_perceive_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene17_scan_or_perceive_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "scan_or_perceive_first",
+        "robot_ball_distance_m": 0.34418,
+        "route_executor": "scan_or_perception_refresh",
+        "route_label": "scan_or_perceive_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "scan_or_perception_refresh",
+      "route_label": "scan_or_perceive_first",
+      "route_quality": {
+        "flags": [
+          "perception_refresh_required"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "scan_or_perception_refresh"
+        ],
+        "route_label": "scan_or_perceive_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 7.826487,
+          "ball_target_distance_m": 0.668922,
+          "lateral_m": 0.0,
+          "robot_ball_distance_m": 0.34418,
+          "yaw_deg": 5.992293
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene17_scan_or_perceive_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene17_scan_or_perceive_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene18_ambiguous_or_unsafe_no_go.json",
+      "expected_route_label": "ambiguous_or_unsafe_no_go",
+      "guard_agrees": true,
+      "guard_route_label": "ambiguous_or_unsafe_no_go",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "ambiguous_or_unsafe_no_go",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene18_ambiguous_or_unsafe_no_go.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene18_ambiguous_or_unsafe_no_go.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "ambiguous_or_unsafe_no_go",
+        "robot_ball_distance_m": 0.316643,
+        "route_executor": "safe_no_go",
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "safe_no_go",
+      "route_label": "ambiguous_or_unsafe_no_go",
+      "route_quality": {
+        "flags": [
+          "corridor_unusable",
+          "target_distance_outside_local_fetch_window"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "safe_no_go"
+        ],
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 18.542911,
+          "ball_target_distance_m": 1.749745,
+          "lateral_m": 0.013174,
+          "robot_ball_distance_m": 0.316643,
+          "yaw_deg": 6.967751
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene18_ambiguous_or_unsafe_no_go",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene18_ambiguous_or_unsafe_no_go.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene19_recovery_or_reaim.json",
+      "expected_route_label": "recovery_or_reaim",
+      "guard_agrees": true,
+      "guard_route_label": "recovery_or_reaim",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "recovery_or_reaim",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene19_recovery_or_reaim.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene19_recovery_or_reaim.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "recovery_or_reaim",
+        "robot_ball_distance_m": 0.506485,
+        "route_executor": "bounded_recovery_reaim",
+        "route_label": "recovery_or_reaim",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "bounded_recovery_reaim",
+      "route_label": "recovery_or_reaim",
+      "route_quality": {
+        "flags": [
+          "bounded_recovery_required",
+          "initial_lateral_setup_debt",
+          "initial_yaw_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "medium",
+        "quality_score": 67.921,
+        "recommendations": [
+          "bounded_reaim_before_push",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "recovery_or_reaim",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 19.586727,
+          "ball_target_distance_m": 0.696604,
+          "lateral_m": 0.008024,
+          "robot_ball_distance_m": 0.506485,
+          "yaw_deg": 10.691621
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene19_recovery_or_reaim",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene19_recovery_or_reaim.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene20_nav2_reposition_first.json",
+      "expected_route_label": "nav2_reposition_first",
+      "guard_agrees": true,
+      "guard_route_label": "nav2_reposition_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "nav2_reposition_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene20_nav2_reposition_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene20_nav2_reposition_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "nav2_reposition_first",
+        "robot_ball_distance_m": 1.07155,
+        "route_executor": "nav2_forward_reposition_then_fetch",
+        "route_label": "nav2_reposition_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "nav2_forward_reposition_then_fetch",
+      "route_label": "nav2_reposition_first",
+      "route_quality": {
+        "flags": [
+          "nav2_reposition_required"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "medium",
+        "quality_score": 67.995,
+        "recommendations": [
+          "nav2_forward_reposition",
+          "verify_setup_pose_before_push"
+        ],
+        "route_label": "nav2_reposition_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 9.793325,
+          "ball_target_distance_m": 0.524356,
+          "lateral_m": 0.0,
+          "robot_ball_distance_m": 1.07155,
+          "yaw_deg": 10.434776
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene20_nav2_reposition_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene20_nav2_reposition_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene21_scan_or_perceive_first.json",
+      "expected_route_label": "scan_or_perceive_first",
+      "guard_agrees": true,
+      "guard_route_label": "scan_or_perceive_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "scan_or_perceive_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene21_scan_or_perceive_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene21_scan_or_perceive_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "scan_or_perceive_first",
+        "robot_ball_distance_m": 0.287772,
+        "route_executor": "scan_or_perception_refresh",
+        "route_label": "scan_or_perceive_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "scan_or_perception_refresh",
+      "route_label": "scan_or_perceive_first",
+      "route_quality": {
+        "flags": [
+          "perception_refresh_required"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "scan_or_perception_refresh"
+        ],
+        "route_label": "scan_or_perceive_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 4.257434,
+          "ball_target_distance_m": 0.71974,
+          "lateral_m": 0.021937,
+          "robot_ball_distance_m": 0.287772,
+          "yaw_deg": 8.56476
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene21_scan_or_perceive_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene21_scan_or_perceive_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene22_scan_or_perceive_first.json",
+      "expected_route_label": "scan_or_perceive_first",
+      "guard_agrees": true,
+      "guard_route_label": "scan_or_perceive_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "scan_or_perceive_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene22_scan_or_perceive_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene22_scan_or_perceive_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "scan_or_perceive_first",
+        "robot_ball_distance_m": 0.336015,
+        "route_executor": "scan_or_perception_refresh",
+        "route_label": "scan_or_perceive_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "scan_or_perception_refresh",
+      "route_label": "scan_or_perceive_first",
+      "route_quality": {
+        "flags": [
+          "perception_refresh_required"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "scan_or_perception_refresh"
+        ],
+        "route_label": "scan_or_perceive_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 19.201665,
+          "ball_target_distance_m": 0.520899,
+          "lateral_m": 0.0,
+          "robot_ball_distance_m": 0.336015,
+          "yaw_deg": 7.228555
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene22_scan_or_perceive_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene22_scan_or_perceive_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene23_fetch_ready_local.json",
+      "expected_route_label": "fetch_ready_local",
+      "guard_agrees": true,
+      "guard_route_label": "fetch_ready_local",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "fetch_ready_local",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": true,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene23_fetch_ready_local.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene23_fetch_ready_local.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "fetch_ready_local",
+        "robot_ball_distance_m": 0.284234,
+        "route_executor": "local_fetch_to_pose",
+        "route_label": "fetch_ready_local",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "local_fetch_to_pose",
+      "route_label": "fetch_ready_local",
+      "route_quality": {
+        "flags": [
+          "initial_lateral_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "low",
+        "quality_score": 82.266,
+        "recommendations": [
+          "local_line_servo_contact",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "fetch_ready_local",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 22.926088,
+          "ball_target_distance_m": 0.579795,
+          "lateral_m": 0.008445,
+          "robot_ball_distance_m": 0.284234,
+          "yaw_deg": 0.0
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene23_fetch_ready_local",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene23_fetch_ready_local.json",
+      "should_dispatch_fetch_to_pose": true,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene24_recovery_or_reaim.json",
+      "expected_route_label": "recovery_or_reaim",
+      "guard_agrees": true,
+      "guard_route_label": "recovery_or_reaim",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "recovery_or_reaim",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene24_recovery_or_reaim.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene24_recovery_or_reaim.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "recovery_or_reaim",
+        "robot_ball_distance_m": 0.753919,
+        "route_executor": "bounded_recovery_reaim",
+        "route_label": "recovery_or_reaim",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "bounded_recovery_reaim",
+      "route_label": "recovery_or_reaim",
+      "route_quality": {
+        "flags": [
+          "bounded_recovery_required",
+          "initial_lateral_setup_debt",
+          "initial_yaw_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "high",
+        "quality_score": 43.27,
+        "recommendations": [
+          "bounded_reaim_before_push",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "recovery_or_reaim",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 13.023674,
+          "ball_target_distance_m": 0.565655,
+          "lateral_m": 0.193652,
+          "robot_ball_distance_m": 0.753919,
+          "yaw_deg": 11.235585
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene24_recovery_or_reaim",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene24_recovery_or_reaim.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene25_ambiguous_or_unsafe_no_go.json",
+      "expected_route_label": "ambiguous_or_unsafe_no_go",
+      "guard_agrees": true,
+      "guard_route_label": "ambiguous_or_unsafe_no_go",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "ambiguous_or_unsafe_no_go",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene25_ambiguous_or_unsafe_no_go.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene25_ambiguous_or_unsafe_no_go.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "ambiguous_or_unsafe_no_go",
+        "robot_ball_distance_m": 0.424408,
+        "route_executor": "safe_no_go",
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "safe_no_go",
+      "route_label": "ambiguous_or_unsafe_no_go",
+      "route_quality": {
+        "flags": [
+          "corridor_unusable",
+          "target_distance_outside_local_fetch_window"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "safe_no_go"
+        ],
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 42.192575,
+          "ball_target_distance_m": 1.836467,
+          "lateral_m": 0.006243,
+          "robot_ball_distance_m": 0.424408,
+          "yaw_deg": 7.745436
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene25_ambiguous_or_unsafe_no_go",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene25_ambiguous_or_unsafe_no_go.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene26_scan_or_perceive_first.json",
+      "expected_route_label": "scan_or_perceive_first",
+      "guard_agrees": true,
+      "guard_route_label": "scan_or_perceive_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "scan_or_perceive_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene26_scan_or_perceive_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene26_scan_or_perceive_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "scan_or_perceive_first",
+        "robot_ball_distance_m": 0.285398,
+        "route_executor": "scan_or_perception_refresh",
+        "route_label": "scan_or_perceive_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "scan_or_perception_refresh",
+      "route_label": "scan_or_perceive_first",
+      "route_quality": {
+        "flags": [
+          "perception_refresh_required"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "scan_or_perception_refresh"
+        ],
+        "route_label": "scan_or_perceive_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 1.315687,
+          "ball_target_distance_m": 0.65219,
+          "lateral_m": 0.024134,
+          "robot_ball_distance_m": 0.285398,
+          "yaw_deg": 1.245363
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene26_scan_or_perceive_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene26_scan_or_perceive_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene27_scan_or_perceive_first.json",
+      "expected_route_label": "scan_or_perceive_first",
+      "guard_agrees": true,
+      "guard_route_label": "scan_or_perceive_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "scan_or_perceive_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene27_scan_or_perceive_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene27_scan_or_perceive_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "scan_or_perceive_first",
+        "robot_ball_distance_m": 0.300548,
+        "route_executor": "scan_or_perception_refresh",
+        "route_label": "scan_or_perceive_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "scan_or_perception_refresh",
+      "route_label": "scan_or_perceive_first",
+      "route_quality": {
+        "flags": [
+          "perception_refresh_required"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "scan_or_perception_refresh"
+        ],
+        "route_label": "scan_or_perceive_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 19.964086,
+          "ball_target_distance_m": 0.517303,
+          "lateral_m": 0.0,
+          "robot_ball_distance_m": 0.300548,
+          "yaw_deg": 0.064825
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene27_scan_or_perceive_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene27_scan_or_perceive_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene28_ambiguous_or_unsafe_no_go.json",
+      "expected_route_label": "ambiguous_or_unsafe_no_go",
+      "guard_agrees": true,
+      "guard_route_label": "ambiguous_or_unsafe_no_go",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "ambiguous_or_unsafe_no_go",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene28_ambiguous_or_unsafe_no_go.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene28_ambiguous_or_unsafe_no_go.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "ambiguous_or_unsafe_no_go",
+        "robot_ball_distance_m": 0.338468,
+        "route_executor": "safe_no_go",
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "safe_no_go",
+      "route_label": "ambiguous_or_unsafe_no_go",
+      "route_quality": {
+        "flags": [
+          "corridor_unusable",
+          "target_distance_outside_local_fetch_window"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "safe_no_go"
+        ],
+        "route_label": "ambiguous_or_unsafe_no_go",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 9.902796,
+          "ball_target_distance_m": 1.555304,
+          "lateral_m": 0.025106,
+          "robot_ball_distance_m": 0.338468,
+          "yaw_deg": 7.703697
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene28_ambiguous_or_unsafe_no_go",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene28_ambiguous_or_unsafe_no_go.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene29_scan_or_perceive_first.json",
+      "expected_route_label": "scan_or_perceive_first",
+      "guard_agrees": true,
+      "guard_route_label": "scan_or_perceive_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "scan_or_perceive_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene29_scan_or_perceive_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene29_scan_or_perceive_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "scan_or_perceive_first",
+        "robot_ball_distance_m": 0.413708,
+        "route_executor": "scan_or_perception_refresh",
+        "route_label": "scan_or_perceive_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "scan_or_perception_refresh",
+      "route_label": "scan_or_perceive_first",
+      "route_quality": {
+        "flags": [
+          "perception_refresh_required"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "scan_or_perception_refresh"
+        ],
+        "route_label": "scan_or_perceive_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 23.007616,
+          "ball_target_distance_m": 0.56412,
+          "lateral_m": 0.0,
+          "robot_ball_distance_m": 0.413708,
+          "yaw_deg": 8.125111
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene29_scan_or_perceive_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene29_scan_or_perceive_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    },
+    {
+      "confidence": 0.0,
+      "correct": true,
+      "decision_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\decisions\\seed20260638_scene30_scan_or_perceive_first.json",
+      "expected_route_label": "scan_or_perceive_first",
+      "guard_agrees": true,
+      "guard_route_label": "scan_or_perceive_first",
+      "llm_supervised_guard": {
+        "accepted": false,
+        "confidence_threshold": 0.9,
+        "decision": "vetoed",
+        "guard_route_label": "scan_or_perceive_first",
+        "llm_confidence": 0.0,
+        "llm_route_label": "",
+        "mode": "llm_supervised_guarded",
+        "provider_status": "skipped_missing_openai_api_key",
+        "veto_reasons": [
+          "provider_not_ok",
+          "missing_llm_route",
+          "confidence_below_threshold"
+        ]
+      },
+      "local_fetch_evidence_allowed": false,
+      "no_direct_cmd_vel": true,
+      "planner_mode": "llm_supervised_guarded",
+      "planner_mode_effective": "deterministic_fallback",
+      "provider_error": "",
+      "provider_request_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_requests\\seed20260638_scene30_scan_or_perceive_first.json",
+      "provider_response_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\provider_responses\\seed20260638_scene30_scan_or_perceive_first.json",
+      "provider_status": "skipped_missing_openai_api_key",
+      "rationale_short": "LLM supervised route vetoed; deterministic guard provided the route. Reasons: provider_not_ok, missing_llm_route, confidence_below_threshold.",
+      "route_admissibility": {
+        "changed": false,
+        "reason": "route_admissible",
+        "requested_route_label": "scan_or_perceive_first",
+        "robot_ball_distance_m": 0.379547,
+        "route_executor": "scan_or_perception_refresh",
+        "route_label": "scan_or_perceive_first",
+        "thresholds": {
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_robot_ball_distance_limit_m": 0.9
+        }
+      },
+      "route_executable": true,
+      "route_executor": "scan_or_perception_refresh",
+      "route_label": "scan_or_perceive_first",
+      "route_quality": {
+        "flags": [
+          "perception_refresh_required"
+        ],
+        "predicted_contact_quality": "blocker",
+        "predicted_first_contact_quality": "not_applicable",
+        "predicted_first_contact_risk": "unavailable",
+        "quality_score": 0.0,
+        "recommendations": [
+          "scan_or_perception_refresh"
+        ],
+        "route_label": "scan_or_perceive_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 17.260735,
+          "ball_target_distance_m": 0.547749,
+          "lateral_m": 0.043476,
+          "robot_ball_distance_m": 0.379547,
+          "yaw_deg": 7.107073
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "scene_id": "seed20260638_scene30_scan_or_perceive_first",
+      "scene_path": "D:\\dev\\chasecar\\artifacts\\session\\live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_planner\\fetch_planner_handoff_gate\\scene_descriptors\\seed20260638_scene30_scan_or_perceive_first.json",
+      "should_dispatch_fetch_to_pose": false,
+      "wrong_fetch_ready_dispatch": false
+    }
+  ],
+  "route_counts": {
+    "ambiguous_or_unsafe_no_go": 6,
+    "fetch_ready_local": 2,
+    "nav2_reposition_first": 6,
+    "recovery_or_reaim": 7,
+    "scan_or_perceive_first": 9
+  },
+  "scene_set": "mixed_fetch_planner_v1",
+  "scene_source": "generated",
+  "seed": 20260638,
+  "type": "fetch_planner_handoff_gate",
+  "wrong_fetch_dispatch_count": 0
+}

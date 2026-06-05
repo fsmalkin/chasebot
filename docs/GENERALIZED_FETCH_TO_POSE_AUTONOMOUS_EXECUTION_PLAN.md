@@ -547,6 +547,22 @@ geometry, including two high-risk recovery rows. This strengthens the broad
 sim-gate UAT floor while leaving provider-backed LLM routing and physical
 hardware-transfer proof as the active gates.
 
+June 5 seed20260638 rough breadth UAT: the current route-owner stack now has a
+roughest-row seeded pass at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner classified `30` generated scenes with `wrong_fetch_dispatch_count=0`.
+The replay at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+selected eight executable rows: three `recovery_or_reaim`, three
+`nav2_reposition_first`, and two `fetch_ready_local`. All eight delivered with
+visual packages; closest approaches stayed in `0.194m..0.198m`. The analyzer at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution, setup, and contact with first-contact blockers `0`.
+Frame-sequence review of all eight raw-camera/topdown sheets matched the
+delivery geometry. The first attempt exposed a fresh-dashboard startup timeout
+on scene15; the row passed on resume with `--env-ready-timeout-s 600`, so the
+evidence class is startup-health watch rather than control failure.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
