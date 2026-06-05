@@ -1203,6 +1203,14 @@ It confirms the three rehearsal commands resolve locally and sets
 `execute_runtime_stack_smoke` as the next action. Treat this as launch
 readiness rather than hardware proof.
 
+The runtime stack smoke has now executed:
+`artifacts/session/live_fetch_hardware_rehearsal_runtime_stack_smoke_artifact_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The run passed with session `20260605T054242Z`, coordinate UAT green, operator
+status present, and milestone raw/debug screenshots inspected. The first attempt
+found a CRLF shell-script boundary in `uat/orchestrator/run_uat_orchestrator.sh`;
+the source is now LF-pinned and regression-tested. The next research gate is
+saved-anchor fetch rehearsal with delivery videos.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

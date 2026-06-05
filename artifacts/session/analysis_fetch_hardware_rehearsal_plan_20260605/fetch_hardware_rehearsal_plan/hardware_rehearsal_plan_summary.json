@@ -1,6 +1,6 @@
 {
   "campaign_id": "analysis_fetch_hardware_rehearsal_plan_20260605",
-  "generated_utc": "2026-06-05T05:23:15.846587+00:00",
+  "generated_utc": "2026-06-05T05:38:49.541143+00:00",
   "hardware_proven": false,
   "hardware_rehearsal_plan_ready": true,
   "issues": [],
@@ -14,9 +14,11 @@
       "promotion_evidence": false,
       "purpose": "Confirm the robot_fidelity_orin/tensorrt_int8 stack and visual capture path before fetch scoring.",
       "required_artifacts": [
-        "first_uat_summary.json",
-        "visual/raw_camera_browser.mp4",
-        "visual/world_stream.mp4"
+        "session:readiness_report.json",
+        "session:visual/operator_status.json",
+        "readiness_path:artifacts.coordinate_summary",
+        "readiness_path:artifacts.milestone_1_evidence_dir:screenshots/d415_color.png",
+        "readiness_path:artifacts.milestone_1_evidence_dir:screenshots/yolo_debug.png"
       ]
     },
     {

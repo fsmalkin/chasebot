@@ -37,6 +37,27 @@ def _script(tmp_path: Path, name: str) -> Path:
     return path
 
 
+def _session_script(tmp_path: Path, name: str) -> Path:
+    path = tmp_path / name
+    session = tmp_path / "session"
+    path.write_text(
+        "\n".join(
+            [
+                "import json",
+                "from pathlib import Path",
+                f"session = Path({str(session)!r})",
+                "(session / 'visual').mkdir(parents=True, exist_ok=True)",
+                "(session / 'readiness_report.json').write_text(json.dumps({'status': 'pass'}), encoding='utf-8')",
+                "(session / 'visual' / 'operator_status.json').write_text('{}', encoding='utf-8')",
+                "print(f'Session directory: {session}')",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def _plan(tmp_path: Path, **overrides) -> Path:
     script = _script(tmp_path, "step.py")
     payload = {
@@ -86,7 +107,20 @@ def test_rehearsal_runner_fails_closed_when_plan_not_ready(tmp_path: Path):
 
 
 def test_rehearsal_runner_executes_one_named_step(tmp_path: Path):
-    plan = _plan(tmp_path)
+    script = _session_script(tmp_path, "session_step.py")
+    plan = _plan(
+        tmp_path,
+        planned_steps=[
+            {
+                "id": "runtime_stack_smoke",
+                "command": f"python {script}",
+                "required_artifacts": [
+                    "session:readiness_report.json",
+                    "session:visual/operator_status.json",
+                ],
+            }
+        ],
+    )
 
     summary = runner.build_summary(
         _args(tmp_path, plan_summary=str(plan), step_id="runtime_stack_smoke", execute=True)
@@ -96,6 +130,7 @@ def test_rehearsal_runner_executes_one_named_step(tmp_path: Path):
     assert summary["mode"] == "execute"
     assert summary["execution"]["id"] == "runtime_stack_smoke"
     assert summary["execution"]["returncode"] == 0
+    assert summary["execution_artifacts"]["pass"] is True
 
 
 def test_rehearsal_runner_requires_single_step_for_execute(tmp_path: Path):
@@ -117,3 +152,13 @@ def test_rehearsal_runner_scorecard_lists_required_artifacts(tmp_path: Path):
     assert "Fetch Hardware Rehearsal Runner" in text
     assert "visual/raw_camera_browser.mp4" in text
     assert "execute_runtime_stack_smoke" in text
+
+
+def test_rehearsal_runner_reads_bom_json(tmp_path: Path):
+    path = tmp_path / "bom.json"
+    path.write_text('{"pass": true}\n', encoding="utf-8-sig")
+
+    payload, issues = runner.read_json(path)
+
+    assert issues == []
+    assert payload["pass"] is True

@@ -1,0 +1,12 @@
+﻿{
+    "session_id":  "20260605T054242Z",
+    "phase":  "M1",
+    "target_id":  "detection_only",
+    "target_transition_active":  false,
+    "execution_lane":  "container_kilted",
+    "runtime_target":  "robot_fidelity_orin",
+    "visual_surface":  "none",
+    "world_surface":  "none",
+    "status_text":  "M1 detection_only complete",
+    "updated_utc":  "2026-06-05T05:44:41.2586618Z"
+}

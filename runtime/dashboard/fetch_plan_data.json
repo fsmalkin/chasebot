@@ -50,6 +50,37 @@
   ],
   "latest_evidence": [
     {
+      "title": "Runtime stack smoke executed with artifact contract",
+      "status": "runtime_stack_smoke passed after LF orchestrator fix",
+      "tone": "green",
+      "summary": "The first hardware-rehearsal step now executes through the runner and validates its artifact contract. The earlier run exposed CRLF line endings in the Linux orchestrator script; after normalizing the script to LF, the stack smoke passed under container_kilted with robot_fidelity_orin and tensorrt_int8. The artifact contract validates the session readiness report, operator status, coordinate UAT summary, and milestone visual screenshots. This is runtime rehearsal evidence, while hardware_proven remains false until fetch rehearsal runs produce robot-side delivery video.",
+      "metrics": [
+        "Runner execution: pass=true; returncode=0; timed_out=false",
+        "Session: 20260605T054242Z; first_uat_complete=true",
+        "Coordinate UAT: pass=true; detection_success_rate=1.0; mean_xy_error=0.113m; p95_xy_error=0.116m",
+        "Milestone visual: D415 raw screenshot and YOLO debug screenshot captured; overlay_distinct=true",
+        "Infrastructure fix: uat/orchestrator/run_uat_orchestrator.sh normalized to LF with a regression test"
+      ],
+      "links": [
+        {
+          "label": "Runtime stack smoke scorecard",
+          "url": "/artifacts/session/live_fetch_hardware_rehearsal_runtime_stack_smoke_artifact_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "Runtime stack smoke readiness report",
+          "url": "/artifacts/session/20260605T054242Z/readiness_report.json"
+        },
+        {
+          "label": "D415 raw screenshot",
+          "url": "/artifacts/demos/milestone_1_20260605T054242Z/screenshots/d415_color.png"
+        },
+        {
+          "label": "YOLO debug screenshot",
+          "url": "/artifacts/demos/milestone_1_20260605T054242Z/screenshots/yolo_debug.png"
+        }
+      ]
+    },
+    {
       "title": "Hardware rehearsal runner preflight is green",
       "status": "all rehearsal commands resolve; next action is runtime stack smoke",
       "tone": "green",
@@ -4185,7 +4216,7 @@
     }
   ],
   "next_steps": [
-    "Execute the hardware rehearsal runner's first step, runtime_stack_smoke, then inspect the raw-camera and world-stream evidence before running saved-anchor fetch rehearsal.",
+    "Run the saved-anchor fetch rehearsal after the runtime stack smoke: zero, left05, and right05 through the planner-routed fetch stack with controller preflight, raw-camera/topdown/world video, and keyframe sequence review.",
     "Use the seed20260635 preflight regression manifest as the default green bar before future route-owner, contact-servo, visual-packaging, or hardware-transfer moonshots.",
     "Keep hardware-transfer claims at rehearsal-ready until robot-side live execution, onboard TensorRT execution, physical camera evidence, and field-physics proof are recorded.",
     "Keep provider-backed guarded fallback as the high-level planner authority model unless product requirements demand strict all-accepted LLM routing.",

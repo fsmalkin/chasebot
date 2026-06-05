@@ -24,7 +24,7 @@
 - purpose: Confirm the robot_fidelity_orin/tensorrt_int8 stack and visual capture path before fetch scoring.
 - promotion_evidence: `False`
 - command: `powershell -ExecutionPolicy Bypass -File scripts/run_first_uat.ps1 -ExecutionLane container_kilted -Distro Ubuntu-24.04 -RuntimeTarget robot_fidelity_orin -InferenceBackend tensorrt_int8 -IncludeVisual true`
-- required_artifacts: `['first_uat_summary.json', 'visual/raw_camera_browser.mp4', 'visual/world_stream.mp4']`
+- required_artifacts: `['session:readiness_report.json', 'session:visual/operator_status.json', 'readiness_path:artifacts.coordinate_summary', 'readiness_path:artifacts.milestone_1_evidence_dir:screenshots/d415_color.png', 'readiness_path:artifacts.milestone_1_evidence_dir:screenshots/yolo_debug.png']`
 
 ### saved_anchor_one_run_fetch_rehearsal
 

@@ -1,0 +1,114 @@
+﻿{
+    "session_id":  "20260605T054242Z",
+    "generated_utc":  "2026-06-05T05:45:38.3405101Z",
+    "status":  "pass",
+    "first_uat_complete":  true,
+    "execution_lane":  "container_kilted",
+    "failure_class":  "",
+    "step_timeout_s":  1200,
+    "container_core_ros_distro":  "kilted",
+    "detected_host_ros_distros":  [
+                                      "jazzy"
+                                  ],
+    "inputs":  {
+                   "distro":  "Ubuntu-24.04",
+                   "ros_distro":  "kilted",
+                   "runtime_target":  "robot_fidelity_orin",
+                   "inference_backend":  "tensorrt_int8",
+                   "uat_execution_context":  "sim_gate",
+                   "workspace_path":  "~/ros2_ws",
+                   "project_name":  "chasecar_gate_firstuat_20260605054246",
+                   "include_visual":  true
+               },
+    "artifacts":  {
+                      "coordinate_artifact_dir":  "D:\\dev\\chasecar\\artifacts\\uat\\20260605T054321Z",
+                      "coordinate_summary":  "D:\\dev\\chasecar\\artifacts\\uat\\20260605T054321Z\\summary.json",
+                      "milestone_1_evidence_dir":  "D:\\dev\\chasecar\\artifacts\\demos\\milestone_1_20260605T054242Z",
+                      "orchestrator_readiness_report":  "D:\\dev\\chasecar\\artifacts\\session\\20260605T054319Z\\readiness_report.json"
+                  },
+    "stale_compose_cleanup":  {
+                                  "found":  [
+
+                                            ],
+                                  "cleaned":  [
+
+                                              ]
+                              },
+    "steps":  [
+                  {
+                      "id":  "S0",
+                      "objective":  "Pre-run stale compose project scan and cleanup",
+                      "status":  "pass",
+                      "failure_class":  "",
+                      "started_utc":  "2026-06-05T05:42:46.4269708Z",
+                      "ended_utc":  "2026-06-05T05:42:46.6625616Z",
+                      "duration_s":  0.24,
+                      "exit_code":  0,
+                      "command":  "docker compose ls + stale cleanup",
+                      "artifact_dir":  null,
+                      "notes":  [
+                                    "No stale gate projects detected."
+                                ]
+                  },
+                  {
+                      "id":  "S1",
+                      "objective":  "Bring up compose gate lane with Nav2 disabled",
+                      "status":  "pass",
+                      "failure_class":  "",
+                      "started_utc":  "2026-06-05T05:42:46.6705863Z",
+                      "ended_utc":  "2026-06-05T05:43:18.9160727Z",
+                      "duration_s":  32.25,
+                      "exit_code":  0,
+                      "command":  "run_compose_gate.ps1 -Action up -ProjectName chasecar_gate_firstuat_20260605054246",
+                      "artifact_dir":  null,
+                      "notes":  [
+                                    "Gate lane up."
+                                ]
+                  },
+                  {
+                      "id":  "S2",
+                      "objective":  "Run coordinate UAT and validate pass artifact",
+                      "status":  "pass",
+                      "failure_class":  "",
+                      "started_utc":  "2026-06-05T05:43:18.9160727Z",
+                      "ended_utc":  "2026-06-05T05:43:41.0782851Z",
+                      "duration_s":  22.16,
+                      "exit_code":  0,
+                      "command":  "run_compose_uat.ps1 -Action run -ProjectName chasecar_gate_firstuat_20260605054246 -UatMode coordinate -UatExecutionContext sim_gate",
+                      "artifact_dir":  "D:\\dev\\chasecar\\artifacts\\uat\\20260605T054321Z",
+                      "notes":  [
+
+                                ]
+                  },
+                  {
+                      "id":  "S3",
+                      "objective":  "Run milestone 1 visual demo and capture evidence",
+                      "status":  "pass",
+                      "failure_class":  "",
+                      "started_utc":  "2026-06-05T05:43:41.0782851Z",
+                      "ended_utc":  "2026-06-05T05:45:05.5985261Z",
+                      "duration_s":  84.52,
+                      "exit_code":  0,
+                      "command":  "run_milestone_demo.ps1 -Milestone 1",
+                      "artifact_dir":  "D:\\dev\\chasecar\\artifacts\\demos\\milestone_1_20260605T054242Z",
+                      "notes":  [
+
+                                ]
+                  },
+                  {
+                      "id":  "S4",
+                      "objective":  "Tear down compose gate lane and package reports",
+                      "status":  "pass",
+                      "failure_class":  "",
+                      "started_utc":  "2026-06-05T05:45:08.1318341Z",
+                      "ended_utc":  "2026-06-05T05:45:38.3385127Z",
+                      "duration_s":  30.21,
+                      "exit_code":  0,
+                      "command":  "run_compose_gate.ps1 -Action down -ProjectName chasecar_gate_firstuat_20260605054246",
+                      "artifact_dir":  null,
+                      "notes":  [
+
+                                ]
+                  }
+              ]
+}

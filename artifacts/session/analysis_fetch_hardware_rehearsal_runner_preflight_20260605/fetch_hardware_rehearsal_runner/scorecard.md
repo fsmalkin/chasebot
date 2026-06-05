@@ -14,7 +14,7 @@
 
 - `runtime_stack_smoke` pass=`True` issues=`[]`
   - command: `powershell -ExecutionPolicy Bypass -File scripts/run_first_uat.ps1 -ExecutionLane container_kilted -Distro Ubuntu-24.04 -RuntimeTarget robot_fidelity_orin -InferenceBackend tensorrt_int8 -IncludeVisual true`
-  - required_artifacts: `['first_uat_summary.json', 'visual/raw_camera_browser.mp4', 'visual/world_stream.mp4']`
+  - required_artifacts: `['session:readiness_report.json', 'session:visual/operator_status.json', 'readiness_path:artifacts.coordinate_summary', 'readiness_path:artifacts.milestone_1_evidence_dir:screenshots/d415_color.png', 'readiness_path:artifacts.milestone_1_evidence_dir:screenshots/yolo_debug.png']`
 - `saved_anchor_one_run_fetch_rehearsal` pass=`True` issues=`[]`
   - command: `python scripts/fetch_planner_route_replay_batch.py --campaign-id hardware_rehearsal_saved_anchors_20260605 --gate-summary artifacts/session/dev_planner_saved_anchor_handoff_gate_zero_numeric_fix_20260604/fetch_planner_handoff_gate/gate_summary.json --max-per-route 3 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail`
   - required_artifacts: `['control_preflight.json', 'mission_verdict.json', 'visual/raw_camera_browser.mp4', 'visual/topdown_telemetry_browser.mp4', 'visual/world_stream.mp4', 'visual/keyframe_review_contact_sheet.png']`

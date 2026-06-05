@@ -448,6 +448,17 @@ seed20260635 mixed-route rehearsal commands resolve locally, then names
 hardware proof boundary remains open until the stack smoke produces visual and
 runtime artifacts.
 
+June 5 runtime stack smoke execution: the first hardware-rehearsal step now
+passes with artifact-contract validation:
+`artifacts/session/live_fetch_hardware_rehearsal_runtime_stack_smoke_artifact_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The run used `robot_fidelity_orin`, `tensorrt_int8`, and `container_kilted`,
+then validated session `20260605T054242Z`, coordinate UAT summary, operator
+status, and milestone screenshots. Visual review confirmed the raw camera target
+and YOLO debug overlay. The first attempt exposed CRLF in
+`uat/orchestrator/run_uat_orchestrator.sh`; the script is now LF-normalized and
+covered by a line-ending regression test. The next step is saved-anchor fetch
+rehearsal with raw-camera/topdown/world video evidence.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.

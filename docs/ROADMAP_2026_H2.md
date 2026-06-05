@@ -1408,3 +1408,10 @@ The rehearsal plan also has a green runner preflight:
 The next roadmap action is `execute_runtime_stack_smoke`; saved-anchor and
 seeded mixed-route rehearsal follow after the stack smoke records usable visual
 evidence.
+
+The runtime stack smoke is now executed and artifact-validated:
+`artifacts/session/live_fetch_hardware_rehearsal_runtime_stack_smoke_artifact_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The run validates `robot_fidelity_orin`, `tensorrt_int8`, coordinate UAT, and
+milestone screenshots after fixing the orchestrator LF boundary. The next
+roadmap action is saved-anchor fetch rehearsal with browser-watchable delivery
+video.

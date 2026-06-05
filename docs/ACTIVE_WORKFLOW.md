@@ -497,6 +497,29 @@ June 5, 2026 hardware rehearsal runner preflight:
   preserves `hardware_proven=false`; robot-side proof starts when
   `runtime_stack_smoke` executes and produces visual/runtime artifacts.
 
+June 5, 2026 runtime stack smoke rehearsal:
+
+- Command:
+  `python scripts\fetch_hardware_rehearsal_runner.py --campaign-id live_fetch_hardware_rehearsal_runtime_stack_smoke_artifact_contract_20260605 --step-id runtime_stack_smoke --execute --timeout-s 1800`
+- Scorecard:
+  `artifacts/session/live_fetch_hardware_rehearsal_runtime_stack_smoke_artifact_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`
+- Result: `planner_routed_fetch_hardware_rehearsal_step_executed`;
+  return code `0`, artifact contract green, session `20260605T054242Z`.
+- Visual review: inspected
+  `artifacts/demos/milestone_1_20260605T054242Z/screenshots/d415_color.png`
+  and
+  `artifacts/demos/milestone_1_20260605T054242Z/screenshots/yolo_debug.png`;
+  the raw camera shows the target centered and the debug screenshot shows the
+  detected ball overlay.
+- Infrastructure repair: the first execution attempt exposed CRLF in
+  `uat/orchestrator/run_uat_orchestrator.sh`; `.gitattributes` now pins
+  `uat/orchestrator/*.sh` to LF and
+  `tests/test_uat_orchestrator_line_endings.py` guards the orchestrator entry
+  script.
+- Evidence meaning: the runtime/sensor stack smoke is green under
+  `robot_fidelity_orin` and `tensorrt_int8`. The next rehearsal step is
+  saved-anchor fetch execution with raw-camera/topdown/world video.
+
 June 4, 2026 planner-only route proof:
 
 - Command:

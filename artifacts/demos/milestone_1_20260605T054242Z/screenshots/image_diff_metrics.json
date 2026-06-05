@@ -1,0 +1,14 @@
+{
+  "left_path": "/workspaces/chasecar/artifacts/snapshots/20260605T054433Z/d415_color.png",
+  "right_path": "/workspaces/chasecar/artifacts/snapshots/20260605T054433Z/yolo_debug.png",
+  "left_exists": true,
+  "right_exists": true,
+  "left_sha256": "7d3d0b91de10d72263bd8a99fb21c213b6dbdbe39e241d7f4e713ab80bacb3b6",
+  "right_sha256": "f49f2d61b1a47e347d5f6cc4d21b71453df871814d5f6c33a2bb4d27fb3af357",
+  "byte_identical": false,
+  "shape_match": true,
+  "mean_abs_diff": 1.10806640625,
+  "max_abs_diff": 255.0,
+  "changed_pixel_ratio": 0.010179036458333334,
+  "strong_changed_pixel_ratio": 0.008404947916666667
+}

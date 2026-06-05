@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 from datetime import datetime
@@ -55,7 +56,7 @@ def read_json(path_text: str | Path) -> tuple[dict[str, Any], list[str]]:
     if not path.is_file():
         return {}, [f"missing_json:{artifact_display_path(path)}"]
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception as exc:  # pragma: no cover - defensive artifact parsing
         return {}, [f"invalid_json:{artifact_display_path(path)}:{exc}"]
     if not isinstance(payload, dict):
@@ -142,6 +143,7 @@ def run_step(step: dict[str, Any], *, timeout_s: int) -> dict[str, Any]:
             "returncode": completed.returncode,
             "stdout_tail": completed.stdout[-4000:],
             "stderr_tail": completed.stderr[-4000:],
+            "session_dir": extract_session_dir(completed.stdout),
             "timed_out": False,
         }
     except subprocess.TimeoutExpired as exc:
@@ -153,8 +155,76 @@ def run_step(step: dict[str, Any], *, timeout_s: int) -> dict[str, Any]:
             "returncode": 124,
             "stdout_tail": (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else "",
             "stderr_tail": (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else "",
+            "session_dir": extract_session_dir(exc.stdout or "") if isinstance(exc.stdout, str) else "",
             "timed_out": True,
         }
+
+
+def extract_session_dir(output: str) -> str:
+    match = re.search(r"Session directory:\s*(.+)", output or "")
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
+def nested_value(payload: dict[str, Any], path_text: str) -> Any:
+    value: Any = payload
+    for part in path_text.split("."):
+        if not isinstance(value, dict):
+            return None
+        value = value.get(part)
+    return value
+
+
+def validate_artifact_spec(spec: str, *, session_dir: str, readiness: dict[str, Any]) -> dict[str, Any]:
+    issues: list[str] = []
+    resolved = ""
+    if spec.startswith("session:"):
+        rel_path = spec.split(":", 1)[1]
+        if not session_dir:
+            issues.append("missing_session_dir")
+        else:
+            resolved = str((Path(session_dir) / rel_path).resolve())
+    elif spec.startswith("readiness_path:"):
+        _, tail = spec.split(":", 1)
+        json_path, suffix = (tail.split(":", 1) + [""])[:2] if ":" in tail else (tail, "")
+        base = nested_value(readiness, json_path)
+        if not base:
+            issues.append(f"missing_readiness_path:{json_path}")
+        else:
+            resolved = str((Path(str(base)) / suffix).resolve()) if suffix else str(Path(str(base)).resolve())
+    else:
+        if not session_dir:
+            issues.append("missing_session_dir")
+        else:
+            resolved = str((Path(session_dir) / spec).resolve())
+    if resolved:
+        issues.extend([] if Path(resolved).is_file() else [f"missing_artifact:{artifact_display_path(resolved)}"])
+    return {
+        "spec": spec,
+        "path": artifact_display_path(resolved) if resolved else "",
+        "pass": not issues,
+        "issues": issues,
+    }
+
+
+def validate_execution_artifacts(step: dict[str, Any], execution: dict[str, Any]) -> dict[str, Any]:
+    session_dir = str(execution.get("session_dir", "") or "")
+    readiness_path = Path(session_dir) / "readiness_report.json" if session_dir else Path()
+    readiness, readiness_issues = read_json(readiness_path) if session_dir else ({}, ["missing_session_dir"])
+    rows = [
+        validate_artifact_spec(str(spec), session_dir=session_dir, readiness=readiness)
+        for spec in list_value(step.get("required_artifacts"))
+    ]
+    issues = list(readiness_issues)
+    issues.extend(issue for row in rows for issue in list_value(row.get("issues")))
+    return {
+        "pass": not issues,
+        "issues": issues,
+        "session_dir": artifact_display_path(session_dir) if session_dir else "",
+        "readiness_report": artifact_display_path(readiness_path) if session_dir else "",
+        "artifacts": rows,
+    }
 
 
 def build_summary(args: argparse.Namespace) -> dict[str, Any]:
@@ -171,6 +241,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     preflights = [evaluate_step_preflight(step) for step in selected_steps]
     preflight_pass = not issues and all(bool(row.get("pass", False)) for row in preflights)
     execution = {}
+    execution_artifacts = {}
     if bool(args.execute):
         if len(selected_steps) != 1:
             issues.append("execute_requires_exactly_one_step")
@@ -178,6 +249,9 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
             execution = run_step(selected_steps[0], timeout_s=int(args.timeout_s))
             if not bool(execution.get("pass", False)):
                 issues.append("executed_step_failed")
+            execution_artifacts = validate_execution_artifacts(selected_steps[0], execution)
+            if not bool(execution_artifacts.get("pass", False)):
+                issues.append("execution_artifact_contract_failed")
     mode = "execute" if bool(args.execute) else "preflight"
     pass_value = not issues and preflight_pass and (not args.execute or bool(execution.get("pass", False)))
     return {
@@ -199,6 +273,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "issues": issues,
         "step_preflights": preflights,
         "execution": execution,
+        "execution_artifacts": execution_artifacts,
         "next_action": (
             "execute_runtime_stack_smoke"
             if pass_value and mode == "preflight"
@@ -251,8 +326,29 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 f"- pass: `{execution.get('pass', False)}`",
                 f"- returncode: `{execution.get('returncode', '')}`",
                 f"- timed_out: `{execution.get('timed_out', False)}`",
+                f"- session_dir: `{execution.get('session_dir', '')}`",
             ]
         )
+    execution_artifacts = dict_value(summary.get("execution_artifacts"))
+    if execution_artifacts:
+        lines.extend(
+            [
+                "",
+                "## Execution Artifacts",
+                "",
+                f"- pass: `{execution_artifacts.get('pass', False)}`",
+                f"- issues: `{execution_artifacts.get('issues', [])}`",
+                f"- session_dir: {artifact_link(str(execution_artifacts.get('session_dir', '')))}",
+                f"- readiness_report: {artifact_link(str(execution_artifacts.get('readiness_report', '')))}",
+            ]
+        )
+        for row in list_value(execution_artifacts.get("artifacts")):
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                f"- `{row.get('spec', '')}` pass=`{row.get('pass', False)}` "
+                f"issues=`{row.get('issues', [])}` {artifact_link(str(row.get('path', '')))}"
+            )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

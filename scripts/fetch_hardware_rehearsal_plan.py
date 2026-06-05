@@ -112,9 +112,11 @@ def build_rehearsal_steps(args: argparse.Namespace) -> list[dict[str, Any]]:
                 ]
             ),
             "required_artifacts": [
-                "first_uat_summary.json",
-                "visual/raw_camera_browser.mp4",
-                "visual/world_stream.mp4",
+                "session:readiness_report.json",
+                "session:visual/operator_status.json",
+                "readiness_path:artifacts.coordinate_summary",
+                "readiness_path:artifacts.milestone_1_evidence_dir:screenshots/d415_color.png",
+                "readiness_path:artifacts.milestone_1_evidence_dir:screenshots/yolo_debug.png",
             ],
         },
         {

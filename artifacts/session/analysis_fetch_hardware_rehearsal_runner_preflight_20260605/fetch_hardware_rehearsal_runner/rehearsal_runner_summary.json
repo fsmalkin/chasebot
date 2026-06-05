@@ -1,7 +1,8 @@
 {
   "campaign_id": "analysis_fetch_hardware_rehearsal_runner_preflight_20260605",
   "execution": {},
-  "generated_utc": "2026-06-05T05:28:26.180754+00:00",
+  "execution_artifacts": {},
+  "generated_utc": "2026-06-05T05:38:49.567762+00:00",
   "hardware_proven": false,
   "issues": [],
   "milestone_interpretation": "planner_routed_fetch_hardware_rehearsal_preflight_ready",
@@ -19,9 +20,11 @@
       "issues": [],
       "pass": true,
       "required_artifacts": [
-        "first_uat_summary.json",
-        "visual/raw_camera_browser.mp4",
-        "visual/world_stream.mp4"
+        "session:readiness_report.json",
+        "session:visual/operator_status.json",
+        "readiness_path:artifacts.coordinate_summary",
+        "readiness_path:artifacts.milestone_1_evidence_dir:screenshots/d415_color.png",
+        "readiness_path:artifacts.milestone_1_evidence_dir:screenshots/yolo_debug.png"
       ],
       "script_path": "scripts/run_first_uat.ps1"
     },
