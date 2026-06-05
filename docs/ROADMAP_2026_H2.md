@@ -1422,3 +1422,14 @@ The batch delivered `left05`, `right05`, and `zero` with `3/3` mission passes
 and `3/3` visual packages. The next roadmap action is seed20260635 mixed-route
 rehearsal with two rows each across fetch-ready, Nav2-first, and
 recovery/re-aim execution.
+
+The seed20260635 mixed-route hardware rehearsal is now green:
+`artifacts/session/live_fetch_hardware_rehearsal_seed20260635_mixed_route_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The parent seeded gate classified `30/30` generated scenes, and the replay
+executed six rows across fetch-ready, Nav2-first, and recovery/re-aim route
+owners. All six missions passed, all six visual packages passed, and the
+analyzer reported clean execution/setup/contact quality. Visual keyframe review
+found camera and topdown evidence aligned through setup, first contact, push,
+and delivery. The next roadmap action is robot-side onboard execution under the
+same artifact contract; `hardware_proven=false` remains in force until that
+evidence exists.

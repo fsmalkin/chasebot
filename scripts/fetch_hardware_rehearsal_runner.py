@@ -224,6 +224,9 @@ def validate_artifact_spec(spec: str, *, session_dir: str, readiness: dict[str, 
 
 
 def validate_execution_artifacts(step: dict[str, Any], execution: dict[str, Any]) -> dict[str, Any]:
+    seeded_gate_summary_path = str(execution.get("seeded_gate_summary_path", "") or "")
+    if seeded_gate_summary_path:
+        return validate_seeded_gate_artifacts(seeded_gate_summary_path)
     batch_summary_path = str(execution.get("batch_summary_path", "") or "")
     if batch_summary_path:
         return validate_replay_batch_artifacts(batch_summary_path)
@@ -242,6 +245,65 @@ def validate_execution_artifacts(step: dict[str, Any], execution: dict[str, Any]
         "session_dir": artifact_display_path(session_dir) if session_dir else "",
         "readiness_report": artifact_display_path(readiness_path) if session_dir else "",
         "artifacts": rows,
+    }
+
+
+def validate_seeded_gate_artifacts(gate_summary_path: str) -> dict[str, Any]:
+    gate, issues = read_json(gate_summary_path)
+    bool_issue(issues, bool(gate.get("pass", False)), "seeded_gate_not_pass")
+    bool_issue(issues, bool(gate.get("planner_gate_pass", False)), "seeded_gate_planner_not_pass")
+    bool_issue(issues, bool(gate.get("replay_pass", False)), "seeded_gate_replay_not_pass")
+    bool_issue(issues, bool(gate.get("analyzer_pass", False)), "seeded_gate_analyzer_not_pass")
+    expected_executable_count = int(gate.get("expected_executable_count") or 0)
+    bool_issue(issues, expected_executable_count > 0, "seeded_gate_expected_executable_count_zero")
+
+    artifact_rows: list[dict[str, Any]] = [
+        {
+            "spec": "seeded_gate_summary",
+            "path": artifact_display_path(gate_summary_path),
+            "pass": not issues,
+            "issues": list(issues),
+        }
+    ]
+    child_specs = {
+        "planner_summary": str(gate.get("planner_summary_path", "") or ""),
+        "replay_summary": str(gate.get("replay_summary_path", "") or ""),
+        "analyzer_summary": str(gate.get("analyzer_summary_path", "") or ""),
+    }
+    for spec, path in child_specs.items():
+        _, child_issues = read_json(path)
+        artifact_rows.append(
+            {
+                "spec": spec,
+                "path": artifact_display_path(path) if path else "",
+                "pass": not child_issues,
+                "issues": child_issues,
+            }
+        )
+        issues.extend(child_issues)
+
+    replay_summary_path = child_specs["replay_summary"]
+    if replay_summary_path:
+        replay_validation = validate_replay_batch_artifacts(replay_summary_path)
+        issues.extend(list_value(replay_validation.get("issues")))
+        artifact_rows.append(
+            {
+                "spec": "seeded_gate_replay_batch_validation",
+                "path": artifact_display_path(replay_summary_path),
+                "pass": bool(replay_validation.get("pass", False)),
+                "issues": list_value(replay_validation.get("issues")),
+            }
+        )
+        artifact_rows.extend(list_value(replay_validation.get("artifacts")))
+
+    return {
+        "pass": not issues,
+        "issues": issues,
+        "seeded_gate_summary": artifact_display_path(gate_summary_path),
+        "batch_summary": artifact_display_path(replay_summary_path) if replay_summary_path else "",
+        "session_dir": "",
+        "readiness_report": "",
+        "artifacts": artifact_rows,
     }
 
 
@@ -423,6 +485,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 f"- timed_out: `{execution.get('timed_out', False)}`",
                 f"- session_dir: `{execution.get('session_dir', '')}`",
                 f"- batch_summary_path: `{execution.get('batch_summary_path', '')}`",
+                f"- seeded_gate_summary_path: `{execution.get('seeded_gate_summary_path', '')}`",
             ]
         )
     execution_artifacts = dict_value(summary.get("execution_artifacts"))
@@ -436,6 +499,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
                 f"- issues: `{execution_artifacts.get('issues', [])}`",
                 f"- session_dir: {artifact_link(str(execution_artifacts.get('session_dir', '')))}",
                 f"- readiness_report: {artifact_link(str(execution_artifacts.get('readiness_report', '')))}",
+                f"- seeded_gate_summary: {artifact_link(str(execution_artifacts.get('seeded_gate_summary', '')))}",
                 f"- batch_summary: {artifact_link(str(execution_artifacts.get('batch_summary', '')))}",
             ]
         )

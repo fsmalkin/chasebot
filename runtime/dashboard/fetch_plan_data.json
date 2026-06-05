@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 1:03 AM ET",
+  "updated_label": "Updated June 5, 2026, 2:39 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Promotion green on supervised seed 20260635",
-  "status_detail": "The planner-gated fetch moonshot now has a fresh provider-backed supervised seeded promotion refresh on seed 20260635. The planner child routed 30/30 generated scenes with provider ok=30/30, guard agreement=30/30, wrong fetch dispatches 0, and one confidence-only deterministic fallback. The live canonical replay selected six executable rows across Nav2-first, recovery/re-aim, and fetch-ready local routes, delivered 6/6 inside the 0.300m contract, produced 6/6 browser-watchable visual packages, and the analyzer reports clean execution/setup/contact with zero first-contact blockers. A controller-startup race on scene03 is now fail-fast and documented through the base-controller service-call preflight; the rerun passed after confirming the diff-drive controller was active.",
+  "status_label": "Hardware rehearsal green through seed 20260635",
+  "status_detail": "The planner-routed fetch stack has now cleared the three-step simulation hardware-rehearsal ladder: runtime stack smoke, saved anchors, and seed 20260635 mixed-route replay. The latest seeded rehearsal classified 30 generated scenes, executed six rows across fetch-ready, Nav2-first, and recovery/re-aim route owners, delivered 6/6 inside the 0.300m contract, produced 6/6 browser-watchable visual packages, and passed analyzer setup/contact/execution checks. Visual keyframe review across all six runs shows onboard camera and topdown geometry aligned through setup, first contact, push, and terminal delivery. hardware_proven remains false until the same contract runs on robot-side onboard hardware.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,88 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Seed 20260635 hardware rehearsal is green",
+      "status": "30 planned scenes, 6 executable mixed-route runs, 6/6 delivery with visual packages",
+      "tone": "green",
+      "summary": "The third hardware-rehearsal step now executes through the runner and validates the seeded gate artifact contract. The parent gate classified 30 generated scenes with zero wrong fetch dispatches; the executable replay selected two fetch-ready, two Nav2-first, and two recovery/re-aim rows. All six missions passed inside the 0.300m contract, all six visual packages passed, and analyzer status is clean for execution, setup, and contact. Visual review of all six raw/topdown keyframe sheets confirms the camera story matches the delivery geometry.",
+      "metrics": [
+        "Runner execution: pass=true; artifact contract pass=true; returncode=0",
+        "Seeded parent gate: pass=true; random_cases=30; expected_executable_count=6; wrong_fetch_dispatch_count=0",
+        "Replay batch: selected=6; mission_pass=6; visual_package_pass=6; mission_fail=0",
+        "Route coverage: fetch_ready_local=2, nav2_reposition_first=2, recovery_or_reaim=2",
+        "Closest approach range from replay scorecard: 0.194m..0.197m inside the 0.300m contract",
+        "Analyzer: execution=clean; setup=clean; contact=clean; first_contact_blocker_count=0",
+        "Planner authority in this run: deterministic fallback because provider status was skipped_missing_openai_api_key; hardware_proven=false remains in force",
+        "Visual review: inspected all six raw/topdown keyframe sheets across setup, first contact, push, and terminal delivery"
+      ],
+      "links": [
+        {
+          "label": "Seed rehearsal runner scorecard",
+          "url": "/artifacts/session/live_fetch_hardware_rehearsal_seed20260635_mixed_route_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "Seeded parent gate scorecard",
+          "url": "/artifacts/session/hardware_rehearsal_seed20260635_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Seed replay batch scorecard",
+          "url": "/artifacts/session/hardware_rehearsal_seed20260635_20260605_replay/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Seed route analyzer scorecard",
+          "url": "/artifacts/session/hardware_rehearsal_seed20260635_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "scene02 onboard video",
+          "url": "/artifacts/session/20260605T062655532643Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene03 onboard video",
+          "url": "/artifacts/session/20260605T062848905204Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene05 onboard video",
+          "url": "/artifacts/session/20260605T063036140143Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene07 onboard video",
+          "url": "/artifacts/session/20260605T063225158607Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene08 onboard video",
+          "url": "/artifacts/session/20260605T063400908945Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene09 onboard video",
+          "url": "/artifacts/session/20260605T063530711030Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene02 keyframe sheet",
+          "url": "/artifacts/session/20260605T062655532643Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene03 keyframe sheet",
+          "url": "/artifacts/session/20260605T062848905204Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene05 keyframe sheet",
+          "url": "/artifacts/session/20260605T063036140143Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene07 keyframe sheet",
+          "url": "/artifacts/session/20260605T063225158607Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene08 keyframe sheet",
+          "url": "/artifacts/session/20260605T063400908945Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene09 keyframe sheet",
+          "url": "/artifacts/session/20260605T063530711030Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
     {
       "title": "Saved-anchor fetch rehearsal is green",
       "status": "zero, left05, right05 delivered with browser-watchable video",
@@ -4263,7 +4345,9 @@
     }
   ],
   "next_steps": [
-    "Run the seed20260635 mixed-route rehearsal after the saved-anchor fetch rehearsal: two fetch-ready, two Nav2-first, and two recovery/re-aim rows with raw-camera/topdown/world video and keyframe sequence review.",
+    "Run the same hardware-rehearsal artifact contract on robot-side onboard hardware with raw-camera/topdown/world video and keyframe sequence review.",
+    "Keep the seed20260635 mixed-route rehearsal as the current simulation hardware-rehearsal green bar before future route-owner, contact-servo, visual-packaging, or hardware-transfer moonshots.",
+    "Restore provider-backed LLM route authority only when API access is available; deterministic fallback remains the safe route owner until then.",
     "Use the seed20260635 preflight regression manifest as the default green bar before future route-owner, contact-servo, visual-packaging, or hardware-transfer moonshots.",
     "Keep hardware-transfer claims at rehearsal-ready until robot-side live execution, onboard TensorRT execution, physical camera evidence, and field-physics proof are recorded.",
     "Keep provider-backed guarded fallback as the high-level planner authority model unless product requirements demand strict all-accepted LLM routing.",

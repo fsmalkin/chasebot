@@ -1218,6 +1218,22 @@ The batch delivered `left05`, `right05`, and `zero` with `3/3` mission passes,
 keyframe sheets. Visual review found coherent delivery evidence for all three.
 The next research gate is seed20260635 mixed-route rehearsal.
 
+The seed20260635 mixed-route hardware rehearsal is now green:
+`artifacts/session/live_fetch_hardware_rehearsal_seed20260635_mixed_route_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The parent seeded gate is
+`artifacts/session/hardware_rehearsal_seed20260635_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The replay batch is
+`artifacts/session/hardware_rehearsal_seed20260635_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`.
+The planner classified `30/30` generated scenes, then the replay executed six
+route-owner rows across fetch-ready, Nav2-first, and recovery/re-aim. All six
+missions passed with browser-watchable visual packages, clean analyzer status,
+and closest approaches around `0.194m..0.197m`. Visual review of the six
+raw/topdown keyframe sheets found the camera evidence and topdown geometry
+aligned through setup, first contact, push, and terminal delivery. This clears
+the current simulation hardware-rehearsal ladder; the remaining proof gap is
+robot-side/onboard execution, so `hardware_proven=false` remains the correct
+claim boundary.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

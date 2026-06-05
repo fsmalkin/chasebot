@@ -537,6 +537,29 @@ June 5, 2026 saved-anchor fetch rehearsal:
   onboard/context videos. The next rehearsal step is seed20260635 mixed-route
   execution.
 
+June 5, 2026 seed20260635 mixed-route hardware rehearsal:
+
+- Command:
+  `python scripts\fetch_hardware_rehearsal_runner.py --campaign-id live_fetch_hardware_rehearsal_seed20260635_mixed_route_contract_20260605 --step-id seed20260635_mixed_route_fetch_rehearsal --execute --timeout-s 3600`
+- Runner scorecard:
+  `artifacts/session/live_fetch_hardware_rehearsal_seed20260635_mixed_route_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`
+- Seeded gate scorecard:
+  `artifacts/session/hardware_rehearsal_seed20260635_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Replay scorecard:
+  `artifacts/session/hardware_rehearsal_seed20260635_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Result: planner gate `30/30`, executable replay `6/6`, visual packages
+  `6/6`, analyzer clean, mission failures `0`, and runner artifact-contract
+  validation green.
+- Route coverage: two `fetch_ready_local`, two `nav2_reposition_first`, and
+  two `recovery_or_reaim` rows delivered inside the `0.300m` contract.
+- Visual review: inspected all six raw/topdown keyframe sheets. The visual
+  sequence matches the telemetry across setup, first contact, push, and
+  terminal delivery.
+- Claim boundary: this is a green hardware-rehearsal simulation package with
+  `promotion_evidence=false` and `hardware_proven=false`. The next milestone
+  step is robot-side execution with onboard camera proof and the same runner
+  artifact contract.
+
 June 4, 2026 planner-only route proof:
 
 - Command:

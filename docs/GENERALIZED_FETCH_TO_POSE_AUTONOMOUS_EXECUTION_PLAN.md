@@ -471,6 +471,24 @@ contact, push, and delivery-circle arrival. The remaining rehearsal step is
 seed20260635 mixed-route execution across fetch-ready, Nav2-first, and
 recovery/re-aim owners.
 
+June 5 seed20260635 mixed-route hardware rehearsal: the third
+hardware-rehearsal step is green:
+`artifacts/session/live_fetch_hardware_rehearsal_seed20260635_mixed_route_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The seeded parent gate is
+`artifacts/session/hardware_rehearsal_seed20260635_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The replay batch scorecard is
+`artifacts/session/hardware_rehearsal_seed20260635_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`.
+The planner gate classified `30/30` generated scenes with zero wrong fetch
+dispatches. The executable replay selected six rows across fetch-ready,
+Nav2-first, and recovery/re-aim route owners, delivered `6/6` inside the
+`0.300m` contract, produced `6/6` browser-playable visual packages, and the
+analyzer reports clean execution, setup, and contact quality. Visual review
+inspected all six raw/topdown keyframe sheets and found the same story in the
+camera and telemetry: setup, first contact, push, and terminal delivery. This
+clears the current rehearsal ladder in simulation while keeping
+`hardware_proven=false`; the next milestone step is robot-side execution with
+onboard camera proof under the same artifact contract.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.
