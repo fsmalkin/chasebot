@@ -513,11 +513,11 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         for link in evidence_by_title["Milestone readiness rollup is UAT-ready"]["links"]
     )
     assert any(
-        "physical_onboard_proof_gap_20260605" in link["url"]
+        "physical_onboard_proof_gap_current_proof_cards_20260605" in link["url"]
         for link in evidence_by_title["Physical/onboard proof gap is explicit"]["links"]
     )
     assert any(
-        "robot_side_rehearsal_preflight_seed20260648_physical_gap_20260605" in link["url"]
+        "robot_side_rehearsal_preflight_seed20260648_current_physical_gap_20260605" in link["url"]
         for link in evidence_by_title["Robot-side physical runbook is current"]["links"]
     )
     assert any(

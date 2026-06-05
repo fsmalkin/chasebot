@@ -13,6 +13,10 @@ if str(SCRIPTS_DIR) not in sys.path:
 import fetch_robot_side_rehearsal_preflight as preflight  # noqa: E402
 
 
+def test_robot_side_preflight_default_physical_gap_uses_current_proof_cards():
+    assert "physical_onboard_proof_gap_current_proof_cards_20260605" in preflight.DEFAULT_PHYSICAL_GAP_SUMMARY
+
+
 def _write_json(path: Path, payload: dict) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(preflight.json.dumps(payload, indent=2) + "\n", encoding="utf-8")

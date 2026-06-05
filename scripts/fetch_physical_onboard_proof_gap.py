@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 ANALYZER_KIND = "fetch_physical_onboard_proof_gap"
 DEFAULT_MILESTONE_READINESS = (
-    "artifacts/session/generalized_fetch_to_pose_milestone_readiness_20260605/"
+    "artifacts/session/generalized_fetch_to_pose_milestone_readiness_current_proof_cards_20260605/"
     "fetch_generalized_milestone_readiness/milestone_readiness_summary.json"
 )
 REQUIRED_FIELDS = (

@@ -25,7 +25,7 @@ DEFAULT_REHEARSAL_PLAN = (
     "fetch_hardware_rehearsal_plan/hardware_rehearsal_plan_summary.json"
 )
 DEFAULT_PHYSICAL_GAP_SUMMARY = (
-    "artifacts/session/physical_onboard_proof_gap_20260605/"
+    "artifacts/session/physical_onboard_proof_gap_current_proof_cards_20260605/"
     "fetch_physical_onboard_proof_gap/physical_onboard_proof_gap_summary.json"
 )
 DEFAULT_DASHBOARD_URL = "http://100.112.221.6:8883"

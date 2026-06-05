@@ -13,6 +13,12 @@ if str(SCRIPTS_DIR) not in sys.path:
 import fetch_physical_onboard_proof_gap as gap  # noqa: E402
 
 
+def test_physical_gap_default_milestone_readiness_uses_current_proof_cards():
+    assert "generalized_fetch_to_pose_milestone_readiness_current_proof_cards_20260605" in (
+        gap.DEFAULT_MILESTONE_READINESS
+    )
+
+
 def _args(tmp_path: Path, **overrides):
     payload = {
         "campaign_id": "physical_gap",
