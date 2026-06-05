@@ -90,7 +90,7 @@
       "title": "Dashboard visual evidence audit is green",
       "status": "15/15 UAT samples and required current evidence cards resolve to browser-watchable artifacts",
       "tone": "green",
-      "summary": "The dashboard visual evidence audit verifies the current browser-facing proof layer. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and the required current evidence cards for the three-seed breadth rollup, hardware rehearsal, and provider preflight. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
+      "summary": "The dashboard visual evidence audit verifies the current browser-facing proof layer after adding the milestone readiness rollup. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and the required current evidence cards for the three-seed breadth rollup, hardware rehearsal, and provider preflight. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
       "metrics": [
         "Audit: pass=true; interpretation=dashboard_visual_evidence_links_green",
         "UAT bundle: 15/15 samples pass link audit",
@@ -102,11 +102,11 @@
       "links": [
         {
           "label": "Dashboard visual evidence audit scorecard",
-          "url": "/artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_milestone_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
         },
         {
           "label": "Dashboard visual evidence audit summary",
-          "url": "/artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/dashboard_visual_evidence_summary.json"
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_milestone_20260605/fetch_dashboard_visual_evidence_audit/dashboard_visual_evidence_summary.json"
         },
         {
           "label": "Seed 20260648 mixed all-routes video bundle",
@@ -119,6 +119,37 @@
         {
           "label": "scene10 fetch-ready keyframe sheet",
           "url": "/artifacts/session/20260605T191604499853Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
+      "title": "Milestone readiness rollup is UAT-ready",
+      "status": "sim-gate/operator UAT green; provider-backed LLM routing and physical/onboard proof still pending",
+      "tone": "green",
+      "summary": "The milestone readiness rollup combines the three-seed deterministic breadth floor, current dashboard visual-evidence audit, provider rerun preflight/comparison, and seed20260648 robot-fidelity hardware rehearsal. It reports operator_uat_ready=true with 300 planner scenes, 27 executable visual deliveries, 15 browser-watchable current UAT samples, and hardware_transfer_ready=true. It keeps milestone_complete=false because OPENAI_API_KEY is missing for provider-backed LLM routing and hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
+      "metrics": [
+        "Milestone audit: pass=true; operator_uat_ready=true; milestone_complete=false",
+        "Green evidence: three-seed deterministic breadth rollup, dashboard visual evidence audit, seed20260648 robot-fidelity hardware rehearsal",
+        "Provider boundary: provider_backed_authority_proven=false until OPENAI_API_KEY rerun and provider-vs-baseline comparison pass",
+        "Hardware boundary: hardware_proven=false until physical/onboard TensorRT run, physical camera evidence, and field physics proof are recorded",
+        "Next action: run provider rerun when OPENAI_API_KEY is present, then physical/onboard TensorRT rehearsal"
+      ],
+      "links": [
+        {
+          "label": "Milestone readiness scorecard",
+          "url": "/artifacts/session/generalized_fetch_to_pose_milestone_readiness_20260605/fetch_generalized_milestone_readiness/scorecard.md"
+        },
+        {
+          "label": "Milestone readiness summary",
+          "url": "/artifacts/session/generalized_fetch_to_pose_milestone_readiness_20260605/fetch_generalized_milestone_readiness/milestone_readiness_summary.json"
+        },
+        {
+          "label": "Three-seed breadth rollup scorecard",
+          "url": "/artifacts/session/analysis_fetch_planner_breadth_rollup_seeds20260648_20260650_20260605/fetch_planner_breadth_rollup/scorecard.md"
+        },
+        {
+          "label": "Dashboard visual evidence audit scorecard",
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
         }
       ]
     },
@@ -6085,6 +6116,7 @@
     }
   ],
   "next_steps": [
+    "Use the milestone readiness rollup as the operator UAT checkpoint: sim evidence is green, provider-backed routing and physical/onboard proof remain the next gates.",
     "Provide OPENAI_API_KEY, then run the rollup-backed provider rerun on seed20260650, run the provider-vs-baseline comparison analyzer, and compare provider agreement, guard vetoes, route deltas, and mixed all-routes visual replay against the three-seed deterministic baseline.",
     "Repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT, physical camera evidence, and field-physics notes.",
     "After provider-backed routing passes, rerun the mixed all-routes evidence ladder on physical/onboard hardware.",

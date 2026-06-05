@@ -490,8 +490,15 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert "Seed 20260648 hardware rehearsal is green" in evidence_by_title
     assert evidence_by_title["Three-seed breadth rollup is green"]["tone"] == "green"
     assert evidence_by_title["Dashboard visual evidence audit is green"]["tone"] == "green"
+    assert evidence_by_title["Milestone readiness rollup is UAT-ready"]["tone"] == "green"
+    assert "operator UAT green" in evidence_by_title["Milestone readiness rollup is UAT-ready"]["status"]
+    assert "milestone_complete=false" in " ".join(evidence_by_title["Milestone readiness rollup is UAT-ready"]["metrics"])
     assert any(
-        "dashboard_visual_evidence_audit_rollup_20260605" in link["url"]
+        "generalized_fetch_to_pose_milestone_readiness_20260605" in link["url"]
+        for link in evidence_by_title["Milestone readiness rollup is UAT-ready"]["links"]
+    )
+    assert any(
+        "dashboard_visual_evidence_audit_with_milestone_20260605" in link["url"]
         for link in evidence_by_title["Dashboard visual evidence audit is green"]["links"]
     )
     assert "15/15 UAT samples" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
