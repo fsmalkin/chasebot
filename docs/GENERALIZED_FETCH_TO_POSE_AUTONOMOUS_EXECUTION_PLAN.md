@@ -547,7 +547,24 @@ geometry, including two high-risk recovery rows. This strengthens the broad
 sim-gate UAT floor while leaving provider-backed LLM routing and physical
 hardware-transfer proof as the active gates.
 
-June 5 seed20260638 rough breadth UAT: the current route-owner stack now has a
+June 5 seed20260639 rough breadth UAT: the current route-owner stack now has a
+cleaner roughest-row seeded pass at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner classified `30` generated scenes with `wrong_fetch_dispatch_count=0`.
+The replay at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+selected nine executable rows: three `recovery_or_reaim`, three
+`nav2_reposition_first`, and three `fetch_ready_local`. All nine delivered with
+visual packages; closest approaches stayed in `0.194m..0.198m`. The analyzer at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution, setup, and contact with first-contact blockers `0`.
+Frame-sequence review of all nine raw-camera/topdown sheets matched the
+delivery geometry. The command omitted `--env-ready-timeout-s`, so the pass also
+proves the new `600s` rough-gate startup default. This remains sim-gate UAT:
+`OPENAI_API_KEY` was unavailable, provider-backed LLM routing stayed open, and
+hardware proof is still pending.
+
+June 5 seed20260638 rough breadth UAT: the route-owner stack added an earlier
 roughest-row seeded pass at
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
 The planner classified `30` generated scenes with `wrong_fetch_dispatch_count=0`.

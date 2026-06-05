@@ -1477,7 +1477,19 @@ recovery rows. The roadmap sequence stays the same: rerun provider-backed LLM
 routing when credentials are available, then run physical/onboard proof before
 claiming hardware transfer.
 
-Seed20260638 raises the stress level with roughest-row selection:
+Seed20260639 raises the stress level again with roughest-row selection:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The seed classified `30` generated scenes with zero wrong fetch dispatches, then
+replayed nine executable rows across recovery/re-aim, Nav2-first, and
+fetch-ready owners at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`.
+All nine delivered, all nine visual packages passed, and frame-sequence review
+found the onboard camera and topdown geometry aligned. The run omitted an
+explicit `--env-ready-timeout-s`, proving the new `600s` rough-gate startup
+default. The roadmap sequence still prioritizes provider-backed LLM reruns and
+physical/onboard proof before hardware-transfer claims.
+
+Seed20260638 raised the stress level with roughest-row selection:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
 The seed classified `30` generated scenes with zero wrong fetch dispatches, then
 replayed eight executable rows across recovery/re-aim, Nav2-first, and

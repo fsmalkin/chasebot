@@ -1284,7 +1284,21 @@ push, and terminal delivery. The two high-risk recovery rows still showed
 coherent ball/target/robot geometry. Provider-backed LLM routing and
 physical/onboard hardware-transfer proof remain the active open gates.
 
-Seed20260638 adds roughest-row breadth evidence:
+Seed20260639 adds the strongest roughest-row breadth evidence so far:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The gate classified `30` generated scenes with zero wrong fetch dispatches. The
+live executable replay at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+passed `9/9` across three `recovery_or_reaim`, three `nav2_reposition_first`,
+and three `fetch_ready_local` rows, with visual packages `9/9`. The analyzer
+reports clean execution, setup, and contact with first-contact blockers `0`, and
+frame-sequence review of all nine raw-camera/topdown sheets matched setup, first
+contact, push, and terminal delivery. The command omitted `--env-ready-timeout-s`
+and passed under the new `600s` rough-gate default. The claim boundary remains
+unchanged: deterministic fallback handled routing because `OPENAI_API_KEY` was
+unavailable, and physical/onboard proof is still open.
+
+Seed20260638 adds earlier roughest-row breadth evidence:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260638_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
 The gate classified `30` generated scenes with zero wrong fetch dispatches. The
 live executable replay at

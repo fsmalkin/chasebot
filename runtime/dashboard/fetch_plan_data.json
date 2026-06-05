@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 9:29 AM ET",
+  "updated_label": "Updated June 5, 2026, 10:15 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Rough breadth seed is green",
-  "status_detail": "Seed 20260638 raises the local sim-gate stress level with roughest-row selection: 30 randomized scenes classified, zero wrong fetch dispatches, 8/8 executable replay deliveries, and 8/8 visual packages across recovery/re-aim, Nav2-first, and fetch-ready routes. All eight rows were predicted contact-quality watches, including three high-risk recovery rows and three medium-risk Nav2-first rows. Frame-sequence review of all eight raw-camera/topdown sheets matched the delivery geometry. One initial fresh-dashboard startup timeout cleared on resume with a longer environment-ready timeout, so this is an infrastructure watch rather than a control miss.",
+  "status_label": "Default-timeout rough seed is green",
+  "status_detail": "Seed 20260639 is the cleanest rough breadth UAT package so far: 30 randomized scenes classified, zero wrong fetch dispatches, 9/9 executable replay deliveries, and 9/9 visual packages across recovery/re-aim, Nav2-first, and fetch-ready routes. The run omitted an explicit env-ready timeout and still passed, proving the new 600s rough-gate default cleared the prior startup flake. Frame-sequence review of all nine raw-camera/topdown sheets matched the delivery geometry. This remains sim-gate route-owner UAT: provider-backed LLM routing and physical/onboard hardware proof are still open.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,115 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Seed 20260639 rough breadth UAT is green",
+      "status": "roughest rows: 9 executable mixed-route runs, 9/9 delivery with visual packages",
+      "tone": "green",
+      "summary": "Seed 20260639 reran the roughest-row seeded breadth gate after the startup-timeout default was raised to 600s. The planner classified 30 generated scenes with zero wrong fetch dispatches. The replay requested up to three rows per executable route and covered nine cases: three recovery/re-aim, three Nav2-first, and three fetch-ready. All nine delivered inside the 0.300m contract, all nine visual packages passed, and the analyzer reports clean execution, setup, and contact with zero first-contact blockers. I inspected all nine raw-camera/topdown keyframe sheets across setup, first contact, push, and terminal delivery; the onboard camera and topdown geometry agree. The run omitted an explicit env-ready timeout and completed without the prior fresh-dashboard startup flake, so the new default is now covered by live rough UAT.",
+      "metrics": [
+        "Parent gate: pass=true; random_cases=30; promotion_evidence=false; planner_authority_ready=false",
+        "Planner routing: pass_count=30; fail_count=0; wrong_fetch_dispatch_count=0",
+        "Route mix: fetch_ready_local=7; nav2_reposition_first=6; scan_or_perceive_first=7; recovery_or_reaim=5; ambiguous_or_unsafe_no_go=5",
+        "Provider status: skipped_missing_openai_api_key=30; deterministic fallback used for all 30",
+        "Executable replay: selected=9; mission_pass=9; visual_package_pass=9; mission_fail=0; skipped_existing=0",
+        "Replay route coverage: fetch_ready_local=3; nav2_reposition_first=3; recovery_or_reaim=3",
+        "Risk mix: predicted_first_contact_risk high=3, medium=4, low=2",
+        "Closest approach range: 0.194m..0.198m inside the 0.300m contract",
+        "Analyzer: execution=clean; setup=clean; contact=clean; first_contact_blocker_count=0",
+        "Startup default proof: command omitted env-ready-timeout-s and passed under the 600s default",
+        "Claim boundary: hardware_proven=false; provider-backed LLM routing and physical/onboard proof remain open gates"
+      ],
+      "links": [
+        {
+          "label": "Seed 20260639 parent scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        },
+        {
+          "label": "Seed 20260639 replay scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md"
+        },
+        {
+          "label": "Seed 20260639 analyzer scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        },
+        {
+          "label": "Seed 20260639 planner scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
+        },
+        {
+          "label": "scene23 recovery onboard video",
+          "url": "/artifacts/session/20260605T092835363811Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene15 recovery onboard video",
+          "url": "/artifacts/session/20260605T093705334876Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene13 recovery onboard video",
+          "url": "/artifacts/session/20260605T094215911302Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene12 Nav2 onboard video",
+          "url": "/artifacts/session/20260605T094947648537Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene18 Nav2 onboard video",
+          "url": "/artifacts/session/20260605T095216418466Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene17 Nav2 onboard video",
+          "url": "/artifacts/session/20260605T095435354525Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene06 fetch-ready onboard video",
+          "url": "/artifacts/session/20260605T095638909786Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene25 fetch-ready onboard video",
+          "url": "/artifacts/session/20260605T095836646728Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene08 fetch-ready onboard video",
+          "url": "/artifacts/session/20260605T100026696094Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene23 recovery keyframe sheet",
+          "url": "/artifacts/session/20260605T092835363811Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene15 recovery keyframe sheet",
+          "url": "/artifacts/session/20260605T093705334876Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene13 recovery keyframe sheet",
+          "url": "/artifacts/session/20260605T094215911302Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene12 Nav2 keyframe sheet",
+          "url": "/artifacts/session/20260605T094947648537Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene18 Nav2 keyframe sheet",
+          "url": "/artifacts/session/20260605T095216418466Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene17 Nav2 keyframe sheet",
+          "url": "/artifacts/session/20260605T095435354525Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene06 fetch-ready keyframe sheet",
+          "url": "/artifacts/session/20260605T095638909786Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene25 fetch-ready keyframe sheet",
+          "url": "/artifacts/session/20260605T095836646728Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "scene08 fetch-ready keyframe sheet",
+          "url": "/artifacts/session/20260605T100026696094Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
     {
       "title": "Seed 20260638 rough breadth UAT is green",
       "status": "roughest rows: 8 executable mixed-route runs, 8/8 delivery with visual packages",
@@ -4672,12 +4781,12 @@
   ],
   "watch_areas": [
     {
-      "label": "Fresh dashboard startup timeout",
-      "body": "Seed20260638 scene15 first timed out while starting a fresh dashboard session, with robot truth visible and target truth missing. The same row passed after resume with env-ready-timeout-s=600. Treat this as an infrastructure/startup-timeout watch before rough gates, not a fetch-control failure."
+      "label": "Rough-gate startup health default",
+      "body": "Seed20260638 scene15 first timed out during fresh-dashboard startup and passed after raising env-ready-timeout-s to 600. Seed20260639 then passed the full roughest-row gate without an explicit timeout argument, proving the new 600s rough-gate default in live UAT. Keep startup health visible, but treat the prior timeout as cleared infrastructure debt."
     },
     {
       "label": "Provider-backed LLM routing rerun",
-      "body": "Seeds 20260636, 20260637, and rough seed20260638 prove the deterministic guarded route-owner stack across fresh broad seeds, while provider status stayed skipped_missing_openai_api_key. Restore OPENAI_API_KEY and rerun the planner gate before claiming current provider-backed authority."
+      "body": "Seeds 20260636, 20260637, rough seed20260638, and rough seed20260639 prove the deterministic guarded route-owner stack across fresh broad seeds, while provider status stayed skipped_missing_openai_api_key for seed20260639. Restore OPENAI_API_KEY and rerun the planner gate before claiming current provider-backed authority."
     },
     {
       "label": "Base-controller fetch preflight",
@@ -4725,99 +4834,129 @@
     }
   ],
   "next_steps": [
-    "Rerun seeds 20260636 through 20260638 with provider-backed LLM routing once OPENAI_API_KEY is available, then compare route agreement and veto reasons against deterministic fallback.",
-    "Use env-ready-timeout-s=600 or equivalent startup-health handling for rough seeded gates so infrastructure startup latency does not mask route-owner evidence.",
+    "Rerun seed 20260639, plus the prior broad seeds if time allows, with provider-backed LLM routing once OPENAI_API_KEY is available, then compare route agreement and veto reasons against deterministic fallback.",
+    "Use the 600s rough-gate startup default for route-quality and breadth runs; seed20260639 proves the default path without an explicit timeout override.",
     "Run the physical/onboard hardware proof for the same ladder, starting with stack smoke and raw-camera/YOLO visual review.",
     "Keep hardware_proven=false until physical robot execution, onboard TensorRT, physical camera evidence, and field-physics proof are recorded."
   ],
   "uat_review_bundle": {
-    "title": "Seed 20260635 supervised promotion executable UAT bundle",
-    "summary": "Review these six seed 20260635 executable samples as the latest milestone UAT package. The provider-backed supervised planner chooses the route under deterministic guard agreement, and the bounded route owners execute Nav2-first, recovery/re-aim, and fetch-ready deliveries with clean visual packages. This bundle carries the browser evidence behind the current promotion-green parent gate.",
+    "title": "Seed 20260639 rough breadth UAT bundle",
+    "summary": "Review these nine seed 20260639 executable samples as the latest browser-watchable UAT package. The deterministic guarded planner classified the wider random set, routed executable scenes to recovery/re-aim, Nav2-first, or fetch-ready owners, and every selected row delivered with onboard/topdown/keyframe proof. Provider-backed LLM authority and physical/onboard proof remain open.",
     "route_samples": [
       {
-        "label": "Promotion Nav2 scene 02",
-        "route": "nav2_reposition_first",
-        "session_id": "20260605T042210177751Z",
-        "reason": "Nav2/reposition-first delivered at 0.197m with clean execution.",
-        "video_url": "/artifacts/session/20260605T042210177751Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T042210177751Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T042210177751Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T042210177751Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Promotion recovery/re-aim scene 03",
+        "label": "Rough recovery scene 23",
         "route": "recovery_or_reaim",
-        "session_id": "20260605T045353381785Z",
-        "reason": "Recovery/re-aim delivered at 0.197m after the base-controller preflight confirmed active diff-drive control.",
-        "video_url": "/artifacts/session/20260605T045353381785Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T045353381785Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T045353381785Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T045353381785Z/visual/keyframe_review_contact_sheet.png"
+        "session_id": "20260605T092835363811Z",
+        "reason": "High-risk recovery/re-aim delivered at 0.196m with coherent setup/contact/delivery frames.",
+        "video_url": "/artifacts/session/20260605T092835363811Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T092835363811Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T092835363811Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T092835363811Z/visual/keyframe_review_contact_sheet.png"
       },
       {
-        "label": "Promotion Nav2 scene 05",
-        "route": "nav2_reposition_first",
-        "session_id": "20260605T043533818886Z",
-        "reason": "Nav2/reposition-first delivered at 0.194m with clean execution.",
-        "video_url": "/artifacts/session/20260605T043533818886Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T043533818886Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T043533818886Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T043533818886Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Promotion fetch-ready scene 07",
-        "route": "fetch_ready_local",
-        "session_id": "20260605T043754318373Z",
-        "reason": "Local fetch delivered at 0.194m with clean execution.",
-        "video_url": "/artifacts/session/20260605T043754318373Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T043754318373Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T043754318373Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T043754318373Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Promotion fetch-ready scene 08",
-        "route": "fetch_ready_local",
-        "session_id": "20260605T043944737777Z",
-        "reason": "Local fetch delivered at 0.195m with the smoothing default active for the watch row.",
-        "video_url": "/artifacts/session/20260605T043944737777Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T043944737777Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T043944737777Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T043944737777Z/visual/keyframe_review_contact_sheet.png"
-      },
-      {
-        "label": "Promotion recovery/re-aim scene 09",
+        "label": "Rough recovery scene 15",
         "route": "recovery_or_reaim",
-        "session_id": "20260605T044138776739Z",
-        "reason": "High-debt recovery/re-aim delivered at 0.194m with clean execution.",
-        "video_url": "/artifacts/session/20260605T044138776739Z/visual/raw_camera_browser.mp4",
-        "topdown_url": "/artifacts/session/20260605T044138776739Z/visual/topdown_telemetry_browser.mp4",
-        "world_url": "/artifacts/session/20260605T044138776739Z/visual/world_stream.mp4",
-        "contact_sheet_url": "/artifacts/session/20260605T044138776739Z/visual/keyframe_review_contact_sheet.png"
+        "session_id": "20260605T093705334876Z",
+        "reason": "High-risk recovery/re-aim delivered at 0.195m and kept the ball visible through contact and terminal delivery.",
+        "video_url": "/artifacts/session/20260605T093705334876Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T093705334876Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T093705334876Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T093705334876Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Rough recovery scene 13",
+        "route": "recovery_or_reaim",
+        "session_id": "20260605T094215911302Z",
+        "reason": "High-risk recovery/re-aim delivered at 0.195m after the longest setup-heavy sequence in the set.",
+        "video_url": "/artifacts/session/20260605T094215911302Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T094215911302Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T094215911302Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T094215911302Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Rough Nav2 scene 12",
+        "route": "nav2_reposition_first",
+        "session_id": "20260605T094947648537Z",
+        "reason": "Nav2-first setup delivered at 0.196m with local fetch closing the corridor cleanly.",
+        "video_url": "/artifacts/session/20260605T094947648537Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T094947648537Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T094947648537Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T094947648537Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Rough Nav2 scene 18",
+        "route": "nav2_reposition_first",
+        "session_id": "20260605T095216418466Z",
+        "reason": "Nav2-first setup delivered at 0.195m with visible ball arrival in the delivery circle.",
+        "video_url": "/artifacts/session/20260605T095216418466Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T095216418466Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T095216418466Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T095216418466Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Rough Nav2 scene 17",
+        "route": "nav2_reposition_first",
+        "session_id": "20260605T095435354525Z",
+        "reason": "Nav2-first setup delivered at 0.198m and preserved a readable handoff to local contact.",
+        "video_url": "/artifacts/session/20260605T095435354525Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T095435354525Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T095435354525Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T095435354525Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Rough fetch-ready scene 06",
+        "route": "fetch_ready_local",
+        "session_id": "20260605T095638909786Z",
+        "reason": "Direct local fetch delivered at 0.195m from a medium-risk predicted contact row.",
+        "video_url": "/artifacts/session/20260605T095638909786Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T095638909786Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T095638909786Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T095638909786Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Rough fetch-ready scene 25",
+        "route": "fetch_ready_local",
+        "session_id": "20260605T095836646728Z",
+        "reason": "Direct local fetch delivered at 0.196m from a low-risk row.",
+        "video_url": "/artifacts/session/20260605T095836646728Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T095836646728Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T095836646728Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T095836646728Z/visual/keyframe_review_contact_sheet.png"
+      },
+      {
+        "label": "Rough fetch-ready scene 08",
+        "route": "fetch_ready_local",
+        "session_id": "20260605T100026696094Z",
+        "reason": "Direct local fetch delivered at 0.196m with predicted clean contact quality.",
+        "video_url": "/artifacts/session/20260605T100026696094Z/visual/raw_camera_browser.mp4",
+        "topdown_url": "/artifacts/session/20260605T100026696094Z/visual/topdown_telemetry_browser.mp4",
+        "world_url": "/artifacts/session/20260605T100026696094Z/visual/world_stream.mp4",
+        "contact_sheet_url": "/artifacts/session/20260605T100026696094Z/visual/keyframe_review_contact_sheet.png"
       }
     ],
     "review_checklist": [
-      "Start with scene03 recovery because it proves the controller-preflight fix and repaired no-motion false start.",
-      "Review both Nav2 clips to confirm long setup remains useful while local fetch closes delivery.",
-      "Review both fetch-ready clips to confirm direct line contact and terminal delivery stay clean after smoothing.",
-      "Review scene09 for the hard recovery/re-aim shape with large initial setup debt.",
-      "Confirm every sample has onboard, topdown, world-stream, and keyframe contact-sheet evidence."
+      "Start with the three recovery/re-aim rows because they carry the highest setup debt and prove the rougher route owner path.",
+      "Review the three Nav2-first rows to confirm Nav2 setup remains useful while local fetch closes the delivery.",
+      "Review the three fetch-ready rows to compare direct line contact against the setup-heavy routes.",
+      "Confirm each row has onboard, topdown, world-stream, and keyframe contact-sheet evidence.",
+      "Keep this package at visual UAT status until provider-backed LLM routing and physical/onboard proof are recorded."
     ],
     "links": [
       {
-        "label": "Promotion parent scorecard",
-        "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
+        "label": "Seed 20260639 parent scorecard",
+        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
       },
       {
-        "label": "Promotion replay scorecard",
-        "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605_replay/fetch_planner_route_replay_batch/scorecard.md"
+        "label": "Seed 20260639 replay scorecard",
+        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md"
       },
       {
-        "label": "Promotion analyzer scorecard",
-        "url": "/artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
+        "label": "Seed 20260639 analyzer scorecard",
+        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
       },
       {
-        "label": "Provider-backed planner child scorecard",
-        "url": "/artifacts/session/dry_supervised_provider_planner_seeded_generalization_gate_seed20260635_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
+        "label": "Seed 20260639 planner scorecard",
+        "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
       }
     ]
   }

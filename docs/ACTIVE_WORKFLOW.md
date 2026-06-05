@@ -647,6 +647,38 @@ June 5, 2026 seed20260637 breadth UAT:
   unavailable, so provider-backed LLM routing and physical/onboard proof remain
   open.
 
+June 5, 2026 seed20260639 rough breadth UAT:
+
+- Command:
+  `python scripts\fetch_planner_seeded_generalization_gate.py --campaign-id live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605 --seed 20260639 --random-cases 30 --planner-mode llm_supervised_guarded --quality-order roughest --max-per-route 3 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail`
+- Parent scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Replay scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260639_rough_breadth_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: parent gate `pass=true`, `random_cases=30`,
+  `wrong_fetch_dispatch_count=0`, executable replay `9/9`, visual packages
+  `9/9`, analyzer execution/setup/contact clean, and first-contact blockers
+  `0`.
+- Route coverage: replay selected three `recovery_or_reaim`, three
+  `nav2_reposition_first`, and three `fetch_ready_local` rows. The planner
+  route mix also held five `ambiguous_or_unsafe_no_go` and seven
+  `scan_or_perceive_first` scenes for route-withholding coverage.
+- Risk coverage: selected rows included three high-risk recovery rows, four
+  medium-risk rows, and two low-risk fetch-ready rows. Closest approaches
+  stayed in `0.194m..0.198m` inside the `0.300m` contract.
+- Visual review: inspected all nine raw-camera/topdown keyframe sheets. The
+  onboard camera and topdown geometry agreed through setup, first contact,
+  push, and terminal delivery.
+- Startup default proof: this command omitted `--env-ready-timeout-s` and still
+  passed the full roughest-row gate under the new `600s` default. Treat the
+  seed20260638 startup timeout as cleared infrastructure debt unless it
+  reproduces under the default.
+- Claim boundary: this is rough sim-gate route-owner UAT. Planner authority ran
+  through deterministic fallback because `OPENAI_API_KEY` was unavailable, so
+  provider-backed LLM routing and physical/onboard proof remain open.
+
 June 5, 2026 seed20260638 rough breadth UAT:
 
 - Command:
