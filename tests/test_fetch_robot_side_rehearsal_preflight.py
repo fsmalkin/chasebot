@@ -61,6 +61,7 @@ def test_robot_side_preflight_ready_without_claiming_hardware_proof(tmp_path: Pa
     assert summary["promotion_evidence"] is False
     assert "control_preflight.json" in summary["required_robot_side_artifacts"][0]
     assert any("fetch_hardware_rehearsal_runner.py" in command for command in summary["next_commands"])
+    assert any("seed20260643_mixed_all_routes_rehearsal" in command for command in summary["next_commands"])
 
 
 def test_robot_side_preflight_fails_closed_when_readiness_is_stale(tmp_path: Path):

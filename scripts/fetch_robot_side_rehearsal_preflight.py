@@ -17,11 +17,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 PREFLIGHT_KIND = "fetch_robot_side_rehearsal_preflight"
 DEFAULT_READINESS_SUMMARY = (
-    "artifacts/session/analysis_fetch_hardware_transfer_readiness_post_seed_rehearsal_20260605_fixed/"
+    "artifacts/session/analysis_fetch_hardware_transfer_readiness_seed20260643_mixed_all_routes_20260605/"
     "fetch_hardware_transfer_readiness/hardware_transfer_readiness_summary.json"
 )
 DEFAULT_REHEARSAL_PLAN = (
-    "artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/"
+    "artifacts/session/analysis_fetch_hardware_rehearsal_plan_seed20260643_20260605/"
     "fetch_hardware_rehearsal_plan/hardware_rehearsal_plan_summary.json"
 )
 DEFAULT_DASHBOARD_URL = "http://100.112.221.6:8883"
@@ -167,7 +167,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
             "powershell -ExecutionPolicy Bypass -File scripts/sync_runtime_workspace.ps1 -Distro Ubuntu-24.04 -WorkspacePath '~/ros2_ws' -SkipBuild -RosDistro kilted",
             "python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_runtime_stack_smoke_20260605 --step-id runtime_stack_smoke --execute --timeout-s 1800",
             "python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_saved_anchors_20260605 --step-id saved_anchor_one_run_fetch_rehearsal --execute --timeout-s 2400",
-            "python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_seed20260635_20260605 --step-id seed20260635_mixed_route_fetch_rehearsal --execute --timeout-s 3600",
+            "python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_seed20260643_mixed_all_routes_20260605 --step-id seed20260643_mixed_all_routes_rehearsal --execute --timeout-s 3600",
         ],
         "claim_boundary": (
             "This preflight proves the local run package is ready to attempt robot-side rehearsal. "

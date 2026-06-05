@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 1:08 PM ET",
+  "updated_label": "Updated June 5, 2026, 9:29 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Mixed all-routes seed 20260643 is green",
-  "status_detail": "Seed 20260643 now proves the full planner route surface in the latest broad package. The expanded planner classified 50 scenes with zero wrong fetch dispatches, and the mixed replay selected two rows per route family. Executable routes delivered 6/6, planner-only scan/no-go routes withheld local fetch 4/4, and all 10 visual packages passed. I inspected the four planner-only keyframe sheets plus representative executable sheets; visuals matched route contracts. Provider-backed LLM routing and physical/onboard proof remain open.",
+  "status_label": "Robot-side seed 20260643 runbook is ready",
+  "status_detail": "Seed 20260643 now carries the hardware-transfer bridge. The active runbook uses the mixed all-routes planner surface: fetch-ready, Nav2-first, recovery/re-aim, scan/perceive, and no-go route owners. Local preflight is green and hardware_proven remains false until physical/onboard execution records controller preflight, raw-camera/context video, keyframe review, onboard TensorRT evidence, and field-physics proof.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,42 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Seed 20260643 robot-side runbook is ready",
+      "status": "local preflight green; five-route hardware rehearsal command generated",
+      "tone": "green",
+      "summary": "The current mixed all-routes proof now flows into the robot-side rehearsal package. Hardware-transfer readiness, the rehearsal plan, the runner preflight, and the robot-side preflight all pass while preserving hardware_proven=false. The final rehearsal step replays seed20260643 across fetch_ready_local, nav2_reposition_first, recovery_or_reaim, scan_or_perceive_first, and ambiguous_or_unsafe_no_go so physical proof covers both action and abstention routes.",
+      "metrics": [
+        "Hardware-transfer readiness: pass=true; hardware_transfer_ready=true; hardware_proven=false",
+        "Rehearsal plan: pass=true; step ids runtime_stack_smoke, saved_anchor_one_run_fetch_rehearsal, seed20260643_mixed_all_routes_rehearsal",
+        "Runner preflight: pass=true; all planned step commands resolve",
+        "Robot-side preflight: pass=true; local_preflight_ready=true; hardware_connected=false; hardware_proven=false",
+        "Next robot-side sequence: dashboard service, runtime sync, stack smoke, saved anchors, seed20260643 mixed all-routes rehearsal",
+        "Claim boundary: provider-backed LLM routing and physical/onboard proof remain open"
+      ],
+      "links": [
+        {
+          "label": "Robot-side preflight scorecard",
+          "url": "/artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_seed20260643_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md"
+        },
+        {
+          "label": "Hardware rehearsal plan scorecard",
+          "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_plan_seed20260643_20260605/fetch_hardware_rehearsal_plan/scorecard.md"
+        },
+        {
+          "label": "Hardware rehearsal runner preflight scorecard",
+          "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_runner_seed20260643_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "Hardware-transfer readiness scorecard",
+          "url": "/artifacts/session/analysis_fetch_hardware_transfer_readiness_seed20260643_mixed_all_routes_20260605/fetch_hardware_transfer_readiness/scorecard.md"
+        },
+        {
+          "label": "Mixed all-routes UAT scorecard",
+          "url": "/artifacts/session/live_planner_seed20260643_mixed_route_family_allroutes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        }
+      ]
+    },
     {
       "title": "Seed 20260643 mixed all-routes UAT is green",
       "status": "full route surface: 10/10 route success with visual packages",
@@ -1018,14 +1054,14 @@
     },
     {
       "title": "Fresh rehearsal ladder is green",
-      "status": "stack smoke, saved anchors, and seed20260635 mixed-route replay passed with visual review",
+      "status": "stack smoke, saved anchors, and seed20260635 sim-gate replay passed; active runbook refreshed to seed20260643",
       "tone": "green",
-      "summary": "The full rehearsal ladder has been rerun after the robot-side preflight. Runtime stack smoke passed under container_kilted with robot_fidelity_orin and tensorrt_int8, saved anchors passed 3/3, and seed20260635 mixed-route replay passed 6/6 across fetch-ready, Nav2-first, and recovery/re-aim route owners. I inspected the D415 raw and YOLO debug screenshots plus all nine fetch keyframe sheets; the onboard camera and topdown geometry agree through setup, first contact, push, and terminal delivery. The remaining milestone gap is physical/onboard hardware proof.",
+      "summary": "The full earlier rehearsal ladder passed after preflight. Runtime stack smoke passed under container_kilted with robot_fidelity_orin and tensorrt_int8, saved anchors passed 3/3, and seed20260635 executable-route replay passed 6/6 across fetch-ready, Nav2-first, and recovery/re-aim route owners. I inspected the D415 raw and YOLO debug screenshots plus all nine fetch keyframe sheets. This remains historical sim-gate rehearsal proof; the active physical/onboard runbook now uses seed20260643 mixed all-routes coverage.",
       "metrics": [
         "Runtime stack smoke: pass=true; session=20260605T065010Z; coordinate UAT pass=true; detection_success_rate=1.0; inference_device=cuda:0",
         "Saved anchors: selected=3; mission_pass=3; visual_package_pass=3; closest=0.197m for left05/right05/zero",
         "Seed20260635 replay: random_cases=30; selected=6; mission_pass=6; visual_package_pass=6; analyzer execution/setup/contact clean",
-        "Route coverage: saved anchors cover fetch_ready_local and recovery_or_reaim; seed replay covers fetch_ready_local, nav2_reposition_first, and recovery_or_reaim",
+        "Current bridge: seed20260643 mixed all-routes runbook covers fetch-ready, Nav2-first, recovery/re-aim, scan/perceive, and no-go routes",
         "Visual review: inspected stack-smoke raw/debug screenshots, three saved-anchor keyframe sheets, and six seed keyframe sheets",
         "Claim boundary: hardware_proven=false; physical camera, onboard TensorRT on the robot, and field physics remain open gates"
       ],
@@ -1090,33 +1126,33 @@
     },
     {
       "title": "Robot-side rehearsal preflight is ready",
-      "status": "local run package ready; hardware proof still open",
+      "status": "local run package ready on seed20260643 all-routes plan; hardware proof still open",
       "tone": "green",
-      "summary": "The next hardware-transfer rung now has an executable preflight and runbook. It verifies the post-seed hardware-transfer readiness summary, the rehearsal plan, required local commands, dashboard serving, runtime workspace sync, stack-smoke script, saved-anchor runner, and seed20260635 mixed-route runner. This is the correct bridge from green simulation rehearsal to physical/onboard proof: the package is ready to attempt, while hardware_connected and hardware_proven remain false until the robot-side artifacts exist.",
+      "summary": "The hardware-transfer bridge now points at the seed20260643 mixed all-routes rehearsal plan. It verifies the current readiness summary, rehearsal plan, required local commands, dashboard serving, runtime sync, stack-smoke script, saved-anchor runner, and the seed20260643 five-route runner. The package is ready to attempt on the robot while hardware_connected and hardware_proven remain false until robot-side artifacts exist.",
       "metrics": [
         "Preflight: pass=true; local_preflight_ready=true; issues=[]",
         "Claim boundary: hardware_connected=false; hardware_proven=false; promotion_evidence=false",
         "Command checks: python, powershell, and git resolve locally",
         "Script checks: dashboard service, runtime sync, first UAT, hardware runner, replay batch, and seeded gate scripts exist",
         "Required robot-side artifacts: control_preflight.json, mission_verdict.json, raw_camera/topdown/world videos, keyframe sheet, visual review notes",
-        "Next robot-side sequence: dashboard service, runtime sync, runtime stack smoke, saved anchors, seed20260635 mixed-route rehearsal"
+        "Next robot-side sequence: dashboard service, runtime sync, runtime stack smoke, saved anchors, seed20260643 mixed all-routes rehearsal"
       ],
       "links": [
         {
           "label": "Robot-side preflight scorecard",
-          "url": "/artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md"
+          "url": "/artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_seed20260643_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md"
         },
         {
           "label": "Robot-side preflight summary",
-          "url": "/artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/robot_side_rehearsal_preflight_summary.json"
+          "url": "/artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_seed20260643_20260605/fetch_robot_side_rehearsal_preflight/robot_side_rehearsal_preflight_summary.json"
         },
         {
-          "label": "Post-seed hardware-transfer readiness scorecard",
-          "url": "/artifacts/session/analysis_fetch_hardware_transfer_readiness_post_seed_rehearsal_20260605_fixed/fetch_hardware_transfer_readiness/scorecard.md"
+          "label": "Seed20260643 hardware-transfer readiness scorecard",
+          "url": "/artifacts/session/analysis_fetch_hardware_transfer_readiness_seed20260643_mixed_all_routes_20260605/fetch_hardware_transfer_readiness/scorecard.md"
         },
         {
-          "label": "Hardware rehearsal plan scorecard",
-          "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/fetch_hardware_rehearsal_plan/scorecard.md"
+          "label": "Seed20260643 hardware rehearsal plan scorecard",
+          "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_plan_seed20260643_20260605/fetch_hardware_rehearsal_plan/scorecard.md"
         }
       ]
     },
@@ -1307,13 +1343,11 @@
       "title": "Hardware rehearsal run plan is ready",
       "status": "three-step robot-side rehearsal contract generated",
       "tone": "green",
-      "summary": "The hardware rehearsal plan now turns the readiness package into executable next steps. It starts with a robot_fidelity_orin/tensorrt_int8 stack smoke, then runs the saved anchors through the planner-routed fetch stack, then repeats the seed20260635 mixed-route sample across fetch-ready, Nav2-first, and recovery/re-aim owners. The plan keeps hardware_proven=false until robot-side execution records the required visual and runtime artifacts.",
+      "summary": "The original hardware rehearsal plan converted the readiness package into executable sim-gate steps: stack smoke, saved anchors, and the seed20260635 executable-route sample. That plan remains historical launch-readiness evidence. The active robot-side runbook now points at seed20260643 mixed all-routes coverage so physical proof can cover action and abstention routes.",
       "metrics": [
-        "Plan analyzer: pass=true; hardware_rehearsal_plan_ready=true; hardware_proven=false",
-        "Step 1: runtime stack smoke with run_first_uat.ps1 using robot_fidelity_orin and tensorrt_int8",
-        "Step 2: saved-anchor one-run rehearsal for zero, left05, and right05 with control preflight and browser-watchable video",
-        "Step 3: seed20260635 mixed-route rehearsal with two samples per executable route family",
-        "Visual review phases: start/setup, pre-contact, first contact, mid-push/coast, terminal arrival, and final rest"
+        "Historical plan: runtime stack smoke, saved anchors, seed20260635 executable-route sample",
+        "Current plan: seed20260643 mixed all-routes rehearsal after stack smoke and saved anchors",
+        "Claim boundary: hardware_proven=false until robot-side visual/runtime artifacts exist"
       ],
       "links": [
         {
@@ -5425,8 +5459,8 @@
   ],
   "next_steps": [
     "Rerun the seed20260643 mixed all-routes gate with provider-backed LLM routing once OPENAI_API_KEY is available, then compare route agreement and veto reasons against deterministic fallback.",
-    "Carry the mixed all-routes route surface into physical/onboard proof: execute fetch-ready/Nav2/recovery rows and visibly withhold fetch for scan/no-go rows.",
-    "Run the physical/onboard hardware proof for the same ladder, starting with stack smoke and raw-camera/YOLO visual review.",
+    "Execute the robot-side seed20260643 runbook: dashboard service, runtime sync, runtime stack smoke, saved anchors, then mixed all-routes route rehearsal.",
+    "Inspect raw_camera, topdown_telemetry, world_stream, and keyframe sheets across each robot-side run before trusting telemetry.",
     "Keep hardware_proven=false until physical robot execution, onboard TensorRT, physical camera evidence, and field-physics proof are recorded."
   ],
   "uat_review_bundle": {

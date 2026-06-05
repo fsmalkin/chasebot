@@ -534,8 +534,9 @@ June 5, 2026 saved-anchor fetch rehearsal:
   sheets. All three show coherent setup, first contact, push, and delivery
   circle arrival that matches topdown geometry.
 - Evidence meaning: saved-anchor fetch rehearsal is green with browser-watchable
-  onboard/context videos. The next rehearsal step is seed20260635 mixed-route
-  execution.
+  onboard/context videos. This fed the completed seed20260635 executable-route
+  rehearsal; the active robot-side runbook now uses seed20260643 mixed
+  all-routes coverage.
 
 June 5, 2026 seed20260635 mixed-route hardware rehearsal:
 
@@ -556,18 +557,22 @@ June 5, 2026 seed20260635 mixed-route hardware rehearsal:
   sequence matches the telemetry across setup, first contact, push, and
   terminal delivery.
 - Claim boundary: this is a green hardware-rehearsal simulation package with
-  `promotion_evidence=false` and `hardware_proven=false`. The next milestone
-  step is robot-side execution with onboard camera proof and the same runner
-  artifact contract.
+  `promotion_evidence=false` and `hardware_proven=false`. It remains historical
+  sim-gate rehearsal proof; the next robot-side attempt uses the seed20260643
+  mixed all-routes runbook with the same artifact contract.
 
-June 5, 2026 robot-side rehearsal preflight:
+June 5, 2026 seed20260643 robot-side runbook refresh:
 
 - Command:
-  `python scripts\fetch_robot_side_rehearsal_preflight.py --campaign-id analysis_fetch_robot_side_rehearsal_preflight_20260605`
+  `python scripts\fetch_robot_side_rehearsal_preflight.py --campaign-id analysis_fetch_robot_side_rehearsal_preflight_seed20260643_20260605`
 - Scorecard:
-  `artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`
+  `artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_seed20260643_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`
 - Refreshed readiness:
-  `artifacts/session/analysis_fetch_hardware_transfer_readiness_post_seed_rehearsal_20260605_fixed/fetch_hardware_transfer_readiness/scorecard.md`
+  `artifacts/session/analysis_fetch_hardware_transfer_readiness_seed20260643_mixed_all_routes_20260605/fetch_hardware_transfer_readiness/scorecard.md`
+- Rehearsal plan:
+  `artifacts/session/analysis_fetch_hardware_rehearsal_plan_seed20260643_20260605/fetch_hardware_rehearsal_plan/scorecard.md`
+- Runner preflight:
+  `artifacts/session/analysis_fetch_hardware_rehearsal_runner_seed20260643_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md`
 - Result: local preflight ready, command/script checks green, `hardware_connected=false`,
   `hardware_proven=false`, and `promotion_evidence=false`.
 - Required robot-side proof: controller preflight with
@@ -576,8 +581,11 @@ June 5, 2026 robot-side rehearsal preflight:
   setup, pre-contact, first contact, mid-push, terminal arrival, and final rest.
 - Evidence meaning: the local run package is ready to attempt robot-side
   rehearsal. Hardware proof starts with onboard execution of the stack smoke,
-  then saved anchors, then seed20260635 mixed-route rehearsal under the same
-  artifact contract.
+  then saved anchors, then seed20260643 mixed all-routes rehearsal under the
+  same artifact contract. The mixed route step covers `fetch_ready_local`,
+  `nav2_reposition_first`, `recovery_or_reaim`, `scan_or_perceive_first`, and
+  `ambiguous_or_unsafe_no_go`, so robot-side proof covers both action and
+  abstention routes.
 
 June 5, 2026 fresh rehearsal ladder:
 
@@ -595,7 +603,9 @@ June 5, 2026 fresh rehearsal ladder:
   saved-anchor keyframe sheets, and all six seed keyframe sheets.
 - Claim boundary: this is fresh sim-gate/runtime-target rehearsal evidence.
   Physical robot execution, onboard TensorRT on the robot, physical camera
-  behavior, and field physics remain the open hardware gates.
+  behavior, and field physics remain the open hardware gates. The active
+  robot-side runbook now uses seed20260643 mixed all-routes coverage for the
+  next physical/onboard attempt.
 
 June 5, 2026 seed20260636 breadth UAT:
 

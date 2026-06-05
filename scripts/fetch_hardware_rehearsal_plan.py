@@ -15,7 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 PLAN_KIND = "fetch_hardware_rehearsal_plan"
 DEFAULT_READINESS_SUMMARY = (
-    "artifacts/session/analysis_fetch_hardware_transfer_readiness_20260605/"
+    "artifacts/session/analysis_fetch_hardware_transfer_readiness_seed20260643_mixed_all_routes_20260605/"
     "fetch_hardware_transfer_readiness/hardware_transfer_readiness_summary.json"
 )
 DEFAULT_SAVED_ANCHOR_GATE = (
@@ -23,8 +23,8 @@ DEFAULT_SAVED_ANCHOR_GATE = (
     "fetch_planner_handoff_gate/gate_summary.json"
 )
 DEFAULT_SEEDED_GATE = (
-    "artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605/"
-    "fetch_planner_seeded_generalization_gate/gate_summary.json"
+    "artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605_planner/"
+    "fetch_planner_handoff_gate/gate_summary.json"
 )
 DEFAULT_DASHBOARD_URL = "http://127.0.0.1:8883"
 
@@ -151,22 +151,33 @@ def build_rehearsal_steps(args: argparse.Namespace) -> list[dict[str, Any]]:
             ],
         },
         {
-            "id": "seed20260635_mixed_route_fetch_rehearsal",
-            "purpose": "Repeat the current broad mixed-route seed across Nav2-first, recovery/re-aim, and fetch-ready route owners.",
+            "id": "seed20260643_mixed_all_routes_rehearsal",
+            "purpose": (
+                "Repeat the current broad mixed all-routes seed across fetch-ready, Nav2-first, "
+                "recovery/re-aim, scan/perceive, and no-go route owners."
+            ),
             "owner": "operator",
             "promotion_evidence": False,
             "command": command_text(
                 [
                     "python",
-                    "scripts/fetch_planner_seeded_generalization_gate.py",
+                    "scripts/fetch_planner_route_replay_batch.py",
                     "--campaign-id",
                     str(args.seeded_campaign_id),
-                    "--seed",
-                    "20260635",
-                    "--random-cases",
-                    "30",
-                    "--planner-mode",
-                    "llm_supervised_guarded",
+                    "--gate-summary",
+                    artifact_display_path(args.seeded_gate),
+                    "--route",
+                    "fetch_ready_local",
+                    "--route",
+                    "nav2_reposition_first",
+                    "--route",
+                    "recovery_or_reaim",
+                    "--route",
+                    "scan_or_perceive_first",
+                    "--route",
+                    "ambiguous_or_unsafe_no_go",
+                    "--quality-order",
+                    "roughest",
                     "--max-per-route",
                     "2",
                     "--dashboard-url",
@@ -236,7 +247,11 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "planned_steps": steps,
         "rehearsal_pass_contract": {
             "saved_anchors": "zero/left05/right05 one-run pass with browser-watchable onboard/context video",
-            "seeded_mixed_route": "seed20260635 executable route sample pass across fetch_ready_local, nav2_reposition_first, recovery_or_reaim",
+            "seeded_mixed_route": (
+                "seed20260643 mixed all-routes sample pass across fetch_ready_local, "
+                "nav2_reposition_first, recovery_or_reaim, scan_or_perceive_first, "
+                "and ambiguous_or_unsafe_no_go"
+            ),
             "blocked_claims_until_recorded": [
                 "robot_side_live_rehearsal",
                 "onboard_tensorrt_execution",
@@ -309,7 +324,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seeded-gate", default=DEFAULT_SEEDED_GATE)
     parser.add_argument("--dashboard-url", default=DEFAULT_DASHBOARD_URL)
     parser.add_argument("--saved-anchor-campaign-id", default="hardware_rehearsal_saved_anchors_20260605")
-    parser.add_argument("--seeded-campaign-id", default="hardware_rehearsal_seed20260635_20260605")
+    parser.add_argument("--seeded-campaign-id", default="hardware_rehearsal_seed20260643_mixed_all_routes_20260605")
     return parser.parse_args()
 
 

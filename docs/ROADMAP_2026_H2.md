@@ -1396,12 +1396,13 @@ frame-sequence review. Preserve seed `20260635`, the smoothed seed `20260634`
 rough analyzer, saved-anchor repeatability, and the hard mixed matrix before
 the next moonshot.
 
-The robot-side rehearsal now has a generated run plan:
+The earlier robot-side rehearsal package has a generated run plan:
 `artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/fetch_hardware_rehearsal_plan/scorecard.md`.
-Run the stack smoke first, then the saved-anchor fetch rehearsal, then the
-seed20260635 mixed-route rehearsal. Keep `hardware_proven=false` until those
+It sequenced the stack smoke first, then the saved-anchor fetch rehearsal, then a
+seed20260635 executable-route sample. Keep `hardware_proven=false` until those
 robot-side runs produce the required controller, mission, video, and keyframe
-artifacts.
+artifacts. This is historical plan evidence; the active robot-side runbook is
+now refreshed to seed20260643 mixed all-routes coverage.
 
 The rehearsal plan also has a green runner preflight:
 `artifacts/session/analysis_fetch_hardware_rehearsal_runner_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
@@ -1419,9 +1420,9 @@ video.
 The saved-anchor fetch rehearsal is now green:
 `artifacts/session/live_fetch_hardware_rehearsal_saved_anchors_batch_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
 The batch delivered `left05`, `right05`, and `zero` with `3/3` mission passes
-and `3/3` visual packages. The next roadmap action is seed20260635 mixed-route
-rehearsal with two rows each across fetch-ready, Nav2-first, and
-recovery/re-aim execution.
+and `3/3` visual packages. This fed the completed seed20260635 executable-route
+rehearsal; the active roadmap action now carries seed20260643 mixed all-routes
+coverage into robot-side execution.
 
 The seed20260635 mixed-route hardware rehearsal is now green:
 `artifacts/session/live_fetch_hardware_rehearsal_seed20260635_mixed_route_contract_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
@@ -1434,14 +1435,18 @@ and delivery. The next roadmap action is robot-side onboard execution under the
 same artifact contract; `hardware_proven=false` remains in force until that
 evidence exists.
 
-The robot-side rehearsal preflight is now green:
-`artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`.
-It verifies the refreshed readiness summary, rehearsal plan, dashboard service,
-runtime sync, stack-smoke script, saved-anchor runner, seed20260635 runner, and
-local command availability. The roadmap action is now the first robot-side stack
-smoke with onboard/context artifact review; saved anchors and seed20260635
-mixed-route execution follow only after that stack smoke records the required
-robot-side evidence. `hardware_proven=false` remains the active boundary.
+The seed20260643 robot-side runbook is now green:
+`artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_seed20260643_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`.
+It verifies the refreshed readiness summary at
+`artifacts/session/analysis_fetch_hardware_transfer_readiness_seed20260643_mixed_all_routes_20260605/fetch_hardware_transfer_readiness/scorecard.md`,
+the current rehearsal plan at
+`artifacts/session/analysis_fetch_hardware_rehearsal_plan_seed20260643_20260605/fetch_hardware_rehearsal_plan/scorecard.md`,
+dashboard service, runtime sync, stack-smoke script, saved-anchor runner,
+seed20260643 mixed all-routes runner, and local command availability. The
+roadmap action is now the first robot-side stack smoke with onboard/context
+artifact review; saved anchors and seed20260643 mixed all-routes execution
+follow only after that stack smoke records the required robot-side evidence.
+`hardware_proven=false` remains the active boundary.
 
 The fresh rehearsal ladder is now green on the sim-gate runtime target:
 `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
@@ -1451,7 +1456,9 @@ and
 Stack smoke, saved anchors, and seed20260635 mixed-route replay all passed with
 browser-watchable evidence and visual keyframe review. The roadmap now advances
 to physical/onboard execution of the same ladder, while `hardware_proven=false`
-continues to protect the field-transfer claim.
+continues to protect the field-transfer claim. The active physical/onboard
+runbook has been refreshed to seed20260643 mixed all-routes coverage; the
+seed20260635 ladder remains historical sim-gate rehearsal proof.
 
 Seed20260636 broadens the current route-owner UAT proof:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260636_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

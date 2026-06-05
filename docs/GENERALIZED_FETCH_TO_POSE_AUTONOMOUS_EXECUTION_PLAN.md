@@ -437,16 +437,18 @@ The plan starts with `run_first_uat.ps1` under `robot_fidelity_orin` and
 stack, then repeats the seed20260635 mixed-route sample. It requires
 base-controller preflight, mission verdicts, onboard raw-camera video,
 topdown/world context, and keyframe sequence review before the hardware claim
-advances beyond rehearsal-ready.
+advances beyond rehearsal-ready. This is historical plan evidence; the active
+robot-side runbook is now refreshed to seed20260643 mixed all-routes coverage.
 
-June 5 hardware rehearsal runner preflight: the three-step plan now has a
+June 5 hardware rehearsal runner preflight: the earlier three-step plan has a
 runner preflight artifact:
 `artifacts/session/analysis_fetch_hardware_rehearsal_runner_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
 It verifies that the `runtime_stack_smoke`, saved-anchor rehearsal, and
-seed20260635 mixed-route rehearsal commands resolve locally, then names
+seed20260635 executable-route sample commands resolve locally, then names
 `execute_runtime_stack_smoke` as the next action. This is launch readiness; the
-hardware proof boundary remains open until the stack smoke produces visual and
-runtime artifacts.
+hardware proof boundary remains open until robot-side runs produce visual and
+runtime artifacts. The current runner preflight is refreshed under the
+seed20260643 mixed all-routes runbook.
 
 June 5 runtime stack smoke execution: the first hardware-rehearsal step now
 passes with artifact-contract validation:
@@ -467,9 +469,9 @@ The replay batch scorecard is
 Saved-anchor `left05`, `right05`, and `zero` passed `3/3` with browser-playable
 raw-camera/topdown/world videos, keyframe contact sheets, control preflight, and
 mission verdict artifacts. Visual review matched telemetry for setup, first
-contact, push, and delivery-circle arrival. The remaining rehearsal step is
-seed20260635 mixed-route execution across fetch-ready, Nav2-first, and
-recovery/re-aim owners.
+contact, push, and delivery-circle arrival. This fed the completed seed20260635
+executable-route rehearsal; the active robot-side runbook now carries
+seed20260643 mixed all-routes coverage.
 
 June 5 seed20260635 mixed-route hardware rehearsal: the third
 hardware-rehearsal step is green:
@@ -486,21 +488,29 @@ analyzer reports clean execution, setup, and contact quality. Visual review
 inspected all six raw/topdown keyframe sheets and found the same story in the
 camera and telemetry: setup, first contact, push, and terminal delivery. This
 clears the current rehearsal ladder in simulation while keeping
-`hardware_proven=false`; the next milestone step is robot-side execution with
-onboard camera proof under the same artifact contract.
+`hardware_proven=false`; it is now historical sim-gate rehearsal evidence. The
+next milestone step is robot-side execution of the seed20260643 mixed
+all-routes runbook with onboard camera proof under the same artifact contract.
 
-June 5 robot-side rehearsal preflight: the hardware-transfer bridge now has a
+June 5 seed20260643 robot-side runbook refresh: the hardware-transfer bridge now has a
 local runbook artifact:
-`artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`.
+`artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_seed20260643_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`.
 The refreshed hardware-transfer readiness scorecard is
-`artifacts/session/analysis_fetch_hardware_transfer_readiness_post_seed_rehearsal_20260605_fixed/fetch_hardware_transfer_readiness/scorecard.md`.
+`artifacts/session/analysis_fetch_hardware_transfer_readiness_seed20260643_mixed_all_routes_20260605/fetch_hardware_transfer_readiness/scorecard.md`.
+The current rehearsal plan is
+`artifacts/session/analysis_fetch_hardware_rehearsal_plan_seed20260643_20260605/fetch_hardware_rehearsal_plan/scorecard.md`,
+and the runner preflight is
+`artifacts/session/analysis_fetch_hardware_rehearsal_runner_seed20260643_preflight_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
 The preflight verifies the readiness summary, rehearsal plan, dashboard service,
-runtime sync, stack-smoke script, saved-anchor runner, seed20260635 runner, and
-required local commands. It reports `local_preflight_ready=true` while keeping
-`hardware_connected=false`, `hardware_proven=false`, and
-`promotion_evidence=false`. The next execution step is robot-side stack smoke,
-followed by saved anchors and seed20260635 mixed-route rehearsal only after
-onboard raw-camera/context artifacts are available for sequence review.
+runtime sync, stack-smoke script, saved-anchor runner, seed20260643 mixed
+all-routes runner, and required local commands. It reports
+`local_preflight_ready=true` while keeping `hardware_connected=false`,
+`hardware_proven=false`, and `promotion_evidence=false`. The next execution
+step is robot-side stack smoke, followed by saved anchors and seed20260643
+mixed all-routes rehearsal only after onboard raw-camera/context artifacts are
+available for sequence review. That final step covers `fetch_ready_local`,
+`nav2_reposition_first`, `recovery_or_reaim`, `scan_or_perceive_first`, and
+`ambiguous_or_unsafe_no_go`.
 
 June 5 fresh rehearsal ladder: the full runner sequence now passes on the
 `robot_fidelity_orin` / `tensorrt_int8` sim-gate runtime target:
@@ -515,6 +525,8 @@ saved-anchor keyframe sheets, and six seed keyframe sheets. Treat this as the
 current browser-watchable rehearsal proof while preserving the hardware claim
 boundary: physical robot execution, onboard TensorRT on the robot, physical
 camera behavior, and field physics remain open.
+The active physical/onboard runbook now uses the seed20260643 mixed all-routes
+surface; the seed20260635 ladder remains historical sim-gate rehearsal proof.
 
 June 5 seed20260636 breadth UAT: the current route-owner stack now has a
 second fresh broad seeded pass at

@@ -62,8 +62,8 @@ def _green_dashboard(path: Path) -> Path:
     return _write_json(
         path,
         {
-            "status_label": "Promotion green on supervised seed 20260635",
-            "status_detail": "seed 20260635 passed with browser-watchable evidence",
+            "status_label": "Mixed all-routes seed 20260643 is green",
+            "status_detail": "seed 20260643 passed with browser-watchable evidence",
             "uat_review_bundle": {
                 "route_samples": [
                     {
@@ -146,6 +146,7 @@ def test_hardware_transfer_readiness_accepts_hardware_rehearsal_dashboard_status
 
     assert summary["pass"] is True
     assert summary["dashboard_plan"]["status_label"] == "Hardware rehearsal green through seed 20260635"
+    assert "seed20260643" in summary["required_next_rehearsal"]["minimum_live_contract"]
 
 
 def test_hardware_transfer_readiness_fails_closed_when_visual_package_is_missing(tmp_path: Path):

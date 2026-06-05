@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 RUNNER_KIND = "fetch_hardware_rehearsal_runner"
 DEFAULT_PLAN_SUMMARY = (
-    "artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/"
+    "artifacts/session/analysis_fetch_hardware_rehearsal_plan_seed20260643_20260605/"
     "fetch_hardware_rehearsal_plan/hardware_rehearsal_plan_summary.json"
 )
 
