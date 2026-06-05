@@ -178,32 +178,37 @@
     },
     {
       "title": "Milestone readiness rollup is UAT-ready",
-      "status": "sim-gate/operator UAT green; provider-backed LLM routing and physical/onboard proof still pending",
+      "status": "sim/operator UAT green with geometry breadth and watchlist proof; provider-backed LLM routing and physical/onboard proof still pending",
       "tone": "green",
-      "summary": "The milestone readiness rollup combines the three-seed deterministic breadth floor, current dashboard visual-evidence audit, provider rerun preflight/comparison, and seed20260648 robot-fidelity hardware rehearsal. It reports operator_uat_ready=true with 300 planner scenes, 27 executable visual deliveries, 15 browser-watchable current UAT samples, and hardware_transfer_ready=true. It keeps milestone_complete=false because OPENAI_API_KEY is missing for provider-backed LLM routing and hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
+      "summary": "The milestone readiness rollup now consumes the current proof stack: three-seed deterministic breadth, planner geometry breadth, the 15-item operator UAT watchlist, the 8-card dashboard visual-evidence audit, provider rerun preflight/comparison, and seed20260648 robot-fidelity hardware rehearsal. It reports operator_uat_ready=true with 300 planner scenes, all five route families, all major setup flags, 15 browser-watchable current UAT samples, and hardware_transfer_ready=true. It keeps milestone_complete=false because OPENAI_API_KEY is missing for provider-backed LLM routing and hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
       "metrics": [
         "Milestone audit: pass=true; operator_uat_ready=true; milestone_complete=false",
-        "Green evidence: three-seed deterministic breadth rollup, dashboard visual evidence audit, seed20260648 robot-fidelity hardware rehearsal",
+        "Green evidence: three-seed deterministic breadth rollup, planner geometry breadth, operator UAT watchlist, dashboard visual evidence audit, seed20260648 robot-fidelity hardware rehearsal",
+        "Geometry breadth: 300 scenes; all five route families; all major setup flags; distance, angle, lateral, standoff, and yaw spans above thresholds",
+        "Dashboard/UAT proof: 15/15 UAT samples and 8/8 current evidence cards pass link audit",
         "Provider boundary: provider_backed_authority_proven=false until OPENAI_API_KEY rerun and provider-vs-baseline comparison pass",
-        "Hardware boundary: hardware_proven=false until physical/onboard TensorRT run, physical camera evidence, and field physics proof are recorded",
-        "Next action: run provider rerun when OPENAI_API_KEY is present, then physical/onboard TensorRT rehearsal"
+        "Hardware boundary: hardware_proven=false until physical/onboard TensorRT run, physical camera evidence, and field physics proof are recorded"
       ],
       "links": [
         {
           "label": "Milestone readiness scorecard",
-          "url": "/artifacts/session/generalized_fetch_to_pose_milestone_readiness_20260605/fetch_generalized_milestone_readiness/scorecard.md"
+          "url": "/artifacts/session/generalized_fetch_to_pose_milestone_readiness_current_proof_cards_20260605/fetch_generalized_milestone_readiness/scorecard.md"
         },
         {
           "label": "Milestone readiness summary",
-          "url": "/artifacts/session/generalized_fetch_to_pose_milestone_readiness_20260605/fetch_generalized_milestone_readiness/milestone_readiness_summary.json"
+          "url": "/artifacts/session/generalized_fetch_to_pose_milestone_readiness_current_proof_cards_20260605/fetch_generalized_milestone_readiness/milestone_readiness_summary.json"
         },
         {
-          "label": "Three-seed breadth rollup scorecard",
-          "url": "/artifacts/session/analysis_fetch_planner_breadth_rollup_seeds20260648_20260650_20260605/fetch_planner_breadth_rollup/scorecard.md"
+          "label": "Planner geometry breadth audit scorecard",
+          "url": "/artifacts/session/planner_geometry_breadth_audit_seeds20260648_20260650_20260605/fetch_planner_geometry_breadth_audit/scorecard.md"
+        },
+        {
+          "label": "Operator UAT watchlist scorecard",
+          "url": "/artifacts/session/dashboard_uat_watchlist_seed20260648_20260605/fetch_dashboard_uat_watchlist/scorecard.md"
         },
         {
           "label": "Dashboard visual evidence audit scorecard",
-          "url": "/artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_current_proof_cards_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
         }
       ]
     },

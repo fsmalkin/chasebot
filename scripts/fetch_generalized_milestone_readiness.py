@@ -23,13 +23,44 @@ DEFAULT_PROVIDER_COMPARISON = (
     "fetch_planner_provider_rerun_comparison/provider_rerun_comparison_summary.json"
 )
 DEFAULT_DASHBOARD_AUDIT = (
-    "artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/"
+    "artifacts/session/dashboard_visual_evidence_audit_current_proof_cards_20260605/"
     "fetch_dashboard_visual_evidence_audit/dashboard_visual_evidence_summary.json"
 )
 DEFAULT_HARDWARE_READINESS = (
     "artifacts/session/hardware_transfer_readiness_seed20260648_dashboard_20260605/"
     "fetch_hardware_transfer_readiness/hardware_transfer_readiness_summary.json"
 )
+DEFAULT_GEOMETRY_BREADTH = (
+    "artifacts/session/planner_geometry_breadth_audit_seeds20260648_20260650_20260605/"
+    "fetch_planner_geometry_breadth_audit/geometry_breadth_summary.json"
+)
+DEFAULT_UAT_WATCHLIST = (
+    "artifacts/session/dashboard_uat_watchlist_seed20260648_20260605/"
+    "fetch_dashboard_uat_watchlist/uat_watchlist_summary.json"
+)
+REQUIRED_ROUTES = {
+    "ambiguous_or_unsafe_no_go",
+    "fetch_ready_local",
+    "nav2_reposition_first",
+    "recovery_or_reaim",
+    "scan_or_perceive_first",
+}
+REQUIRED_SETUP_FLAGS = {
+    "bounded_recovery_required",
+    "corridor_unusable",
+    "initial_lateral_setup_debt",
+    "initial_yaw_setup_debt",
+    "nav2_reposition_required",
+    "perception_refresh_required",
+    "target_distance_outside_local_fetch_window",
+}
+MIN_GEOMETRY_SPANS = {
+    "ball_target_angle_abs_deg": 30.0,
+    "ball_target_distance_m": 1.0,
+    "lateral_m": 0.15,
+    "robot_ball_distance_m": 0.8,
+    "yaw_deg": 20.0,
+}
 
 
 def utc_now() -> str:
@@ -91,6 +122,13 @@ def int_value(value: Any) -> int:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def float_value(value: Any) -> float:
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def issue_unless(issues: list[str], condition: bool, issue: str) -> None:
@@ -157,13 +195,20 @@ def summarize_dashboard_audit(path_text: str) -> dict[str, Any]:
         int_value(payload.get("uat_sample_pass_count")) == int_value(payload.get("uat_sample_count")),
         "uat_sample_pass_count_mismatch",
     )
-    issue_unless(issues, int_value(payload.get("evidence_card_pass_count")) >= 3, "evidence_card_pass_count_below_3")
+    issue_unless(issues, int_value(payload.get("evidence_card_count")) >= 8, "evidence_card_count_below_8")
+    issue_unless(
+        issues,
+        int_value(payload.get("evidence_card_pass_count")) == int_value(payload.get("evidence_card_count")),
+        "evidence_card_pass_count_mismatch",
+    )
     return {
         "path": artifact_display_path(path_text),
         "pass": not issues,
         "issues": issues,
         "uat_sample_count": int_value(payload.get("uat_sample_count")),
         "uat_sample_pass_count": int_value(payload.get("uat_sample_pass_count")),
+        "evidence_card_count": int_value(payload.get("evidence_card_count")),
+        "evidence_card_pass_count": int_value(payload.get("evidence_card_pass_count")),
         "route_counts": dict_value(payload.get("route_counts")),
     }
 
@@ -186,14 +231,81 @@ def summarize_hardware_readiness(path_text: str) -> dict[str, Any]:
     }
 
 
+def summarize_geometry_breadth(path_text: str) -> dict[str, Any]:
+    payload, issues = read_json(path_text)
+    route_counts = dict_value(payload.get("route_counts"))
+    flag_counts = dict_value(payload.get("flag_counts"))
+    ranges = dict_value(payload.get("ranges"))
+    missing_routes = sorted(route for route in REQUIRED_ROUTES if int_value(route_counts.get(route)) <= 0)
+    missing_flags = sorted(flag for flag in REQUIRED_SETUP_FLAGS if int_value(flag_counts.get(flag)) <= 0)
+    span_failures: list[str] = []
+    for key, minimum in MIN_GEOMETRY_SPANS.items():
+        span = float_value(dict_value(ranges.get(key)).get("span"))
+        if span < minimum:
+            span_failures.append(f"{key}:{span:.3f}<{minimum:.3f}")
+    issue_unless(issues, bool(payload.get("pass", False)), "geometry_breadth_not_green")
+    issue_unless(issues, int_value(payload.get("scene_count")) >= 300, "geometry_scene_count_below_300")
+    issue_unless(issues, not missing_routes, f"geometry_missing_routes:{','.join(missing_routes)}")
+    issue_unless(issues, not missing_flags, f"geometry_missing_setup_flags:{','.join(missing_flags)}")
+    issue_unless(issues, not span_failures, f"geometry_span_failures:{','.join(span_failures)}")
+    return {
+        "path": artifact_display_path(path_text),
+        "pass": not issues,
+        "issues": issues,
+        "scene_count": int_value(payload.get("scene_count")),
+        "seeds": list_value(payload.get("seeds")),
+        "route_counts": route_counts,
+        "flag_counts": flag_counts,
+        "minimum_spans": dict_value(payload.get("minimum_spans")),
+        "spans": {key: float_value(dict_value(ranges.get(key)).get("span")) for key in MIN_GEOMETRY_SPANS},
+    }
+
+
+def summarize_uat_watchlist(path_text: str) -> dict[str, Any]:
+    payload, issues = read_json(path_text)
+    route_counts = dict_value(payload.get("route_counts"))
+    missing_routes = sorted(route for route in REQUIRED_ROUTES if int_value(route_counts.get(route)) < 3)
+    guidance = [str(item) for item in list_value(payload.get("review_guidance"))]
+    issue_unless(issues, bool(payload.get("pass", False)), "uat_watchlist_not_green")
+    issue_unless(issues, int_value(payload.get("sample_count")) >= 15, "uat_watchlist_sample_count_below_15")
+    issue_unless(issues, not missing_routes, f"uat_watchlist_route_counts_below_3:{','.join(missing_routes)}")
+    issue_unless(
+        issues,
+        str(payload.get("milestone_interpretation", "") or "") == "dashboard_uat_watchlist_ready",
+        "uat_watchlist_interpretation_unexpected",
+    )
+    issue_unless(
+        issues,
+        any("onboard" in item and "first" in item for item in guidance),
+        "uat_watchlist_onboard_first_guidance_missing",
+    )
+    return {
+        "path": artifact_display_path(path_text),
+        "pass": not issues,
+        "issues": issues,
+        "sample_count": int_value(payload.get("sample_count")),
+        "route_counts": route_counts,
+        "review_guidance": guidance,
+    }
+
+
 def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     provider_readiness = summarize_provider_readiness(str(args.provider_readiness_summary))
     provider_comparison = summarize_provider_comparison(str(args.provider_comparison_summary))
     dashboard_audit = summarize_dashboard_audit(str(args.dashboard_visual_evidence_summary))
     hardware_readiness = summarize_hardware_readiness(str(args.hardware_transfer_readiness_summary))
+    geometry_breadth = summarize_geometry_breadth(str(args.geometry_breadth_summary))
+    uat_watchlist = summarize_uat_watchlist(str(args.uat_watchlist_summary))
     sim_uat_green = all(
         bool(section.get("pass", False))
-        for section in (provider_readiness, provider_comparison, dashboard_audit, hardware_readiness)
+        for section in (
+            provider_readiness,
+            provider_comparison,
+            dashboard_audit,
+            hardware_readiness,
+            geometry_breadth,
+            uat_watchlist,
+        )
     )
     provider_authority_proven = bool(provider_readiness.get("provider_backed_authority_proven", False)) and bool(
         provider_comparison.get("guarded_provider_rerun_ready", False)
@@ -210,6 +322,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         ("provider_comparison", provider_comparison),
         ("dashboard_visual_evidence", dashboard_audit),
         ("hardware_transfer_readiness", hardware_readiness),
+        ("planner_geometry_breadth", geometry_breadth),
+        ("operator_uat_watchlist", uat_watchlist),
     ):
         for issue in list_value(section.get("issues")):
             issues.append(f"{name}:{issue}")
@@ -242,7 +356,9 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "open_gates": open_gates,
         "green_evidence": [
             "three_seed_deterministic_breadth_rollup_green",
+            "planner_geometry_breadth_green",
             "current_dashboard_visual_evidence_links_green",
+            "operator_uat_watchlist_ready",
             "seed20260648_robot_fidelity_sim_gate_hardware_rehearsal_green",
         ]
         if sim_uat_green
@@ -256,6 +372,8 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "provider_comparison": provider_comparison,
         "dashboard_visual_evidence": dashboard_audit,
         "hardware_transfer_readiness": hardware_readiness,
+        "planner_geometry_breadth": geometry_breadth,
+        "operator_uat_watchlist": uat_watchlist,
     }
 
 
@@ -291,7 +409,9 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
     for key in (
         "provider_readiness",
         "provider_comparison",
+        "planner_geometry_breadth",
         "dashboard_visual_evidence",
+        "operator_uat_watchlist",
         "hardware_transfer_readiness",
     ):
         section = dict_value(summary.get(key))
@@ -312,6 +432,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--provider-comparison-summary", default=DEFAULT_PROVIDER_COMPARISON)
     parser.add_argument("--dashboard-visual-evidence-summary", default=DEFAULT_DASHBOARD_AUDIT)
     parser.add_argument("--hardware-transfer-readiness-summary", default=DEFAULT_HARDWARE_READINESS)
+    parser.add_argument("--geometry-breadth-summary", default=DEFAULT_GEOMETRY_BREADTH)
+    parser.add_argument("--uat-watchlist-summary", default=DEFAULT_UAT_WATCHLIST)
     return parser.parse_args()
 
 

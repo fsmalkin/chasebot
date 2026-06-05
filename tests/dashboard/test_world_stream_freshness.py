@@ -509,7 +509,7 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert "physical claim generation" in evidence_by_title["Robot-side physical runbook is current"]["summary"]
     assert "fetch_physical_claim_from_run.py" in " ".join(evidence_by_title["Robot-side physical runbook is current"]["metrics"])
     assert any(
-        "generalized_fetch_to_pose_milestone_readiness_20260605" in link["url"]
+        "generalized_fetch_to_pose_milestone_readiness_current_proof_cards_20260605" in link["url"]
         for link in evidence_by_title["Milestone readiness rollup is UAT-ready"]["links"]
     )
     assert any(
