@@ -26,6 +26,7 @@ REQUIRED_SAMPLE_LINK_KEYS = (
 )
 REQUIRED_EVIDENCE_TITLES = (
     "Three-seed breadth rollup is green",
+    "Planner geometry breadth audit is green",
     "Milestone readiness rollup is UAT-ready",
     "Physical/onboard proof gap is explicit",
     "Robot-side physical runbook is current",

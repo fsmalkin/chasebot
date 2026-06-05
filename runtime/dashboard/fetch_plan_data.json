@@ -87,15 +87,42 @@
       ]
     },
     {
-      "title": "Dashboard visual evidence audit is green",
-      "status": "15/15 UAT samples and 6/6 required current evidence cards resolve to browser-watchable artifacts",
+      "title": "Planner geometry breadth audit is green",
+      "status": "300 scenes cover all route families plus wide distance, angle, lateral, standoff, and yaw ranges",
       "tone": "green",
-      "summary": "The dashboard visual evidence audit now verifies the current browser-facing proof layer, including milestone readiness, physical/onboard proof-gap, robot-side runbook, and physical-claim generator evidence cards. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and six required current evidence cards. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
+      "summary": "The geometry breadth audit backs the wide-variety claim with measured setup-debt spread across seeds 20260648, 20260649, and 20260650. It checks 300 planner scenes across all five route families and all major setup flags. The audited spread covers ball-target distance 0.451m..1.848m, ball-target angle 0.042deg..41.821deg, lateral setup debt 0.000m..0.209m, robot-ball distance 0.286m..1.302m, and yaw debt 0.000deg..30.596deg. This remains deterministic fallback geometry evidence until provider-backed routing and physical/onboard proof land.",
+      "metrics": [
+        "Audit: pass=true; scene_count=300; seeds=20260648,20260649,20260650",
+        "Route coverage: fetch_ready_local=70; nav2_reposition_first=57; recovery_or_reaim=52; scan_or_perceive_first=65; ambiguous_or_unsafe_no_go=56",
+        "Geometry spread: ball_target_distance_m span=1.397; ball_target_angle_abs_deg span=41.780; lateral_m span=0.209; robot_ball_distance_m span=1.016; yaw_deg span=30.596",
+        "Setup flags covered: bounded_recovery_required, corridor_unusable, initial_lateral_setup_debt, initial_yaw_setup_debt, nav2_reposition_required, perception_refresh_required, target_distance_outside_local_fetch_window",
+        "Claim boundary: geometry_breadth_not_promotion_evidence; provider/hardware proof remains pending"
+      ],
+      "links": [
+        {
+          "label": "Planner geometry breadth audit scorecard",
+          "url": "/artifacts/session/planner_geometry_breadth_audit_seeds20260648_20260650_20260605/fetch_planner_geometry_breadth_audit/scorecard.md"
+        },
+        {
+          "label": "Planner geometry breadth audit summary",
+          "url": "/artifacts/session/planner_geometry_breadth_audit_seeds20260648_20260650_20260605/fetch_planner_geometry_breadth_audit/geometry_breadth_summary.json"
+        },
+        {
+          "label": "Three-seed breadth rollup scorecard",
+          "url": "/artifacts/session/analysis_fetch_planner_breadth_rollup_seeds20260648_20260650_20260605/fetch_planner_breadth_rollup/scorecard.md"
+        }
+      ]
+    },
+    {
+      "title": "Dashboard visual evidence audit is green",
+      "status": "15/15 UAT samples and 7/7 required current evidence cards resolve to browser-watchable artifacts",
+      "tone": "green",
+      "summary": "The dashboard visual evidence audit now verifies the current browser-facing proof layer, including breadth rollup, geometry breadth, milestone readiness, physical/onboard proof-gap, robot-side runbook, hardware rehearsal, and provider preflight evidence cards. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and seven required current evidence cards. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
       "metrics": [
         "Audit: pass=true; interpretation=dashboard_visual_evidence_links_green",
         "UAT bundle: 15/15 samples pass link audit",
         "Route coverage: ambiguous_or_unsafe_no_go=3; scan_or_perceive_first=3; recovery_or_reaim=3; nav2_reposition_first=3; fetch_ready_local=3",
-        "Required current evidence cards: 6/6 pass link audit",
+        "Required current evidence cards: 7/7 pass link audit",
         "Artifacts checked per sample: raw_camera_browser, topdown_telemetry, world_stream, keyframe_review_contact_sheet, visual package scorecard",
         "Claim boundary: visual link/provenance audit only; promotion_evidence=false; hardware_proven=false"
       ],
@@ -6179,6 +6206,7 @@
   ],
   "next_steps": [
     "Use the milestone readiness rollup as the operator UAT checkpoint: sim evidence is green, provider-backed routing and physical/onboard proof remain the next gates.",
+    "Use the planner geometry breadth audit alongside route-count rollups when judging wide-variety coverage; it verifies distance, angle, lateral, standoff, yaw, route-family, and setup-flag spread.",
     "Use the physical/onboard proof-gap schema for the next hardware run: physical robot, onboard TensorRT, physical camera evidence, field-physics notes, and browser-watchable artifacts are all required before hardware_proven=true.",
     "Run the current seed20260648 robot-side physical runbook, then create physical_claim_summary.json and rerun fetch_physical_onboard_proof_gap.py before any hardware_proven claim.",
     "After a physical run, run fetch_physical_claim_from_run.py on the completed batch summary with all physical confirmation flags, then feed that claim into fetch_physical_onboard_proof_gap.py.",
