@@ -482,8 +482,9 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Expanded rough seed 20260643 is green"
+    assert payload["status_label"] == "Mixed all-routes seed 20260643 is green"
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
+    assert "Seed 20260643 mixed all-routes UAT is green" in evidence_by_title
     assert "Seed 20260643 50x4 rough UAT is green" in evidence_by_title
     assert "Seed 20260642 rough UAT is green" in evidence_by_title
     assert "Seed 20260641 startup-retry rough UAT is green" in evidence_by_title
@@ -501,6 +502,21 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert "Hardware rehearsal run plan is ready" in evidence_by_title
     assert "Hardware-transfer rehearsal package is ready" in evidence_by_title
     assert "Supervised seeded promotion refresh is green" in evidence_by_title
+    assert evidence_by_title["Seed 20260643 mixed all-routes UAT is green"]["links"][0]["url"].endswith(
+        "/fetch_planner_route_replay_batch/scorecard.md"
+    )
+    assert any(
+        link["url"].endswith("/visual/raw_camera_browser.mp4")
+        for link in evidence_by_title["Seed 20260643 mixed all-routes UAT is green"]["links"]
+    )
+    assert any(
+        "scan_or_perceive_first" in link["label"]
+        for link in evidence_by_title["Seed 20260643 mixed all-routes UAT is green"]["links"]
+    )
+    assert any(
+        "ambiguous_or_unsafe_no_go" in link["label"]
+        for link in evidence_by_title["Seed 20260643 mixed all-routes UAT is green"]["links"]
+    )
     assert evidence_by_title["Seed 20260643 50x4 rough UAT is green"]["links"][0]["url"].endswith(
         "/fetch_planner_seeded_generalization_gate/scorecard.md"
     )
@@ -601,11 +617,13 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         "/fetch_planner_seeded_generalization_gate/scorecard.md"
     )
     route_samples = payload["uat_review_bundle"]["route_samples"]
-    assert len(route_samples) == 12
+    assert len(route_samples) == 10
     assert {sample["route"] for sample in route_samples} == {
+        "ambiguous_or_unsafe_no_go",
         "fetch_ready_local",
         "nav2_reposition_first",
         "recovery_or_reaim",
+        "scan_or_perceive_first",
     }
     assert payload["uat_review_bundle"]["route_samples"][0]["video_url"].startswith("/artifacts/session/")
     assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")

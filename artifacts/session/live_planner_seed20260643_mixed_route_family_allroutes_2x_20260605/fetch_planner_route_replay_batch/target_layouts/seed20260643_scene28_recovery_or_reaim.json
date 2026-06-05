@@ -1,0 +1,166 @@
+{
+  "generated_utc": "2026-06-05T12:58:22.429182+00:00",
+  "layout_family": "planner_gated_recovery_or_reaim",
+  "planner_route_label": "recovery_or_reaim",
+  "planner_scene": {
+    "ball_pose": {
+      "x": 0.508018,
+      "y": -0.220731,
+      "yaw": 0.0,
+      "z": 0.021336
+    },
+    "corridor": {
+      "blocked": false,
+      "clearance_m": 0.35,
+      "unsafe_drift_m": 0.0
+    },
+    "expected_route_label": "recovery_or_reaim",
+    "generated_utc": "2026-06-05T12:07:49.165240+00:00",
+    "geometry": {
+      "ball_target_angle_deg": 26.538062,
+      "ball_target_distance_m": 0.494035,
+      "robot_ball_distance_m": 0.67271,
+      "robot_lateral_error_m": 0.222896,
+      "robot_lateral_signed_m": 0.222896,
+      "robot_yaw_error_deg": -20.22414
+    },
+    "local_fetch_envelope": {
+      "delivery_radius_m": 0.3,
+      "eligible": false,
+      "no_direct_ball_impulse": true,
+      "requires_robot_owned_contact": true
+    },
+    "perception": {
+      "ball_confidence": 0.98,
+      "state_age_s": 0.15,
+      "target_confidence": 0.99
+    },
+    "robot_pose": {
+      "x": -0.159406,
+      "y": -0.304903,
+      "yaw": 0.110199,
+      "z": 0.0
+    },
+    "scene_id": "seed20260643_scene28_recovery_or_reaim",
+    "scene_set": "mixed_fetch_planner_v1",
+    "seed": 20260643,
+    "target_pose": {
+      "radius_m": 0.3,
+      "x": 0.95,
+      "y": 0.0,
+      "z": 0.001
+    },
+    "type": "fetch_planner_scene_descriptor"
+  },
+  "random_draw": {
+    "ball_pose": {
+      "x": 0.508018,
+      "y": -0.220731,
+      "yaw": 0.0,
+      "z": 0.021336
+    },
+    "ball_target_angle_deg": 26.538062,
+    "ball_target_distance_m": 0.494035,
+    "planner_route_label": "recovery_or_reaim",
+    "random_profile": "planner_mixed_v1",
+    "robot_ball_distance_m": 0.67271,
+    "robot_lateral_error_m": 0.222896,
+    "robot_lateral_signed_m": 0.222896,
+    "robot_pose": {
+      "x": -0.159406,
+      "y": -0.304903,
+      "yaw": 0.110199,
+      "z": 0.0
+    },
+    "robot_yaw_error_deg": -20.22414,
+    "route_executor": "bounded_recovery_reaim",
+    "route_quality": {
+      "flags": [
+        "bounded_recovery_required",
+        "initial_lateral_setup_debt",
+        "initial_yaw_setup_debt"
+      ],
+      "predicted_contact_quality": "watch",
+      "predicted_first_contact_quality": "watch",
+      "predicted_first_contact_risk": "high",
+      "quality_score": 43.421,
+      "recommendations": [
+        "bounded_reaim_before_push",
+        "pre_contact_smoothing"
+      ],
+      "route_label": "recovery_or_reaim",
+      "setup_debt": {
+        "ball_target_angle_abs_deg": 26.538062,
+        "ball_target_distance_m": 0.494035,
+        "lateral_m": 0.192896,
+        "robot_ball_distance_m": 0.67271,
+        "yaw_deg": 17.22414
+      },
+      "thresholds": {
+        "clean_lateral_m": 0.03,
+        "clean_yaw_deg": 3.0,
+        "fetch_ready_lateral_limit_m": 0.05,
+        "fetch_ready_yaw_limit_deg": 6.0,
+        "nav2_reposition_min_robot_ball_distance_m": 0.9,
+        "recovery_lateral_limit_m": 0.24,
+        "recovery_robot_ball_distance_limit_m": 0.9,
+        "recovery_yaw_limit_deg": 35.0
+      }
+    },
+    "seed": 20260643,
+    "target_pose": {
+      "radius_m": 0.3,
+      "x": 0.95,
+      "y": 0.0,
+      "z": 0.001
+    }
+  },
+  "random_profile": "planner_mixed_v1",
+  "route_executor": "bounded_recovery_reaim",
+  "route_quality": {
+    "flags": [
+      "bounded_recovery_required",
+      "initial_lateral_setup_debt",
+      "initial_yaw_setup_debt"
+    ],
+    "predicted_contact_quality": "watch",
+    "predicted_first_contact_quality": "watch",
+    "predicted_first_contact_risk": "high",
+    "quality_score": 43.421,
+    "recommendations": [
+      "bounded_reaim_before_push",
+      "pre_contact_smoothing"
+    ],
+    "route_label": "recovery_or_reaim",
+    "setup_debt": {
+      "ball_target_angle_abs_deg": 26.538062,
+      "ball_target_distance_m": 0.494035,
+      "lateral_m": 0.192896,
+      "robot_ball_distance_m": 0.67271,
+      "yaw_deg": 17.22414
+    },
+    "thresholds": {
+      "clean_lateral_m": 0.03,
+      "clean_yaw_deg": 3.0,
+      "fetch_ready_lateral_limit_m": 0.05,
+      "fetch_ready_yaw_limit_deg": 6.0,
+      "nav2_reposition_min_robot_ball_distance_m": 0.9,
+      "recovery_lateral_limit_m": 0.24,
+      "recovery_robot_ball_distance_limit_m": 0.9,
+      "recovery_yaw_limit_deg": 35.0
+    }
+  },
+  "scenario_id": "golf_ball_circle_delivery_uat",
+  "targets": [
+    {
+      "forward_m": 0.508018,
+      "id": "ball_1",
+      "label": "planner_gated_ball",
+      "lateral_m": -0.220731,
+      "min_dwell_s": 0.5,
+      "start_visible": true,
+      "visit_tolerance_m": 0.22,
+      "z_m": 0.021336
+    }
+  ]
+}

@@ -547,6 +547,21 @@ geometry, including two high-risk recovery rows. This strengthens the broad
 sim-gate UAT floor while leaving provider-backed LLM routing and physical
 hardware-transfer proof as the active gates.
 
+June 5 seed20260643 mixed all-routes UAT: seed `20260643` now has a full
+route-family visual proof in addition to the expanded rough delivery run. The
+mixed replay at
+`artifacts/session/live_planner_seed20260643_mixed_route_family_allroutes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md`
+selected two rows per route family from the `50`-scene planner gate. It passed
+`10/10` route contracts: executable routes delivered `6/6`, and planner-only
+`scan_or_perceive_first` plus `ambiguous_or_unsafe_no_go` rows withheld local
+fetch `4/4`. The corrected analyzer at
+`artifacts/session/live_planner_seed20260643_mixed_route_family_allroutes_2x_analysis_fixed_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution/setup/contact and first-contact blockers `0`.
+Frame-sequence review covered the four planner-only stopped-scene proofs plus
+representative Nav2, recovery, and fetch-ready sheets. This is the current best
+sim-gate package because it proves both action and abstention routes. Provider-
+backed LLM routing and physical/onboard proof remain open.
+
 June 5 seed20260643 expanded rough breadth UAT: seed `20260643` raises the
 rough route-owner visual UAT bar to `50` generated scenes and up to four live
 rows per executable route family. The parent gate at

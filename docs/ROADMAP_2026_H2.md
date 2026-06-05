@@ -1477,6 +1477,20 @@ recovery rows. The roadmap sequence stays the same: rerun provider-backed LLM
 routing when credentials are available, then run physical/onboard proof before
 claiming hardware transfer.
 
+Seed20260643 now proves the full mixed route-family surface for the latest broad
+seed:
+`artifacts/session/live_planner_seed20260643_mixed_route_family_allroutes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The replay selected two rows per route family and passed `10/10` route
+contracts. Executable routes delivered `6/6`; planner-only
+`scan_or_perceive_first` and `ambiguous_or_unsafe_no_go` routes withheld local
+fetch `4/4` with browser-watchable stopped-scene proof. The corrected analyzer
+at
+`artifacts/session/live_planner_seed20260643_mixed_route_family_allroutes_2x_analysis_fixed_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution/setup/contact. The roadmap now has a stronger sim-gate
+UAT floor for both route execution and route abstention; provider-backed LLM
+reruns and physical/onboard proof remain the active gates before
+hardware-transfer claims.
+
 Seed20260643 raises the broad rough-gate evidence bar:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
 The seed classified `50` scenes with zero wrong fetch dispatches, replayed

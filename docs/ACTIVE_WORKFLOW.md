@@ -647,6 +647,29 @@ June 5, 2026 seed20260637 breadth UAT:
   unavailable, so provider-backed LLM routing and physical/onboard proof remain
   open.
 
+June 5, 2026 seed20260643 mixed all-routes visual UAT:
+
+- Replay command:
+  `python scripts\fetch_planner_route_replay_batch.py --campaign-id live_planner_seed20260643_mixed_route_family_allroutes_2x_20260605 --gate-summary artifacts\session\live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605_planner\fetch_planner_handoff_gate\gate_summary.json --route fetch_ready_local --route nav2_reposition_first --route recovery_or_reaim --route scan_or_perceive_first --route ambiguous_or_unsafe_no_go --quality-order roughest --max-per-route 2 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail`
+- Replay scorecard:
+  `artifacts/session/live_planner_seed20260643_mixed_route_family_allroutes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer scorecard:
+  `artifacts/session/live_planner_seed20260643_mixed_route_family_allroutes_2x_analysis_fixed_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: mixed replay `pass=true`, `selected_count=10`,
+  `route_success_count=10`, `mission_pass_count=6`,
+  `route_only_pass_count=4`, `visual_package_pass_count=10`, and
+  `mission_fail_count=0`.
+- Route coverage: two rows each for `fetch_ready_local`,
+  `nav2_reposition_first`, `recovery_or_reaim`, `scan_or_perceive_first`, and
+  `ambiguous_or_unsafe_no_go`. Executable rows delivered `6/6`; planner-only
+  scan/no-go rows withheld local fetch `4/4`.
+- Visual review: inspected the four planner-only raw-camera/topdown keyframe
+  sheets plus representative Nav2, recovery, and fetch-ready sheets. The
+  planner-only rows visibly stayed still with local fetch withheld, and the
+  executable samples matched delivery geometry.
+- Claim boundary: this is full route-family sim-gate UAT for the latest broad
+  seed. Provider-backed LLM routing and physical/onboard proof remain open.
+
 June 5, 2026 seed20260643 expanded rough breadth UAT:
 
 - Command:

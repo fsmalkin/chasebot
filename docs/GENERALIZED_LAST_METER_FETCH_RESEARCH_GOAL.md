@@ -1284,6 +1284,21 @@ push, and terminal delivery. The two high-risk recovery rows still showed
 coherent ball/target/robot geometry. Provider-backed LLM routing and
 physical/onboard hardware-transfer proof remain the active open gates.
 
+Seed20260643 now has full route-family UAT on top of the expanded rough
+delivery run:
+`artifacts/session/live_planner_seed20260643_mixed_route_family_allroutes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The mixed replay selected two rows each for `fetch_ready_local`,
+`nav2_reposition_first`, `recovery_or_reaim`, `scan_or_perceive_first`, and
+`ambiguous_or_unsafe_no_go`. Route contracts passed `10/10`: executable rows
+delivered `6/6`, planner-only scan/no-go rows withheld local fetch `4/4`, and
+visual packages passed `10/10`. The corrected analyzer at
+`artifacts/session/live_planner_seed20260643_mixed_route_family_allroutes_2x_analysis_fixed_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution/setup/contact. Frame-sequence review covered all four
+planner-only stopped-scene proofs plus representative executable sheets. This
+is the current best sim-gate package because it proves both route execution and
+route abstention from the same broad seed. Provider-backed LLM routing and
+physical/onboard proof remain open.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
