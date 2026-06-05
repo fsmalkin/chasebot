@@ -1081,6 +1081,20 @@ at `27.631s`, moved the ball from `(0.293, -0.118)` to `(0.756, -0.035)`, and
 delivered at `0.197m`. Hardware-transfer packaging should treat this preflight
 as a required executor guard.
 
+Seed `20260644` adds the latest fresh mixed-route visual UAT pass:
+`artifacts/session/live_planner_seed20260644_mixed_all_routes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The planner child classified `50` generated scenes across all five route
+families with zero wrong fetch dispatches. The mixed replay selected two rows
+per route family and passed `10/10` route contracts: `6/6` executable
+deliveries plus `4/4` planner-only scan/no-go abstentions. The analyzer at
+`artifacts/session/live_planner_seed20260644_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution, setup, contact, and `0` first-contact blockers.
+Frame-sequence review covered every keyframe sheet: planner-only rows stayed
+stopped, and recovery, Nav2-first, and fetch-ready rows reached the delivery
+circle. This strengthens the route-owner architecture path while preserving the
+claim boundary: routing used deterministic fallback because `OPENAI_API_KEY`
+was unavailable, and physical/onboard proof remains open.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches

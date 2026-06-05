@@ -3162,6 +3162,19 @@ Milestone 3 pass criteria include:
    - promotion evidence requires corrected marker geometry and same-session
      visual confirmation
    - detailed per-tick shot evidence belongs in `state_history.jsonl`, while milestone/result events belong in `gather_sequence.jsonl`
+   - current planner-routed mixed-route breadth package:
+     - parent seeded gate:
+       `artifacts/session/live_planner_seeded_generalization_gate_seed20260644_breadth_50x2_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+     - mixed all-routes replay:
+       `artifacts/session/live_planner_seed20260644_mixed_all_routes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md`
+     - mixed all-routes analyzer:
+       `artifacts/session/live_planner_seed20260644_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+     - review rule: inspect all ten keyframe sheets across planner-only
+       abstentions and executable delivery routes before using the summary as
+       evidence
+     - claim boundary: this is fresh sim-gate breadth evidence under
+       deterministic fallback; provider-backed LLM routing and physical/onboard
+       proof remain open
 30. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/scorecard.md`

@@ -1328,6 +1328,20 @@ is the current best sim-gate package because it proves both route execution and
 route abstention from the same broad seed. Provider-backed LLM routing and
 physical/onboard proof remain open.
 
+Seed20260644 confirms the mixed route-family result on a fresh seed:
+`artifacts/session/live_planner_seed20260644_mixed_all_routes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The planner child classified `50` generated scenes with all five route labels
+represented and zero wrong fetch dispatches. The mixed replay selected two rows
+per route family and passed `10/10` route contracts: six executable deliveries
+and four planner-only abstentions. The supporting analyzer
+`artifacts/session/live_planner_seed20260644_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution/setup/contact and `0` first-contact blockers.
+Frame-sequence review covered all ten keyframe sheets and matched the route
+contract. This raises confidence in planner-routed setup plus bounded local
+fetch under sim-gate physics. Provider-backed LLM routing remains blocked until
+`OPENAI_API_KEY` is available, and physical/onboard proof remains the
+hardware-transfer gate.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

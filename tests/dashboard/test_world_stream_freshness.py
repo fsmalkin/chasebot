@@ -482,8 +482,9 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Robot-side seed 20260643 rehearsal is green"
+    assert payload["status_label"] == "Seed 20260644 mixed all-routes UAT is green"
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
+    assert "Seed 20260644 mixed all-routes UAT is green" in evidence_by_title
     assert "Seed 20260643 robot-side rehearsal is green" in evidence_by_title
     assert "Seed 20260643 robot-side runbook is ready" in evidence_by_title
     assert "Seed 20260643 mixed all-routes UAT is green" in evidence_by_title
@@ -641,7 +642,7 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         "recovery_or_reaim",
         "scan_or_perceive_first",
     }
-    assert any(sample["session_id"] == "20260605T141313062384Z" for sample in route_samples)
+    assert any(sample["session_id"] == "20260605T145804164471Z" for sample in route_samples)
     assert {sample["interpretation"] for sample in route_samples} == {"delivery pass", "planner-only abstention"}
     assert payload["uat_review_bundle"]["route_samples"][0]["video_url"].startswith("/artifacts/session/")
     assert payload["latest_evidence"][0]["links"][0]["url"].startswith("/artifacts/session/")
@@ -4768,3 +4769,14 @@ def test_world_stream_observer_renderability_expires_after_grace_window(tmp_path
     assert expired["world_stream_transport_healthy"] is False
     assert expired["world_stream_degraded"] is False
     assert expired["failure_class"] == "world_stream_no_recent_frames"
+    assert evidence_by_title["Seed 20260644 mixed all-routes UAT is green"]["links"][0]["url"].endswith(
+        "/fetch_planner_seeded_generalization_gate/scorecard.md"
+    )
+    assert any(
+        "scan_or_perceive_first" in link["label"] and link["url"].endswith("/visual/raw_camera_browser.mp4")
+        for link in evidence_by_title["Seed 20260644 mixed all-routes UAT is green"]["links"]
+    )
+    assert any(
+        "nav2_reposition_first" in link["label"] and link["url"].endswith("/visual/raw_camera_browser.mp4")
+        for link in evidence_by_title["Seed 20260644 mixed all-routes UAT is green"]["links"]
+    )

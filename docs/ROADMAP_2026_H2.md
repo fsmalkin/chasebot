@@ -1464,6 +1464,20 @@ remaining gates: provider-backed LLM rerun after `OPENAI_API_KEY` is available,
 and physical/onboard proof with the same visual evidence standard before
 changing `hardware_proven`.
 
+Seed20260644 adds a fresh mixed all-routes breadth confirmation:
+`artifacts/session/live_planner_seed20260644_mixed_all_routes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The planner child classified `50` generated scenes across all five route
+families with zero wrong fetch dispatches. The mixed replay passed `10/10`
+route contracts with six executable deliveries, four planner-only abstentions,
+and ten visual packages. The analyzer at
+`artifacts/session/live_planner_seed20260644_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution, setup, contact, and `0` first-contact blockers.
+Frame-sequence review covered all ten keyframe sheets. The active roadmap keeps
+seed20260643 as the robot-side rehearsal checkpoint and uses seed20260644 as
+fresh sim-gate breadth evidence. The next gates remain provider-backed LLM
+routing once `OPENAI_API_KEY` is available and physical/onboard proof before
+hardware-transfer claims.
+
 The fresh rehearsal ladder is now green on the sim-gate runtime target:
 `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
 `artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
