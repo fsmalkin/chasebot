@@ -417,6 +417,18 @@ base-controller preflight for seed `20260635` scene03. This is the active
 preservation bar before route-owner, contact-servo, visual-packaging, or
 hardware-transfer moonshots.
 
+June 5 hardware-transfer readiness package: the planner-routed stack now has a
+rehearsal contract for the Jetbot/Orin path:
+`artifacts/session/analysis_fetch_hardware_transfer_readiness_20260605/fetch_hardware_transfer_readiness/scorecard.md`.
+The analyzer passes with `hardware_transfer_ready=true`,
+`hardware_proven=false`, and `promotion_evidence=false`. It verifies the active
+seed20260635/preflight regression bar, browser-watchable UAT dashboard samples,
+`robot_fidelity_orin` runtime documentation, `tensorrt_int8` documentation, and
+controller-preflight evidence. The next rung is robot-side rehearsal evidence:
+base-controller preflight, mission verdict, onboard raw-camera video,
+topdown/world context, keyframe sequence review, and explicit TensorRT/runtime
+provenance.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.

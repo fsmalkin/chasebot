@@ -455,6 +455,21 @@ June 5, 2026 seed20260635/preflight regression manifest:
   contact-servo, visual-packaging, dashboard, controller-preflight, and
   hardware-transfer changes.
 
+June 5, 2026 hardware-transfer readiness package:
+
+- Command:
+  `python scripts\fetch_hardware_transfer_readiness.py --campaign-id analysis_fetch_hardware_transfer_readiness_20260605`
+- Scorecard:
+  `artifacts/session/analysis_fetch_hardware_transfer_readiness_20260605/fetch_hardware_transfer_readiness/scorecard.md`
+- Result: `planner_routed_fetch_hardware_rehearsal_ready`;
+  `hardware_transfer_ready=true`, `hardware_proven=false`, and
+  `promotion_evidence=false`.
+- Evidence meaning: the planner-routed stack is packaged for the first
+  robot-side rehearsal. The rehearsal must record base-controller preflight,
+  mission verdict, onboard raw-camera video, topdown/world context, keyframe
+  sequence review, `robot_fidelity_orin`, and `tensorrt_int8` provenance before
+  hardware-transfer claims advance beyond rehearsal-ready.
+
 June 4, 2026 planner-only route proof:
 
 - Command:

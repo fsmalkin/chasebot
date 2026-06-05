@@ -50,6 +50,28 @@
   ],
   "latest_evidence": [
     {
+      "title": "Hardware-transfer rehearsal package is ready",
+      "status": "runtime-contract gates pass; hardware_proven=false",
+      "tone": "green",
+      "summary": "The new readiness analyzer confirms the planner-routed fetch stack is ready for a hardware rehearsal package while keeping the claim boundary clear. The check preserves the seed20260635 regression bar, verifies the dashboard has six browser-watchable UAT samples, confirms the robot_fidelity_orin and tensorrt_int8 runtime contract docs, and lists the open hardware gates that still need robot-side proof.",
+      "metrics": [
+        "Readiness analyzer: pass=true; hardware_transfer_ready=true; hardware_proven=false",
+        "Regression bar: seeded gates 8/8; live seeded missions 48/48; visual packages 48/48; control preflight 1/1",
+        "Runtime contract: robot_fidelity_orin, Jetson Orin Nano 8GB, and tensorrt_int8 documentation checks pass",
+        "Open hardware gates: robot-side live rehearsal, onboard TensorRT execution, physical camera visual package, and field physics"
+      ],
+      "links": [
+        {
+          "label": "Hardware-transfer readiness scorecard",
+          "url": "/artifacts/session/analysis_fetch_hardware_transfer_readiness_20260605/fetch_hardware_transfer_readiness/scorecard.md"
+        },
+        {
+          "label": "Hardware-transfer readiness summary",
+          "url": "/artifacts/session/analysis_fetch_hardware_transfer_readiness_20260605/fetch_hardware_transfer_readiness/hardware_transfer_readiness_summary.json"
+        }
+      ]
+    },
+    {
       "title": "Supervised seeded promotion refresh is green",
       "status": "seed 20260635: provider-backed planner 30/30, executable replay 6/6, visual packages 6/6",
       "tone": "green",
@@ -4117,9 +4139,9 @@
     }
   ],
   "next_steps": [
-    "Package the hardware-transfer plan for the planner-routed route-owner stack, including Jetbot/Orin runtime assumptions, base-controller preflight, model provenance checks, and robot-side visual-evidence capture.",
+    "Run the first hardware-transfer rehearsal package from the new readiness contract: robot_fidelity_orin, tensorrt_int8, base-controller preflight, robot-side mission verdict, physical/onboard raw-camera video, topdown/world context, and keyframe sequence review.",
     "Use the seed20260635 preflight regression manifest as the default green bar before future route-owner, contact-servo, visual-packaging, or hardware-transfer moonshots.",
-    "Run one additional supervised seeded promotion refresh or a named hardware-transfer dry rehearsal only after the hardware-transfer plan names its runtime evidence contract.",
+    "Keep hardware-transfer claims at rehearsal-ready until robot-side live execution, onboard TensorRT execution, physical camera evidence, and field-physics proof are recorded.",
     "Keep provider-backed guarded fallback as the high-level planner authority model unless product requirements demand strict all-accepted LLM routing.",
     "Measure the runtime cost of the longer recovery window and decide whether hardware UAT needs a progress-based timeout instead of a fixed duration.",
     "Investigate container-side ffmpeg availability as evidence hardening; host-side browser video recovery works but remains a packaging dependency."

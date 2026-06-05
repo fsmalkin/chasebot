@@ -1386,7 +1386,12 @@ before scoring if `jetbot_base_controller` is inactive, and stores
 confirmed active control, observed first contact at `27.631s`, and delivered at
 `0.197m`.
 
-Next work should package the hardware-transfer plan for the planner-routed
-route-owner stack and fold seed `20260635`, the smoothed seed `20260634` rough
-analyzer, saved-anchor repeatability, and the hard mixed matrix into the
-preservation bar before the next moonshot.
+The hardware-transfer packaging step is now a reproducible analyzer:
+`artifacts/session/analysis_fetch_hardware_transfer_readiness_20260605/fetch_hardware_transfer_readiness/scorecard.md`.
+It passes with `hardware_transfer_ready=true`, `hardware_proven=false`, and
+`promotion_evidence=false`. Next work should run the first robot-side rehearsal
+from this contract: `robot_fidelity_orin`, `tensorrt_int8`, base-controller
+preflight, mission verdict, onboard camera video, topdown/world context, and
+frame-sequence review. Preserve seed `20260635`, the smoothed seed `20260634`
+rough analyzer, saved-anchor repeatability, and the hard mixed matrix before
+the next moonshot.

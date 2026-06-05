@@ -1179,9 +1179,15 @@ Executable fetch now records a base-controller preflight through
 
 Interpretation: the planner-routed route-owner stack is simulation
 promotion-green again with current smoothing and controller preflight active.
-The next milestone work is hardware-transfer packaging plus a refreshed
-preservation manifest that includes saved anchors, the hard mixed matrix, seed
-`20260634` rough preservation, and seed `20260635` canonical promotion proof.
+The hardware-transfer readiness package is now green:
+`artifacts/session/analysis_fetch_hardware_transfer_readiness_20260605/fetch_hardware_transfer_readiness/scorecard.md`.
+It reports `hardware_transfer_ready=true`, `hardware_proven=false`, and
+`promotion_evidence=false` after checking the seed20260635/preflight
+preservation bar, dashboard UAT package, `robot_fidelity_orin` contract,
+`tensorrt_int8` runtime documentation, and controller-preflight evidence. The
+next milestone work is a robot-side rehearsal that records base-controller
+preflight, mission verdict, onboard raw-camera video, topdown/world context,
+frame-sequence review, and TensorRT/runtime provenance.
 
 ## Definition Of Done For The Research Thread
 
