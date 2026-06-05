@@ -31,6 +31,8 @@ DEFAULT_ZONE_SDF = REPO_ROOT / "ros2_config" / "golf_ball_delivery_zone_marker.s
 DEFAULT_BALL_MODEL_NAME = "visit_mission_target_ball_1"
 DEFAULT_ZONE_MODEL_NAME = "golf_ball_delivery_zone"
 DEFAULT_ROBOT_MODEL_NAME = "jetbot"
+BASE_CONTROLLER_NAME = "jetbot_base_controller"
+BASE_CONTROLLER_PARAM_FILE = "/workspaces/chasecar/ros2_config/config/jetbot_diff_drive_v1.0.0.yaml"
 NAV2_REPOSITION_RESULT_MARKER = "NAV2_REPOSITION_RESULT="
 NAV2_REPOSITION_BEHAVIOR_TREE = "/workspaces/chasecar/ros2_config/behavior_trees/navigate_to_pose_w_replanning.xml"
 ROUTE_FETCH_READY = "fetch_ready_local"
@@ -599,6 +601,72 @@ def docker_exec_service(compose_project: str, service: str, script: str, *, time
         stderr = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
         return 124, stdout + stderr + f"\ntimeout_after_s={float(timeout_s):.3f}"
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
+
+
+def _tail_text(text: str, *, max_chars: int = 4000) -> str:
+    clean = str(text or "")
+    return clean[-max_chars:] if len(clean) > max_chars else clean
+
+
+def ensure_base_controller_active(
+    *,
+    compose_project: str,
+    service: str = "sim-gate",
+    controller_name: str = BASE_CONTROLLER_NAME,
+    timeout_s: float = 25.0,
+) -> dict[str, Any]:
+    """Ensure cmd_vel can reach the diff-drive controller before a fetch run."""
+    timeout_i = max(int(math.ceil(float(timeout_s))), 1)
+    script = f"""
+set +u
+source /opt/ros/${{CORE_ROS_DISTRO:-kilted}}/setup.bash
+if [ -f /root/ros2_ws/install/setup.bash ]; then
+  source /root/ros2_ws/install/setup.bash
+fi
+set -u
+CONTROLLER_NAME={json.dumps(controller_name)}
+PARAM_FILE={json.dumps(BASE_CONTROLLER_PARAM_FILE)}
+LIST_OUT=/tmp/chasecar_controller_list.txt
+SPAWN_OUT=/tmp/chasecar_controller_spawn.txt
+deadline=$((SECONDS + {timeout_i}))
+while [ "$SECONDS" -le "$deadline" ]; do
+  if timeout 6 ros2 service call /controller_manager/list_controllers controller_manager_msgs/srv/ListControllers "{{}}" >"$LIST_OUT" 2>&1; then
+    cat "$LIST_OUT"
+    if grep -Eq "name=['\\\"]?$CONTROLLER_NAME['\\\"]?.*state=['\\\"]?active['\\\"]?" "$LIST_OUT"; then
+      echo BASE_CONTROLLER_ACTIVE=1
+      exit 0
+    fi
+    ros2 run controller_manager spawner "$CONTROLLER_NAME" \\
+      --controller-manager /controller_manager \\
+      --controller-manager-timeout 8 \\
+      --switch-timeout 8 \\
+      --param-file "$PARAM_FILE" >"$SPAWN_OUT" 2>&1 || true
+    cat "$SPAWN_OUT"
+  else
+    cat "$LIST_OUT" || true
+  fi
+  sleep 1
+done
+echo BASE_CONTROLLER_ACTIVE=0
+exit 2
+"""
+    rc, output = docker_exec_service(
+        compose_project,
+        service,
+        script,
+        timeout_s=float(timeout_i) + 15.0,
+    )
+    active = rc == 0 and "BASE_CONTROLLER_ACTIVE=1" in output
+    repaired = "Loaded " in output or "Configured and activated" in output or "Successfully loaded controller" in output
+    return {
+        "controller_name": controller_name,
+        "service": service,
+        "timeout_s": float(timeout_s),
+        "returncode": rc,
+        "pass": active,
+        "repaired": bool(active and repaired),
+        "output_tail": _tail_text(output),
+    }
 
 
 def normalize_angle_rad(angle_rad: float) -> float:
@@ -2328,12 +2396,18 @@ def main() -> int:
         z=0.0,
         yaw=args.robot_yaw,
     )
+    control_preflight: dict[str, Any] = {
+        "required": False,
+        "pass": True,
+        "reason": "planner_route_only_or_not_yet_evaluated",
+    }
     write_json(
         artifact_dir / "spawn_summary.json",
         {
             "zone": spawn_zone,
             "ball": spawn_ball,
             "robot_pose": robot_pose,
+            "control_preflight": control_preflight,
             "target_layout": target_layout,
             "nav2_layout_transform": nav2_layout_transform,
         },
@@ -2569,6 +2643,40 @@ def main() -> int:
         )
         print(f"GATHER_MISSION_SUMMARY={artifact_dir / 'mission_verdict.json'}")
         return 0 if route_only_pass else 2
+
+    control_preflight = {
+        **ensure_base_controller_active(compose_project=args.compose_project),
+        "required": True,
+    }
+    write_json(artifact_dir / "control_preflight.json", control_preflight)
+    write_json(
+        artifact_dir / "spawn_summary.json",
+        {
+            "zone": spawn_zone,
+            "ball": spawn_ball,
+            "robot_pose": robot_pose,
+            "control_preflight": control_preflight,
+            "target_layout": target_layout,
+            "nav2_layout_transform": nav2_layout_transform,
+        },
+    )
+    if not bool(control_preflight.get("pass", False)):
+        update_runtime(
+            args.gather_runtime_json,
+            mission_status="failed",
+            mission_phase="failed",
+            gather_phase="failed",
+            proof_state="failed",
+            latest_feedback="Fetch control preflight failed; base controller is unavailable.",
+        )
+        update_runtime(
+            args.visit_runtime_json,
+            mission_status="failed",
+            mission_phase="failed",
+            proof_state="failed",
+            latest_feedback="Fetch control preflight failed.",
+        )
+        raise RuntimeError(f"Base controller preflight failed; see {artifact_dir / 'control_preflight.json'}")
 
     pre_fetch_reposition: dict[str, Any] = {
         "phase": "nav2_reposition_before_fetch",
@@ -2865,6 +2973,7 @@ def main() -> int:
         "nav2_reposition_goal_pose": pre_fetch_reposition.get("goal_pose", {}),
         "nav2_layout_transform": nav2_layout_transform,
         "planner_route_execution_defaults": planner_route_defaults,
+        "control_preflight": control_preflight,
         "fetch_skipped_after_reposition": bool(fetch_skipped_after_reposition),
         "contact_phase_forward_only": bool(float(args.drive_linear_x_mps) >= -1e-9),
         "forward_only_pre_contact_required": bool(args.forward_only_pre_contact_required),
@@ -2913,6 +3022,7 @@ def main() -> int:
         "random_profile": random_profile,
         "random_draw": random_draw,
         "planner_route": route_metadata,
+        "control_preflight": control_preflight,
         "pre_fetch_reposition": pre_fetch_reposition,
         "nav2_layout_transform": nav2_layout_transform,
         "planner_route_execution_defaults": planner_route_defaults,
@@ -2942,6 +3052,7 @@ def main() -> int:
         "random_profile": random_profile,
         "random_draw": random_draw,
         "planner_route": route_metadata,
+        "control_preflight": control_preflight,
         "session_id": session_id,
         "dashboard_session_binding": dashboard_session_binding,
         "pre_fetch_reposition": pre_fetch_reposition,

@@ -830,6 +830,33 @@ June 5, 2026 fetch-ready contact-smoothing recheck:
   seed `20260633` parent as the current promotion-green milestone proof until
   the next canonical seeded/saved-layout promotion refresh includes smoothing.
 
+June 5, 2026 supervised seeded promotion refresh:
+
+- Parent gate:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Planner child:
+  `artifacts/session/dry_supervised_provider_planner_seeded_generalization_gate_seed20260635_20260605_planner/fetch_planner_handoff_gate/scorecard.md`
+- Replay:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: `planner_routed_seeded_generalization_promotion_green`,
+  `promotion_evidence=true`, provider `ok=30/30`, guard agreement `30/30`,
+  wrong fetch dispatches `0`, one confidence-only deterministic fallback,
+  executable replay `6/6`, visual packages `6/6`, clean execution/setup/contact
+  analysis, first-contact blockers `0`, and closest approaches
+  `0.194m..0.197m`.
+- Visual review: all six selected rows were checked through raw/topdown
+  keyframe sheets across setup, pre-contact, first contact, push, terminal
+  arrival, and final rest. Scene03 recovery/re-aim is the primary fix-forward
+  clip:
+  `artifacts/session/20260605T045353381785Z/visual/raw_camera_browser.mp4`.
+- Fix-forward note: scene03 first exposed a no-motion failure when the base
+  diff-drive controller was unavailable. Executable fetch now runs a
+  service-call preflight against `/controller_manager/list_controllers`, records
+  `control_preflight.json`, and fails before scoring when
+  `jetbot_base_controller` is not active.
+
 For infrastructure-interrupted route-owner batches, resume with the same
 campaign id and add `--resume-skip-existing`. The runner reuses passing
 `fetch_visual_uat_package/package_summary.json` artifacts for completed scenes

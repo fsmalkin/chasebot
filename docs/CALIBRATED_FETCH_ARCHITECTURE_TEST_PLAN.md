@@ -451,6 +451,16 @@ branch strategy changes are propagated back to `main`.
   `STATUS_SUCCEEDED`, `0.451645m` closest approach, and about `0.121m` ball
   displacement. Treat this as evidence that Nav2 can keep the ball bounded but
   cannot be promoted as the sole contact owner.
+- Planner-routed route-owner evidence:
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+  is the current supervised promotion proof for the planner-gated architecture.
+  The provider-backed planner child routed `30/30` scenes with guard agreement
+  `30/30` and wrong fetch dispatches `0`; the executable replay delivered
+  `6/6` missions and `6/6` visual packages across Nav2-first, recovery/re-aim,
+  and fetch-ready route owners; the analyzer reports clean execution, setup,
+  contact, and first-contact quality. Scene03's earlier no-motion failure is
+  now handled as infrastructure evidence by a base-controller preflight before
+  executable fetch scoring.
 - Corrected May 31 geometry/video reference:
   `artifacts/session/20260531T204154158382Z/gather_mission/20260531T204255Z/mission_verdict.json`
   passed saved `zero` with `fetch_to_pose_pass=true`,

@@ -1325,8 +1325,18 @@ Acceptance:
 ## June 5, 2026 Fetch-To-Pose Moonshot Checkpoint
 
 The planner-routed fetch moonshot remains on the current architecture path. The
-provider-backed supervised seed `20260633` gate is still the promotion-green
-milestone proof. A new roughest-order seed `20260634` pass adds useful breadth:
+latest provider-backed supervised seed `20260635` gate is the current
+promotion-green milestone proof:
+`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner child routed `30/30` generated scenes with provider `ok=30/30`,
+guard agreement `30/30`, wrong fetch dispatches `0`, and one confidence-only
+deterministic fallback. The live replay selected two recovery rows, two
+Nav2-first rows, and two direct fetch-ready rows; all six delivered with
+browser-watchable visual packages, clean execution/setup/contact analysis, and
+closest approaches from `0.194m` to `0.197m`.
+
+The new promotion refresh also preserves the seed `20260634` roughest-order
+breadth pass. That rough slice added useful breadth after contact smoothing:
 six executable rows delivered with browser-watchable visual packages, including
 two recovery rows, two Nav2-first rows, and two direct fetch-ready rows.
 
@@ -1357,6 +1367,16 @@ Nav2-first, and fetch-ready rows, with clean execution, setup, and contact
 quality. The current evidence supports continuing the planner-gated route-owner
 architecture.
 
+The seed `20260635` refresh also fixed forward on an infrastructure ambiguity.
+Scene03 initially exposed commands published into a non-moving robot because the
+base diff-drive controller was unavailable. Executable fetch now records a
+service-call preflight against `/controller_manager/list_controllers`, fails
+before scoring if `jetbot_base_controller` is inactive, and stores
+`control_preflight.json` with the mission artifacts. The repaired scene03 run
+confirmed active control, observed first contact at `27.631s`, and delivered at
+`0.197m`.
+
 Next work should package the hardware-transfer plan for the planner-routed
-route-owner stack and fold the smoothed rough analyzer into the preservation bar
-for the next canonical promotion refresh.
+route-owner stack and fold seed `20260635`, the smoothed seed `20260634` rough
+analyzer, saved-anchor repeatability, and the hard mixed matrix into the
+preservation bar before the next moonshot.

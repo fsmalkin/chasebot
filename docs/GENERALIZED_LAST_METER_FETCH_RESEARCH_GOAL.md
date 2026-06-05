@@ -1148,6 +1148,32 @@ rough route-owner UAT lane with `promotion_evidence=false`; the promotion lane
 should refresh through the canonical seeded/saved-layout gates with smoothing
 active.
 
+June 5 supervised seeded promotion refresh: seed `20260635` now carries the
+current canonical promotion proof for the planner-routed architecture:
+`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The provider-backed planner child routed `30/30` generated scenes with provider
+`ok=30/30`, guard agreement `30/30`, wrong fetch dispatches `0`, and one
+confidence-only deterministic fallback. The executable replay selected two
+`nav2_reposition_first`, two `recovery_or_reaim`, and two `fetch_ready_local`
+rows; all six delivered into the `0.300m` contract with browser-watchable
+packages, clean execution/setup/contact analysis, and first-contact blockers
+`0`. Closest approach ranged from `0.194m` to `0.197m`.
+
+The refresh also fixed a diagnostic gap. Scene03 first failed as a no-motion
+executor run: commands were published, but visual and telemetry evidence showed
+the robot and ball stayed fixed because the base controller was unavailable.
+Executable fetch now records a base-controller preflight through
+`/controller_manager/list_controllers` and fails before scoring if
+`jetbot_base_controller` is not active. The repaired scene03 session
+`20260605T045353381785Z` confirmed active control, observed first contact at
+`27.631s`, moved the ball roughly `0.46m`, and delivered at `0.197m`.
+
+Interpretation: the planner-routed route-owner stack is simulation
+promotion-green again with current smoothing and controller preflight active.
+The next milestone work is hardware-transfer packaging plus a refreshed
+preservation manifest that includes saved anchors, the hard mixed matrix, seed
+`20260634` rough preservation, and seed `20260635` canonical promotion proof.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

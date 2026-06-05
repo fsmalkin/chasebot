@@ -786,6 +786,28 @@ reports clean execution, setup, and contact quality with `0` contact watches and
 evidence with `promotion_evidence=false`; the next canonical seeded/saved-layout
 promotion refresh should include the smoothing default.
 
+June 5 supervised seeded promotion refresh: seed `20260635` is the current
+canonical supervised promotion proof for the planner-routed stack:
+`artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The provider-backed planner child routed `30/30` generated scenes with provider
+`ok=30/30`, guard agreement `30/30`, wrong fetch dispatches `0`, and one
+confidence-only deterministic fallback. The live replay selected two
+`nav2_reposition_first`, two `recovery_or_reaim`, and two `fetch_ready_local`
+rows, delivered `6/6`, produced `6/6` browser-watchable packages, and the
+analyzer reports clean execution, setup, contact, and `0` first-contact
+blockers. Closest approach stayed inside `0.194m..0.197m`.
+
+Scene03 turned the prior no-motion ambiguity into a runtime guard. The failed
+attempt showed commands published while the robot and ball stayed fixed because
+the base diff-drive controller was unavailable. Executable fetch now runs a
+service-call preflight through `/controller_manager/list_controllers`, records
+`control_preflight.json`, and fails before mission scoring unless
+`jetbot_base_controller` is active. The repaired scene03 session
+`20260605T045353381785Z` confirmed controller readiness, observed first contact
+at `27.631s`, moved the ball from `(0.293, -0.118)` to `(0.756, -0.035)`, and
+delivered at `0.197m`. Hardware-transfer packaging should treat this preflight
+as a required executor guard.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches

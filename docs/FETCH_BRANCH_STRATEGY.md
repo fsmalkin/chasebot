@@ -434,6 +434,20 @@ Planner-routed moonshot update, June 2:
   analyzer as the branch-local regression gate before route-owner swaps,
   executor moonshots, recovery-window changes, visual-packaging changes, or
   hardware-transfer claims.
+- supervised promotion refresh and control-preflight update, June 5:
+  seed `20260635` is the current planner-routed promotion proof at
+  `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+  The provider-backed planner child returned `ok=30/30`, guard agreement
+  `30/30`, wrong fetch dispatches `0`, and one confidence-only deterministic
+  fallback. The canonical executable replay delivered `6/6` live missions and
+  `6/6` visual packages across two `nav2_reposition_first`, two
+  `recovery_or_reaim`, and two `fetch_ready_local` rows, with clean analyzer
+  status and `promotion_evidence=true`. Scene03 also exposed a base-controller
+  startup race; `golf_ball_circle_delivery_demo_runner.py` now records
+  `control_preflight.json`, checks `/controller_manager/list_controllers`, and
+  fails before scoring if `jetbot_base_controller` is inactive. Fold this result
+  into the branch regression manifest before the next executor moonshot or
+  hardware-transfer claim.
 
 Saved-anchor requalification update, later June 1:
 

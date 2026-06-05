@@ -23,6 +23,7 @@ from golf_ball_circle_delivery_demo_runner import apply_planner_route_execution_
 from golf_ball_circle_delivery_demo_runner import build_nav2_reposition_setup_pose  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_nav2_relative_setup_goal  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import docker_exec_service  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import ensure_base_controller_active  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import dispatch_nav2_reposition_before_fetch  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import NAV2_REPOSITION_BEHAVIOR_TREE  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import parse_nav2_reposition_result  # noqa: E402
@@ -79,6 +80,53 @@ def test_docker_exec_service_returns_timeout_result(monkeypatch):
     assert "partial-out" in output
     assert "partial-err" in output
     assert "timeout_after_s=10.000" in output
+
+
+def test_ensure_base_controller_active_accepts_existing_active_controller(monkeypatch):
+    import golf_ball_circle_delivery_demo_runner as runner
+
+    calls = []
+
+    def fake_exec(compose_project, service, script, *, timeout_s):
+        calls.append((compose_project, service, script, timeout_s))
+        return 0, "jetbot_base_controller diff_drive_controller/DiffDriveController active\nBASE_CONTROLLER_ACTIVE=1\n"
+
+    monkeypatch.setattr(runner, "docker_exec_service", fake_exec)
+
+    result = ensure_base_controller_active(compose_project="project", timeout_s=2.0)
+
+    assert result["pass"] is True
+    assert result["repaired"] is False
+    assert result["returncode"] == 0
+    assert calls[0][0] == "project"
+    assert calls[0][1] == "sim-gate"
+    assert "/controller_manager/list_controllers" in calls[0][2]
+
+
+def test_ensure_base_controller_active_records_repair_success(monkeypatch):
+    import golf_ball_circle_delivery_demo_runner as runner
+
+    def fake_exec(*_args, **_kwargs):
+        return 0, "Could not contact service\nLoaded jetbot_base_controller\nConfigured and activated\nBASE_CONTROLLER_ACTIVE=1\n"
+
+    monkeypatch.setattr(runner, "docker_exec_service", fake_exec)
+
+    result = ensure_base_controller_active(compose_project="project")
+
+    assert result["pass"] is True
+    assert result["repaired"] is True
+    assert "Configured and activated" in result["output_tail"]
+
+
+def test_ensure_base_controller_active_fails_closed_when_unavailable(monkeypatch):
+    import golf_ball_circle_delivery_demo_runner as runner
+
+    monkeypatch.setattr(runner, "docker_exec_service", lambda *_args, **_kwargs: (2, "BASE_CONTROLLER_ACTIVE=0"))
+
+    result = ensure_base_controller_active(compose_project="project", timeout_s=1.0)
+
+    assert result["pass"] is False
+    assert result["returncode"] == 2
 
 
 def test_passive_docker_exec_returns_timeout_result(monkeypatch):

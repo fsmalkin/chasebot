@@ -1361,7 +1361,25 @@ the same bounded budgets.
    - promotion precondition:
      no learned execution until shadow predictions improve margin or failure
      classification without guard violations
-11. Person target prototype:
+11. Planner-routed route-owner promotion refresh:
+   - status: current active architecture path
+   - branch:
+     `spike/fetch-arch-planner-routed-forward-only-moonshot-20260602`
+   - evidence:
+     `artifacts/session/live_supervised_planner_seeded_generalization_gate_seed20260635_smoothing_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+   - result:
+     provider-backed planner routing `30/30`, guard agreement `30/30`, wrong
+     fetch dispatches `0`, one confidence-only deterministic fallback,
+     executable replay `6/6`, visual packages `6/6`, clean execution/setup/
+     contact analysis, and `promotion_evidence=true`
+   - implementation note:
+     executable fetch now records a base-controller preflight before scoring, so
+     no-motion runs caused by an inactive `jetbot_base_controller` fail as
+     infrastructure evidence instead of contact-policy evidence
+   - interpretation:
+     object-centric local fetch is now one route owner inside the planner-gated
+     stack, alongside Nav2-first setup and deterministic recovery/re-aim
+12. Person target prototype:
    - only after pose-target gates are green
 
 ## Non-Goals
