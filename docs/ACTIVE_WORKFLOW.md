@@ -579,6 +579,24 @@ June 5, 2026 robot-side rehearsal preflight:
   then saved anchors, then seed20260635 mixed-route rehearsal under the same
   artifact contract.
 
+June 5, 2026 fresh rehearsal ladder:
+
+- Runtime stack smoke:
+  `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`
+- Saved-anchor runner:
+  `artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`
+- Seed20260635 runner:
+  `artifacts/session/robot_side_fetch_rehearsal_seed20260635_20260605/fetch_hardware_rehearsal_runner/scorecard.md`
+- Result: stack smoke passed with `robot_fidelity_orin`, `tensorrt_int8`,
+  coordinate UAT `pass=true`, and raw/debug screenshots. Saved anchors passed
+  `3/3`; seed20260635 mixed-route replay passed `6/6` with analyzer-clean
+  execution, setup, and contact.
+- Visual review: inspected the D415 raw and YOLO debug screenshots, all three
+  saved-anchor keyframe sheets, and all six seed keyframe sheets.
+- Claim boundary: this is fresh sim-gate/runtime-target rehearsal evidence.
+  Physical robot execution, onboard TensorRT on the robot, physical camera
+  behavior, and field physics remain the open hardware gates.
+
 June 4, 2026 planner-only route proof:
 
 - Command:

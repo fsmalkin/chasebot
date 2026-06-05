@@ -22,26 +22,26 @@
 ## Videos
 
 ### Browser-Safe Onboard Camera
-- [raw_camera_browser.mp4](/artifacts/session/20260605T062848905204Z/visual/raw_camera_browser.mp4)
+- [raw_camera_browser.mp4](/artifacts/session/20260605T070336842787Z/visual/raw_camera_browser.mp4)
 
 ### Browser-Safe Context Views
-- [topdown_telemetry_browser.mp4](/artifacts/session/20260605T062848905204Z/visual/topdown_telemetry_browser.mp4)
-- [world_stream.mp4](/artifacts/session/20260605T062848905204Z/visual/world_stream.mp4)
+- [topdown_telemetry_browser.mp4](/artifacts/session/20260605T070336842787Z/visual/topdown_telemetry_browser.mp4)
+- [world_stream.mp4](/artifacts/session/20260605T070336842787Z/visual/world_stream.mp4)
 
 ## All Video Artifacts
-- [raw_camera_browser.mp4](/artifacts/session/20260605T062848905204Z/visual/raw_camera_browser.mp4)
-- [topdown_telemetry_browser.mp4](/artifacts/session/20260605T062848905204Z/visual/topdown_telemetry_browser.mp4)
-- [world_stream.mp4](/artifacts/session/20260605T062848905204Z/visual/world_stream.mp4)
+- [raw_camera_browser.mp4](/artifacts/session/20260605T070336842787Z/visual/raw_camera_browser.mp4)
+- [topdown_telemetry_browser.mp4](/artifacts/session/20260605T070336842787Z/visual/topdown_telemetry_browser.mp4)
+- [world_stream.mp4](/artifacts/session/20260605T070336842787Z/visual/world_stream.mp4)
 - `yolo_debug.mp4` validation=`not_browser_h264_yuv420p:codec=mpeg4:pix_fmt=yuv420p`
 - `raw_camera.mp4` validation=`not_browser_h264_yuv420p:codec=mpeg4:pix_fmt=yuv420p`
 - `topdown_telemetry.mp4` validation=`not_browser_h264_yuv420p:codec=mpeg4:pix_fmt=yuv420p`
 
 ## Video Recovery
-- `raw_camera_browser.mp4` source=`raw_keyframes` ok=`True` frames=`21` previous=`video_missing_or_tiny` error=``
-- `topdown_telemetry_browser.mp4` source=`topdown_keyframes` ok=`True` frames=`21` previous=`video_missing_or_tiny` error=``
+- `raw_camera_browser.mp4` source=`raw_keyframes` ok=`True` frames=`29` previous=`video_missing_or_tiny` error=``
+- `topdown_telemetry_browser.mp4` source=`topdown_keyframes` ok=`True` frames=`29` previous=`video_missing_or_tiny` error=``
 
 ## Visual Keyframe Reviews
-- [keyframe_review_contact_sheet.png](/artifacts/session/20260605T062848905204Z/visual/keyframe_review_contact_sheet.png) session=`20260605T062848905204Z` ok=`True` selected=`10` paired=`21` source=`raw_topdown_keyframes` error=``
+- [keyframe_review_contact_sheet.png](/artifacts/session/20260605T070336842787Z/visual/keyframe_review_contact_sheet.png) session=`20260605T070336842787Z` ok=`True` selected=`10` paired=`29` source=`raw_topdown_keyframes` error=``
 
 ## Planner Gates
 - `hardware_rehearsal_seed20260635_20260605_planner` pass=`True` routes=`30/30` wrong_fetch=`0`
@@ -53,10 +53,10 @@
 - none
 
 ## Missions
-- route=`recovery_or_reaim` session=`20260605T062848905204Z` fetch_to_pose=`True` route_only=`False` raw_fetch_to_pose=`True` executor=`bounded_recovery_reaim` reason=`trajectory_intersects_delivery_radius` closest=`0.195m` geometry=`unknown` geometry_reason=`` model_provenance=`True` target_model=`calibrated_golf_ball` ai_mode=`` route_outcome=`` [summary](/artifacts/session/20260605T062848905204Z/golf_ball_circle_delivery/20260605T062920127412Z/mission_verdict.json)
+- route=`recovery_or_reaim` session=`20260605T070336842787Z` fetch_to_pose=`True` route_only=`False` raw_fetch_to_pose=`True` executor=`bounded_recovery_reaim` reason=`trajectory_intersects_delivery_radius` closest=`0.196m` geometry=`unknown` geometry_reason=`` model_provenance=`True` target_model=`calibrated_golf_ball` ai_mode=`` route_outcome=`` [summary](/artifacts/session/20260605T070336842787Z/golf_ball_circle_delivery/20260605T070408775252Z/mission_verdict.json)
 
 ## Visual Evidence
-- `artifacts/session/20260605T062848905204Z/visual` confirmation=`True` visual_demo=`False` world_stream=`True` target_persistence=`False` world_degraded=`False` world_failure=``
+- `artifacts/session/20260605T070336842787Z/visual` confirmation=`True` visual_demo=`False` world_stream=`True` target_persistence=`False` world_degraded=`False` world_failure=``
 
 ## Warnings
 - `visual_confirmation_keyframe_recovery`

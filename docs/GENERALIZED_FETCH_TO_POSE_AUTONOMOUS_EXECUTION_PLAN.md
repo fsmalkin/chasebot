@@ -502,6 +502,20 @@ required local commands. It reports `local_preflight_ready=true` while keeping
 followed by saved anchors and seed20260635 mixed-route rehearsal only after
 onboard raw-camera/context artifacts are available for sequence review.
 
+June 5 fresh rehearsal ladder: the full runner sequence now passes on the
+`robot_fidelity_orin` / `tensorrt_int8` sim-gate runtime target:
+`artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+`artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+and
+`artifacts/session/robot_side_fetch_rehearsal_seed20260635_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+The stack smoke captured raw D415 and YOLO debug screenshots, saved anchors
+passed `3/3`, and seed20260635 mixed-route replay passed `6/6` with clean
+route-analyzer status. Visual review covered the stack-smoke screenshots, three
+saved-anchor keyframe sheets, and six seed keyframe sheets. Treat this as the
+current browser-watchable rehearsal proof while preserving the hardware claim
+boundary: physical robot execution, onboard TensorRT on the robot, physical
+camera behavior, and field physics remain open.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.

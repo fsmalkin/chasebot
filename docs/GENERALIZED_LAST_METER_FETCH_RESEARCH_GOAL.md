@@ -1244,6 +1244,18 @@ saved-anchor runner, and seed mixed-route runner. It deliberately reports
 requires onboard execution with controller preflight, mission verdict,
 raw-camera/topdown/world videos, keyframe sheets, and operator sequence review.
 
+The fresh rehearsal ladder is now green on the sim-gate runtime target:
+`artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+`artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+and
+`artifacts/session/robot_side_fetch_rehearsal_seed20260635_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+Stack smoke passed with `robot_fidelity_orin`, `tensorrt_int8`, coordinate UAT,
+and raw/debug screenshots. Saved anchors passed `3/3`; seed20260635 mixed-route
+replay passed `6/6`. Visual review covered the stack-smoke screenshots, three
+saved-anchor keyframe sheets, and six seed keyframe sheets. The next research
+proof is physical/onboard execution of the same ladder, with `hardware_proven`
+remaining false until that proof exists.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

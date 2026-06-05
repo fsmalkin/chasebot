@@ -1442,3 +1442,13 @@ local command availability. The roadmap action is now the first robot-side stack
 smoke with onboard/context artifact review; saved anchors and seed20260635
 mixed-route execution follow only after that stack smoke records the required
 robot-side evidence. `hardware_proven=false` remains the active boundary.
+
+The fresh rehearsal ladder is now green on the sim-gate runtime target:
+`artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+`artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
+and
+`artifacts/session/robot_side_fetch_rehearsal_seed20260635_20260605/fetch_hardware_rehearsal_runner/scorecard.md`.
+Stack smoke, saved anchors, and seed20260635 mixed-route replay all passed with
+browser-watchable evidence and visual keyframe review. The roadmap now advances
+to physical/onboard execution of the same ladder, while `hardware_proven=false`
+continues to protect the field-transfer claim.

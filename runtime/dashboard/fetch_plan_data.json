@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 2:58 AM ET",
+  "updated_label": "Updated June 5, 2026, 3:17 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Robot-side rehearsal preflight is ready",
-  "status_detail": "The planner-routed fetch stack has cleared the simulation hardware-rehearsal ladder and now has a robot-side run package ready. The new preflight verifies the refreshed hardware-transfer readiness summary, rehearsal plan, required local commands, dashboard service script, runtime sync script, stack-smoke command, saved-anchor replay command, and seed20260635 mixed-route command. It keeps hardware_connected=false and hardware_proven=false until onboard execution records controller preflight, mission verdicts, raw-camera/topdown/world videos, keyframe sheets, and visual review notes.",
+  "status_label": "Fresh rehearsal ladder is green",
+  "status_detail": "The current branch now has a fresh end-to-end rehearsal ladder on the robot_fidelity_orin/tensorrt_int8 sim-gate runtime target: stack smoke, saved anchors, and seed 20260635 mixed-route replay all passed through the hardware rehearsal runner. Visual keyframe review covered the raw camera and topdown sequences for the stack-smoke screenshots, all three saved anchors, and all six mixed-route runs. This strengthens the browser-watchable UAT package while keeping hardware_proven=false until physical robot-side/onboard execution and field physics are recorded.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,78 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Fresh rehearsal ladder is green",
+      "status": "stack smoke, saved anchors, and seed20260635 mixed-route replay passed with visual review",
+      "tone": "green",
+      "summary": "The full rehearsal ladder has been rerun after the robot-side preflight. Runtime stack smoke passed under container_kilted with robot_fidelity_orin and tensorrt_int8, saved anchors passed 3/3, and seed20260635 mixed-route replay passed 6/6 across fetch-ready, Nav2-first, and recovery/re-aim route owners. I inspected the D415 raw and YOLO debug screenshots plus all nine fetch keyframe sheets; the onboard camera and topdown geometry agree through setup, first contact, push, and terminal delivery. The remaining milestone gap is physical/onboard hardware proof.",
+      "metrics": [
+        "Runtime stack smoke: pass=true; session=20260605T065010Z; coordinate UAT pass=true; detection_success_rate=1.0; inference_device=cuda:0",
+        "Saved anchors: selected=3; mission_pass=3; visual_package_pass=3; closest=0.197m for left05/right05/zero",
+        "Seed20260635 replay: random_cases=30; selected=6; mission_pass=6; visual_package_pass=6; analyzer execution/setup/contact clean",
+        "Route coverage: saved anchors cover fetch_ready_local and recovery_or_reaim; seed replay covers fetch_ready_local, nav2_reposition_first, and recovery_or_reaim",
+        "Visual review: inspected stack-smoke raw/debug screenshots, three saved-anchor keyframe sheets, and six seed keyframe sheets",
+        "Claim boundary: hardware_proven=false; physical camera, onboard TensorRT on the robot, and field physics remain open gates"
+      ],
+      "links": [
+        {
+          "label": "Runtime stack smoke scorecard",
+          "url": "/artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "Saved-anchor runner scorecard",
+          "url": "/artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "Seed runner scorecard",
+          "url": "/artifacts/session/robot_side_fetch_rehearsal_seed20260635_20260605/fetch_hardware_rehearsal_runner/scorecard.md"
+        },
+        {
+          "label": "left05 onboard video",
+          "url": "/artifacts/session/20260605T065438043501Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "right05 onboard video",
+          "url": "/artifacts/session/20260605T065650383344Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "zero onboard video",
+          "url": "/artifacts/session/20260605T065910170978Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene02 onboard video",
+          "url": "/artifacts/session/20260605T070125058991Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene03 onboard video",
+          "url": "/artifacts/session/20260605T070336842787Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene05 onboard video",
+          "url": "/artifacts/session/20260605T070537017062Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene07 onboard video",
+          "url": "/artifacts/session/20260605T070727026295Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene08 onboard video",
+          "url": "/artifacts/session/20260605T070913836361Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "scene09 onboard video",
+          "url": "/artifacts/session/20260605T071049431440Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "D415 raw stack-smoke screenshot",
+          "url": "/artifacts/demos/milestone_1_20260605T065010Z/screenshots/d415_color.png"
+        },
+        {
+          "label": "YOLO debug stack-smoke screenshot",
+          "url": "/artifacts/demos/milestone_1_20260605T065010Z/screenshots/yolo_debug.png"
+        }
+      ]
+    },
     {
       "title": "Robot-side rehearsal preflight is ready",
       "status": "local run package ready; hardware proof still open",
@@ -4377,9 +4449,9 @@
     }
   ],
   "next_steps": [
-    "Attempt robot-side runtime stack smoke using the preflight runbook, then inspect the onboard and context artifacts before scoring fetch behavior.",
-    "If stack smoke is green, run saved anchors through the same runner contract and inspect raw-camera/topdown/world keyframes before the seed mixed-route sample.",
-    "Keep hardware_proven=false until robot-side live execution, onboard TensorRT execution, physical camera evidence, and field-physics proof are recorded."
+    "Run the physical/onboard hardware proof for the same ladder, starting with stack smoke and raw-camera/YOLO visual review.",
+    "Restore provider-backed LLM routing when OPENAI_API_KEY is available, then rerun the planner gate to compare provider-backed route choice with deterministic fallback.",
+    "Keep hardware_proven=false until physical robot execution, onboard TensorRT, physical camera evidence, and field-physics proof are recorded."
   ],
   "uat_review_bundle": {
     "title": "Seed 20260635 supervised promotion executable UAT bundle",

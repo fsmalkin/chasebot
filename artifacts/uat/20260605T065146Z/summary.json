@@ -1,0 +1,26 @@
+{
+  "detection_success_rate": 1.0,
+  "failure_counts": {
+    "invalid_depth": 0,
+    "no_detection": 0,
+    "stale_topic": 0,
+    "transform_failure": 0
+  },
+  "inference_device_resolved": "cuda:0",
+  "max_timeout_s": 0.151839107988053,
+  "mean_xy_error_m": 0.11270132522731865,
+  "navigation": {},
+  "p95_xy_error_m": 0.11580207765102385,
+  "pass": true,
+  "profile": "compat",
+  "run_id": "20260605T065146Z",
+  "runtime_target": "robot_fidelity_orin",
+  "scenario_count": 10,
+  "thresholds": {
+    "detection_success_rate_min": 0.9,
+    "max_timeout_s": 20.0,
+    "mean_xy_error_max_m": 0.25,
+    "p95_xy_error_max_m": 0.4
+  },
+  "timestamp_utc": "2026-06-05T06:52:02.654853+00:00"
+}

@@ -15,7 +15,7 @@
   "dry_run": false,
   "expected_executable_count": 6,
   "fresh_dashboard_session_per_run": true,
-  "generated_utc": "2026-06-05T06:37:34.192658+00:00",
+  "generated_utc": "2026-06-05T07:12:45.660376+00:00",
   "max_per_route": 2,
   "milestone_interpretation": "planner_routed_seeded_generalization_visual_uat_green",
   "pass": true,
