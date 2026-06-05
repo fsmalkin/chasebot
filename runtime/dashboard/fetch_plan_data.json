@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 2:39 AM ET",
+  "updated_label": "Updated June 5, 2026, 2:58 AM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Hardware rehearsal green through seed 20260635",
-  "status_detail": "The planner-routed fetch stack has now cleared the three-step simulation hardware-rehearsal ladder: runtime stack smoke, saved anchors, and seed 20260635 mixed-route replay. The latest seeded rehearsal classified 30 generated scenes, executed six rows across fetch-ready, Nav2-first, and recovery/re-aim route owners, delivered 6/6 inside the 0.300m contract, produced 6/6 browser-watchable visual packages, and passed analyzer setup/contact/execution checks. Visual keyframe review across all six runs shows onboard camera and topdown geometry aligned through setup, first contact, push, and terminal delivery. hardware_proven remains false until the same contract runs on robot-side onboard hardware.",
+  "status_label": "Robot-side rehearsal preflight is ready",
+  "status_detail": "The planner-routed fetch stack has cleared the simulation hardware-rehearsal ladder and now has a robot-side run package ready. The new preflight verifies the refreshed hardware-transfer readiness summary, rehearsal plan, required local commands, dashboard service script, runtime sync script, stack-smoke command, saved-anchor replay command, and seed20260635 mixed-route command. It keeps hardware_connected=false and hardware_proven=false until onboard execution records controller preflight, mission verdicts, raw-camera/topdown/world videos, keyframe sheets, and visual review notes.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,38 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Robot-side rehearsal preflight is ready",
+      "status": "local run package ready; hardware proof still open",
+      "tone": "green",
+      "summary": "The next hardware-transfer rung now has an executable preflight and runbook. It verifies the post-seed hardware-transfer readiness summary, the rehearsal plan, required local commands, dashboard serving, runtime workspace sync, stack-smoke script, saved-anchor runner, and seed20260635 mixed-route runner. This is the correct bridge from green simulation rehearsal to physical/onboard proof: the package is ready to attempt, while hardware_connected and hardware_proven remain false until the robot-side artifacts exist.",
+      "metrics": [
+        "Preflight: pass=true; local_preflight_ready=true; issues=[]",
+        "Claim boundary: hardware_connected=false; hardware_proven=false; promotion_evidence=false",
+        "Command checks: python, powershell, and git resolve locally",
+        "Script checks: dashboard service, runtime sync, first UAT, hardware runner, replay batch, and seeded gate scripts exist",
+        "Required robot-side artifacts: control_preflight.json, mission_verdict.json, raw_camera/topdown/world videos, keyframe sheet, visual review notes",
+        "Next robot-side sequence: dashboard service, runtime sync, runtime stack smoke, saved anchors, seed20260635 mixed-route rehearsal"
+      ],
+      "links": [
+        {
+          "label": "Robot-side preflight scorecard",
+          "url": "/artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md"
+        },
+        {
+          "label": "Robot-side preflight summary",
+          "url": "/artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/robot_side_rehearsal_preflight_summary.json"
+        },
+        {
+          "label": "Post-seed hardware-transfer readiness scorecard",
+          "url": "/artifacts/session/analysis_fetch_hardware_transfer_readiness_post_seed_rehearsal_20260605_fixed/fetch_hardware_transfer_readiness/scorecard.md"
+        },
+        {
+          "label": "Hardware rehearsal plan scorecard",
+          "url": "/artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/fetch_hardware_rehearsal_plan/scorecard.md"
+        }
+      ]
+    },
     {
       "title": "Seed 20260635 hardware rehearsal is green",
       "status": "30 planned scenes, 6 executable mixed-route runs, 6/6 delivery with visual packages",
@@ -4345,14 +4377,9 @@
     }
   ],
   "next_steps": [
-    "Run the same hardware-rehearsal artifact contract on robot-side onboard hardware with raw-camera/topdown/world video and keyframe sequence review.",
-    "Keep the seed20260635 mixed-route rehearsal as the current simulation hardware-rehearsal green bar before future route-owner, contact-servo, visual-packaging, or hardware-transfer moonshots.",
-    "Restore provider-backed LLM route authority only when API access is available; deterministic fallback remains the safe route owner until then.",
-    "Use the seed20260635 preflight regression manifest as the default green bar before future route-owner, contact-servo, visual-packaging, or hardware-transfer moonshots.",
-    "Keep hardware-transfer claims at rehearsal-ready until robot-side live execution, onboard TensorRT execution, physical camera evidence, and field-physics proof are recorded.",
-    "Keep provider-backed guarded fallback as the high-level planner authority model unless product requirements demand strict all-accepted LLM routing.",
-    "Measure the runtime cost of the longer recovery window and decide whether hardware UAT needs a progress-based timeout instead of a fixed duration.",
-    "Investigate container-side ffmpeg availability as evidence hardening; host-side browser video recovery works but remains a packaging dependency."
+    "Attempt robot-side runtime stack smoke using the preflight runbook, then inspect the onboard and context artifacts before scoring fetch behavior.",
+    "If stack smoke is green, run saved anchors through the same runner contract and inspect raw-camera/topdown/world keyframes before the seed mixed-route sample.",
+    "Keep hardware_proven=false until robot-side live execution, onboard TensorRT execution, physical camera evidence, and field-physics proof are recorded."
   ],
   "uat_review_bundle": {
     "title": "Seed 20260635 supervised promotion executable UAT bundle",

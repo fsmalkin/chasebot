@@ -80,6 +80,28 @@ def _green_dashboard(path: Path) -> Path:
     )
 
 
+def _green_hardware_rehearsal_dashboard(path: Path) -> Path:
+    return _write_json(
+        path,
+        {
+            "status_label": "Hardware rehearsal green through seed 20260635",
+            "status_detail": "seed 20260635 passed the hardware rehearsal ladder",
+            "uat_review_bundle": {
+                "route_samples": [
+                    {
+                        "label": f"sample{i}",
+                        "video_url": f"/artifacts/session/sample{i}/visual/raw_camera_browser.mp4",
+                        "topdown_url": f"/artifacts/session/sample{i}/visual/topdown_telemetry_browser.mp4",
+                        "world_url": f"/artifacts/session/sample{i}/visual/world_stream.mp4",
+                        "contact_sheet_url": f"/artifacts/session/sample{i}/visual/keyframe_review_contact_sheet.png",
+                    }
+                    for i in range(6)
+                ]
+            },
+        },
+    )
+
+
 def _green_docs(tmp_path: Path) -> None:
     _write_text(
         tmp_path / "hardware_contract.md",
@@ -116,12 +138,22 @@ def test_hardware_transfer_readiness_is_rehearsal_ready_without_claiming_hardwar
     assert "robot_side_live_rehearsal_not_run" in summary["open_hardware_gates"]
 
 
+def test_hardware_transfer_readiness_accepts_hardware_rehearsal_dashboard_status(tmp_path: Path):
+    args = _green_fixture(tmp_path)
+    _green_hardware_rehearsal_dashboard(Path(args.dashboard_plan))
+
+    summary = readiness.build_summary(args)
+
+    assert summary["pass"] is True
+    assert summary["dashboard_plan"]["status_label"] == "Hardware rehearsal green through seed 20260635"
+
+
 def test_hardware_transfer_readiness_fails_closed_when_visual_package_is_missing(tmp_path: Path):
     args = _green_fixture(tmp_path)
     _write_json(
         Path(args.dashboard_plan),
         {
-            "status_label": "Promotion green on supervised seed 20260635",
+            "status_label": "Hardware rehearsal green through seed 20260635",
             "status_detail": "seed 20260635 passed",
             "uat_review_bundle": {"route_samples": []},
         },

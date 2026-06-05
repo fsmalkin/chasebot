@@ -1433,3 +1433,12 @@ found camera and topdown evidence aligned through setup, first contact, push,
 and delivery. The next roadmap action is robot-side onboard execution under the
 same artifact contract; `hardware_proven=false` remains in force until that
 evidence exists.
+
+The robot-side rehearsal preflight is now green:
+`artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`.
+It verifies the refreshed readiness summary, rehearsal plan, dashboard service,
+runtime sync, stack-smoke script, saved-anchor runner, seed20260635 runner, and
+local command availability. The roadmap action is now the first robot-side stack
+smoke with onboard/context artifact review; saved anchors and seed20260635
+mixed-route execution follow only after that stack smoke records the required
+robot-side evidence. `hardware_proven=false` remains the active boundary.

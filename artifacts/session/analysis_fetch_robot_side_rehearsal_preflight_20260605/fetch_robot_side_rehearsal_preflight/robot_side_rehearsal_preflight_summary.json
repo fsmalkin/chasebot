@@ -1,0 +1,91 @@
+{
+  "campaign_id": "analysis_fetch_robot_side_rehearsal_preflight_20260605",
+  "claim_boundary": "This preflight proves the local run package is ready to attempt robot-side rehearsal. It does not prove onboard TensorRT execution, physical camera behavior, field physics, or hardware delivery.",
+  "command_checks": [
+    {
+      "command": "python",
+      "issues": [],
+      "pass": true,
+      "path": "C:\\Users\\afutu\\AppData\\Local\\Programs\\Python\\Python312\\python.EXE"
+    },
+    {
+      "command": "powershell",
+      "issues": [],
+      "pass": true,
+      "path": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.EXE"
+    },
+    {
+      "command": "git",
+      "issues": [],
+      "pass": true,
+      "path": "C:\\Program Files\\Git\\cmd\\git.EXE"
+    }
+  ],
+  "dashboard_url": "http://100.112.221.6:8883",
+  "generated_utc": "2026-06-05T06:46:15.150107+00:00",
+  "hardware_connected": false,
+  "hardware_proven": false,
+  "issues": [],
+  "local_preflight_ready": true,
+  "milestone_interpretation": "robot_side_fetch_rehearsal_preflight_ready",
+  "next_commands": [
+    "powershell -ExecutionPolicy Bypass -File scripts/run_dashboard_service.ps1 -BindHost 0.0.0.0 -Port 8883",
+    "powershell -ExecutionPolicy Bypass -File scripts/sync_runtime_workspace.ps1 -Distro Ubuntu-24.04 -WorkspacePath '~/ros2_ws' -SkipBuild -RosDistro kilted",
+    "python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_runtime_stack_smoke_20260605 --step-id runtime_stack_smoke --execute --timeout-s 1800",
+    "python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_saved_anchors_20260605 --step-id saved_anchor_one_run_fetch_rehearsal --execute --timeout-s 2400",
+    "python scripts/fetch_hardware_rehearsal_runner.py --campaign-id robot_side_fetch_rehearsal_seed20260635_20260605 --step-id seed20260635_mixed_route_fetch_rehearsal --execute --timeout-s 3600"
+  ],
+  "pass": true,
+  "planner_provider": {
+    "execution_policy": "deterministic_fallback_allowed_when_provider_unavailable",
+    "openai_api_key_present": false,
+    "provider_absence_blocks_hardware_proof": false
+  },
+  "promotion_evidence": false,
+  "readiness_summary_path": "artifacts/session/analysis_fetch_hardware_transfer_readiness_post_seed_rehearsal_20260605_fixed/fetch_hardware_transfer_readiness/hardware_transfer_readiness_summary.json",
+  "rehearsal_plan_path": "artifacts/session/analysis_fetch_hardware_rehearsal_plan_20260605/fetch_hardware_rehearsal_plan/hardware_rehearsal_plan_summary.json",
+  "required_robot_side_artifacts": [
+    "control_preflight.json with /controller_manager/list_controllers evidence",
+    "mission_verdict.json",
+    "visual/raw_camera_browser.mp4",
+    "visual/topdown_telemetry_browser.mp4",
+    "visual/world_stream.mp4",
+    "visual/keyframe_review_contact_sheet.png",
+    "operator visual review notes for start/setup, pre-contact, first contact, mid-push, terminal arrival, final rest"
+  ],
+  "scorecard_path": "artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md",
+  "script_checks": [
+    {
+      "issues": [],
+      "pass": true,
+      "path": "scripts/run_dashboard_service.ps1"
+    },
+    {
+      "issues": [],
+      "pass": true,
+      "path": "scripts/sync_runtime_workspace.ps1"
+    },
+    {
+      "issues": [],
+      "pass": true,
+      "path": "scripts/run_first_uat.ps1"
+    },
+    {
+      "issues": [],
+      "pass": true,
+      "path": "scripts/fetch_hardware_rehearsal_runner.py"
+    },
+    {
+      "issues": [],
+      "pass": true,
+      "path": "scripts/fetch_planner_route_replay_batch.py"
+    },
+    {
+      "issues": [],
+      "pass": true,
+      "path": "scripts/fetch_planner_seeded_generalization_gate.py"
+    }
+  ],
+  "summary_path": "artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/robot_side_rehearsal_preflight_summary.json",
+  "type": "fetch_robot_side_rehearsal_preflight"
+}

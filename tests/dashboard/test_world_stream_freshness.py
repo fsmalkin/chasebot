@@ -482,8 +482,9 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Hardware rehearsal green through seed 20260635"
+    assert payload["status_label"] == "Robot-side rehearsal preflight is ready"
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
+    assert "Robot-side rehearsal preflight is ready" in evidence_by_title
     assert "Seed 20260635 hardware rehearsal is green" in evidence_by_title
     assert "Saved-anchor fetch rehearsal is green" in evidence_by_title
     assert "Runtime stack smoke executed with artifact contract" in evidence_by_title
@@ -493,6 +494,9 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert "Supervised seeded promotion refresh is green" in evidence_by_title
     assert evidence_by_title["Saved-anchor fetch rehearsal is green"]["links"][0]["url"].endswith(
         "/fetch_hardware_rehearsal_runner/scorecard.md"
+    )
+    assert evidence_by_title["Robot-side rehearsal preflight is ready"]["links"][0]["url"].endswith(
+        "/fetch_robot_side_rehearsal_preflight/scorecard.md"
     )
     assert evidence_by_title["Seed 20260635 hardware rehearsal is green"]["links"][0]["url"].endswith(
         "/fetch_hardware_rehearsal_runner/scorecard.md"

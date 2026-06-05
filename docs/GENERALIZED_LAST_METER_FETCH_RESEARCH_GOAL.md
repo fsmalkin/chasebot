@@ -1234,6 +1234,16 @@ the current simulation hardware-rehearsal ladder; the remaining proof gap is
 robot-side/onboard execution, so `hardware_proven=false` remains the correct
 claim boundary.
 
+The robot-side rehearsal preflight is now ready:
+`artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`.
+It validates the local run package after the seed20260635 rehearsal, including
+the refreshed hardware-transfer readiness summary, rehearsal plan, command
+availability, dashboard service, runtime sync, stack-smoke command,
+saved-anchor runner, and seed mixed-route runner. It deliberately reports
+`hardware_connected=false` and `hardware_proven=false`; physical proof still
+requires onboard execution with controller preflight, mission verdict,
+raw-camera/topdown/world videos, keyframe sheets, and operator sequence review.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

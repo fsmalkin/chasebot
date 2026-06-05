@@ -489,6 +489,19 @@ clears the current rehearsal ladder in simulation while keeping
 `hardware_proven=false`; the next milestone step is robot-side execution with
 onboard camera proof under the same artifact contract.
 
+June 5 robot-side rehearsal preflight: the hardware-transfer bridge now has a
+local runbook artifact:
+`artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`.
+The refreshed hardware-transfer readiness scorecard is
+`artifacts/session/analysis_fetch_hardware_transfer_readiness_post_seed_rehearsal_20260605_fixed/fetch_hardware_transfer_readiness/scorecard.md`.
+The preflight verifies the readiness summary, rehearsal plan, dashboard service,
+runtime sync, stack-smoke script, saved-anchor runner, seed20260635 runner, and
+required local commands. It reports `local_preflight_ready=true` while keeping
+`hardware_connected=false`, `hardware_proven=false`, and
+`promotion_evidence=false`. The next execution step is robot-side stack smoke,
+followed by saved anchors and seed20260635 mixed-route rehearsal only after
+onboard raw-camera/context artifacts are available for sequence review.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.

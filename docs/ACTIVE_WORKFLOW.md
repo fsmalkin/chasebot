@@ -560,6 +560,25 @@ June 5, 2026 seed20260635 mixed-route hardware rehearsal:
   step is robot-side execution with onboard camera proof and the same runner
   artifact contract.
 
+June 5, 2026 robot-side rehearsal preflight:
+
+- Command:
+  `python scripts\fetch_robot_side_rehearsal_preflight.py --campaign-id analysis_fetch_robot_side_rehearsal_preflight_20260605`
+- Scorecard:
+  `artifacts/session/analysis_fetch_robot_side_rehearsal_preflight_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`
+- Refreshed readiness:
+  `artifacts/session/analysis_fetch_hardware_transfer_readiness_post_seed_rehearsal_20260605_fixed/fetch_hardware_transfer_readiness/scorecard.md`
+- Result: local preflight ready, command/script checks green, `hardware_connected=false`,
+  `hardware_proven=false`, and `promotion_evidence=false`.
+- Required robot-side proof: controller preflight with
+  `/controller_manager/list_controllers`, mission verdict, raw-camera video,
+  topdown/world context, keyframe contact sheet, and visual review notes across
+  setup, pre-contact, first contact, mid-push, terminal arrival, and final rest.
+- Evidence meaning: the local run package is ready to attempt robot-side
+  rehearsal. Hardware proof starts with onboard execution of the stack smoke,
+  then saved anchors, then seed20260635 mixed-route rehearsal under the same
+  artifact contract.
+
 June 4, 2026 planner-only route proof:
 
 - Command:

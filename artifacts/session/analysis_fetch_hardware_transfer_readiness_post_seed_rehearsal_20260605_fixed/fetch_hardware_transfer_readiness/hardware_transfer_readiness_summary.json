@@ -1,0 +1,92 @@
+{
+  "campaign_id": "analysis_fetch_hardware_transfer_readiness_post_seed_rehearsal_20260605_fixed",
+  "dashboard_plan": {
+    "first_video_url": "/artifacts/session/20260605T042210177751Z/visual/raw_camera_browser.mp4",
+    "issues": [],
+    "pass": true,
+    "path": "runtime/dashboard/fetch_plan_data.json",
+    "status_label": "Hardware rehearsal green through seed 20260635",
+    "uat_sample_count": 6
+  },
+  "generated_utc": "2026-06-05T06:44:35.864791+00:00",
+  "hardware_constraints": {
+    "issues": [],
+    "pass": true,
+    "path": "docs/ROBOT_HARDWARE_CONSTRAINTS.md",
+    "required_terms": [
+      "Jetson Orin Nano 8GB",
+      "cmd_vel",
+      "Controller update rate",
+      "100 Hz"
+    ]
+  },
+  "hardware_contract": {
+    "issues": [],
+    "pass": true,
+    "path": "docs/ROBOT_HARDWARE_CONTRACT_ORIN_NANO.md",
+    "required_terms": [
+      "Jetson Orin Nano 8GB",
+      "runtime_target=robot_fidelity_orin",
+      "inference_backend=tensorrt_int8"
+    ]
+  },
+  "hardware_proven": false,
+  "hardware_transfer_ready": true,
+  "issue_count": 0,
+  "milestone_interpretation": "planner_routed_fetch_hardware_rehearsal_ready",
+  "open_hardware_gates": [
+    "robot_side_live_rehearsal_not_run",
+    "onboard_tensorrt_execution_not_proven",
+    "physical_camera_visual_package_not_recorded",
+    "field_physics_not_proven"
+  ],
+  "pass": true,
+  "promotion_evidence": false,
+  "readiness_level": "ready_for_hardware_rehearsal",
+  "regression_manifest": {
+    "control_preflight_green_count": 1,
+    "issues": [],
+    "pass": true,
+    "path": "artifacts/session/analysis_planner_moonshot_regression_set_seed20260635_preflight_20260605/fetch_moonshot_regression_manifest/regression_summary.json",
+    "seeded_gate_count": 8,
+    "seeded_live_mission_pass_count": 48,
+    "seeded_visual_package_pass_count": 48,
+    "totals": {
+      "boundary_row_count": 2,
+      "boundary_row_green_count": 2,
+      "control_preflight_count": 1,
+      "control_preflight_green_count": 1,
+      "issue_count": 0,
+      "seeded_gate_count": 8,
+      "seeded_gate_green_count": 8,
+      "seeded_live_mission_pass_count": 48,
+      "seeded_visual_package_pass_count": 48
+    }
+  },
+  "required_next_rehearsal": {
+    "inference_backend": "tensorrt_int8",
+    "minimum_live_contract": "saved anchors one-run plus one seed20260635-style mixed route sample before hardware promotion discussion",
+    "required_artifacts": [
+      "control_preflight.json",
+      "mission_verdict.json",
+      "raw_camera_browser.mp4",
+      "topdown_telemetry_browser.mp4",
+      "world_stream.mp4",
+      "keyframe_review_contact_sheet.png"
+    ],
+    "runtime_target": "robot_fidelity_orin"
+  },
+  "scorecard_path": "artifacts/session/analysis_fetch_hardware_transfer_readiness_post_seed_rehearsal_20260605_fixed/fetch_hardware_transfer_readiness/scorecard.md",
+  "summary_path": "artifacts/session/analysis_fetch_hardware_transfer_readiness_post_seed_rehearsal_20260605_fixed/fetch_hardware_transfer_readiness/hardware_transfer_readiness_summary.json",
+  "tensorrt_runtime": {
+    "issues": [],
+    "pass": true,
+    "path": "runtime/tensorrt/README.md",
+    "required_terms": [
+      "tensorrt_int8",
+      "build INT8 engine",
+      "RuntimeTarget robot_fidelity_orin"
+    ]
+  },
+  "type": "fetch_hardware_transfer_readiness"
+}

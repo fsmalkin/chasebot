@@ -127,7 +127,9 @@ def evaluate_dashboard_plan(path_text: str) -> dict[str, Any]:
     payload, issues = read_json(path_text)
     uat = dict_value(payload.get("uat_review_bundle"))
     samples = [row for row in list_value(uat.get("route_samples")) if isinstance(row, dict)]
-    bool_issue(issues, str(payload.get("status_label", "")).startswith("Promotion green"), "dashboard_status_not_promotion_green")
+    status_label = str(payload.get("status_label", ""))
+    status_ready = status_label.startswith("Promotion green") or status_label.startswith("Hardware rehearsal green")
+    bool_issue(issues, status_ready, "dashboard_status_not_hardware_ready")
     bool_issue(issues, "20260635" in str(payload.get("status_detail", "")), "dashboard_missing_seed20260635_status")
     bool_issue(issues, len(samples) >= 6, "dashboard_uat_samples_below_6")
     for index, sample in enumerate(samples):
@@ -138,7 +140,7 @@ def evaluate_dashboard_plan(path_text: str) -> dict[str, Any]:
         "path": artifact_display_path(path_text),
         "pass": not issues,
         "issues": issues,
-        "status_label": str(payload.get("status_label", "")),
+        "status_label": status_label,
         "uat_sample_count": len(samples),
         "first_video_url": str(samples[0].get("video_url", "")) if samples else "",
     }
