@@ -253,24 +253,34 @@
     },
     {
       "title": "Provider rerun preflight is waiting on OPENAI_API_KEY",
-      "status": "blocked prerequisite: seed20260648 fallback evidence and dashboard are ready; provider key is missing",
+      "status": "blocked prerequisite: three-seed breadth rollup, latest seed, and dashboard are ready; provider key is missing",
       "tone": "yellow",
-      "summary": "The provider-rerun readiness preflight now targets seed20260648, the widest fallback baseline so far. Current fallback evidence is green: 100 generated scenes, all five route families represented, zero wrong fetch dispatches, and the dashboard UAT bundle has 15 browser-watchable samples. The preflight fails closed because OPENAI_API_KEY is absent, so provider-backed planner authority remains unproven and hardware_proven stays false.",
+      "summary": "The provider-rerun readiness preflight now targets the current breadth floor: the three-seed rollup across seeds 20260648, 20260649, and 20260650, plus seed20260650 as the concrete provider rerun seed. Rollup evidence is green with 300 generated planner scenes, zero wrong fetch dispatches, 27/27 executable visual deliveries, zero contact watches, and zero first-contact blockers. The dashboard surface and latest fallback seed checks pass. The preflight fails closed because OPENAI_API_KEY is absent, so provider-backed planner authority remains unproven and hardware_proven stays false.",
       "metrics": [
         "Preflight: provider_rerun_ready=false; readiness_level=provider_rerun_blocked",
         "Blocker: missing_openai_api_key",
-        "Fallback evidence: seed=20260648; random_cases=100; route families=5/5; wrong_fetch_dispatch_count=0",
-        "Dashboard evidence: status references seed20260648; uat_sample_count=15",
+        "Rollup baseline: seeds=20260648,20260649,20260650; random_cases=300; executable_rows=27",
+        "Rollup quality: wrong_fetch_dispatches=0; contact_watches=0; first_contact_blockers=0",
+        "Concrete provider rerun target: seed=20260650; random_cases=100; route families=5/5",
+        "Dashboard evidence: breadth rollup status present; uat_sample_count=15",
         "Claim boundary: provider_backed_authority_proven=false; promotion_evidence=false; hardware_proven=false"
       ],
       "links": [
         {
           "label": "Provider rerun readiness scorecard",
-          "url": "/artifacts/session/provider_rerun_readiness_seed20260648_20260605/fetch_planner_provider_rerun_readiness/scorecard.md"
+          "url": "/artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/scorecard.md"
         },
         {
           "label": "Provider rerun readiness summary",
-          "url": "/artifacts/session/provider_rerun_readiness_seed20260648_20260605/fetch_planner_provider_rerun_readiness/provider_rerun_readiness_summary.json"
+          "url": "/artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/provider_rerun_readiness_summary.json"
+        },
+        {
+          "label": "Three-seed breadth rollup scorecard",
+          "url": "/artifacts/session/analysis_fetch_planner_breadth_rollup_seeds20260648_20260650_20260605/fetch_planner_breadth_rollup/scorecard.md"
+        },
+        {
+          "label": "Seed 20260650 planner scorecard",
+          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
         },
         {
           "label": "Seed 20260648 mixed all-routes UAT bundle",
@@ -6028,9 +6038,8 @@
     }
   ],
   "next_steps": [
-    "Record provider-backed rerun evidence after OPENAI_API_KEY is available, using seed20260650 plus the seed20260648 hardware-rehearsal baseline for comparison.",
+    "Provide OPENAI_API_KEY, then run the rollup-backed provider rerun on seed20260650 and compare provider agreement, guard vetoes, route decisions, and mixed all-routes visual replay against the three-seed deterministic baseline.",
     "Repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT, physical camera evidence, and field-physics notes.",
-    "Provide OPENAI_API_KEY, then run the provider-rerun commands against the current breadth baseline and compare provider agreement, guard vetoes, and route decisions.",
     "After provider-backed routing passes, rerun the mixed all-routes evidence ladder on physical/onboard hardware.",
     "Inspect raw_camera, topdown_telemetry, world_stream, and keyframe sheets across each physical/onboard run before trusting telemetry.",
     "Keep hardware_proven=false until physical robot execution, onboard TensorRT, physical camera evidence, and field-physics proof are recorded."

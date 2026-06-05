@@ -3266,6 +3266,14 @@ Milestone 3 pass criteria include:
      - rollup route mix: `fetch_ready_local=70`, `nav2_reposition_first=57`,
        `recovery_or_reaim=52`, `scan_or_perceive_first=65`, and
        `ambiguous_or_unsafe_no_go=56`
+     - rollup-backed provider-rerun readiness:
+       `artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`
+     - provider-rerun status: rollup evidence, seed20260650 fallback evidence,
+       and dashboard checks are ready; the current blocker is
+       `missing_openai_api_key`
+     - next provider sequence: restore `OPENAI_API_KEY`, run the generated
+       seed20260650 `llm_supervised_guarded` planner gate, run explicit
+       all-routes replay, then analyze provider agreement and guard vetoes
      - claim boundary: this is robot-fidelity/sim-gate rehearsal evidence;
        `hardware_proven=false` until physical robot execution, onboard
        TensorRT proof, physical camera evidence, and field physics are recorded

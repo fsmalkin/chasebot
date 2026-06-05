@@ -513,10 +513,13 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         for link in evidence_by_title["Seed 20260648 hardware rehearsal is green"]["links"]
     )
     assert "Provider rerun preflight is waiting on OPENAI_API_KEY" in evidence_by_title
-    assert evidence_by_title["Provider rerun preflight is waiting on OPENAI_API_KEY"]["tone"] == "yellow"
+    provider_card = evidence_by_title["Provider rerun preflight is waiting on OPENAI_API_KEY"]
+    assert provider_card["tone"] == "yellow"
+    assert "three-seed breadth rollup" in provider_card["status"]
+    assert "seed=20260650" in " ".join(provider_card["metrics"])
     assert any(
-        link["url"].endswith("/fetch_planner_provider_rerun_readiness/scorecard.md")
-        for link in evidence_by_title["Provider rerun preflight is waiting on OPENAI_API_KEY"]["links"]
+        "provider_rerun_readiness_rollup_seed20260650_20260605" in link["url"]
+        for link in provider_card["links"]
     )
     assert "Seed 20260648 mixed all-routes 3x UAT is green" in evidence_by_title
     assert "Seed 20260647 mixed all-routes 3x UAT is green" in evidence_by_title

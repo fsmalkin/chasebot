@@ -1489,6 +1489,16 @@ across the rollup is `fetch_ready_local=70`, `nav2_reposition_first=57`,
 breadth baseline while provider-backed LLM routing and physical/onboard proof
 stay open.
 
+The current provider-rerun preflight now uses that rollup as the evidence
+floor:
+`artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`.
+It verifies the three-seed breadth rollup, seed20260650 latest fallback
+planner summary, and dashboard surface, then blocks only on
+`missing_openai_api_key`. The next provider-backed run targets seed20260650
+with `llm_supervised_guarded` routing and compares provider agreement, guard
+vetoes, route decisions, and mixed all-routes visual replay against the
+deterministic rollup baseline.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

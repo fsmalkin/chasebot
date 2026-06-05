@@ -1541,6 +1541,16 @@ The provider-rerun scorecard now targets this seed and blocks only on
 `missing_openai_api_key`:
 `artifacts/session/provider_rerun_readiness_seed20260648_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`.
 
+The active provider-rerun preflight now uses the three-seed rollup as its
+evidence floor:
+`artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`.
+That preflight verifies seeds `20260648`, `20260649`, and `20260650` as a
+`300`-scene deterministic breadth baseline, confirms `27/27` executable visual
+deliveries with zero contact watches and zero first-contact blockers, and then
+blocks only on `missing_openai_api_key`. The roadmap sequence is credential
+restore, provider-backed seed20260650 planner gate, explicit all-routes replay,
+analyzer comparison, and then physical/onboard rehearsal.
+
 The fresh rehearsal ladder is now green on the sim-gate runtime target:
 `artifacts/session/robot_side_fetch_rehearsal_runtime_stack_smoke_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,
 `artifacts/session/robot_side_fetch_rehearsal_saved_anchors_20260605/fetch_hardware_rehearsal_runner/scorecard.md`,

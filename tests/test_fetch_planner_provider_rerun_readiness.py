@@ -23,10 +23,13 @@ def _args(tmp_path: Path, **overrides):
     payload = {
         "campaign_id": "provider_ready",
         "latest_fallback_planner_summary": str(tmp_path / "planner" / "gate_summary.json"),
+        "breadth_rollup_summary": str(tmp_path / "rollup" / "breadth_rollup_summary.json"),
         "dashboard_plan": str(tmp_path / "dashboard.json"),
-        "seed": 20260648,
+        "seed": 20260650,
         "random_cases": 100,
         "max_per_route": 3,
+        "min_rollup_random_cases": 300,
+        "min_rollup_executable_rows": 27,
         "dashboard_url": "http://127.0.0.1:8883",
         "campaign_suffix": "20260605",
         "openai_api_key": "",
@@ -40,7 +43,7 @@ def _green_planner(path: Path) -> Path:
         path,
         {
             "pass": True,
-            "seed": 20260648,
+            "seed": 20260650,
             "random_cases": 100,
             "pass_count": 100,
             "wrong_fetch_dispatch_count": 0,
@@ -57,12 +60,47 @@ def _green_planner(path: Path) -> Path:
     )
 
 
+def _green_rollup(path: Path) -> Path:
+    return _write_json(
+        path,
+        {
+            "pass": True,
+            "seeds": [20260648, 20260649, 20260650],
+            "gate_count": 3,
+            "total_random_cases": 300,
+            "total_planner_pass_count": 300,
+            "total_wrong_fetch_dispatch_count": 0,
+            "total_selected_count": 27,
+            "total_mission_pass_count": 27,
+            "total_mission_fail_count": 0,
+            "total_visual_package_pass_count": 27,
+            "total_contact_watch_count": 0,
+            "total_first_contact_blocker_count": 0,
+            "provider_backed_authority_ready": False,
+            "provider_status_counts": {"skipped_missing_openai_api_key": 300},
+            "route_counts": {
+                "ambiguous_or_unsafe_no_go": 56,
+                "fetch_ready_local": 70,
+                "nav2_reposition_first": 57,
+                "recovery_or_reaim": 52,
+                "scan_or_perceive_first": 65,
+            },
+        },
+    )
+
+
 def _green_dashboard(path: Path) -> Path:
     return _write_json(
         path,
         {
-            "status_label": "Seed 20260648 mixed all-routes 3x UAT is green",
-            "status_detail": "Seed20260648 classified 100 generated scenes.",
+            "status_label": "Three-seed breadth rollup green; seed 20260648 hardware rehearsal green",
+            "status_detail": "The rollup covers seeds 20260648, 20260649, and 20260650 across 300 scenes.",
+            "latest_evidence": [
+                {
+                    "title": "Three-seed breadth rollup is green",
+                    "metrics": ["Planner breadth: random_cases=300", "Seed 20260650 fresh breadth UAT is green"],
+                }
+            ],
             "uat_review_bundle": {
                 "route_samples": [
                     {
@@ -79,6 +117,7 @@ def _green_dashboard(path: Path) -> Path:
 def _green_fixture(tmp_path: Path):
     args = _args(tmp_path)
     _green_planner(Path(args.latest_fallback_planner_summary))
+    _green_rollup(Path(args.breadth_rollup_summary))
     _green_dashboard(Path(args.dashboard_plan))
     return args
 
@@ -91,6 +130,7 @@ def test_provider_rerun_readiness_blocks_without_openai_key(tmp_path: Path):
     assert summary["provider_backed_authority_proven"] is False
     assert summary["readiness_level"] == "provider_rerun_blocked"
     assert summary["blockers"] == ["missing_openai_api_key"]
+    assert summary["breadth_rollup"]["pass"] is True
     assert summary["latest_fallback_seed"]["pass"] is True
 
 
@@ -115,7 +155,7 @@ def test_provider_rerun_readiness_requires_all_route_families(tmp_path: Path):
         Path(args.latest_fallback_planner_summary),
         {
             "pass": True,
-            "seed": 20260648,
+            "seed": 20260650,
             "random_cases": 100,
             "pass_count": 100,
             "wrong_fetch_dispatch_count": 0,
@@ -131,6 +171,41 @@ def test_provider_rerun_readiness_requires_all_route_families(tmp_path: Path):
     assert "latest_fallback_seed:route_family_coverage_incomplete" in summary["blockers"]
 
 
+def test_provider_rerun_readiness_requires_green_breadth_rollup(tmp_path: Path):
+    args = _green_fixture(tmp_path)
+    args.openai_api_key = "sk-test"
+    _write_json(
+        Path(args.breadth_rollup_summary),
+        {
+            "pass": True,
+            "seeds": [20260648, 20260649, 20260650],
+            "total_random_cases": 300,
+            "total_planner_pass_count": 300,
+            "total_wrong_fetch_dispatch_count": 1,
+            "total_selected_count": 27,
+            "total_mission_pass_count": 27,
+            "total_mission_fail_count": 0,
+            "total_visual_package_pass_count": 27,
+            "total_contact_watch_count": 0,
+            "total_first_contact_blocker_count": 0,
+            "provider_backed_authority_ready": False,
+            "provider_status_counts": {"skipped_missing_openai_api_key": 300},
+            "route_counts": {
+                "ambiguous_or_unsafe_no_go": 56,
+                "fetch_ready_local": 70,
+                "nav2_reposition_first": 57,
+                "recovery_or_reaim": 52,
+                "scan_or_perceive_first": 65,
+            },
+        },
+    )
+
+    summary = readiness.build_summary(args)
+
+    assert summary["pass"] is False
+    assert "breadth_rollup:breadth_rollup_wrong_fetch_dispatch_count_nonzero" in summary["blockers"]
+
+
 def test_provider_rerun_readiness_scorecard_names_blocker_and_commands(tmp_path: Path):
     scorecard = tmp_path / "scorecard.md"
     summary = readiness.build_summary(_green_fixture(tmp_path))
@@ -139,5 +214,7 @@ def test_provider_rerun_readiness_scorecard_names_blocker_and_commands(tmp_path:
 
     text = scorecard.read_text(encoding="utf-8")
     assert "openai_api_key_present: `False`" in text
+    assert "## Breadth Rollup Baseline" in text
+    assert "total_random_cases: `300`" in text
     assert "`missing_openai_api_key`" in text
     assert "fetch_planner_seeded_generalization_gate.py" in text

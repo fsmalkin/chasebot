@@ -1250,6 +1250,15 @@ first-contact blockers stayed at `0`. Route mix across the rollup is
 the current deterministic-fallback breadth baseline for the moonshot branch.
 Provider-backed LLM authority and physical/onboard proof remain the open gates.
 
+The provider-rerun readiness checkpoint now keys off that full breadth
+baseline:
+`artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`.
+The preflight passes the rollup, seed20260650 fallback, and dashboard checks,
+then blocks only on `missing_openai_api_key`. After credentials are available,
+rerun seed20260650 in `llm_supervised_guarded` mode, replay three roughest rows
+per route family, and compare provider decisions against the deterministic
+rollup before changing the planner-authority claim.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches
