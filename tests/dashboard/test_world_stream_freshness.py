@@ -493,12 +493,21 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert evidence_by_title["Milestone readiness rollup is UAT-ready"]["tone"] == "green"
     assert "operator UAT green" in evidence_by_title["Milestone readiness rollup is UAT-ready"]["status"]
     assert "milestone_complete=false" in " ".join(evidence_by_title["Milestone readiness rollup is UAT-ready"]["metrics"])
+    assert evidence_by_title["Physical/onboard proof gap is explicit"]["tone"] == "yellow"
+    assert "physical_onboard_proof_ready=false" in " ".join(
+        evidence_by_title["Physical/onboard proof gap is explicit"]["metrics"]
+    )
+    assert "hardware_proven remains false" in evidence_by_title["Physical/onboard proof gap is explicit"]["summary"]
     assert any(
         "generalized_fetch_to_pose_milestone_readiness_20260605" in link["url"]
         for link in evidence_by_title["Milestone readiness rollup is UAT-ready"]["links"]
     )
     assert any(
-        "dashboard_visual_evidence_audit_with_milestone_20260605" in link["url"]
+        "physical_onboard_proof_gap_20260605" in link["url"]
+        for link in evidence_by_title["Physical/onboard proof gap is explicit"]["links"]
+    )
+    assert any(
+        "dashboard_visual_evidence_audit_with_physical_gap_20260605" in link["url"]
         for link in evidence_by_title["Dashboard visual evidence audit is green"]["links"]
     )
     assert "15/15 UAT samples" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]

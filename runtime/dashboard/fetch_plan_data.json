@@ -90,7 +90,7 @@
       "title": "Dashboard visual evidence audit is green",
       "status": "15/15 UAT samples and required current evidence cards resolve to browser-watchable artifacts",
       "tone": "green",
-      "summary": "The dashboard visual evidence audit verifies the current browser-facing proof layer after adding the milestone readiness rollup. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and the required current evidence cards for the three-seed breadth rollup, hardware rehearsal, and provider preflight. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
+      "summary": "The dashboard visual evidence audit verifies the current browser-facing proof layer after adding the milestone readiness and physical/onboard proof-gap rollups. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and the required current evidence cards for the three-seed breadth rollup, hardware rehearsal, and provider preflight. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
       "metrics": [
         "Audit: pass=true; interpretation=dashboard_visual_evidence_links_green",
         "UAT bundle: 15/15 samples pass link audit",
@@ -102,11 +102,11 @@
       "links": [
         {
           "label": "Dashboard visual evidence audit scorecard",
-          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_milestone_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_physical_gap_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
         },
         {
           "label": "Dashboard visual evidence audit summary",
-          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_milestone_20260605/fetch_dashboard_visual_evidence_audit/dashboard_visual_evidence_summary.json"
+          "url": "/artifacts/session/dashboard_visual_evidence_audit_with_physical_gap_20260605/fetch_dashboard_visual_evidence_audit/dashboard_visual_evidence_summary.json"
         },
         {
           "label": "Seed 20260648 mixed all-routes video bundle",
@@ -150,6 +150,33 @@
         {
           "label": "Dashboard visual evidence audit scorecard",
           "url": "/artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
+        }
+      ]
+    },
+    {
+      "title": "Physical/onboard proof gap is explicit",
+      "status": "operator UAT is ready; physical robot, TensorRT, camera, and field-physics proof remain open",
+      "tone": "yellow",
+      "summary": "The physical/onboard proof-gap audit turns the remaining hardware_proven=false boundary into an executable schema. Current operator UAT evidence is green, and the audit now states exactly what a future physical proof claim must contain: robot_fidelity_orin runtime target, tensorrt_int8 inference backend, physical_robot execution surface, physical robot run, onboard TensorRT execution, physical camera evidence, field-physics notes, and browser-watchable control/mission/video/keyframe artifacts. No physical claim has been provided yet, so hardware_proven remains false.",
+      "metrics": [
+        "Gap audit: pass=true for planning visibility; physical_onboard_proof_ready=false",
+        "Required fields: runtime_target, inference_backend, execution_surface, physical_robot_run, onboard_tensorrt_execution, physical_camera_evidence, field_physics_notes",
+        "Required artifacts: control_preflight, mission_verdict, raw_camera, topdown_telemetry, world_stream, keyframe_contact_sheet",
+        "Current open gates: physical_robot_run_not_provided, onboard_tensorrt_execution_not_provided, physical_camera_evidence_not_provided, field_physics_notes_not_provided",
+        "Claim boundary: sim-gate hardware rehearsal does not count as physical/onboard proof"
+      ],
+      "links": [
+        {
+          "label": "Physical/onboard proof gap scorecard",
+          "url": "/artifacts/session/physical_onboard_proof_gap_20260605/fetch_physical_onboard_proof_gap/scorecard.md"
+        },
+        {
+          "label": "Physical/onboard proof gap summary",
+          "url": "/artifacts/session/physical_onboard_proof_gap_20260605/fetch_physical_onboard_proof_gap/physical_onboard_proof_gap_summary.json"
+        },
+        {
+          "label": "Milestone readiness scorecard",
+          "url": "/artifacts/session/generalized_fetch_to_pose_milestone_readiness_20260605/fetch_generalized_milestone_readiness/scorecard.md"
         }
       ]
     },
@@ -6117,6 +6144,7 @@
   ],
   "next_steps": [
     "Use the milestone readiness rollup as the operator UAT checkpoint: sim evidence is green, provider-backed routing and physical/onboard proof remain the next gates.",
+    "Use the physical/onboard proof-gap schema for the next hardware run: physical robot, onboard TensorRT, physical camera evidence, field-physics notes, and browser-watchable artifacts are all required before hardware_proven=true.",
     "Provide OPENAI_API_KEY, then run the rollup-backed provider rerun on seed20260650, run the provider-vs-baseline comparison analyzer, and compare provider agreement, guard vetoes, route deltas, and mixed all-routes visual replay against the three-seed deterministic baseline.",
     "Repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT, physical camera evidence, and field-physics notes.",
     "After provider-backed routing passes, rerun the mixed all-routes evidence ladder on physical/onboard hardware.",
