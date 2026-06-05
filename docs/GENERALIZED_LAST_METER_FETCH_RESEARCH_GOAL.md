@@ -1409,6 +1409,15 @@ contract. The current provider-rerun scorecard
 `artifacts/session/provider_rerun_readiness_seed20260648_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`
 now targets seed20260648 and blocks only on `missing_openai_api_key`.
 
+The current hardware-transfer readiness scorecard
+`artifacts/session/hardware_transfer_readiness_seed20260648_dashboard_20260605/fetch_hardware_transfer_readiness/scorecard.md`
+accepts the seed20260648 dashboard surface and reports
+`hardware_transfer_ready=true`, `readiness_level=ready_for_hardware_rehearsal`,
+and `hardware_proven=false`. The next hardware-facing sequence is saved anchors
+one-run, then one seed20260648 mixed all-routes rehearsal with onboard
+TensorRT, physical camera video, field-physics evidence, and same-session
+visual packages before any hardware claim advances.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.

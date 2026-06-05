@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 3:25 PM ET",
+  "updated_label": "Updated June 5, 2026, 3:33 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Seed 20260648 green; provider rerun preflight is waiting on OPENAI_API_KEY",
-  "status_detail": "Seed20260648 is the latest and widest fresh mixed-route sim-gate checkpoint: 100 generated planner scenes, zero wrong fetch dispatches, and 15/15 mixed all-route visual replay. The provider-rerun readiness preflight targets seed20260648 and fails closed because OPENAI_API_KEY is missing. Provider-backed LLM routing and physical/onboard proof remain open, so hardware_proven stays false.",
+  "status_label": "Seed 20260648 green; hardware rehearsal-ready; provider rerun waits on OPENAI_API_KEY",
+  "status_detail": "Seed20260648 is the latest and widest fresh mixed-route sim-gate checkpoint: 100 generated planner scenes, zero wrong fetch dispatches, and 15/15 mixed all-route visual replay. The hardware-transfer readiness checker now accepts the current dashboard surface and reports hardware_transfer_ready=true while hardware_proven=false. The provider-rerun readiness preflight targets seed20260648 and fails closed because OPENAI_API_KEY is missing. Provider-backed LLM routing and physical/onboard proof remain open.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -49,6 +49,33 @@
     }
   ],
   "latest_evidence": [
+    {
+      "title": "Hardware-transfer readiness is green for rehearsal",
+      "status": "ready for robot-side rehearsal; physical/onboard proof remains open",
+      "tone": "green",
+      "summary": "The hardware-transfer readiness checker now accepts the current seed20260648 dashboard evidence and the preserved regression manifest. It reports pass=true, hardware_transfer_ready=true, and hardware_proven=false. The next robot-side rehearsal must still produce onboard TensorRT execution, physical camera video, field-physics evidence, and same-session visual packages before any hardware claim advances.",
+      "metrics": [
+        "Readiness: pass=true; hardware_transfer_ready=true; readiness_level=ready_for_hardware_rehearsal",
+        "Dashboard evidence: seed20260648 status accepted; uat_sample_count=15",
+        "Regression preservation: seeded_gate_count=8; seeded_live_mission_pass_count=48; seeded_visual_package_pass_count=48",
+        "Required rehearsal: saved anchors one-run plus one seed20260648 mixed all-routes sample",
+        "Claim boundary: hardware_proven=false; promotion_evidence=false"
+      ],
+      "links": [
+        {
+          "label": "Hardware-transfer readiness scorecard",
+          "url": "/artifacts/session/hardware_transfer_readiness_seed20260648_dashboard_20260605/fetch_hardware_transfer_readiness/scorecard.md"
+        },
+        {
+          "label": "Hardware-transfer readiness summary",
+          "url": "/artifacts/session/hardware_transfer_readiness_seed20260648_dashboard_20260605/fetch_hardware_transfer_readiness/hardware_transfer_readiness_summary.json"
+        },
+        {
+          "label": "Seed 20260648 mixed all-routes UAT bundle",
+          "url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
+        }
+      ]
+    },
     {
       "title": "Provider rerun preflight is waiting on OPENAI_API_KEY",
       "status": "blocked prerequisite: seed20260648 fallback evidence and dashboard are ready; provider key is missing",

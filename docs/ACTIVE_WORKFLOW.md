@@ -3201,6 +3201,14 @@ Milestone 3 pass criteria include:
      - current provider-rerun readiness:
        `artifacts/session/provider_rerun_readiness_seed20260648_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`
      - current provider blocker: `missing_openai_api_key`
+     - hardware-transfer readiness:
+       `artifacts/session/hardware_transfer_readiness_seed20260648_dashboard_20260605/fetch_hardware_transfer_readiness/scorecard.md`
+     - hardware-transfer status: `hardware_transfer_ready=true`,
+       `readiness_level=ready_for_hardware_rehearsal`, and
+       `hardware_proven=false`
+     - next hardware sequence: saved anchors one-run, then one seed20260648
+       mixed all-routes rehearsal with onboard TensorRT, physical camera video,
+       field-physics evidence, and same-session visual packages
 30. Gather pre-stage command authority audit:
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/command_authority_summary.json`
    - `artifacts/session/<campaign_id>/gather_pre_stage_command_authority_audit/scorecard.md`

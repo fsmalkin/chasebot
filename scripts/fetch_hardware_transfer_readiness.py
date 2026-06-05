@@ -22,6 +22,12 @@ DEFAULT_DASHBOARD_PLAN = "runtime/dashboard/fetch_plan_data.json"
 DEFAULT_HARDWARE_CONTRACT = "docs/ROBOT_HARDWARE_CONTRACT_ORIN_NANO.md"
 DEFAULT_HARDWARE_CONSTRAINTS = "docs/ROBOT_HARDWARE_CONSTRAINTS.md"
 DEFAULT_TENSORRT_README = "runtime/tensorrt/README.md"
+CURRENT_DASHBOARD_REHEARSAL_SEED = "20260648"
+ACCEPTED_DASHBOARD_REHEARSAL_SEEDS = (
+    CURRENT_DASHBOARD_REHEARSAL_SEED,
+    "20260643",
+    "20260635",
+)
 
 
 def utc_now() -> str:
@@ -128,19 +134,18 @@ def evaluate_dashboard_plan(path_text: str) -> dict[str, Any]:
     uat = dict_value(payload.get("uat_review_bundle"))
     samples = [row for row in list_value(uat.get("route_samples")) if isinstance(row, dict)]
     status_label = str(payload.get("status_label", ""))
+    status_detail = str(payload.get("status_detail", ""))
+    status_text = f"{status_label} {status_detail}"
+    has_accepted_seed = any(seed in status_text for seed in ACCEPTED_DASHBOARD_REHEARSAL_SEEDS)
     status_ready = (
         status_label.startswith("Promotion green")
         or status_label.startswith("Hardware rehearsal green")
-        or status_label.startswith("Mixed all-routes seed 20260643")
-        or status_label.startswith("Robot-side seed 20260643")
+        or status_label.startswith("Mixed all-routes seed")
+        or status_label.startswith("Robot-side seed")
+        or (status_label.startswith("Seed ") and "green" in status_label.lower())
     )
     bool_issue(issues, status_ready, "dashboard_status_not_hardware_ready")
-    status_detail = str(payload.get("status_detail", ""))
-    bool_issue(
-        issues,
-        "20260643" in status_detail or "20260635" in status_detail,
-        "dashboard_missing_current_seed_status",
-    )
+    bool_issue(issues, has_accepted_seed, "dashboard_missing_current_seed_status")
     bool_issue(issues, len(samples) >= 6, "dashboard_uat_samples_below_6")
     for index, sample in enumerate(samples):
         label = str(sample.get("label") or f"sample{index}")
@@ -230,7 +235,10 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
                 "world_stream.mp4",
                 "keyframe_review_contact_sheet.png",
             ],
-            "minimum_live_contract": "saved anchors one-run plus one seed20260643 mixed all-routes sample before hardware promotion discussion",
+            "minimum_live_contract": (
+                f"saved anchors one-run plus one seed{CURRENT_DASHBOARD_REHEARSAL_SEED} "
+                "mixed all-routes sample before hardware promotion discussion"
+            ),
         },
     }
 

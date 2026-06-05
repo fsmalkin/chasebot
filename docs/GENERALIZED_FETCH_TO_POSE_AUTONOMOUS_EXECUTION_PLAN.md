@@ -1165,6 +1165,16 @@ route contracts. The matching provider-rerun preflight
 passes fallback-evidence and dashboard checks, then blocks only on
 `missing_openai_api_key`.
 
+The hardware-transfer readiness checker now accepts this same seed20260648
+dashboard surface:
+`artifacts/session/hardware_transfer_readiness_seed20260648_dashboard_20260605/fetch_hardware_transfer_readiness/scorecard.md`.
+It reports `hardware_transfer_ready=true`,
+`readiness_level=ready_for_hardware_rehearsal`, and `hardware_proven=false`.
+The next hardware-facing sequence is saved anchors one-run, then one
+seed20260648 mixed all-routes rehearsal with onboard TensorRT, physical camera
+video, field-physics evidence, and same-session visual packages before any
+hardware claim advances.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches
