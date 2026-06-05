@@ -486,6 +486,7 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
     assert "Three-seed breadth rollup is green" in evidence_by_title
     assert "Planner geometry breadth audit is green" in evidence_by_title
+    assert "Operator UAT watchlist is ready" in evidence_by_title
     assert "Seed 20260650 fresh breadth UAT is green" in evidence_by_title
     assert "Seed 20260649 fresh breadth UAT is green" in evidence_by_title
     assert "Seed 20260648 hardware rehearsal is green" in evidence_by_title
@@ -493,6 +494,8 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert evidence_by_title["Planner geometry breadth audit is green"]["tone"] == "green"
     assert "scene_count=300" in " ".join(evidence_by_title["Planner geometry breadth audit is green"]["metrics"])
     assert evidence_by_title["Dashboard visual evidence audit is green"]["tone"] == "green"
+    assert evidence_by_title["Operator UAT watchlist is ready"]["tone"] == "green"
+    assert "sample_count=15" in " ".join(evidence_by_title["Operator UAT watchlist is ready"]["metrics"])
     assert evidence_by_title["Milestone readiness rollup is UAT-ready"]["tone"] == "green"
     assert "operator UAT green" in evidence_by_title["Milestone readiness rollup is UAT-ready"]["status"]
     assert "milestone_complete=false" in " ".join(evidence_by_title["Milestone readiness rollup is UAT-ready"]["metrics"])
@@ -530,10 +533,14 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         for link in evidence_by_title["Dashboard visual evidence audit is green"]["links"]
     )
     assert "15/15 UAT samples" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
-    assert "7/7 required current evidence cards" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
+    assert "8/8 required current evidence cards" in evidence_by_title["Dashboard visual evidence audit is green"]["status"]
     assert any(
         "planner_geometry_breadth_audit_seeds20260648_20260650_20260605" in link["url"]
         for link in evidence_by_title["Planner geometry breadth audit is green"]["links"]
+    )
+    assert any(
+        "dashboard_uat_watchlist_seed20260648_20260605" in link["url"]
+        for link in evidence_by_title["Operator UAT watchlist is ready"]["links"]
     )
     assert evidence_by_title["Seed 20260650 fresh breadth UAT is green"]["tone"] == "green"
     assert evidence_by_title["Seed 20260649 fresh breadth UAT is green"]["tone"] == "green"

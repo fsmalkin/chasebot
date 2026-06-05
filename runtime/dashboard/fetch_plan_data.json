@@ -115,14 +115,14 @@
     },
     {
       "title": "Dashboard visual evidence audit is green",
-      "status": "15/15 UAT samples and 7/7 required current evidence cards resolve to browser-watchable artifacts",
+      "status": "15/15 UAT samples and 8/8 required current evidence cards resolve to browser-watchable artifacts",
       "tone": "green",
-      "summary": "The dashboard visual evidence audit now verifies the current browser-facing proof layer, including breadth rollup, geometry breadth, milestone readiness, physical/onboard proof-gap, robot-side runbook, hardware rehearsal, and provider preflight evidence cards. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and seven required current evidence cards. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
+      "summary": "The dashboard visual evidence audit now verifies the current browser-facing proof layer, including breadth rollup, geometry breadth, milestone readiness, physical/onboard proof-gap, robot-side runbook, hardware rehearsal, provider preflight, and operator UAT watchlist evidence cards. It checks the Seed 20260648 mixed all-routes UAT bundle, all required onboard/topdown/world/keyframe/scorecard links for the 15 route samples, and eight required current evidence cards. The audit passes with all five route families represented 3x each and no missing or tiny linked artifacts. This is a link/provenance audit, so promotion_evidence=false and hardware_proven=false remain unchanged.",
       "metrics": [
         "Audit: pass=true; interpretation=dashboard_visual_evidence_links_green",
         "UAT bundle: 15/15 samples pass link audit",
         "Route coverage: ambiguous_or_unsafe_no_go=3; scan_or_perceive_first=3; recovery_or_reaim=3; nav2_reposition_first=3; fetch_ready_local=3",
-        "Required current evidence cards: 7/7 pass link audit",
+        "Required current evidence cards: 8/8 pass link audit",
         "Artifacts checked per sample: raw_camera_browser, topdown_telemetry, world_stream, keyframe_review_contact_sheet, visual package scorecard",
         "Claim boundary: visual link/provenance audit only; promotion_evidence=false; hardware_proven=false"
       ],
@@ -146,6 +146,33 @@
         {
           "label": "scene10 fetch-ready keyframe sheet",
           "url": "/artifacts/session/20260605T191604499853Z/visual/keyframe_review_contact_sheet.png"
+        }
+      ]
+    },
+    {
+      "title": "Operator UAT watchlist is ready",
+      "status": "15 route samples ordered for onboard-first visual review across all five route families",
+      "tone": "green",
+      "summary": "The dashboard UAT watchlist converts the current Seed 20260648 mixed all-routes bundle into a review sequence. It verifies 3 samples for each route family, classifies planner-only scan/no-go rows as abstentions, classifies recovery/Nav2/fetch-ready rows as delivery passes, and leads each row with onboard raw_camera_browser plus the keyframe sheet before topdown/world context. This makes the browser UAT path explicit instead of asking the operator to infer what to watch from raw links.",
+      "metrics": [
+        "Watchlist: pass=true; sample_count=15",
+        "Route coverage: ambiguous_or_unsafe_no_go=3; scan_or_perceive_first=3; recovery_or_reaim=3; nav2_reposition_first=3; fetch_ready_local=3",
+        "Contracts: planner-only routes should visibly withhold local fetch; delivery routes should visibly reach the delivery circle",
+        "Review order: onboard first, keyframes second, then topdown/world context",
+        "Claim boundary: UAT watchlist only; promotion_evidence=false; hardware_proven=false"
+      ],
+      "links": [
+        {
+          "label": "Operator UAT watchlist scorecard",
+          "url": "/artifacts/session/dashboard_uat_watchlist_seed20260648_20260605/fetch_dashboard_uat_watchlist/scorecard.md"
+        },
+        {
+          "label": "Operator UAT watchlist summary",
+          "url": "/artifacts/session/dashboard_uat_watchlist_seed20260648_20260605/fetch_dashboard_uat_watchlist/uat_watchlist_summary.json"
+        },
+        {
+          "label": "Seed 20260648 mixed all-routes video bundle",
+          "url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
         }
       ]
     },
@@ -6205,6 +6232,7 @@
     }
   ],
   "next_steps": [
+    "Use the operator UAT watchlist for browser review: start with onboard videos, cross-check keyframe sheets, then use topdown/world context for each route family.",
     "Use the milestone readiness rollup as the operator UAT checkpoint: sim evidence is green, provider-backed routing and physical/onboard proof remain the next gates.",
     "Use the planner geometry breadth audit alongside route-count rollups when judging wide-variety coverage; it verifies distance, angle, lateral, standoff, yaw, route-family, and setup-flag spread.",
     "Use the physical/onboard proof-gap schema for the next hardware run: physical robot, onboard TensorRT, physical camera evidence, field-physics notes, and browser-watchable artifacts are all required before hardware_proven=true.",

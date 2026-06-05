@@ -64,6 +64,7 @@ def _green_dashboard(tmp_path: Path) -> Path:
         "artifacts/session/runbook/fetch_robot_side_rehearsal_preflight/scorecard.md",
         "artifacts/session/hardware/fetch_hardware_rehearsal_runner/scorecard.md",
         "artifacts/session/provider/fetch_planner_provider_rerun_readiness/scorecard.md",
+        "artifacts/session/watchlist/fetch_dashboard_uat_watchlist/scorecard.md",
     ):
         _write(tmp_path / rel)
     payload = {
@@ -146,6 +147,16 @@ def _green_dashboard(tmp_path: Path) -> Path:
                     }
                 ],
             },
+            {
+                "title": "Operator UAT watchlist is ready",
+                "tone": "green",
+                "links": [
+                    {
+                        "label": "watchlist scorecard",
+                        "url": "/artifacts/session/watchlist/fetch_dashboard_uat_watchlist/scorecard.md",
+                    }
+                ],
+            },
         ],
     }
     path = tmp_path / "runtime" / "dashboard" / "fetch_plan_data.json"
@@ -165,7 +176,7 @@ def test_dashboard_visual_evidence_audit_scores_green_bundle(tmp_path: Path, mon
     assert summary["milestone_interpretation"] == "dashboard_visual_evidence_links_green"
     assert summary["uat_sample_count"] == 2
     assert summary["uat_sample_pass_count"] == 2
-    assert summary["evidence_card_pass_count"] == 7
+    assert summary["evidence_card_pass_count"] == 8
     assert summary["all_evidence_cards_audited"] is False
     assert summary["route_counts"] == {"fetch_ready_local": 1, "nav2_reposition_first": 1}
 
