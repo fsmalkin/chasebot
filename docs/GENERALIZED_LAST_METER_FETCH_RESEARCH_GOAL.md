@@ -1271,6 +1271,19 @@ Provider-backed LLM routing remains an open rerun because the gate used
 deterministic fallback while `OPENAI_API_KEY` was unavailable. Physical/onboard
 hardware-transfer proof remains a separate gate.
 
+Seed20260637 adds a third fresh breadth pass:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260637_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The gate classified `30` generated scenes with zero wrong fetch dispatches. The
+live executable replay at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260637_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+passed `6/6` across two `fetch_ready_local`, two `nav2_reposition_first`, and
+two `recovery_or_reaim` rows, with visual packages `6/6`. The analyzer reports
+clean execution, setup, and contact with first-contact blockers `0`. Six
+raw-camera/topdown keyframe sheets were reviewed across setup, first contact,
+push, and terminal delivery. The two high-risk recovery rows still showed
+coherent ball/target/robot geometry. Provider-backed LLM routing and
+physical/onboard hardware-transfer proof remain the active open gates.
+
 ## Definition Of Done For The Research Thread
 
 The research thread is done when it returns a concise findings package that:

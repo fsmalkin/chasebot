@@ -532,6 +532,21 @@ geometry. This broadens sim-gate UAT evidence while preserving two claim
 boundaries: provider-backed LLM routing needs a rerun after `OPENAI_API_KEY` is
 available, and physical/onboard proof still gates `hardware_proven=true`.
 
+June 5 seed20260637 breadth UAT: a third fresh seeded pass is green at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260637_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The planner classified `30` generated scenes with `wrong_fetch_dispatch_count=0`.
+The executable replay at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260637_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+selected two `fetch_ready_local`, two `nav2_reposition_first`, and two
+`recovery_or_reaim` rows; all six delivered with visual packages. The analyzer
+at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260637_breadth_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution, setup, and contact with first-contact blockers `0`.
+Frame-sequence review of all six raw-camera/topdown sheets matched the delivery
+geometry, including two high-risk recovery rows. This strengthens the broad
+sim-gate UAT floor while leaving provider-backed LLM routing and physical
+hardware-transfer proof as the active gates.
+
 June 4 mixed route-family UAT proof: seed `20260633` now has one live row per
 route family at
 `artifacts/session/analysis_mixed_route_family_uat_seed20260633_20260604/fetch_planner_route_uat_analyzer/scorecard.md`.

@@ -621,6 +621,32 @@ June 5, 2026 seed20260636 breadth UAT:
   through deterministic fallback because `OPENAI_API_KEY` was unavailable, so
   provider-backed LLM routing and physical/onboard proof remain open.
 
+June 5, 2026 seed20260637 breadth UAT:
+
+- Command:
+  `python scripts\fetch_planner_seeded_generalization_gate.py --campaign-id live_planner_seeded_generalization_gate_seed20260637_breadth_20260605 --seed 20260637 --random-cases 30 --planner-mode llm_supervised_guarded --max-per-route 2 --dashboard-url http://127.0.0.1:8883 --fresh-dashboard-session-per-run --allow-operator-view-degraded --stop-on-fail`
+- Parent scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260637_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+- Replay scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260637_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`
+- Analyzer scorecard:
+  `artifacts/session/live_planner_seeded_generalization_gate_seed20260637_breadth_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+- Result: parent gate `pass=true`, `random_cases=30`,
+  `wrong_fetch_dispatch_count=0`, executable replay `6/6`, visual packages
+  `6/6`, analyzer execution/setup/contact clean, and first-contact blockers
+  `0`.
+- Route coverage: replay selected two `fetch_ready_local`, two
+  `nav2_reposition_first`, and two `recovery_or_reaim` rows. The two recovery
+  rows were predicted high-risk and still produced coherent visual delivery
+  evidence.
+- Visual review: inspected all six raw-camera/topdown keyframe sheets. The
+  onboard camera and topdown geometry agreed through setup, first contact,
+  push, and terminal delivery.
+- Claim boundary: this is another broad sim-gate route-owner UAT pass. Planner
+  authority ran through deterministic fallback because `OPENAI_API_KEY` was
+  unavailable, so provider-backed LLM routing and physical/onboard proof remain
+  open.
+
 June 4, 2026 planner-only route proof:
 
 - Command:

@@ -1464,3 +1464,15 @@ and frame-sequence review found the onboard camera and topdown geometry aligned.
 The roadmap now carries two active next gates: restore provider-backed LLM
 routing for this seed when `OPENAI_API_KEY` is available, and run the same
 evidence ladder on physical/onboard hardware before changing `hardware_proven`.
+
+Seed20260637 adds a third fresh breadth proof:
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260637_breadth_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The seed classified `30` generated scenes with zero wrong fetch dispatches, then
+replayed six executable rows across fetch-ready, Nav2-first, and recovery/re-aim
+owners at
+`artifacts/session/live_planner_seeded_generalization_gate_seed20260637_breadth_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`.
+All six delivered, all six visual packages passed, and frame-sequence review
+found the onboard camera and topdown geometry aligned, including two high-risk
+recovery rows. The roadmap sequence stays the same: rerun provider-backed LLM
+routing when credentials are available, then run physical/onboard proof before
+claiming hardware transfer.
