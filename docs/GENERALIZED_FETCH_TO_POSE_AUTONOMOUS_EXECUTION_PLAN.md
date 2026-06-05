@@ -1095,6 +1095,23 @@ circle. This strengthens the route-owner architecture path while preserving the
 claim boundary: routing used deterministic fallback because `OPENAI_API_KEY`
 was unavailable, and physical/onboard proof remains open.
 
+Seed `20260645` adds the next fresh mixed-route visual UAT pass:
+`artifacts/session/live_planner_seed20260645_mixed_all_routes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The planner child classified `50` generated scenes with all five route families
+represented and zero wrong fetch dispatches. The completed mixed replay selected
+two rows per route family and passed `10/10` route contracts: `6/6`
+executable deliveries plus `4/4` planner-only scan/no-go abstentions. The
+analyzer at
+`artifacts/session/live_planner_seed20260645_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution, setup, contact, and `0` first-contact blockers.
+Frame-sequence review covered all ten keyframe sheets and matched the route
+contracts. The first scene13 attempt stopped during robot set-pose before
+fetch control; the targeted repro
+`artifacts/session/live_planner_seed20260645_scene13_fetch_ready_repro_20260605/fetch_planner_route_replay_batch/scorecard.md`
+and resumed mixed batch passed, so the result is tracked as a setup-service
+harness watch. The claim boundary remains unchanged: provider-backed LLM
+routing needs `OPENAI_API_KEY`, and physical/onboard proof is still open.
+
 ## Gates
 
 - Planner handoff gate passes only when no out-of-envelope scene dispatches

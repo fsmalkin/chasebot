@@ -1,0 +1,731 @@
+{
+  "campaign_id": "live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_analysis",
+  "contact_quality_status": "clean",
+  "contact_watch_count": 0,
+  "evidence_scope": "route_owner_visual_uat",
+  "executable_route_green": true,
+  "execution_quality_status": "clean",
+  "execution_watch_count": 0,
+  "first_contact_blocker_count": 0,
+  "first_contact_risk_counts": {
+    "high": 2,
+    "low": 1,
+    "medium": 3
+  },
+  "generated_utc": "2026-06-05T15:47:55.613708+00:00",
+  "milestone_interpretation": "randomized_route_owner_visual_uat_green",
+  "mission_green": true,
+  "missions": [
+    {
+      "closest_approach_distance_m": 0.194962,
+      "contact_flags": [],
+      "contact_quality": "clean",
+      "contact_watch_flags": [],
+      "execution_quality": "clean",
+      "fetch_to_pose_pass": true,
+      "first_contact_blocker_flags": [],
+      "first_contact_quality_flags": [],
+      "first_contact_quality_pass": true,
+      "first_contact_t_s": 24.588276,
+      "local_fetch_dispatched": true,
+      "mission_completed_pass": true,
+      "model_provenance_valid": true,
+      "outcome_reason": "trajectory_intersects_delivery_radius",
+      "path": "artifacts/session/20260605T153331488473Z/golf_ball_circle_delivery/20260605T153733744130Z/mission_verdict.json",
+      "planner_only_route": false,
+      "planner_route_executed": false,
+      "planner_route_only_pass": false,
+      "planner_route_outcome": "",
+      "predicted_contact_quality": "watch",
+      "predicted_first_contact_risk": "high",
+      "route_contract_pass": true,
+      "route_executor": "bounded_recovery_reaim",
+      "route_label": "recovery_or_reaim",
+      "route_quality": {
+        "flags": [
+          "bounded_recovery_required",
+          "initial_lateral_setup_debt",
+          "initial_yaw_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "high",
+        "quality_score": 40.741,
+        "recommendations": [
+          "bounded_reaim_before_push",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "recovery_or_reaim",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 8.405937,
+          "ball_target_distance_m": 0.581881,
+          "lateral_m": 0.206294,
+          "robot_ball_distance_m": 0.495489,
+          "yaw_deg": 17.466583
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "route_quality_flags": [
+        "bounded_recovery_required",
+        "initial_lateral_setup_debt",
+        "initial_yaw_setup_debt"
+      ],
+      "route_quality_score": 40.741,
+      "session_id": "20260605T153331488473Z",
+      "setup_quality": "clean",
+      "setup_watch_flags": [],
+      "stable_contact_approach_pass": true,
+      "visual_review_required": true
+    },
+    {
+      "closest_approach_distance_m": 0.196751,
+      "contact_flags": [],
+      "contact_quality": "clean",
+      "contact_watch_flags": [],
+      "execution_quality": "clean",
+      "fetch_to_pose_pass": true,
+      "first_contact_blocker_flags": [],
+      "first_contact_quality_flags": [],
+      "first_contact_quality_pass": true,
+      "first_contact_t_s": 30.711375,
+      "local_fetch_dispatched": true,
+      "mission_completed_pass": true,
+      "model_provenance_valid": true,
+      "outcome_reason": "trajectory_intersects_delivery_radius",
+      "path": "artifacts/session/20260605T153859946442Z/golf_ball_circle_delivery/20260605T153938869162Z/mission_verdict.json",
+      "planner_only_route": false,
+      "planner_route_executed": false,
+      "planner_route_only_pass": false,
+      "planner_route_outcome": "",
+      "predicted_contact_quality": "watch",
+      "predicted_first_contact_risk": "high",
+      "route_contract_pass": true,
+      "route_executor": "bounded_recovery_reaim",
+      "route_label": "recovery_or_reaim",
+      "route_quality": {
+        "flags": [
+          "bounded_recovery_required",
+          "initial_lateral_setup_debt",
+          "initial_yaw_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "high",
+        "quality_score": 41.6,
+        "recommendations": [
+          "bounded_reaim_before_push",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "recovery_or_reaim",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 19.628267,
+          "ball_target_distance_m": 0.496616,
+          "lateral_m": 0.111515,
+          "robot_ball_distance_m": 0.509725,
+          "yaw_deg": 30.779188
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "route_quality_flags": [
+        "bounded_recovery_required",
+        "initial_lateral_setup_debt",
+        "initial_yaw_setup_debt"
+      ],
+      "route_quality_score": 41.6,
+      "session_id": "20260605T153859946442Z",
+      "setup_quality": "clean",
+      "setup_watch_flags": [],
+      "stable_contact_approach_pass": true,
+      "visual_review_required": true
+    },
+    {
+      "closest_approach_distance_m": 0.197803,
+      "contact_flags": [],
+      "contact_quality": "clean",
+      "contact_watch_flags": [],
+      "execution_quality": "clean",
+      "fetch_to_pose_pass": true,
+      "first_contact_blocker_flags": [],
+      "first_contact_quality_flags": [],
+      "first_contact_quality_pass": true,
+      "first_contact_t_s": 12.80886,
+      "local_fetch_dispatched": true,
+      "mission_completed_pass": true,
+      "model_provenance_valid": true,
+      "outcome_reason": "trajectory_intersects_delivery_radius",
+      "path": "artifacts/session/20260605T154101860604Z/golf_ball_circle_delivery/20260605T154127849585Z/mission_verdict.json",
+      "planner_only_route": false,
+      "planner_route_executed": false,
+      "planner_route_only_pass": false,
+      "planner_route_outcome": "",
+      "predicted_contact_quality": "watch",
+      "predicted_first_contact_risk": "medium",
+      "route_contract_pass": true,
+      "route_executor": "nav2_forward_reposition_then_fetch",
+      "route_label": "nav2_reposition_first",
+      "route_quality": {
+        "flags": [
+          "nav2_reposition_required"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "medium",
+        "quality_score": 58.954,
+        "recommendations": [
+          "nav2_forward_reposition",
+          "verify_setup_pose_before_push"
+        ],
+        "route_label": "nav2_reposition_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 28.301989,
+          "ball_target_distance_m": 0.632922,
+          "lateral_m": 0.00549,
+          "robot_ball_distance_m": 1.281431,
+          "yaw_deg": 3.838684
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "route_quality_flags": [
+        "nav2_reposition_required"
+      ],
+      "route_quality_score": 58.954,
+      "session_id": "20260605T154101860604Z",
+      "setup_quality": "clean",
+      "setup_watch_flags": [],
+      "stable_contact_approach_pass": true,
+      "visual_review_required": true
+    },
+    {
+      "closest_approach_distance_m": 0.194927,
+      "contact_flags": [],
+      "contact_quality": "clean",
+      "contact_watch_flags": [],
+      "execution_quality": "clean",
+      "fetch_to_pose_pass": true,
+      "first_contact_blocker_flags": [],
+      "first_contact_quality_flags": [],
+      "first_contact_quality_pass": true,
+      "first_contact_t_s": 12.140436,
+      "local_fetch_dispatched": true,
+      "mission_completed_pass": true,
+      "model_provenance_valid": true,
+      "outcome_reason": "trajectory_intersects_delivery_radius",
+      "path": "artifacts/session/20260605T154300021779Z/golf_ball_circle_delivery/20260605T154332830268Z/mission_verdict.json",
+      "planner_only_route": false,
+      "planner_route_executed": false,
+      "planner_route_only_pass": false,
+      "planner_route_outcome": "",
+      "predicted_contact_quality": "watch",
+      "predicted_first_contact_risk": "medium",
+      "route_contract_pass": true,
+      "route_executor": "nav2_forward_reposition_then_fetch",
+      "route_label": "nav2_reposition_first",
+      "route_quality": {
+        "flags": [
+          "nav2_reposition_required"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "medium",
+        "quality_score": 59.443,
+        "recommendations": [
+          "nav2_forward_reposition",
+          "verify_setup_pose_before_push"
+        ],
+        "route_label": "nav2_reposition_first",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 13.981188,
+          "ball_target_distance_m": 0.479677,
+          "lateral_m": 0.026915,
+          "robot_ball_distance_m": 1.270083,
+          "yaw_deg": 3.543245
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "route_quality_flags": [
+        "nav2_reposition_required"
+      ],
+      "route_quality_score": 59.443,
+      "session_id": "20260605T154300021779Z",
+      "setup_quality": "clean",
+      "setup_watch_flags": [],
+      "stable_contact_approach_pass": true,
+      "visual_review_required": true
+    },
+    {
+      "closest_approach_distance_m": 0.196524,
+      "contact_flags": [],
+      "contact_quality": "clean",
+      "contact_watch_flags": [],
+      "execution_quality": "clean",
+      "fetch_to_pose_pass": true,
+      "first_contact_blocker_flags": [],
+      "first_contact_quality_flags": [],
+      "first_contact_quality_pass": true,
+      "first_contact_t_s": 5.537839,
+      "local_fetch_dispatched": true,
+      "mission_completed_pass": true,
+      "model_provenance_valid": true,
+      "outcome_reason": "trajectory_intersects_delivery_radius",
+      "path": "artifacts/session/20260605T154450774249Z/golf_ball_circle_delivery/20260605T154522392427Z/mission_verdict.json",
+      "planner_only_route": false,
+      "planner_route_executed": false,
+      "planner_route_only_pass": false,
+      "planner_route_outcome": "",
+      "predicted_contact_quality": "watch",
+      "predicted_first_contact_risk": "medium",
+      "route_contract_pass": true,
+      "route_executor": "local_fetch_to_pose",
+      "route_label": "fetch_ready_local",
+      "route_quality": {
+        "flags": [
+          "initial_yaw_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "medium",
+        "quality_score": 79.407,
+        "recommendations": [
+          "local_line_servo_contact",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "fetch_ready_local",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 6.343301,
+          "ball_target_distance_m": 0.710324,
+          "lateral_m": 0.0,
+          "robot_ball_distance_m": 0.313658,
+          "yaw_deg": 1.470894
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "route_quality_flags": [
+        "initial_yaw_setup_debt"
+      ],
+      "route_quality_score": 79.407,
+      "session_id": "20260605T154450774249Z",
+      "setup_quality": "clean",
+      "setup_watch_flags": [],
+      "stable_contact_approach_pass": true,
+      "visual_review_required": true
+    },
+    {
+      "closest_approach_distance_m": 0.196409,
+      "contact_flags": [],
+      "contact_quality": "clean",
+      "contact_watch_flags": [],
+      "execution_quality": "clean",
+      "fetch_to_pose_pass": true,
+      "first_contact_blocker_flags": [],
+      "first_contact_quality_flags": [],
+      "first_contact_quality_pass": true,
+      "first_contact_t_s": 23.414246,
+      "local_fetch_dispatched": true,
+      "mission_completed_pass": true,
+      "model_provenance_valid": true,
+      "outcome_reason": "trajectory_intersects_delivery_radius",
+      "path": "artifacts/session/20260605T154618474059Z/golf_ball_circle_delivery/20260605T154644585413Z/mission_verdict.json",
+      "planner_only_route": false,
+      "planner_route_executed": false,
+      "planner_route_only_pass": false,
+      "planner_route_outcome": "",
+      "predicted_contact_quality": "watch",
+      "predicted_first_contact_risk": "low",
+      "route_contract_pass": true,
+      "route_executor": "local_fetch_to_pose",
+      "route_label": "fetch_ready_local",
+      "route_quality": {
+        "flags": [
+          "initial_lateral_setup_debt",
+          "initial_yaw_setup_debt"
+        ],
+        "predicted_contact_quality": "watch",
+        "predicted_first_contact_quality": "watch",
+        "predicted_first_contact_risk": "low",
+        "quality_score": 81.23,
+        "recommendations": [
+          "local_line_servo_contact",
+          "pre_contact_smoothing"
+        ],
+        "route_label": "fetch_ready_local",
+        "setup_debt": {
+          "ball_target_angle_abs_deg": 15.735752,
+          "ball_target_distance_m": 0.6002,
+          "lateral_m": 0.008938,
+          "robot_ball_distance_m": 0.334642,
+          "yaw_deg": 0.161675
+        },
+        "thresholds": {
+          "clean_lateral_m": 0.03,
+          "clean_yaw_deg": 3.0,
+          "fetch_ready_lateral_limit_m": 0.05,
+          "fetch_ready_yaw_limit_deg": 6.0,
+          "nav2_reposition_min_robot_ball_distance_m": 0.9,
+          "recovery_lateral_limit_m": 0.24,
+          "recovery_robot_ball_distance_limit_m": 0.9,
+          "recovery_yaw_limit_deg": 35.0
+        }
+      },
+      "route_quality_flags": [
+        "initial_lateral_setup_debt",
+        "initial_yaw_setup_debt"
+      ],
+      "route_quality_score": 81.23,
+      "session_id": "20260605T154618474059Z",
+      "setup_quality": "clean",
+      "setup_watch_flags": [],
+      "stable_contact_approach_pass": true,
+      "visual_review_required": true
+    }
+  ],
+  "pass": true,
+  "planner_gate_green": true,
+  "planner_gates": [
+    {
+      "campaign_id": "live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_planner",
+      "expected_route_counts": {
+        "ambiguous_or_unsafe_no_go": 5,
+        "fetch_ready_local": 11,
+        "nav2_reposition_first": 9,
+        "recovery_or_reaim": 14,
+        "scan_or_perceive_first": 11
+      },
+      "fail_count": 0,
+      "fetch_dispatch_count": 11,
+      "guard_agreement_count": 50,
+      "guard_disagreement_count": 0,
+      "llm_shadow_provider_ok_count": 0,
+      "llm_shadow_ready": false,
+      "pass": true,
+      "pass_count": 50,
+      "path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_planner/fetch_planner_handoff_gate/gate_summary.json",
+      "planner_mode_effective_counts": {
+        "deterministic_fallback": 50
+      },
+      "provider_status_counts": {
+        "skipped_missing_openai_api_key": 50
+      },
+      "route_counts": {
+        "ambiguous_or_unsafe_no_go": 5,
+        "fetch_ready_local": 11,
+        "nav2_reposition_first": 9,
+        "recovery_or_reaim": 14,
+        "scan_or_perceive_first": 11
+      },
+      "scene_ids": [
+        "seed20260645_scene01_recovery_or_reaim",
+        "seed20260645_scene02_fetch_ready_local",
+        "seed20260645_scene03_recovery_or_reaim",
+        "seed20260645_scene04_scan_or_perceive_first",
+        "seed20260645_scene05_nav2_reposition_first",
+        "seed20260645_scene06_fetch_ready_local",
+        "seed20260645_scene07_fetch_ready_local",
+        "seed20260645_scene08_scan_or_perceive_first",
+        "seed20260645_scene09_nav2_reposition_first",
+        "seed20260645_scene10_fetch_ready_local",
+        "seed20260645_scene11_scan_or_perceive_first",
+        "seed20260645_scene12_ambiguous_or_unsafe_no_go",
+        "seed20260645_scene13_fetch_ready_local",
+        "seed20260645_scene14_nav2_reposition_first",
+        "seed20260645_scene15_recovery_or_reaim",
+        "seed20260645_scene16_recovery_or_reaim",
+        "seed20260645_scene17_ambiguous_or_unsafe_no_go",
+        "seed20260645_scene18_scan_or_perceive_first",
+        "seed20260645_scene19_recovery_or_reaim",
+        "seed20260645_scene20_recovery_or_reaim",
+        "seed20260645_scene21_nav2_reposition_first",
+        "seed20260645_scene22_scan_or_perceive_first",
+        "seed20260645_scene23_nav2_reposition_first",
+        "seed20260645_scene24_scan_or_perceive_first",
+        "seed20260645_scene25_scan_or_perceive_first",
+        "seed20260645_scene26_recovery_or_reaim",
+        "seed20260645_scene27_recovery_or_reaim",
+        "seed20260645_scene28_recovery_or_reaim",
+        "seed20260645_scene29_nav2_reposition_first",
+        "seed20260645_scene30_recovery_or_reaim",
+        "seed20260645_scene31_ambiguous_or_unsafe_no_go",
+        "seed20260645_scene32_fetch_ready_local",
+        "seed20260645_scene33_recovery_or_reaim",
+        "seed20260645_scene34_fetch_ready_local",
+        "seed20260645_scene35_scan_or_perceive_first",
+        "seed20260645_scene36_recovery_or_reaim",
+        "seed20260645_scene37_nav2_reposition_first",
+        "seed20260645_scene38_scan_or_perceive_first",
+        "seed20260645_scene39_fetch_ready_local",
+        "seed20260645_scene40_nav2_reposition_first",
+        "seed20260645_scene41_ambiguous_or_unsafe_no_go",
+        "seed20260645_scene42_recovery_or_reaim",
+        "seed20260645_scene43_fetch_ready_local",
+        "seed20260645_scene44_fetch_ready_local",
+        "seed20260645_scene45_nav2_reposition_first",
+        "seed20260645_scene46_recovery_or_reaim",
+        "seed20260645_scene47_scan_or_perceive_first",
+        "seed20260645_scene48_ambiguous_or_unsafe_no_go",
+        "seed20260645_scene49_fetch_ready_local",
+        "seed20260645_scene50_scan_or_perceive_first"
+      ],
+      "scene_set": "mixed_fetch_planner_v1",
+      "scene_source": "generated",
+      "seed": 20260645,
+      "total_count": 50,
+      "wrong_fetch_dispatch_count": 0
+    }
+  ],
+  "planner_only_route_green": true,
+  "promotion_evidence": false,
+  "quality_prediction_counts": {
+    "watch": 6
+  },
+  "repeatability_runs_per_anchor": 3,
+  "route_rows": [
+    {
+      "coverage_status": "live_executable_passed",
+      "live_blocker_count": 0,
+      "live_clean_count": 2,
+      "live_count": 2,
+      "live_execution_watch_count": 0,
+      "live_fetch_pass_count": 2,
+      "live_pass_count": 2,
+      "live_route_only_pass_count": 0,
+      "live_setup_watch_count": 0,
+      "live_watch_count": 0,
+      "planner_count": 11,
+      "predicted_blocker_count": 0,
+      "predicted_watch_count": 2,
+      "route_label": "fetch_ready_local"
+    },
+    {
+      "coverage_status": "live_executable_passed",
+      "live_blocker_count": 0,
+      "live_clean_count": 2,
+      "live_count": 2,
+      "live_execution_watch_count": 0,
+      "live_fetch_pass_count": 2,
+      "live_pass_count": 2,
+      "live_route_only_pass_count": 0,
+      "live_setup_watch_count": 0,
+      "live_watch_count": 0,
+      "planner_count": 9,
+      "predicted_blocker_count": 0,
+      "predicted_watch_count": 2,
+      "route_label": "nav2_reposition_first"
+    },
+    {
+      "coverage_status": "planner_only_classified",
+      "live_blocker_count": 0,
+      "live_clean_count": 0,
+      "live_count": 0,
+      "live_execution_watch_count": 0,
+      "live_fetch_pass_count": 0,
+      "live_pass_count": 0,
+      "live_route_only_pass_count": 0,
+      "live_setup_watch_count": 0,
+      "live_watch_count": 0,
+      "planner_count": 11,
+      "predicted_blocker_count": 0,
+      "predicted_watch_count": 0,
+      "route_label": "scan_or_perceive_first"
+    },
+    {
+      "coverage_status": "live_executable_passed",
+      "live_blocker_count": 0,
+      "live_clean_count": 2,
+      "live_count": 2,
+      "live_execution_watch_count": 0,
+      "live_fetch_pass_count": 2,
+      "live_pass_count": 2,
+      "live_route_only_pass_count": 0,
+      "live_setup_watch_count": 0,
+      "live_watch_count": 0,
+      "planner_count": 14,
+      "predicted_blocker_count": 0,
+      "predicted_watch_count": 2,
+      "route_label": "recovery_or_reaim"
+    },
+    {
+      "coverage_status": "planner_only_classified",
+      "live_blocker_count": 0,
+      "live_clean_count": 0,
+      "live_count": 0,
+      "live_execution_watch_count": 0,
+      "live_fetch_pass_count": 0,
+      "live_pass_count": 0,
+      "live_route_only_pass_count": 0,
+      "live_setup_watch_count": 0,
+      "live_watch_count": 0,
+      "planner_count": 5,
+      "predicted_blocker_count": 0,
+      "predicted_watch_count": 0,
+      "route_label": "ambiguous_or_unsafe_no_go"
+    }
+  ],
+  "saved_anchor_repeatability_green": false,
+  "saved_anchor_scene_counts": {},
+  "scorecard_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md",
+  "setup_quality_status": "clean",
+  "setup_watch_count": 0,
+  "summary_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_analysis/fetch_planner_route_uat_analyzer/route_uat_summary.json",
+  "type": "fetch_planner_route_uat_analyzer",
+  "visual_package_green": true,
+  "visual_packages": [
+    {
+      "campaign_id": "live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene30_recovery_or_reaim",
+      "local_fetch_visual_confirmed": true,
+      "milestone_interpretation": "mobile_visual_uat_ready_not_promotion",
+      "mobile_watchable": true,
+      "onboard_camera_watchable": true,
+      "pass": true,
+      "path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene30_recovery_or_reaim/fetch_visual_uat_package/package_summary.json",
+      "promotion_evidence": false,
+      "scorecard_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene30_recovery_or_reaim/fetch_visual_uat_package/scorecard.md",
+      "video_count": 6,
+      "video_recovery_attempt_count": 3,
+      "video_recovery_count": 3,
+      "video_recovery_ok_count": 3,
+      "visual_confirmation_seen": true,
+      "warnings": [
+        "visual_confirmation_keyframe_recovery"
+      ]
+    },
+    {
+      "campaign_id": "live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene15_recovery_or_reaim",
+      "local_fetch_visual_confirmed": true,
+      "milestone_interpretation": "mobile_visual_uat_ready_not_promotion",
+      "mobile_watchable": true,
+      "onboard_camera_watchable": true,
+      "pass": true,
+      "path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene15_recovery_or_reaim/fetch_visual_uat_package/package_summary.json",
+      "promotion_evidence": false,
+      "scorecard_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene15_recovery_or_reaim/fetch_visual_uat_package/scorecard.md",
+      "video_count": 6,
+      "video_recovery_attempt_count": 2,
+      "video_recovery_count": 2,
+      "video_recovery_ok_count": 2,
+      "visual_confirmation_seen": true,
+      "warnings": [
+        "visual_confirmation_keyframe_recovery"
+      ]
+    },
+    {
+      "campaign_id": "live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene09_nav2_reposition_first",
+      "local_fetch_visual_confirmed": true,
+      "milestone_interpretation": "mobile_visual_uat_ready_not_promotion",
+      "mobile_watchable": true,
+      "onboard_camera_watchable": true,
+      "pass": true,
+      "path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene09_nav2_reposition_first/fetch_visual_uat_package/package_summary.json",
+      "promotion_evidence": false,
+      "scorecard_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene09_nav2_reposition_first/fetch_visual_uat_package/scorecard.md",
+      "video_count": 6,
+      "video_recovery_attempt_count": 2,
+      "video_recovery_count": 2,
+      "video_recovery_ok_count": 2,
+      "visual_confirmation_seen": true,
+      "warnings": [
+        "visual_confirmation_keyframe_recovery"
+      ]
+    },
+    {
+      "campaign_id": "live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene45_nav2_reposition_first",
+      "local_fetch_visual_confirmed": true,
+      "milestone_interpretation": "mobile_visual_uat_ready_not_promotion",
+      "mobile_watchable": true,
+      "onboard_camera_watchable": true,
+      "pass": true,
+      "path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene45_nav2_reposition_first/fetch_visual_uat_package/package_summary.json",
+      "promotion_evidence": false,
+      "scorecard_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene45_nav2_reposition_first/fetch_visual_uat_package/scorecard.md",
+      "video_count": 6,
+      "video_recovery_attempt_count": 2,
+      "video_recovery_count": 2,
+      "video_recovery_ok_count": 2,
+      "visual_confirmation_seen": true,
+      "warnings": [
+        "visual_confirmation_keyframe_recovery"
+      ]
+    },
+    {
+      "campaign_id": "live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene13_fetch_ready_local",
+      "local_fetch_visual_confirmed": true,
+      "milestone_interpretation": "mobile_visual_uat_ready_not_promotion",
+      "mobile_watchable": true,
+      "onboard_camera_watchable": true,
+      "pass": true,
+      "path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene13_fetch_ready_local/fetch_visual_uat_package/package_summary.json",
+      "promotion_evidence": false,
+      "scorecard_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene13_fetch_ready_local/fetch_visual_uat_package/scorecard.md",
+      "video_count": 6,
+      "video_recovery_attempt_count": 2,
+      "video_recovery_count": 2,
+      "video_recovery_ok_count": 2,
+      "visual_confirmation_seen": true,
+      "warnings": [
+        "visual_confirmation_keyframe_recovery"
+      ]
+    },
+    {
+      "campaign_id": "live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene07_fetch_ready_local",
+      "local_fetch_visual_confirmed": true,
+      "milestone_interpretation": "mobile_visual_uat_ready_not_promotion",
+      "mobile_watchable": true,
+      "onboard_camera_watchable": true,
+      "pass": true,
+      "path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene07_fetch_ready_local/fetch_visual_uat_package/package_summary.json",
+      "promotion_evidence": false,
+      "scorecard_path": "artifacts/session/live_planner_seeded_generalization_gate_seed20260645_breadth_50x2_20260605_replay_seed20260645_scene07_fetch_ready_local/fetch_visual_uat_package/scorecard.md",
+      "video_count": 6,
+      "video_recovery_attempt_count": 2,
+      "video_recovery_count": 2,
+      "video_recovery_ok_count": 2,
+      "visual_confirmation_seen": true,
+      "warnings": [
+        "visual_confirmation_keyframe_recovery"
+      ]
+    }
+  ]
+}

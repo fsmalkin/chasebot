@@ -1342,6 +1342,21 @@ fetch under sim-gate physics. Provider-backed LLM routing remains blocked until
 `OPENAI_API_KEY` is available, and physical/onboard proof remains the
 hardware-transfer gate.
 
+Seed20260645 confirms the mixed route-family result again on a fresh seed:
+`artifacts/session/live_planner_seed20260645_mixed_all_routes_2x_20260605/fetch_planner_route_replay_batch/scorecard.md`.
+The planner child classified `50` generated scenes with all five route labels
+represented and zero wrong fetch dispatches. The completed mixed replay selected
+two rows per route family and passed `10/10` route contracts: six executable
+deliveries and four planner-only abstentions. The supporting analyzer
+`artifacts/session/live_planner_seed20260645_mixed_all_routes_analysis_20260605/fetch_planner_route_uat_analyzer/scorecard.md`
+reports clean execution/setup/contact and `0` first-contact blockers.
+Frame-sequence review covered all ten keyframe sheets and matched the route
+contract. One first scene13 attempt stopped during robot set-pose before fetch
+control; the targeted repro
+`artifacts/session/live_planner_seed20260645_scene13_fetch_ready_repro_20260605/fetch_planner_route_replay_batch/scorecard.md`
+and resumed mixed batch passed. Treat this as a setup-service harness watch,
+while keeping the architecture read green under sim-gate deterministic fallback.
+
 Seed20260643 expands the roughest-row breadth evidence through the hardened
 route-owner stack:
 `artifacts/session/live_planner_seeded_generalization_gate_seed20260643_rough_breadth_50x4_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
