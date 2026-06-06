@@ -5198,6 +5198,7 @@ pkill -f "fluxbox" 2>/dev/null || true
             fetch_planner_gate.ROUTE_FETCH_READY,
             fetch_planner_gate.ROUTE_NAV2_REPOSITION,
             fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
+            fetch_planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
         }
         if forward_only_pre_contact is None:
             forward_only_pre_contact = True if not route_executed else None
@@ -5690,6 +5691,8 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
                     if route_label in nav2_setup_first_routes
                     else "planner route permitted bounded local re-aim execution"
                     if route_label == fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM
+                    else "planner route required measured local setup/capture before fetch"
+                    if route_label == fetch_planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
                     else "planner route permitted bounded local execution"
                 ),
                 forward_only_pre_contact=runner_script == "golf_ball_circle_delivery_demo_runner.py",
@@ -5760,11 +5763,16 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
                 fetch_planner_gate.ROUTE_FETCH_READY,
                 fetch_planner_gate.ROUTE_NAV2_REPOSITION,
                 fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
+                fetch_planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
             }:
+                local_setup_route = str(planner_route_execution.get("route_label", "")) in {
+                    fetch_planner_gate.ROUTE_RECOVERY_OR_REAIM,
+                    fetch_planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
+                }
                 command.extend(["--drive-mode", "line_servo"])
                 command.extend(["--drive-linear-x-mps", "0.100000"])
-                command.extend(["--drive-duration-s", "36.000000"])
-                command.extend(["--sample-duration-s", "40.000000"])
+                command.extend(["--drive-duration-s", "118.000000" if local_setup_route else "36.000000"])
+                command.extend(["--sample-duration-s", "122.000000" if local_setup_route else "40.000000"])
                 command.extend(["--line-servo-push-linear-x-mps", "0.055000"])
                 command.extend(["--line-servo-max-angular-z-rps", "0.180000"])
                 command.extend(["--line-servo-yaw-gain", "1.200000"])

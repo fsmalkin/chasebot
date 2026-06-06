@@ -27,6 +27,7 @@ EXECUTABLE_ROUTES = (
     planner_gate.ROUTE_FETCH_READY,
     planner_gate.ROUTE_NAV2_REPOSITION,
     planner_gate.ROUTE_RECOVERY_OR_REAIM,
+    planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
 )
 PLANNER_ONLY_ROUTES = (
     planner_gate.ROUTE_SCAN_OR_PERCEIVE,

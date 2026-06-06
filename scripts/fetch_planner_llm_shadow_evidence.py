@@ -25,6 +25,7 @@ ROUTE_LABELS = (
     "nav2_reposition_first",
     "scan_or_perceive_first",
     "recovery_or_reaim",
+    "local_setup_capture",
     "ambiguous_or_unsafe_no_go",
 )
 

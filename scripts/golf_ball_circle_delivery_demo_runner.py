@@ -43,13 +43,20 @@ ROUTE_FETCH_READY = "fetch_ready_local"
 ROUTE_NAV2_REPOSITION = "nav2_reposition_first"
 ROUTE_SCAN_OR_PERCEIVE = "scan_or_perceive_first"
 ROUTE_RECOVERY_OR_REAIM = "recovery_or_reaim"
+ROUTE_LOCAL_SETUP_CAPTURE = "local_setup_capture"
 ROUTE_NO_GO = "ambiguous_or_unsafe_no_go"
 ROUTE_EXECUTOR_LOCAL_FETCH = "local_fetch_to_pose"
 ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH = "nav2_forward_reposition_then_fetch"
 ROUTE_EXECUTOR_SCAN = "scan_or_perception_refresh"
 ROUTE_EXECUTOR_RECOVERY = "bounded_recovery_reaim"
+ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE = "measured_local_setup_capture"
 ROUTE_EXECUTOR_NO_GO = "safe_no_go"
-EXECUTABLE_PLANNER_FETCH_ROUTES = {ROUTE_FETCH_READY, ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM}
+EXECUTABLE_PLANNER_FETCH_ROUTES = {
+    ROUTE_FETCH_READY,
+    ROUTE_NAV2_REPOSITION,
+    ROUTE_RECOVERY_OR_REAIM,
+    ROUTE_LOCAL_SETUP_CAPTURE,
+}
 PLANNER_ONLY_ROUTE_EXECUTORS = {
     ROUTE_SCAN_OR_PERCEIVE: ROUTE_EXECUTOR_SCAN,
     ROUTE_NO_GO: ROUTE_EXECUTOR_NO_GO,
@@ -80,8 +87,13 @@ ROUTE_EXECUTOR_BY_LABEL = {
     ROUTE_FETCH_READY: ROUTE_EXECUTOR_LOCAL_FETCH,
     ROUTE_NAV2_REPOSITION: ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
     ROUTE_RECOVERY_OR_REAIM: ROUTE_EXECUTOR_RECOVERY,
+    ROUTE_LOCAL_SETUP_CAPTURE: ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE,
     **PLANNER_ONLY_ROUTE_EXECUTORS,
 }
+
+
+def _is_local_setup_owner_route(route_label: str) -> bool:
+    return str(route_label or "").strip() in {ROUTE_RECOVERY_OR_REAIM, ROUTE_LOCAL_SETUP_CAPTURE}
 
 
 def utc_now() -> str:
@@ -645,7 +657,7 @@ def apply_planner_route_execution_defaults(
     _set_route_default(args, explicit_args, "forward_only_pre_contact_required", True, "--forward-only-pre-contact-required")
     _set_route_default(args, explicit_args, "drive_mode", "line_servo", "--drive-mode")
     _set_route_default(args, explicit_args, "drive_linear_x_mps", 0.1, "--drive-linear-x-mps")
-    if route_label == ROUTE_RECOVERY_OR_REAIM:
+    if _is_local_setup_owner_route(route_label):
         route_drive_duration_s = RECOVERY_ROUTE_DRIVE_DURATION_S
         route_sample_duration_s = RECOVERY_ROUTE_SAMPLE_DURATION_S
     elif route_label == ROUTE_NAV2_REPOSITION:
@@ -1415,7 +1427,7 @@ def line_servo_command(
     effective_contact_lateral_ready_m = float(contact_lateral_ready_m)
     recovery_line_acquire_lateral_m = max(float(effective_contact_lateral_ready_m), 0.0)
     recovery_setup_pocket_m = 0.10
-    if clean_route_label == "recovery_or_reaim":
+    if _is_local_setup_owner_route(clean_route_label):
         effective_setup_standoff_m = max(effective_setup_standoff_m, float(recovery_setup_standoff_m))
         effective_max_angular_z_rps = max(effective_max_angular_z_rps, float(recovery_max_angular_z_rps))
         effective_contact_lateral_ready_m = min(effective_contact_lateral_ready_m, 0.030)
@@ -1436,7 +1448,7 @@ def line_servo_command(
         distance_to_contact < 0.14
         and abs(robot_lateral_error) > effective_contact_lateral_ready_m
     )
-    recovery_final_reaim_active = bool(clean_route_label == ROUTE_RECOVERY_OR_REAIM and contact_final_reaim_active)
+    recovery_final_reaim_active = bool(_is_local_setup_owner_route(clean_route_label) and contact_final_reaim_active)
     lateral_reaim_gain = 3.5
     lateral_reaim_limit_rad = 0.45
     if contact_final_reaim_active:
@@ -1461,7 +1473,7 @@ def line_servo_command(
         )
     ball_moved = bool(ball_motion_m >= float(motion_threshold_m))
     recovery_contact_lateral_trim_active = bool(
-        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        _is_local_setup_owner_route(clean_route_label)
         and distance_to_contact <= 0.08
         and not contact_ready
         and abs(robot_lateral_error) > effective_contact_lateral_ready_m * 0.85
@@ -1478,7 +1490,7 @@ def line_servo_command(
         )
     )
     recovery_close_settle_active = bool(
-        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        _is_local_setup_owner_route(clean_route_label)
         and 0.12 < distance_to_contact <= 0.22
         and not contact_ready
         and abs(robot_lateral_error) > effective_contact_lateral_ready_m * 1.50
@@ -1487,7 +1499,7 @@ def line_servo_command(
     recovery_line_acquire_yaw_hold_threshold_rad = max(float(contact_yaw_ready_rad) * 4.0, 0.22)
     recovery_close_line_acquire_yaw_hold_threshold_rad = max(float(contact_yaw_ready_rad) * 8.0, 0.55)
     recovery_line_acquire_yaw_hold_active = bool(
-        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        _is_local_setup_owner_route(clean_route_label)
         and not contact_ready
         and abs(robot_lateral_error) <= recovery_line_acquire_lateral_m
         and (
@@ -1502,7 +1514,7 @@ def line_servo_command(
         )
     )
     recovery_line_acquire_yaw_crawl_active = bool(
-        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        _is_local_setup_owner_route(clean_route_label)
         and not ball_moved
         and recovery_line_acquire_yaw_hold_active
         and 0.20 < distance_to_contact <= 0.24
@@ -1539,7 +1551,7 @@ def line_servo_command(
         and abs(line_yaw_error) > local_contact_yaw_hold_threshold_rad
     )
     recovery_contact_yaw_hold_active = bool(
-        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        _is_local_setup_owner_route(clean_route_label)
         and (
             (
                 recovery_line_acquire_yaw_hold_active
@@ -1585,7 +1597,7 @@ def line_servo_command(
         desired_yaw = line_yaw
         base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
     elif (
-        clean_route_label == "recovery_or_reaim"
+        _is_local_setup_owner_route(clean_route_label)
         and distance_to_setup <= recovery_setup_pocket_m
         and abs(robot_lateral_error) <= recovery_line_acquire_lateral_m
         and distance_to_contact > 0.12
@@ -1668,7 +1680,7 @@ def line_servo_command(
         base_linear = min(base_linear, 0.055)
     linear_floor = float(min_linear_x_mps)
     recovery_yaw_hold = bool(
-        clean_route_label == ROUTE_RECOVERY_OR_REAIM
+        _is_local_setup_owner_route(clean_route_label)
         and not ball_moved
         and abs(yaw_error) > 1.25
         and distance_to_contact > 0.20
@@ -1676,7 +1688,7 @@ def line_servo_command(
     recovery_yaw_crawl = bool(
         recovery_line_acquire_yaw_crawl_active
         or (
-            clean_route_label == ROUTE_RECOVERY_OR_REAIM
+            _is_local_setup_owner_route(clean_route_label)
             and not ball_moved
             and not recovery_yaw_hold
             and not recovery_contact_yaw_hold_active

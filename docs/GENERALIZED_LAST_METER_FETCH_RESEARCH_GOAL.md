@@ -34,17 +34,31 @@ deterministic controllers, or later learned-local components behind guards.
 Scope correction: this milestone proves open-field setup-to-push-ready
 planning plus the bounded local fetch skill. The route labels
 `fetch_ready_local`, `nav2_reposition_first`, `scan_or_perceive_first`,
-`recovery_or_reaim`, and `ambiguous_or_unsafe_no_go` remain useful reporting
-families. The planner authority target is an executable maneuver plan. Local
-fetch may start only after measured push-ready geometry is true: the robot is
-behind the ball on the intended ball-target line and inside standoff,
-lateral-error, yaw, freshness, and corridor-validity bounds.
+`recovery_or_reaim`, `local_setup_capture`, and
+`ambiguous_or_unsafe_no_go` remain useful reporting families. The planner
+authority target is an executable maneuver plan. `nav2_reposition_first` owns
+measured-admissible free-space repositioning. `local_setup_capture` owns
+ball-relative setup when the robot must get behind the selected ball before
+push-ready validation. Local fetch may start only after measured push-ready
+geometry is true: the robot is behind the ball on the intended ball-target line
+and inside standoff, lateral-error, yaw, freshness, and corridor-validity
+bounds.
 
 The open-field test surface is `broad_spatial_fetch_generalization_v1`. It
 covers front, behind, wraparound, true opposite-side, wide-angle, stale
 perception, blocked/no-go, and recovery setups on a soccer-field or
 putting-green-like local field. The previous opposite-circle Nav2 failure is a
 pinned regression case inside that broader surface.
+
+June 6 measured-stage update: `local_setup_capture` is now a first-class route
+family and executor identity for ball-relative setup ownership. The hard seed
+dry-run
+`artifacts/session/multiball_local_setup_capture_dryrun_seed20260607_20260606/fetch_multiball_retrieval_gate/gate_summary.json`
+passes as planning evidence with `11` `local_setup_capture` steps, `1`
+`recovery_or_reaim` step, and `0` `nav2_reposition_first` setup steps. That
+result proves routing and command construction. Live promotion evidence still
+requires browser-watchable execution with measured push-ready handoff and
+delivery verification.
 
 Milestone acceptance:
 

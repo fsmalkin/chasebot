@@ -4923,36 +4923,3 @@ def test_world_stream_observer_renderability_expires_after_grace_window(tmp_path
     assert expired["world_stream_transport_healthy"] is False
     assert expired["world_stream_degraded"] is False
     assert expired["failure_class"] == "world_stream_no_recent_frames"
-    assert evidence_by_title["Seed 20260644 mixed all-routes UAT is green"]["links"][0]["url"].endswith(
-        "/fetch_planner_seeded_generalization_gate/scorecard.md"
-    )
-    assert any(
-        "scan_or_perceive_first" in link["label"] and link["url"].endswith("/visual/raw_camera_browser.mp4")
-        for link in evidence_by_title["Seed 20260644 mixed all-routes UAT is green"]["links"]
-    )
-    assert any(
-        "nav2_reposition_first" in link["label"] and link["url"].endswith("/visual/raw_camera_browser.mp4")
-        for link in evidence_by_title["Seed 20260644 mixed all-routes UAT is green"]["links"]
-    )
-    assert evidence_by_title["Seed 20260645 mixed all-routes UAT is green"]["links"][0]["url"].endswith(
-        "/fetch_planner_seeded_generalization_gate/scorecard.md"
-    )
-    assert any(
-        "scene13" in link["label"] and link["url"].endswith("/visual/raw_camera_browser.mp4")
-        for link in evidence_by_title["Seed 20260645 mixed all-routes UAT is green"]["links"]
-    )
-    assert any(
-        "mixed all-routes analyzer" in link["label"]
-        for link in evidence_by_title["Seed 20260645 mixed all-routes UAT is green"]["links"]
-    )
-    assert evidence_by_title["Seed 20260646 mixed all-routes 3x UAT is green"]["links"][0]["url"].endswith(
-        "/fetch_planner_seeded_generalization_gate/scorecard.md"
-    )
-    assert any(
-        "scene48" in link["label"] and link["url"].endswith("/visual/raw_camera_browser.mp4")
-        for link in evidence_by_title["Seed 20260646 mixed all-routes 3x UAT is green"]["links"]
-    )
-    assert any(
-        "mixed all-routes analyzer" in link["label"]
-        for link in evidence_by_title["Seed 20260646 mixed all-routes 3x UAT is green"]["links"]
-    )

@@ -114,7 +114,7 @@ def test_generate_multiball_scenes_is_deterministic_and_bounded():
                 assert _pose_distance(pose, other["pose"]) >= multiball_gate.MIN_BALL_SEPARATION_M
 
 
-def test_multiball_planner_skips_nearest_candidate_when_route_quality_blocks_nav2_setup():
+def test_multiball_planner_prefers_lower_setup_debt_local_setup_capture_candidate():
     target = multiball_gate.target_pose()
     scene = {
         "generated_utc": "2026-06-06T00:00:00Z",
@@ -134,9 +134,10 @@ def test_multiball_planner_skips_nearest_candidate_when_route_quality_blocks_nav
     plan = multiball_gate.plan_multiball_scene(scene, args=_args())
 
     assert plan["planner_ready"] is True
-    assert plan["retrieval_order"][0] == "ball_1"
+    assert plan["retrieval_order"][0] == "ball_2"
     assert sorted(plan["retrieval_order"]) == ["ball_1", "ball_2", "ball_3"]
     assert plan["executable_step_count"] == 3
+    assert plan["sequence"][0]["route_label"] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
 
 
 def test_multiball_planner_prioritizes_target_aligned_candidate_over_nearer_high_angle_nav2_setup():
@@ -162,7 +163,7 @@ def test_multiball_planner_prioritizes_target_aligned_candidate_over_nearer_high
     high_angle = next(row for row in first_candidates if row["ball_id"] == "near_high_angle")
 
     assert plan["retrieval_order"][0] == "aligned_far"
-    assert first_step["route_label"] == planner_gate.ROUTE_NAV2_REPOSITION
+    assert first_step["route_label"] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
     assert high_angle["cost"]["direction_alignment_penalty"] > 1.0
     assert high_angle["route_quality"]["setup_debt"]["ball_target_angle_abs_deg"] > 90.0
 
@@ -191,7 +192,9 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
     assert summary["scene_count"] == 2
     assert summary["planned_step_count"] == 6
     assert summary["planner_ready_scene_count"] == 2
-    assert summary["scene_rows"][0]["retrieval_order"] == ["ball_3", "ball_2", "ball_1"]
+    assert sum(summary["route_counts"].values()) == 6
+    assert summary["route_counts"][planner_gate.ROUTE_LOCAL_SETUP_CAPTURE] >= 1
+    assert summary["scene_rows"][0]["retrieval_order"] == ["ball_3", "ball_1", "ball_2"]
     assert (tmp_path / summary["summary_path"]).is_file()
     assert (tmp_path / summary["scorecard_path"]).is_file()
     first_plan_path = tmp_path / summary["scene_rows"][0]["sequence_plan_path"]
@@ -256,18 +259,21 @@ def test_persistent_field_mode_preserves_target_and_robot_in_step_commands(tmp_p
 
 def test_nav2_goal_frame_mode_is_configurable_for_step_commands(tmp_path, monkeypatch):
     _patch_roots(tmp_path, monkeypatch)
+    layout_path = tmp_path / "layout.json"
+    _write_json(layout_path, {"planner_route_label": planner_gate.ROUTE_NAV2_REPOSITION})
 
-    summary = multiball_gate.run_gate(
-        _args(
-            campaign_id="dry_nav2_relative_multiball",
-            dry_run=True,
-            random_cases=1,
-            balls_per_scene=1,
-            nav2_goal_frame_mode="nav2_relative",
-        )
+    command = multiball_gate.build_step_command(
+        args=_args(nav2_goal_frame_mode="nav2_relative"),
+        layout_path=layout_path,
+        scene_id="manual_nav2_scene",
+        step={
+            "step_index": 1,
+            "ball_id": "ball_1",
+            "route_label": planner_gate.ROUTE_NAV2_REPOSITION,
+            "estimated_start_robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        },
     )
 
-    command = summary["step_rows"][0]["command"]
     assert command[command.index("--nav2-reposition-goal-frame-mode") + 1] == "nav2_relative"
 
 

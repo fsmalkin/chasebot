@@ -66,24 +66,26 @@ that proposal before any route owner executes.
 
 1. `fetch_ready_local`: scene is inside the documented local fetch envelope;
    validate push-ready geometry and dispatch `fetch_to_pose`.
-2. `nav2_reposition_first`: ball/target are local, but robot pose or topology is
-   outside the push-ready envelope; dispatch bounded reposition, wraparound, or
-   setup first.
+2. `nav2_reposition_first`: ball/target are local, but the robot needs
+   measured-admissible free-space repositioning before setup ownership begins.
 3. `scan_or_perceive_first`: ball, target, delivery pose, or confidence is
    stale, missing, or ambiguous; scan/perceive before fetch.
 4. `recovery_or_reaim`: scene is near-envelope but needs a known re-aim,
    recenter, or recovery routine before fetch.
-5. `ambiguous_or_unsafe_no_go`: scene is blocked, unsafe, or semantically
+5. `local_setup_capture`: scene is local and valid, but the hard stage is
+   ball-relative setup; the measured local setup/capture owner gets behind the
+   selected ball before push-ready validation.
+6. `ambiguous_or_unsafe_no_go`: scene is blocked, unsafe, or semantically
    unclear; withhold fetch and report the no-go reason.
 
 The route labels are reporting families. The planner product is an executable
 bounded sequence with maneuvers such as `scan_perceive`,
 `nav2_reposition`, `wraparound_setup`, `recovery_reaim`,
-`validate_push_ready`, `local_fetch_to_pose`, `monitor_delivery`, or
-`safe_no_go`. A wrong local-fetch dispatch is a planner/compiler failure. A
-local fetch miss after a correct measured push-ready handoff is subsystem
-evidence. A correct scan, reposition, wraparound, recovery, abstain, or no-go on
-a difficult field setup is planner evidence.
+`local_setup_capture`, `validate_push_ready`, `local_fetch_to_pose`,
+`monitor_delivery`, or `safe_no_go`. A wrong local-fetch dispatch is a
+planner/compiler failure. A local fetch miss after a correct measured push-ready
+handoff is subsystem evidence. A correct scan, reposition, setup/capture,
+recovery, abstain, or no-go on a difficult field setup is planner evidence.
 
 The first concrete gate for this contract is
 `scripts/fetch_planner_handoff_gate.py`. It can run deterministic scoring or
@@ -122,7 +124,11 @@ and writes one planner-routed local-fetch layout per ball. LLM/provider work
 should compare mission strategy, route choice, recovery strategy, and handoff
 timing against that deterministic baseline before it influences live execution.
 Low-level motion remains owned by Nav2 free-space navigation, deterministic
-local setup/capture, and guarded local fetch.
+local setup/capture, and guarded local fetch. The June 6 implementation adds
+`local_setup_capture` as the first explicit route family for ball-relative
+setup ownership; dry-run seed `20260607` now plans `11` measured local
+setup/capture steps and `1` bounded recovery step across four multi-ball
+scenes, with zero Nav2 setup routes.
 
 The opposite-side fetch probe turns that boundary into a control requirement.
 Local fetch should enter contact from a forward-driving setup. Reverse pre-stage

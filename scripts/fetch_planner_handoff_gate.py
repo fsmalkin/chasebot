@@ -46,24 +46,28 @@ ROUTE_FETCH_READY = "fetch_ready_local"
 ROUTE_NAV2_REPOSITION = "nav2_reposition_first"
 ROUTE_SCAN_OR_PERCEIVE = "scan_or_perceive_first"
 ROUTE_RECOVERY_OR_REAIM = "recovery_or_reaim"
+ROUTE_LOCAL_SETUP_CAPTURE = "local_setup_capture"
 ROUTE_NO_GO = "ambiguous_or_unsafe_no_go"
 ROUTE_LABELS = (
     ROUTE_FETCH_READY,
     ROUTE_NAV2_REPOSITION,
     ROUTE_SCAN_OR_PERCEIVE,
     ROUTE_RECOVERY_OR_REAIM,
+    ROUTE_LOCAL_SETUP_CAPTURE,
     ROUTE_NO_GO,
 )
 ROUTE_EXECUTOR_LOCAL_FETCH = "local_fetch_to_pose"
 ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH = "nav2_forward_reposition_then_fetch"
 ROUTE_EXECUTOR_SCAN = "scan_or_perception_refresh"
 ROUTE_EXECUTOR_RECOVERY = "bounded_recovery_reaim"
+ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE = "measured_local_setup_capture"
 ROUTE_EXECUTOR_NO_GO = "safe_no_go"
 ROUTE_EXECUTORS = {
     ROUTE_FETCH_READY: ROUTE_EXECUTOR_LOCAL_FETCH,
     ROUTE_NAV2_REPOSITION: ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
     ROUTE_SCAN_OR_PERCEIVE: ROUTE_EXECUTOR_SCAN,
     ROUTE_RECOVERY_OR_REAIM: ROUTE_EXECUTOR_RECOVERY,
+    ROUTE_LOCAL_SETUP_CAPTURE: ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE,
     ROUTE_NO_GO: ROUTE_EXECUTOR_NO_GO,
 }
 MANEUVER_SCAN = "scan_perceive"
@@ -71,6 +75,7 @@ MANEUVER_NO_GO = "safe_no_go"
 MANEUVER_NAV2_REPOSITION = "nav2_reposition"
 MANEUVER_WRAPAROUND_SETUP = "wraparound_setup"
 MANEUVER_RECOVERY_REAIM = "recovery_reaim"
+MANEUVER_LOCAL_SETUP_CAPTURE = "local_setup_capture"
 MANEUVER_VALIDATE_PUSH_READY = "validate_push_ready"
 MANEUVER_LOCAL_FETCH = "local_fetch_to_pose"
 MANEUVER_MONITOR_DELIVERY = "monitor_delivery"
@@ -80,6 +85,7 @@ MANEUVER_LABELS = (
     MANEUVER_NAV2_REPOSITION,
     MANEUVER_WRAPAROUND_SETUP,
     MANEUVER_RECOVERY_REAIM,
+    MANEUVER_LOCAL_SETUP_CAPTURE,
     MANEUVER_VALIDATE_PUSH_READY,
     MANEUVER_LOCAL_FETCH,
     MANEUVER_MONITOR_DELIVERY,
@@ -101,6 +107,9 @@ FETCH_READY_YAW_LIMIT_DEG = 6.0
 RECOVERY_LATERAL_LIMIT_M = 0.240
 RECOVERY_YAW_LIMIT_DEG = 35.0
 RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M = 0.900
+LOCAL_SETUP_CAPTURE_ROBOT_BALL_DISTANCE_LIMIT_M = 2.600
+LOCAL_SETUP_CAPTURE_LATERAL_LIMIT_M = 2.200
+LOCAL_SETUP_CAPTURE_YAW_LIMIT_DEG = 180.0
 NAV2_REPOSITION_MIN_ROBOT_BALL_DISTANCE_M = RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
 NAV2_REPOSITION_STANDOFF_LIMIT_M = 1.350
 
@@ -244,6 +253,34 @@ def _recovery_admissible_from_geometry(geometry: dict[str, Any]) -> bool:
     )
 
 
+def _local_setup_capture_admissible_from_geometry(geometry: dict[str, Any]) -> bool:
+    ball_target_distance_m = _finite_float(geometry.get("ball_target_distance_m"), 999.0)
+    robot_ball_distance_m = _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
+    lateral_error_m = _finite_float(geometry.get("robot_lateral_error_m"), 999.0)
+    yaw_error_deg = abs(_finite_float(geometry.get("robot_yaw_error_deg"), 999.0))
+    return bool(
+        0.34 <= ball_target_distance_m <= 0.85
+        and 0.24 <= robot_ball_distance_m <= LOCAL_SETUP_CAPTURE_ROBOT_BALL_DISTANCE_LIMIT_M
+        and lateral_error_m <= LOCAL_SETUP_CAPTURE_LATERAL_LIMIT_M
+        and yaw_error_deg <= LOCAL_SETUP_CAPTURE_YAW_LIMIT_DEG
+    )
+
+
+def _geometry_needs_ball_relative_setup_owner(geometry: dict[str, Any]) -> bool:
+    robot_ball_relative_bearing_abs_deg = _finite_float(geometry.get("robot_ball_relative_bearing_abs_deg"), 0.0)
+    opposite_side = bool(geometry.get("opposite_side_of_circle", False))
+    lateral_error_m = _finite_float(geometry.get("robot_lateral_error_m"), 999.0)
+    yaw_error_deg = abs(_finite_float(geometry.get("robot_yaw_error_deg"), 999.0))
+    robot_ball_distance_m = _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
+    return bool(
+        opposite_side
+        or robot_ball_relative_bearing_abs_deg >= 90.0
+        or lateral_error_m > RECOVERY_LATERAL_LIMIT_M
+        or yaw_error_deg > RECOVERY_YAW_LIMIT_DEG
+        or robot_ball_distance_m > NAV2_REPOSITION_STANDOFF_LIMIT_M
+    )
+
+
 def route_admissibility_for_scene(scene: dict[str, Any], route_label: str) -> dict[str, Any]:
     route = str(route_label or "").strip()
     geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
@@ -256,6 +293,14 @@ def route_admissibility_for_scene(scene: dict[str, Any], route_label: str) -> di
         effective_route = ROUTE_RECOVERY_OR_REAIM
         reason = "near_field_setup_prefers_bounded_recovery_reaim"
         changed = True
+    elif (
+        route == ROUTE_NAV2_REPOSITION
+        and _geometry_needs_ball_relative_setup_owner(geometry)
+        and _local_setup_capture_admissible_from_geometry(geometry)
+    ):
+        effective_route = ROUTE_LOCAL_SETUP_CAPTURE
+        reason = "measured_geometry_requires_local_setup_capture_owner"
+        changed = True
 
     return {
         "requested_route_label": route,
@@ -267,6 +312,7 @@ def route_admissibility_for_scene(scene: dict[str, Any], route_label: str) -> di
         "thresholds": {
             "recovery_robot_ball_distance_limit_m": RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M,
             "nav2_reposition_min_robot_ball_distance_m": NAV2_REPOSITION_MIN_ROBOT_BALL_DISTANCE_M,
+            "local_setup_capture_robot_ball_distance_limit_m": LOCAL_SETUP_CAPTURE_ROBOT_BALL_DISTANCE_LIMIT_M,
         },
     }
 
@@ -459,6 +505,17 @@ def generate_random_scenes(
                 sign = -1.0 if float(geometry["robot_lateral_signed_m"]) < 0 else 1.0
                 geometry["robot_lateral_signed_m"] = round(0.18 * sign, 6)
                 geometry["robot_lateral_error_m"] = 0.18
+        elif route_label == ROUTE_LOCAL_SETUP_CAPTURE:
+            scene = _target_relative_scene(
+                rng=rng,
+                route_label=route_label,
+                scene_id=scene_id,
+                distance_range=(0.50, 0.82),
+                angle_range_deg=(-36.0, 36.0),
+                standoff_range=(1.40, 2.20),
+                lateral_range=(-0.36, 0.36),
+                yaw_error_range_deg=(-150.0, 150.0),
+            )
         else:
             scene = _target_relative_scene(
                 rng=rng,
@@ -592,7 +649,7 @@ def generate_opposite_behind_scenes(
 
     scenes = [
         _scene_with_relative_ball_bearing(
-            route_label=ROUTE_NAV2_REPOSITION,
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="opbehind_nav2_ball_behind_left_01",
             distance_m=0.64,
             angle_deg=24.0,
@@ -602,7 +659,7 @@ def generate_opposite_behind_scenes(
             scene_set=scene_set,
         ),
         _scene_with_relative_ball_bearing(
-            route_label=ROUTE_NAV2_REPOSITION,
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="opbehind_nav2_ball_behind_right_02",
             distance_m=0.66,
             angle_deg=-26.0,
@@ -612,7 +669,7 @@ def generate_opposite_behind_scenes(
             scene_set=scene_set,
         ),
         _scene_with_relative_ball_bearing(
-            route_label=ROUTE_NAV2_REPOSITION,
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="opbehind_nav2_wraparound_left_03",
             distance_m=0.72,
             angle_deg=38.0,
@@ -622,7 +679,7 @@ def generate_opposite_behind_scenes(
             scene_set=scene_set,
         ),
         _scene_with_relative_ball_bearing(
-            route_label=ROUTE_NAV2_REPOSITION,
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="opbehind_nav2_wraparound_right_04",
             distance_m=0.74,
             angle_deg=-38.0,
@@ -656,7 +713,7 @@ def generate_opposite_behind_scenes(
             scene_set=scene_set,
         ),
         _scene_with_relative_ball_bearing(
-            route_label=ROUTE_NAV2_REPOSITION,
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="opbehind_nav2_opposite_circle_left_07",
             distance_m=0.62,
             angle_deg=160.0,
@@ -667,7 +724,7 @@ def generate_opposite_behind_scenes(
             scene_set=scene_set,
         ),
         _scene_with_relative_ball_bearing(
-            route_label=ROUTE_NAV2_REPOSITION,
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="opbehind_nav2_opposite_circle_right_08",
             distance_m=0.62,
             angle_deg=-160.0,
@@ -743,7 +800,7 @@ def generate_broad_spatial_scenes(
     scenes = [
         *generate_opposite_behind_scenes(random_cases=12, scene_set=scene_set),
         _scene_with_relative_ball_bearing(
-            route_label=ROUTE_NAV2_REPOSITION,
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="broad_nav2_opposite_circle_left_deep_13",
             distance_m=0.76,
             angle_deg=145.0,
@@ -754,7 +811,7 @@ def generate_broad_spatial_scenes(
             scene_set=scene_set,
         ),
         _scene_with_relative_ball_bearing(
-            route_label=ROUTE_NAV2_REPOSITION,
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="broad_nav2_opposite_circle_right_deep_14",
             distance_m=0.76,
             angle_deg=-145.0,
@@ -765,7 +822,7 @@ def generate_broad_spatial_scenes(
             scene_set=scene_set,
         ),
         _scene_with_relative_ball_bearing(
-            route_label=ROUTE_NAV2_REPOSITION,
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="broad_nav2_opposite_circle_left_shallow_15",
             distance_m=0.48,
             angle_deg=122.0,
@@ -776,7 +833,7 @@ def generate_broad_spatial_scenes(
             scene_set=scene_set,
         ),
         _scene_with_relative_ball_bearing(
-            route_label=ROUTE_NAV2_REPOSITION,
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="broad_nav2_opposite_circle_right_shallow_16",
             distance_m=0.48,
             angle_deg=-122.0,
@@ -849,24 +906,26 @@ def generate_hard_scenes(*, random_cases: int = 10, scene_set: str = HARD_SCENE_
             yaw_error_deg=-5.5,
             scene_set=scene_set,
         ),
-        _fixed_target_relative_scene(
-            route_label=ROUTE_NAV2_REPOSITION,
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="hard_nav2_opposite_side_left_01",
             distance_m=0.62,
             angle_deg=170.0,
             standoff_m=1.08,
             lateral_m=0.08,
-            yaw_error_deg=12.0,
+            relative_bearing_deg=112.0,
+            opposite_side_setup=True,
             scene_set=scene_set,
         ),
-        _fixed_target_relative_scene(
-            route_label=ROUTE_NAV2_REPOSITION,
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_LOCAL_SETUP_CAPTURE,
             scene_id="hard_nav2_opposite_side_right_02",
             distance_m=0.62,
             angle_deg=-170.0,
             standoff_m=1.12,
             lateral_m=-0.10,
-            yaw_error_deg=-13.0,
+            relative_bearing_deg=-116.0,
+            opposite_side_setup=True,
             scene_set=scene_set,
         ),
         _fixed_target_relative_scene(
@@ -999,6 +1058,7 @@ def deterministic_route_label(scene: dict[str, Any]) -> str:
     robot_ball_distance_m = _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
     lateral_error_m = _finite_float(geometry.get("robot_lateral_error_m"), 999.0)
     yaw_error_deg = abs(_finite_float(geometry.get("robot_yaw_error_deg"), 999.0))
+    needs_local_setup_capture = bool(_geometry_needs_ball_relative_setup_owner(geometry))
 
     if ball_conf < 0.65 or target_conf < 0.65 or state_age_s > 2.0:
         return ROUTE_SCAN_OR_PERCEIVE
@@ -1018,6 +1078,8 @@ def deterministic_route_label(scene: dict[str, Any]) -> str:
         and yaw_error_deg <= RECOVERY_YAW_LIMIT_DEG
     ):
         return ROUTE_RECOVERY_OR_REAIM
+    if needs_local_setup_capture and _local_setup_capture_admissible_from_geometry(geometry):
+        return ROUTE_LOCAL_SETUP_CAPTURE
     return ROUTE_NAV2_REPOSITION
 
 
@@ -1100,6 +1162,29 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
             risk = "high" if severity >= 0.65 else "medium"
         recommendations.extend(["bounded_reaim_before_push", "pre_contact_smoothing"])
         score = 78.0 - 38.0 * severity
+    elif route == ROUTE_LOCAL_SETUP_CAPTURE:
+        lateral_ratio = _quality_ratio(lateral_m, RECOVERY_LATERAL_LIMIT_M, LOCAL_SETUP_CAPTURE_LATERAL_LIMIT_M)
+        yaw_ratio = _quality_ratio(yaw_deg, RECOVERY_YAW_LIMIT_DEG, LOCAL_SETUP_CAPTURE_YAW_LIMIT_DEG)
+        standoff_ratio = _quality_ratio(robot_ball_m, RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M, LOCAL_SETUP_CAPTURE_ROBOT_BALL_DISTANCE_LIMIT_M)
+        severity = max(lateral_ratio, yaw_ratio, standoff_ratio)
+        flags.append("local_setup_capture_required")
+        if robot_ball_relative_bearing_abs_deg >= 90.0:
+            flags.append("ball_relative_wraparound_required")
+        if lateral_m > RECOVERY_LATERAL_LIMIT_M:
+            flags.append("wide_lateral_setup_debt")
+        if yaw_deg > RECOVERY_YAW_LIMIT_DEG:
+            flags.append("wide_yaw_setup_debt")
+        if robot_ball_m > NAV2_REPOSITION_STANDOFF_LIMIT_M:
+            flags.append("wide_setup_distance_debt")
+        if not _local_setup_capture_admissible_from_geometry(geometry):
+            flags.append("outside_local_setup_capture_envelope")
+            status = "blocker"
+            risk = "high"
+        else:
+            status = "watch"
+            risk = "high" if severity >= 0.60 else "medium"
+        recommendations.extend(["measured_local_setup_capture", "verify_push_ready_pose_before_fetch"])
+        score = 72.0 - 34.0 * severity
     elif route == ROUTE_NAV2_REPOSITION:
         standoff_ratio = _quality_ratio(robot_ball_m, 0.70, NAV2_REPOSITION_STANDOFF_LIMIT_M)
         angle_ratio = _quality_ratio(ball_target_angle_deg, 20.0, 45.0)
@@ -1169,6 +1254,9 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
             "recovery_lateral_limit_m": RECOVERY_LATERAL_LIMIT_M,
             "recovery_yaw_limit_deg": RECOVERY_YAW_LIMIT_DEG,
             "recovery_robot_ball_distance_limit_m": RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M,
+            "local_setup_capture_lateral_limit_m": LOCAL_SETUP_CAPTURE_LATERAL_LIMIT_M,
+            "local_setup_capture_yaw_limit_deg": LOCAL_SETUP_CAPTURE_YAW_LIMIT_DEG,
+            "local_setup_capture_robot_ball_distance_limit_m": LOCAL_SETUP_CAPTURE_ROBOT_BALL_DISTANCE_LIMIT_M,
             "nav2_reposition_min_robot_ball_distance_m": NAV2_REPOSITION_MIN_ROBOT_BALL_DISTANCE_M,
         },
     }
@@ -1196,6 +1284,12 @@ def default_maneuver_sequence_for_route(scene: dict[str, Any], route_label: str)
             MANEUVER_LOCAL_FETCH,
             MANEUVER_MONITOR_DELIVERY,
         ]
+    if route == ROUTE_LOCAL_SETUP_CAPTURE:
+        sequence = [MANEUVER_LOCAL_SETUP_CAPTURE]
+        if opposite or behind:
+            sequence.append(MANEUVER_WRAPAROUND_SETUP)
+        sequence.extend([MANEUVER_VALIDATE_PUSH_READY, MANEUVER_LOCAL_FETCH, MANEUVER_MONITOR_DELIVERY])
+        return sequence
     if route == ROUTE_NAV2_REPOSITION:
         sequence = [MANEUVER_NAV2_REPOSITION]
         if opposite or behind:
@@ -1220,7 +1314,12 @@ def compile_maneuver_plan(
         sequence = default_maneuver_sequence_for_route(scene, route)
         source = "deterministic_compiled"
 
-    executable_fetch_route = route in {ROUTE_FETCH_READY, ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM}
+    executable_fetch_route = route in {
+        ROUTE_FETCH_READY,
+        ROUTE_NAV2_REPOSITION,
+        ROUTE_RECOVERY_OR_REAIM,
+        ROUTE_LOCAL_SETUP_CAPTURE,
+    }
     veto_reasons: list[str] = []
     if executable_fetch_route:
         if MANEUVER_LOCAL_FETCH not in sequence:
@@ -1673,7 +1772,8 @@ def summarize_scene_geometry_coverage(scenes: list[dict[str, Any]]) -> dict[str,
     executable_count = sum(
         1
         for row in rows
-        if str(row["expected_route_label"]) in {ROUTE_FETCH_READY, ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM}
+        if str(row["expected_route_label"])
+        in {ROUTE_FETCH_READY, ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM, ROUTE_LOCAL_SETUP_CAPTURE}
     )
     return {
         "scene_count": len(rows),

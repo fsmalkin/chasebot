@@ -520,9 +520,18 @@ plus the bounded local fetch skill. The planner should propose executable
 maneuver sequences such as scan, reposition, wraparound setup, re-aim,
 push-ready validation, local fetch, recovery, or safe no-go. Route families
 such as `fetch_ready_local`, `nav2_reposition_first`,
-`scan_or_perceive_first`, `recovery_or_reaim`, and
+`scan_or_perceive_first`, `recovery_or_reaim`, `local_setup_capture`, and
 `ambiguous_or_unsafe_no_go` remain reporting labels. Local fetch starts only
 after the validator proves measured push-ready geometry.
+
+June 6 implementation update: `local_setup_capture` is the explicit route
+family for ball-relative setup ownership. `nav2_reposition_first` remains a
+free-space repositioning owner, while measured local setup/capture gets the
+robot behind the selected ball before the push-ready gate. The dry multi-ball
+seed `20260607` plan
+`artifacts/session/multiball_local_setup_capture_dryrun_seed20260607_20260606/fetch_multiball_retrieval_gate/gate_summary.json`
+passed with `11` `local_setup_capture` steps, `1` `recovery_or_reaim` step, and
+no Nav2 setup routes.
 
 June 6, 2026 status: the open-field planner-routed UAT slice is green at the
 visual evidence layer. Rollup

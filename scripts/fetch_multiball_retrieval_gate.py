@@ -57,6 +57,7 @@ VISUAL_PACKAGE_MARKER = replay_batch.VISUAL_PACKAGE_MARKER
 ROUTE_PENALTY = {
     planner_gate.ROUTE_FETCH_READY: 0.00,
     planner_gate.ROUTE_RECOVERY_OR_REAIM: 0.22,
+    planner_gate.ROUTE_LOCAL_SETUP_CAPTURE: 0.30,
     planner_gate.ROUTE_NAV2_REPOSITION: 0.45,
     planner_gate.ROUTE_SCAN_OR_PERCEIVE: 3.00,
     planner_gate.ROUTE_NO_GO: 9.00,
@@ -65,6 +66,7 @@ EXECUTABLE_ROUTES = {
     planner_gate.ROUTE_FETCH_READY,
     planner_gate.ROUTE_NAV2_REPOSITION,
     planner_gate.ROUTE_RECOVERY_OR_REAIM,
+    planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
 }
 
 
@@ -432,6 +434,11 @@ def candidate_cost(
         quality_penalty += 0.35
     if str(route_label) == planner_gate.ROUTE_RECOVERY_OR_REAIM and "initial_yaw_setup_debt" in quality_flags:
         quality_penalty += 0.20
+    if str(route_label) == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE:
+        if "wide_setup_distance_debt" in quality_flags:
+            quality_penalty += 0.25
+        if "ball_relative_wraparound_required" in quality_flags:
+            quality_penalty += 0.15
     failed_attempt_penalty = 0.0
     if last_attempt_failed:
         failed_attempt_penalty += 1.20
@@ -1313,6 +1320,14 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     planned_step_count = len(step_rows)
     live_pass_count = sum(1 for row in step_rows if bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)))
     planner_ready_scene_count = sum(1 for row in scene_rows if bool(row.get("planner_ready", False)))
+    route_counts = {
+        route: sum(1 for row in step_rows if str(row.get("route_label", "") or "") == route)
+        for route in planner_gate.ROUTE_LABELS
+    }
+    route_executor_counts = {
+        executor: sum(1 for row in step_rows if str(row.get("route_executor", "") or "") == executor)
+        for executor in sorted({str(row.get("route_executor", "") or "") for row in step_rows if str(row.get("route_executor", "") or "")})
+    }
     visual_package_command: list[str] = []
     visual_package_summary_path = ""
     visual_package: dict[str, Any] = {}
@@ -1395,6 +1410,8 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "scene_count": len(scene_rows),
         "planner_ready_scene_count": planner_ready_scene_count,
         "planned_step_count": planned_step_count,
+        "route_counts": route_counts,
+        "route_executor_counts": route_executor_counts,
         "live_fetch_to_pose_pass_count": live_pass_count,
         "live_fetch_to_pose_fail_count": 0 if dry_run else planned_step_count - live_pass_count,
         "live_all_balls_delivered_scene_count": sum(
@@ -1468,6 +1485,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- scene_count: `{summary.get('scene_count', 0)}`",
         f"- balls_per_scene: `{summary.get('balls_per_scene', 0)}`",
         f"- planned_step_count: `{summary.get('planned_step_count', 0)}`",
+        f"- route_counts: `{summary.get('route_counts', {})}`",
+        f"- route_executor_counts: `{summary.get('route_executor_counts', {})}`",
         f"- planner_ready_scene_count: `{summary.get('planner_ready_scene_count', 0)}`",
         f"- live_fetch_to_pose_pass_count: `{summary.get('live_fetch_to_pose_pass_count', 0)}`",
         f"- live_fetch_to_pose_fail_count: `{summary.get('live_fetch_to_pose_fail_count', 0)}`",

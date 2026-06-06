@@ -86,11 +86,13 @@ def test_deterministic_classifier_separates_reposition_recovery_and_fetch_ready(
     assert gate.deterministic_route_label(by_expected[gate.ROUTE_FETCH_READY]) == gate.ROUTE_FETCH_READY
     assert gate.deterministic_route_label(by_expected[gate.ROUTE_NAV2_REPOSITION]) == gate.ROUTE_NAV2_REPOSITION
     assert gate.deterministic_route_label(by_expected[gate.ROUTE_RECOVERY_OR_REAIM]) == gate.ROUTE_RECOVERY_OR_REAIM
+    assert gate.deterministic_route_label(by_expected[gate.ROUTE_LOCAL_SETUP_CAPTURE]) == gate.ROUTE_LOCAL_SETUP_CAPTURE
     assert gate.deterministic_route_label(by_expected[gate.ROUTE_SCAN_OR_PERCEIVE]) == gate.ROUTE_SCAN_OR_PERCEIVE
     assert gate.deterministic_route_label(by_expected[gate.ROUTE_NO_GO]) == gate.ROUTE_NO_GO
     assert by_expected[gate.ROUTE_FETCH_READY]["local_fetch_envelope"]["eligible"] is True
     assert by_expected[gate.ROUTE_SCAN_OR_PERCEIVE]["local_fetch_envelope"]["eligible"] is False
     assert by_expected[gate.ROUTE_RECOVERY_OR_REAIM]["local_fetch_envelope"]["eligible"] is False
+    assert by_expected[gate.ROUTE_LOCAL_SETUP_CAPTURE]["local_fetch_envelope"]["eligible"] is False
 
 
 def test_deterministic_classifier_routes_moderate_setup_debt_to_recovery():
@@ -209,22 +211,29 @@ def test_hard_scene_set_covers_deliberate_route_pressure_cases():
     assert {
         route: sum(1 for scene in scenes if scene["expected_route_label"] == route)
         for route in gate.ROUTE_LABELS
-    } == {route: 2 for route in gate.ROUTE_LABELS}
+    } == {
+        gate.ROUTE_FETCH_READY: 2,
+        gate.ROUTE_NAV2_REPOSITION: 0,
+        gate.ROUTE_SCAN_OR_PERCEIVE: 2,
+        gate.ROUTE_RECOVERY_OR_REAIM: 2,
+        gate.ROUTE_LOCAL_SETUP_CAPTURE: 2,
+        gate.ROUTE_NO_GO: 2,
+    }
     assert all(
         gate.deterministic_route_label(scene) == scene["expected_route_label"]
         for scene in scenes
     )
 
-    nav2_angles = [
+    local_setup_angles = [
         abs(scene["geometry"]["ball_target_angle_deg"])
         for scene in scenes
-        if scene["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+        if scene["expected_route_label"] == gate.ROUTE_LOCAL_SETUP_CAPTURE
     ]
-    assert nav2_angles == [170.0, 170.0]
+    assert local_setup_angles == [170.0, 170.0]
     assert all(
         scene["geometry"]["robot_ball_distance_m"] >= gate.NAV2_REPOSITION_MIN_ROBOT_BALL_DISTANCE_M
         for scene in scenes
-        if scene["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+        if scene["expected_route_label"] == gate.ROUTE_LOCAL_SETUP_CAPTURE
     )
 
 
@@ -249,9 +258,10 @@ def test_opposite_behind_scene_set_covers_broad_spatial_cases():
         for route in gate.ROUTE_LABELS
     } == {
         gate.ROUTE_FETCH_READY: 1,
-        gate.ROUTE_NAV2_REPOSITION: 6,
+        gate.ROUTE_NAV2_REPOSITION: 0,
         gate.ROUTE_SCAN_OR_PERCEIVE: 1,
         gate.ROUTE_RECOVERY_OR_REAIM: 2,
+        gate.ROUTE_LOCAL_SETUP_CAPTURE: 6,
         gate.ROUTE_NO_GO: 2,
     }
     assert all(
@@ -260,10 +270,11 @@ def test_opposite_behind_scene_set_covers_broad_spatial_cases():
     )
 
     nav2_wraparound = next(scene for scene in scenes if scene["scene_id"] == "opbehind_nav2_wraparound_left_03")
-    quality = gate.score_route_quality(nav2_wraparound, gate.ROUTE_NAV2_REPOSITION)
+    quality = gate.score_route_quality(nav2_wraparound, gate.ROUTE_LOCAL_SETUP_CAPTURE)
 
     assert "ball_behind_robot_heading" in quality["flags"]
-    assert "nav2_wraparound_setup" in quality["recommendations"]
+    assert "local_setup_capture_required" in quality["flags"]
+    assert "measured_local_setup_capture" in quality["recommendations"]
 
 
 def test_opposite_behind_layout_preserves_profile_and_geometry(tmp_path):
@@ -273,15 +284,15 @@ def test_opposite_behind_layout_preserves_profile_and_geometry(tmp_path):
             random_cases=12,
             scene_set=gate.OPPOSITE_BEHIND_SCENE_SET,
         )
-        if item["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+        if item["expected_route_label"] == gate.ROUTE_LOCAL_SETUP_CAPTURE
     )
     layout_path = tmp_path / "layout.json"
 
     gate.write_fetch_ready_layout_from_scene(
         layout_path,
         scene,
-        route_label=gate.ROUTE_NAV2_REPOSITION,
-        route_executor=gate.ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
+        route_label=gate.ROUTE_LOCAL_SETUP_CAPTURE,
+        route_executor=gate.ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE,
     )
 
     layout = read_json(layout_path)
@@ -307,8 +318,9 @@ def test_broad_spatial_scene_set_covers_open_field_geometry_classes():
     assert coverage["behind_robot_heading_count"] >= 6
     assert coverage["opposite_side_of_circle_count"] >= 6
     assert route_counts[gate.ROUTE_FETCH_READY] >= 1
-    assert route_counts[gate.ROUTE_NAV2_REPOSITION] >= 8
+    assert route_counts[gate.ROUTE_NAV2_REPOSITION] == 0
     assert route_counts[gate.ROUTE_RECOVERY_OR_REAIM] >= 2
+    assert route_counts[gate.ROUTE_LOCAL_SETUP_CAPTURE] >= 10
     assert route_counts[gate.ROUTE_SCAN_OR_PERCEIVE] >= 2
     assert route_counts[gate.ROUTE_NO_GO] >= 2
     assert all(
@@ -368,8 +380,16 @@ def test_planner_gate_scores_hard_scene_set(tmp_path, monkeypatch):
     assert summary["scene_set"] == gate.HARD_SCENE_SET
     assert summary["random_cases"] == 10
     assert summary["wrong_fetch_dispatch_count"] == 0
-    assert summary["expected_route_counts"] == {route: 2 for route in gate.ROUTE_LABELS}
-    assert summary["route_counts"] == {route: 2 for route in gate.ROUTE_LABELS}
+    expected_counts = {
+        gate.ROUTE_FETCH_READY: 2,
+        gate.ROUTE_NAV2_REPOSITION: 0,
+        gate.ROUTE_SCAN_OR_PERCEIVE: 2,
+        gate.ROUTE_RECOVERY_OR_REAIM: 2,
+        gate.ROUTE_LOCAL_SETUP_CAPTURE: 2,
+        gate.ROUTE_NO_GO: 2,
+    }
+    assert summary["expected_route_counts"] == expected_counts
+    assert summary["route_counts"] == expected_counts
 
 
 def test_planner_gate_scores_opposite_behind_scene_set(tmp_path, monkeypatch):
@@ -423,7 +443,7 @@ def test_decision_records_route_quality_for_planner_artifacts():
     assert decision["maneuver_plan"]["requires_measured_push_ready_before_fetch"] is True
 
 
-def test_nav2_opposite_side_plan_includes_wraparound_and_push_ready_gate():
+def test_local_setup_capture_opposite_side_plan_includes_wraparound_and_push_ready_gate():
     scene = next(
         item for item in gate.generate_random_scenes(
             seed=123,
@@ -431,15 +451,31 @@ def test_nav2_opposite_side_plan_includes_wraparound_and_push_ready_gate():
             scene_set=gate.BROAD_SPATIAL_SCENE_SET,
         )
         if item["geometry"]["opposite_side_of_circle"] is True
-        and item["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+        and item["expected_route_label"] == gate.ROUTE_LOCAL_SETUP_CAPTURE
     )
 
-    plan = gate.compile_maneuver_plan(scene, gate.ROUTE_NAV2_REPOSITION)
+    plan = gate.compile_maneuver_plan(scene, gate.ROUTE_LOCAL_SETUP_CAPTURE)
 
-    assert gate.MANEUVER_NAV2_REPOSITION in plan["maneuver_sequence"]
+    assert gate.MANEUVER_LOCAL_SETUP_CAPTURE in plan["maneuver_sequence"]
     assert gate.MANEUVER_WRAPAROUND_SETUP in plan["maneuver_sequence"]
     assert gate.MANEUVER_VALIDATE_PUSH_READY in plan["maneuver_sequence"]
     assert gate.MANEUVER_LOCAL_FETCH in plan["maneuver_sequence"]
+    assert plan["push_ready_index"] < plan["local_fetch_index"]
+    assert plan["requires_measured_push_ready_before_fetch"] is True
+
+
+def test_local_setup_capture_plan_requires_setup_capture_before_push_ready():
+    scene = next(
+        item for item in gate.generate_random_scenes(seed=123, random_cases=12)
+        if item["expected_route_label"] == gate.ROUTE_LOCAL_SETUP_CAPTURE
+    )
+
+    plan = gate.compile_maneuver_plan(scene, gate.ROUTE_LOCAL_SETUP_CAPTURE)
+
+    assert gate.MANEUVER_LOCAL_SETUP_CAPTURE in plan["maneuver_sequence"]
+    assert gate.MANEUVER_VALIDATE_PUSH_READY in plan["maneuver_sequence"]
+    assert gate.MANEUVER_LOCAL_FETCH in plan["maneuver_sequence"]
+    assert plan["maneuver_sequence"].index(gate.MANEUVER_LOCAL_SETUP_CAPTURE) < plan["push_ready_index"]
     assert plan["push_ready_index"] < plan["local_fetch_index"]
     assert plan["requires_measured_push_ready_before_fetch"] is True
 
@@ -484,6 +520,7 @@ def test_route_executor_mapping_covers_all_route_labels():
     assert gate.executor_for_route(gate.ROUTE_NAV2_REPOSITION) == gate.ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH
     assert gate.executor_for_route(gate.ROUTE_SCAN_OR_PERCEIVE) == gate.ROUTE_EXECUTOR_SCAN
     assert gate.executor_for_route(gate.ROUTE_RECOVERY_OR_REAIM) == gate.ROUTE_EXECUTOR_RECOVERY
+    assert gate.executor_for_route(gate.ROUTE_LOCAL_SETUP_CAPTURE) == gate.ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE
     assert gate.executor_for_route(gate.ROUTE_NO_GO) == gate.ROUTE_EXECUTOR_NO_GO
     assert gate.executor_for_route("unknown") == "unsupported_route"
 

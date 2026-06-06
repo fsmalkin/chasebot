@@ -22,6 +22,7 @@ ROUTE_LABELS = (
     "fetch_ready_local",
     "nav2_reposition_first",
     "recovery_or_reaim",
+    "local_setup_capture",
     "scan_or_perceive_first",
     "ambiguous_or_unsafe_no_go",
 )

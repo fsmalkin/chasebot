@@ -1961,6 +1961,7 @@ Default architecture path after the reset:
    - `nav2_reposition_first`
    - `scan_or_perceive_first`
    - `recovery_or_reaim`
+   - `local_setup_capture`
    - `ambiguous_or_unsafe_no_go`
 2. Nav2 owns measured-admissible free-space repositioning. Nav2 action success
    must be validated against measured robot pose before any ball-relative
@@ -1974,6 +1975,12 @@ Default architecture path after the reset:
 5. AI push-coast and route-selection proposals start as handoff/maneuver
    guidance for reproducible stage gaps, then earn live authority through
    deterministic guards and corrected visual evidence.
+
+Current implementation note: `local_setup_capture` is the measured
+ball-relative setup owner. Dry-run seed `20260607` planned `11`
+`local_setup_capture` steps and `1` `recovery_or_reaim` step across four
+multi-ball scenes:
+`artifacts/session/multiball_local_setup_capture_dryrun_seed20260607_20260606/fetch_multiball_retrieval_gate/scorecard.md`.
 
 ## Corral Surface Calibration
 
