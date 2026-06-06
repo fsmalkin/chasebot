@@ -51,17 +51,25 @@
   "latest_evidence": [
     {
       "title": "Execution-first big move is queued",
-      "status": "stop adding sim-only proof rails; run provider or physical launch next",
+      "status": "launch decision is waiting on provider key or physical hardware gate",
       "tone": "yellow",
-      "summary": "The active branch has enough deterministic sim-gate route-owner proof to prioritize launch work. The provider-backed route-owner sequence is packaged and waits on OPENAI_API_KEY. The robot-side physical/onboard rehearsal is packaged and waits on physical lane availability. Additional sim-only work should prepare one of those launches or investigate a failure from them.",
+      "summary": "The active branch has enough deterministic sim-gate route-owner proof to prioritize launch work. The execution-first launcher now reads the provider checklist and robot-side preflight, then selects provider launch, physical/onboard launch, or a fail-closed waiting state. The current decision is waiting_on_external_gate because OPENAI_API_KEY is absent and the robot-side preflight reports hardware_connected=false.",
       "metrics": [
+        "Current decision: launch_ready=false; selected_lane=waiting_on_external_gate",
+        "Provider blocker: missing_openai_api_key",
+        "Physical blocker: hardware_connected_false",
         "Current sim proof: 300 planner scenes, five route families, 27/27 executable visual deliveries, 15/15 operator watchlist samples",
-        "Provider launch: seed20260650 llm_supervised_guarded sequence, provider-vs-baseline comparison, replay and route UAT quality gate",
-        "Physical launch: seed20260648 robot-side runtime smoke, saved anchors, mixed all-routes rehearsal, physical claim and proof-gap audit",
-        "Claim boundary: milestone_complete=false until provider_backed_authority_proven=true and hardware_proven=true",
-        "Rule: sim-only work now needs a direct launch, preservation, or failure-investigation purpose"
+        "Rule: run provider launch when OPENAI_API_KEY is present, or physical/onboard launch when hardware is connected and approved"
       ],
       "links": [
+        {
+          "label": "Execution-first launch decision",
+          "url": "/artifacts/session/execution_first_launch_decision_current_20260605/fetch_execution_first_launch_decision/scorecard.md"
+        },
+        {
+          "label": "Execution-first launch decision summary",
+          "url": "/artifacts/session/execution_first_launch_decision_current_20260605/fetch_execution_first_launch_decision/execution_first_launch_decision_summary.json"
+        },
         {
           "label": "Provider launch checklist",
           "url": "/artifacts/session/provider_launch_checklist_seed20260650_20260605/fetch_provider_launch_checklist/scorecard.md"

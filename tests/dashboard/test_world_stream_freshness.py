@@ -493,7 +493,16 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert "Seed 20260648 hardware rehearsal is green" in evidence_by_title
     assert evidence_by_title["Three-seed breadth rollup is green"]["tone"] == "green"
     assert evidence_by_title["Execution-first big move is queued"]["tone"] == "yellow"
-    assert "run provider or physical launch next" in evidence_by_title["Execution-first big move is queued"]["status"]
+    assert "waiting on provider key or physical hardware gate" in evidence_by_title[
+        "Execution-first big move is queued"
+    ]["status"]
+    assert "selected_lane=waiting_on_external_gate" in " ".join(
+        evidence_by_title["Execution-first big move is queued"]["metrics"]
+    )
+    assert any(
+        "execution_first_launch_decision_current_20260605" in link["url"]
+        for link in evidence_by_title["Execution-first big move is queued"]["links"]
+    )
     assert any(
         "provider_launch_checklist_seed20260650_20260605" in link["url"]
         for link in evidence_by_title["Execution-first big move is queued"]["links"]
