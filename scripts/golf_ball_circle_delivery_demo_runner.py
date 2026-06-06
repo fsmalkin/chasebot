@@ -63,6 +63,13 @@ NAV2_FALLBACK_BALL_MOTION_LIMIT_M = 0.020
 NAV2_WIDE_SETUP_ROBOT_BALL_DISTANCE_LIMIT_M = 1.800
 NAV2_WIDE_SETUP_LATERAL_LIMIT_M = 1.800
 NAV2_WIDE_SETUP_YAW_LIMIT_DEG = 165.0
+NAV2_SETUP_FIELD_BOUNDS = {
+    "x_min_m": -1.20,
+    "x_max_m": 2.20,
+    "y_min_m": -1.35,
+    "y_max_m": 1.35,
+}
+NAV2_SETUP_FIELD_MARGIN_M = 0.05
 NAV2_REPOSITION_GOAL_POSITION_TOLERANCE_M = 0.250
 NAV2_REPOSITION_GOAL_YAW_TOLERANCE_DEG = 25.0
 PUSH_READY_LATERAL_LIMIT_M = 0.030
@@ -970,6 +977,47 @@ def clamp(value: float, lower: float, upper: float) -> float:
     return max(float(lower), min(float(upper), float(value)))
 
 
+def setup_point_inside_nav2_field(x: float, y: float) -> bool:
+    return bool(
+        float(NAV2_SETUP_FIELD_BOUNDS["x_min_m"]) + NAV2_SETUP_FIELD_MARGIN_M
+        <= float(x)
+        <= float(NAV2_SETUP_FIELD_BOUNDS["x_max_m"]) - NAV2_SETUP_FIELD_MARGIN_M
+        and float(NAV2_SETUP_FIELD_BOUNDS["y_min_m"]) + NAV2_SETUP_FIELD_MARGIN_M
+        <= float(y)
+        <= float(NAV2_SETUP_FIELD_BOUNDS["y_max_m"]) - NAV2_SETUP_FIELD_MARGIN_M
+    )
+
+
+def bounded_nav2_setup_standoff(
+    *,
+    ball_x: float,
+    ball_y: float,
+    line_yaw: float,
+    setup_standoff_m: float,
+) -> tuple[float, bool]:
+    desired = max(float(setup_standoff_m), 0.0)
+
+    def point_for(standoff: float) -> tuple[float, float]:
+        return (
+            float(ball_x) - math.cos(float(line_yaw)) * float(standoff),
+            float(ball_y) - math.sin(float(line_yaw)) * float(standoff),
+        )
+
+    desired_x, desired_y = point_for(desired)
+    if setup_point_inside_nav2_field(desired_x, desired_y):
+        return desired, False
+    low = 0.0
+    high = desired
+    for _ in range(32):
+        mid = 0.5 * (low + high)
+        mid_x, mid_y = point_for(mid)
+        if setup_point_inside_nav2_field(mid_x, mid_y):
+            low = mid
+        else:
+            high = mid
+    return low, True
+
+
 def yaw_to_quaternion(yaw_rad: float) -> dict[str, float]:
     half_yaw = 0.5 * float(yaw_rad)
     return {
@@ -990,8 +1038,14 @@ def build_nav2_reposition_setup_pose(
     frame_id: str = "odom",
 ) -> dict[str, Any]:
     line_yaw = math.atan2(float(target_y) - float(ball_y), float(target_x) - float(ball_x))
-    setup_x = float(ball_x) - math.cos(line_yaw) * float(setup_standoff_m)
-    setup_y = float(ball_y) - math.sin(line_yaw) * float(setup_standoff_m)
+    bounded_standoff_m, field_bounded = bounded_nav2_setup_standoff(
+        ball_x=float(ball_x),
+        ball_y=float(ball_y),
+        line_yaw=line_yaw,
+        setup_standoff_m=float(setup_standoff_m),
+    )
+    setup_x = float(ball_x) - math.cos(line_yaw) * bounded_standoff_m
+    setup_y = float(ball_y) - math.sin(line_yaw) * bounded_standoff_m
     return {
         "frame_id": str(frame_id or "odom"),
         "x": round(float(setup_x), 6),
@@ -999,8 +1053,10 @@ def build_nav2_reposition_setup_pose(
         "z": 0.0,
         "yaw": round(float(line_yaw), 6),
         "line_yaw_rad": round(float(line_yaw), 6),
-        "setup_standoff_m": round(float(setup_standoff_m), 6),
-        "source": "ball_target_line_setup_pose",
+        "setup_standoff_m": round(float(bounded_standoff_m), 6),
+        "requested_setup_standoff_m": round(float(setup_standoff_m), 6),
+        "field_bounded": bool(field_bounded),
+        "source": "ball_target_line_setup_pose_field_bounded" if field_bounded else "ball_target_line_setup_pose",
         "orientation": yaw_to_quaternion(line_yaw),
     }
 

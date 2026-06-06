@@ -968,7 +968,32 @@ def test_build_nav2_reposition_setup_pose_uses_ball_target_line():
     assert pose["x"] == pytest.approx(0.4457 - math.cos(line_yaw) * 0.38, abs=1.0e-6)
     assert pose["y"] == pytest.approx(0.212988 - math.sin(line_yaw) * 0.38, abs=1.0e-6)
     assert pose["setup_standoff_m"] == pytest.approx(0.38)
+    assert pose["requested_setup_standoff_m"] == pytest.approx(0.38)
+    assert pose["field_bounded"] is False
+    assert pose["source"] == "ball_target_line_setup_pose"
     assert pose["orientation"]["w"] == pytest.approx(math.cos(line_yaw * 0.5), abs=1.0e-6)
+
+
+def test_build_nav2_reposition_setup_pose_shortens_edge_setup_to_field_bounds():
+    pose = build_nav2_reposition_setup_pose(
+        ball_x=1.656822,
+        ball_y=-0.351905,
+        target_x=0.95,
+        target_y=0.0,
+        setup_standoff_m=0.9,
+        frame_id="odom",
+    )
+
+    line_yaw = math.atan2(0.0 - (-0.351905), 0.95 - 1.656822)
+    assert pose["field_bounded"] is True
+    assert pose["source"] == "ball_target_line_setup_pose_field_bounded"
+    assert pose["requested_setup_standoff_m"] == pytest.approx(0.9)
+    assert pose["setup_standoff_m"] < 0.9
+    assert pose["setup_standoff_m"] > 0.38
+    assert pose["yaw"] == pytest.approx(line_yaw, abs=1.0e-6)
+    assert pose["x"] <= 2.15
+    assert pose["y"] >= -1.30
+    assert pose["y"] <= 1.30
 
 
 def test_build_nav2_relative_setup_goal_preserves_truth_delta_in_nav2_frame():
