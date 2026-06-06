@@ -326,6 +326,80 @@ def test_visual_uat_package_scorecard_labels_multiple_planner_routes(tmp_path, m
     assert "[summary](/artifacts/session/session_b/mission_verdict.json)" in text
 
 
+def test_visual_uat_package_accepts_multiball_local_fetch_without_planner_gate(tmp_path, monkeypatch):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(package, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+    _stub_browser_video_probe(monkeypatch)
+
+    mission_paths = []
+    for index, route in enumerate(("nav2_reposition_first", "nav2_reposition_first", "recovery_or_reaim"), start=1):
+        mission = session_root / "multiball_session" / "golf_ball_circle_delivery" / f"run_{index}" / "mission_verdict.json"
+        _write_json(
+            mission,
+            {
+                "session_id": "multiball_session",
+                "scenario_id": "fetch_multiball_retrieval_v1",
+                "scenario_label": "Multi-Ball Retrieval v1",
+                "planner_route_label": route,
+                "route_executor": "nav2_forward_reposition_then_fetch" if route == "nav2_reposition_first" else "bounded_recovery_reaim",
+                "fetch_to_pose_pass": True,
+                "pass": True,
+                "shot_outcome": {
+                    "ai_push_coast_mode": "guarded_live",
+                    "closest_approach_distance_m": 0.2,
+                    "reason": "trajectory_intersects_delivery_radius",
+                },
+                "model_provenance": {
+                    "model_provenance_valid": True,
+                    "target_model_classification": "calibrated_golf_ball",
+                },
+            },
+        )
+        mission_paths.append(str(mission))
+
+    visual = session_root / "multiball_session" / "visual"
+    visual.mkdir(parents=True)
+    (visual / "world_stream.mp4").write_bytes(b"w" * package.VIDEO_MIN_BYTES)
+    (visual / "topdown_telemetry_browser.mp4").write_bytes(b"t" * package.VIDEO_MIN_BYTES)
+    (visual / "raw_camera_browser.mp4").write_bytes(b"r" * package.VIDEO_MIN_BYTES)
+    _write_json(
+        visual / "visual_demo_summary.json",
+        {
+            "pass": True,
+            "raw_nonblank": True,
+            "debug_nonblank": True,
+            "target_persistence_ok": True,
+            "motion_progress_ok": True,
+            "target_visible_ratio": 0.8,
+            "raw_frame_count": 20,
+            "telemetry_frame_count": 20,
+        },
+    )
+
+    args = type(
+        "Args",
+        (),
+        {
+            "campaign_id": "multiball_uat",
+            "planner_summary": [],
+            "seeded_evidence_summary": [],
+            "stage_quality_summary": [],
+            "mission_summary": mission_paths,
+            "visual_dir": [str(visual)],
+        },
+    )()
+
+    summary = package.build_summary(args)
+
+    assert summary["pass"] is True
+    assert summary["planner_gate_green"] is False
+    assert summary["multiball_local_fetch_uat"] is True
+    assert summary["local_fetch_visual_confirmed"] is True
+    assert all(mission["ai_push_coast_mode"] == "guarded_live" for mission in summary["missions"])
+    assert "planner_gate_not_green" not in summary["warnings"]
+
+
 def test_visual_uat_package_recovers_browser_videos_from_keyframes(tmp_path, monkeypatch):
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)

@@ -1761,3 +1761,15 @@ The multi-ball ladder is:
 4. seeded randomized multi-ball gate with replayable frozen failures
 5. planner/provider comparison for order choice and recovery strategy
 6. mission-time optimization after retrieval reliability is stable
+
+June 6 multi-ball evidence update: the first same-seed visual UAT rung is
+green. Seed `20260606` produced a three-ball same-session pass with
+browser-watchable video and corrected multi-ball visual packaging:
+`artifacts/session/live_multiball_retrieval_v1_seed20260606_scene01_guarded_20260606_repack/fetch_visual_uat_package/scorecard.md`.
+The follow-on broad seed `20260620` remains red:
+`artifacts/session/live_multiball_retrieval_v1_seed20260620_scene01_refine_20260606/fetch_multiball_retrieval_gate/scorecard.md`.
+That failure moved the roadmap emphasis from order optimization alone to
+mission-level decomposition. The next milestone target is a planner-owned
+multi-ball mission loop that chooses retrieval order, setup route, recovery
+route, and push-ready handoff timing from measured state, then dispatches the
+one-ball local primitive only when the measured handoff gate is green.

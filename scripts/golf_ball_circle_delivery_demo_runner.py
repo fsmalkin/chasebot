@@ -22,6 +22,10 @@ from passive_ball_roll_calibration_runner import docker_exec
 from passive_ball_roll_calibration_runner import remove_model
 from passive_ball_roll_calibration_runner import spawn_model
 from gather_mission_runner import fetch_model_provenance
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_MODE_GUARDED_LIVE
+from gather_ai_push_coast_helpers import AI_PUSH_COAST_MODE_SHADOW
+from gather_ai_push_coast_helpers import ALLOWED_AI_PUSH_COAST_MODES
+from gather_ai_push_coast_helpers import decide_ai_push_coast_handoff
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -2395,6 +2399,57 @@ def build_shot_outcome(
     }
 
 
+def ball_motion_from_shot_outcome(shot_outcome: dict[str, Any]) -> float:
+    start = shot_outcome.get("ball_start_pose") if isinstance(shot_outcome.get("ball_start_pose"), dict) else {}
+    end = shot_outcome.get("ball_end_pose") if isinstance(shot_outcome.get("ball_end_pose"), dict) else {}
+    if not start or not end:
+        return 0.0
+    try:
+        return math.hypot(float(end.get("x", 0.0)) - float(start.get("x", 0.0)), float(end.get("y", 0.0)) - float(start.get("y", 0.0)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def latest_robot_ball_xyyaw(contact_samples: list[dict[str, Any]]) -> tuple[dict[str, float] | None, dict[str, float] | None]:
+    for sample in reversed(contact_samples):
+        if not isinstance(sample, dict):
+            continue
+        robot_pose = pose_xy_yaw(sample.get("robot_pose") if isinstance(sample.get("robot_pose"), dict) else None)
+        ball_pose = pose_xy_yaw(sample.get("ball_pose") if isinstance(sample.get("ball_pose"), dict) else None)
+        if robot_pose is not None and ball_pose is not None:
+            return robot_pose, ball_pose
+    return None, None
+
+
+def build_ai_push_coast_terminal_decision(
+    *,
+    args: argparse.Namespace,
+    contact_samples: list[dict[str, Any]],
+    shot_outcome: dict[str, Any],
+    approach_metrics: dict[str, Any],
+    pre_fetch_reposition: dict[str, Any],
+    terminal_correction_attempted: bool = False,
+) -> dict[str, Any]:
+    robot_pose, ball_pose = latest_robot_ball_xyyaw(contact_samples)
+    ball_motion_m = ball_motion_from_shot_outcome(shot_outcome)
+    return decide_ai_push_coast_handoff(
+        robot_pose=robot_pose,
+        ball_pose=ball_pose,
+        fetch_pose_world={"x": args.zone_x, "y": args.zone_y, "z": args.zone_z},
+        delivery_radius_m=float(args.fetch_delivery_radius_m),
+        nav2_corridor_push=pre_fetch_reposition,
+        nav2_attempted=bool(args.nav2_reposition_before_fetch or pre_fetch_reposition.get("attempted", False)),
+        terminal_correction_attempted=bool(terminal_correction_attempted),
+        distance_to_fetch_pose_m=shot_outcome.get("distance_to_fetch_pose_m"),
+        closest_approach_distance_m=shot_outcome.get("closest_approach_distance_m"),
+        terminal_settled_after_nav2=bool(contact_samples),
+        ball_moved_since_fetch=bool(ball_motion_m >= float(args.first_contact_motion_threshold_m)),
+        approach_contact_metrics=approach_metrics,
+        shot_outcome=shot_outcome,
+        mode=str(args.ai_push_coast_mode or AI_PUSH_COAST_MODE_SHADOW),
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the golf-ball circle delivery dashboard demo.")
     parser.add_argument("--dashboard-url", default=DEFAULT_DASHBOARD_URL)
@@ -2452,12 +2507,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--nav2-reposition-timeout-s", type=float, default=24.0)
     parser.add_argument("--nav2-reposition-server-wait-s", type=float, default=8.0)
     parser.add_argument("--nav2-reposition-pose-wait-s", type=float, default=3.0)
+    parser.add_argument("--nav2-reposition-refine-attempts", type=int, default=0)
     parser.add_argument("--nav2-reposition-continue-on-failure", action="store_true")
     parser.add_argument("--disable-nav2-precontact-fallback", action="store_true")
     parser.add_argument("--forward-only-pre-contact-required", action="store_true")
     parser.add_argument("--stop-on-delivery", action="store_true")
     parser.add_argument("--delivery-stop-radius-m", type=float, default=0.0)
     parser.add_argument("--post-delivery-sample-s", type=float, default=0.0)
+    parser.add_argument("--ai-push-coast-mode", choices=ALLOWED_AI_PUSH_COAST_MODES, default=AI_PUSH_COAST_MODE_SHADOW)
+    parser.add_argument("--terminal-correction-extra-margin-m", type=float, default=0.080)
+    parser.add_argument("--terminal-correction-duration-s", type=float, default=3.0)
     parser.add_argument("--sample-duration-s", type=float, default=9.0)
     parser.add_argument("--poll-period-s", type=float, default=0.10)
     parser.add_argument("--first-contact-motion-threshold-m", type=float, default=0.005)
@@ -2916,6 +2975,7 @@ def main() -> int:
         pre_fetch_reposition["configured_timeout_s"] = round(float(args.nav2_reposition_timeout_s), 6)
         pre_fetch_reposition["configured_server_wait_s"] = round(float(args.nav2_reposition_server_wait_s), 6)
         pre_fetch_reposition["configured_pose_wait_s"] = round(float(args.nav2_reposition_pose_wait_s), 6)
+        pre_fetch_reposition["configured_refine_attempts"] = max(0, int(args.nav2_reposition_refine_attempts))
         pre_fetch_reposition["continue_on_failure"] = bool(args.nav2_reposition_continue_on_failure)
         pre_fetch_reposition["stop_after_reposition"] = publish_zero_stop(args.compose_project)
         try:
@@ -2942,6 +3002,80 @@ def main() -> int:
                 pre_fetch_reposition=pre_fetch_reposition,
                 pre_fetch_reposition_samples=pre_fetch_reposition_samples,
             )
+            refinement_attempts: list[dict[str, Any]] = []
+            for refine_index in range(max(0, int(args.nav2_reposition_refine_attempts))):
+                if not bool(nav2_precontact_fallback.get("eligible", False)):
+                    break
+                if str(nav2_precontact_fallback.get("reason", "")) != "nav2_success_needs_wide_setup_refinement":
+                    break
+                update_runtime(
+                    args.gather_runtime_json,
+                    mission_phase="nav2_reposition_refine",
+                    gather_phase="nav2_reposition_refine",
+                    proof_state="visiting",
+                    zone_pose={
+                        "x": args.zone_x,
+                        "y": args.zone_y,
+                        "z": args.zone_z,
+                        "radius_m": args.fetch_delivery_radius_m,
+                    },
+                    latest_feedback="Measured setup is not push-ready; Nav2 is refining the setup pose.",
+                )
+                refine_result = dispatch_nav2_reposition_before_fetch(
+                    compose_project=args.compose_project,
+                    goal_pose=goal_pose,
+                    timeout_s=args.nav2_reposition_timeout_s,
+                    server_wait_s=args.nav2_reposition_server_wait_s,
+                )
+                refine_result["attempt_index"] = refine_index + 1
+                refine_result["goal_pose"] = goal_pose
+                refine_result["stop_after_reposition"] = publish_zero_stop(args.compose_project)
+                refine_samples: list[dict[str, Any]] = []
+                try:
+                    refine_samples = collect_contact_samples(
+                        compose_project=args.compose_project,
+                        world_name=args.world_name,
+                        robot_model_name=args.robot_model_name,
+                        ball_model_name=args.target_model_name,
+                        duration_s=0.5,
+                        poll_period_s=args.poll_period_s,
+                    )
+                except Exception as exc:
+                    refine_result["post_reposition_sample_error"] = str(exc)
+                if refine_samples:
+                    index_offset = len(pre_fetch_reposition_samples)
+                    t_offset = (
+                        float(pre_fetch_reposition_samples[-1].get("t_s", 0.0) or 0.0) + float(args.poll_period_s)
+                        if pre_fetch_reposition_samples
+                        else 0.0
+                    )
+                    for sample_index, sample in enumerate(refine_samples):
+                        sample["sample_index"] = index_offset + sample_index
+                        sample["t_s"] = round(t_offset + float(sample.get("t_s", 0.0) or 0.0), 6)
+                        sample["nav2_refinement_sample"] = True
+                    pre_fetch_reposition_samples.extend(refine_samples)
+                    last_sample = pre_fetch_reposition_samples[-1]
+                    refine_result["post_reposition_sample_count"] = len(refine_samples)
+                    refine_result["post_reposition_robot_pose"] = last_sample.get("robot_pose")
+                    refine_result["post_reposition_ball_pose"] = last_sample.get("ball_pose")
+                    pre_fetch_reposition["post_reposition_sample_count"] = len(pre_fetch_reposition_samples)
+                    pre_fetch_reposition["post_reposition_robot_pose"] = last_sample.get("robot_pose")
+                    pre_fetch_reposition["post_reposition_ball_pose"] = last_sample.get("ball_pose")
+                    append_jsonl(artifact_dir / "pre_fetch_reposition_trace.jsonl", pre_fetch_reposition_samples)
+                nav2_precontact_fallback = nav2_precontact_refinement_to_local_recovery_decision(
+                    args=args,
+                    target_layout=target_layout,
+                    pre_fetch_reposition=pre_fetch_reposition,
+                    pre_fetch_reposition_samples=pre_fetch_reposition_samples,
+                )
+                refine_result["post_refine_handoff_decision"] = nav2_precontact_fallback
+                refinement_attempts.append(refine_result)
+                if not bool(refine_result.get("success", False)):
+                    break
+            if refinement_attempts:
+                pre_fetch_reposition["refinement_attempts"] = refinement_attempts
+                pre_fetch_reposition["refinement_attempt_count"] = len(refinement_attempts)
+                pre_fetch_reposition["post_refinement_handoff_decision"] = nav2_precontact_fallback
             if bool(nav2_precontact_fallback.get("eligible", False)):
                 nav2_precontact_fallback["applied"] = True
                 args.planner_route_label = ROUTE_RECOVERY_OR_REAIM
@@ -3101,8 +3235,6 @@ def main() -> int:
         contact_samples.extend(post_samples)
 
     samples = ball_samples_from_contact_samples(contact_samples)
-    append_jsonl(trace_path, samples)
-    append_jsonl(contact_trace_path, contact_samples)
     shot_outcome = build_shot_outcome(
         samples,
         target_x=args.zone_x,
@@ -3130,6 +3262,122 @@ def main() -> int:
         ball_lateral_threshold_m=args.ball_lateral_threshold_m,
         oscillation_yaw_threshold_deg=args.oscillation_yaw_threshold_deg,
     )
+    initial_shot_outcome = dict(shot_outcome)
+    initial_approach_metrics = dict(approach_metrics)
+    ai_push_coast_decision = build_ai_push_coast_terminal_decision(
+        args=args,
+        contact_samples=contact_samples,
+        shot_outcome=shot_outcome,
+        approach_metrics=approach_metrics,
+        pre_fetch_reposition=pre_fetch_reposition,
+    )
+    terminal_correction: dict[str, Any] = {
+        "attempted": False,
+        "mode": str(args.ai_push_coast_mode or AI_PUSH_COAST_MODE_SHADOW),
+        "guard_accepted": bool(ai_push_coast_decision.get("ai_push_coast_guard", {}).get("accepted", False)),
+        "reason": "not_guarded_live",
+        "max_distance_to_fetch_pose_m": round(
+            float(args.fetch_delivery_radius_m) + max(0.0, float(args.terminal_correction_extra_margin_m)),
+            6,
+        ),
+    }
+    if bool(shot_outcome.get("pass", False)):
+        terminal_correction["reason"] = "delivery_already_passed"
+    elif str(args.ai_push_coast_mode or AI_PUSH_COAST_MODE_SHADOW) == AI_PUSH_COAST_MODE_GUARDED_LIVE:
+        guard = ai_push_coast_decision.get("ai_push_coast_guard", {})
+        distance_to_fetch_pose = shot_outcome.get("distance_to_fetch_pose_m")
+        max_correction_distance_m = float(args.fetch_delivery_radius_m) + max(
+            0.0,
+            float(args.terminal_correction_extra_margin_m),
+        )
+        if not bool(guard.get("accepted", False)):
+            terminal_correction["reason"] = "guard_rejected"
+            terminal_correction["guard_reasons"] = list(guard.get("reasons", [])) if isinstance(guard.get("reasons"), list) else []
+        elif distance_to_fetch_pose is None or float(distance_to_fetch_pose) > max_correction_distance_m:
+            terminal_correction["reason"] = "outside_near_contract_terminal_margin"
+            terminal_correction["distance_to_fetch_pose_m"] = distance_to_fetch_pose
+        else:
+            terminal_correction["attempted"] = True
+            terminal_correction["reason"] = "guarded_terminal_repush"
+            terminal_correction["duration_s"] = round(float(args.terminal_correction_duration_s), 6)
+            try:
+                correction_samples = collect_line_servo_samples(
+                    compose_project=args.compose_project,
+                    world_name=args.world_name,
+                    robot_model_name=args.robot_model_name,
+                    ball_model_name=args.target_model_name,
+                    duration_s=float(args.terminal_correction_duration_s),
+                    poll_period_s=args.poll_period_s,
+                    delivery_target_x=args.zone_x,
+                    delivery_target_y=args.zone_y,
+                    delivery_radius_m=args.fetch_delivery_radius_m,
+                    delivery_stop_radius_m=delivery_stop_radius_m,
+                    stop_on_delivery=bool(args.stop_on_delivery),
+                    motion_threshold_m=args.first_contact_motion_threshold_m,
+                    max_linear_x_mps=args.drive_linear_x_mps,
+                    push_linear_x_mps=args.line_servo_push_linear_x_mps,
+                    min_linear_x_mps=args.line_servo_min_linear_x_mps,
+                    max_angular_z_rps=args.line_servo_max_angular_z_rps,
+                    yaw_gain=args.line_servo_yaw_gain,
+                    contact_lateral_ready_m=args.line_servo_contact_lateral_ready_m,
+                    contact_yaw_ready_rad=math.radians(args.line_servo_contact_yaw_ready_deg),
+                    route_label=planner_route_label,
+                )
+                t_offset = (
+                    float(contact_samples[-1].get("t_s", 0.0) or 0.0) + float(args.poll_period_s)
+                    if contact_samples
+                    else 0.0
+                )
+                index_offset = len(contact_samples)
+                for index, row in enumerate(correction_samples):
+                    row["sample_index"] = index_offset + index
+                    row["t_s"] = round(t_offset + float(row.get("t_s", 0.0) or 0.0), 6)
+                    row["terminal_correction_sample"] = True
+                contact_samples.extend(correction_samples)
+                samples = ball_samples_from_contact_samples(contact_samples)
+                shot_outcome = build_shot_outcome(
+                    samples,
+                    target_x=args.zone_x,
+                    target_y=args.zone_y,
+                    target_z=args.zone_z,
+                    radius_m=args.fetch_delivery_radius_m,
+                )
+                approach_metrics = build_approach_contact_metrics(
+                    contact_samples,
+                    ball_start_x=args.ball_x,
+                    ball_start_y=args.ball_y,
+                    target_x=args.zone_x,
+                    target_y=args.zone_y,
+                    motion_threshold_m=args.first_contact_motion_threshold_m,
+                    lateral_threshold_m=args.approach_lateral_threshold_m,
+                    yaw_threshold_deg=args.approach_yaw_threshold_deg,
+                    contact_angle_threshold_deg=args.contact_angle_threshold_deg,
+                    ball_lateral_threshold_m=args.ball_lateral_threshold_m,
+                    oscillation_yaw_threshold_deg=args.oscillation_yaw_threshold_deg,
+                )
+                terminal_correction["sample_count"] = len(correction_samples)
+                terminal_correction["pass_after_correction"] = bool(shot_outcome.get("pass", False))
+                terminal_correction["post_correction_distance_to_fetch_pose_m"] = shot_outcome.get(
+                    "distance_to_fetch_pose_m"
+                )
+                terminal_correction["post_correction_closest_approach_m"] = shot_outcome.get(
+                    "closest_approach_distance_m"
+                )
+            except Exception as exc:
+                terminal_correction["attempted"] = True
+                terminal_correction["reason"] = "terminal_correction_error"
+                terminal_correction["error"] = str(exc)
+    shot_outcome = {
+        **shot_outcome,
+        "initial_shot_outcome": initial_shot_outcome,
+        "initial_approach_contact_metrics": initial_approach_metrics,
+        "ai_push_coast_mode": str(args.ai_push_coast_mode or AI_PUSH_COAST_MODE_SHADOW),
+        **ai_push_coast_decision,
+        "terminal_correction": terminal_correction,
+    }
+    samples = ball_samples_from_contact_samples(contact_samples)
+    append_jsonl(trace_path, samples)
+    append_jsonl(contact_trace_path, contact_samples)
     measured_push_ready_handoff = measured_push_ready_handoff_from_approach_metrics(
         approach_metrics,
         local_fetch_dispatched=not bool(fetch_skipped_after_reposition),
@@ -3142,7 +3390,16 @@ def main() -> int:
     )
     pass_flag = bool(shot_outcome.get("pass", False))
     pre_fetch_elapsed_s = float(pre_fetch_reposition.get("elapsed_s", 0.0) or 0.0)
-    mission_time_s = pre_fetch_elapsed_s + (0.0 if fetch_skipped_after_reposition else max(float(args.sample_duration_s), float(args.drive_duration_s)))
+    terminal_correction_elapsed_s = (
+        float(terminal_correction.get("duration_s", 0.0) or 0.0)
+        if bool(terminal_correction.get("attempted", False))
+        else 0.0
+    )
+    mission_time_s = (
+        pre_fetch_elapsed_s
+        + (0.0 if fetch_skipped_after_reposition else max(float(args.sample_duration_s), float(args.drive_duration_s)))
+        + terminal_correction_elapsed_s
+    )
     forward_only_pre_contact = bool(float(args.drive_linear_x_mps) >= -1e-9)
     route_quality = (
         planner_route_defaults.get("route_quality", {})
@@ -3179,6 +3436,11 @@ def main() -> int:
         "delivery_stop_triggered": bool(delivery_stop_triggered),
         "post_delivery_sample_s": round(float(args.post_delivery_sample_s), 6),
         "post_delivery_sample_count": int(post_delivery_sample_count),
+        "ai_push_coast_mode": str(args.ai_push_coast_mode or AI_PUSH_COAST_MODE_SHADOW),
+        "ai_push_coast_shadow": ai_push_coast_decision.get("ai_push_coast_shadow", {}),
+        "ai_push_coast_proposal": ai_push_coast_decision.get("ai_push_coast_proposal", {}),
+        "ai_push_coast_guard": ai_push_coast_decision.get("ai_push_coast_guard", {}),
+        "terminal_correction": terminal_correction,
         "drive_stop_publishers": stop_publishers_payload,
         "drive_linear_x_mps": round(float(args.drive_linear_x_mps), 6),
         "drive_duration_s": round(float(args.drive_duration_s), 6),
@@ -3296,6 +3558,9 @@ def main() -> int:
             f"`{pre_fetch_reposition.get('status_text', '')}`",
             f"- Nav2 pre-contact fallback: `{bool(nav2_precontact_fallback.get('applied', False))}` "
             f"`{nav2_precontact_fallback.get('reason', '')}`",
+            f"- AI push-coast mode: `{args.ai_push_coast_mode}`",
+            f"- Terminal correction: `{bool(terminal_correction.get('attempted', False))}` "
+            f"`{terminal_correction.get('reason', '')}`",
             f"- Measured push-ready handoff: `{bool(measured_push_ready_handoff.get('pass', False))}` "
             f"`{measured_push_ready_handoff.get('source', '')}`",
             f"- Drive mode: `{args.drive_mode}`",

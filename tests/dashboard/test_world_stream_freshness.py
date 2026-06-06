@@ -862,6 +862,31 @@ def test_get_state_includes_latest_visual_uat_package(monkeypatch, tmp_path):
     assert state["visual_uat_package"]["videos"][1]["url"] == ""
 
 
+def test_latest_session_artifact_json_caps_scan_to_recent_session_dirs(monkeypatch, tmp_path):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(dashboard_service, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(dashboard_service, "LATEST_SESSION_ARTIFACT_SCAN_LIMIT", 2)
+    controller = _make_controller(tmp_path)
+    relative_parts = ("fetch_visual_uat_package", "package_summary.json")
+
+    old_path = session_root / "old" / relative_parts[0] / relative_parts[1]
+    recent_path = session_root / "recent" / relative_parts[0] / relative_parts[1]
+    _write_json(old_path, {"type": "fetch_visual_uat_package", "campaign_id": "old"})
+    _write_json(recent_path, {"type": "fetch_visual_uat_package", "campaign_id": "recent"})
+    (session_root / "newest_empty").mkdir(parents=True)
+
+    os.utime(old_path, (4000, 4000))
+    os.utime(recent_path, (2000, 2000))
+    os.utime(session_root / "old", (1000, 1000))
+    os.utime(session_root / "recent", (3000, 3000))
+    os.utime(session_root / "newest_empty", (5000, 5000))
+
+    path, payload = controller._latest_session_artifact_json(relative_parts)
+
+    assert path == recent_path
+    assert payload["campaign_id"] == "recent"
+
+
 def test_idle_shutdown_operator_activity_resets_idle_timer(monkeypatch, tmp_path):
     controller = _make_controller(tmp_path)
     controller.state["idle_shutdown_idle_since_utc"] = "2026-05-22T12:00:00+00:00"

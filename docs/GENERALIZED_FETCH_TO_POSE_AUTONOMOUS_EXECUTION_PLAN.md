@@ -22,6 +22,19 @@ surprising random scenes must pass planner routing before local fetch is judged.
 Custom contact routines and AI push-coast proposals remain fallback lanes that
 earn live authority only from corrected, reproducible stage-gap evidence.
 
+June 6, 2026 multi-ball goal framing: set the next milestone as **Multi-Ball
+Retrieval v1**. The robot should solve a bounded soccer-field or putting-green
+scene by identifying several balls, selecting an efficient retrieval sequence,
+choosing the setup or recovery owner for each ball from measured state, and
+dispatching local `fetch_to_pose` only after measured push-ready handoff. Current
+evidence supports the first same-seed UAT rung:
+`artifacts/session/live_multiball_retrieval_v1_seed20260606_scene01_guarded_20260606_repack/fetch_visual_uat_package/scorecard.md`.
+The broad seed `20260620` remains the active blocker because setup-to-contact
+quality failed after Nav2 returned success:
+`artifacts/session/live_multiball_retrieval_v1_seed20260620_scene01_refine_20260606/fetch_multiball_retrieval_gate/scorecard.md`.
+Use that failure to build measured handoff replanning rather than tuning
+terminal distance.
+
 June 2, 2026 execution pivot: the LLM/world-state planner is integrated as a
 route-classification and shadow-evidence surface. The non-local route labels
 still need executable route owners. The opposite-side direct run proved

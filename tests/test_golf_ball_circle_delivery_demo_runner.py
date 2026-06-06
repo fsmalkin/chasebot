@@ -14,7 +14,9 @@ if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
 from golf_ball_circle_delivery_demo_runner import build_shot_outcome  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import ball_motion_from_shot_outcome  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import ball_samples_from_contact_samples  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import build_ai_push_coast_terminal_decision  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_approach_contact_metrics  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import line_servo_command  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import parse_args  # noqa: E402
@@ -49,6 +51,15 @@ def test_shot_outcome_uses_segment_intersection_for_delivery_circle():
     assert outcome["fetch_pose_world"] == {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.3}
 
 
+def test_ball_motion_from_shot_outcome_measures_start_to_end_motion():
+    outcome = {
+        "ball_start_pose": {"x": 0.20, "y": 0.0},
+        "ball_end_pose": {"x": 0.50, "y": 0.4},
+    }
+
+    assert ball_motion_from_shot_outcome(outcome) == pytest.approx(0.5)
+
+
 def test_parse_args_accepts_dashboard_fetch_target_aliases(monkeypatch):
     monkeypatch.setattr(
         sys,
@@ -69,6 +80,88 @@ def test_parse_args_accepts_dashboard_fetch_target_aliases(monkeypatch):
     assert args.fetch_target_x == pytest.approx(1.25)
     assert args.fetch_target_y == pytest.approx(0.10)
     assert args.fetch_target_z == pytest.approx(0.002)
+
+
+def test_parse_args_accepts_ai_push_coast_guarded_live(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "golf_ball_circle_delivery_demo_runner.py",
+            "--ai-push-coast-mode",
+            "guarded_live",
+            "--terminal-correction-extra-margin-m",
+            "0.05",
+        ],
+    )
+
+    args = parse_args()
+
+    assert args.ai_push_coast_mode == "guarded_live"
+    assert args.terminal_correction_extra_margin_m == pytest.approx(0.05)
+
+
+def test_ai_push_coast_terminal_decision_accepts_clean_near_contract_miss():
+    args = SimpleNamespace(
+        zone_x=1.12,
+        zone_y=0.0,
+        zone_z=0.001,
+        fetch_delivery_radius_m=0.30,
+        nav2_reposition_before_fetch=True,
+        first_contact_motion_threshold_m=0.005,
+        ai_push_coast_mode="guarded_live",
+    )
+    contact_samples = [
+        {
+            "sample_index": 0,
+            "t_s": 0.0,
+            "robot_pose": {"position": {"x": 0.30, "y": 0.0, "z": 0.0}, "yaw": 0.0},
+            "ball_pose": {"position": {"x": 0.50, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+        },
+        {
+            "sample_index": 1,
+            "t_s": 0.4,
+            "robot_pose": {"position": {"x": 0.45, "y": 0.0, "z": 0.0}, "yaw": 0.0},
+            "ball_pose": {"position": {"x": 0.50, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+        },
+        {
+            "sample_index": 2,
+            "t_s": 0.8,
+            "robot_pose": {"position": {"x": 0.54, "y": 0.0, "z": 0.0}, "yaw": 0.0},
+            "ball_pose": {"position": {"x": 0.54, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+        },
+        {
+            "sample_index": 3,
+            "t_s": 1.2,
+            "robot_pose": {"position": {"x": 0.66, "y": 0.0, "z": 0.0}, "yaw": 0.0},
+            "ball_pose": {"position": {"x": 0.72, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+        },
+    ]
+    shot = build_shot_outcome(
+        ball_samples_from_contact_samples(contact_samples),
+        target_x=args.zone_x,
+        target_y=args.zone_y,
+        target_z=args.zone_z,
+        radius_m=args.fetch_delivery_radius_m,
+    )
+    approach = build_approach_contact_metrics(
+        contact_samples,
+        ball_start_x=0.50,
+        ball_start_y=0.0,
+        target_x=args.zone_x,
+        target_y=args.zone_y,
+    )
+
+    decision = build_ai_push_coast_terminal_decision(
+        args=args,
+        contact_samples=contact_samples,
+        shot_outcome=shot,
+        approach_metrics=approach,
+        pre_fetch_reposition={"attempted": True, "dispatch_status": "goal_finished", "success": True},
+    )
+
+    assert decision["ai_push_coast_proposal"]["maneuver_class"] == "terminal_repush"
+    assert decision["ai_push_coast_guard"]["accepted"] is True
 
 
 def test_docker_exec_service_returns_timeout_result(monkeypatch):

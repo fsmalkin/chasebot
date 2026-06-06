@@ -44,7 +44,7 @@ MIN_BALL_SEPARATION_M = 0.34
 MIN_ROBOT_BALL_SEPARATION_M = 0.30
 SETUP_STANDOFF_M = 0.38
 CORRIDOR_INTERFERENCE_RADIUS_M = 0.22
-TARGET_MODEL_NAME_PREFIX = "multiball_fetch_target"
+TARGET_MODEL_NAME_PREFIX = "visit_mission_target_multiball_fetch"
 MISSION_SUMMARY_MARKER = replay_batch.MISSION_SUMMARY_MARKER
 VISUAL_PACKAGE_MARKER = replay_batch.VISUAL_PACKAGE_MARKER
 
@@ -384,22 +384,40 @@ def candidate_cost(
     robot_pose: dict[str, Any],
     remaining_balls: list[dict[str, Any]],
     route_label: str,
+    route_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     setup_pose = setup_pose_for_ball(ball.get("pose", {}))
     travel_distance_m = pose_distance(robot_pose, setup_pose)
     ball_target_distance_m = pose_distance(ball.get("pose", {}), target_pose())
     interference_count = corridor_interference_count(ball, remaining_balls)
+    quality = route_quality if isinstance(route_quality, dict) else {}
+    quality_flags = {str(flag) for flag in quality.get("flags", [])} if isinstance(quality.get("flags"), list) else set()
+    first_contact_risk = str(quality.get("predicted_first_contact_risk", "") or "").strip()
+    predicted_contact_quality = str(quality.get("predicted_contact_quality", "") or "").strip()
+    quality_penalty = 0.0
+    if first_contact_risk == "high":
+        quality_penalty += 0.45
+    elif first_contact_risk == "medium":
+        quality_penalty += 0.15
+    if predicted_contact_quality == "watch":
+        quality_penalty += 0.10
+    if str(route_label) == planner_gate.ROUTE_RECOVERY_OR_REAIM and "ball_behind_robot_heading" in quality_flags:
+        quality_penalty += 0.35
+    if str(route_label) == planner_gate.ROUTE_RECOVERY_OR_REAIM and "initial_yaw_setup_debt" in quality_flags:
+        quality_penalty += 0.20
     cost = (
         travel_distance_m
         + 0.18 * ball_target_distance_m
         + ROUTE_PENALTY.get(str(route_label), 5.0)
         + 0.40 * interference_count
+        + quality_penalty
     )
     return {
         "score": round(float(cost), 6),
         "travel_distance_to_setup_m": round(float(travel_distance_m), 6),
         "ball_target_distance_m": round(float(ball_target_distance_m), 6),
         "route_penalty": round(float(ROUTE_PENALTY.get(str(route_label), 5.0)), 6),
+        "quality_penalty": round(float(quality_penalty), 6),
         "corridor_interference_count": int(interference_count),
         "setup_pose": setup_pose,
     }
@@ -443,6 +461,7 @@ def plan_multiball_scene(scene: dict[str, Any], *, args: argparse.Namespace) -> 
                 robot_pose=current_robot_pose,
                 remaining_balls=remaining,
                 route_label=str(decision.get("route_label", "")),
+                route_quality=decision.get("route_quality") if isinstance(decision.get("route_quality"), dict) else {},
             )
             candidates.append(
                 {
@@ -544,6 +563,10 @@ def build_step_command(
     expected_session_id: str = "",
 ) -> list[str]:
     target_model_name = f"{TARGET_MODEL_NAME_PREFIX}_{safe_id(scene_id)}_{safe_id(str(step.get('ball_id', 'ball')))}"
+    robot_pose = step.get("estimated_start_robot_pose") if isinstance(step.get("estimated_start_robot_pose"), dict) else {}
+    if not robot_pose:
+        one_ball_scene = step.get("one_ball_scene") if isinstance(step.get("one_ball_scene"), dict) else {}
+        robot_pose = one_ball_scene.get("robot_pose") if isinstance(one_ball_scene.get("robot_pose"), dict) else {}
     command = [
         str(args.python_exe or sys.executable),
         str(REPO_ROOT / "scripts" / "golf_ball_circle_delivery_demo_runner.py"),
@@ -558,7 +581,31 @@ def build_step_command(
         "--fetch-delivery-radius-m",
         f"{float(args.fetch_delivery_radius_m):.3f}",
         "--forward-only-pre-contact-required",
+        "--nav2-reposition-before-fetch",
+        "--nav2-reposition-goal-frame-mode",
+        "world_direct",
+        "--nav2-reposition-timeout-s",
+        "48.000",
+        "--nav2-reposition-server-wait-s",
+        "8.000",
+        "--nav2-reposition-pose-wait-s",
+        "2.500",
+        "--nav2-reposition-refine-attempts",
+        "1",
+        "--ai-push-coast-mode",
+        "guarded_live",
     ]
+    if robot_pose:
+        command.extend(
+            [
+                "--robot-x",
+                f"{finite_float(robot_pose.get('x')):.6f}",
+                "--robot-y",
+                f"{finite_float(robot_pose.get('y')):.6f}",
+                "--robot-yaw",
+                f"{finite_float(robot_pose.get('yaw')):.6f}",
+            ]
+        )
     if str(args.dashboard_url or "").strip():
         command.extend(["--dashboard-url", str(args.dashboard_url).strip()])
     run_compose_project = str(compose_project or args.compose_project or "").strip()

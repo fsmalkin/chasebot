@@ -207,6 +207,22 @@ into every per-ball local fetch, stops the session before packaging, and builds
 one visual package across all mission summaries. Use this as the first
 browser-watchable UAT proof for repeated retrieval.
 
+Current same-seed green reference:
+`artifacts/session/live_multiball_retrieval_v1_seed20260606_scene01_guarded_20260606_repack/fetch_visual_uat_package/scorecard.md`.
+It passed `3/3` deliveries in one dashboard session with `guarded_live`
+handoff metadata and browser-watchable onboard/topdown video. Use the direct
+browser links from the dashboard when handing this to the operator:
+`/artifacts/session/20260606T141836641424Z/visual/raw_camera_browser.mp4`,
+`/artifacts/session/20260606T141836641424Z/visual/topdown_telemetry_browser.mp4`,
+and `/artifacts/session/20260606T141836641424Z/visual/world_stream.mp4`.
+
+Current broad-seed blocker:
+`artifacts/session/live_multiball_retrieval_v1_seed20260620_scene01_refine_20260606/fetch_multiball_retrieval_gate/scorecard.md`.
+Seed `20260620` failed `1/3` after measured Nav2 setup refinement. Treat this
+as setup/capture-owner evidence. The planner should solve the mission by
+choosing order, setup route, recovery route, and measured push-ready handoff
+timing before local fetch dispatch.
+
 Saved-anchor repeatability analyzer scope:
 
 ```powershell

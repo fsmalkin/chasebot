@@ -95,6 +95,8 @@ WORLD_STREAM_RENDERABLE_GRACE_S = 10.0
 DEFAULT_IDLE_SHUTDOWN_AFTER_S = 30.0 * 60.0
 IDLE_SHUTDOWN_WATCHDOG_POLL_S = 15.0
 FETCH_PROGRESS_CACHE_TTL_S = 5.0
+LATEST_SESSION_ARTIFACT_DIR_CACHE_TTL_S = 2.0
+LATEST_SESSION_ARTIFACT_SCAN_LIMIT = 400
 FETCH_PROGRESS_MILESTONE = "Generalized Fetch-To-Pose v1"
 VISUAL_UAT_PACKAGE_KIND = "fetch_visual_uat_package"
 STAGE_QUALITY_AUDIT_KIND = "fetch_saved_anchor_setup_contact_audit"
@@ -734,6 +736,9 @@ class DashboardController:
         self._control_plane_checked_at = 0.0
         self._fetch_progress_cache_at = 0.0
         self._fetch_progress_cache: Dict[str, Any] = {}
+        self._latest_session_dirs_cache_at = 0.0
+        self._latest_session_dirs_cache_root = ""
+        self._latest_session_dirs_cache: list[Path] = []
         self.contract = self._load_contract()
         self.frozen_intents = {intent["name"]: intent for intent in self.contract.get("intents", [])}
         self.state_lock = threading.RLock()
@@ -1858,9 +1863,7 @@ class DashboardController:
         if not SESSION_ROOT.is_dir():
             return None, {}
         candidates: list[tuple[float, Path]] = []
-        for session_dir in SESSION_ROOT.iterdir():
-            if not session_dir.is_dir():
-                continue
+        for session_dir in self._recent_session_dirs():
             path = session_dir.joinpath(*relative_parts)
             if not path.is_file():
                 continue
@@ -1876,6 +1879,40 @@ class DashboardController:
                 continue
             return path, payload
         return None, {}
+
+    def _recent_session_dirs(self) -> list[Path]:
+        if not SESSION_ROOT.is_dir():
+            return []
+        root_key = str(SESSION_ROOT.resolve())
+        now = time.monotonic()
+        cached_root = str(getattr(self, "_latest_session_dirs_cache_root", "") or "")
+        cached_at = float(getattr(self, "_latest_session_dirs_cache_at", 0.0) or 0.0)
+        cached = list(getattr(self, "_latest_session_dirs_cache", []) or [])
+        if (
+            cached
+            and cached_root == root_key
+            and now - cached_at < LATEST_SESSION_ARTIFACT_DIR_CACHE_TTL_S
+        ):
+            return cached
+
+        candidates: list[tuple[float, Path]] = []
+        try:
+            iterator = SESSION_ROOT.iterdir()
+        except OSError:
+            return []
+        for session_dir in iterator:
+            if not session_dir.is_dir():
+                continue
+            try:
+                candidates.append((session_dir.stat().st_mtime, session_dir))
+            except OSError:
+                continue
+        limit = max(int(LATEST_SESSION_ARTIFACT_SCAN_LIMIT), 1)
+        recent = [path for _mtime, path in sorted(candidates, key=lambda item: item[0], reverse=True)[:limit]]
+        self._latest_session_dirs_cache_root = root_key
+        self._latest_session_dirs_cache_at = now
+        self._latest_session_dirs_cache = recent
+        return list(recent)
 
     @staticmethod
     def _artifact_display_path(path: Optional[Path]) -> str:

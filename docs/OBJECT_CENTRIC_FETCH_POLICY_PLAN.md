@@ -39,6 +39,20 @@ local fetch, recovery, or safe no-go. Local fetch receives control only after a
 measured push-ready handoff. Cases that lack measured push-readiness count as
 planner/setup execution evidence.
 
+June 6, 2026 multi-ball evidence update: the first same-seed three-ball UAT
+proof is green, while broader seed `20260620` exposes setup/capture gaps. The
+green proof is
+`artifacts/session/live_multiball_retrieval_v1_seed20260606_scene01_guarded_20260606_repack/fetch_visual_uat_package/scorecard.md`:
+three deliveries passed in one dashboard session with browser-watchable onboard
+and topdown video, `guarded_live` AI handoff metadata, and frame-sequence
+review. The broader failure package is
+`artifacts/session/live_multiball_retrieval_v1_seed20260620_scene01_refine_20260606/fetch_multiball_retrieval_gate/scorecard.md`:
+measured Nav2 setup refinement helped one ball, then two balls failed on
+setup-to-contact quality rather than order planning. The next multi-ball goal
+therefore optimizes mission-level decomposition: the planner must choose order,
+setup owner, recovery owner, and handoff timing from measured state, while local
+fetch executes only inside the push-ready envelope.
+
 May 31, 2026 evidence and architecture reset: the delivery-marker geometry
 issue means pre-fix fetch pass/fail claims are diagnostic unless the artifact
 records `geometry_consistency.pass=true`, the visible delivery marker matches

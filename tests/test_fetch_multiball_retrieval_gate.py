@@ -141,6 +141,7 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
     assert summary["scene_count"] == 2
     assert summary["planned_step_count"] == 6
     assert summary["planner_ready_scene_count"] == 2
+    assert summary["scene_rows"][0]["retrieval_order"] == ["ball_3", "ball_1", "ball_2"]
     assert (tmp_path / summary["summary_path"]).is_file()
     assert (tmp_path / summary["scorecard_path"]).is_file()
     seen_model_names = set()
@@ -155,7 +156,25 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
         assert "--target-model-name" in row["command"]
         model_name = row["command"][row["command"].index("--target-model-name") + 1]
         assert model_name not in seen_model_names
+        assert model_name.startswith(multiball_gate.TARGET_MODEL_NAME_PREFIX)
         seen_model_names.add(model_name)
+        robot_pose = layout["multiball_estimated_start_robot_pose"]
+        assert "--robot-x" in row["command"]
+        assert "--robot-y" in row["command"]
+        assert "--robot-yaw" in row["command"]
+        assert float(row["command"][row["command"].index("--robot-x") + 1]) == robot_pose["x"]
+        assert float(row["command"][row["command"].index("--robot-y") + 1]) == robot_pose["y"]
+        assert float(row["command"][row["command"].index("--robot-yaw") + 1]) == robot_pose["yaw"]
+        assert "--nav2-reposition-before-fetch" in row["command"]
+        assert "--nav2-reposition-goal-frame-mode" in row["command"]
+        assert row["command"][row["command"].index("--nav2-reposition-goal-frame-mode") + 1] == "world_direct"
+        assert "--nav2-reposition-timeout-s" in row["command"]
+        assert float(row["command"][row["command"].index("--nav2-reposition-timeout-s") + 1]) == 48.0
+        assert "--nav2-reposition-refine-attempts" in row["command"]
+        assert int(row["command"][row["command"].index("--nav2-reposition-refine-attempts") + 1]) == 1
+        assert "--nav2-reposition-continue-on-failure" not in row["command"]
+        assert "--ai-push-coast-mode" in row["command"]
+        assert row["command"][row["command"].index("--ai-push-coast-mode") + 1] == "guarded_live"
 
 
 def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatch):

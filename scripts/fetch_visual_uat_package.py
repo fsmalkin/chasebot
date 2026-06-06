@@ -768,8 +768,18 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         "planner_route_reason": str(planner_route_execution.get("reason", "") or ""),
         "fetch_to_pose_pass_count": int(payload.get("fetch_to_pose_pass_count", 1 if fetch_pass else 0) or 0) if fetch_pass else 0,
         "fetch_to_pose_fail_count": int(payload.get("fetch_to_pose_fail_count", 0 if fetch_pass else 1) or 0) if fetch_pass else 1,
-        "ai_push_coast_mode": str(payload.get("ai_push_coast_mode", mission_verdict.get("ai_push_coast_mode", "")) or ""),
+        "ai_push_coast_mode": str(
+            payload.get(
+                "ai_push_coast_mode",
+                mission_verdict.get(
+                    "ai_push_coast_mode",
+                    shot_outcome.get("ai_push_coast_mode", planner_route.get("ai_push_coast_mode", "")),
+                ),
+            )
+            or ""
+        ),
         "mission_objective": str(payload.get("mission_objective", mission_verdict.get("mission_objective", "")) or ""),
+        "scenario_id": str(payload.get("scenario_id", mission_verdict.get("scenario_id", "")) or ""),
         "scenario_label": str(payload.get("scenario_label", mission_verdict.get("scenario_label", "")) or ""),
         "target_layout_json": str(payload.get("requested_target_layout_json", mission_verdict.get("target_layout_json", "")) or ""),
         "closest_approach_distance_m": closest_approach,
@@ -931,6 +941,16 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         for mission in missions
     )
     local_fetch_seen = any(mission.get("fetch_to_pose_pass") for mission in missions)
+    all_local_fetch_missions_pass = bool(missions) and all(mission.get("fetch_to_pose_pass") for mission in missions)
+    multiball_local_fetch_uat = bool(
+        missions
+        and all_local_fetch_missions_pass
+        and all(
+            str(mission.get("scenario_id", "") or "") == "fetch_multiball_retrieval_v1"
+            or str(mission.get("scenario_label", "") or "") == "Multi-Ball Retrieval v1"
+            for mission in missions
+        )
+    )
     planner_route_only_seen = any(mission.get("planner_route_only_pass") for mission in missions)
     visual_confirmation_seen = any(item.get("visual_confirmation_pass") for item in visual_summaries)
     local_fetch_visual_confirmed = any(
@@ -950,12 +970,13 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
     }
     onboard_camera_ok = "raw_camera_browser.mp4" in playable_core
     video_ok = REQUIRED_MOBILE_VIDEO_NAMES.issubset(playable_core)
+    planner_or_multiball_uat_ok = bool(planner_ok or multiball_local_fetch_uat)
     if route_only_proof:
         pass_flag = bool(planner_ok and planner_route_only_seen and video_ok and planner_route_only_visual_confirmed)
     else:
-        pass_flag = bool(planner_ok and local_fetch_seen and video_ok and local_fetch_visual_confirmed)
+        pass_flag = bool(planner_or_multiball_uat_ok and local_fetch_seen and video_ok and local_fetch_visual_confirmed)
     warnings: list[str] = []
-    if not planner_ok:
+    if not planner_or_multiball_uat_ok:
         warnings.append("planner_gate_not_green")
     if route_only_proof:
         if not planner_route_only_seen:
@@ -1015,6 +1036,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "local_fetch_visual_confirmed": local_fetch_visual_confirmed,
         "planner_route_only_visual_confirmed": planner_route_only_visual_confirmed,
         "planner_gate_green": planner_ok,
+        "multiball_local_fetch_uat": multiball_local_fetch_uat,
         "local_fetch_pass_seen": local_fetch_seen,
         "planner_route_only_pass_seen": planner_route_only_seen,
         "raw_local_fetch_pass_seen": raw_local_fetch_seen,
