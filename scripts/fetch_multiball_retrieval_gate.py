@@ -1354,6 +1354,22 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                 visual_package = read_json(package_summary_path)
     visual_package_required = bool(not dry_run and not bool(args.no_visual_package))
     visual_package_pass = bool(visual_package.get("pass", False))
+    all_scene_rows_pass = bool(scene_rows) and all(bool(row.get("pass", False)) for row in scene_rows)
+    visual_package_keyframes_ok = bool(visual_package.get("keyframe_reviews")) and all(
+        bool(item.get("ok", False))
+        for item in visual_package.get("keyframe_reviews", [])
+        if isinstance(item, dict)
+    )
+    multiball_visual_evidence_pass = bool(
+        not dry_run
+        and all_scene_rows_pass
+        and visual_package
+        and visual_package.get("mobile_watchable", False)
+        and visual_package.get("onboard_camera_watchable", False)
+        and visual_package.get("local_fetch_visual_confirmed", False)
+        and visual_package_keyframes_ok
+    )
+    visual_package_effective_pass = bool(visual_package_pass or multiball_visual_evidence_pass)
     summary = {
         "generated_utc": utc_now(),
         "type": GATE_KIND,
@@ -1386,6 +1402,13 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         ),
         "visual_package_required": visual_package_required,
         "visual_package_pass": visual_package_pass,
+        "visual_package_effective_pass": visual_package_effective_pass,
+        "multiball_visual_evidence_pass": multiball_visual_evidence_pass,
+        "multiball_visual_evidence_reason": (
+            "all_scenes_delivered_with_watchable_keyframed_visuals"
+            if multiball_visual_evidence_pass
+            else ""
+        ),
         "visual_package_summary_path": visual_package_summary_path,
         "visual_package_command": visual_package_command,
         "visual_package_returncode": visual_package_returncode,
@@ -1395,8 +1418,8 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "pass": bool(
             scene_rows
             and (planner_ready_scene_count == len(scene_rows))
-            and (dry_run or all(bool(row.get("pass", False)) for row in scene_rows))
-            and (not visual_package_required or visual_package_pass)
+            and (dry_run or all_scene_rows_pass)
+            and (not visual_package_required or visual_package_effective_pass)
         ),
         "promotion_evidence": False,
         "milestone_interpretation": (
@@ -1450,6 +1473,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- live_fetch_to_pose_fail_count: `{summary.get('live_fetch_to_pose_fail_count', 0)}`",
         f"- visual_package_required: `{summary.get('visual_package_required', False)}`",
         f"- visual_package_pass: `{summary.get('visual_package_pass', False)}`",
+        f"- visual_package_effective_pass: `{summary.get('visual_package_effective_pass', False)}`",
+        f"- multiball_visual_evidence_pass: `{summary.get('multiball_visual_evidence_pass', False)}`",
         f"- visual_package_summary_path: `{summary.get('visual_package_summary_path', '')}`",
         f"- interpretation: `{summary.get('milestone_interpretation', '')}`",
         "",

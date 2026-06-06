@@ -868,6 +868,131 @@ def test_multiball_gate_persistent_scene_rows_preserve_live_replanning_counts(tm
     assert scene_row["fetch_to_pose_fail_count"] == 1
 
 
+def test_multiball_gate_accepts_watchable_retried_scene_visual_evidence(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+
+    monkeypatch.setattr(
+        replay_batch,
+        "stop_dashboard_environment",
+        lambda dashboard_url, *, timeout_s: {"request": {"ok": True}, "state": {"environment_state": "stopped"}},
+    )
+    monkeypatch.setattr(
+        replay_batch,
+        "start_dashboard_environment",
+        lambda args: {
+            "request": {"ok": True},
+            "state": {
+                "environment_state": "environment_ready",
+                "phase": "environment_ready",
+                "sim_gate_ready": True,
+                "operator_view_ready": True,
+                "compose_project": "persistent_project",
+                "session_id": "persistent_session",
+            },
+        },
+    )
+    monkeypatch.setattr(
+        multiball_gate,
+        "prepare_persistent_field_scene",
+        lambda **kwargs: {"pass": True, "reason": "persistent_field_ready", "balls": [], "robot_pose": {}},
+    )
+
+    def fake_materialize_replanning_rows(*args, **kwargs):
+        rows = [
+            {
+                "scene_id": "seed20260606_multiball_scene01",
+                "step_index": 1,
+                "ball_id": "ball_1",
+                "mission_summary_path": "artifacts/session/persistent_session/golf_ball_circle_delivery/run_1/mission_verdict.json",
+                "mission": {"fetch_to_pose_pass": False},
+                "fetch_to_pose_pass": False,
+                "returncode": 2,
+            },
+            {
+                "scene_id": "seed20260606_multiball_scene01",
+                "step_index": 2,
+                "ball_id": "ball_1",
+                "mission_summary_path": "artifacts/session/persistent_session/golf_ball_circle_delivery/run_2/mission_verdict.json",
+                "mission": {"fetch_to_pose_pass": True},
+                "fetch_to_pose_pass": True,
+                "returncode": 0,
+            },
+            {
+                "scene_id": "seed20260606_multiball_scene01",
+                "step_index": 3,
+                "ball_id": "ball_2",
+                "mission_summary_path": "artifacts/session/persistent_session/golf_ball_circle_delivery/run_3/mission_verdict.json",
+                "mission": {"fetch_to_pose_pass": True},
+                "fetch_to_pose_pass": True,
+                "returncode": 0,
+            },
+        ]
+        return rows, {
+            "enabled": True,
+            "initial_ball_count": 2,
+            "max_iterations": 3,
+            "delivered_ball_ids": ["ball_1", "ball_2"],
+            "remaining_ball_ids": [],
+            "all_balls_delivered": True,
+            "iterations": [],
+        }
+
+    def fake_run_command(command, *, timeout_s):
+        package_path = (
+            tmp_path
+            / "artifacts"
+            / "session"
+            / "retried_multiball_visual_package"
+            / "fetch_visual_uat_package"
+            / "package_summary.json"
+        )
+        package_path.parent.mkdir(parents=True, exist_ok=True)
+        package_path.write_text(
+            json.dumps(
+                {
+                    "pass": False,
+                    "mobile_watchable": True,
+                    "onboard_camera_watchable": True,
+                    "local_fetch_visual_confirmed": True,
+                    "keyframe_reviews": [{"ok": True, "session_id": "persistent_session"}],
+                    "warnings": ["planner_gate_not_green"],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=f"{multiball_gate.VISUAL_PACKAGE_MARKER}{package_path}\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(multiball_gate, "materialize_replanning_rows", fake_materialize_replanning_rows)
+    monkeypatch.setattr(multiball_gate, "run_command", fake_run_command)
+
+    summary = multiball_gate.run_gate(
+        _args(
+            campaign_id="retried_visual",
+            dry_run=False,
+            random_cases=1,
+            balls_per_scene=2,
+            persistent_field=True,
+            fresh_dashboard_session=True,
+            dashboard_url="http://127.0.0.1:8894",
+        )
+    )
+
+    assert summary["visual_package_pass"] is False
+    assert summary["multiball_visual_evidence_pass"] is True
+    assert summary["visual_package_effective_pass"] is True
+    assert summary["live_fetch_to_pose_pass_count"] == 2
+    assert summary["live_fetch_to_pose_fail_count"] == 1
+    assert summary["scene_rows"][0]["pass"] is True
+    assert summary["pass"] is True
+
+
 def test_multiball_gate_can_package_before_blocking_dashboard_stop(tmp_path, monkeypatch):
     _patch_roots(tmp_path, monkeypatch)
     calls = []
