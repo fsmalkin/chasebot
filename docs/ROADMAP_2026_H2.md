@@ -502,14 +502,18 @@ Acceptance:
 
 Current direction update:
 
-Next major milestone: Deliver Open-Field Planner-Gated Generalized
-Fetch-To-Pose v1, a no-shoot, robot-owned fetch behavior where an
-LLM/world-state planner solves field-like setup geometry, deterministic
-validators compile the maneuver plan, Nav2/setup/local route owners execute
-accepted motion, and a thin fetch adapter monitors delivery geometry, object
-progress, escape, stale state, and replanning triggers. Custom contact routines
-and AI/model proposal layers remain fallback lanes that earn live authority only
-from corrected, reproducible stage-gap evidence.
+Next major milestone: Deliver Multi-Ball Retrieval v1, a robot-owned field
+behavior that identifies multiple balls on a bounded soccer-field or
+putting-green surface, plans an efficient retrieval order, and executes repeated
+setup/capture/push-to-target cycles through the current open-field
+`fetch_to_pose` primitive. Open-Field Planner-Gated Generalized Fetch-To-Pose v1
+is the local primitive underneath the multi-ball milestone: an LLM/world-state
+planner solves field-like setup geometry, deterministic validators compile the
+maneuver plan, Nav2/setup/local route owners execute accepted motion, and the
+fetch adapter monitors delivery geometry, object progress, escape, stale state,
+and replanning triggers. Custom contact routines and AI/model proposal layers
+remain fallback lanes that earn live authority only from corrected,
+reproducible stage-gap evidence.
 
 Planner-gating correction: this milestone proves setup-to-push-ready planning
 plus the bounded local fetch skill. The planner should propose executable
@@ -1730,3 +1734,30 @@ push-ready handoff before local fetch. Hardware and physical/onboard proof stay
 on the roadmap, but they follow this broader browser-watchable evidence package
 so field transfer rests on general setup competence rather than a narrow route
 matrix.
+
+June 6 multi-ball roadmap pivot: the next product milestone is Multi-Ball
+Retrieval v1. The open-field one-ball stack becomes the local primitive for a
+mission-level behavior that identifies several balls, chooses an efficient
+retrieval order, and dispatches repeated setup/capture/push-to-target cycles.
+The active branch is `spike/fetch-multiball-open-field-20260606`; the physical
+onboarding branch remains `spike/fetch-physical-robot-onboarding-20260606`.
+
+The first multi-ball gate is
+`scripts/fetch_multiball_retrieval_gate.py`. The seed20260606 dry-run evidence
+is
+`artifacts/session/multiball_retrieval_v1_dryrun_seed20260606_20260606/fetch_multiball_retrieval_gate/scorecard.md`:
+four bounded three-ball scenes, twelve planned retrieval steps, and one
+planner-routed local-fetch layout per ball. This dry-run validates scene
+generation, order planning, and replay-command materialization inside the
+current local push envelope. Live retrieval claims start at the next rung.
+
+The multi-ball ladder is:
+
+1. dry-run seeded planning gate over bounded three-ball scenes
+2. one same-session live three-ball visual demo with browser-watchable onboard,
+   topdown, and world/context video
+3. three varied three-ball scenes with frame-sequence review and mission-level
+   retrieval scoring
+4. seeded randomized multi-ball gate with replayable frozen failures
+5. planner/provider comparison for order choice and recovery strategy
+6. mission-time optimization after retrieval reliability is stable

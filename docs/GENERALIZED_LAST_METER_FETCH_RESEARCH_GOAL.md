@@ -17,16 +17,19 @@ not only the current saved layouts.
 
 ## Next Major Milestone
 
-Deliver Open-Field Planner-Gated Generalized Fetch-To-Pose v1: a no-shoot,
-robot-owned fetch behavior where an LLM/world-state planner solves field-like
-setup geometry before local fetch begins. The planner receives robot, ball,
-target, freshness, confidence, and safety constraints, then proposes a bounded
-maneuver sequence such as scan, reposition, wraparound setup, re-aim,
-push-ready validation, local fetch, recovery, or no-go. Deterministic validators
-compile or reject that proposal. Deterministic route owners execute accepted
-motion through Nav2, setup routines, and local fetch. High-frequency control
-stays with Nav2, deterministic controllers, or later learned-local components
-behind guards.
+Deliver Multi-Ball Retrieval v1: a robot-owned field behavior that identifies
+multiple balls on a bounded soccer-field or putting-green surface, plans an
+efficient retrieval order, executes repeated setup/capture/push-to-target
+cycles, and proves reliability through visually reviewed multi-angle demos plus
+seeded randomized multi-ball scenarios. Open-Field Planner-Gated Generalized
+Fetch-To-Pose v1 remains the local primitive underneath this milestone. The
+LLM/world-state planner receives robot, ball, target, freshness, confidence,
+and safety constraints, then proposes a bounded maneuver sequence such as scan,
+reposition, wraparound setup, re-aim, push-ready validation, local fetch,
+recovery, or no-go. Deterministic validators compile or reject that proposal.
+Deterministic route owners execute accepted motion through Nav2, setup
+routines, and local fetch. High-frequency control stays with Nav2,
+deterministic controllers, or later learned-local components behind guards.
 
 Scope correction: this milestone proves open-field setup-to-push-ready
 planning plus the bounded local fetch skill. The route labels
@@ -87,6 +90,19 @@ this as the current open-field visual UAT proof and as a control lesson:
 Nav2 remains useful for long-haul setup, while measured local setup/refinement
 is now a first-class route owner before local fetch contact. Promotion evidence
 still requires the canonical saved-layout and seeded-random gates.
+
+June 6, 2026 multi-ball retrieval update: the active milestone now rolls the
+open-field local primitive into a three-ball mission surface. Branch
+`spike/fetch-multiball-open-field-20260606` owns this work. The first gate,
+`scripts/fetch_multiball_retrieval_gate.py`, generates bounded
+`open_field_multiball_v1` scenes, plans a retrieval order, writes one
+planner-routed local-fetch layout per ball, and records replay commands for
+visual UAT. The first dry-run package is
+`artifacts/session/multiball_retrieval_v1_dryrun_seed20260606_20260606/fetch_multiball_retrieval_gate/scorecard.md`:
+four three-ball scenes, twelve planned retrieval steps, and planner-ready
+commands for every ball. This is planning evidence. The next proof step is
+same-session live multi-ball retrieval with onboard, topdown, and world/context
+video plus mission-level retrieval scoring.
 
 ## May 31, 2026 Evidence And Architecture Reset
 

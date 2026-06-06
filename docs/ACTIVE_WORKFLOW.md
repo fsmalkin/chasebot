@@ -168,6 +168,28 @@ push-ready handoff for every counted executable fetch. It is visual UAT
 evidence; canonical promotion still follows saved-layout and seeded-random
 gates.
 
+Multi-ball retrieval now starts as a planning and replay-command gate above the
+same one-ball local primitive. Use this first to confirm bounded scene spread,
+retrieval order, route ownership, and per-ball local-fetch layouts:
+
+```powershell
+python scripts\fetch_multiball_retrieval_gate.py `
+  --campaign-id <id> `
+  --dry-run `
+  --random-cases 4 `
+  --balls-per-scene 3 `
+  --seed 20260606
+```
+
+Current dry-run reference:
+`artifacts/session/multiball_retrieval_v1_dryrun_seed20260606_20260606/fetch_multiball_retrieval_gate/scorecard.md`.
+The reference generated four bounded three-ball scenes and twelve replayable
+local-fetch commands. It is planning evidence only. The next live rung is one
+same-session multi-ball visual demo that retrieves three balls through repeated
+planner-routed setup/capture/push-to-target cycles and includes onboard,
+topdown, world/context video, keyframe sequence review, and mission-level
+retrieval scoring.
+
 Saved-anchor repeatability analyzer scope:
 
 ```powershell
@@ -2078,12 +2100,16 @@ Commands:
 
 Research contract:
 
-Next major milestone: Deliver Open-Field Planner-Gated Generalized
-Fetch-To-Pose v1, a no-shoot, robot-owned fetch behavior where an
-LLM/world-state planner solves field-like setup geometry, deterministic
-validators compile the maneuver plan, Nav2/setup/local route owners execute
-accepted motion, and a thin fetch adapter monitors delivery geometry, object
-progress, escape, stale state, and replanning triggers.
+Next major milestone: Deliver Multi-Ball Retrieval v1, a robot-owned field
+behavior that identifies multiple balls on a bounded soccer-field or
+putting-green surface, plans an efficient retrieval order, and executes repeated
+setup/capture/push-to-target cycles through the current open-field
+`fetch_to_pose` primitive. Open-Field Planner-Gated Generalized Fetch-To-Pose v1
+is the local primitive underneath this milestone: the LLM/world-state planner
+solves field-like setup geometry, deterministic validators compile the maneuver
+plan, Nav2/setup/local route owners execute accepted motion, and the fetch
+adapter monitors delivery geometry, object progress, escape, stale state, and
+replanning triggers.
 
 Scope correction: Generalized Fetch-To-Pose v1 proves open-field
 setup-to-push-ready planning plus the bounded local fetch subsystem. The

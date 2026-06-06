@@ -20,12 +20,16 @@ The previous gather/place objective remains useful as negative baseline
 evidence, but success is no longer final stop in the corral. Success is
 trajectory intersection with a delivery radius around the requested target pose.
 
-Next major milestone: Deliver Open-Field Planner-Gated Generalized
-Fetch-To-Pose v1, a no-shoot, robot-owned fetch behavior where an
-LLM/world-state planner solves field-like setup geometry, deterministic
-validators compile the plan, Nav2/setup/local route owners execute accepted
-motion, and the fetch adapter monitors delivery geometry, object progress,
-escape, stale state, and replanning triggers.
+Next major milestone: Deliver Multi-Ball Retrieval v1, a robot-owned field
+behavior that identifies multiple balls on a bounded soccer-field or
+putting-green surface, plans an efficient retrieval order, and executes repeated
+setup/capture/push-to-target cycles through the current open-field
+`fetch_to_pose` primitive. Open-Field Planner-Gated Generalized Fetch-To-Pose v1
+is the local primitive underneath this milestone: an LLM/world-state planner
+solves field-like setup geometry, deterministic validators compile the plan,
+Nav2/setup/local route owners execute accepted motion, and the fetch adapter
+monitors delivery geometry, object progress, escape, stale state, and
+replanning triggers.
 
 Scope correction: this plan covers both the open-field planner handoff and the
 bounded local fetch subsystem. The planner should propose executable maneuver

@@ -6,14 +6,18 @@ same control loop under different names. The active UAT baseline remains
 research portfolio should deliberately test wider designs that may generalize
 better, reduce telemetry fragility, or simplify eventual hardware transfer.
 
-Next major milestone: Deliver Open-Field Planner-Gated Generalized
-Fetch-To-Pose v1, a no-shoot, robot-owned fetch behavior where an
-LLM/world-state planner solves field-like setup geometry, deterministic
-validators compile the maneuver plan, Nav2/setup/local route owners execute
-accepted motion, and a thin fetch adapter monitors corrected delivery geometry,
-object progress, escape, stale state, and replanning triggers. Custom contact
-routines and AI/model proposal layers remain fallback lanes that earn live
-authority only from corrected, reproducible stage-gap evidence.
+Next major milestone: Deliver Multi-Ball Retrieval v1, a robot-owned field
+behavior that identifies multiple balls on a bounded soccer-field or
+putting-green surface, plans an efficient retrieval order, and executes repeated
+setup/capture/push-to-target cycles through the current open-field
+`fetch_to_pose` primitive. Open-Field Planner-Gated Generalized Fetch-To-Pose v1
+is the local primitive underneath this milestone: an LLM/world-state planner
+solves field-like setup geometry, deterministic validators compile the maneuver
+plan, Nav2/setup/local route owners execute accepted motion, and the fetch
+adapter monitors corrected delivery geometry, object progress, escape, stale
+state, and replanning triggers. Custom contact routines and AI/model proposal
+layers remain fallback lanes that earn live authority only from corrected,
+reproducible stage-gap evidence.
 
 May 31, 2026 evidence reset: the delivery-marker geometry issue changed the
 meaning of recent fetch metrics. A fetch result is architecture evidence only

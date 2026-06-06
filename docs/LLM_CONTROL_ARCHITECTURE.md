@@ -110,6 +110,16 @@ local refinement owns final setup-to-push-ready, and local fetch starts only
 after the measured gate passes. This remains visual UAT evidence; canonical
 promotion still requires saved-layout and seeded-random gates.
 
+Multi-ball retrieval adds one planning layer above that primitive. The planner
+now has two separable jobs: choose the mission order across visible balls, then
+compile each selected ball into a bounded one-ball maneuver sequence. The first
+implementation surface is `scripts/fetch_multiball_retrieval_gate.py`, which
+generates `open_field_multiball_v1` scenes, chooses an order with deterministic
+costing, and writes one planner-routed local-fetch layout per ball. LLM/provider
+work should compare order choice, route choice, and recovery strategy against
+that deterministic baseline before it influences live execution. Low-level
+motion remains owned by Nav2, deterministic setup/refinement, and local fetch.
+
 The opposite-side fetch probe turns that boundary into a control requirement.
 Local fetch should enter contact from a forward-driving setup. Reverse pre-stage
 commands are legacy gather behavior and should be treated as a planner/executor

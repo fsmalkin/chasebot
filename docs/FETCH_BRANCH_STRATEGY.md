@@ -4,12 +4,16 @@ This document owns branch-role decisions for calibrated golf fetch work. Use the
 roadmap for priority, `ACTIVE_WORKFLOW.md` for gates and commands, and the
 `OBJECT_CENTRIC_*` docs for research details.
 
-Next major milestone: Deliver Open-Field Planner-Gated Generalized
-Fetch-To-Pose v1, a no-shoot, robot-owned fetch behavior where an
-LLM/world-state planner solves field-like setup geometry, deterministic
-validators compile the maneuver plan, Nav2/setup/local route owners execute
-accepted motion, and a thin fetch adapter monitors delivery geometry, object
-progress, escape, stale state, and replanning triggers.
+Next major milestone: Deliver Multi-Ball Retrieval v1, a robot-owned field
+behavior that identifies multiple balls on a bounded soccer-field or
+putting-green surface, plans an efficient retrieval order, and executes repeated
+setup/capture/push-to-target cycles through the current open-field
+`fetch_to_pose` primitive. Open-Field Planner-Gated Generalized Fetch-To-Pose v1
+is now the local primitive underneath that milestone: the LLM/world-state
+planner solves field-like setup geometry, deterministic validators compile the
+bounded maneuver plan, Nav2/setup/local route owners execute accepted motion,
+and the fetch adapter monitors delivery geometry, object progress, escape,
+stale state, and replanning triggers.
 
 Scope correction: this branch strategy covers both the planner handoff lane and
 the bounded local fetch subsystem. Major unknowns and arbitrary random scenes
@@ -35,6 +39,19 @@ then bounded local setup/recovery takes over when Nav2 times out or leaves dirty
 pre-contact geometry. Future branches should preserve this handoff boundary and
 expand seeded/canonical proof rather than returning to pure Nav2 or direct local
 fetch dispatch from broad field geometry.
+
+June 6, 2026 multi-ball branch decision: use
+`spike/fetch-multiball-open-field-20260606` for Multi-Ball Retrieval v1. This
+branch starts above the proven one-ball local primitive. Its first gate is
+`scripts/fetch_multiball_retrieval_gate.py`, which generates bounded
+`open_field_multiball_v1` scenes, chooses a retrieval order, materializes one
+planner-routed local-fetch layout per ball, and records replay commands for
+visual UAT. The current dry-run reference is
+`artifacts/session/multiball_retrieval_v1_dryrun_seed20260606_20260606/fetch_multiball_retrieval_gate/scorecard.md`:
+four three-ball scenes, twelve planned retrieval steps, and planner-ready
+commands for every ball. The dry-run is planning evidence only; promotion
+requires same-session live multi-ball demos with browser-watchable onboard,
+topdown, and context proof.
 
 ## Recommended Branch Roles
 
