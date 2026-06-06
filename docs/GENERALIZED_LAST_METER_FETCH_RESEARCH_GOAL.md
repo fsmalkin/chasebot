@@ -92,10 +92,10 @@ is now a first-class route owner before local fetch contact. Promotion evidence
 still requires the canonical saved-layout and seeded-random gates.
 
 June 6, 2026 multi-ball retrieval update: the active milestone now rolls the
-open-field local primitive into a three-ball mission surface. Branch
-`spike/fetch-multiball-open-field-20260606` owns this work. The first gate,
-`scripts/fetch_multiball_retrieval_gate.py`, generates bounded
-`open_field_multiball_v1` scenes, plans a retrieval order, writes one
+open-field local primitive into a three-ball mission surface with measured
+stage ownership. Branch `spike/fetch-multiball-open-field-20260606` owns this
+work. The first gate, `scripts/fetch_multiball_retrieval_gate.py`, generates
+bounded `open_field_multiball_v1` scenes, plans a retrieval order, writes one
 planner-routed local-fetch layout per ball, and records replay commands for
 visual UAT. The first dry-run package is
 `artifacts/session/multiball_retrieval_v1_dryrun_seed20260606_20260606/fetch_multiball_retrieval_gate/scorecard.md`:
@@ -103,6 +103,17 @@ four three-ball scenes, twelve planned retrieval steps, and planner-ready
 commands for every ball. This is planning evidence. The next proof step is
 same-session live multi-ball retrieval with onboard, topdown, and world/context
 video plus mission-level retrieval scoring.
+
+The current evidence splits the architecture cleanly. Seed `20260606` passed a
+fresh-session two-scene live gate with six successful deliveries:
+`artifacts/session/live_multiball_retrieval_v1_seed20260606_two_scene_fresh_semantics_20260606/fetch_multiball_retrieval_gate/scorecard.md`.
+Seed `20260607` failed at setup/reposition rather than ball physics:
+`artifacts/session/live_multiball_retrieval_v1_seed20260607_scene01_20260606/fetch_multiball_retrieval_gate/scorecard.md`,
+and the `nav2_relative` probe did not repair that failure. Treat this as the
+current research boundary: Nav2 remains useful for measured-admissible
+free-space repositioning, while a local setup/capture owner must get the robot
+behind the selected ball on the ball-target line before guarded `fetch_to_pose`
+contact begins.
 
 ## May 31, 2026 Evidence And Architecture Reset
 
@@ -561,12 +572,14 @@ broader planner-routed scenario coverage.
 
 ## May 28, 2026 Direction
 
-The research pass selected a no-shoot runtime direction. After the May 31
-evidence reset, the preferred runtime shape is planner-gated and Nav2-first:
-the planner chooses the route class, Nav2 owns robot motion where it has a
-clear contract, and the fetch adapter verifies object outcome against corrected
-geometry. Bounded push-and-coast routines remain available for contact-rich
-subroutines outside Nav2's clean local-control contract.
+The research pass selected a no-shoot runtime direction. The May 31 evidence
+reset and June 6 multi-ball probes now set the preferred runtime shape:
+planner-gated control with measured stage ownership. The planner chooses the
+route class, Nav2 owns validated free-space repositioning, a local
+setup/capture owner gets the robot behind the ball on the ball-target line, and
+the fetch adapter verifies object outcome against corrected geometry. Bounded
+push-and-coast routines remain available for contact-rich subroutines that
+require measured ball-relative control.
 
 AI is part of the direction, but it is layered:
 
@@ -579,9 +592,9 @@ AI is part of the direction, but it is layered:
    freshness, ball drift, retry budget, safe stop, and promotion gates.
 4. Direct high-frequency LM-owned `/cmd_vel` remains out of scope.
 
-Use contact-aware geometric-shooter evidence as a physics and trajectory probe
-only. It is not the preferred runtime architecture because it currently proves a
-direct ball-velocity impulse, not robot-owned bounded pushing.
+Use contact-aware geometric-shooter evidence as a physics and trajectory probe.
+The preferred runtime architecture proves robot-owned bounded pushing, while
+the shooter artifacts prove direct ball-velocity impulse behavior.
 
 May 29, 2026 evidence update: the Nav2 corridor-push spike answered the cheap
 physics/controller question and left sole-contact promotion blocked by
@@ -598,15 +611,15 @@ random/generalization gate remains pending.
   closest approach was `0.451645m` against the `0.300m` contract.
 
 Interpretation: Nav2 can provide useful real-time corridor tracking and bounded
-contact, but path completion is not the same as object delivery. The `right05`
-miss is close enough to be a constructive boundary case, not a reason to
-replace Nav2 wholesale. Do not promote `nav2_followpath_corridor_push_v1` as a
-standalone contact owner. Freeze the right05 stop-short artifact and move the
-next focused lane to a hybrid fetch stage supervisor: Nav2 owns long-haul,
-coarse setup, and corridor tracking where it is strong; deterministic homebrew
-routines own fine pre-capture alignment, first contact, terminal re-push/coast,
-and recentering; the AI/model layer starts in shadow mode as the handoff and
-maneuver-class proposer. This remains distinct from the old
+contact, but path completion is separate from object delivery. The `right05`
+miss is a constructive boundary case for the measured stage owner. Freeze the
+right05 stop-short artifact and keep `nav2_followpath_corridor_push_v1` as
+evidence rather than a standalone contact owner. The next focused lane is a
+hybrid fetch stage supervisor: Nav2 owns long-haul free-space motion where it is
+strong; deterministic local routines own fine pre-capture alignment, first
+contact, terminal re-push/coast, and recentering; the AI/model layer starts in
+shadow mode as the handoff and maneuver-class proposer. This remains distinct
+from the old
 `nav2_mppi_follow_path_reacquire_v1` pre-stage evidence branch.
 
 May 29, 2026 dashboard UAT refinement: dashboard random golf-fetch runs now

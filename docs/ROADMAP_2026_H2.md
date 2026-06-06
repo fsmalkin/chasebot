@@ -505,15 +505,15 @@ Current direction update:
 Next major milestone: Deliver Multi-Ball Retrieval v1, a robot-owned field
 behavior that identifies multiple balls on a bounded soccer-field or
 putting-green surface, plans an efficient retrieval order, and executes repeated
-setup/capture/push-to-target cycles through the current open-field
-`fetch_to_pose` primitive. Open-Field Planner-Gated Generalized Fetch-To-Pose v1
-is the local primitive underneath the multi-ball milestone: an LLM/world-state
-planner solves field-like setup geometry, deterministic validators compile the
-maneuver plan, Nav2/setup/local route owners execute accepted motion, and the
-fetch adapter monitors delivery geometry, object progress, escape, stale state,
-and replanning triggers. Custom contact routines and AI/model proposal layers
-remain fallback lanes that earn live authority only from corrected,
-reproducible stage-gap evidence.
+setup/capture/push-to-target cycles through a measured local `fetch_to_pose`
+primitive. Open-Field Planner-Gated Generalized Fetch-To-Pose v1 is the local
+primitive underneath the multi-ball milestone: an LLM/world-state planner
+solves mission strategy and route class, deterministic validators compile the
+maneuver plan, Nav2 owns measured-admissible free-space repositioning, a local
+setup/capture owner gets behind the selected ball on the ball-target line, and
+the fetch adapter monitors delivery geometry, object progress, escape, stale
+state, and replanning triggers. AI/model proposal layers earn live authority
+through corrected, reproducible stage-gap evidence and deterministic guards.
 
 Planner-gating correction: this milestone proves setup-to-push-ready planning
 plus the bounded local fetch skill. The planner should propose executable
@@ -630,9 +630,11 @@ The roadmap sequence is now capture-geometry setup first, then saved-anchor
 one-run rebuild, then terminal correction only for clean near-contract misses.
 The intended algorithm is straightforward: planner proposes a bounded maneuver
 sequence, validators require measured push-ready geometry, setup owners reach a
-capture pose behind the ball on the delivery line, Nav2 owns corridor push when
-that handoff is valid, the delivery monitor reports outcome, and bounded
-correction runs only from a clean terminal state.
+capture pose behind the ball on the delivery line, guarded local fetch/contact
+runs from that handoff, the delivery monitor reports outcome, and bounded
+correction runs only from a clean terminal state. Nav2 owns free-space
+repositioning before this local handoff when route validation says it is
+admissible.
 
 June 2 saved-anchor repeatability repair cleared the current setup/contact
 blocker for the saved anchors. The corrected gate
@@ -689,9 +691,10 @@ browser-watchable UAT package
 `artifacts/session/uat_fetch_guarded_live_seeded_case04_20260602/fetch_visual_uat_package/scorecard.md`
 passes with mobile-watchable onboard, topdown, debug, and world-stream video.
 The next roadmap step is operator clip review. This keeps the broader
-architecture simple: planner selects the route class, the setup/capture stage
-gets the robot onto the delivery line, Nav2 owns the corridor push, and the
-monitor verifies object outcome.
+architecture simple: planner selects the route class, Nav2 handles validated
+free-space repositioning, the setup/capture stage gets the robot onto the
+delivery line, guarded local fetch/contact delivers the ball, and the monitor
+verifies object outcome.
 
 June 2 opposite-side fetch probe expanded the validated subsystem envelope. The
 layout `ros2_config/target_layouts/golf_ball_circle_delivery_opposite_side_01.json`
@@ -1766,10 +1769,17 @@ June 6 multi-ball evidence update: the first same-seed visual UAT rung is
 green. Seed `20260606` produced a three-ball same-session pass with
 browser-watchable video and corrected multi-ball visual packaging:
 `artifacts/session/live_multiball_retrieval_v1_seed20260606_scene01_guarded_20260606_repack/fetch_visual_uat_package/scorecard.md`.
+The stronger fresh-session rerun passed two seeded scenes and six deliveries:
+`artifacts/session/live_multiball_retrieval_v1_seed20260606_two_scene_fresh_semantics_20260606/fetch_multiball_retrieval_gate/scorecard.md`.
 The follow-on broad seed `20260620` remains red:
 `artifacts/session/live_multiball_retrieval_v1_seed20260620_scene01_refine_20260606/fetch_multiball_retrieval_gate/scorecard.md`.
-That failure moved the roadmap emphasis from order optimization alone to
-mission-level decomposition. The next milestone target is a planner-owned
-multi-ball mission loop that chooses retrieval order, setup route, recovery
-route, and push-ready handoff timing from measured state, then dispatches the
-one-ball local primitive only when the measured handoff gate is green.
+The new seed `20260607` exposed the current architecture limit:
+`artifacts/session/live_multiball_retrieval_v1_seed20260607_scene01_20260606/fetch_multiball_retrieval_gate/scorecard.md`
+and the follow-up `nav2_relative` probe both failed at setup/reposition rather
+than ball physics. That evidence moves the roadmap emphasis from order
+optimization to mission-level decomposition and measured stage ownership. The
+next milestone target is a planner-owned multi-ball mission loop that chooses
+retrieval order, route class, recovery route, and push-ready handoff timing from
+measured state. Nav2 owns free-space repositioning after route validation. A
+local setup/capture owner gets behind the selected ball on the ball-target line
+before dispatching the one-ball local primitive.

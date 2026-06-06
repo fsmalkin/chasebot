@@ -1962,14 +1962,18 @@ Default architecture path after the reset:
    - `scan_or_perceive_first`
    - `recovery_or_reaim`
    - `ambiguous_or_unsafe_no_go`
-2. Nav2 owns long-haul navigation, repositioning, corridor approach, and
-   bounded push paths where corrected evidence shows the ball remains in the
-   local envelope.
-3. The fetch adapter translates intent, monitors corrected geometry, and
+2. Nav2 owns measured-admissible free-space repositioning. Nav2 action success
+   must be validated against measured robot pose before any ball-relative
+   handoff.
+3. A measured local setup/capture owner gets the robot behind the selected ball
+   on the ball-target line and must satisfy the push-ready gate before guarded
+   `fetch_to_pose` contact begins.
+4. The fetch adapter translates intent, monitors corrected geometry, and
    cancels or replans on success, escape, stale state, unsafe drift, timeout, or
    action abort.
-4. Custom contact routines and AI push-coast proposals are fallback lanes for
-   reproducible stage gaps found after corrected Nav2/LLM-first evidence.
+5. AI push-coast and route-selection proposals start as handoff/maneuver
+   guidance for reproducible stage gaps, then earn live authority through
+   deterministic guards and corrected visual evidence.
 
 ## Corral Surface Calibration
 
@@ -2136,47 +2140,53 @@ Research contract:
 Next major milestone: Deliver Multi-Ball Retrieval v1, a robot-owned field
 behavior that identifies multiple balls on a bounded soccer-field or
 putting-green surface, plans an efficient retrieval order, and executes repeated
-setup/capture/push-to-target cycles through the current open-field
-`fetch_to_pose` primitive. Open-Field Planner-Gated Generalized Fetch-To-Pose v1
-is the local primitive underneath this milestone: the LLM/world-state planner
-solves field-like setup geometry, deterministic validators compile the maneuver
-plan, Nav2/setup/local route owners execute accepted motion, and the fetch
-adapter monitors delivery geometry, object progress, escape, stale state, and
-replanning triggers.
+setup/capture/push-to-target cycles through a measured local `fetch_to_pose`
+primitive. Open-Field Planner-Gated Generalized Fetch-To-Pose v1 is the local
+primitive underneath this milestone: the LLM/world-state planner solves mission
+strategy and route class, deterministic validators compile the maneuver plan,
+Nav2 owns free-space repositioning when measured route validation is admissible,
+a measured local setup/capture owner gets the robot behind the ball on the
+ball-target line, and the fetch adapter monitors delivery geometry, object
+progress, escape, stale state, and replanning triggers.
 
 Scope correction: Generalized Fetch-To-Pose v1 proves open-field
 setup-to-push-ready planning plus the bounded local fetch subsystem. The
 broader product path is:
-`LLM/world-state planner -> maneuver compiler/validator -> selected route owner
--> measured push-ready gate -> guarded local fetch -> monitor/result back to
-planner`.
+`LLM/world-state planner -> maneuver compiler/validator -> Nav2 free-space or
+local setup/capture owner -> measured push-ready gate -> guarded local fetch ->
+monitor/result back to planner`.
 
 1. freeze `nav2_mppi_follow_path_reacquire_v1` as the baseline/evidence branch rather than continuing broad MPPI/capture threshold tuning
 2. reserve historical Nav2/MPPI branches for long-range/pre-stage evidence.
    The fresh `nav2_followpath_corridor_push_v1` hypothesis has now been tested:
-   Nav2 can own useful ball-target corridor `FollowPath` contact, but the saved
-   `right05` `3/3` promotion failure shows it is not sufficient as the sole
-   contact controller
+   Nav2 provides useful ball-target corridor `FollowPath` contact, and the
+   saved `right05` `3/3` promotion failure makes it evidence rather than the
+   sole contact controller
 3. treat `object_centric_gather_policy_v1` as a historical gather/place baseline and source of useful launch/roll behavior
 4. define `fetch_to_pose` first; user/person detection comes later through the same target-pose contract
-5. score fetch success by measured ball-trajectory intersection with a delivery radius, not final stop in a corral
-6. run fetch as bounded `plan -> setup -> push-readiness gate -> Nav2 corridor push -> observe -> recover/reacquire -> done/give_up` cycles with explicit attempt and mission budgets
+5. score fetch success by measured ball-trajectory intersection with a delivery radius; final stop in a corral is historical reporting context
+6. run fetch as bounded `plan -> route validation -> free-space reposition or
+   local setup/capture -> push-readiness gate -> guarded local fetch -> observe
+   -> recover/reacquire -> done/give_up` cycles with explicit attempt and
+   mission budgets
 7. keep deterministic safety filters around every policy proposal: command bounds, ball drift, clearance, target freshness, timeout, stuck state, and safe-stop fallback
 8. capture shot-outcome, push-readiness, surface-calibration, failure-replay, and counterfactual-prediction data before tuning push/coast behavior
-9. keep AI as a fallback local lane through shadow-mode learned
-   handoff/maneuver proposal first: stay with Nav2, terminal re-push,
-   recenter, abort/re-stage, miss vector, coast timing, and recovery side
+9. use AI first as a shadow-mode handoff and maneuver proposer for setup,
+   capture, and recovery decisions: stay with Nav2, switch to local setup,
+   terminal re-push, recenter, abort/re-stage, miss vector, coast timing, and
+   recovery side
 10. allow LM/VLA-style models to supervise task mode, failure interpretation,
     known maneuver choices, and subsystem handoff only through deterministic
     contracts
 11. keep direct high-frequency LLM motor control out of scope
 12. keep `physics-calibrated-golf-fetch-v1` as the stable demo/UAT integration branch; use short-lived `spike/...` branches for targeted requalification and archive blocked architecture branches as evidence only
 13. preferred immediate requalification:
-    corrected Nav2/LLM-first saved-layout and planner-approved local random
-    evidence with same-session video and corrected marker geometry; keep
-    `spike/fetch-arch-ai-push-coast-servo-20260529` for fallback analyzers,
-    guards, shadow scoring, and narrow guarded-live routines
-14. do not confuse control-family screens with broad architecture coverage; new architecture spikes must change an ownership boundary, prediction model, actuation/contact strategy, or state-machine boundary and must name the expected generalization/product benefit
+    measured local setup/capture-owner evidence on the latest multi-ball hard
+    seeds, plus planner-approved saved-layout and local random evidence with
+    same-session video and corrected marker geometry. Nav2 remains a
+    free-space route owner; `spike/fetch-arch-ai-push-coast-servo-20260529`
+    remains the analyzer, guard, shadow-scoring, and narrow guarded-live lane.
+14. use architecture spikes for broad coverage only when they change an ownership boundary, prediction model, actuation/contact strategy, or state-machine boundary and name the expected generalization/product benefit
 15. treat the May 27 opposite-side dashboard observation as a generalization
     signal: saved-layout gates prove the known geometry, while target-relative
     side changes must be covered by seeded random/generalization suites before
@@ -2194,12 +2204,12 @@ planner`.
 19. require `geometry_consistency.pass=true`, corrected visible delivery marker,
     and same-session browser-watchable onboard plus context videos before
     counting any fetch result as UAT or architecture evidence
-20. use the June 1 stage-boundary invariant as the current local fetch baseline:
-    planner-approved local case -> setup/reacquire to measured push-ready pose ->
-    push-readiness gate -> Nav2 corridor push -> delivery monitor. A
-    contact-buffer handoff and deterministic first-contact servo may appear
-    inside setup/contact confirmation. The measured push-readiness gate remains
-    the required dispatch condition.
+20. use the June 6 stage-boundary invariant as the current local fetch baseline:
+    planner-approved local case -> measured local setup/capture owner ->
+    push-readiness gate -> guarded local fetch/contact routine -> delivery
+    monitor. Nav2 may place the robot in free space before the local owner takes
+    over. The measured push-readiness gate remains the required dispatch
+    condition.
 21. use the fetch delivery pose as the active setup/capture zone for every
     `fetch_to_pose` mission. The legacy corral zone remains historical reporting
     context only. The June 2 opposite-side probe found that pre-stage/stage

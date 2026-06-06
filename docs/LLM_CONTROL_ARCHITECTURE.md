@@ -110,15 +110,19 @@ local refinement owns final setup-to-push-ready, and local fetch starts only
 after the measured gate passes. This remains visual UAT evidence; canonical
 promotion still requires saved-layout and seeded-random gates.
 
-Multi-ball retrieval adds one planning layer above that primitive. The planner
-now has two separable jobs: choose the mission order across visible balls, then
-compile each selected ball into a bounded one-ball maneuver sequence. The first
-implementation surface is `scripts/fetch_multiball_retrieval_gate.py`, which
-generates `open_field_multiball_v1` scenes, chooses an order with deterministic
-costing, and writes one planner-routed local-fetch layout per ball. LLM/provider
-work should compare order choice, route choice, and recovery strategy against
-that deterministic baseline before it influences live execution. Low-level
-motion remains owned by Nav2, deterministic setup/refinement, and local fetch.
+Multi-ball retrieval adds one mission-planning layer above that primitive. The
+planner chooses the retrieval order across visible balls, then compiles each
+selected ball into a bounded one-ball maneuver sequence. The current evidence
+shows that route ownership matters as much as order choice: Nav2 can help with
+free-space repositioning, while measured local setup/capture must own the final
+behind-ball geometry before contact. The first implementation surface is
+`scripts/fetch_multiball_retrieval_gate.py`, which generates
+`open_field_multiball_v1` scenes, chooses an order with deterministic costing,
+and writes one planner-routed local-fetch layout per ball. LLM/provider work
+should compare mission strategy, route choice, recovery strategy, and handoff
+timing against that deterministic baseline before it influences live execution.
+Low-level motion remains owned by Nav2 free-space navigation, deterministic
+local setup/capture, and guarded local fetch.
 
 The opposite-side fetch probe turns that boundary into a control requirement.
 Local fetch should enter contact from a forward-driving setup. Reverse pre-stage
@@ -146,11 +150,13 @@ The immediate hybrid learned lane is:
 
 The current preferred fetch stack is:
 
-`LLM/world planner -> deterministic maneuver compiler/validator -> Nav2/setup route owners -> measured push-ready gate -> local fetch/corridor push -> monitor -> bounded correction/replan`
+`LLM/world planner -> deterministic maneuver compiler/validator -> Nav2
+free-space or measured local setup/capture owner -> measured push-ready gate ->
+guarded local fetch/contact routine -> monitor -> bounded correction/replan`
 
-This is a no-shoot architecture. Contact-aware geometric-shooter artifacts can
-inform roll/coast physics, but direct ball impulses are not a runtime control
-owner. Large calibrated simulation batches may train the local predictor.
+This architecture is no-shoot. Contact-aware geometric-shooter artifacts can
+inform roll/coast physics. Runtime control excludes direct ball impulses. Large
+calibrated simulation batches may train the local predictor.
 V-JEPA-style video world models may be useful as offboard teachers or research
 baselines for candidate-action scoring, but onboard execution should be a small
 structured or distilled inference path sized for the canonical `tensorrt_int8`
