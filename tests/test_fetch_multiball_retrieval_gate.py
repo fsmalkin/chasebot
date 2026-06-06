@@ -602,6 +602,9 @@ def test_replanning_rows_can_use_bounded_extra_attempt_to_deliver_failed_ball(tm
 
     assert len(rows) == 3
     assert [bool(row["mission"]["fetch_to_pose_pass"]) for row in rows] == [False, True, True]
+    assert all(row["selected_ball_id"] == row["ball_id"] for row in rows)
+    assert all(isinstance(row["route_quality"], dict) for row in rows)
+    assert all(isinstance(row["route_cost"], dict) for row in rows)
     assert replan["max_iterations"] == 3
     assert replan["all_balls_delivered"] is True
     assert replan["remaining_ball_ids"] == []
@@ -773,6 +776,96 @@ def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatc
     assert all(row["fetch_to_pose_pass"] for row in summary["step_rows"])
     assert all(row["closest_approach_m"] == 0.18 for row in summary["step_rows"])
     assert all(row["shot_reason"] == "trajectory_intersects_delivery_radius" for row in summary["step_rows"])
+    assert summary["scene_rows"][0]["delivered_ball_count"] == 3
+    assert summary["scene_rows"][0]["remaining_ball_count"] == 0
+    assert summary["scene_rows"][0]["fetch_to_pose_pass_count"] == 3
+    assert summary["scene_rows"][0]["fetch_to_pose_fail_count"] == 0
+    assert set(summary["scene_rows"][0]["delivered_ball_ids"]) == {"ball_1", "ball_2", "ball_3"}
+
+
+def test_multiball_gate_persistent_scene_rows_preserve_live_replanning_counts(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+
+    monkeypatch.setattr(
+        replay_batch,
+        "stop_dashboard_environment",
+        lambda dashboard_url, *, timeout_s: {"request": {"ok": True}, "state": {"environment_state": "stopped"}},
+    )
+    monkeypatch.setattr(
+        replay_batch,
+        "start_dashboard_environment",
+        lambda args: {
+            "request": {"ok": True},
+            "state": {
+                "environment_state": "environment_ready",
+                "phase": "environment_ready",
+                "sim_gate_ready": True,
+                "operator_view_ready": True,
+                "compose_project": "persistent_project",
+                "session_id": "persistent_session",
+            },
+        },
+    )
+    monkeypatch.setattr(
+        multiball_gate,
+        "prepare_persistent_field_scene",
+        lambda **kwargs: {"pass": True, "reason": "persistent_field_ready", "balls": [], "robot_pose": {}},
+    )
+
+    def fake_materialize_replanning_rows(*args, **kwargs):
+        rows = [
+            {
+                "scene_id": "seed20260606_multiball_scene01",
+                "step_index": 1,
+                "ball_id": "ball_2",
+                "mission": {"fetch_to_pose_pass": True},
+                "fetch_to_pose_pass": True,
+                "returncode": 0,
+            },
+            {
+                "scene_id": "seed20260606_multiball_scene01",
+                "step_index": 2,
+                "ball_id": "ball_1",
+                "mission": {"fetch_to_pose_pass": False},
+                "fetch_to_pose_pass": False,
+                "returncode": 2,
+            },
+        ]
+        return rows, {
+            "enabled": True,
+            "initial_ball_count": 3,
+            "max_iterations": 3,
+            "delivered_ball_ids": ["ball_2"],
+            "remaining_ball_ids": ["ball_1", "ball_3"],
+            "all_balls_delivered": False,
+            "iterations": [],
+        }
+
+    monkeypatch.setattr(multiball_gate, "materialize_replanning_rows", fake_materialize_replanning_rows)
+
+    summary = multiball_gate.run_gate(
+        _args(
+            campaign_id="persistent_counts",
+            dry_run=False,
+            random_cases=1,
+            balls_per_scene=3,
+            persistent_field=True,
+            fresh_dashboard_session=True,
+            no_visual_package=True,
+            dashboard_url="http://127.0.0.1:8894",
+        )
+    )
+
+    scene_row = summary["scene_rows"][0]
+    assert summary["pass"] is False
+    assert scene_row["pass"] is False
+    assert scene_row["live_all_balls_delivered"] is False
+    assert scene_row["delivered_ball_count"] == 1
+    assert scene_row["remaining_ball_count"] == 2
+    assert scene_row["delivered_ball_ids"] == ["ball_2"]
+    assert scene_row["remaining_ball_ids"] == ["ball_1", "ball_3"]
+    assert scene_row["fetch_to_pose_pass_count"] == 1
+    assert scene_row["fetch_to_pose_fail_count"] == 1
 
 
 def test_multiball_gate_can_package_before_blocking_dashboard_stop(tmp_path, monkeypatch):

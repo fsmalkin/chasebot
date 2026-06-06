@@ -838,8 +838,11 @@ def materialize_plan_rows(
             "scene_id": scene_id,
             "step_index": int(step.get("step_index", 0) or 0),
             "ball_id": str(step.get("ball_id", "") or ""),
+            "selected_ball_id": str(step.get("ball_id", "") or ""),
             "route_label": str(step.get("route_label", "") or ""),
             "route_executor": str(step.get("route_executor", "") or ""),
+            "route_quality": step.get("route_quality", {}) if isinstance(step.get("route_quality"), dict) else {},
+            "route_cost": step.get("cost", {}) if isinstance(step.get("cost"), dict) else {},
             "executable_route": bool(step.get("executable_route", False)),
             "layout_path": artifact_display_path(layout_path),
             "command": command,
@@ -1046,8 +1049,11 @@ def materialize_replanning_rows(
             "scene_id": scene_id,
             "step_index": int(step.get("step_index", 0) or 0),
             "ball_id": str(step.get("ball_id", "") or ""),
+            "selected_ball_id": str(step.get("ball_id", "") or ""),
             "route_label": str(step.get("route_label", "") or ""),
             "route_executor": str(step.get("route_executor", "") or ""),
+            "route_quality": step.get("route_quality", {}) if isinstance(step.get("route_quality"), dict) else {},
+            "route_cost": step.get("cost", {}) if isinstance(step.get("cost"), dict) else {},
             "executable_route": bool(step.get("executable_route", False)),
             "layout_path": artifact_display_path(layout_path),
             "command": command,
@@ -1241,11 +1247,51 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                 str(args.dashboard_url or ""),
                 timeout_s=float(args.env_stop_timeout_s),
             )
+        scene_rows_for_scene = [row for row in rows if row.get("scene_id") == plan.get("scene_id")]
+        fetch_to_pose_pass_count = sum(
+            1 for row in scene_rows_for_scene if bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+        )
+        fetch_to_pose_fail_count = sum(
+            1
+            for row in scene_rows_for_scene
+            if row.get("returncode") is not None
+            and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+        )
+        delivered_ball_ids: list[str] = []
+        remaining_ball_ids: list[str] = []
+        if isinstance(live_replan_summary, dict) and bool(live_replan_summary.get("enabled", False)):
+            delivered_ball_ids = [
+                str(ball_id)
+                for ball_id in live_replan_summary.get("delivered_ball_ids", [])
+                if str(ball_id or "").strip()
+            ]
+            remaining_ball_ids = [
+                str(ball_id)
+                for ball_id in live_replan_summary.get("remaining_ball_ids", [])
+                if str(ball_id or "").strip()
+            ]
+        elif scene_rows_for_scene:
+            delivered_ball_ids = [
+                str(row.get("ball_id", "") or "")
+                for row in scene_rows_for_scene
+                if bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+            ]
         scene_rows.append(
             {
                 "scene_id": str(scene.get("scene_id", "") or ""),
                 "pass": scene_pass,
                 "ball_count": int(plan.get("ball_count", 0) or 0),
+                "delivered_ball_count": len(delivered_ball_ids),
+                "remaining_ball_count": len(remaining_ball_ids),
+                "delivered_ball_ids": delivered_ball_ids,
+                "remaining_ball_ids": remaining_ball_ids,
+                "fetch_to_pose_pass_count": fetch_to_pose_pass_count,
+                "fetch_to_pose_fail_count": fetch_to_pose_fail_count,
+                "live_all_balls_delivered": bool(
+                    isinstance(live_replan_summary, dict)
+                    and live_replan_summary.get("enabled", False)
+                    and live_replan_summary.get("all_balls_delivered", False)
+                ),
                 "retrieval_order": plan.get("retrieval_order", []),
                 "planner_ready": bool(plan.get("planner_ready", False)),
                 "executable_step_count": int(plan.get("executable_step_count", 0) or 0),
