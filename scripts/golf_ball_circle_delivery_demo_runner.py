@@ -2499,6 +2499,8 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Materialize a planner-only route scene, sample it visually, and record that local fetch was intentionally withheld.",
     )
+    parser.add_argument("--use-existing-target-model", action="store_true")
+    parser.add_argument("--preserve-robot-pose", action="store_true")
     parser.add_argument("--nav2-reposition-before-fetch", action="store_true")
     parser.add_argument("--nav2-reposition-frame-id", default="odom")
     parser.add_argument("--nav2-reposition-goal-frame-mode", choices=["nav2_relative", "world_direct"], default="nav2_relative")
@@ -2593,7 +2595,8 @@ def main() -> int:
         latest_feedback="Preparing golf-ball circle delivery demo.",
     )
 
-    remove_model(compose_project=args.compose_project, world_name=args.world_name, model_name=args.target_model_name)
+    if not bool(args.use_existing_target_model):
+        remove_model(compose_project=args.compose_project, world_name=args.world_name, model_name=args.target_model_name)
     remove_model(compose_project=args.compose_project, world_name=args.world_name, model_name=args.zone_model_name)
     spawn_zone = spawn_model(
         compose_project=args.compose_project,
@@ -2604,24 +2607,77 @@ def main() -> int:
         y=args.zone_y,
         z=args.zone_z,
     )
-    spawn_ball = spawn_model(
-        compose_project=args.compose_project,
-        world_name=args.world_name,
-        model_sdf=Path(args.target_model_sdf),
-        model_name=args.target_model_name,
-        x=args.ball_x,
-        y=args.ball_y,
-        z=args.ball_z,
-    )
-    robot_pose = set_model_pose(
-        compose_project=args.compose_project,
-        world_name=args.world_name,
-        model_name="jetbot",
-        x=args.robot_x,
-        y=args.robot_y,
-        z=0.0,
-        yaw=args.robot_yaw,
-    )
+    if bool(args.use_existing_target_model):
+        spawn_ball = {
+            "model_name": args.target_model_name,
+            "model_sdf": str(args.target_model_sdf),
+            "pose": {"x": args.ball_x, "y": args.ball_y, "z": args.ball_z, "yaw": 0.0},
+            "pass": True,
+            "skipped": True,
+            "reason": "use_existing_target_model",
+        }
+    else:
+        spawn_ball = spawn_model(
+            compose_project=args.compose_project,
+            world_name=args.world_name,
+            model_sdf=Path(args.target_model_sdf),
+            model_name=args.target_model_name,
+            x=args.ball_x,
+            y=args.ball_y,
+            z=args.ball_z,
+        )
+    if bool(args.preserve_robot_pose):
+        robot_pose = {
+            "model_name": "jetbot",
+            "pose": {"x": args.robot_x, "y": args.robot_y, "z": 0.0, "yaw": args.robot_yaw},
+            "pass": True,
+            "skipped": True,
+            "reason": "preserve_robot_pose",
+        }
+    else:
+        robot_pose = set_model_pose(
+            compose_project=args.compose_project,
+            world_name=args.world_name,
+            model_name="jetbot",
+            x=args.robot_x,
+            y=args.robot_y,
+            z=0.0,
+            yaw=args.robot_yaw,
+        )
+    initial_pose_samples: list[dict[str, Any]] = []
+    initial_measured_pose: dict[str, Any] = {"available": False}
+    if bool(args.use_existing_target_model) or bool(args.preserve_robot_pose):
+        try:
+            initial_pose_samples = collect_contact_samples(
+                compose_project=args.compose_project,
+                world_name=args.world_name,
+                robot_model_name=args.robot_model_name,
+                ball_model_name=args.target_model_name,
+                duration_s=max(float(args.poll_period_s), 0.2),
+                poll_period_s=args.poll_period_s,
+            )
+        except Exception as exc:
+            initial_measured_pose = {"available": False, "error": str(exc)}
+        if initial_pose_samples:
+            measured_robot_pose, measured_ball_pose = latest_robot_ball_xyyaw(initial_pose_samples)
+            initial_measured_pose = {
+                "available": bool(measured_robot_pose is not None or measured_ball_pose is not None),
+                "sample_count": len(initial_pose_samples),
+                "robot_pose": measured_robot_pose,
+                "ball_pose": measured_ball_pose,
+            }
+            if measured_robot_pose is not None and bool(args.preserve_robot_pose):
+                args.robot_x = float(measured_robot_pose["x"])
+                args.robot_y = float(measured_robot_pose["y"])
+                args.robot_yaw = float(measured_robot_pose["yaw"])
+                robot_pose["pose"] = dict(measured_robot_pose)
+                robot_pose["measured_pose_source"] = "initial_truth_sample"
+            if measured_ball_pose is not None and bool(args.use_existing_target_model):
+                args.ball_x = float(measured_ball_pose["x"])
+                args.ball_y = float(measured_ball_pose["y"])
+                args.ball_z = float(measured_ball_pose.get("z", args.ball_z))
+                spawn_ball["pose"] = dict(measured_ball_pose)
+                spawn_ball["measured_pose_source"] = "initial_truth_sample"
     control_preflight: dict[str, Any] = {
         "required": False,
         "pass": True,
@@ -2633,6 +2689,7 @@ def main() -> int:
             "zone": spawn_zone,
             "ball": spawn_ball,
             "robot_pose": robot_pose,
+            "initial_measured_pose": initial_measured_pose,
             "control_preflight": control_preflight,
             "target_layout": target_layout,
             "nav2_layout_transform": nav2_layout_transform,
@@ -2881,6 +2938,7 @@ def main() -> int:
             "zone": spawn_zone,
             "ball": spawn_ball,
             "robot_pose": robot_pose,
+            "initial_measured_pose": initial_measured_pose,
             "control_preflight": control_preflight,
             "target_layout": target_layout,
             "nav2_layout_transform": nav2_layout_transform,

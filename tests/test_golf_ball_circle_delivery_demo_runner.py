@@ -101,6 +101,23 @@ def test_parse_args_accepts_ai_push_coast_guarded_live(monkeypatch):
     assert args.terminal_correction_extra_margin_m == pytest.approx(0.05)
 
 
+def test_parse_args_accepts_persistent_scene_fetch_flags(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "golf_ball_circle_delivery_demo_runner.py",
+            "--use-existing-target-model",
+            "--preserve-robot-pose",
+        ],
+    )
+
+    args = parse_args()
+
+    assert args.use_existing_target_model is True
+    assert args.preserve_robot_pose is True
+
+
 def test_ai_push_coast_terminal_decision_accepts_clean_near_contract_miss():
     args = SimpleNamespace(
         zone_x=1.12,

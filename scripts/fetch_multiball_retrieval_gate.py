@@ -23,6 +23,10 @@ from typing import Any
 
 import fetch_planner_handoff_gate as planner_gate
 import fetch_planner_route_replay_batch as replay_batch
+from golf_ball_circle_delivery_demo_runner import set_model_pose
+from passive_ball_roll_calibration_runner import DEFAULT_WORLD_NAME
+from passive_ball_roll_calibration_runner import remove_model
+from passive_ball_roll_calibration_runner import spawn_model
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +49,7 @@ MIN_ROBOT_BALL_SEPARATION_M = 0.30
 SETUP_STANDOFF_M = 0.38
 CORRIDOR_INTERFERENCE_RADIUS_M = 0.22
 TARGET_MODEL_NAME_PREFIX = "visit_mission_target_multiball_fetch"
+DEFAULT_BALL_SDF = REPO_ROOT / "ros2_config" / "calibrated_golf_ball.sdf"
 MISSION_SUMMARY_MARKER = replay_batch.MISSION_SUMMARY_MARKER
 VISUAL_PACKAGE_MARKER = replay_batch.VISUAL_PACKAGE_MARKER
 
@@ -105,6 +110,10 @@ def resolve_path(raw_path: str) -> Path:
 def safe_id(value: str) -> str:
     cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "").strip())
     return cleaned.strip("_") or "scene"
+
+
+def target_model_name_for_ball(scene_id: str, ball_id: str) -> str:
+    return f"{TARGET_MODEL_NAME_PREFIX}_{safe_id(scene_id)}_{safe_id(str(ball_id or 'ball'))}"
 
 
 def finite_float(value: Any, default: float = 0.0) -> float:
@@ -562,7 +571,7 @@ def build_step_command(
     compose_project: str = "",
     expected_session_id: str = "",
 ) -> list[str]:
-    target_model_name = f"{TARGET_MODEL_NAME_PREFIX}_{safe_id(scene_id)}_{safe_id(str(step.get('ball_id', 'ball')))}"
+    target_model_name = target_model_name_for_ball(scene_id, str(step.get("ball_id", "ball") or "ball"))
     robot_pose = step.get("estimated_start_robot_pose") if isinstance(step.get("estimated_start_robot_pose"), dict) else {}
     if not robot_pose:
         one_ball_scene = step.get("one_ball_scene") if isinstance(step.get("one_ball_scene"), dict) else {}
@@ -595,6 +604,8 @@ def build_step_command(
         "--ai-push-coast-mode",
         "guarded_live",
     ]
+    if bool(getattr(args, "persistent_field", False)):
+        command.extend(["--use-existing-target-model", "--preserve-robot-pose"])
     if robot_pose:
         command.extend(
             [
@@ -690,6 +701,66 @@ def write_scene_artifacts(root: Path, scene: dict[str, Any], plan: dict[str, Any
     }
 
 
+def prepare_persistent_field_scene(
+    *,
+    scene: dict[str, Any],
+    compose_project: str,
+    world_name: str = DEFAULT_WORLD_NAME,
+) -> dict[str, Any]:
+    scene_id = str(scene.get("scene_id", "scene") or "scene")
+    balls = [ball for ball in scene.get("balls", []) if isinstance(ball, dict)]
+    robot_pose = scene.get("robot_pose", {}) if isinstance(scene.get("robot_pose"), dict) else {}
+    payload: dict[str, Any] = {
+        "enabled": True,
+        "scene_id": scene_id,
+        "compose_project": compose_project,
+        "world_name": world_name,
+        "ball_model_sdf": artifact_display_path(REPO_ROOT / "ros2_config" / "calibrated_golf_ball.sdf"),
+        "ball_count": len(balls),
+        "balls": [],
+        "robot_pose": {},
+        "pass": False,
+    }
+    if not str(compose_project or "").strip():
+        payload["reason"] = "missing_compose_project"
+        return payload
+    all_pass = True
+    for ball in balls:
+        ball_id = str(ball.get("id", "ball") or "ball")
+        pose = ball.get("pose", {}) if isinstance(ball.get("pose"), dict) else {}
+        model_name = target_model_name_for_ball(scene_id, ball_id)
+        remove_model(compose_project=compose_project, world_name=world_name, model_name=model_name)
+        spawn = spawn_model(
+            compose_project=compose_project,
+            world_name=world_name,
+            model_sdf=REPO_ROOT / "ros2_config" / "calibrated_golf_ball.sdf",
+            model_name=model_name,
+            x=finite_float(pose.get("x")),
+            y=finite_float(pose.get("y")),
+            z=finite_float(pose.get("z"), 0.021336),
+        )
+        all_pass = bool(all_pass and spawn.get("pass", False))
+        payload["balls"].append({"ball_id": ball_id, "model_name": model_name, "pose": pose, "spawn": spawn})
+    if robot_pose:
+        robot_result = set_model_pose(
+            compose_project=compose_project,
+            world_name=world_name,
+            model_name="jetbot",
+            x=finite_float(robot_pose.get("x")),
+            y=finite_float(robot_pose.get("y")),
+            z=0.0,
+            yaw=finite_float(robot_pose.get("yaw")),
+        )
+        all_pass = bool(all_pass and robot_result.get("pass", False))
+        payload["robot_pose"] = robot_result
+    else:
+        all_pass = False
+        payload["robot_pose"] = {"pass": False, "reason": "missing_scene_robot_pose"}
+    payload["pass"] = bool(all_pass)
+    payload["reason"] = "persistent_field_ready" if all_pass else "persistent_field_setup_failed"
+    return payload
+
+
 def materialize_plan_rows(
     root: Path,
     plan: dict[str, Any],
@@ -753,6 +824,179 @@ def materialize_plan_rows(
     return rows
 
 
+def pose_from_contact_pose(raw_pose: Any) -> dict[str, float] | None:
+    if not isinstance(raw_pose, dict):
+        return None
+    position = raw_pose.get("position") if isinstance(raw_pose.get("position"), dict) else raw_pose
+    if not isinstance(position, dict):
+        return None
+    return round_pose(
+        finite_float(position.get("x")),
+        finite_float(position.get("y")),
+        z=finite_float(position.get("z")),
+        yaw=finite_float(raw_pose.get("yaw")),
+    )
+
+
+def latest_measured_state_from_mission(mission_summary_path: Path) -> dict[str, Any]:
+    payload = read_json(mission_summary_path)
+    artifact_dir = resolve_path(str(payload.get("artifact_dir", "") or mission_summary_path.parent))
+    contact_trace_path = artifact_dir / "contact_trace.jsonl"
+    robot_pose = None
+    ball_pose = None
+    sample_count = 0
+    if contact_trace_path.is_file():
+        for line in contact_trace_path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            sample_count += 1
+            row_robot = pose_from_contact_pose(row.get("robot_pose"))
+            row_ball = pose_from_contact_pose(row.get("ball_pose"))
+            if row_robot is not None:
+                robot_pose = row_robot
+            if row_ball is not None:
+                ball_pose = row_ball
+    shot_outcome = payload.get("shot_outcome") if isinstance(payload.get("shot_outcome"), dict) else {}
+    if ball_pose is None and isinstance(shot_outcome.get("ball_end_pose"), dict):
+        ball_pose = pose_from_contact_pose(shot_outcome.get("ball_end_pose"))
+    return {
+        "available": bool(robot_pose is not None or ball_pose is not None),
+        "mission_summary_path": artifact_display_path(mission_summary_path),
+        "contact_trace_path": artifact_display_path(contact_trace_path),
+        "contact_sample_count": sample_count,
+        "robot_pose": robot_pose,
+        "ball_pose": ball_pose,
+        "fetch_to_pose_pass": bool(payload.get("fetch_to_pose_pass", payload.get("pass", False))),
+        "shot_outcome": shot_outcome,
+    }
+
+
+def update_remaining_after_attempt(
+    remaining_balls: list[dict[str, Any]],
+    *,
+    attempted_ball_id: str,
+    measured_state: dict[str, Any],
+) -> list[dict[str, Any]]:
+    updated: list[dict[str, Any]] = []
+    for ball in remaining_balls:
+        ball_id = str(ball.get("id", "") or "")
+        if ball_id == str(attempted_ball_id):
+            continue
+        else:
+            updated.append(ball)
+    return updated
+
+
+def materialize_replanning_rows(
+    root: Path,
+    scene: dict[str, Any],
+    *,
+    args: argparse.Namespace,
+    execute_live: bool,
+    compose_project: str = "",
+    expected_session_id: str = "",
+    execution_skipped_reason: str = "",
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    scene_id = str(scene.get("scene_id", "") or "scene")
+    remaining = [dict(ball) for ball in scene.get("balls", []) if isinstance(ball, dict)]
+    current_robot_pose = dict(scene.get("robot_pose", {}) if isinstance(scene.get("robot_pose"), dict) else {})
+    replans: list[dict[str, Any]] = []
+    for iteration in range(len(remaining)):
+        active_scene = {
+            **scene,
+            "scene_id": scene_id,
+            "robot_pose": current_robot_pose,
+            "balls": remaining,
+        }
+        plan = plan_multiball_scene(active_scene, args=args)
+        replans.append(
+            {
+                "iteration": iteration + 1,
+                "robot_pose": current_robot_pose,
+                "remaining_ball_ids": [str(ball.get("id", "") or "") for ball in remaining],
+                "retrieval_order": plan.get("retrieval_order", []),
+                "planner_ready": bool(plan.get("planner_ready", False)),
+            }
+        )
+        sequence = plan.get("sequence") if isinstance(plan.get("sequence"), list) else []
+        if not sequence:
+            break
+        step = dict(sequence[0])
+        step["step_index"] = iteration + 1
+        step["replanned_live_step"] = True
+        layout_path = write_layout_for_step(root, scene_id, step)
+        command = build_step_command(
+            args=args,
+            layout_path=layout_path,
+            scene_id=scene_id,
+            step=step,
+            compose_project=compose_project,
+            expected_session_id=expected_session_id,
+        )
+        row = {
+            "scene_id": scene_id,
+            "step_index": int(step.get("step_index", 0) or 0),
+            "ball_id": str(step.get("ball_id", "") or ""),
+            "route_label": str(step.get("route_label", "") or ""),
+            "route_executor": str(step.get("route_executor", "") or ""),
+            "executable_route": bool(step.get("executable_route", False)),
+            "layout_path": artifact_display_path(layout_path),
+            "command": command,
+            "dry_run": not bool(execute_live),
+            "replanned_live_step": True,
+            "execution_skipped_reason": str(execution_skipped_reason or ""),
+            "expected_session_id": str(expected_session_id or ""),
+            "compose_project": str(compose_project or args.compose_project or ""),
+            "returncode": None,
+            "failure_reason": "",
+            "mission_summary_path": "",
+            "mission": {},
+            "measured_post_step_state": {},
+            "stdout_tail": "",
+            "stderr_tail": "",
+        }
+        if execute_live:
+            completed = run_command(command, timeout_s=float(args.timeout_s))
+            output = (completed.stdout or "") + "\n" + (completed.stderr or "")
+            mission_summary_raw = extract_marker(output, MISSION_SUMMARY_MARKER)
+            row["returncode"] = int(completed.returncode)
+            row["stdout_tail"] = "\n".join((completed.stdout or "").splitlines()[-20:])
+            row["stderr_tail"] = "\n".join((completed.stderr or "").splitlines()[-20:])
+            if mission_summary_raw:
+                mission_summary_path = resolve_path(mission_summary_raw)
+                row["mission_summary_path"] = artifact_display_path(mission_summary_path)
+                row["mission"] = replay_batch.summarize_mission(mission_summary_path)
+                measured_state = latest_measured_state_from_mission(mission_summary_path)
+                row["measured_post_step_state"] = measured_state
+                if isinstance(measured_state.get("robot_pose"), dict):
+                    current_robot_pose = dict(measured_state["robot_pose"])
+                else:
+                    current_robot_pose = step.get("estimated_post_fetch_robot_pose", current_robot_pose)
+                remaining = update_remaining_after_attempt(
+                    remaining,
+                    attempted_ball_id=str(step.get("ball_id", "") or ""),
+                    measured_state=measured_state,
+                )
+            else:
+                current_robot_pose = step.get("estimated_post_fetch_robot_pose", current_robot_pose)
+                remaining = [
+                    ball for ball in remaining if str(ball.get("id", "") or "") != str(step.get("ball_id", "") or "")
+                ]
+            if int(completed.returncode) != 0 and not row["failure_reason"]:
+                row["failure_reason"] = "runner_returned_nonzero"
+        rows.append(row)
+        if execute_live and bool(args.stop_on_fail) and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)):
+            break
+    return rows, {"enabled": True, "iterations": replans}
+
+
 def load_scene_descriptors(paths: list[str]) -> list[dict[str, Any]]:
     scenes: list[dict[str, Any]] = []
     for raw_path in paths:
@@ -804,15 +1048,42 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     for scene in scenes:
         plan = plan_multiball_scene(scene, args=args)
         artifact_paths = write_scene_artifacts(root, scene, plan)
-        rows = materialize_plan_rows(
-            root,
-            plan,
-            args=args,
-            execute_live=live_execution_ready,
-            compose_project=run_compose_project,
-            expected_session_id=expected_session_id,
-            execution_skipped_reason=live_execution_blocker,
-        )
+        persistent_field_setup: dict[str, Any] = {"enabled": False}
+        scene_execution_ready = bool(live_execution_ready)
+        scene_execution_blocker = str(live_execution_blocker or "")
+        if scene_execution_ready and bool(getattr(args, "persistent_field", False)):
+            persistent_field_setup = prepare_persistent_field_scene(
+                scene=scene,
+                compose_project=run_compose_project,
+                world_name=DEFAULT_WORLD_NAME,
+            )
+            setup_path = ensure_dir(root / "persistent_field_setup") / f"{safe_id(str(scene.get('scene_id', 'scene')))}.json"
+            write_json(setup_path, persistent_field_setup)
+            persistent_field_setup["path"] = artifact_display_path(setup_path)
+            if not bool(persistent_field_setup.get("pass", False)):
+                scene_execution_ready = False
+                scene_execution_blocker = str(persistent_field_setup.get("reason", "persistent_field_setup_failed"))
+        live_replan_summary: dict[str, Any] = {"enabled": False}
+        if scene_execution_ready and bool(getattr(args, "persistent_field", False)):
+            rows, live_replan_summary = materialize_replanning_rows(
+                root,
+                scene,
+                args=args,
+                execute_live=scene_execution_ready,
+                compose_project=run_compose_project,
+                expected_session_id=expected_session_id,
+                execution_skipped_reason=scene_execution_blocker,
+            )
+        else:
+            rows = materialize_plan_rows(
+                root,
+                plan,
+                args=args,
+                execute_live=scene_execution_ready,
+                compose_project=run_compose_project,
+                expected_session_id=expected_session_id,
+                execution_skipped_reason=scene_execution_blocker,
+            )
         step_rows.extend(rows)
         scene_pass = bool(plan.get("planner_ready", False))
         if not dry_run:
@@ -830,6 +1101,8 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                 "retrieval_order": plan.get("retrieval_order", []),
                 "planner_ready": bool(plan.get("planner_ready", False)),
                 "executable_step_count": int(plan.get("executable_step_count", 0) or 0),
+                "persistent_field_setup": persistent_field_setup,
+                "live_replanning": live_replan_summary,
                 **artifact_paths,
             }
         )
@@ -881,6 +1154,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "profile": str(args.profile or DEFAULT_PROFILE),
         "dry_run": dry_run,
         "planner_mode": str(args.planner_mode),
+        "persistent_field": bool(getattr(args, "persistent_field", False)),
         "fresh_dashboard_session": bool(getattr(args, "fresh_dashboard_session", False)),
         "dashboard_url": str(args.dashboard_url or ""),
         "compose_project": run_compose_project,
@@ -1031,6 +1305,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--package-timeout-s", type=float, default=180.0)
     parser.add_argument("--no-visual-package", action="store_true")
     parser.add_argument("--stop-on-fail", action="store_true")
+    parser.add_argument("--persistent-field", action="store_true")
     return parser.parse_args()
 
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -62,6 +63,11 @@ def _patch_roots(tmp_path, monkeypatch):
     monkeypatch.setattr(replay_batch, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(replay_batch, "SESSION_ROOT", session_root)
     monkeypatch.setattr(planner_gate, "REPO_ROOT", tmp_path)
+
+
+def _write_json(path, payload):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _pose_distance(a, b):
@@ -175,6 +181,171 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
         assert "--nav2-reposition-continue-on-failure" not in row["command"]
         assert "--ai-push-coast-mode" in row["command"]
         assert row["command"][row["command"].index("--ai-push-coast-mode") + 1] == "guarded_live"
+
+
+def test_persistent_field_mode_preserves_target_and_robot_in_step_commands(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+
+    summary = multiball_gate.run_gate(
+        _args(campaign_id="dry_persistent_multiball", dry_run=True, random_cases=1, balls_per_scene=3, persistent_field=True)
+    )
+
+    for row in summary["step_rows"]:
+        assert "--use-existing-target-model" in row["command"]
+        assert "--preserve-robot-pose" in row["command"]
+
+
+def test_prepare_persistent_field_scene_spawns_all_balls_and_sets_robot(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    calls = {"removed": [], "spawned": [], "robot": []}
+
+    def fake_remove_model(*, compose_project, world_name, model_name):
+        calls["removed"].append((compose_project, world_name, model_name))
+
+    def fake_spawn_model(**kwargs):
+        calls["spawned"].append(kwargs)
+        return {"pass": True, "model_name": kwargs["model_name"], "pose": {"x": kwargs["x"], "y": kwargs["y"], "z": kwargs["z"]}}
+
+    def fake_set_model_pose(**kwargs):
+        calls["robot"].append(kwargs)
+        return {"pass": True, "pose": {"x": kwargs["x"], "y": kwargs["y"], "z": kwargs["z"], "yaw": kwargs["yaw"]}}
+
+    monkeypatch.setattr(multiball_gate, "remove_model", fake_remove_model)
+    monkeypatch.setattr(multiball_gate, "spawn_model", fake_spawn_model)
+    monkeypatch.setattr(multiball_gate, "set_model_pose", fake_set_model_pose)
+
+    scene = multiball_gate.generate_multiball_scenes(seed=20260606, random_cases=1, balls_per_scene=3)[0]
+
+    result = multiball_gate.prepare_persistent_field_scene(
+        scene=scene,
+        compose_project="persistent_project",
+        world_name="yolo_test_world",
+    )
+
+    assert result["pass"] is True
+    assert result["ball_count"] == 3
+    assert len(calls["removed"]) == 3
+    assert len(calls["spawned"]) == 3
+    assert len(calls["robot"]) == 1
+    assert calls["spawned"][0]["model_name"].startswith(multiball_gate.TARGET_MODEL_NAME_PREFIX)
+
+
+def test_latest_measured_state_from_mission_reads_contact_trace(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    artifact_dir = tmp_path / "artifacts" / "session" / "session_a" / "golf_ball_circle_delivery" / "run_a"
+    artifact_dir.mkdir(parents=True)
+    mission = artifact_dir / "mission_verdict.json"
+    contact_trace = artifact_dir / "contact_trace.jsonl"
+    contact_trace.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "robot_pose": {"position": {"x": 0.1, "y": 0.2, "z": 0.0}, "yaw": 0.3},
+                        "ball_pose": {"position": {"x": 0.4, "y": 0.5, "z": 0.021336}, "yaw": 0.0},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "robot_pose": {"position": {"x": 0.6, "y": 0.7, "z": 0.0}, "yaw": 0.8},
+                        "ball_pose": {"position": {"x": 0.9, "y": 1.0, "z": 0.021336}, "yaw": 0.0},
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_json(
+        mission,
+        {
+            "artifact_dir": str(artifact_dir),
+            "fetch_to_pose_pass": True,
+            "shot_outcome": {"closest_approach_distance_m": 0.2},
+        },
+    )
+
+    state = multiball_gate.latest_measured_state_from_mission(mission)
+
+    assert state["available"] is True
+    assert state["fetch_to_pose_pass"] is True
+    assert state["contact_sample_count"] == 2
+    assert state["robot_pose"] == {"x": 0.6, "y": 0.7, "z": 0.0, "yaw": 0.8}
+    assert state["ball_pose"] == {"x": 0.9, "y": 1.0, "z": 0.021336, "yaw": 0.0}
+
+
+def test_replanning_rows_use_measured_robot_pose_for_next_step(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    root = tmp_path / "artifacts" / "session" / "replan" / multiball_gate.GATE_KIND
+    scene = multiball_gate.generate_multiball_scenes(seed=20260606, random_cases=1, balls_per_scene=3)[0]
+    calls = []
+
+    def fake_run_command(command, *, timeout_s):
+        calls.append(command)
+        run_index = len(calls)
+        artifact_dir = (
+            tmp_path
+            / "artifacts"
+            / "session"
+            / "session_replan"
+            / "golf_ball_circle_delivery"
+            / f"run_{run_index}"
+        )
+        artifact_dir.mkdir(parents=True)
+        mission = artifact_dir / "mission_verdict.json"
+        contact_trace = artifact_dir / "contact_trace.jsonl"
+        robot_x = 0.10 * run_index
+        contact_trace.write_text(
+            json.dumps(
+                {
+                    "robot_pose": {"position": {"x": robot_x, "y": 0.25, "z": 0.0}, "yaw": 0.5},
+                    "ball_pose": {"position": {"x": 0.8, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        _write_json(
+            mission,
+            {
+                "artifact_dir": str(artifact_dir),
+                "scenario_id": "fetch_multiball_retrieval_v1",
+                "scenario_label": "Multi-Ball Retrieval v1",
+                "fetch_to_pose_pass": True,
+                "pass": True,
+                "shot_outcome": {
+                    "closest_approach_distance_m": 0.2,
+                    "reason": "trajectory_intersects_delivery_radius",
+                    "ball_end_pose": {"x": 0.8, "y": 0.0, "z": 0.021336},
+                },
+            },
+        )
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=f"{multiball_gate.MISSION_SUMMARY_MARKER}{mission}\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(multiball_gate, "run_command", fake_run_command)
+
+    rows, replan = multiball_gate.materialize_replanning_rows(
+        root,
+        scene,
+        args=_args(dry_run=False, persistent_field=True),
+        execute_live=True,
+        compose_project="persistent_project",
+        expected_session_id="session_replan",
+    )
+
+    assert len(rows) == 3
+    assert replan["enabled"] is True
+    assert len(replan["iterations"]) == 3
+    assert all(row["measured_post_step_state"]["available"] for row in rows)
+    second_layout = json.loads((tmp_path / rows[1]["layout_path"]).read_text(encoding="utf-8"))
+    assert second_layout["multiball_estimated_start_robot_pose"]["x"] == 0.1
+    assert "--use-existing-target-model" in rows[0]["command"]
+    assert "--preserve-robot-pose" in rows[0]["command"]
 
 
 def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatch):
