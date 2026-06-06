@@ -46,6 +46,7 @@ SETUP_STANDOFF_M = 0.38
 CORRIDOR_INTERFERENCE_RADIUS_M = 0.22
 TARGET_MODEL_NAME_PREFIX = "multiball_fetch_target"
 MISSION_SUMMARY_MARKER = replay_batch.MISSION_SUMMARY_MARKER
+VISUAL_PACKAGE_MARKER = replay_batch.VISUAL_PACKAGE_MARKER
 
 ROUTE_PENALTY = {
     planner_gate.ROUTE_FETCH_READY: 0.00,
@@ -566,6 +567,39 @@ def build_step_command(
     return command
 
 
+def session_id_for_artifact_path(path: Path) -> str:
+    try:
+        rel = path.resolve().relative_to(SESSION_ROOT.resolve())
+    except ValueError:
+        return ""
+    return rel.parts[0] if rel.parts else ""
+
+
+def build_visual_package_command(
+    *,
+    args: argparse.Namespace,
+    campaign_id: str,
+    mission_summary_paths: list[Path],
+) -> list[str]:
+    command = [
+        str(args.python_exe or sys.executable),
+        str(REPO_ROOT / "scripts" / "fetch_visual_uat_package.py"),
+        "--campaign-id",
+        f"{campaign_id}_visual_package",
+    ]
+    seen_visual_dirs: set[str] = set()
+    for mission_path in mission_summary_paths:
+        command.extend(["--mission-summary", str(mission_path)])
+        session_id = session_id_for_artifact_path(mission_path)
+        if session_id:
+            visual_dir = SESSION_ROOT / session_id / "visual"
+            visual_key = str(visual_dir.resolve())
+            if visual_key not in seen_visual_dirs:
+                command.extend(["--visual-dir", str(visual_dir)])
+                seen_visual_dirs.add(visual_key)
+    return command
+
+
 def run_command(command: list[str], *, timeout_s: float) -> subprocess.CompletedProcess[str]:
     timeout = max(float(timeout_s), 1.0)
     try:
@@ -707,6 +741,36 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     planned_step_count = len(step_rows)
     live_pass_count = sum(1 for row in step_rows if bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)))
     planner_ready_scene_count = sum(1 for row in scene_rows if bool(row.get("planner_ready", False)))
+    visual_package_command: list[str] = []
+    visual_package_summary_path = ""
+    visual_package: dict[str, Any] = {}
+    visual_package_returncode: int | None = None
+    visual_package_stdout_tail = ""
+    visual_package_stderr_tail = ""
+    if not dry_run and not bool(args.no_visual_package):
+        mission_summary_paths = [
+            resolve_path(str(row.get("mission_summary_path", "") or ""))
+            for row in step_rows
+            if str(row.get("mission_summary_path", "") or "").strip()
+        ]
+        if mission_summary_paths:
+            visual_package_command = build_visual_package_command(
+                args=args,
+                campaign_id=campaign_id,
+                mission_summary_paths=mission_summary_paths,
+            )
+            completed = run_command(visual_package_command, timeout_s=float(args.package_timeout_s))
+            output = (completed.stdout or "") + "\n" + (completed.stderr or "")
+            visual_package_returncode = int(completed.returncode)
+            visual_package_stdout_tail = "\n".join((completed.stdout or "").splitlines()[-20:])
+            visual_package_stderr_tail = "\n".join((completed.stderr or "").splitlines()[-20:])
+            package_summary_raw = extract_marker(output, VISUAL_PACKAGE_MARKER)
+            if package_summary_raw:
+                package_summary_path = resolve_path(package_summary_raw)
+                visual_package_summary_path = artifact_display_path(package_summary_path)
+                visual_package = read_json(package_summary_path)
+    visual_package_required = bool(not dry_run and not bool(args.no_visual_package))
+    visual_package_pass = bool(visual_package.get("pass", False))
     summary = {
         "generated_utc": utc_now(),
         "type": GATE_KIND,
@@ -722,10 +786,19 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "planned_step_count": planned_step_count,
         "live_fetch_to_pose_pass_count": live_pass_count,
         "live_fetch_to_pose_fail_count": 0 if dry_run else planned_step_count - live_pass_count,
+        "visual_package_required": visual_package_required,
+        "visual_package_pass": visual_package_pass,
+        "visual_package_summary_path": visual_package_summary_path,
+        "visual_package_command": visual_package_command,
+        "visual_package_returncode": visual_package_returncode,
+        "visual_package_stdout_tail": visual_package_stdout_tail,
+        "visual_package_stderr_tail": visual_package_stderr_tail,
+        "visual_package": visual_package,
         "pass": bool(
             scene_rows
             and (planner_ready_scene_count == len(scene_rows))
             and (dry_run or live_pass_count == planned_step_count)
+            and (not visual_package_required or visual_package_pass)
         ),
         "promotion_evidence": False,
         "milestone_interpretation": (
@@ -772,6 +845,9 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- planner_ready_scene_count: `{summary.get('planner_ready_scene_count', 0)}`",
         f"- live_fetch_to_pose_pass_count: `{summary.get('live_fetch_to_pose_pass_count', 0)}`",
         f"- live_fetch_to_pose_fail_count: `{summary.get('live_fetch_to_pose_fail_count', 0)}`",
+        f"- visual_package_required: `{summary.get('visual_package_required', False)}`",
+        f"- visual_package_pass: `{summary.get('visual_package_pass', False)}`",
+        f"- visual_package_summary_path: `{summary.get('visual_package_summary_path', '')}`",
         f"- interpretation: `{summary.get('milestone_interpretation', '')}`",
         "",
         "## Scenes",
@@ -828,6 +904,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fetch-delivery-radius-m", type=float, default=0.300)
     parser.add_argument("--python-exe", default=sys.executable)
     parser.add_argument("--timeout-s", type=float, default=180.0)
+    parser.add_argument("--package-timeout-s", type=float, default=180.0)
+    parser.add_argument("--no-visual-package", action="store_true")
     parser.add_argument("--stop-on-fail", action="store_true")
     return parser.parse_args()
 

@@ -38,6 +38,8 @@ def _args(**overrides):
         "fetch_delivery_radius_m": 0.3,
         "python_exe": sys.executable,
         "timeout_s": 180.0,
+        "package_timeout_s": 180.0,
+        "no_visual_package": False,
         "stop_on_fail": False,
     }
     payload.update(overrides)
@@ -153,6 +155,38 @@ def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatc
 
     def fake_run_command(command, *, timeout_s):
         calls.append(command)
+        if "fetch_visual_uat_package.py" in " ".join(command):
+            package_path = (
+                tmp_path
+                / "artifacts"
+                / "session"
+                / "live_multiball_visual_package"
+                / "fetch_visual_uat_package"
+                / "package_summary.json"
+            )
+            package_path.parent.mkdir(parents=True, exist_ok=True)
+            package_path.write_text(
+                json.dumps(
+                    {
+                        "campaign_id": "live_multiball_visual_package",
+                        "pass": True,
+                        "mobile_watchable": True,
+                        "onboard_camera_watchable": True,
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            return type(
+                "Completed",
+                (),
+                {
+                    "returncode": 0,
+                    "stdout": f"{multiball_gate.VISUAL_PACKAGE_MARKER}{package_path}\n",
+                    "stderr": "",
+                },
+            )()
         mission_path = (
             tmp_path
             / "artifacts"
@@ -202,7 +236,13 @@ def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatc
     summary = multiball_gate.run_gate(_args(campaign_id="live_multiball", dry_run=False, random_cases=1, balls_per_scene=3))
 
     assert summary["pass"] is True
-    assert len(calls) == 3
+    assert len(calls) == 4
     assert summary["live_fetch_to_pose_pass_count"] == 3
     assert summary["live_fetch_to_pose_fail_count"] == 0
+    assert summary["visual_package_required"] is True
+    assert summary["visual_package_pass"] is True
+    assert summary["visual_package_summary_path"].endswith("fetch_visual_uat_package/package_summary.json")
+    package_command = calls[-1]
+    assert package_command.count("--mission-summary") == 3
+    assert package_command.count("--visual-dir") == 3
     assert all(row["mission"]["fetch_to_pose_pass"] for row in summary["step_rows"])
