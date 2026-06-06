@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from chasecar_env import load_repo_dotenv
 from llm_provider_openai import call_openai_responses
 from llm_supervisor_core import DEFAULT_OPENAI_BASE_URL
 from llm_supervisor_core import DEFAULT_OPENAI_MODEL
@@ -29,6 +30,7 @@ from llm_supervisor_core import utc_now
 from llm_supervisor_core import write_json
 
 
+load_repo_dotenv(REPO_ROOT)
 DEFAULT_SCENE_SET = "mixed_fetch_planner_v1"
 DEFAULT_RANDOM_CASES = 20
 DEFAULT_SEED = 20260530

@@ -25,14 +25,14 @@ REQUIRED_SAMPLE_LINK_KEYS = (
     "scorecard_url",
 )
 REQUIRED_EVIDENCE_TITLES = (
-    "Execution-first big move is queued",
+    "Provider-backed seed20260650 launch is green",
     "Three-seed breadth rollup is green",
     "Planner geometry breadth audit is green",
     "Milestone readiness rollup is UAT-ready",
     "Physical/onboard proof gap is explicit",
     "Robot-side physical runbook is current",
     "Seed 20260648 hardware rehearsal is green",
-    "Provider rerun preflight is waiting on OPENAI_API_KEY",
+    "Provider rerun preflight is green",
     "Provider launch checklist is ready",
     "Operator UAT watchlist is ready",
 )

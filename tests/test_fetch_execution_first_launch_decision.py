@@ -91,6 +91,17 @@ def test_launch_decision_selects_provider_when_key_is_present(tmp_path: Path, mo
     assert summary["selected_next_commands"][0] == "python provider_preflight.py"
 
 
+def test_parse_args_uses_dotenv_loaded_openai_key(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(launch, "REPO_ROOT", tmp_path)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    (tmp_path / ".env").write_text("OPENAI_API_KEY=from-dotenv\n", encoding="utf-8")
+
+    launch.load_repo_dotenv(tmp_path)
+    args = launch.parse_args([])
+
+    assert args.openai_api_key == "from-dotenv"
+
+
 def test_launch_decision_selects_physical_when_allowed_and_provider_is_blocked(
     tmp_path: Path, monkeypatch
 ):

@@ -482,9 +482,9 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     ]
 
     payload = json.loads((dashboard_service.STATIC_DASHBOARD_DIR / "fetch_plan_data.json").read_text(encoding="utf-8"))
-    assert payload["status_label"] == "Execution-first pivot: provider launch or physical/onboard rehearsal next"
+    assert payload["status_label"] == "Provider-backed planner launch is green; physical/onboard rehearsal next"
     evidence_by_title = {item["title"]: item for item in payload["latest_evidence"]}
-    assert "Execution-first big move is queued" in evidence_by_title
+    assert "Provider-backed seed20260650 launch is green" in evidence_by_title
     assert "Three-seed breadth rollup is green" in evidence_by_title
     assert "Planner geometry breadth audit is green" in evidence_by_title
     assert "Operator UAT watchlist is ready" in evidence_by_title
@@ -492,24 +492,24 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert "Seed 20260649 fresh breadth UAT is green" in evidence_by_title
     assert "Seed 20260648 hardware rehearsal is green" in evidence_by_title
     assert evidence_by_title["Three-seed breadth rollup is green"]["tone"] == "green"
-    assert evidence_by_title["Execution-first big move is queued"]["tone"] == "yellow"
-    assert "waiting on provider key or physical hardware gate" in evidence_by_title[
-        "Execution-first big move is queued"
+    assert evidence_by_title["Provider-backed seed20260650 launch is green"]["tone"] == "green"
+    assert "physical/onboard proof remains open" in evidence_by_title[
+        "Provider-backed seed20260650 launch is green"
     ]["status"]
-    assert "selected_lane=waiting_on_external_gate" in " ".join(
-        evidence_by_title["Execution-first big move is queued"]["metrics"]
+    assert "selected_lane=provider_launch" in " ".join(
+        evidence_by_title["Provider-backed seed20260650 launch is green"]["metrics"]
     )
     assert any(
-        "execution_first_launch_decision_current_20260605" in link["url"]
-        for link in evidence_by_title["Execution-first big move is queued"]["links"]
+        "provider_planner_seed20260650_breadth_100x3_20260605" in link["url"]
+        for link in evidence_by_title["Provider-backed seed20260650 launch is green"]["links"]
     )
     assert any(
-        "provider_launch_checklist_seed20260650_20260605" in link["url"]
-        for link in evidence_by_title["Execution-first big move is queued"]["links"]
+        "provider_planner_seed20260650_provider_rerun_comparison_20260605" in link["url"]
+        for link in evidence_by_title["Provider-backed seed20260650 launch is green"]["links"]
     )
     assert any(
-        "robot_side_rehearsal_preflight_seed20260648_current_physical_gap_20260605" in link["url"]
-        for link in evidence_by_title["Execution-first big move is queued"]["links"]
+        "raw_camera_browser.mp4" in link["url"]
+        for link in evidence_by_title["Provider-backed seed20260650 launch is green"]["links"]
     )
     assert evidence_by_title["Planner geometry breadth audit is green"]["tone"] == "green"
     assert "scene_count=300" in " ".join(evidence_by_title["Planner geometry breadth audit is green"]["metrics"])
@@ -566,7 +566,8 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
     assert evidence_by_title["Seed 20260649 fresh breadth UAT is green"]["tone"] == "green"
     assert evidence_by_title["Seed 20260648 hardware rehearsal is green"]["tone"] == "green"
     watch_by_label = {item["label"]: item for item in payload["watch_areas"]}
-    assert "300 generated planner scenes" in watch_by_label["Provider-backed LLM routing rerun"]["body"]
+    assert "provider ok=100/100" in watch_by_label["Provider-backed route-owner authority"]["body"]
+    assert "physical/onboard execution" in watch_by_label["Provider-backed route-owner authority"]["body"]
     assert "dashboard visual evidence audit" in watch_by_label["Visual keyframe review"]["body"]
     assert payload["uat_review_bundle"]["title"] == "Seed 20260648 mixed all-routes video bundle"
     assert "three-seed rollup" in payload["uat_review_bundle"]["summary"]
@@ -586,24 +587,23 @@ def test_fetch_plan_routes_serve_static_page_and_data(tmp_path):
         link["url"].endswith("/fetch_planner_route_uat_analyzer/scorecard.md")
         for link in evidence_by_title["Seed 20260648 hardware rehearsal is green"]["links"]
     )
-    assert "Provider rerun preflight is waiting on OPENAI_API_KEY" in evidence_by_title
-    provider_card = evidence_by_title["Provider rerun preflight is waiting on OPENAI_API_KEY"]
-    assert provider_card["tone"] == "yellow"
-    assert "three-seed breadth rollup" in provider_card["status"]
-    assert "seed=20260650" in " ".join(provider_card["metrics"])
-    assert "provider-vs-baseline comparison analyzer" in " ".join(provider_card["metrics"]).lower()
+    assert "Provider rerun preflight is green" in evidence_by_title
+    provider_card = evidence_by_title["Provider rerun preflight is green"]
+    assert provider_card["tone"] == "green"
+    assert "provider launch path is ready" in provider_card["status"]
+    assert "provider_rerun_ready=true" in " ".join(provider_card["metrics"])
+    assert "selected_lane=provider_launch" in " ".join(provider_card["metrics"])
     assert any(
         "provider_rerun_readiness_rollup_seed20260650_20260605" in link["url"]
         for link in provider_card["links"]
     )
     assert any(
-        "provider_rerun_comparison_pre_provider_seed20260650_20260605" in link["url"]
+        "execution_first_launch_decision_current_20260605" in link["url"]
         for link in provider_card["links"]
     )
     assert "Provider launch checklist is ready" in evidence_by_title
     launch_card = evidence_by_title["Provider launch checklist is ready"]
-    assert launch_card["tone"] == "yellow"
-    assert "provider_launch_ready=false" in " ".join(launch_card["metrics"])
+    assert "provider_launch_ready=true" in " ".join(launch_card["metrics"])
     assert any(
         "provider_launch_checklist_seed20260650_20260605" in link["url"]
         for link in launch_card["links"]

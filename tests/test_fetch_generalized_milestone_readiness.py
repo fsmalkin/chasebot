@@ -71,6 +71,22 @@ def _green_provider_comparison(path: Path) -> Path:
     )
 
 
+def _provider_authority_comparison(path: Path) -> Path:
+    return _write_json(
+        path,
+        {
+            "guarded_provider_rerun_ready": True,
+            "strict_provider_authority_ready": True,
+            "blockers": [],
+            "provider_replay": {"pass": True, "mission_pass_count": 9},
+            "provider_route_uat": {
+                "pass": True,
+                "milestone_interpretation": "randomized_route_owner_visual_uat_green",
+            },
+        },
+    )
+
+
 def _green_dashboard_audit(path: Path) -> Path:
     return _write_json(
         path,
@@ -199,6 +215,28 @@ def test_milestone_readiness_is_operator_uat_ready_without_overclaiming(tmp_path
     assert "robot_side_live_rehearsal_not_run" in summary["open_gates"]
 
 
+def test_milestone_readiness_uses_provider_comparison_as_authority_gate(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(readiness, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(readiness, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+    args = _green_fixture(tmp_path)
+    provider_readiness_path = Path(args.provider_readiness_summary)
+    provider_readiness = readiness.json.loads(provider_readiness_path.read_text(encoding="utf-8"))
+    provider_readiness["provider_rerun_ready"] = True
+    provider_readiness["blockers"] = []
+    _write_json(provider_readiness_path, provider_readiness)
+    _provider_authority_comparison(Path(args.provider_comparison_summary))
+
+    summary = readiness.build_summary(args)
+
+    assert summary["pass"] is True
+    assert summary["operator_uat_ready"] is True
+    assert summary["provider_backed_authority_proven"] is True
+    assert summary["milestone_complete"] is False
+    assert summary["hardware_proven"] is False
+    assert "provider_backed_llm_routing_not_proven" not in summary["open_gates"]
+    assert "robot_side_live_rehearsal_not_run" in summary["open_gates"]
+
+
 def test_milestone_readiness_fails_when_dashboard_visual_audit_is_incomplete(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(readiness, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(readiness, "SESSION_ROOT", tmp_path / "artifacts" / "session")
@@ -277,6 +315,7 @@ def test_milestone_readiness_scorecard_names_green_evidence_and_open_gates(tmp_p
     text = scorecard.read_text(encoding="utf-8")
     assert "Generalized Fetch-To-Pose Milestone Readiness" in text
     assert "three_seed_deterministic_breadth_rollup_green" in text
+    assert "provider_backed_route_owner_seed20260650_pending" in text
     assert "planner_geometry_breadth_green" in text
     assert "operator_uat_watchlist_ready" in text
     assert "provider_backed_llm_routing_not_proven" in text

@@ -19,7 +19,7 @@ DEFAULT_PROVIDER_READINESS = (
     "fetch_planner_provider_rerun_readiness/provider_rerun_readiness_summary.json"
 )
 DEFAULT_PROVIDER_COMPARISON = (
-    "artifacts/session/provider_rerun_comparison_pre_provider_seed20260650_20260605/"
+    "artifacts/session/provider_planner_seed20260650_provider_rerun_comparison_20260605/"
     "fetch_planner_provider_rerun_comparison/provider_rerun_comparison_summary.json"
 )
 DEFAULT_DASHBOARD_AUDIT = (
@@ -140,6 +140,7 @@ def summarize_provider_readiness(path_text: str) -> dict[str, Any]:
     payload, issues = read_json(path_text)
     blockers = [str(item) for item in list_value(payload.get("blockers"))]
     expected_only_key_blocker = blockers == ["missing_openai_api_key"]
+    provider_preflight_ready = bool(payload.get("provider_rerun_ready", False)) and not blockers
     breadth = dict_value(payload.get("breadth_rollup"))
     issue_unless(issues, bool(breadth.get("pass", False)), "breadth_rollup_not_green")
     issue_unless(issues, int_value(breadth.get("total_random_cases")) >= 300, "breadth_rollup_below_300_cases")
@@ -147,7 +148,7 @@ def summarize_provider_readiness(path_text: str) -> dict[str, Any]:
     issue_unless(issues, int_value(breadth.get("total_wrong_fetch_dispatch_count")) == 0, "wrong_fetch_dispatch_nonzero")
     issue_unless(issues, int_value(breadth.get("total_contact_watch_count")) == 0, "contact_watch_nonzero")
     issue_unless(issues, int_value(breadth.get("total_first_contact_blocker_count")) == 0, "first_contact_blocker_nonzero")
-    issue_unless(issues, expected_only_key_blocker, "provider_readiness_has_unexpected_blockers")
+    issue_unless(issues, expected_only_key_blocker or provider_preflight_ready, "provider_readiness_has_unexpected_blockers")
     return {
         "path": artifact_display_path(path_text),
         "pass": not issues,
@@ -156,6 +157,7 @@ def summarize_provider_readiness(path_text: str) -> dict[str, Any]:
         "provider_rerun_ready": bool(payload.get("provider_rerun_ready", False)),
         "provider_backed_authority_proven": bool(payload.get("provider_backed_authority_proven", False)),
         "expected_pending_only": expected_only_key_blocker,
+        "provider_preflight_ready": provider_preflight_ready,
         "breadth_random_cases": int_value(breadth.get("total_random_cases")),
         "executable_visual_rows": int_value(breadth.get("total_selected_count")),
         "wrong_fetch_dispatch_count": int_value(breadth.get("total_wrong_fetch_dispatch_count")),
@@ -168,11 +170,16 @@ def summarize_provider_comparison(path_text: str) -> dict[str, Any]:
     expected_provider_missing = blockers and all(
         blocker.startswith("provider_planner:") for blocker in blockers
     )
+    provider_authority_ready = (
+        bool(payload.get("guarded_provider_rerun_ready", False))
+        and bool(payload.get("strict_provider_authority_ready", False))
+        and not blockers
+    )
     replay = dict_value(payload.get("provider_replay"))
     route_uat = dict_value(payload.get("provider_route_uat"))
     issue_unless(issues, bool(replay.get("pass", False)), "provider_replay_baseline_not_green")
     issue_unless(issues, bool(route_uat.get("pass", False)), "provider_route_uat_baseline_not_green")
-    issue_unless(issues, expected_provider_missing, "provider_comparison_has_unexpected_blockers")
+    issue_unless(issues, expected_provider_missing or provider_authority_ready, "provider_comparison_has_unexpected_blockers")
     return {
         "path": artifact_display_path(path_text),
         "pass": not issues,
@@ -180,6 +187,7 @@ def summarize_provider_comparison(path_text: str) -> dict[str, Any]:
         "blockers": blockers,
         "guarded_provider_rerun_ready": bool(payload.get("guarded_provider_rerun_ready", False)),
         "strict_provider_authority_ready": bool(payload.get("strict_provider_authority_ready", False)),
+        "provider_authority_ready": provider_authority_ready,
         "expected_pending_only": expected_provider_missing,
         "replay_pass_count": int_value(replay.get("mission_pass_count")),
         "route_uat_interpretation": str(route_uat.get("milestone_interpretation", "") or ""),
@@ -307,9 +315,7 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
             uat_watchlist,
         )
     )
-    provider_authority_proven = bool(provider_readiness.get("provider_backed_authority_proven", False)) and bool(
-        provider_comparison.get("guarded_provider_rerun_ready", False)
-    )
+    provider_authority_proven = bool(provider_comparison.get("provider_authority_ready", False))
     hardware_proven = bool(hardware_readiness.get("hardware_proven", False))
     open_gates: list[str] = []
     if not provider_authority_proven:
@@ -356,6 +362,9 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         "open_gates": open_gates,
         "green_evidence": [
             "three_seed_deterministic_breadth_rollup_green",
+            "provider_backed_route_owner_seed20260650_green"
+            if provider_authority_proven
+            else "provider_backed_route_owner_seed20260650_pending",
             "planner_geometry_breadth_green",
             "current_dashboard_visual_evidence_links_green",
             "operator_uat_watchlist_ready",
@@ -364,7 +373,6 @@ def build_summary(args: argparse.Namespace) -> dict[str, Any]:
         if sim_uat_green
         else [],
         "next_actions": [
-            "restore_openai_api_key_and_run_provider_rerun_comparison",
             "run_physical_onboard_tensor_rt_rehearsal_with_physical_camera_evidence",
             "keep_hardware_proven_false_until_field_physics_and_onboard_artifacts_are_recorded",
         ],

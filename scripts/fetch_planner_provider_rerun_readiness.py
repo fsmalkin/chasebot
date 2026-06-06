@@ -11,8 +11,11 @@ from datetime import timezone
 from pathlib import Path
 from typing import Any
 
+from chasecar_env import load_repo_dotenv
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+load_repo_dotenv(REPO_ROOT)
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 ANALYZER_KIND = "fetch_planner_provider_rerun_readiness"
 ROUTE_LABELS = (
@@ -227,12 +230,16 @@ def summarize_dashboard(path_text: str, *, seed: int, min_rollup_random_cases: i
     uat = dict_value(payload.get("uat_review_bundle"))
     route_samples = [row for row in uat.get("route_samples", []) if isinstance(row, dict)] if isinstance(uat.get("route_samples"), list) else []
     rollup_text = json.dumps(evidence_rows, sort_keys=True)
+    dashboard_text = " ".join((status_label, status_detail, rollup_text))
     issue_unless(
         issues,
-        "Three-seed breadth rollup" in status_label or "Three-seed breadth rollup" in status_detail,
-        "dashboard_status_missing_breadth_rollup",
+        (
+            "Three-seed breadth rollup" in dashboard_text
+            or ("execution-first" in dashboard_text.lower() and str(min_rollup_random_cases) in dashboard_text)
+        ),
+        "dashboard_status_missing_breadth_or_execution_pivot",
     )
-    issue_unless(issues, str(min_rollup_random_cases) in status_detail or str(min_rollup_random_cases) in rollup_text, f"dashboard_missing_rollup_{min_rollup_random_cases}_cases")
+    issue_unless(issues, str(min_rollup_random_cases) in dashboard_text, f"dashboard_missing_rollup_{min_rollup_random_cases}_cases")
     issue_unless(issues, str(seed) in status_label or str(seed) in status_detail or str(seed) in rollup_text, f"dashboard_status_missing_seed_{seed}")
     issue_unless(issues, len(route_samples) >= 15, "dashboard_uat_samples_below_15")
     issue_unless(
@@ -254,8 +261,8 @@ def build_rerun_commands(args: argparse.Namespace) -> dict[str, str]:
     seed = int(args.seed)
     suffix = str(args.campaign_suffix)
     planner_campaign = f"provider_planner_seed{seed}_breadth_{int(args.random_cases)}x{int(args.max_per_route)}_{suffix}"
-    replay_campaign = f"provider_planner_seed{seed}_mixed_all_routes_{int(args.max_per_route)}x_{suffix}"
-    analysis_campaign = f"provider_planner_seed{seed}_mixed_all_routes_analysis_{suffix}"
+    replay_campaign = f"{planner_campaign}_replay"
+    analysis_campaign = f"{planner_campaign}_analysis"
     comparison_campaign = f"provider_planner_seed{seed}_provider_rerun_comparison_{suffix}"
     planner_summary = (
         f"artifacts\\session\\{planner_campaign}_planner\\fetch_planner_handoff_gate\\gate_summary.json"

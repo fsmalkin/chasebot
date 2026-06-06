@@ -58,7 +58,7 @@ def _green_dashboard(tmp_path: Path) -> Path:
             _write(tmp_path / "artifacts" / "session" / session / rel)
     for rel in (
         "artifacts/session/rollup/fetch_planner_breadth_rollup/scorecard.md",
-        "artifacts/session/big_move/fetch_execution_first_pivot/scorecard.md",
+        "artifacts/session/provider_parent/fetch_planner_seeded_generalization_gate/scorecard.md",
         "artifacts/session/geometry/fetch_planner_geometry_breadth_audit/scorecard.md",
         "artifacts/session/milestone/fetch_generalized_milestone_readiness/scorecard.md",
         "artifacts/session/physical_gap/fetch_physical_onboard_proof_gap/scorecard.md",
@@ -80,12 +80,12 @@ def _green_dashboard(tmp_path: Path) -> Path:
         },
         "latest_evidence": [
             {
-                "title": "Execution-first big move is queued",
-                "tone": "yellow",
+                "title": "Provider-backed seed20260650 launch is green",
+                "tone": "green",
                 "links": [
                     {
-                        "label": "big move scorecard",
-                        "url": "/artifacts/session/big_move/fetch_execution_first_pivot/scorecard.md",
+                        "label": "provider parent scorecard",
+                        "url": "/artifacts/session/provider_parent/fetch_planner_seeded_generalization_gate/scorecard.md",
                     }
                 ],
             },
@@ -150,8 +150,8 @@ def _green_dashboard(tmp_path: Path) -> Path:
                 ],
             },
             {
-                "title": "Provider rerun preflight is waiting on OPENAI_API_KEY",
-                "tone": "yellow",
+                "title": "Provider rerun preflight is green",
+                "tone": "green",
                 "links": [
                     {
                         "label": "provider scorecard",

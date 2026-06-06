@@ -42,12 +42,12 @@ def _readiness_payload(*, ready: bool = False) -> dict:
             ),
             "explicit_all_routes_replay": (
                 "python scripts\\fetch_planner_route_replay_batch.py "
-                "--campaign-id provider_planner_seed20260650_mixed_all_routes_3x_20260605 "
+                "--campaign-id provider_planner_seed20260650_breadth_100x3_20260605_replay "
                 "--gate-summary artifacts\\session\\provider_planner_seed20260650_breadth_100x3_20260605_planner\\fetch_planner_handoff_gate\\gate_summary.json"
             ),
             "analysis": (
                 "python scripts\\fetch_planner_route_uat_analyzer.py "
-                "--campaign-id provider_planner_seed20260650_mixed_all_routes_analysis_20260605 "
+                "--campaign-id provider_planner_seed20260650_breadth_100x3_20260605_analysis "
                 "--planner-summary artifacts\\session\\provider_planner_seed20260650_breadth_100x3_20260605_planner\\fetch_planner_handoff_gate\\gate_summary.json"
             ),
             "provider_rerun_comparison": (
@@ -55,8 +55,8 @@ def _readiness_payload(*, ready: bool = False) -> dict:
                 "--campaign-id provider_planner_seed20260650_provider_rerun_comparison_20260605 "
                 "--seed 20260650 "
                 "--provider-planner-summary artifacts\\session\\provider_planner_seed20260650_breadth_100x3_20260605_planner\\fetch_planner_handoff_gate\\gate_summary.json "
-                "--provider-replay-summary artifacts\\session\\provider_planner_seed20260650_mixed_all_routes_3x_20260605\\fetch_planner_route_replay_batch\\batch_summary.json "
-                "--provider-route-uat-summary artifacts\\session\\provider_planner_seed20260650_mixed_all_routes_analysis_20260605\\fetch_planner_route_uat_analyzer\\route_uat_summary.json"
+                "--provider-replay-summary artifacts\\session\\provider_planner_seed20260650_breadth_100x3_20260605_replay\\fetch_planner_route_replay_batch\\batch_summary.json "
+                "--provider-route-uat-summary artifacts\\session\\provider_planner_seed20260650_breadth_100x3_20260605_analysis\\fetch_planner_route_uat_analyzer\\route_uat_summary.json"
             ),
         },
     }

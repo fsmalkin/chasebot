@@ -11,8 +11,11 @@ from datetime import timezone
 from pathlib import Path
 from typing import Any
 
+from chasecar_env import load_repo_dotenv
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+load_repo_dotenv(REPO_ROOT)
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 ANALYZER_KIND = "fetch_provider_launch_checklist"
 DEFAULT_PROVIDER_READINESS = (

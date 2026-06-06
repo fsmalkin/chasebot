@@ -93,8 +93,11 @@ def _green_dashboard(path: Path) -> Path:
     return _write_json(
         path,
         {
-            "status_label": "Three-seed breadth rollup green; seed 20260648 hardware rehearsal green",
-            "status_detail": "The rollup covers seeds 20260648, 20260649, and 20260650 across 300 scenes.",
+            "status_label": "Execution-first pivot: provider launch or physical/onboard rehearsal next",
+            "status_detail": (
+                "Execution-first branch is ready with 300 scenes and provider-backed seed20260650 "
+                "launch queued."
+            ),
             "latest_evidence": [
                 {
                     "title": "Three-seed breadth rollup is green",
@@ -146,8 +149,11 @@ def test_provider_rerun_readiness_passes_when_key_and_fallback_evidence_are_read
     assert summary["blockers"] == []
     assert "--planner-mode llm_supervised_guarded" in summary["next_commands"]["planner_gate"]
     assert "--route ambiguous_or_unsafe_no_go" in summary["next_commands"]["explicit_all_routes_replay"]
+    assert "provider_planner_seed20260650_breadth_100x3_20260605_replay" in summary["next_commands"]["explicit_all_routes_replay"]
+    assert "provider_planner_seed20260650_breadth_100x3_20260605_analysis" in summary["next_commands"]["analysis"]
     assert "fetch_planner_provider_rerun_comparison.py" in summary["next_commands"]["provider_rerun_comparison"]
     assert "--seed 20260650" in summary["next_commands"]["provider_rerun_comparison"]
+    assert "provider_planner_seed20260650_breadth_100x3_20260605_replay" in summary["next_commands"]["provider_rerun_comparison"]
 
 
 def test_provider_rerun_readiness_requires_all_route_families(tmp_path: Path):

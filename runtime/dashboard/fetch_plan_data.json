@@ -1,9 +1,9 @@
 {
   "title": "Generalized Fetch-To-Pose Living Plan",
-  "updated_label": "Updated June 5, 2026, 5:29 PM ET",
+  "updated_label": "Updated June 5, 2026, 8:55 PM ET",
   "branch": "spike/fetch-arch-planner-routed-forward-only-moonshot-20260602",
-  "status_label": "Execution-first pivot: provider launch or physical/onboard rehearsal next",
-  "status_detail": "The planner-routed moonshot path has enough sim-gate breadth and visual proof to stop optimizing around meta-evidence. Current proof covers 300 generated planner scenes, all five route families, 27/27 executable visual deliveries, 15/15 operator watchlist samples, and 9/9 required dashboard proof cards. The next big move is execution: run the provider-backed seed20260650 route-owner launch when OPENAI_API_KEY is present, or run the seed20260648 robot-side physical/onboard rehearsal when the hardware lane is available. Milestone completion still requires provider-backed planner authority and physical/onboard proof.",
+  "status_label": "Provider-backed planner launch is green; physical/onboard rehearsal next",
+  "status_detail": "The planner-routed moonshot path now has deterministic breadth, provider-backed planner authority, and browser-watchable visual proof. Current proof covers 300 generated planner scenes, all five route families, 27/27 executable deterministic visual deliveries, 15/15 operator watchlist samples, 10/10 required dashboard proof cards, and a provider-backed seed20260650 launch with provider ok=100/100, guarded accepts=100/100, zero wrong fetch dispatches, 9/9 executable visual deliveries, and clean execution/setup/contact analysis. The next big move is physical/onboard rehearsal; milestone completion still requires hardware_proven=true from physical robot execution, onboard TensorRT proof, physical camera evidence, and field-physics notes.",
   "long_term_milestone": {
     "title": "Planner-Gated Generalized Fetch-To-Pose v1",
     "body": "Deliver a no-shoot, robot-owned fetch behavior where the planner chooses the bounded route, Nav2 or recovery setup owns approach geometry where it has evidence, local fetch closes the line, and a bounded contact servo finishes only inside a measured delivery envelope."
@@ -50,41 +50,54 @@
   ],
   "latest_evidence": [
     {
-      "title": "Execution-first big move is queued",
-      "status": "launch decision is waiting on provider key or physical hardware gate",
-      "tone": "yellow",
-      "summary": "The active branch has enough deterministic sim-gate route-owner proof to prioritize launch work. The execution-first launcher now reads the provider checklist and robot-side preflight, then selects provider launch, physical/onboard launch, or a fail-closed waiting state. The current decision is waiting_on_external_gate because OPENAI_API_KEY is absent and the robot-side preflight reports hardware_connected=false.",
+      "title": "Provider-backed seed20260650 launch is green",
+      "status": "provider authority proven in sim; physical/onboard proof remains open",
+      "tone": "green",
+      "summary": "The repo key was present, and the provider launch path now loads the repo .env through the shared environment helper. The execution-first launcher selects provider_launch, the provider-backed seeded gate passed 100/100 route decisions with provider ok=100/100, guarded accepts=100/100, zero vetoes, zero wrong fetch dispatches, replay 9/9, visual packages 9/9, and clean execution/setup/contact analysis. Representative onboard/topdown keyframe sheets across recovery, Nav2-first, and fetch-ready routes showed coherent setup, visible push/coast, and terminal delivery geometry. Hardware proof remains the open milestone gate.",
       "metrics": [
-        "Current decision: launch_ready=false; selected_lane=waiting_on_external_gate",
-        "Provider blocker: missing_openai_api_key",
-        "Physical blocker: hardware_connected_false",
-        "Current sim proof: 300 planner scenes, five route families, 27/27 executable visual deliveries, 15/15 operator watchlist samples",
-        "Rule: run provider launch when OPENAI_API_KEY is present, or physical/onboard launch when hardware is connected and approved"
+        "Execution-first decision: launch_ready=true; selected_lane=provider_launch; blockers=[]",
+        "Provider planner: random_cases=100; provider ok=100/100; llm_supervised_guarded=100; guarded accepts=100/100; vetoes=0",
+        "Route mix: fetch_ready_local=23; nav2_reposition_first=16; recovery_or_reaim=15; scan_or_perceive_first=24; ambiguous_or_unsafe_no_go=22",
+        "Executable replay: selected=9; mission_pass=9; visual_package_pass=9; mission_fail=0",
+        "Analyzer: execution/setup/contact clean; first_contact_blocker_count=0; contact_watch_count=0",
+        "Milestone readiness: provider_backed_authority_proven=true; hardware_proven=false; milestone_complete=false"
       ],
       "links": [
         {
-          "label": "Execution-first launch decision",
-          "url": "/artifacts/session/execution_first_launch_decision_current_20260605/fetch_execution_first_launch_decision/scorecard.md"
+          "label": "Provider-backed parent scorecard",
+          "url": "/artifacts/session/provider_planner_seed20260650_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md"
         },
         {
-          "label": "Execution-first launch decision summary",
-          "url": "/artifacts/session/execution_first_launch_decision_current_20260605/fetch_execution_first_launch_decision/execution_first_launch_decision_summary.json"
+          "label": "Provider-backed planner scorecard",
+          "url": "/artifacts/session/provider_planner_seed20260650_breadth_100x3_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
         },
         {
-          "label": "Provider launch checklist",
-          "url": "/artifacts/session/provider_launch_checklist_seed20260650_20260605/fetch_provider_launch_checklist/scorecard.md"
+          "label": "Provider replay scorecard",
+          "url": "/artifacts/session/provider_planner_seed20260650_breadth_100x3_20260605_replay/fetch_planner_route_replay_batch/scorecard.md"
         },
         {
-          "label": "Robot-side physical runbook",
-          "url": "/artifacts/session/robot_side_rehearsal_preflight_seed20260648_current_physical_gap_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md"
+          "label": "Provider route UAT analyzer",
+          "url": "/artifacts/session/provider_planner_seed20260650_breadth_100x3_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md"
         },
         {
-          "label": "Milestone readiness scorecard",
-          "url": "/artifacts/session/generalized_fetch_to_pose_milestone_readiness_current_proof_cards_20260605/fetch_generalized_milestone_readiness/scorecard.md"
+          "label": "Provider rerun comparison",
+          "url": "/artifacts/session/provider_planner_seed20260650_provider_rerun_comparison_20260605/fetch_planner_provider_rerun_comparison/scorecard.md"
         },
         {
-          "label": "Dashboard visual evidence audit",
-          "url": "/artifacts/session/dashboard_visual_evidence_audit_current_proof_cards_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md"
+          "label": "Recovery onboard video",
+          "url": "/artifacts/session/20260606T002115154561Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Recovery keyframe sheet",
+          "url": "/artifacts/session/20260606T002115154561Z/visual/keyframe_review_contact_sheet.png"
+        },
+        {
+          "label": "Nav2-first onboard video",
+          "url": "/artifacts/session/20260606T002740156949Z/visual/raw_camera_browser.mp4"
+        },
+        {
+          "label": "Fetch-ready onboard video",
+          "url": "/artifacts/session/20260606T003405029990Z/visual/raw_camera_browser.mp4"
         }
       ]
     },
@@ -217,21 +230,24 @@
     },
     {
       "title": "Milestone readiness rollup is UAT-ready",
-      "status": "sim/operator UAT green with geometry breadth and watchlist proof; provider-backed LLM routing and physical/onboard proof still pending",
+      "status": "sim/operator UAT green with provider authority; physical/onboard proof still pending",
       "tone": "green",
-      "summary": "The milestone readiness rollup now consumes the current proof stack: three-seed deterministic breadth, planner geometry breadth, the 15-item operator UAT watchlist, the 10-card dashboard visual-evidence audit, provider rerun preflight/comparison, and seed20260648 robot-fidelity hardware rehearsal. It reports operator_uat_ready=true with 300 planner scenes, all five route families, all major setup flags, 15 browser-watchable current UAT samples, and hardware_transfer_ready=true. It keeps milestone_complete=false because OPENAI_API_KEY is missing for provider-backed LLM routing and hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
+      "summary": "The milestone readiness rollup now consumes the current proof stack: three-seed deterministic breadth, provider-backed seed20260650 authority, planner geometry breadth, the 15-item operator UAT watchlist, the 10-card dashboard visual-evidence audit, and seed20260648 robot-fidelity hardware rehearsal. It reports operator_uat_ready=true and provider_backed_authority_proven=true. It keeps milestone_complete=false because hardware_proven=false until physical robot execution, onboard TensorRT proof, physical camera evidence, and field physics are recorded.",
       "metrics": [
-        "Milestone audit: pass=true; operator_uat_ready=true; milestone_complete=false",
-        "Green evidence: three-seed deterministic breadth rollup, planner geometry breadth, operator UAT watchlist, dashboard visual evidence audit, seed20260648 robot-fidelity hardware rehearsal",
-        "Geometry breadth: 300 scenes; all five route families; all major setup flags; distance, angle, lateral, standoff, and yaw spans above thresholds",
+        "Milestone audit: pass=true; operator_uat_ready=true; provider_backed_authority_proven=true; milestone_complete=false",
+        "Green evidence: three-seed deterministic breadth rollup, provider-backed seed20260650 authority, planner geometry breadth, operator UAT watchlist, dashboard visual evidence audit, seed20260648 robot-fidelity hardware rehearsal",
         "Dashboard/UAT proof: 15/15 UAT samples and 10/10 current evidence cards pass link audit",
-        "Provider boundary: provider_backed_authority_proven=false until OPENAI_API_KEY rerun and provider-vs-baseline comparison pass",
+        "Provider boundary: closed by provider comparison; strict_provider_authority_ready=true; guarded_provider_rerun_ready=true",
         "Hardware boundary: hardware_proven=false until physical/onboard TensorRT run, physical camera evidence, and field physics proof are recorded"
       ],
       "links": [
         {
           "label": "Milestone readiness scorecard",
           "url": "/artifacts/session/generalized_fetch_to_pose_milestone_readiness_current_proof_cards_20260605/fetch_generalized_milestone_readiness/scorecard.md"
+        },
+        {
+          "label": "Provider comparison scorecard",
+          "url": "/artifacts/session/provider_planner_seed20260650_provider_rerun_comparison_20260605/fetch_planner_provider_rerun_comparison/scorecard.md"
         },
         {
           "label": "Milestone readiness summary",
@@ -479,21 +495,15 @@
       ]
     },
     {
-      "title": "Provider rerun preflight is waiting on OPENAI_API_KEY",
-      "status": "blocked prerequisite: three-seed breadth rollup, latest seed, and dashboard are ready; provider key is missing",
-      "tone": "yellow",
-      "summary": "The provider-rerun readiness preflight targets the current breadth floor: the three-seed rollup across seeds 20260648, 20260649, and 20260650, plus seed20260650 as the concrete provider rerun seed. Rollup evidence is green with 300 generated planner scenes, zero wrong fetch dispatches, 27/27 executable visual deliveries, zero contact watches, and zero first-contact blockers. The readiness scorecard now emits the full provider sequence: provider planner gate, explicit all-routes replay, route UAT analyzer, and provider-vs-baseline comparison. The current comparison artifact proves the replay/analyzer are green and fails only because provider status is skipped_missing_openai_api_key.",
+      "title": "Provider rerun preflight is green",
+      "status": "repo .env key loaded; provider launch path is ready and has passed",
+      "tone": "green",
+      "summary": "The provider-rerun readiness preflight now passes with openai_api_key_present=true after the provider launch scripts load the repo .env. It emits the wrapper-aligned provider sequence and points at the completed seed20260650 provider launch, replay, analysis, and comparison artifacts.",
       "metrics": [
-        "Preflight: provider_rerun_ready=false; readiness_level=provider_rerun_blocked",
-        "Blocker: missing_openai_api_key",
-        "Rollup baseline: seeds=20260648,20260649,20260650; random_cases=300; executable_rows=27",
-        "Rollup quality: wrong_fetch_dispatches=0; contact_watches=0; first_contact_blockers=0",
-        "Concrete provider rerun target: seed=20260650; random_cases=100; route families=5/5",
-        "Dashboard evidence: breadth rollup status present; uat_sample_count=15",
-        "Comparison gate: provider planner status, guard agreement/vetoes, route deltas from seed20260650 baseline, replay pass, and route UAT quality",
-        "Current pre-provider comparison: replay green and route UAT clean; provider planner blocked by skipped_missing_openai_api_key",
-        "Provider-vs-baseline comparison analyzer is now the final provider rerun evidence gate",
-        "Claim boundary: provider_backed_authority_proven=false; promotion_evidence=false; hardware_proven=false"
+        "Provider readiness: pass=true; provider_rerun_ready=true; blockers=[]",
+        "Provider launch checklist: pass=true; provider_launch_ready=true; readiness_level=ready_for_provider_launch",
+        "Execution-first decision: selected_lane=provider_launch",
+        "Claim boundary: provider readiness is now green; hardware_proven remains false until physical/onboard proof lands"
       ],
       "links": [
         {
@@ -501,42 +511,25 @@
           "url": "/artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/scorecard.md"
         },
         {
-          "label": "Provider rerun readiness summary",
-          "url": "/artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/provider_rerun_readiness_summary.json"
+          "label": "Provider launch checklist",
+          "url": "/artifacts/session/provider_launch_checklist_seed20260650_20260605/fetch_provider_launch_checklist/scorecard.md"
         },
         {
-          "label": "Pre-provider comparison summary",
-          "url": "/artifacts/session/provider_rerun_comparison_pre_provider_seed20260650_20260605/fetch_planner_provider_rerun_comparison/provider_rerun_comparison_summary.json"
-        },
-        {
-          "label": "Pre-provider comparison scorecard",
-          "url": "/artifacts/session/provider_rerun_comparison_pre_provider_seed20260650_20260605/fetch_planner_provider_rerun_comparison/scorecard.md"
-        },
-        {
-          "label": "Three-seed breadth rollup scorecard",
-          "url": "/artifacts/session/analysis_fetch_planner_breadth_rollup_seeds20260648_20260650_20260605/fetch_planner_breadth_rollup/scorecard.md"
-        },
-        {
-          "label": "Seed 20260650 planner scorecard",
-          "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
-        },
-        {
-          "label": "Seed 20260648 mixed all-routes UAT bundle",
-          "url": "/artifacts/session/live_planner_seed20260648_mixed_all_routes_3x_20260605/fetch_planner_route_replay_batch/scorecard.md"
+          "label": "Execution-first launch decision",
+          "url": "/artifacts/session/execution_first_launch_decision_current_20260605/fetch_execution_first_launch_decision/scorecard.md"
         }
       ]
     },
     {
       "title": "Provider launch checklist is ready",
-      "status": "provider-backed run sequence is packaged; OPENAI_API_KEY still gates launch",
-      "tone": "yellow",
-      "summary": "The provider launch checklist turns the pending LLM-backed planner rerun into an executable sequence with expected artifacts and refresh steps. It records the planner gate, mixed all-routes replay, route UAT analysis, provider-vs-baseline comparison, and dashboard proof refresh commands. The launch plan is ready, while provider_launch_ready=false until OPENAI_API_KEY is present and the provider preflight clears its blockers.",
+      "status": "provider_launch_ready=true with wrapper-aligned artifacts",
+      "tone": "green",
+      "summary": "The provider launch checklist now passes with provider_launch_ready=true after the shared .env loader made the repo key available to provider launch scripts. It records the parent provider gate, planner child, replay child, route analyzer, comparison analyzer, and refresh-dashboard steps needed to preserve the claim.",
       "metrics": [
-        "Checklist: pass=true; launch_plan_ready=true; provider_launch_ready=false",
-        "Current blocker: missing_openai_api_key",
-        "Run sequence: provider planner gate, visual replay, route UAT analysis, provider comparison, dashboard proof refresh",
-        "Expected artifacts: provider planner summary, replay summary, route UAT summary, provider comparison summary, scorecards for each layer",
-        "Claim boundary: provider_backed_authority_proven=false until provider artifacts pass; promotion_evidence=false; hardware_proven=false"
+        "Checklist: pass=true; launch_plan_ready=true; provider_launch_ready=true",
+        "Readiness level: ready_for_provider_launch; blockers=[]",
+        "Expected artifacts: provider planner, provider replay, provider route UAT, provider comparison",
+        "Claim boundary: provider authority is proven by the completed comparison; promotion_evidence=false on the checklist; hardware_proven=false"
       ],
       "links": [
         {
@@ -544,12 +537,12 @@
           "url": "/artifacts/session/provider_launch_checklist_seed20260650_20260605/fetch_provider_launch_checklist/scorecard.md"
         },
         {
-          "label": "Provider launch checklist summary",
-          "url": "/artifacts/session/provider_launch_checklist_seed20260650_20260605/fetch_provider_launch_checklist/provider_launch_checklist_summary.json"
-        },
-        {
           "label": "Provider rerun readiness scorecard",
           "url": "/artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/scorecard.md"
+        },
+        {
+          "label": "Provider comparison scorecard",
+          "url": "/artifacts/session/provider_planner_seed20260650_provider_rerun_comparison_20260605/fetch_planner_provider_rerun_comparison/scorecard.md"
         }
       ]
     },
@@ -6254,8 +6247,8 @@
       "body": "Seed20260640 repaired the base-controller preflight race with a final post-repair list_controllers check. Seed20260641 repaired live-run timeout capture and bounded fresh-dashboard startup retry. Seed20260645 adds a robot set-pose service-timeout watch: the first scene13 attempt stopped before fetch control, then the targeted repro and resumed batch passed."
     },
     {
-      "label": "Provider-backed LLM routing rerun",
-      "body": "The deterministic guarded route-owner stack now has a three-seed breadth rollup over seeds 20260648, 20260649, and 20260650: 300 generated planner scenes, 27/27 executable visual deliveries, zero wrong fetch dispatches, zero contact watches, and zero first-contact blockers. Provider status stayed skipped_missing_openai_api_key, so restore OPENAI_API_KEY and rerun the planner gate before claiming current provider-backed authority."
+      "label": "Provider-backed route-owner authority",
+      "body": "Seed20260650 now closes the provider-backed planner-authority gate: provider ok=100/100, llm_supervised_guarded=100, guarded accepts=100/100, wrong_fetch=0, replay=9/9, visual packages=9/9, and clean route UAT quality. Preserve this as the current sim authority proof while the next gate shifts to physical/onboard execution."
     },
     {
       "label": "Base-controller fetch preflight",
@@ -6304,14 +6297,13 @@
   ],
   "next_steps": [
     "Use the operator UAT watchlist for browser review: start with onboard videos, cross-check keyframe sheets, then use topdown/world context for each route family.",
-    "Use the milestone readiness rollup as the operator UAT checkpoint: sim evidence is green, provider-backed routing and physical/onboard proof remain the next gates.",
+    "Use the milestone readiness rollup as the operator UAT checkpoint: sim evidence and provider-backed routing are green; physical/onboard proof remains the next gate.",
+    "Use the provider-backed seed20260650 launch as the current planner-authority proof: provider ok=100/100, guarded accepts=100/100, wrong_fetch=0, replay=9/9, and route UAT quality clean.",
     "Use the planner geometry breadth audit alongside route-count rollups when judging wide-variety coverage; it verifies distance, angle, lateral, standoff, yaw, route-family, and setup-flag spread.",
     "Use the physical/onboard proof-gap schema for the next hardware run: physical robot, onboard TensorRT, physical camera evidence, field-physics notes, and browser-watchable artifacts are all required before hardware_proven=true.",
     "Run the current seed20260648 robot-side physical runbook, then create physical_claim_summary.json and rerun fetch_physical_onboard_proof_gap.py before any hardware_proven claim.",
     "After a physical run, run fetch_physical_claim_from_run.py on the completed batch summary with all physical confirmation flags, then feed that claim into fetch_physical_onboard_proof_gap.py.",
-    "Provide OPENAI_API_KEY, then run the rollup-backed provider rerun on seed20260650, run the provider-vs-baseline comparison analyzer, and compare provider agreement, guard vetoes, route deltas, and mixed all-routes visual replay against the three-seed deterministic baseline.",
-    "Repeat the same mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT, physical camera evidence, and field-physics notes.",
-    "After provider-backed routing passes, rerun the mixed all-routes evidence ladder on physical/onboard hardware.",
+    "Repeat the mixed all-routes evidence ladder on physical/onboard hardware with onboard TensorRT, physical camera evidence, and field-physics notes.",
     "Inspect raw_camera, topdown_telemetry, world_stream, and keyframe sheets across each physical/onboard run before trusting telemetry.",
     "Keep hardware_proven=false until physical robot execution, onboard TensorRT, physical camera evidence, and field-physics proof are recorded."
   ],
@@ -6510,5 +6502,8 @@
         "url": "/artifacts/session/live_planner_seeded_generalization_gate_seed20260648_breadth_100x3_20260605_planner/fetch_planner_handoff_gate/scorecard.md"
       }
     ]
-  }
+  },
+  "operator_notes": [
+    "Use the provider-backed seed20260650 launch as the current planner-authority proof; the next milestone gate is physical/onboard rehearsal with onboard TensorRT, physical camera evidence, and field-physics notes."
+  ]
 }

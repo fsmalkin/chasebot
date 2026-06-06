@@ -11,8 +11,11 @@ from datetime import timezone
 from pathlib import Path
 from typing import Any
 
+from chasecar_env import load_repo_dotenv
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+load_repo_dotenv(REPO_ROOT)
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 ANALYZER_KIND = "fetch_execution_first_launch_decision"
 DEFAULT_PROVIDER_CHECKLIST = (
@@ -239,7 +242,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Choose the first available execution-first launch lane.")
     parser.add_argument("--campaign-id", default=f"fetch_execution_first_launch_decision_{current_utc_stamp()}")
     parser.add_argument("--provider-checklist-summary", default=DEFAULT_PROVIDER_CHECKLIST)
@@ -247,7 +250,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--openai-api-key", default=os.environ.get("OPENAI_API_KEY", ""))
     parser.add_argument("--prefer", choices=("auto", "provider", "physical"), default="auto")
     parser.add_argument("--allow-physical-launch", action="store_true")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def main() -> int:

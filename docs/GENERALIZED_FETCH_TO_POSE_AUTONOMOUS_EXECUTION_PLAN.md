@@ -38,25 +38,27 @@ low-cost search mechanism while preserving canonical 1.0x evidence for
 promotion decisions.
 
 June 5, 2026 big-move pivot: the active branch has enough sim-gate route-owner
-proof and enough browser evidence plumbing. Further work should prioritize
-execution gates over additional meta-audits. The current decision is:
+proof, provider-backed planner authority, and browser evidence plumbing.
+Further work should prioritize the hardware transfer gate over additional
+meta-audits. The current decision is:
 
-1. run the provider-backed route-owner rerun as soon as `OPENAI_API_KEY` is
-   present, using the packaged provider launch checklist at
-   `artifacts/session/provider_launch_checklist_seed20260650_20260605/fetch_provider_launch_checklist/scorecard.md`
-2. run the robot-side physical/onboard rehearsal as soon as the physical robot
+1. treat the provider-backed seed20260650 route-owner launch as green:
+   `artifacts/session/provider_planner_seed20260650_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`
+2. use the provider comparison scorecard as the planner-authority proof:
+   `artifacts/session/provider_planner_seed20260650_provider_rerun_comparison_20260605/fetch_planner_provider_rerun_comparison/scorecard.md`
+3. run the robot-side physical/onboard rehearsal as soon as the physical robot
    lane is available, using the refreshed runbook at
    `artifacts/session/robot_side_rehearsal_preflight_seed20260648_current_physical_gap_20260605/fetch_robot_side_rehearsal_preflight/scorecard.md`
-3. cap additional sim-only proof work unless it directly prepares one of those
-   two launches or fixes a failure from them
-4. keep the dashboard as the operator-facing UAT surface: every launch attempt
+4. cap additional sim-only proof work unless it directly prepares the hardware
+   launch or fixes a failure from it
+5. keep the dashboard as the operator-facing UAT surface: every launch attempt
    needs onboard-first video, keyframe sequence review, topdown/world context,
    and a scorecard link
 
 The intended big move is a five-route-family demo package: no-go, scan/perceive,
 recovery/re-aim, Nav2-first, and fetch-ready local. Provider-backed routing
-proves planner authority; physical/onboard rehearsal proves hardware transfer.
-Either lane may run first. Milestone completion needs both.
+now proves planner authority for the current simulation gate. Physical/onboard
+rehearsal remains the hardware-transfer proof required for milestone completion.
 
 June 2, 2026 moonshot implementation target: the branch routes mixed planner
 scenes into v0 executable outcomes. `fetch_ready_local` and
@@ -1161,14 +1163,14 @@ contracts. Seed20260647 is now the widest sim-gate route-owner UAT package for
 the planner-routed moonshot path; provider-backed LLM routing and
 physical/onboard proof remain the next gates.
 
-Provider-rerun readiness is now explicit:
+The seed20260647 provider-rerun readiness checkpoint was the first explicit
+credential gate:
 `artifacts/session/provider_rerun_readiness_seed20260647_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`.
 The preflight verifies that seed20260647 fallback evidence and the dashboard
-UAT bundle are ready for a provider-backed rerun, then fails closed on the
-current machine because `OPENAI_API_KEY` is absent. Treat this as the active
-provider gate: add credentials, rerun the generated `llm_supervised_guarded`
-seed20260647 commands, then compare provider agreement, guard vetoes, and the
-same all-routes visual replay before changing any planner-authority claim.
+UAT bundle were ready for a provider-backed rerun, then failed closed on the
+credential boundary. Keep it as historical evidence hygiene. The active
+provider-authority proof is the completed seed20260650 provider comparison
+recorded below.
 
 Seed `20260648` raises the deterministic fallback breadth floor to `100`
 generated planner scenes:
@@ -1242,23 +1244,21 @@ sim-gate behavior. The active gates remain provider-backed LLM rerun after
 `OPENAI_API_KEY` is restored and physical/onboard proof before any
 `hardware_proven=true` claim.
 
-Seed `20260650` adds the next fresh 100-scene breadth check:
-`artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
-The planner classified all `100` generated scenes across all five route
-families with zero wrong fetch dispatches. Provider status remained
-`skipped_missing_openai_api_key=100`, so this is deterministic-fallback
-evidence. The selected executable replay passed `9/9` deliveries across
-`recovery_or_reaim`, `nav2_reposition_first`, and `fetch_ready_local`, with
-visual packages `9/9`:
-`artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`.
+Seed `20260650` now closes the provider-backed route-owner launch:
+`artifacts/session/provider_planner_seed20260650_breadth_100x3_20260605/fetch_planner_seeded_generalization_gate/scorecard.md`.
+The provider-backed planner classified all `100` generated scenes across all
+five route families with provider `ok=100/100`, `llm_supervised_guarded=100`,
+guarded accepts `100/100`, zero vetoes, and zero wrong fetch dispatches. The
+selected executable replay passed `9/9` deliveries across `recovery_or_reaim`,
+`nav2_reposition_first`, and `fetch_ready_local`, with visual packages `9/9`:
+`artifacts/session/provider_planner_seed20260650_breadth_100x3_20260605_replay/fetch_planner_route_replay_batch/scorecard.md`.
 The analyzer at
-`artifacts/session/live_planner_seeded_generalization_gate_seed20260650_breadth_100x3_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
+`artifacts/session/provider_planner_seed20260650_breadth_100x3_20260605_analysis/fetch_planner_route_uat_analyzer/scorecard.md`
 reports clean execution/setup/contact, `0` contact watches, and `0`
-first-contact blockers. Frame-sequence review covered all nine
-raw-camera/topdown sheets and matched the corrected delivery geometry. This
-adds a consecutive 100-scene breadth pass after seed20260649 while preserving
-the same claim boundary: provider-backed LLM routing and physical/onboard proof
-remain open gates.
+first-contact blockers. Frame-sequence review sampled representative
+raw-camera/topdown sheets across recovery, Nav2-first, and fetch-ready routes
+and matched the corrected delivery geometry. This gives the current sim gate
+provider-backed planner authority; physical/onboard proof remains open.
 
 The current multi-seed breadth rollup is green:
 `artifacts/session/analysis_fetch_planner_breadth_rollup_seeds20260648_20260650_20260605/fetch_planner_breadth_rollup/scorecard.md`.
@@ -1268,24 +1268,22 @@ visual deliveries passed `27/27`, contact watches stayed at `0`, and
 first-contact blockers stayed at `0`. Route mix across the rollup is
 `fetch_ready_local=70`, `nav2_reposition_first=57`, `recovery_or_reaim=52`,
 `scan_or_perceive_first=65`, and `ambiguous_or_unsafe_no_go=56`. Treat this as
-the current deterministic-fallback breadth baseline for the moonshot branch.
-Provider-backed LLM authority and physical/onboard proof remain the open gates.
+the deterministic breadth baseline used for provider comparison.
+Physical/onboard proof remains the open gate.
 
 The provider-rerun readiness checkpoint now keys off that full breadth
 baseline:
 `artifacts/session/provider_rerun_readiness_rollup_seed20260650_20260605/fetch_planner_provider_rerun_readiness/scorecard.md`.
-The preflight passes the rollup, seed20260650 fallback, and dashboard checks,
-then blocks only on `missing_openai_api_key`. After credentials are available,
-rerun seed20260650 in `llm_supervised_guarded` mode, replay three roughest rows
-per route family, and compare provider decisions against the deterministic
-rollup before changing the planner-authority claim.
+The preflight now passes with `openai_api_key_present=true` after loading the
+repo `.env` through the shared environment helper.
 
-The provider comparison step is now executable:
-`artifacts/session/provider_rerun_comparison_pre_provider_seed20260650_20260605/fetch_planner_provider_rerun_comparison/scorecard.md`.
+The provider comparison step is green:
+`artifacts/session/provider_planner_seed20260650_provider_rerun_comparison_20260605/fetch_planner_provider_rerun_comparison/scorecard.md`.
 It checks provider status, guard agreement and veto reasons, route deltas from
 the matching seed20260650 baseline, replay success, and route UAT quality. The
-current pre-provider artifact confirms the visual replay path is green and
-isolates the open blocker to provider credentials.
+comparison reports `strict_provider_authority_ready=true`,
+`guarded_provider_rerun_ready=true`, route deltas `0`, replay `9/9`, and clean
+route UAT quality.
 
 The dashboard visual evidence audit now checks the operator-facing proof links:
 `artifacts/session/dashboard_visual_evidence_audit_rollup_20260605/fetch_dashboard_visual_evidence_audit/scorecard.md`.

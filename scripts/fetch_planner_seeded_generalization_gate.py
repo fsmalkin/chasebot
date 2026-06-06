@@ -13,12 +13,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from chasecar_env import load_repo_dotenv
 import fetch_planner_handoff_gate as planner_gate
 import fetch_planner_route_replay_batch as replay_batch
 import fetch_planner_route_uat_analyzer as route_analyzer
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+load_repo_dotenv(REPO_ROOT)
 SESSION_ROOT = REPO_ROOT / "artifacts" / "session"
 GATE_KIND = "fetch_planner_seeded_generalization_gate"
 DEFAULT_RANDOM_CASES = 30
