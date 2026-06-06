@@ -228,6 +228,69 @@ def test_hard_scene_set_covers_deliberate_route_pressure_cases():
     )
 
 
+def test_opposite_behind_scene_set_covers_broad_spatial_cases():
+    scenes = gate.generate_random_scenes(
+        seed=123,
+        random_cases=12,
+        scene_set=gate.OPPOSITE_BEHIND_SCENE_SET,
+    )
+
+    assert len(scenes) == 12
+    assert sum(
+        1 for scene in scenes
+        if scene["geometry"]["robot_ball_relative_bearing_abs_deg"] >= 90.0
+    ) >= 6
+    assert sum(
+        1 for scene in scenes
+        if scene["geometry"]["opposite_side_of_circle"] is True
+    ) >= 3
+    assert {
+        route: sum(1 for scene in scenes if scene["expected_route_label"] == route)
+        for route in gate.ROUTE_LABELS
+    } == {
+        gate.ROUTE_FETCH_READY: 1,
+        gate.ROUTE_NAV2_REPOSITION: 6,
+        gate.ROUTE_SCAN_OR_PERCEIVE: 1,
+        gate.ROUTE_RECOVERY_OR_REAIM: 2,
+        gate.ROUTE_NO_GO: 2,
+    }
+    assert all(
+        gate.deterministic_route_label(scene) == scene["expected_route_label"]
+        for scene in scenes
+    )
+
+    nav2_wraparound = next(scene for scene in scenes if scene["scene_id"] == "opbehind_nav2_wraparound_left_03")
+    quality = gate.score_route_quality(nav2_wraparound, gate.ROUTE_NAV2_REPOSITION)
+
+    assert "ball_behind_robot_heading" in quality["flags"]
+    assert "nav2_wraparound_setup" in quality["recommendations"]
+
+
+def test_opposite_behind_layout_preserves_profile_and_geometry(tmp_path):
+    scene = next(
+        item for item in gate.generate_random_scenes(
+            seed=123,
+            random_cases=12,
+            scene_set=gate.OPPOSITE_BEHIND_SCENE_SET,
+        )
+        if item["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+    )
+    layout_path = tmp_path / "layout.json"
+
+    gate.write_fetch_ready_layout_from_scene(
+        layout_path,
+        scene,
+        route_label=gate.ROUTE_NAV2_REPOSITION,
+        route_executor=gate.ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
+    )
+
+    layout = read_json(layout_path)
+    assert layout["random_profile"] == gate.OPPOSITE_BEHIND_PROFILE
+    assert layout["random_draw"]["random_profile"] == gate.OPPOSITE_BEHIND_PROFILE
+    assert layout["random_draw"]["scene_set"] == gate.OPPOSITE_BEHIND_SCENE_SET
+    assert layout["random_draw"]["robot_ball_relative_bearing_abs_deg"] >= 90.0
+
+
 def test_planner_gate_scores_hard_scene_set(tmp_path, monkeypatch):
     monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
     args = SimpleNamespace(
@@ -256,6 +319,38 @@ def test_planner_gate_scores_hard_scene_set(tmp_path, monkeypatch):
     assert summary["wrong_fetch_dispatch_count"] == 0
     assert summary["expected_route_counts"] == {route: 2 for route in gate.ROUTE_LABELS}
     assert summary["route_counts"] == {route: 2 for route in gate.ROUTE_LABELS}
+
+
+def test_planner_gate_scores_opposite_behind_scene_set(tmp_path, monkeypatch):
+    monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
+    args = SimpleNamespace(
+        campaign_id="planner_gate_opposite_behind_matrix",
+        scene_set=gate.OPPOSITE_BEHIND_SCENE_SET,
+        scene_descriptor_json=[],
+        scene_dir="",
+        random_cases=12,
+        seed=123,
+        planner_mode=gate.PLANNER_MODE_DETERMINISTIC,
+        dry_run=True,
+        openai_model=gate.DEFAULT_OPENAI_MODEL,
+        openai_api_key="",
+        openai_base_url=gate.DEFAULT_OPENAI_BASE_URL,
+        openai_org_id="",
+        openai_project_id="",
+        reasoning_effort=gate.DEFAULT_REASONING_EFFORT,
+        timeout_s=30.0,
+    )
+
+    summary = gate.run_gate(args)
+    coverage = summary["geometry_coverage"]
+
+    assert summary["pass"] is True
+    assert summary["scene_set"] == gate.OPPOSITE_BEHIND_SCENE_SET
+    assert coverage["scene_count"] == 12
+    assert coverage["behind_robot_heading_count"] >= 6
+    assert coverage["opposite_side_of_circle_count"] >= 3
+    assert all(coverage["success_bar"].values())
+    assert (tmp_path / "artifacts" / "session" / "planner_gate_opposite_behind_matrix" / gate.PLANNER_GATE_KIND / "scorecard.md").exists()
 
 
 def test_decision_records_route_quality_for_planner_artifacts():

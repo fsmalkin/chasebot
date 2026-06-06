@@ -70,6 +70,8 @@ FETCH_TARGET_POSE = {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.30}
 PLANNER_GATE_KIND = "fetch_planner_handoff_gate"
 PLANNER_MIXED_PROFILE = "planner_mixed_v1"
 HARD_SCENE_SET = "hard_mixed_fetch_planner_v1"
+OPPOSITE_BEHIND_SCENE_SET = "opposite_side_and_behind_robot_v1"
+OPPOSITE_BEHIND_PROFILE = "opposite_side_and_behind_robot_v1"
 OPENAI_TOOL_NAME = "emit_fetch_planner_route"
 LLM_SUPERVISED_MIN_CONFIDENCE = 0.90
 CONTACT_QUALITY_CLEAN_LATERAL_M = 0.030
@@ -148,6 +150,58 @@ def _finite_float(value: Any, default: float = 0.0) -> float:
     if not math.isfinite(number):
         return float(default)
     return number
+
+
+def _normalize_angle_deg(angle_deg: float) -> float:
+    return ((float(angle_deg) + 180.0) % 360.0) - 180.0
+
+
+def _pose_yaw_deg(pose: dict[str, Any]) -> float:
+    return math.degrees(_finite_float(pose.get("yaw"), 0.0))
+
+
+def _bearing_deg(origin: dict[str, Any], target: dict[str, Any]) -> float:
+    dx = _finite_float(target.get("x"), 0.0) - _finite_float(origin.get("x"), 0.0)
+    dy = _finite_float(target.get("y"), 0.0) - _finite_float(origin.get("y"), 0.0)
+    return math.degrees(math.atan2(dy, dx))
+
+
+def _augment_spatial_generalization_geometry(scene: dict[str, Any]) -> None:
+    geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
+    robot_pose = scene.get("robot_pose") if isinstance(scene.get("robot_pose"), dict) else {}
+    ball_pose = scene.get("ball_pose") if isinstance(scene.get("ball_pose"), dict) else {}
+    target_pose = scene.get("target_pose") if isinstance(scene.get("target_pose"), dict) else dict(FETCH_TARGET_POSE)
+    if not robot_pose or not ball_pose:
+        return
+
+    robot_to_ball_bearing_deg = _bearing_deg(robot_pose, ball_pose)
+    robot_ball_relative_bearing_deg = _normalize_angle_deg(robot_to_ball_bearing_deg - _pose_yaw_deg(robot_pose))
+    target_to_ball = (
+        _finite_float(ball_pose.get("x"), 0.0) - _finite_float(target_pose.get("x"), 0.0),
+        _finite_float(ball_pose.get("y"), 0.0) - _finite_float(target_pose.get("y"), 0.0),
+    )
+    target_to_robot = (
+        _finite_float(robot_pose.get("x"), 0.0) - _finite_float(target_pose.get("x"), 0.0),
+        _finite_float(robot_pose.get("y"), 0.0) - _finite_float(target_pose.get("y"), 0.0),
+    )
+    dot = target_to_ball[0] * target_to_robot[0] + target_to_ball[1] * target_to_robot[1]
+    ball_norm = math.hypot(*target_to_ball)
+    robot_norm = math.hypot(*target_to_robot)
+    target_robot_ball_angle_deg = 0.0
+    opposite_side = False
+    if ball_norm > 1.0e-9 and robot_norm > 1.0e-9:
+        cosine = max(-1.0, min(1.0, dot / (ball_norm * robot_norm)))
+        target_robot_ball_angle_deg = math.degrees(math.acos(cosine))
+        opposite_side = target_robot_ball_angle_deg >= 90.0
+
+    scene["geometry"] = {
+        **geometry,
+        "robot_to_ball_bearing_deg": round(float(robot_to_ball_bearing_deg), 6),
+        "robot_ball_relative_bearing_deg": round(float(robot_ball_relative_bearing_deg), 6),
+        "robot_ball_relative_bearing_abs_deg": round(abs(float(robot_ball_relative_bearing_deg)), 6),
+        "target_robot_ball_angle_deg": round(float(target_robot_ball_angle_deg), 6),
+        "opposite_side_of_circle": bool(opposite_side),
+    }
 
 
 def _quality_ratio(value: float, clean: float, limit: float) -> float:
@@ -243,7 +297,7 @@ def _target_relative_scene(
         and target_confidence >= 0.65
         and state_age_s <= 2.0
     )
-    return {
+    scene = {
         "generated_utc": utc_now(),
         "type": "fetch_planner_scene_descriptor",
         "scene_set": DEFAULT_SCENE_SET,
@@ -277,6 +331,8 @@ def _target_relative_scene(
             "no_direct_ball_impulse": True,
         },
     }
+    _augment_spatial_generalization_geometry(scene)
+    return scene
 
 
 def _refresh_local_fetch_envelope(scene: dict[str, Any]) -> None:
@@ -309,6 +365,8 @@ def generate_random_scenes(
 ) -> list[dict[str, Any]]:
     if str(scene_set or "").strip() == HARD_SCENE_SET:
         return generate_hard_scenes(random_cases=random_cases, scene_set=scene_set)
+    if str(scene_set or "").strip() == OPPOSITE_BEHIND_SCENE_SET:
+        return generate_opposite_behind_scenes(random_cases=random_cases, scene_set=scene_set)
 
     rng = random.Random(int(seed))
     case_count = max(int(random_cases), 1)
@@ -394,6 +452,7 @@ def generate_random_scenes(
                 unsafe_drift_m=rng.uniform(0.18, 0.35),
             )
         scene["scene_set"] = scene_set
+        _augment_spatial_generalization_geometry(scene)
         _refresh_local_fetch_envelope(scene)
         scenes.append(scene)
     return scenes
@@ -433,8 +492,223 @@ def _fixed_target_relative_scene(
         unsafe_drift_m=float(unsafe_drift_m),
     )
     scene["scene_set"] = scene_set
+    _augment_spatial_generalization_geometry(scene)
     _refresh_local_fetch_envelope(scene)
     return scene
+
+
+def _scene_with_relative_ball_bearing(
+    *,
+    route_label: str,
+    scene_id: str,
+    distance_m: float,
+    angle_deg: float,
+    standoff_m: float,
+    lateral_m: float,
+    relative_bearing_deg: float,
+    scene_set: str,
+    ball_confidence: float = 0.98,
+    target_confidence: float = 0.99,
+    state_age_s: float = 0.15,
+    corridor_blocked: bool = False,
+    corridor_clearance_m: float = 0.35,
+    unsafe_drift_m: float = 0.0,
+    opposite_side_setup: bool = False,
+) -> dict[str, Any]:
+    scene = _fixed_target_relative_scene(
+        route_label=route_label,
+        scene_id=scene_id,
+        distance_m=distance_m,
+        angle_deg=angle_deg,
+        standoff_m=standoff_m,
+        lateral_m=lateral_m,
+        yaw_error_deg=0.0,
+        scene_set=scene_set,
+        ball_confidence=ball_confidence,
+        target_confidence=target_confidence,
+        state_age_s=state_age_s,
+        corridor_blocked=corridor_blocked,
+        corridor_clearance_m=corridor_clearance_m,
+        unsafe_drift_m=unsafe_drift_m,
+    )
+    robot_pose = scene["robot_pose"]
+    ball_pose = scene["ball_pose"]
+    if opposite_side_setup:
+        angle_rad = math.radians(angle_deg)
+        normal_x = -math.sin(angle_rad)
+        normal_y = math.cos(angle_rad)
+        robot_pose["x"] = round(
+            float(FETCH_TARGET_POSE["x"]) + (standoff_m * math.cos(angle_rad)) + (lateral_m * normal_x),
+            6,
+        )
+        robot_pose["y"] = round(
+            float(FETCH_TARGET_POSE["y"]) + (standoff_m * math.sin(angle_rad)) + (lateral_m * normal_y),
+            6,
+        )
+        scene["geometry"]["robot_ball_distance_m"] = round(
+            math.hypot(robot_pose["x"] - ball_pose["x"], robot_pose["y"] - ball_pose["y"]),
+            6,
+        )
+
+    robot_to_ball_bearing_deg = _bearing_deg(robot_pose, ball_pose)
+    robot_pose["yaw"] = round(math.radians(_normalize_angle_deg(robot_to_ball_bearing_deg - relative_bearing_deg)), 6)
+    scene["geometry"]["robot_yaw_error_deg"] = round(
+        _normalize_angle_deg(math.degrees(float(robot_pose["yaw"])) - float(angle_deg)),
+        6,
+    )
+    _augment_spatial_generalization_geometry(scene)
+    _refresh_local_fetch_envelope(scene)
+    return scene
+
+
+def generate_opposite_behind_scenes(
+    *,
+    random_cases: int = 12,
+    scene_set: str = OPPOSITE_BEHIND_SCENE_SET,
+) -> list[dict[str, Any]]:
+    """Return a deterministic broad-spatial matrix for opposite-side UAT."""
+
+    scenes = [
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="opbehind_nav2_ball_behind_left_01",
+            distance_m=0.64,
+            angle_deg=24.0,
+            standoff_m=1.10,
+            lateral_m=0.10,
+            relative_bearing_deg=138.0,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="opbehind_nav2_ball_behind_right_02",
+            distance_m=0.66,
+            angle_deg=-26.0,
+            standoff_m=1.12,
+            lateral_m=-0.10,
+            relative_bearing_deg=-142.0,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="opbehind_nav2_wraparound_left_03",
+            distance_m=0.72,
+            angle_deg=38.0,
+            standoff_m=1.24,
+            lateral_m=0.18,
+            relative_bearing_deg=168.0,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="opbehind_nav2_wraparound_right_04",
+            distance_m=0.74,
+            angle_deg=-38.0,
+            standoff_m=1.24,
+            lateral_m=-0.18,
+            relative_bearing_deg=-168.0,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_SCAN_OR_PERCEIVE,
+            scene_id="opbehind_scan_stale_behind_05",
+            distance_m=0.58,
+            angle_deg=12.0,
+            standoff_m=0.84,
+            lateral_m=0.08,
+            relative_bearing_deg=126.0,
+            state_age_s=4.0,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NO_GO,
+            scene_id="opbehind_no_go_blocked_behind_06",
+            distance_m=0.62,
+            angle_deg=-14.0,
+            standoff_m=0.86,
+            lateral_m=-0.08,
+            relative_bearing_deg=-132.0,
+            corridor_blocked=True,
+            corridor_clearance_m=0.06,
+            unsafe_drift_m=0.24,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="opbehind_nav2_opposite_circle_left_07",
+            distance_m=0.62,
+            angle_deg=160.0,
+            standoff_m=0.82,
+            lateral_m=0.12,
+            relative_bearing_deg=112.0,
+            opposite_side_setup=True,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="opbehind_nav2_opposite_circle_right_08",
+            distance_m=0.62,
+            angle_deg=-160.0,
+            standoff_m=0.84,
+            lateral_m=-0.12,
+            relative_bearing_deg=-116.0,
+            opposite_side_setup=True,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NO_GO,
+            scene_id="opbehind_no_go_far_opposite_09",
+            distance_m=1.32,
+            angle_deg=172.0,
+            standoff_m=0.92,
+            lateral_m=0.04,
+            relative_bearing_deg=148.0,
+            opposite_side_setup=True,
+            corridor_clearance_m=0.18,
+            unsafe_drift_m=0.21,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_FETCH_READY,
+            scene_id="opbehind_fetch_ready_local_control_10",
+            distance_m=0.55,
+            angle_deg=8.0,
+            standoff_m=0.34,
+            lateral_m=0.018,
+            yaw_error_deg=2.2,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_RECOVERY_OR_REAIM,
+            scene_id="opbehind_recovery_lateral_debt_11",
+            distance_m=0.62,
+            angle_deg=-18.0,
+            standoff_m=0.76,
+            lateral_m=-0.19,
+            yaw_error_deg=-24.0,
+            scene_set=scene_set,
+        ),
+        _fixed_target_relative_scene(
+            route_label=ROUTE_RECOVERY_OR_REAIM,
+            scene_id="opbehind_recovery_yaw_debt_12",
+            distance_m=0.60,
+            angle_deg=20.0,
+            standoff_m=0.70,
+            lateral_m=0.12,
+            yaw_error_deg=31.0,
+            scene_set=scene_set,
+        ),
+    ]
+    case_count = max(int(random_cases), 1)
+    if case_count <= len(scenes):
+        return scenes[:case_count]
+    extra: list[dict[str, Any]] = []
+    while len(scenes) + len(extra) < case_count:
+        template = scenes[len(extra) % len(scenes)]
+        clone = json.loads(json.dumps(template))
+        clone["scene_id"] = f"{template['scene_id']}_repeat{len(extra) + 1:02d}"
+        extra.append(clone)
+    return scenes + extra
 
 
 def generate_hard_scenes(*, random_cases: int = 10, scene_set: str = HARD_SCENE_SET) -> list[dict[str, Any]]:
@@ -591,6 +865,7 @@ def load_frozen_scenes(
         for scene in _scene_payloads_from_file(path):
             scene.setdefault("scene_set", scene_set)
             scene.setdefault("source_scene_path", str(path))
+            _augment_spatial_generalization_geometry(scene)
             _refresh_local_fetch_envelope(scene)
             scenes.append(scene)
     return scenes
@@ -642,6 +917,8 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
     robot_ball_m = _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
     ball_target_m = _finite_float(geometry.get("ball_target_distance_m"), 999.0)
     ball_target_angle_deg = abs(_finite_float(geometry.get("ball_target_angle_deg"), 0.0))
+    robot_ball_relative_bearing_abs_deg = _finite_float(geometry.get("robot_ball_relative_bearing_abs_deg"), 0.0)
+    opposite_side_of_circle = bool(geometry.get("opposite_side_of_circle", False))
     clearance_m = _finite_float(corridor.get("clearance_m"), 0.0)
     blocked = bool(corridor.get("blocked", False))
     ball_conf = _finite_float(perception.get("ball_confidence"), 0.0)
@@ -662,6 +939,10 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
         flags.append("corridor_unusable")
     if not 0.34 <= ball_target_m <= 0.85:
         flags.append("target_distance_outside_local_fetch_window")
+    if robot_ball_relative_bearing_abs_deg >= 90.0:
+        flags.append("ball_behind_robot_heading")
+    if opposite_side_of_circle:
+        flags.append("opposite_side_of_circle")
 
     if route == ROUTE_FETCH_READY:
         lateral_ratio = _quality_ratio(lateral_m, CONTACT_QUALITY_CLEAN_LATERAL_M, FETCH_READY_LATERAL_LIMIT_M)
@@ -727,6 +1008,8 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
             risk = "medium" if severity >= 0.55 else "low"
             recommendations.extend(["nav2_forward_reposition", "verify_setup_pose_before_push"])
             score = 84.0 - 28.0 * severity
+        if robot_ball_relative_bearing_abs_deg >= 90.0 or opposite_side_of_circle:
+            recommendations.extend(["nav2_wraparound_setup", "verify_push_ready_pose_before_fetch"])
     elif route == ROUTE_SCAN_OR_PERCEIVE:
         status = "blocker"
         risk = "unavailable"
@@ -779,6 +1062,16 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
 
 def executor_for_route(route_label: str) -> str:
     return str(ROUTE_EXECUTORS.get(str(route_label or "").strip(), "unsupported_route"))
+
+
+def random_profile_for_scene(scene: dict[str, Any]) -> str:
+    explicit = str(scene.get("random_profile", "") or "").strip()
+    if explicit:
+        return explicit
+    scene_set = str(scene.get("scene_set", "") or "").strip()
+    if scene_set == OPPOSITE_BEHIND_SCENE_SET:
+        return OPPOSITE_BEHIND_PROFILE
+    return PLANNER_MIXED_PROFILE
 
 
 def planner_prompt(scene: dict[str, Any]) -> str:
@@ -1005,6 +1298,7 @@ def write_fetch_ready_layout_from_scene(
     clean_route_label = str(route_label or scene.get("expected_route_label", "") or ROUTE_FETCH_READY).strip()
     clean_route_executor = str(route_executor or executor_for_route(clean_route_label)).strip()
     route_quality = score_route_quality(scene, clean_route_label)
+    random_profile = random_profile_for_scene(scene)
     layout_family = (
         "planner_gated_fetch_ready"
         if clean_route_label == ROUTE_FETCH_READY
@@ -1016,14 +1310,15 @@ def write_fetch_ready_layout_from_scene(
             "generated_utc": utc_now(),
             "scenario_id": scenario_id,
             "layout_family": layout_family,
-            "random_profile": PLANNER_MIXED_PROFILE,
+            "random_profile": random_profile,
             "planner_route_label": clean_route_label,
             "route_executor": clean_route_executor,
             "route_quality": route_quality,
             "planner_scene": scene,
             "random_draw": {
-                "random_profile": PLANNER_MIXED_PROFILE,
+                "random_profile": random_profile,
                 "seed": scene.get("seed", ""),
+                "scene_set": scene.get("scene_set", ""),
                 "planner_route_label": clean_route_label,
                 "route_executor": clean_route_executor,
                 "route_quality": route_quality,
@@ -1075,6 +1370,52 @@ def generate_dashboard_scene(
     scene = generate_random_scenes(seed=clean_seed, random_cases=1, scene_set=scene_set)[0]
     scene["seed"] = clean_seed
     return scene
+
+
+def summarize_scene_geometry_coverage(scenes: list[dict[str, Any]]) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for scene in scenes:
+        geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
+        rows.append(
+            {
+                "scene_id": str(scene.get("scene_id", "") or ""),
+                "expected_route_label": str(scene.get("expected_route_label", "") or ""),
+                "robot_ball_relative_bearing_deg": _finite_float(
+                    geometry.get("robot_ball_relative_bearing_deg"),
+                    0.0,
+                ),
+                "robot_ball_relative_bearing_abs_deg": _finite_float(
+                    geometry.get("robot_ball_relative_bearing_abs_deg"),
+                    0.0,
+                ),
+                "opposite_side_of_circle": bool(geometry.get("opposite_side_of_circle", False)),
+                "ball_target_angle_deg": _finite_float(geometry.get("ball_target_angle_deg"), 0.0),
+                "ball_target_distance_m": _finite_float(geometry.get("ball_target_distance_m"), 0.0),
+                "robot_ball_distance_m": _finite_float(geometry.get("robot_ball_distance_m"), 0.0),
+                "robot_lateral_signed_m": _finite_float(geometry.get("robot_lateral_signed_m"), 0.0),
+                "robot_yaw_error_deg": _finite_float(geometry.get("robot_yaw_error_deg"), 0.0),
+            }
+        )
+    behind_count = sum(1 for row in rows if float(row["robot_ball_relative_bearing_abs_deg"]) >= 90.0)
+    opposite_count = sum(1 for row in rows if bool(row["opposite_side_of_circle"]))
+    executable_count = sum(
+        1
+        for row in rows
+        if str(row["expected_route_label"]) in {ROUTE_FETCH_READY, ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM}
+    )
+    return {
+        "scene_count": len(rows),
+        "behind_robot_heading_count": behind_count,
+        "opposite_side_of_circle_count": opposite_count,
+        "executable_route_count": executable_count,
+        "success_bar": {
+            "at_least_12_cases": len(rows) >= 12,
+            "at_least_6_behind_robot_heading": behind_count >= 6,
+            "at_least_3_opposite_side": opposite_count >= 3,
+            "at_least_2_executable_candidates": executable_count >= 2,
+        },
+        "rows": rows,
+    }
 
 
 def run_gate(args: argparse.Namespace) -> dict[str, Any]:
@@ -1191,6 +1532,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "llm_supervised_ready": llm_supervised_ready,
         "route_counts": route_counts,
         "expected_route_counts": expected_counts,
+        "geometry_coverage": summarize_scene_geometry_coverage(scenes),
         "results": results,
     }
     write_json(gate_root / "gate_summary.json", summary)
@@ -1226,6 +1568,35 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         route_counts = summary.get("route_counts", {}) if isinstance(summary.get("route_counts"), dict) else {}
         expected_counts = summary.get("expected_route_counts", {}) if isinstance(summary.get("expected_route_counts"), dict) else {}
         lines.append(f"- `{route}` expected=`{expected_counts.get(route, 0)}` chosen=`{route_counts.get(route, 0)}`")
+    coverage = summary.get("geometry_coverage", {}) if isinstance(summary.get("geometry_coverage"), dict) else {}
+    success_bar = coverage.get("success_bar", {}) if isinstance(coverage.get("success_bar"), dict) else {}
+    lines.extend(
+        [
+            "",
+            "## Geometry Coverage",
+            "",
+            f"- scene_count: `{coverage.get('scene_count', 0)}`",
+            f"- behind_robot_heading_count: `{coverage.get('behind_robot_heading_count', 0)}`",
+            f"- opposite_side_of_circle_count: `{coverage.get('opposite_side_of_circle_count', 0)}`",
+            f"- executable_route_count: `{coverage.get('executable_route_count', 0)}`",
+            f"- success_bar: `{success_bar}`",
+            "",
+            "| scene | route | rel bearing deg | opposite side | ball angle deg | ball dist m | robot-ball m | yaw err deg |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+    )
+    for row in list(coverage.get("rows", [])):
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            f"| `{row.get('scene_id', '')}` | `{row.get('expected_route_label', '')}` | "
+            f"`{float(row.get('robot_ball_relative_bearing_deg', 0.0)):.1f}` | "
+            f"`{bool(row.get('opposite_side_of_circle', False))}` | "
+            f"`{float(row.get('ball_target_angle_deg', 0.0)):.1f}` | "
+            f"`{float(row.get('ball_target_distance_m', 0.0)):.3f}` | "
+            f"`{float(row.get('robot_ball_distance_m', 0.0)):.3f}` | "
+            f"`{float(row.get('robot_yaw_error_deg', 0.0)):.1f}` |"
+        )
     lines.extend(["", "## Cases", ""])
     for result in list(summary.get("results", [])):
         if not isinstance(result, dict):
