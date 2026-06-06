@@ -190,6 +190,23 @@ planner-routed setup/capture/push-to-target cycles and includes onboard,
 topdown, world/context video, keyframe sequence review, and mission-level
 retrieval scoring.
 
+Live one-scene rung:
+
+```powershell
+python scripts\fetch_multiball_retrieval_gate.py `
+  --campaign-id <id> `
+  --random-cases 1 `
+  --balls-per-scene 3 `
+  --seed 20260606 `
+  --fresh-dashboard-session `
+  --dashboard-url http://127.0.0.1:8894
+```
+
+The live gate starts one dashboard session, passes the same expected session ID
+into every per-ball local fetch, stops the session before packaging, and builds
+one visual package across all mission summaries. Use this as the first
+browser-watchable UAT proof for repeated retrieval.
+
 Saved-anchor repeatability analyzer scope:
 
 ```powershell

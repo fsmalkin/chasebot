@@ -540,6 +540,7 @@ def build_step_command(
     layout_path: Path,
     scene_id: str,
     step: dict[str, Any],
+    compose_project: str = "",
     expected_session_id: str = "",
 ) -> list[str]:
     target_model_name = f"{TARGET_MODEL_NAME_PREFIX}_{safe_id(scene_id)}_{safe_id(str(step.get('ball_id', 'ball')))}"
@@ -560,8 +561,9 @@ def build_step_command(
     ]
     if str(args.dashboard_url or "").strip():
         command.extend(["--dashboard-url", str(args.dashboard_url).strip()])
-    if str(args.compose_project or "").strip():
-        command.extend(["--compose-project", str(args.compose_project).strip()])
+    run_compose_project = str(compose_project or args.compose_project or "").strip()
+    if run_compose_project:
+        command.extend(["--compose-project", run_compose_project])
     if str(expected_session_id or "").strip():
         command.extend(["--expected-session-id", str(expected_session_id).strip()])
     return command
@@ -641,14 +643,30 @@ def write_scene_artifacts(root: Path, scene: dict[str, Any], plan: dict[str, Any
     }
 
 
-def materialize_plan_rows(root: Path, plan: dict[str, Any], *, args: argparse.Namespace) -> list[dict[str, Any]]:
+def materialize_plan_rows(
+    root: Path,
+    plan: dict[str, Any],
+    *,
+    args: argparse.Namespace,
+    execute_live: bool,
+    compose_project: str = "",
+    expected_session_id: str = "",
+    execution_skipped_reason: str = "",
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     scene_id = str(plan.get("scene_id", "") or "scene")
     for step in plan.get("sequence", []) if isinstance(plan.get("sequence"), list) else []:
         if not isinstance(step, dict):
             continue
         layout_path = write_layout_for_step(root, scene_id, step)
-        command = build_step_command(args=args, layout_path=layout_path, scene_id=scene_id, step=step)
+        command = build_step_command(
+            args=args,
+            layout_path=layout_path,
+            scene_id=scene_id,
+            step=step,
+            compose_project=compose_project,
+            expected_session_id=expected_session_id,
+        )
         row = {
             "scene_id": scene_id,
             "step_index": int(step.get("step_index", 0) or 0),
@@ -658,7 +676,10 @@ def materialize_plan_rows(root: Path, plan: dict[str, Any], *, args: argparse.Na
             "executable_route": bool(step.get("executable_route", False)),
             "layout_path": artifact_display_path(layout_path),
             "command": command,
-            "dry_run": bool(args.dry_run),
+            "dry_run": not bool(execute_live),
+            "execution_skipped_reason": str(execution_skipped_reason or ""),
+            "expected_session_id": str(expected_session_id or ""),
+            "compose_project": str(compose_project or args.compose_project or ""),
             "returncode": None,
             "failure_reason": "",
             "mission_summary_path": "",
@@ -666,7 +687,7 @@ def materialize_plan_rows(root: Path, plan: dict[str, Any], *, args: argparse.Na
             "stdout_tail": "",
             "stderr_tail": "",
         }
-        if not args.dry_run:
+        if execute_live:
             completed = run_command(command, timeout_s=float(args.timeout_s))
             output = (completed.stdout or "") + "\n" + (completed.stderr or "")
             mission_summary_raw = extract_marker(output, MISSION_SUMMARY_MARKER)
@@ -680,7 +701,7 @@ def materialize_plan_rows(root: Path, plan: dict[str, Any], *, args: argparse.Na
             if int(completed.returncode) != 0 and not row["failure_reason"]:
                 row["failure_reason"] = "runner_returned_nonzero"
         rows.append(row)
-        if not args.dry_run and bool(args.stop_on_fail) and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)):
+        if execute_live and bool(args.stop_on_fail) and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)):
             break
     return rows
 
@@ -700,6 +721,29 @@ def load_scene_descriptors(paths: list[str]) -> list[dict[str, Any]]:
 def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     campaign_id = str(args.campaign_id or "").strip() or f"live_fetch_multiball_retrieval_gate_{current_utc_stamp()}"
     root = ensure_dir(SESSION_ROOT / campaign_id / GATE_KIND)
+    dry_run = bool(args.dry_run)
+    run_compose_project = str(args.compose_project or "").strip()
+    expected_session_id = str(getattr(args, "expected_session_id", "") or "").strip()
+    dashboard_stop_before_start: dict[str, Any] = {}
+    dashboard_start: dict[str, Any] = {}
+    dashboard_stop_before_package: dict[str, Any] = {}
+    live_execution_ready = not dry_run
+    live_execution_blocker = ""
+    if not dry_run and bool(getattr(args, "fresh_dashboard_session", False)):
+        dashboard_stop_before_start = replay_batch.stop_dashboard_environment(
+            str(args.dashboard_url or ""),
+            timeout_s=float(args.env_stop_timeout_s),
+        )
+        dashboard_start = replay_batch.start_dashboard_environment(args)
+        start_state = dashboard_start.get("state") if isinstance(dashboard_start.get("state"), dict) else {}
+        run_compose_project = str(start_state.get("compose_project", "") or start_state.get("launcher_project", "") or "")
+        expected_session_id = str(start_state.get("session_id", "") or "")
+        live_execution_ready = replay_batch.dashboard_environment_ready(
+            start_state,
+            allow_operator_view_degraded=bool(getattr(args, "allow_operator_view_degraded", False)),
+        )
+        if not live_execution_ready:
+            live_execution_blocker = replay_batch.dashboard_start_failure_reason(dashboard_start)
     scenes = load_scene_descriptors(list(args.scene_descriptor_json or []))
     if not scenes:
         scenes = generate_multiball_scenes(
@@ -713,10 +757,18 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     for scene in scenes:
         plan = plan_multiball_scene(scene, args=args)
         artifact_paths = write_scene_artifacts(root, scene, plan)
-        rows = materialize_plan_rows(root, plan, args=args)
+        rows = materialize_plan_rows(
+            root,
+            plan,
+            args=args,
+            execute_live=live_execution_ready,
+            compose_project=run_compose_project,
+            expected_session_id=expected_session_id,
+            execution_skipped_reason=live_execution_blocker,
+        )
         step_rows.extend(rows)
         scene_pass = bool(plan.get("planner_ready", False))
-        if not args.dry_run:
+        if not dry_run:
             scene_rows_for_scene = [row for row in rows if row.get("scene_id") == plan.get("scene_id")]
             scene_pass = bool(
                 scene_rows_for_scene
@@ -734,10 +786,9 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                 **artifact_paths,
             }
         )
-        if not args.dry_run and bool(args.stop_on_fail) and not scene_pass:
+        if not dry_run and bool(args.stop_on_fail) and not scene_pass:
             break
 
-    dry_run = bool(args.dry_run)
     planned_step_count = len(step_rows)
     live_pass_count = sum(1 for row in step_rows if bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)))
     planner_ready_scene_count = sum(1 for row in scene_rows if bool(row.get("planner_ready", False)))
@@ -748,6 +799,11 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     visual_package_stdout_tail = ""
     visual_package_stderr_tail = ""
     if not dry_run and not bool(args.no_visual_package):
+        if bool(getattr(args, "fresh_dashboard_session", False)) and live_execution_ready:
+            dashboard_stop_before_package = replay_batch.stop_dashboard_environment(
+                str(args.dashboard_url or ""),
+                timeout_s=float(args.env_stop_timeout_s),
+            )
         mission_summary_paths = [
             resolve_path(str(row.get("mission_summary_path", "") or ""))
             for row in step_rows
@@ -778,6 +834,15 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "profile": str(args.profile or DEFAULT_PROFILE),
         "dry_run": dry_run,
         "planner_mode": str(args.planner_mode),
+        "fresh_dashboard_session": bool(getattr(args, "fresh_dashboard_session", False)),
+        "dashboard_url": str(args.dashboard_url or ""),
+        "compose_project": run_compose_project,
+        "expected_session_id": expected_session_id,
+        "live_execution_ready": bool(live_execution_ready),
+        "live_execution_blocker": live_execution_blocker,
+        "dashboard_stop_before_start": dashboard_stop_before_start,
+        "dashboard_start": dashboard_start,
+        "dashboard_stop_before_package": dashboard_stop_before_package,
         "seed": int(args.seed),
         "random_cases": int(args.random_cases),
         "balls_per_scene": int(args.balls_per_scene),
@@ -837,6 +902,9 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- profile: `{summary.get('profile', '')}`",
         f"- dry_run: `{summary.get('dry_run', False)}`",
         f"- planner_mode: `{summary.get('planner_mode', '')}`",
+        f"- fresh_dashboard_session: `{summary.get('fresh_dashboard_session', False)}`",
+        f"- live_execution_ready: `{summary.get('live_execution_ready', False)}`",
+        f"- expected_session_id: `{summary.get('expected_session_id', '')}`",
         f"- pass: `{summary.get('pass', False)}`",
         f"- promotion_evidence: `{summary.get('promotion_evidence', False)}`",
         f"- scene_count: `{summary.get('scene_count', 0)}`",
@@ -901,6 +969,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--planner-timeout-s", type=float, default=45.0)
     parser.add_argument("--dashboard-url", default="")
     parser.add_argument("--compose-project", default="")
+    parser.add_argument("--expected-session-id", default="")
+    parser.add_argument("--fresh-dashboard-session", action="store_true")
+    parser.add_argument("--allow-operator-view-degraded", action="store_true")
+    parser.add_argument("--world-file", default="yolo_test_world_v6_calibrated_golf_turf.world")
+    parser.add_argument("--surface-profile", default="calibrated_golf_turf")
+    parser.add_argument("--robot-sdf-name", default="jetbot_core_ignition_v1.7.0.sdf")
+    parser.add_argument("--env-ready-timeout-s", type=float, default=replay_batch.DEFAULT_ENV_READY_TIMEOUT_S)
+    parser.add_argument("--env-start-attempts", type=int, default=2)
+    parser.add_argument("--env-stop-timeout-s", type=float, default=90.0)
     parser.add_argument("--fetch-delivery-radius-m", type=float, default=0.300)
     parser.add_argument("--python-exe", default=sys.executable)
     parser.add_argument("--timeout-s", type=float, default=180.0)

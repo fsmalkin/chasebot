@@ -35,6 +35,15 @@ def _args(**overrides):
         "planner_timeout_s": 45.0,
         "dashboard_url": "",
         "compose_project": "",
+        "expected_session_id": "",
+        "fresh_dashboard_session": False,
+        "allow_operator_view_degraded": False,
+        "world_file": "yolo_test_world_v6_calibrated_golf_turf.world",
+        "surface_profile": "calibrated_golf_turf",
+        "robot_sdf_name": "jetbot_core_ignition_v1.7.0.sdf",
+        "env_ready_timeout_s": replay_batch.DEFAULT_ENV_READY_TIMEOUT_S,
+        "env_start_attempts": 2,
+        "env_stop_timeout_s": 90.0,
         "fetch_delivery_radius_m": 0.3,
         "python_exe": sys.executable,
         "timeout_s": 180.0,
@@ -152,6 +161,27 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
 def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatch):
     _patch_roots(tmp_path, monkeypatch)
     calls = []
+    stops = []
+
+    def fake_stop_dashboard_environment(dashboard_url, *, timeout_s):
+        stops.append((dashboard_url, timeout_s))
+        return {"request": {"ok": True}, "state": {"environment_state": "stopped"}}
+
+    def fake_start_dashboard_environment(args):
+        return {
+            "request": {"ok": True},
+            "state": {
+                "environment_state": "environment_ready",
+                "phase": "environment_ready",
+                "sim_gate_ready": True,
+                "operator_view_ready": True,
+                "compose_project": "fresh_multiball_project",
+                "session_id": "fresh_multiball_session",
+            },
+        }
+
+    monkeypatch.setattr(replay_batch, "stop_dashboard_environment", fake_stop_dashboard_environment)
+    monkeypatch.setattr(replay_batch, "start_dashboard_environment", fake_start_dashboard_environment)
 
     def fake_run_command(command, *, timeout_s):
         calls.append(command)
@@ -191,9 +221,9 @@ def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatc
             tmp_path
             / "artifacts"
             / "session"
-            / f"live_multiball_step_{len(calls)}"
+            / "fresh_multiball_session"
             / "golf_ball_circle_delivery"
-            / "run"
+            / f"run_{len(calls)}"
             / "mission_verdict.json"
         )
         mission_path.parent.mkdir(parents=True, exist_ok=True)
@@ -233,16 +263,36 @@ def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatc
 
     monkeypatch.setattr(multiball_gate, "run_command", fake_run_command)
 
-    summary = multiball_gate.run_gate(_args(campaign_id="live_multiball", dry_run=False, random_cases=1, balls_per_scene=3))
+    summary = multiball_gate.run_gate(
+        _args(
+            campaign_id="live_multiball",
+            dry_run=False,
+            random_cases=1,
+            balls_per_scene=3,
+            fresh_dashboard_session=True,
+            dashboard_url="http://127.0.0.1:8894",
+        )
+    )
 
     assert summary["pass"] is True
     assert len(calls) == 4
+    assert len(stops) == 2
+    assert summary["fresh_dashboard_session"] is True
+    assert summary["live_execution_ready"] is True
+    assert summary["compose_project"] == "fresh_multiball_project"
+    assert summary["expected_session_id"] == "fresh_multiball_session"
     assert summary["live_fetch_to_pose_pass_count"] == 3
     assert summary["live_fetch_to_pose_fail_count"] == 0
     assert summary["visual_package_required"] is True
     assert summary["visual_package_pass"] is True
     assert summary["visual_package_summary_path"].endswith("fetch_visual_uat_package/package_summary.json")
+    for step_command in calls[:3]:
+        assert "--expected-session-id" in step_command
+        assert step_command[step_command.index("--expected-session-id") + 1] == "fresh_multiball_session"
+        assert "--compose-project" in step_command
+        assert step_command[step_command.index("--compose-project") + 1] == "fresh_multiball_project"
     package_command = calls[-1]
     assert package_command.count("--mission-summary") == 3
-    assert package_command.count("--visual-dir") == 3
+    assert package_command.count("--visual-dir") == 1
+    assert str(tmp_path / "artifacts" / "session" / "fresh_multiball_session" / "visual") in package_command
     assert all(row["mission"]["fetch_to_pose_pass"] for row in summary["step_rows"])
