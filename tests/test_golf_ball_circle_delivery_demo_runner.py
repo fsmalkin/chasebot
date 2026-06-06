@@ -30,6 +30,7 @@ from golf_ball_circle_delivery_demo_runner import parse_nav2_reposition_result  
 from golf_ball_circle_delivery_demo_runner import summarize_line_servo_effective_command  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import transform_nav2_reposition_layout_to_current_robot  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import nav2_precontact_fallback_to_local_recovery_decision  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import nav2_precontact_refinement_to_local_recovery_decision  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import measured_push_ready_handoff_from_approach_metrics  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import set_model_pose  # noqa: E402
 import passive_ball_roll_calibration_runner as passive_runner  # noqa: E402
@@ -443,6 +444,68 @@ def test_nav2_precontact_fallback_accepts_seed20260629_clean_abort_boundary():
     assert decision["geometry"]["robot_ball_distance_m"] == pytest.approx(1.222382)
     assert decision["thresholds"]["robot_ball_distance_limit_m"] == pytest.approx(1.3)
     assert decision["ball_motion_m"] == pytest.approx(0.0)
+
+
+def test_nav2_precontact_fallback_accepts_wide_setup_after_timeout_without_ball_motion():
+    args = _route_default_args(
+        planner_route_label="nav2_reposition_first",
+        route_executor="nav2_forward_reposition_then_fetch",
+        ball_x=0.0,
+        ball_y=0.0,
+        zone_x=0.76,
+        zone_y=0.0,
+    )
+    samples = [
+        {
+            "robot_pose": {"x": -0.6, "y": 1.0, "yaw": math.radians(150.0), "z": 0.0},
+            "ball_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0, "z": 0.021336},
+        }
+    ]
+
+    decision = nav2_precontact_fallback_to_local_recovery_decision(
+        args=args,
+        target_layout={},
+        pre_fetch_reposition={"success": False, "status_text": "goal_result_timeout"},
+        pre_fetch_reposition_samples=samples,
+    )
+
+    assert decision["eligible"] is True
+    assert decision["reason"] == "pre_contact_nav2_failure_inside_wide_setup_fallback_envelope"
+    assert decision["local_recovery_admissible"] is False
+    assert decision["wide_setup_admissible"] is True
+    assert decision["geometry"]["robot_lateral_error_m"] == pytest.approx(1.0)
+    assert decision["geometry"]["robot_yaw_error_deg"] == pytest.approx(150.0)
+
+
+def test_nav2_success_refinement_accepts_dirty_post_nav2_setup():
+    args = _route_default_args(
+        planner_route_label="nav2_reposition_first",
+        route_executor="nav2_forward_reposition_then_fetch",
+        ball_x=0.0,
+        ball_y=0.0,
+        zone_x=0.62,
+        zone_y=0.0,
+    )
+    samples = [
+        {
+            "robot_pose": {"x": -0.33, "y": 0.06, "yaw": math.radians(-28.0), "z": 0.0},
+            "ball_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0, "z": 0.021336},
+        }
+    ]
+
+    decision = nav2_precontact_refinement_to_local_recovery_decision(
+        args=args,
+        target_layout={},
+        pre_fetch_reposition={"success": True, "status_text": "goal_succeeded"},
+        pre_fetch_reposition_samples=samples,
+    )
+
+    assert decision["eligible"] is True
+    assert decision["reason"] == "nav2_success_needs_local_recovery_refinement"
+    assert decision["push_ready"] is False
+    assert decision["local_recovery_admissible"] is True
+    assert decision["geometry"]["robot_lateral_error_m"] == pytest.approx(0.06)
+    assert decision["geometry"]["robot_yaw_error_deg"] == pytest.approx(28.0)
 
 
 def test_nav2_precontact_fallback_rejects_ball_motion_before_handoff():

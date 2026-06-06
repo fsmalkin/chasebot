@@ -71,8 +71,22 @@ Milestone acceptance:
    correction.
 8. Broad-field UAT requires at least six successful deliveries across distinct
    geometry classes, at least three successful true opposite-side starts, and
-   one success on the prior opposite-circle failure shape, all with
+   one success on the prior opposite-circle regression scene, all with
    browser-watchable onboard and context evidence.
+
+June 6, 2026 open-field UAT update: the planner-routed stack now has a green
+visual UAT rollup for the broad-field acceptance slice. Rollup
+`artifacts/session/open_field_fetch_uat_rollup_20260606/fetch_open_field_uat_rollup/scorecard.md`
+reports `6/6` strict successes across behind-ball, fetch-ready, recovery/re-aim,
+and true opposite-side classes; `3/3` true opposite-side starts passed; the
+prior opposite-circle regression scene passed; every counted executable fetch
+recorded `measured_push_ready_handoff_pass=true`; and every counted row has a
+browser-watchable visual package. Four of the six successes used bounded local
+setup/recovery after Nav2 either timed out or left dirty setup geometry. Treat
+this as the current open-field visual UAT proof and as a control lesson:
+Nav2 remains useful for long-haul setup, while measured local setup/refinement
+is now a first-class route owner before local fetch contact. Promotion evidence
+still requires the canonical saved-layout and seeded-random gates.
 
 ## May 31, 2026 Evidence And Architecture Reset
 

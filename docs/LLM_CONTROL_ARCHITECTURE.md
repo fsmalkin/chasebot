@@ -98,8 +98,17 @@ capture, dashboard artifact recording, and maneuver-plan compilation. The
 `broad_spatial_fetch_generalization_v1` scene set widens the planner surface to
 front, behind, wraparound, true opposite-side, stale-perception, blocked/no-go,
 and recovery setups. The prior opposite-circle Nav2 failure is now a pinned
-open-field regression. Live execution still has to prove the full route-owner
-stack across that surface with measured push-ready handoff before local fetch.
+open-field regression. Live visual UAT now proves the first broad route-owner
+slice:
+`artifacts/session/open_field_fetch_uat_rollup_20260606/fetch_open_field_uat_rollup/scorecard.md`
+reports six strict scene successes, three true opposite-side starts, the pinned
+opposite regression repaired, and measured push-ready handoff on every counted
+fetch. Four successes used bounded local setup/recovery after Nav2 timed out or
+left dirty geometry, so the control split is now explicit: the planner selects
+the maneuver sequence, Nav2 attempts long-haul setup where useful, deterministic
+local refinement owns final setup-to-push-ready, and local fetch starts only
+after the measured gate passes. This remains visual UAT evidence; canonical
+promotion still requires saved-layout and seeded-random gates.
 
 The opposite-side fetch probe turns that boundary into a control requirement.
 Local fetch should enter contact from a forward-driving setup. Reverse pre-stage

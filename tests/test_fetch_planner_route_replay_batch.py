@@ -223,6 +223,10 @@ def test_replay_batch_live_mock_records_mission_and_visual_package(tmp_path, mon
                     "planner_route_label": gate.ROUTE_FETCH_READY,
                     "route_executor": gate.ROUTE_EXECUTOR_LOCAL_FETCH,
                     "forward_only_pre_contact": True,
+                    "measured_push_ready_handoff": {
+                        "pass": True,
+                        "source": "terminal_pre_contact_and_first_contact_quality",
+                    },
                     "shot_outcome": {
                         "reason": "trajectory_intersects_delivery_radius",
                         "closest_approach_distance_m": 0.196,
@@ -252,10 +256,167 @@ def test_replay_batch_live_mock_records_mission_and_visual_package(tmp_path, mon
     summary = batch.run_batch(_make_args(gate_summary=str(gate_summary), max_per_route=1, dry_run=False))
 
     assert summary["pass"] is True
+    assert summary["fetch_to_pose_pass_count"] == 1
     assert summary["mission_pass_count"] == 1
+    assert summary["measured_push_ready_handoff_required_count"] == 1
+    assert summary["measured_push_ready_handoff_pass_count"] == 1
+    assert summary["measured_push_ready_handoff_fail_count"] == 0
     assert summary["visual_package_pass_count"] == 1
     assert summary["rows"][0]["mission"]["closest_approach_distance_m"] == 0.196
+    assert summary["rows"][0]["mission"]["measured_push_ready_handoff_pass"] is True
     assert summary["rows"][0]["visual_package"]["pass"] is True
+
+
+def test_replay_batch_blocks_delivery_without_push_ready_handoff(tmp_path, monkeypatch):
+    monkeypatch.setattr(batch, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(batch, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+
+    gate_root = tmp_path / "artifacts" / "session" / "gate" / gate.PLANNER_GATE_KIND
+    scene = next(
+        item
+        for item in gate.generate_random_scenes(seed=20260635, random_cases=10)
+        if item["expected_route_label"] == gate.ROUTE_FETCH_READY
+    )
+    scene_path = gate_root / "scene_descriptors" / f"{scene['scene_id']}.json"
+    _write_json(scene_path, scene)
+    decision = gate.decide_scene(scene)
+    gate_summary = gate_root / "gate_summary.json"
+    _write_json(gate_summary, {"results": [{**decision, "scene_path": str(scene_path)}]})
+
+    def fake_run(command, *, timeout_s):
+        command_text = " ".join(command)
+        if "golf_ball_circle_delivery_demo_runner.py" in command_text:
+            mission = tmp_path / "artifacts" / "session" / "session_push_ready_fail" / "golf_ball_circle_delivery" / "run" / "mission_verdict.json"
+            _write_json(
+                mission,
+                {
+                    "pass": True,
+                    "fetch_to_pose_pass": True,
+                    "planner_route_label": gate.ROUTE_FETCH_READY,
+                    "route_executor": gate.ROUTE_EXECUTOR_LOCAL_FETCH,
+                    "local_fetch_dispatched": True,
+                    "measured_push_ready_handoff": {
+                        "pass": False,
+                        "source": "terminal_pre_contact_and_first_contact_quality",
+                        "reason": "terminal_pre_contact_not_ready",
+                    },
+                    "shot_outcome": {
+                        "reason": "trajectory_intersects_delivery_radius",
+                        "closest_approach_distance_m": 0.196,
+                    },
+                    "approach_contact_metrics": {
+                        "flags": ["terminal_pre_contact_not_ready"],
+                        "first_contact_quality_flags": [],
+                        "stable_contact_approach_pass": True,
+                        "first_contact_quality_pass": True,
+                    },
+                },
+            )
+            return type("Completed", (), {"returncode": 0, "stdout": f"{batch.MISSION_SUMMARY_MARKER}{mission}\n", "stderr": ""})()
+        package_summary = tmp_path / "artifacts" / "session" / "package_push_ready_fail" / "fetch_visual_uat_package" / "package_summary.json"
+        _write_json(package_summary, {"campaign_id": "package_push_ready_fail", "pass": True})
+        return type("Completed", (), {"returncode": 0, "stdout": f"{batch.VISUAL_PACKAGE_MARKER}{package_summary}\n", "stderr": ""})()
+
+    monkeypatch.setattr(batch, "_run_command", fake_run)
+
+    summary = batch.run_batch(_make_args(gate_summary=str(gate_summary), max_per_route=1, dry_run=False))
+
+    assert summary["pass"] is False
+    assert summary["fetch_to_pose_pass_count"] == 1
+    assert summary["mission_pass_count"] == 0
+    assert summary["mission_fail_count"] == 1
+    assert summary["route_success_count"] == 0
+    assert summary["visual_package_pass_count"] == 1
+    assert summary["measured_push_ready_handoff_required_count"] == 1
+    assert summary["measured_push_ready_handoff_pass_count"] == 0
+    assert summary["measured_push_ready_handoff_fail_count"] == 1
+    assert summary["rows"][0]["mission"]["measured_push_ready_handoff_pass"] is False
+    assert summary["rows"][0]["mission"]["measured_push_ready_handoff_reason"] == "terminal_pre_contact_not_ready"
+
+
+def test_replay_batch_surfaces_nav2_timeout_with_local_recovery(tmp_path, monkeypatch):
+    monkeypatch.setattr(batch, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(batch, "SESSION_ROOT", tmp_path / "artifacts" / "session")
+
+    gate_root = tmp_path / "artifacts" / "session" / "gate" / gate.PLANNER_GATE_KIND
+    scene = next(
+        item
+        for item in gate.generate_broad_spatial_scenes(random_cases=18)
+        if item["scene_id"] == "opbehind_nav2_opposite_circle_left_07"
+    )
+    scene_path = gate_root / "scene_descriptors" / f"{scene['scene_id']}.json"
+    _write_json(scene_path, scene)
+    decision = gate.decide_scene(scene)
+    gate_summary = gate_root / "gate_summary.json"
+    _write_json(gate_summary, {"results": [{**decision, "scene_path": str(scene_path)}]})
+
+    def fake_run(command, *, timeout_s):
+        command_text = " ".join(command)
+        if "golf_ball_circle_delivery_demo_runner.py" in command_text:
+            mission = tmp_path / "artifacts" / "session" / "session_nav2_recovered" / "golf_ball_circle_delivery" / "run" / "mission_verdict.json"
+            _write_json(
+                mission,
+                {
+                    "pass": True,
+                    "fetch_to_pose_pass": True,
+                    "planner_route_label": gate.ROUTE_NAV2_REPOSITION,
+                    "route_executor": "nav2_forward_reposition_then_fetch",
+                    "local_fetch_dispatched": True,
+                    "pre_fetch_reposition": {
+                        "attempted": True,
+                        "success": False,
+                        "dispatch_status": "goal_result_timeout",
+                        "error": "goal_result_timeout",
+                        "fallback_to_local_recovery": {
+                            "applied": True,
+                            "fallback_route_label": gate.ROUTE_RECOVERY_OR_REAIM,
+                            "reason": "pre_contact_nav2_failure_inside_local_recovery_envelope",
+                        },
+                    },
+                    "measured_push_ready_handoff": {
+                        "pass": True,
+                        "source": "approach_contact_metrics",
+                    },
+                    "shot_outcome": {
+                        "reason": "trajectory_intersects_delivery_radius",
+                        "closest_approach_distance_m": 0.197,
+                    },
+                    "approach_contact_metrics": {
+                        "flags": [],
+                        "first_contact_quality_flags": [],
+                        "stable_contact_approach_pass": True,
+                        "first_contact_quality_pass": True,
+                    },
+                },
+            )
+            return type("Completed", (), {"returncode": 0, "stdout": f"{batch.MISSION_SUMMARY_MARKER}{mission}\n", "stderr": ""})()
+        package_summary = tmp_path / "artifacts" / "session" / "package_nav2_recovered" / "fetch_visual_uat_package" / "package_summary.json"
+        _write_json(package_summary, {"campaign_id": "package_nav2_recovered", "pass": True})
+        return type("Completed", (), {"returncode": 0, "stdout": f"{batch.VISUAL_PACKAGE_MARKER}{package_summary}\n", "stderr": ""})()
+
+    monkeypatch.setattr(batch, "_run_command", fake_run)
+
+    summary = batch.run_batch(
+        _make_args(
+            gate_summary=str(gate_summary),
+            route=[gate.ROUTE_NAV2_REPOSITION],
+            max_per_route=1,
+            dry_run=False,
+        )
+    )
+
+    mission = summary["rows"][0]["mission"]
+    assert summary["pass"] is True
+    assert summary["route_success_count"] == 1
+    assert summary["pre_fetch_reposition_attempt_count"] == 1
+    assert summary["pre_fetch_reposition_success_count"] == 0
+    assert summary["pre_fetch_local_recovery_applied_count"] == 1
+    assert mission["planner_route_attempted"] is True
+    assert mission["pre_fetch_reposition_attempted"] is True
+    assert mission["pre_fetch_reposition_success"] is False
+    assert mission["pre_fetch_reposition_dispatch_status"] == "goal_result_timeout"
+    assert mission["pre_fetch_local_recovery_applied"] is True
+    assert mission["pre_fetch_local_recovery_route_label"] == gate.ROUTE_RECOVERY_OR_REAIM
 
 
 def test_replay_batch_live_mock_records_planner_only_route_package(tmp_path, monkeypatch):
@@ -378,6 +539,10 @@ def test_replay_batch_resume_skip_existing_visual_package(tmp_path, monkeypatch)
             "fetch_to_pose_pass": True,
             "planner_route_label": gate.ROUTE_FETCH_READY,
             "route_executor": gate.ROUTE_EXECUTOR_LOCAL_FETCH,
+            "measured_push_ready_handoff": {
+                "pass": True,
+                "source": "terminal_pre_contact_and_first_contact_quality",
+            },
             "shot_outcome": {
                 "reason": "trajectory_intersects_delivery_radius",
                 "closest_approach_distance_m": 0.192,
@@ -426,7 +591,9 @@ def test_replay_batch_resume_skip_existing_visual_package(tmp_path, monkeypatch)
     assert summary["pass"] is True
     assert summary["selected_count"] == 1
     assert summary["skipped_existing_count"] == 1
+    assert summary["fetch_to_pose_pass_count"] == 1
     assert summary["mission_pass_count"] == 1
+    assert summary["measured_push_ready_handoff_pass_count"] == 1
     assert summary["visual_package_pass_count"] == 1
     assert summary["rows"][0]["resume_skip_existing"] is True
     assert summary["rows"][0]["mission"]["closest_approach_distance_m"] == 0.192
@@ -482,6 +649,10 @@ def test_replay_batch_fresh_dashboard_session_binds_visual_session(tmp_path, mon
                     "session_id": "session_fresh",
                     "planner_route_label": gate.ROUTE_FETCH_READY,
                     "route_executor": gate.ROUTE_EXECUTOR_LOCAL_FETCH,
+                    "measured_push_ready_handoff": {
+                        "pass": True,
+                        "source": "terminal_pre_contact_and_first_contact_quality",
+                    },
                     "shot_outcome": {
                         "reason": "trajectory_intersects_delivery_radius",
                         "closest_approach_distance_m": 0.19,

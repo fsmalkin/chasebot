@@ -91,7 +91,18 @@ starts. The prior opposite-circle Nav2 failure is a pinned regression inside
 that surface. The next evidence target is browser-watchable live route-owner
 UAT that proves measured push-ready handoff before every local fetch dispatch,
 including at least three true opposite-side successes and one success on the
-previous opposite-circle failure shape.
+previous opposite-circle regression scene.
+
+June 6, 2026 open-field UAT result: that target now has a green visual package
+at `artifacts/session/open_field_fetch_uat_rollup_20260606/fetch_open_field_uat_rollup/scorecard.md`.
+The rollup reports six strict successes across behind-ball, fetch-ready,
+recovery/re-aim, and true opposite-side classes; three true opposite-side starts
+passed; the pinned prior opposite-circle regression scene passed; and every counted
+row carried measured push-ready handoff. Four successes required bounded local
+setup/recovery after Nav2 timed out or left dirty setup geometry. Keep the
+policy direction planner-gated and route-owner based: Nav2 handles long-haul
+setup where it can, local setup/refinement owns the final push-ready gate, and
+local fetch remains a contact skill behind that measured handoff.
 
 June 2, 2026 planner-routing update: the planner layer is integrated as a
 classification and shadow-evidence surface, including deterministic replay and

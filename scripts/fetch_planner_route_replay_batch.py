@@ -421,8 +421,32 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     payload = read_json(path)
     shot = payload.get("shot_outcome") if isinstance(payload.get("shot_outcome"), dict) else {}
     metrics = payload.get("approach_contact_metrics") if isinstance(payload.get("approach_contact_metrics"), dict) else {}
+    push_ready = (
+        payload.get("measured_push_ready_handoff")
+        if isinstance(payload.get("measured_push_ready_handoff"), dict)
+        else {}
+    )
+    pre_fetch_reposition = (
+        payload.get("pre_fetch_reposition")
+        if isinstance(payload.get("pre_fetch_reposition"), dict)
+        else {}
+    )
+    pre_fetch_fallback = (
+        pre_fetch_reposition.get("fallback_to_local_recovery")
+        if isinstance(pre_fetch_reposition.get("fallback_to_local_recovery"), dict)
+        else {}
+    )
     route = payload.get("planner_route") if isinstance(payload.get("planner_route"), dict) else {}
     route_execution = payload.get("planner_route_execution") if isinstance(payload.get("planner_route_execution"), dict) else {}
+    route_label = str(payload.get("planner_route_label", route.get("planner_route_label", route_execution.get("route_label", ""))) or "")
+    local_fetch_dispatched = bool(payload.get("local_fetch_dispatched", True))
+    push_ready_required = bool(local_fetch_dispatched and route_label in EXECUTABLE_ROUTES)
+    pre_fetch_attempted = bool(pre_fetch_reposition.get("attempted", False))
+    route_attempted = bool(
+        route_execution.get("route_executed", False)
+        or pre_fetch_attempted
+        or (route_label == planner_gate.ROUTE_FETCH_READY and local_fetch_dispatched)
+    )
     closest = shot.get("closest_approach_distance_m")
     try:
         closest_value = float(closest)
@@ -434,11 +458,25 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         "pass": bool(payload.get("pass", False)),
         "fetch_to_pose_pass": bool(payload.get("fetch_to_pose_pass", False)),
         "planner_route_only_pass": bool(payload.get("planner_route_only_pass", False)),
-        "local_fetch_dispatched": bool(payload.get("local_fetch_dispatched", True)),
+        "local_fetch_dispatched": local_fetch_dispatched,
         "planner_route_executed": bool(payload.get("planner_route_executed", route_execution.get("route_executed", False))),
+        "planner_route_attempted": route_attempted,
         "planner_route_outcome": str(route_execution.get("outcome", "") or ""),
-        "route_label": str(payload.get("planner_route_label", route.get("planner_route_label", route_execution.get("route_label", ""))) or ""),
+        "route_label": route_label,
         "route_executor": str(payload.get("route_executor", route.get("route_executor", route_execution.get("route_executor", ""))) or ""),
+        "pre_fetch_reposition_attempted": pre_fetch_attempted,
+        "pre_fetch_reposition_success": bool(pre_fetch_reposition.get("success", False)),
+        "pre_fetch_reposition_dispatch_status": str(
+            pre_fetch_reposition.get("dispatch_status", pre_fetch_reposition.get("status_text", "")) or ""
+        ),
+        "pre_fetch_reposition_error": str(pre_fetch_reposition.get("error", "") or ""),
+        "pre_fetch_local_recovery_applied": bool(pre_fetch_fallback.get("applied", False)),
+        "pre_fetch_local_recovery_reason": str(pre_fetch_fallback.get("reason", "") or ""),
+        "pre_fetch_local_recovery_route_label": str(pre_fetch_fallback.get("fallback_route_label", "") or ""),
+        "measured_push_ready_handoff_required": push_ready_required,
+        "measured_push_ready_handoff_pass": bool(push_ready.get("pass", False)),
+        "measured_push_ready_handoff_source": str(push_ready.get("source", "missing") or "missing"),
+        "measured_push_ready_handoff_reason": str(push_ready.get("reason", "") or ""),
         "closest_approach_distance_m": round(closest_value, 6) if math.isfinite(closest_value) else None,
         "outcome_reason": str(shot.get("reason", payload.get("fetch_to_pose_failure_reason", "")) or ""),
         "contact_quality_flags": metrics.get("flags", []) if isinstance(metrics.get("flags"), list) else [],
@@ -451,6 +489,14 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         "first_contact_quality_pass": bool(metrics.get("first_contact_quality_pass", False)),
         "forward_only_pre_contact": bool(payload.get("forward_only_pre_contact", True)),
     }
+
+
+def executable_mission_success(mission: dict[str, Any]) -> bool:
+    if not bool(mission.get("fetch_to_pose_pass", False)):
+        return False
+    if bool(mission.get("measured_push_ready_handoff_required", False)):
+        return bool(mission.get("measured_push_ready_handoff_pass", False))
+    return True
 
 
 def run_batch(args: argparse.Namespace) -> dict[str, Any]:
@@ -625,10 +671,15 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
                 break
         rows.append(row)
 
-    mission_pass_count = sum(
+    fetch_to_pose_pass_count = sum(
         1
         for row in rows
         if not bool(row.get("planner_only_route", False)) and bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+    )
+    mission_pass_count = sum(
+        1
+        for row in rows
+        if not bool(row.get("planner_only_route", False)) and executable_mission_success(row.get("mission") or {})
     )
     route_only_pass_count = sum(
         1
@@ -636,7 +687,40 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
         if bool(row.get("planner_only_route", False)) and bool((row.get("mission") or {}).get("planner_route_only_pass", False))
     )
     route_success_count = mission_pass_count + route_only_pass_count
-    mission_fail_count = sum(1 for row in rows if row.get("mission") and not bool((row.get("mission") or {}).get("pass", False)))
+    mission_fail_count = sum(
+        1
+        for row in rows
+        if row.get("mission")
+        and not bool(row.get("planner_only_route", False))
+        and not executable_mission_success(row.get("mission") or {})
+    )
+    push_ready_required_count = sum(
+        1
+        for row in rows
+        if bool((row.get("mission") or {}).get("measured_push_ready_handoff_required", False))
+    )
+    push_ready_pass_count = sum(
+        1
+        for row in rows
+        if bool((row.get("mission") or {}).get("measured_push_ready_handoff_required", False))
+        and bool((row.get("mission") or {}).get("measured_push_ready_handoff_pass", False))
+    )
+    pre_fetch_reposition_attempt_count = sum(
+        1
+        for row in rows
+        if bool((row.get("mission") or {}).get("pre_fetch_reposition_attempted", False))
+    )
+    pre_fetch_reposition_success_count = sum(
+        1
+        for row in rows
+        if bool((row.get("mission") or {}).get("pre_fetch_reposition_attempted", False))
+        and bool((row.get("mission") or {}).get("pre_fetch_reposition_success", False))
+    )
+    pre_fetch_local_recovery_applied_count = sum(
+        1
+        for row in rows
+        if bool((row.get("mission") or {}).get("pre_fetch_local_recovery_applied", False))
+    )
     visual_pass_count = sum(1 for row in rows if bool((row.get("visual_package") or {}).get("pass", False)))
     summary = {
         "generated_utc": utc_now(),
@@ -650,10 +734,17 @@ def run_batch(args: argparse.Namespace) -> dict[str, Any]:
         "selected_count": len(rows),
         "skipped_existing_count": sum(1 for row in rows if bool(row.get("resume_skip_existing", False))),
         "requested_route_count": {route: sum(1 for row in rows if row.get("route_label") == route) for route in requested_routes},
+        "fetch_to_pose_pass_count": fetch_to_pose_pass_count,
         "mission_pass_count": mission_pass_count,
         "route_only_pass_count": route_only_pass_count,
         "route_success_count": route_success_count,
         "mission_fail_count": mission_fail_count,
+        "measured_push_ready_handoff_required_count": push_ready_required_count,
+        "measured_push_ready_handoff_pass_count": push_ready_pass_count,
+        "measured_push_ready_handoff_fail_count": push_ready_required_count - push_ready_pass_count,
+        "pre_fetch_reposition_attempt_count": pre_fetch_reposition_attempt_count,
+        "pre_fetch_reposition_success_count": pre_fetch_reposition_success_count,
+        "pre_fetch_local_recovery_applied_count": pre_fetch_local_recovery_applied_count,
         "visual_package_pass_count": visual_pass_count,
         "pass": bool(
             rows
@@ -682,10 +773,17 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- pass: `{summary.get('pass', False)}`",
         f"- selected_count: `{summary.get('selected_count', 0)}`",
         f"- skipped_existing_count: `{summary.get('skipped_existing_count', 0)}`",
+        f"- fetch_to_pose_pass_count: `{summary.get('fetch_to_pose_pass_count', 0)}`",
         f"- mission_pass_count: `{summary.get('mission_pass_count', 0)}`",
         f"- route_only_pass_count: `{summary.get('route_only_pass_count', 0)}`",
         f"- route_success_count: `{summary.get('route_success_count', 0)}`",
         f"- mission_fail_count: `{summary.get('mission_fail_count', 0)}`",
+        f"- measured_push_ready_handoff_required_count: `{summary.get('measured_push_ready_handoff_required_count', 0)}`",
+        f"- measured_push_ready_handoff_pass_count: `{summary.get('measured_push_ready_handoff_pass_count', 0)}`",
+        f"- measured_push_ready_handoff_fail_count: `{summary.get('measured_push_ready_handoff_fail_count', 0)}`",
+        f"- pre_fetch_reposition_attempt_count: `{summary.get('pre_fetch_reposition_attempt_count', 0)}`",
+        f"- pre_fetch_reposition_success_count: `{summary.get('pre_fetch_reposition_success_count', 0)}`",
+        f"- pre_fetch_local_recovery_applied_count: `{summary.get('pre_fetch_local_recovery_applied_count', 0)}`",
         f"- visual_package_pass_count: `{summary.get('visual_package_pass_count', 0)}`",
         f"- promotion_evidence: `{summary.get('promotion_evidence', False)}`",
         f"- interpretation: `{summary.get('milestone_interpretation', '')}`",
@@ -701,6 +799,19 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         mission_link = f" [mission](/{mission_path})" if mission_path.startswith("artifacts/session/") else ""
         package_link = f" [visual_package](/{package_scorecard})" if package_scorecard.startswith("artifacts/session/") else ""
         closest = mission.get("closest_approach_distance_m")
+        push_ready_text = ""
+        if bool(mission.get("measured_push_ready_handoff_required", False)):
+            push_ready_text = (
+                f" push_ready=`{mission.get('measured_push_ready_handoff_pass', False)}`"
+                f" source=`{mission.get('measured_push_ready_handoff_source', '')}`"
+            )
+        pre_fetch_text = ""
+        if bool(mission.get("pre_fetch_reposition_attempted", False)):
+            pre_fetch_text = (
+                f" nav2_reposition=`{mission.get('pre_fetch_reposition_success', False)}`"
+                f" nav2_status=`{mission.get('pre_fetch_reposition_dispatch_status', '')}`"
+                f" local_recovery=`{mission.get('pre_fetch_local_recovery_applied', False)}`"
+            )
         closest_text = f" closest=`{float(closest):.3f}m`" if isinstance(closest, (int, float)) else ""
         quality_text = (
             f" score=`{quality.get('quality_score', '')}` "
@@ -719,6 +830,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"mission_pass=`{mission.get('fetch_to_pose_pass', mission.get('pass', ''))}` "
             f"route_only_pass=`{mission.get('planner_route_only_pass', '')}` "
             f"visual_pass=`{package.get('pass', '')}`"
+            f"{push_ready_text}"
+            f"{pre_fetch_text}"
             f"{quality_text}{closest_text}{mission_link}{package_link}"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

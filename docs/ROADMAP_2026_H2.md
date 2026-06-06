@@ -520,6 +520,17 @@ such as `fetch_ready_local`, `nav2_reposition_first`,
 `ambiguous_or_unsafe_no_go` remain reporting labels. Local fetch starts only
 after the validator proves measured push-ready geometry.
 
+June 6, 2026 status: the open-field planner-routed UAT slice is green at the
+visual evidence layer. Rollup
+`artifacts/session/open_field_fetch_uat_rollup_20260606/fetch_open_field_uat_rollup/scorecard.md`
+dedupes nine attempts into six strict scene successes, including three true
+opposite-side starts and the pinned prior opposite-circle regression scene. Every
+counted executable row recorded measured push-ready handoff and browser-watchable
+video. Four successes required bounded local setup/recovery after Nav2 timed out
+or left dirty pre-contact geometry, which sets the next architecture rule: Nav2
+is a long-haul/setup owner, and measured local refinement owns the final
+setup-to-push-ready handoff.
+
 May 31, 2026 evidence reset: the delivery-marker geometry issue means prior
 fetch pass/fail claims require reclassification unless the artifact proves
 `geometry_consistency.pass=true`, the visible delivery marker matches

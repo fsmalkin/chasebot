@@ -146,6 +146,28 @@ the sim before packaging, and writes a package-local
 `keyframe_review_contact_sheet.png`. Review that sheet across the run sequence
 before reporting pass/fail.
 
+Open-field planner-routed UAT now has a strict rollup step. Use it after route
+replay batches to dedupe reruns by scene, count browser-watchable visual
+successes, verify measured push-ready handoff, and confirm true opposite-side
+coverage:
+
+```powershell
+python scripts\fetch_open_field_uat_rollup.py `
+  --campaign-id <id> `
+  --batch-summary artifacts\session\<batch_a>\fetch_planner_route_replay_batch\batch_summary.json `
+  --batch-summary artifacts\session\<batch_b>\fetch_planner_route_replay_batch\batch_summary.json `
+  --min-successes 6 `
+  --min-opposite-successes 3
+```
+
+Current green reference:
+`artifacts/session/open_field_fetch_uat_rollup_20260606/fetch_open_field_uat_rollup/scorecard.md`.
+That package proves six strict visual UAT successes, three true opposite-side
+successes, the pinned prior opposite-circle regression scene, and measured
+push-ready handoff for every counted executable fetch. It is visual UAT
+evidence; canonical promotion still follows saved-layout and seeded-random
+gates.
+
 Saved-anchor repeatability analyzer scope:
 
 ```powershell

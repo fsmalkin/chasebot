@@ -23,6 +23,19 @@ only after measured push-ready handoff. Custom contact routines and AI
 push-coast proposals remain fallback lanes that earn live authority only from
 corrected reproducible stage-gap evidence.
 
+June 6, 2026 branch decision: keep
+`spike/fetch-arch-planner-routed-forward-only-moonshot-20260602` active as the
+open-field planner-routed UAT branch. The current proof package is
+`artifacts/session/open_field_fetch_uat_rollup_20260606/fetch_open_field_uat_rollup/scorecard.md`:
+six strict visual successes, three true opposite-side successes, the pinned
+opposite-circle regression scene repaired, and measured push-ready handoff on every
+counted executable fetch. The winning runtime sequence is planner route selection
+plus measured route-owner refinement: Nav2 attempts long-haul setup where useful,
+then bounded local setup/recovery takes over when Nav2 times out or leaves dirty
+pre-contact geometry. Future branches should preserve this handoff boundary and
+expand seeded/canonical proof rather than returning to pure Nav2 or direct local
+fetch dispatch from broad field geometry.
+
 ## Recommended Branch Roles
 
 1. Stable demo/UAT branch:
