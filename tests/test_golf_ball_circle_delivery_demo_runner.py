@@ -516,6 +516,49 @@ def test_planner_route_defaults_downgrade_near_field_nav2_layout_to_recovery():
     assert args.robot_yaw == pytest.approx(0.211588)
 
 
+def test_planner_route_defaults_downgrade_quality_blocked_near_field_nav2_layout_to_recovery():
+    args = _route_default_args(nav2_reposition_before_fetch=True, nav2_reposition_transform_layout_to_current_robot=True)
+    layout = {
+        "planner_route_label": "nav2_reposition_first",
+        "route_executor": "nav2_forward_reposition_then_fetch",
+        "random_draw": {
+            "planner_route_label": "nav2_reposition_first",
+            "route_executor": "nav2_forward_reposition_then_fetch",
+            "ball_target_distance_m": 0.633705,
+            "robot_ball_distance_m": 0.883985,
+            "robot_lateral_error_m": 0.077212,
+            "robot_yaw_error_deg": -147.72473,
+            "robot_pose": {"x": 0.745385, "y": 0.158287, "yaw": -0.398204},
+            "route_quality": {
+                "flags": [
+                    "nav2_reposition_near_field_not_admissible",
+                    "nav2_reposition_required",
+                    "opposite_side_of_circle",
+                ],
+                "predicted_contact_quality": "blocker",
+                "predicted_first_contact_quality": "blocker",
+            },
+        },
+    }
+
+    defaults = apply_planner_route_execution_defaults(
+        args,
+        layout,
+        explicit_args={"--nav2-reposition-before-fetch", "--nav2-reposition-transform-layout-to-current-robot"},
+    )
+
+    assert defaults["applied"] is True
+    assert defaults["planner_route_requested_label"] == "nav2_reposition_first"
+    assert defaults["planner_route_label"] == "recovery_or_reaim"
+    assert defaults["route_admissibility"]["changed"] is True
+    assert defaults["route_admissibility"]["reason"] == "route_quality_blocked_near_field_prefers_bounded_recovery_reaim"
+    assert args.nav2_reposition_before_fetch is False
+    assert args.nav2_reposition_transform_layout_to_current_robot is False
+    assert args.robot_x == pytest.approx(0.745385)
+    assert args.robot_y == pytest.approx(0.158287)
+    assert args.robot_yaw == pytest.approx(-0.398204)
+
+
 def test_nav2_precontact_fallback_accepts_clean_abort_inside_local_envelope():
     args = _route_default_args(
         planner_route_label="nav2_reposition_first",

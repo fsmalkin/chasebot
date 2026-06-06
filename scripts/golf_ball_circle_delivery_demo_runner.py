@@ -214,21 +214,56 @@ def _nav2_layout_prefers_local_recovery(target_layout: dict[str, Any]) -> dict[s
         999.0,
     )
     yaw_error_deg = abs(_finite_float(random_draw.get("robot_yaw_error_deg"), 999.0))
-    prefers_recovery = bool(
+    route_quality = (
+        random_draw.get("route_quality", {})
+        if isinstance(random_draw.get("route_quality"), dict)
+        else target_layout.get("route_quality", {})
+        if isinstance(target_layout.get("route_quality"), dict)
+        else {}
+    )
+    route_quality_flags = (
+        {str(flag) for flag in route_quality.get("flags", [])}
+        if isinstance(route_quality.get("flags"), list)
+        else set()
+    )
+    predicted_contact_quality = str(route_quality.get("predicted_contact_quality", "") or "").strip()
+    predicted_first_contact_quality = str(route_quality.get("predicted_first_contact_quality", "") or "").strip()
+    clean_near_field_prefers_recovery = bool(
         0.34 <= ball_target_distance_m <= 0.85
         and 0.24 <= robot_ball_distance_m <= RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
         and lateral_error_m <= RECOVERY_LATERAL_LIMIT_M
         and yaw_error_deg <= RECOVERY_YAW_LIMIT_DEG
     )
+    quality_blocked_near_field_prefers_recovery = bool(
+        0.34 <= ball_target_distance_m <= 0.85
+        and 0.24 <= robot_ball_distance_m <= max(RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M, 0.95)
+        and lateral_error_m <= RECOVERY_LATERAL_LIMIT_M
+        and "nav2_reposition_near_field_not_admissible" in route_quality_flags
+        and (
+            predicted_contact_quality == "blocker"
+            or predicted_first_contact_quality == "blocker"
+            or "opposite_side_of_circle" in route_quality_flags
+        )
+    )
+    prefers_recovery = clean_near_field_prefers_recovery or quality_blocked_near_field_prefers_recovery
+    reason = "nav2_route_admissible"
+    if clean_near_field_prefers_recovery:
+        reason = "near_field_setup_prefers_bounded_recovery_reaim"
+    elif quality_blocked_near_field_prefers_recovery:
+        reason = "route_quality_blocked_near_field_prefers_bounded_recovery_reaim"
     return {
         "changed": prefers_recovery,
-        "reason": "near_field_setup_prefers_bounded_recovery_reaim" if prefers_recovery else "nav2_route_admissible",
+        "reason": reason,
         "robot_ball_distance_m": round(float(robot_ball_distance_m), 6),
         "ball_target_distance_m": round(float(ball_target_distance_m), 6),
         "robot_lateral_error_m": round(float(lateral_error_m), 6),
         "robot_yaw_error_deg": round(float(yaw_error_deg), 6),
+        "route_quality_flags": sorted(route_quality_flags),
+        "predicted_contact_quality": predicted_contact_quality,
+        "predicted_first_contact_quality": predicted_first_contact_quality,
         "thresholds": {
             "recovery_robot_ball_distance_limit_m": RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M,
+            "quality_blocked_recovery_robot_ball_distance_limit_m": max(RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M, 0.95),
             "recovery_lateral_limit_m": RECOVERY_LATERAL_LIMIT_M,
             "recovery_yaw_limit_deg": RECOVERY_YAW_LIMIT_DEG,
         },
@@ -587,6 +622,8 @@ def apply_planner_route_execution_defaults(
         if bool(route_admissibility.get("changed", False)):
             route_label = ROUTE_RECOVERY_OR_REAIM
             route_executor = ROUTE_EXECUTOR_RECOVERY
+            args.nav2_reposition_before_fetch = False
+            args.nav2_reposition_transform_layout_to_current_robot = False
     _set_route_default(args, explicit_args, "planner_route_label", route_label, "--planner-route-label")
     _set_route_default(args, explicit_args, "route_executor", route_executor, "--route-executor")
     robot_pose = random_draw.get("robot_pose") if isinstance(random_draw.get("robot_pose"), dict) else {}

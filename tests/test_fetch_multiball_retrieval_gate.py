@@ -43,7 +43,7 @@ def _args(**overrides):
         "world_file": "yolo_test_world_v6_calibrated_golf_turf.world",
         "surface_profile": "calibrated_golf_turf",
         "robot_sdf_name": "jetbot_core_ignition_v1.7.0.sdf",
-        "nav2_goal_frame_mode": "world_direct",
+        "nav2_goal_frame_mode": multiball_gate.DEFAULT_NAV2_GOAL_FRAME_MODE,
         "env_ready_timeout_s": replay_batch.DEFAULT_ENV_READY_TIMEOUT_S,
         "env_start_attempts": 2,
         "env_stop_timeout_s": 90.0,
@@ -165,6 +165,20 @@ def test_multiball_planner_prioritizes_target_aligned_candidate_over_nearer_high
     assert first_step["route_label"] == planner_gate.ROUTE_NAV2_REPOSITION
     assert high_angle["cost"]["direction_alignment_penalty"] > 1.0
     assert high_angle["route_quality"]["setup_debt"]["ball_target_angle_abs_deg"] > 90.0
+
+
+def test_multiball_planner_deprioritizes_recently_failed_ball_when_other_targets_remain():
+    scenes = multiball_gate.generate_multiball_scenes(seed=20260606, random_cases=2, balls_per_scene=3)
+    scene = scenes[1]
+    scene["balls"][0]["last_attempt_failed"] = True
+    scene["balls"][0]["attempt_count"] = 1
+
+    plan = multiball_gate.plan_multiball_scene(scene, args=_args())
+    first_candidates = plan["candidate_audit"][0]["candidates"]
+    failed_candidate = next(row for row in first_candidates if row["ball_id"] == "ball_1")
+
+    assert plan["retrieval_order"][0] != "ball_1"
+    assert failed_candidate["cost"]["failed_attempt_penalty"] > 0.0
 
 
 def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_path, monkeypatch):
@@ -390,6 +404,35 @@ def test_latest_measured_state_from_mission_falls_back_to_post_nav2_reposition_p
     assert state["ball_pose"] == {"x": 0.13, "y": -0.01, "z": 0.021336, "yaw": 0.0}
 
 
+def test_latest_measured_state_ignores_empty_shot_pose_before_nav2_fallback(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    artifact_dir = tmp_path / "artifacts" / "session" / "session_nav2_empty" / "golf_ball_circle_delivery" / "run_nav2"
+    artifact_dir.mkdir(parents=True)
+    mission = artifact_dir / "mission_verdict.json"
+    _write_json(
+        mission,
+        {
+            "artifact_dir": str(artifact_dir),
+            "fetch_to_pose_pass": False,
+            "pre_fetch_reposition": {
+                "post_reposition_robot_pose": {
+                    "position": {"x": 1.9, "y": 0.31, "z": 0.0},
+                    "yaw": -2.56,
+                },
+                "post_reposition_ball_pose": {
+                    "position": {"x": 0.12877, "y": -0.011075, "z": 0.021336},
+                    "yaw": 0.0,
+                },
+            },
+            "shot_outcome": {"ball_end_pose": {}, "reason": "nav2_reposition_failed_before_fetch"},
+        },
+    )
+
+    state = multiball_gate.latest_measured_state_from_mission(mission)
+
+    assert state["ball_pose"] == {"x": 0.12877, "y": -0.011075, "z": 0.021336, "yaw": 0.0}
+
+
 def test_update_remaining_removes_passed_ball_and_keeps_failed_ball_with_measured_pose():
     remaining = [
         {"id": "ball_1", "pose": {"x": 0.1, "y": 0.0, "z": 0.021336, "yaw": 0.0}},
@@ -411,6 +454,7 @@ def test_update_remaining_removes_passed_ball_and_keeps_failed_ball_with_measure
     assert [ball["id"] for ball in after_fail] == ["ball_1", "ball_2"]
     assert after_fail[0]["pose"]["x"] == 0.25
     assert after_fail[0]["last_attempt_failed"] is True
+    assert after_fail[0]["attempt_count"] == 1
 
 
 def test_replanning_rows_use_measured_robot_pose_for_next_step(tmp_path, monkeypatch):
@@ -486,6 +530,106 @@ def test_replanning_rows_use_measured_robot_pose_for_next_step(tmp_path, monkeyp
     assert "--use-existing-target-model" in rows[0]["command"]
     assert "--preserve-robot-pose" in rows[0]["command"]
     assert "--pre-fetch-setup-correction-s" in rows[0]["command"]
+
+
+def test_replanning_rows_can_use_bounded_extra_attempt_to_deliver_failed_ball(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    root = tmp_path / "artifacts" / "session" / "replan_retry" / multiball_gate.GATE_KIND
+    scene = multiball_gate.generate_multiball_scenes(seed=20260606, random_cases=1, balls_per_scene=2)[0]
+    calls = []
+
+    def fake_run_command(command, *, timeout_s):
+        calls.append(command)
+        run_index = len(calls)
+        layout_path = Path(command[command.index("--target-layout-json") + 1])
+        layout = json.loads(layout_path.read_text(encoding="utf-8"))
+        ball_id = layout["multiball_ball_id"]
+        pass_attempt = run_index > 1
+        artifact_dir = (
+            tmp_path
+            / "artifacts"
+            / "session"
+            / "session_retry"
+            / "golf_ball_circle_delivery"
+            / f"run_{run_index}"
+        )
+        artifact_dir.mkdir(parents=True)
+        mission = artifact_dir / "mission_verdict.json"
+        contact_trace = artifact_dir / "contact_trace.jsonl"
+        contact_trace.write_text(
+            json.dumps(
+                {
+                    "robot_pose": {"position": {"x": 0.2 * run_index, "y": 0.1, "z": 0.0}, "yaw": 0.0},
+                    "ball_pose": {"position": {"x": 0.4 + 0.1 * run_index, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        _write_json(
+            mission,
+            {
+                "artifact_dir": str(artifact_dir),
+                "scenario_id": "fetch_multiball_retrieval_v1",
+                "scenario_label": "Multi-Ball Retrieval v1",
+                "fetch_to_pose_pass": pass_attempt,
+                "pass": pass_attempt,
+                "shot_outcome": {
+                    "closest_approach_distance_m": 0.2 if pass_attempt else 0.5,
+                    "reason": "trajectory_intersects_delivery_radius" if pass_attempt else "missed_delivery_radius",
+                    "ball_end_pose": {"x": 0.5 + 0.1 * run_index, "y": 0.0, "z": 0.021336},
+                },
+                "debug_ball_id": ball_id,
+            },
+        )
+        return subprocess.CompletedProcess(
+            command,
+            0 if pass_attempt else 2,
+            stdout=f"{multiball_gate.MISSION_SUMMARY_MARKER}{mission}\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(multiball_gate, "run_command", fake_run_command)
+
+    rows, replan = multiball_gate.materialize_replanning_rows(
+        root,
+        scene,
+        args=_args(dry_run=False, persistent_field=True, max_extra_attempts_per_scene=1),
+        execute_live=True,
+        compose_project="persistent_project",
+        expected_session_id="session_retry",
+    )
+
+    assert len(rows) == 3
+    assert [bool(row["mission"]["fetch_to_pose_pass"]) for row in rows] == [False, True, True]
+    assert replan["max_iterations"] == 3
+    assert replan["all_balls_delivered"] is True
+    assert replan["remaining_ball_ids"] == []
+
+
+def test_replanning_rows_keep_ball_remaining_when_runner_omits_mission_marker(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    root = tmp_path / "artifacts" / "session" / "replan_missing_marker" / multiball_gate.GATE_KIND
+    scene = multiball_gate.generate_multiball_scenes(seed=20260606, random_cases=1, balls_per_scene=1)[0]
+
+    def fake_run_command(command, *, timeout_s):
+        return subprocess.CompletedProcess(command, 2, stdout="", stderr="runner failed before summary")
+
+    monkeypatch.setattr(multiball_gate, "run_command", fake_run_command)
+
+    rows, replan = multiball_gate.materialize_replanning_rows(
+        root,
+        scene,
+        args=_args(dry_run=False, persistent_field=True, max_extra_attempts_per_scene=0),
+        execute_live=True,
+        compose_project="persistent_project",
+        expected_session_id="session_missing_marker",
+    )
+
+    assert len(rows) == len(scene["balls"])
+    assert rows[0]["failure_reason"] == "runner_returned_nonzero"
+    assert replan["all_balls_delivered"] is False
+    assert scene["balls"][0]["id"] in replan["remaining_ball_ids"]
 
 
 def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatch):
@@ -626,6 +770,9 @@ def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatc
     assert package_command.count("--visual-dir") == 1
     assert str(tmp_path / "artifacts" / "session" / "fresh_multiball_session" / "visual") in package_command
     assert all(row["mission"]["fetch_to_pose_pass"] for row in summary["step_rows"])
+    assert all(row["fetch_to_pose_pass"] for row in summary["step_rows"])
+    assert all(row["closest_approach_m"] == 0.18 for row in summary["step_rows"])
+    assert all(row["shot_reason"] == "trajectory_intersects_delivery_radius" for row in summary["step_rows"])
 
 
 def test_multiball_gate_can_package_before_blocking_dashboard_stop(tmp_path, monkeypatch):

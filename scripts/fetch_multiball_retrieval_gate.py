@@ -36,6 +36,7 @@ DEFAULT_SEED = 20260606
 DEFAULT_RANDOM_CASES = 6
 DEFAULT_BALLS_PER_SCENE = 3
 DEFAULT_PROFILE = "open_field_multiball_v1"
+DEFAULT_NAV2_GOAL_FRAME_MODE = "world_direct"
 DEFAULT_FIELD_BOUNDS = {
     "x_min_m": -1.20,
     "x_max_m": 2.20,
@@ -407,6 +408,8 @@ def candidate_cost(
     setup_debt = quality.get("setup_debt") if isinstance(quality.get("setup_debt"), dict) else {}
     ball_target_angle_abs_deg = abs(finite_float(setup_debt.get("ball_target_angle_abs_deg"), 0.0))
     route_quality_score = finite_float(quality.get("quality_score"), 100.0)
+    attempt_count = max(0, int(finite_float(ball.get("attempt_count"), 0.0)))
+    last_attempt_failed = bool(ball.get("last_attempt_failed", False))
 
     route_quality_deficit_penalty = max(0.0, (82.0 - route_quality_score) / 82.0)
     direction_alignment_penalty = min(max(ball_target_angle_abs_deg - 12.0, 0.0) / 70.0, 1.45)
@@ -429,6 +432,13 @@ def candidate_cost(
         quality_penalty += 0.35
     if str(route_label) == planner_gate.ROUTE_RECOVERY_OR_REAIM and "initial_yaw_setup_debt" in quality_flags:
         quality_penalty += 0.20
+    failed_attempt_penalty = 0.0
+    if last_attempt_failed:
+        failed_attempt_penalty += 1.20
+    if attempt_count > 0:
+        failed_attempt_penalty += min(2.40, 0.60 * attempt_count)
+    if last_attempt_failed and str(route_label) == planner_gate.ROUTE_NAV2_REPOSITION:
+        failed_attempt_penalty += 0.80
     cost = (
         travel_distance_m
         + 0.18 * ball_target_distance_m
@@ -438,6 +448,7 @@ def candidate_cost(
         + route_quality_deficit_penalty
         + direction_alignment_penalty
         + blocker_penalty
+        + failed_attempt_penalty
     )
     return {
         "score": round(float(cost), 6),
@@ -448,6 +459,8 @@ def candidate_cost(
         "route_quality_deficit_penalty": round(float(route_quality_deficit_penalty), 6),
         "direction_alignment_penalty": round(float(direction_alignment_penalty), 6),
         "blocker_penalty": round(float(blocker_penalty), 6),
+        "failed_attempt_penalty": round(float(failed_attempt_penalty), 6),
+        "attempt_count": attempt_count,
         "corridor_interference_count": int(interference_count),
         "setup_pose": setup_pose,
     }
@@ -620,7 +633,7 @@ def build_step_command(
             [
                 "--nav2-reposition-before-fetch",
                 "--nav2-reposition-goal-frame-mode",
-                str(getattr(args, "nav2_goal_frame_mode", "world_direct") or "world_direct"),
+                str(getattr(args, "nav2_goal_frame_mode", DEFAULT_NAV2_GOAL_FRAME_MODE) or DEFAULT_NAV2_GOAL_FRAME_MODE),
                 "--nav2-reposition-timeout-s",
                 "48.000",
                 "--nav2-reposition-server-wait-s",
@@ -850,8 +863,7 @@ def materialize_plan_rows(
             row["stderr_tail"] = "\n".join((completed.stderr or "").splitlines()[-20:])
             if mission_summary_raw:
                 mission_summary_path = resolve_path(mission_summary_raw)
-                row["mission_summary_path"] = artifact_display_path(mission_summary_path)
-                row["mission"] = replay_batch.summarize_mission(mission_summary_path)
+                enrich_row_with_mission_evidence(row, mission_summary_path)
             if int(completed.returncode) != 0 and not row["failure_reason"]:
                 row["failure_reason"] = "runner_returned_nonzero"
         rows.append(row)
@@ -866,12 +878,36 @@ def pose_from_contact_pose(raw_pose: Any) -> dict[str, float] | None:
     position = raw_pose.get("position") if isinstance(raw_pose.get("position"), dict) else raw_pose
     if not isinstance(position, dict):
         return None
+    if "x" not in position and "y" not in position:
+        return None
     return round_pose(
         finite_float(position.get("x")),
         finite_float(position.get("y")),
         z=finite_float(position.get("z")),
         yaw=finite_float(raw_pose.get("yaw")),
     )
+
+
+def enrich_row_with_mission_evidence(row: dict[str, Any], mission_summary_path: Path) -> dict[str, Any]:
+    row["mission_summary_path"] = artifact_display_path(mission_summary_path)
+    row["mission"] = replay_batch.summarize_mission(mission_summary_path)
+    measured_state = latest_measured_state_from_mission(mission_summary_path)
+    row["measured_post_step_state"] = measured_state
+    shot_outcome = measured_state.get("shot_outcome") if isinstance(measured_state.get("shot_outcome"), dict) else {}
+    row["fetch_to_pose_pass"] = bool(measured_state.get("fetch_to_pose_pass", False))
+    row["closest_approach_m"] = shot_outcome.get("closest_approach_distance_m")
+    row["shot_reason"] = str(shot_outcome.get("reason", "") or "")
+    ai_proposal = (
+        shot_outcome.get("ai_push_coast_proposal")
+        if isinstance(shot_outcome.get("ai_push_coast_proposal"), dict)
+        else {}
+    )
+    stage_classification = (
+        ai_proposal.get("stage_classification") if isinstance(ai_proposal.get("stage_classification"), dict) else {}
+    )
+    row["stage_labels"] = stage_classification.get("stage_labels", [])
+    row["contact_quality_flags"] = stage_classification.get("contact_quality_flags", [])
+    return measured_state
 
 
 def latest_measured_state_from_mission(mission_summary_path: Path) -> dict[str, Any]:
@@ -938,9 +974,13 @@ def update_remaining_after_attempt(
                 updated_ball = dict(ball)
                 updated_ball["pose"] = dict(measured_ball_pose)
                 updated_ball["last_attempt_failed"] = True
+                updated_ball["attempt_count"] = int(finite_float(ball.get("attempt_count"), 0.0)) + 1
                 updated.append(updated_ball)
             else:
-                updated.append(ball)
+                updated_ball = dict(ball)
+                updated_ball["last_attempt_failed"] = True
+                updated_ball["attempt_count"] = int(finite_float(ball.get("attempt_count"), 0.0)) + 1
+                updated.append(updated_ball)
         else:
             updated.append(ball)
     return updated
@@ -961,7 +1001,11 @@ def materialize_replanning_rows(
     remaining = [dict(ball) for ball in scene.get("balls", []) if isinstance(ball, dict)]
     current_robot_pose = dict(scene.get("robot_pose", {}) if isinstance(scene.get("robot_pose"), dict) else {})
     replans: list[dict[str, Any]] = []
-    for iteration in range(len(remaining)):
+    initial_ball_count = len(remaining)
+    max_iterations = initial_ball_count + max(0, int(getattr(args, "max_extra_attempts_per_scene", 0) or 0))
+    for iteration in range(max_iterations):
+        if not remaining:
+            break
         active_scene = {
             **scene,
             "scene_id": scene_id,
@@ -969,6 +1013,7 @@ def materialize_replanning_rows(
             "balls": remaining,
         }
         plan = plan_multiball_scene(active_scene, args=args)
+        sequence = plan.get("sequence") if isinstance(plan.get("sequence"), list) else []
         replans.append(
             {
                 "iteration": iteration + 1,
@@ -976,9 +1021,13 @@ def materialize_replanning_rows(
                 "remaining_ball_ids": [str(ball.get("id", "") or "") for ball in remaining],
                 "retrieval_order": plan.get("retrieval_order", []),
                 "planner_ready": bool(plan.get("planner_ready", False)),
+                "selected_ball_id": str(sequence[0].get("ball_id", "") or "") if sequence else "",
+                "selected_route_label": str(sequence[0].get("route_label", "") or "") if sequence else "",
+                "selected_route_executor": str(sequence[0].get("route_executor", "") or "") if sequence else "",
+                "selected_route_quality": sequence[0].get("route_quality", {}) if sequence else {},
+                "selected_cost": sequence[0].get("cost", {}) if sequence else {},
             }
         )
-        sequence = plan.get("sequence") if isinstance(plan.get("sequence"), list) else []
         if not sequence:
             break
         step = dict(sequence[0])
@@ -1024,10 +1073,7 @@ def materialize_replanning_rows(
             row["stderr_tail"] = "\n".join((completed.stderr or "").splitlines()[-20:])
             if mission_summary_raw:
                 mission_summary_path = resolve_path(mission_summary_raw)
-                row["mission_summary_path"] = artifact_display_path(mission_summary_path)
-                row["mission"] = replay_batch.summarize_mission(mission_summary_path)
-                measured_state = latest_measured_state_from_mission(mission_summary_path)
-                row["measured_post_step_state"] = measured_state
+                measured_state = enrich_row_with_mission_evidence(row, mission_summary_path)
                 if isinstance(measured_state.get("robot_pose"), dict):
                     current_robot_pose = dict(measured_state["robot_pose"])
                 else:
@@ -1038,16 +1084,30 @@ def materialize_replanning_rows(
                     measured_state=measured_state,
                 )
             else:
-                current_robot_pose = step.get("estimated_post_fetch_robot_pose", current_robot_pose)
-                remaining = [
-                    ball for ball in remaining if str(ball.get("id", "") or "") != str(step.get("ball_id", "") or "")
-                ]
+                remaining = update_remaining_after_attempt(
+                    remaining,
+                    attempted_ball_id=str(step.get("ball_id", "") or ""),
+                    measured_state={"fetch_to_pose_pass": False},
+                )
             if int(completed.returncode) != 0 and not row["failure_reason"]:
                 row["failure_reason"] = "runner_returned_nonzero"
         rows.append(row)
         if execute_live and bool(args.stop_on_fail) and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)):
             break
-    return rows, {"enabled": True, "iterations": replans}
+    delivered_ball_ids = [
+        str(row.get("ball_id", "") or "")
+        for row in rows
+        if bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+    ]
+    return rows, {
+        "enabled": True,
+        "iterations": replans,
+        "initial_ball_count": initial_ball_count,
+        "max_iterations": max_iterations,
+        "delivered_ball_ids": delivered_ball_ids,
+        "remaining_ball_ids": [str(ball.get("id", "") or "") for ball in remaining],
+        "all_balls_delivered": bool(not remaining and initial_ball_count > 0),
+    }
 
 
 def load_scene_descriptors(paths: list[str]) -> list[dict[str, Any]]:
@@ -1168,11 +1228,14 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         scene_pass = bool(plan.get("planner_ready", False))
         if not dry_run:
             scene_rows_for_scene = [row for row in rows if row.get("scene_id") == plan.get("scene_id")]
-            scene_pass = bool(
-                scene_rows_for_scene
-                and len(scene_rows_for_scene) == int(plan.get("ball_count", 0) or 0)
-                and all(bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)) for row in scene_rows_for_scene)
-            )
+            if bool(getattr(args, "persistent_field", False)):
+                scene_pass = bool(live_replan_summary.get("all_balls_delivered", False))
+            else:
+                scene_pass = bool(
+                    scene_rows_for_scene
+                    and len(scene_rows_for_scene) == int(plan.get("ball_count", 0) or 0)
+                    and all(bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)) for row in scene_rows_for_scene)
+                )
         if not dry_run and fresh_session_per_scene and scene_live_execution_ready:
             scene_dashboard_stop_after_scene = replay_batch.stop_dashboard_environment(
                 str(args.dashboard_url or ""),
@@ -1272,6 +1335,9 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "planned_step_count": planned_step_count,
         "live_fetch_to_pose_pass_count": live_pass_count,
         "live_fetch_to_pose_fail_count": 0 if dry_run else planned_step_count - live_pass_count,
+        "live_all_balls_delivered_scene_count": sum(
+            1 for row in scene_rows if bool((row.get("live_replanning") or {}).get("all_balls_delivered", False))
+        ),
         "visual_package_required": visual_package_required,
         "visual_package_pass": visual_package_pass,
         "visual_package_summary_path": visual_package_summary_path,
@@ -1283,7 +1349,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "pass": bool(
             scene_rows
             and (planner_ready_scene_count == len(scene_rows))
-            and (dry_run or live_pass_count == planned_step_count)
+            and (dry_run or all(bool(row.get("pass", False)) for row in scene_rows))
             and (not visual_package_required or visual_package_pass)
         ),
         "promotion_evidence": False,
@@ -1303,6 +1369,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
             "robot_owned_contact": True,
             "no_direct_ball_impulse": True,
             "one_ball_fetch_primitive": "planner_routed_fetch_to_pose",
+            "nav2_goal_frame_mode": str(getattr(args, "nav2_goal_frame_mode", DEFAULT_NAV2_GOAL_FRAME_MODE) or DEFAULT_NAV2_GOAL_FRAME_MODE),
             "same_environment_live_mission_required_for_promotion": True,
         },
         "scene_rows": scene_rows,
@@ -1399,7 +1466,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--world-file", default="yolo_test_world_v6_calibrated_golf_turf.world")
     parser.add_argument("--surface-profile", default="calibrated_golf_turf")
     parser.add_argument("--robot-sdf-name", default="jetbot_core_ignition_v1.7.0.sdf")
-    parser.add_argument("--nav2-goal-frame-mode", choices=["world_direct", "nav2_relative"], default="world_direct")
+    parser.add_argument(
+        "--nav2-goal-frame-mode",
+        choices=["world_direct", "nav2_relative"],
+        default=DEFAULT_NAV2_GOAL_FRAME_MODE,
+    )
     parser.add_argument("--env-ready-timeout-s", type=float, default=replay_batch.DEFAULT_ENV_READY_TIMEOUT_S)
     parser.add_argument("--env-start-attempts", type=int, default=2)
     parser.add_argument("--env-stop-timeout-s", type=float, default=90.0)
@@ -1407,6 +1478,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--python-exe", default=sys.executable)
     parser.add_argument("--timeout-s", type=float, default=180.0)
     parser.add_argument("--package-timeout-s", type=float, default=180.0)
+    parser.add_argument("--max-extra-attempts-per-scene", type=int, default=0)
     parser.add_argument("--no-visual-package", action="store_true")
     parser.add_argument("--stop-on-fail", action="store_true")
     parser.add_argument("--persistent-field", action="store_true")
