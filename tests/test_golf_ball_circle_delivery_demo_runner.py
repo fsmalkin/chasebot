@@ -30,6 +30,7 @@ from golf_ball_circle_delivery_demo_runner import parse_nav2_reposition_result  
 from golf_ball_circle_delivery_demo_runner import summarize_line_servo_effective_command  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import transform_nav2_reposition_layout_to_current_robot  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import nav2_precontact_fallback_to_local_recovery_decision  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import measured_push_ready_handoff_from_approach_metrics  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import set_model_pose  # noqa: E402
 import passive_ball_roll_calibration_runner as passive_runner  # noqa: E402
 
@@ -470,6 +471,50 @@ def test_nav2_precontact_fallback_rejects_ball_motion_before_handoff():
     assert decision["eligible"] is False
     assert decision["reason"] == "nav2_moved_ball_before_fallback"
     assert decision["ball_motion_m"] == pytest.approx(0.05)
+
+
+def test_measured_push_ready_handoff_requires_terminal_ready_and_first_contact_quality():
+    handoff = measured_push_ready_handoff_from_approach_metrics(
+        {
+            "terminal_pre_contact_contact_ready_gated": True,
+            "first_contact_quality_pass": True,
+            "first_contact_t_s": 2.5,
+            "terminal_pre_contact_sample_count": 8,
+            "terminal_pre_contact_quality_sample_count": 3,
+        },
+        local_fetch_dispatched=True,
+        planner_route_label="nav2_reposition_first",
+    )
+
+    assert handoff["required"] is True
+    assert handoff["pass"] is True
+    assert handoff["terminal_pre_contact_contact_ready_gated"] is True
+    assert handoff["first_contact_quality_pass"] is True
+
+
+def test_measured_push_ready_handoff_blocks_fetch_without_terminal_gate():
+    handoff = measured_push_ready_handoff_from_approach_metrics(
+        {
+            "terminal_pre_contact_contact_ready_gated": False,
+            "first_contact_quality_pass": True,
+        },
+        local_fetch_dispatched=True,
+        planner_route_label="recovery_or_reaim",
+    )
+
+    assert handoff["required"] is True
+    assert handoff["pass"] is False
+
+
+def test_measured_push_ready_handoff_not_required_for_no_go_route():
+    handoff = measured_push_ready_handoff_from_approach_metrics(
+        {},
+        local_fetch_dispatched=False,
+        planner_route_label="ambiguous_or_unsafe_no_go",
+    )
+
+    assert handoff["required"] is False
+    assert handoff["pass"] is True
 
 
 def test_planner_route_defaults_extend_recovery_execution_window_without_nav2_setup():

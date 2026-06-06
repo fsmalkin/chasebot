@@ -4,21 +4,24 @@ This document owns branch-role decisions for calibrated golf fetch work. Use the
 roadmap for priority, `ACTIVE_WORKFLOW.md` for gates and commands, and the
 `OBJECT_CENTRIC_*` docs for research details.
 
-Next major milestone: Deliver Planner-Gated Generalized Fetch-To-Pose v1, a
-no-shoot, robot-owned fetch behavior where an LLM/world-state planner selects
-the route class, Nav2 owns as much real-time robot motion as the corrected
-evidence supports, and a thin fetch adapter monitors delivery geometry, object
+Next major milestone: Deliver Open-Field Planner-Gated Generalized
+Fetch-To-Pose v1, a no-shoot, robot-owned fetch behavior where an
+LLM/world-state planner solves field-like setup geometry, deterministic
+validators compile the maneuver plan, Nav2/setup/local route owners execute
+accepted motion, and a thin fetch adapter monitors delivery geometry, object
 progress, escape, stale state, and replanning triggers.
 
 Scope correction: this branch strategy covers both the planner handoff lane and
 the bounded local fetch subsystem. Major unknowns and arbitrary random scenes
-require planner classification before fetch execution. The LLM/world-state
-planner should classify scenes as `fetch_ready_local`, `nav2_reposition_first`,
-`scan_or_perceive_first`, `recovery_or_reaim`, or
-`ambiguous_or_unsafe_no_go`; only `fetch_ready_local` cases count against the
-local fetch branch. Custom contact routines and AI push-coast proposals remain
-fallback lanes that earn live authority only from corrected reproducible
-stage-gap evidence.
+require planner maneuver planning before fetch execution. The LLM/world-state
+planner should propose bounded sequences such as scan, reposition, wraparound
+setup, re-aim, push-ready validation, local fetch, recovery, or safe no-go. The
+legacy route families `fetch_ready_local`, `nav2_reposition_first`,
+`scan_or_perceive_first`, `recovery_or_reaim`, and
+`ambiguous_or_unsafe_no_go` remain reporting labels. Local fetch evidence starts
+only after measured push-ready handoff. Custom contact routines and AI
+push-coast proposals remain fallback lanes that earn live authority only from
+corrected reproducible stage-gap evidence.
 
 ## Recommended Branch Roles
 
@@ -517,15 +520,15 @@ blocked branch in place. A blocked branch becomes a candidate again only after
 fresh `zero` and `plus45` pre-stage proof is recorded with artifact paths and an
 explicit update to this document.
 
-Current preferred branch decision: use the current fetch spike to score a broad
-stage-owner comparison before adding broader live custom control. The immediate
-hypothesis is staged rather than Nav2-only: planner-approved local cases should
-use Nav2 for corridor approach, a monitored contact-buffer handoff for
-close/aligned no-object-motion stops, deterministic first-contact confirmation,
-and Nav2 corridor push plus delivery monitoring. The next runnable branch work
-should compare this staged behavior against the May 27 object-centric package,
-Nav2 corridor-push, corrected direct `right05`, and prior acquisition or
-goal-side setup evidence before selecting a targeted repair.
+Current preferred branch decision: keep
+`spike/fetch-arch-planner-routed-forward-only-moonshot-20260602` as the active
+open-field planner lane. The next runnable work should expand from route-label
+selection to maneuver-plan execution on `broad_spatial_fetch_generalization_v1`.
+The branch should prove scan, reposition, wraparound setup, re-aim,
+push-ready validation, local fetch, recovery, and safe no-go plans with
+deterministic validators and measured push-ready handoff before local fetch.
+Nav2 remains the preferred route owner where it can reach setup cleanly; local
+setup/recovery owners cover the field geometries Nav2 cannot complete directly.
 
 Keep `spike/fetch-arch-ai-push-coast-servo-20260529` available for analyzers,
 guards, shadow scoring, and narrow fallback routines. Learned local output may

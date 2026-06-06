@@ -502,20 +502,23 @@ Acceptance:
 
 Current direction update:
 
-Next major milestone: Deliver Planner-Gated Generalized Fetch-To-Pose v1, a
-no-shoot, robot-owned fetch behavior where an LLM/world-state planner selects
-the correct route class, Nav2 owns as much real-time robot motion as the
-corrected evidence supports, and a thin fetch adapter monitors delivery
-geometry, object progress, escape, stale state, and replanning triggers.
-Custom contact routines and AI/model proposal layers remain fallback lanes that
-earn live authority only from corrected, reproducible stage-gap evidence.
+Next major milestone: Deliver Open-Field Planner-Gated Generalized
+Fetch-To-Pose v1, a no-shoot, robot-owned fetch behavior where an
+LLM/world-state planner solves field-like setup geometry, deterministic
+validators compile the maneuver plan, Nav2/setup/local route owners execute
+accepted motion, and a thin fetch adapter monitors delivery geometry, object
+progress, escape, stale state, and replanning triggers. Custom contact routines
+and AI/model proposal layers remain fallback lanes that earn live authority only
+from corrected, reproducible stage-gap evidence.
 
-Planner-gating correction: this milestone proves the planner-to-subsystem
-handoff plus the bounded local fetch skill. The planner first classifies each
-scene as `fetch_ready_local`, `nav2_reposition_first`,
-`scan_or_perceive_first`, `recovery_or_reaim`, or
-`ambiguous_or_unsafe_no_go`. Only `fetch_ready_local` cases are handed to the
-fetch subsystem and scored as local fetch evidence.
+Planner-gating correction: this milestone proves setup-to-push-ready planning
+plus the bounded local fetch skill. The planner should propose executable
+maneuver sequences such as scan, reposition, wraparound setup, re-aim,
+push-ready validation, local fetch, recovery, or safe no-go. Route families
+such as `fetch_ready_local`, `nav2_reposition_first`,
+`scan_or_perceive_first`, `recovery_or_reaim`, and
+`ambiguous_or_unsafe_no_go` remain reporting labels. Local fetch starts only
+after the validator proves measured push-ready geometry.
 
 May 31, 2026 evidence reset: the delivery-marker geometry issue means prior
 fetch pass/fail claims require reclassification unless the artifact proves
@@ -610,10 +613,11 @@ show one clean centerline pass and two off-axis setup/capture/handoff failures:
 `left05` escapes laterally, and `right05` under-moves after unstable capture.
 The roadmap sequence is now capture-geometry setup first, then saved-anchor
 one-run rebuild, then terminal correction only for clean near-contract misses.
-The intended algorithm is straightforward: route classification, ball-target
-delivery line, capture pose behind the ball, geometry-gated setup handoff, Nav2
-corridor push, delivery monitor, and bounded correction only from a clean
-terminal state.
+The intended algorithm is straightforward: planner proposes a bounded maneuver
+sequence, validators require measured push-ready geometry, setup owners reach a
+capture pose behind the ball on the delivery line, Nav2 owns corridor push when
+that handoff is valid, the delivery monitor reports outcome, and bounded
+correction runs only from a clean terminal state.
 
 June 2 saved-anchor repeatability repair cleared the current setup/contact
 blocker for the saved anchors. The corrected gate
@@ -712,6 +716,21 @@ blocked corridors, near-margin delivery, and recovery/re-aim cases. Promotion
 evidence still comes from canonical 1.0x saved-layout and seeded gates, but the
 research loop should favor larger disposable branches when the question is
 architectural ownership rather than parameter fit.
+
+June 6 open-field planner reframe: the planner-routed moonshot now targets
+open-field setup-to-push-ready behavior through bounded maneuver planning. The
+LLM/world-state planner should solve soccer-field or putting-green-like local
+geometry by proposing bounded maneuver sequences. Deterministic validators
+compile or reject those sequences, require measured push-ready geometry before
+local fetch, and keep high-frequency control inside Nav2, setup owners, local
+fetch, or guarded learned-local components. The named breadth surface is
+`broad_spatial_fetch_generalization_v1`, covering front, behind, wraparound,
+true opposite-side, stale perception, blocked/no-go, and recovery starts. The
+prior opposite-circle Nav2 failure is a pinned regression case in that surface.
+The next UAT milestone is browser-watchable live evidence with at least six
+successful deliveries across distinct geometry classes, three true
+opposite-side successes, one success on the prior opposite-circle failure
+shape, and a measured push-ready handoff before every local fetch dispatch.
 
 June 3 moonshot progress: the planner-routed branch now proves the executable
 fetch/reposition routes with a shared stage-aware `line_servo` proof executor.
@@ -1689,3 +1708,14 @@ timed out during fresh-dashboard startup and passed on resume with
 timeout or equivalent health handling. The roadmap sequence still prioritizes
 provider-backed LLM reruns and physical/onboard proof before hardware-transfer
 claims.
+
+June 6 current roadmap alignment: the next validation milestone is open-field
+planner UAT before hardware-transfer claims advance. The planner-routed stack
+should graduate from route-family selection to bounded maneuver planning on
+`broad_spatial_fetch_generalization_v1`. The UAT package should show the planner
+solving front, behind, wraparound, true opposite-side, stale-perception,
+blocked/no-go, and recovery setups with deterministic validation and measured
+push-ready handoff before local fetch. Hardware and physical/onboard proof stay
+on the roadmap, but they follow this broader browser-watchable evidence package
+so field transfer rests on general setup competence rather than a narrow route
+matrix.

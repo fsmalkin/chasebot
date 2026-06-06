@@ -1483,6 +1483,41 @@ def summarize_line_servo_effective_command(contact_samples: list[dict[str, Any]]
     return {}
 
 
+def measured_push_ready_handoff_from_approach_metrics(
+    approach_metrics: dict[str, Any],
+    *,
+    local_fetch_dispatched: bool,
+    planner_route_label: str,
+) -> dict[str, Any]:
+    required = bool(str(planner_route_label or "").strip() in EXECUTABLE_PLANNER_FETCH_ROUTES)
+    terminal_ready = bool(approach_metrics.get("terminal_pre_contact_contact_ready_gated", False))
+    first_contact_ready = bool(approach_metrics.get("first_contact_quality_pass", False))
+    passed = bool((not required) or (local_fetch_dispatched and terminal_ready and first_contact_ready))
+    return {
+        "required": required,
+        "pass": passed,
+        "local_fetch_dispatched": bool(local_fetch_dispatched),
+        "planner_route_label": str(planner_route_label or ""),
+        "terminal_pre_contact_contact_ready_gated": terminal_ready,
+        "first_contact_quality_pass": first_contact_ready,
+        "first_contact_t_s": approach_metrics.get("first_contact_t_s"),
+        "terminal_pre_contact_sample_count": approach_metrics.get("terminal_pre_contact_sample_count"),
+        "terminal_pre_contact_quality_sample_count": approach_metrics.get(
+            "terminal_pre_contact_quality_sample_count"
+        ),
+        "max_abs_robot_lateral_error_terminal_pre_contact_m": approach_metrics.get(
+            "max_abs_robot_lateral_error_terminal_pre_contact_m"
+        ),
+        "max_abs_robot_yaw_error_terminal_pre_contact_deg": approach_metrics.get(
+            "max_abs_robot_yaw_error_terminal_pre_contact_deg"
+        ),
+        "flags": list(approach_metrics.get("first_contact_quality_flags", []))
+        if isinstance(approach_metrics.get("first_contact_quality_flags"), list)
+        else [],
+        "source": "approach_contact_metrics",
+    }
+
+
 def collect_contact_samples(
     *,
     compose_project: str,
@@ -2950,6 +2985,11 @@ def main() -> int:
         ball_lateral_threshold_m=args.ball_lateral_threshold_m,
         oscillation_yaw_threshold_deg=args.oscillation_yaw_threshold_deg,
     )
+    measured_push_ready_handoff = measured_push_ready_handoff_from_approach_metrics(
+        approach_metrics,
+        local_fetch_dispatched=not bool(fetch_skipped_after_reposition),
+        planner_route_label=planner_route_label,
+    )
     model_provenance = fetch_model_provenance(
         mission_objective=args.mission_objective,
         target_model_sdf=args.target_model_sdf,
@@ -2981,6 +3021,7 @@ def main() -> int:
         "nav2_reposition_dispatch_status": str(pre_fetch_reposition.get("dispatch_status", "")),
         "nav2_reposition_status_text": str(pre_fetch_reposition.get("status_text", "")),
         "nav2_reposition_goal_pose": pre_fetch_reposition.get("goal_pose", {}),
+        "measured_push_ready_handoff": measured_push_ready_handoff,
         "nav2_layout_transform": nav2_layout_transform,
         "planner_route_execution_defaults": planner_route_defaults,
         "control_preflight": control_preflight,
@@ -3032,6 +3073,7 @@ def main() -> int:
         "random_profile": random_profile,
         "random_draw": random_draw,
         "planner_route": route_metadata,
+        "measured_push_ready_handoff": measured_push_ready_handoff,
         "control_preflight": control_preflight,
         "pre_fetch_reposition": pre_fetch_reposition,
         "nav2_layout_transform": nav2_layout_transform,
@@ -3062,6 +3104,7 @@ def main() -> int:
         "random_profile": random_profile,
         "random_draw": random_draw,
         "planner_route": route_metadata,
+        "measured_push_ready_handoff": measured_push_ready_handoff,
         "control_preflight": control_preflight,
         "session_id": session_id,
         "dashboard_session_binding": dashboard_session_binding,
@@ -3108,6 +3151,8 @@ def main() -> int:
             f"`{pre_fetch_reposition.get('status_text', '')}`",
             f"- Nav2 pre-contact fallback: `{bool(nav2_precontact_fallback.get('applied', False))}` "
             f"`{nav2_precontact_fallback.get('reason', '')}`",
+            f"- Measured push-ready handoff: `{bool(measured_push_ready_handoff.get('pass', False))}` "
+            f"`{measured_push_ready_handoff.get('source', '')}`",
             f"- Drive mode: `{args.drive_mode}`",
             f"- Delivery stop radius: `{delivery_stop_radius_m:.3f}m`",
             f"- Model provenance: `{bool(model_provenance.get('model_provenance_valid', False))}` "

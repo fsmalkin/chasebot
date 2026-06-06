@@ -20,18 +20,20 @@ The previous gather/place objective remains useful as negative baseline
 evidence, but success is no longer final stop in the corral. Success is
 trajectory intersection with a delivery radius around the requested target pose.
 
-Next major milestone: Deliver Planner-Gated Generalized Fetch-To-Pose v1, a
-no-shoot, robot-owned fetch behavior where an LLM/world-state planner selects
-the route class, Nav2 owns as much real-time robot motion as corrected evidence
-supports, and a thin fetch adapter monitors delivery geometry, object progress,
+Next major milestone: Deliver Open-Field Planner-Gated Generalized
+Fetch-To-Pose v1, a no-shoot, robot-owned fetch behavior where an
+LLM/world-state planner solves field-like setup geometry, deterministic
+validators compile the plan, Nav2/setup/local route owners execute accepted
+motion, and the fetch adapter monitors delivery geometry, object progress,
 escape, stale state, and replanning triggers.
 
-Scope correction: this plan covers the bounded local fetch subsystem. It does
-not claim that arbitrary random scenes are executable by fetch. Scenes with
-major unknowns, bad robot-ball-target topology, stale/ambiguous perception, or
-unsafe corridors must first go through an LLM/world-state planner handoff gate.
-Only cases classified as `fetch_ready_local` should dispatch `fetch_to_pose` and
-count against this subsystem.
+Scope correction: this plan covers both the open-field planner handoff and the
+bounded local fetch subsystem. The planner should propose executable maneuver
+sequences for major local unknowns on a soccer-field or putting-green-like
+surface: scan, reposition, wraparound setup, re-aim, push-ready validation,
+local fetch, recovery, or safe no-go. Local fetch receives control only after a
+measured push-ready handoff. Cases that lack measured push-readiness count as
+planner/setup execution evidence.
 
 May 31, 2026 evidence and architecture reset: the delivery-marker geometry
 issue means pre-fix fetch pass/fail claims are diagnostic unless the artifact
@@ -55,12 +57,15 @@ fields are diagnostic and must be rerun before they support saved-layout,
 seeded, architecture, or promotion claims. Use
 `scripts/fetch_model_provenance_audit.py` to inventory prior artifacts.
 
-The immediate architecture direction is planner-gated, Nav2-first, and
-stage-boundary strict:
+The immediate architecture direction is planner-gated, Nav2-first where useful,
+and stage-boundary strict:
 
-- the LLM/world-state planner chooses `fetch_ready_local`,
-  `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`, or
+- the LLM/world-state planner proposes a bounded maneuver sequence and records
+  its route family: `fetch_ready_local`, `nav2_reposition_first`,
+  `scan_or_perceive_first`, `recovery_or_reaim`, or
   `ambiguous_or_unsafe_no_go`
+- deterministic validators compile the proposal, require push-ready validation
+  before local fetch, and reject direct `/cmd_vel` or direct ball-impulse plans
 - the local fetch planner computes the ball-target delivery line, the desired
   capture pose behind the ball, and the geometry gate for standoff, lateral
   error, yaw error, target freshness, and corridor validity
@@ -76,6 +81,17 @@ stage-boundary strict:
   unsafe drift, timeout, or action abort
 - learned local models become fallback handoff and maneuver-class proposers
   after corrected Nav2-first evidence exposes reproducible stage gaps
+
+June 6, 2026 open-field planner update: route labels remain useful, but they
+are no longer the planner ceiling. The active branch now treats the planner as a
+bounded maneuver planner for open local field geometry. The named surface is
+`broad_spatial_fetch_generalization_v1`; it covers front, behind, wraparound,
+true opposite-side, wide-angle, stale perception, blocked/no-go, and recovery
+starts. The prior opposite-circle Nav2 failure is a pinned regression inside
+that surface. The next evidence target is browser-watchable live route-owner
+UAT that proves measured push-ready handoff before every local fetch dispatch,
+including at least three true opposite-side successes and one success on the
+previous opposite-circle failure shape.
 
 June 2, 2026 planner-routing update: the planner layer is integrated as a
 classification and shadow-evidence surface, including deterministic replay and
@@ -122,6 +138,17 @@ planner owns route selection; Nav2/recovery/local fetch own bounded execution;
 the monitor packages visual and geometric proof. The big move is now to
 validate the provider-authorized stack under real onboard/physical constraints.
 
+June 6, 2026 goal update: hardware launch work now sits behind the broader
+open-field planner UAT. The provider-authorized stack should first prove that
+the planner can solve diverse setup geometry instead of selecting only one of
+five fixed route labels. Use `broad_spatial_fetch_generalization_v1` to exercise
+front, behind, wraparound, true opposite-side, stale-perception, blocked/no-go,
+and recovery starts. The immediate UAT bar is at least six successful
+deliveries across distinct geometry classes, at least three true opposite-side
+successes, one success on the previous opposite-circle Nav2 failure shape, and
+measured push-ready handoff before each local fetch dispatch. Physical/onboard
+proof follows that browser-watchable open-field package.
+
 May 29, 2026 architecture update, reinterpreted after the evidence reset: keep
 fetch no-shoot and robot-owned. The Nav2 corridor-push spike proved Nav2 can
 make useful bounded corridor contact. Sole-contact promotion remains blocked by
@@ -139,9 +166,9 @@ fallback AI/contact backlog:
   proposers: they may predict roll outcome or propose stay-with-Nav2, terminal
   re-push, recenter, abort, or re-stage decisions, first in shadow mode and
   later only inside deterministic guards
-- deterministic homebrew routines, not a large model, should execute fine
-  pre-capture alignment, first-contact stabilization, terminal stop-short
-  correction, and bounded recenter/re-push/coast
+- deterministic homebrew routines should execute fine pre-capture alignment,
+  first-contact stabilization, terminal stop-short correction, and bounded
+  recenter/re-push/coast
 - V-JEPA-style world models are useful research inspiration for scoring
   candidate actions, but full video world models are offboard/teacher
   candidates; onboard inference should be a smaller structured or distilled

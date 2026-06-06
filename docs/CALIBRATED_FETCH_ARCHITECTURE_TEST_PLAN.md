@@ -6,13 +6,14 @@ same control loop under different names. The active UAT baseline remains
 research portfolio should deliberately test wider designs that may generalize
 better, reduce telemetry fragility, or simplify eventual hardware transfer.
 
-Next major milestone: Deliver Planner-Gated Generalized Fetch-To-Pose v1, a
-no-shoot, robot-owned fetch behavior where an LLM/world-state planner selects
-the route class, Nav2 owns as much real-time robot motion as the corrected
-evidence supports, and a thin fetch adapter monitors corrected delivery
-geometry, object progress, escape, stale state, and replanning triggers.
-Custom contact routines and AI/model proposal layers remain fallback lanes that
-earn live authority only from corrected, reproducible stage-gap evidence.
+Next major milestone: Deliver Open-Field Planner-Gated Generalized
+Fetch-To-Pose v1, a no-shoot, robot-owned fetch behavior where an
+LLM/world-state planner solves field-like setup geometry, deterministic
+validators compile the maneuver plan, Nav2/setup/local route owners execute
+accepted motion, and a thin fetch adapter monitors corrected delivery geometry,
+object progress, escape, stale state, and replanning triggers. Custom contact
+routines and AI/model proposal layers remain fallback lanes that earn live
+authority only from corrected, reproducible stage-gap evidence.
 
 May 31, 2026 evidence reset: the delivery-marker geometry issue changed the
 meaning of recent fetch metrics. A fetch result is architecture evidence only
@@ -144,12 +145,11 @@ an executable `nav2_reposition_first` handoff path.
 
 Planner handoff is a separate evidence layer. Random scenes that are outside the
 local fetch envelope should not be handed directly to `fetch_to_pose` and scored
-as subsystem failures. The planner layer must first classify each scene as one
-of: `fetch_ready_local`, `nav2_reposition_first`, `scan_or_perceive_first`,
-`recovery_or_reaim`, or `ambiguous_or_unsafe_no_go`. A local fetch failure is
-only subsystem evidence after a correct `fetch_ready_local` handoff. A correct
-abstain, scan, reposition, or no-go on an out-of-envelope scene is planner
-success, not missing fetch capability.
+as subsystem failures. The planner layer must first produce an executable
+maneuver plan, a route-family label, validator decisions, and push-ready
+handoff requirements. A local fetch failure is subsystem evidence only after a
+correct measured push-ready handoff. A correct scan, reposition, wraparound,
+recovery, or no-go on a difficult field setup is planner success.
 
 ## Architecture Portfolio
 
@@ -169,6 +169,7 @@ success, not missing fetch capability.
 | Learned residual or maneuver proposer | Learns residual corrections or proposes setup pocket, handoff, push duration, coast timing, and recovery side behind deterministic gates | Offline replay/shadow evaluation before live control | Does it add measurable margin while abstaining on out-of-distribution states? |
 | LM/VLA high-level supervisor | Uses language or robot-foundation-model reasoning for task mode, failure interpretation, and maneuver choice without owning fast control | Contract/dry-run prompt replay over frozen state digests | Does it improve recover/give-up decisions while leaving local contact to guarded controllers? |
 | Planner-gated fetch handoff | Tests whether the LLM/world-state planner recognizes when local fetch is applicable versus when to scan, reposition, recover, or no-go | `scripts/fetch_planner_handoff_gate.py --scene-descriptor-json ros2_config/fetch_planner_scene_sets/mixed_fetch_planner_v1.json` | Does it avoid dispatching local fetch outside its envelope while still choosing fetch on valid local cases? |
+| Open-field maneuver planner | Tests whether the LLM/world-state planner can solve soccer-field or putting-green-like setup challenges by proposing bounded maneuver sequences before route owners execute | `scripts/fetch_planner_handoff_gate.py --scene-set broad_spatial_fetch_generalization_v1 --random-cases 18`, then browser-watchable live route-owner UAT | Does it produce executable scan/reposition/wraparound/re-aim/push-ready/fetch/no-go plans, including true opposite-side starts, while preserving measured push-ready handoff before local fetch? |
 | Portfolio supervisor/switcher | Chooses push, coast, re-aim, hold, or give-up from measured uncertainty | Offline counterfactual replay, then live A/B on hard layouts | Does switching reduce tail failures without adding opaque behavior? |
 | Perception-first target-pose fetch | Replaces truth-state assumptions with sensed ball/target pose once pose delivery is stable | Shadow perception parity against truth-state UAT traces | Does it preserve success when truth-state shortcuts are removed? |
 

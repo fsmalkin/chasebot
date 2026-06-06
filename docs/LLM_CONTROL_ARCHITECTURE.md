@@ -14,14 +14,15 @@ This is a design and implementation note for the current stack. It is not a road
 
 ## Design Goal
 
-The LLM should act like a bounded supervisor, not like a direct motor controller.
+The LLM acts as a bounded supervisor. Direct motor control stays with Nav2,
+deterministic controllers, and guarded local-control components.
 
 That means:
 
 - it observes a compact state digest instead of raw ROS graphs or image streams
-- it chooses at most one next bounded action
-- it never bypasses deterministic gating
-- it never owns fast control loops
+- it chooses one bounded action or one bounded maneuver sequence
+- deterministic gating approves each action or maneuver sequence
+- fast control loops stay below the model layer
 - it may rely on slower deterministic recovery or orchestration loops below it
 - it can escalate to safer or lower-level behaviors, but not replace them
 
@@ -32,8 +33,8 @@ the layers explicit. The Nav2 corridor-push spike showed Nav2 can be a useful
 stage owner for long-haul, coarse setup, and corridor tracking, but the
 `right05` saved-layout promotion failure showed that path completion is not
 enough for object delivery. AI is now a shadow-only handoff and maneuver-class
-proposer inside a hybrid stage supervisor, not a replacement for Nav2 or
-deterministic contact routines:
+proposer inside a hybrid stage supervisor. Nav2 and deterministic contact
+routines remain the runtime owners:
 
 1. LM or VLA-style models may supervise high-level task mode, failure
    interpretation, and known maneuver choices.
@@ -56,26 +57,33 @@ deterministic contact routines:
    scoring is green and deterministic guards accept the handoff or maneuver
    class.
 
-The planner handoff is now explicit. The LLM/world-state planner is responsible
-for deciding whether local fetch is applicable before any local subsystem is
-scored:
+The planner handoff is now a maneuver-planning contract. The LLM/world-state
+planner is responsible for solving the local field setup problem before any
+local subsystem is scored. It receives the world state, target objective,
+robot/ball/goal geometry, confidence, freshness, and safety constraints, then
+proposes a bounded maneuver sequence. Deterministic validators compile or reject
+that proposal before any route owner executes.
 
 1. `fetch_ready_local`: scene is inside the documented local fetch envelope;
-   dispatch `fetch_to_pose`.
+   validate push-ready geometry and dispatch `fetch_to_pose`.
 2. `nav2_reposition_first`: ball/target are local, but robot pose or topology is
-   not fetch-ready; dispatch a bounded reposition/setup routine first.
+   outside the push-ready envelope; dispatch bounded reposition, wraparound, or
+   setup first.
 3. `scan_or_perceive_first`: ball, target, delivery pose, or confidence is
    stale, missing, or ambiguous; scan/perceive before fetch.
 4. `recovery_or_reaim`: scene is near-envelope but needs a known re-aim,
    recenter, or recovery routine before fetch.
-5. `ambiguous_or_unsafe_no_go`: scene is outside known envelopes, blocked,
-   unsafe, or semantically unclear; do not dispatch fetch.
+5. `ambiguous_or_unsafe_no_go`: scene is blocked, unsafe, or semantically
+   unclear; withhold fetch and report the no-go reason.
 
-This means a major-unknown random scene is not automatically a fetch subsystem
-test. A wrong `fetch_ready_local` dispatch is a planner failure. A local fetch
-miss after a correct `fetch_ready_local` dispatch is subsystem evidence. A
-correct scan, reposition, recovery, abstain, or no-go on an out-of-envelope
-scene is a planner success.
+The route labels are reporting families. The planner product is an executable
+bounded sequence with maneuvers such as `scan_perceive`,
+`nav2_reposition`, `wraparound_setup`, `recovery_reaim`,
+`validate_push_ready`, `local_fetch_to_pose`, `monitor_delivery`, or
+`safe_no_go`. A wrong local-fetch dispatch is a planner/compiler failure. A
+local fetch miss after a correct measured push-ready handoff is subsystem
+evidence. A correct scan, reposition, wraparound, recovery, abstain, or no-go on
+a difficult field setup is planner evidence.
 
 The first concrete gate for this contract is
 `scripts/fetch_planner_handoff_gate.py`. It can run deterministic scoring or
@@ -84,14 +92,14 @@ The first concrete gate for this contract is
 may record provider requests and rationales, but deterministic guard agreement
 remains the promotion condition and no planner output can command `/cmd_vel`.
 
-Current integration boundary, June 2, 2026: the planner is integrated for route
-classification, deterministic replay, LLM-shadow comparison, rationale capture,
-dashboard artifact recording, and a v0 executable route contract. The dashboard
-now treats `fetch_ready_local` and `nav2_reposition_first` as runnable forward-only
-proof routes with route metadata and a pre-contact forward-motion guard.
-`ambiguous_or_unsafe_no_go` is an executed safe-stop/no-go route. The scan and
-recovery labels remain classified placeholders until their perception-refresh
-and bounded re-aim executors are wired.
+Current integration boundary, June 6, 2026: the planner is integrated for route
+families, deterministic replay, LLM-shadow and supervised comparison, rationale
+capture, dashboard artifact recording, and maneuver-plan compilation. The
+`broad_spatial_fetch_generalization_v1` scene set widens the planner surface to
+front, behind, wraparound, true opposite-side, stale-perception, blocked/no-go,
+and recovery setups. The prior opposite-circle Nav2 failure is now a pinned
+open-field regression. Live execution still has to prove the full route-owner
+stack across that surface with measured push-ready handoff before local fetch.
 
 The opposite-side fetch probe turns that boundary into a control requirement.
 Local fetch should enter contact from a forward-driving setup. Reverse pre-stage
@@ -109,7 +117,7 @@ for `scan_or_perceive_first`, one bounded deterministic re-aim for
 `recovery_or_reaim`, and browser-watchable videos where the operator can see the
 planner route and the actual robot path.
 
-The latest proven Nav2 lane is therefore evidence, not the final architecture:
+The latest proven Nav2 lane remains corridor-tracking evidence:
 
 `LM/VLA supervisor -> deterministic fetch state machine/guards -> Nav2 FollowPath corridor-push -> ball-escape/success monitor -> robot`
 
@@ -117,9 +125,9 @@ The immediate hybrid learned lane is:
 
 `LM/VLA supervisor -> deterministic fetch state machine/guards -> Nav2 or deterministic contact routine -> local learned handoff/proposer in shadow -> robot`
 
-The current preferred local fetch algorithm is:
+The current preferred fetch stack is:
 
-`planner route label -> ball-target delivery line -> capture pose -> setup motion -> handoff geometry gate -> Nav2 corridor push -> monitor -> bounded correction/replan`
+`LLM/world planner -> deterministic maneuver compiler/validator -> Nav2/setup route owners -> measured push-ready gate -> local fetch/corridor push -> monitor -> bounded correction/replan`
 
 This is a no-shoot architecture. Contact-aware geometric-shooter artifacts can
 inform roll/coast physics, but direct ball impulses are not a runtime control
@@ -432,9 +440,11 @@ For the current turn-and-go proof, the intended control story is:
 This architecture is intentionally friendly to a smaller on-machine model later because:
 
 - the input is a compact fixed-shape digest
-- the output is a small bounded action set
+- the output is a bounded maneuver sequence compiled through deterministic
+  validators
 - most of the complexity stays in deterministic layers
-- the model does classification-style next-step choice rather than open-ended policy generation
+- the model performs high-level setup planning without generating direct
+  low-level motor policy
 
 That keeps the cloud and local paths aligned:
 
@@ -445,18 +455,23 @@ That keeps the cloud and local paths aligned:
 
 ## What Is Out Of Scope For This Architecture
 
-This design does not currently include:
+Current scope boundaries:
 
-- open-ended multi-step mission planning
 - freeform natural-language control in the browser
 - direct end-to-end vision-language-action control
 - LLM ownership of environment lifecycle or scenario orchestration
 - LLM ownership of real-time steering or controller loops
 - early live gather-supervisor control; any gather-brain exploration before deterministic gather mechanics stabilize should stay shadow-mode only
 
+Open-field `fetch_to_pose` setup planning is in scope when it compiles to the
+bounded maneuver vocabulary and passes deterministic validation. The model may
+propose scan, reposition, wraparound setup, re-aim, validation, local fetch,
+recovery, or no-go steps; it may not publish raw motion or bypass route-owner
+contracts.
+
 ## Current Design Principle
 
-The LLM should be the highest-level bounded decision layer in the stack, not
-the place where low-level robot competence lives. Near-term gather redesign may
-add more deterministic orchestration inside Layer 3, but it should not move
-fast control into the model layer.
+The LLM is the highest-level bounded decision layer in the stack. Low-level
+robot competence lives in Nav2, deterministic controllers, and guarded local
+policies. Near-term gather redesign may add more deterministic orchestration
+inside Layer 3 while keeping fast control below the model layer.

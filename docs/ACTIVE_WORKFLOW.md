@@ -2056,16 +2056,19 @@ Commands:
 
 Research contract:
 
-Next major milestone: Deliver Planner-Gated Generalized Fetch-To-Pose v1, a
-no-shoot, robot-owned fetch behavior where an LLM/world-state planner selects
-the route class, Nav2 owns as much real-time robot motion as corrected evidence
-supports, and a thin fetch adapter monitors delivery geometry, object progress,
-escape, stale state, and replanning triggers.
+Next major milestone: Deliver Open-Field Planner-Gated Generalized
+Fetch-To-Pose v1, a no-shoot, robot-owned fetch behavior where an
+LLM/world-state planner solves field-like setup geometry, deterministic
+validators compile the maneuver plan, Nav2/setup/local route owners execute
+accepted motion, and a thin fetch adapter monitors delivery geometry, object
+progress, escape, stale state, and replanning triggers.
 
-Scope correction: Generalized Fetch-To-Pose v1 proves planner handoff plus the
-bounded local fetch subsystem. The broader product path is:
-`LLM/world-state planner -> capability envelope check -> selected subsystem ->
-guarded execution -> monitor/result back to planner`.
+Scope correction: Generalized Fetch-To-Pose v1 proves open-field
+setup-to-push-ready planning plus the bounded local fetch subsystem. The
+broader product path is:
+`LLM/world-state planner -> maneuver compiler/validator -> selected route owner
+-> measured push-ready gate -> guarded local fetch -> monitor/result back to
+planner`.
 
 1. freeze `nav2_mppi_follow_path_reacquire_v1` as the baseline/evidence branch rather than continuing broad MPPI/capture threshold tuning
 2. reserve historical Nav2/MPPI branches for long-range/pre-stage evidence.
@@ -2103,10 +2106,10 @@ guarded execution -> monitor/result back to planner`.
 17. prove generalized last-meter fetch with a reusable seeded gate before
     claiming a robot-owned architecture generalizes beyond saved layouts
 18. prove planner handoff separately before claiming the robot handles major
-    unknowns: mixed random scenes must be classified as `fetch_ready_local`,
-    `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`, or
-    `ambiguous_or_unsafe_no_go`; only `fetch_ready_local` cases count against
-    the local fetch subsystem
+    unknowns: mixed random scenes must produce executable maneuver plans, route
+    family labels, validator decisions, and push-ready handoff evidence. Local
+    fetch cases count against the local subsystem only after measured
+    push-readiness is true.
 19. require `geometry_consistency.pass=true`, corrected visible delivery marker,
     and same-session browser-watchable onboard plus context videos before
     counting any fetch result as UAT or architecture evidence
@@ -2138,6 +2141,13 @@ guarded execution -> monitor/result back to planner`.
 23. when the goal is full architecture research, ground in
     `docs/GENERALIZED_LAST_METER_FETCH_RESEARCH_GOAL.md` and return a findings
     matrix before tuning a single path
+24. use `broad_spatial_fetch_generalization_v1` as the open-field planner UAT
+    surface for front, behind, wraparound, true opposite-side, stale
+    perception, blocked/no-go, and recovery cases. The prior opposite-circle
+    Nav2 failure is a pinned regression. Browser-watchable UAT should show at
+    least six successful deliveries across distinct geometry classes, at least
+    three true opposite-side successes, and one success on that pinned
+    regression before broad-generalization claims advance.
 
 Implementation contract:
 

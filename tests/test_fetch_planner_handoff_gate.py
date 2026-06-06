@@ -291,6 +291,57 @@ def test_opposite_behind_layout_preserves_profile_and_geometry(tmp_path):
     assert layout["random_draw"]["robot_ball_relative_bearing_abs_deg"] >= 90.0
 
 
+def test_broad_spatial_scene_set_covers_open_field_geometry_classes():
+    scenes = gate.generate_random_scenes(
+        seed=123,
+        random_cases=18,
+        scene_set=gate.BROAD_SPATIAL_SCENE_SET,
+    )
+    coverage = gate.summarize_scene_geometry_coverage(scenes)
+    route_counts = {
+        route: sum(1 for scene in scenes if scene["expected_route_label"] == route)
+        for route in gate.ROUTE_LABELS
+    }
+
+    assert len(scenes) == 18
+    assert coverage["behind_robot_heading_count"] >= 6
+    assert coverage["opposite_side_of_circle_count"] >= 6
+    assert route_counts[gate.ROUTE_FETCH_READY] >= 1
+    assert route_counts[gate.ROUTE_NAV2_REPOSITION] >= 8
+    assert route_counts[gate.ROUTE_RECOVERY_OR_REAIM] >= 2
+    assert route_counts[gate.ROUTE_SCAN_OR_PERCEIVE] >= 2
+    assert route_counts[gate.ROUTE_NO_GO] >= 2
+    assert all(
+        gate.deterministic_route_label(scene) == scene["expected_route_label"]
+        for scene in scenes
+    )
+
+
+def test_broad_spatial_layout_preserves_profile(tmp_path):
+    scene = next(
+        item for item in gate.generate_random_scenes(
+            seed=123,
+            random_cases=18,
+            scene_set=gate.BROAD_SPATIAL_SCENE_SET,
+        )
+        if item["geometry"]["opposite_side_of_circle"] is True
+    )
+    layout_path = tmp_path / "layout.json"
+
+    gate.write_fetch_ready_layout_from_scene(
+        layout_path,
+        scene,
+        route_label=scene["expected_route_label"],
+        route_executor=gate.executor_for_route(scene["expected_route_label"]),
+    )
+
+    layout = read_json(layout_path)
+    assert layout["random_profile"] == gate.BROAD_SPATIAL_PROFILE
+    assert layout["random_draw"]["random_profile"] == gate.BROAD_SPATIAL_PROFILE
+    assert layout["random_draw"]["scene_set"] == gate.BROAD_SPATIAL_SCENE_SET
+    assert layout["random_draw"]["opposite_side_of_circle"] is True
+
+
 def test_planner_gate_scores_hard_scene_set(tmp_path, monkeypatch):
     monkeypatch.setattr(gate, "REPO_ROOT", tmp_path)
     args = SimpleNamespace(
@@ -364,6 +415,68 @@ def test_decision_records_route_quality_for_planner_artifacts():
     assert decision["route_quality"]["route_label"] == gate.ROUTE_FETCH_READY
     assert decision["route_quality"]["predicted_contact_quality"] in {"clean", "watch"}
     assert decision["route_quality"]["quality_score"] > 0.0
+    assert decision["maneuver_plan"]["maneuver_sequence"] == [
+        gate.MANEUVER_VALIDATE_PUSH_READY,
+        gate.MANEUVER_LOCAL_FETCH,
+        gate.MANEUVER_MONITOR_DELIVERY,
+    ]
+    assert decision["maneuver_plan"]["requires_measured_push_ready_before_fetch"] is True
+
+
+def test_nav2_opposite_side_plan_includes_wraparound_and_push_ready_gate():
+    scene = next(
+        item for item in gate.generate_random_scenes(
+            seed=123,
+            random_cases=18,
+            scene_set=gate.BROAD_SPATIAL_SCENE_SET,
+        )
+        if item["geometry"]["opposite_side_of_circle"] is True
+        and item["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+    )
+
+    plan = gate.compile_maneuver_plan(scene, gate.ROUTE_NAV2_REPOSITION)
+
+    assert gate.MANEUVER_NAV2_REPOSITION in plan["maneuver_sequence"]
+    assert gate.MANEUVER_WRAPAROUND_SETUP in plan["maneuver_sequence"]
+    assert gate.MANEUVER_VALIDATE_PUSH_READY in plan["maneuver_sequence"]
+    assert gate.MANEUVER_LOCAL_FETCH in plan["maneuver_sequence"]
+    assert plan["push_ready_index"] < plan["local_fetch_index"]
+    assert plan["requires_measured_push_ready_before_fetch"] is True
+
+
+def test_plan_compiler_vetoes_fetch_before_push_ready_for_executable_route():
+    scene = next(
+        item for item in gate.generate_random_scenes(seed=123, random_cases=10)
+        if item["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+    )
+
+    plan = gate.compile_maneuver_plan(
+        scene,
+        gate.ROUTE_NAV2_REPOSITION,
+        proposed={"maneuver_sequence": [gate.MANEUVER_LOCAL_FETCH, gate.MANEUVER_VALIDATE_PUSH_READY]},
+    )
+
+    assert plan["source"] == "deterministic_compiled_after_veto"
+    assert "validate_push_ready_after_fetch" in plan["veto_reasons"]
+    assert plan["push_ready_index"] < plan["local_fetch_index"]
+
+
+def test_plan_compiler_vetoes_planner_only_local_fetch():
+    scene = next(
+        item for item in gate.generate_random_scenes(seed=123, random_cases=10)
+        if item["expected_route_label"] == gate.ROUTE_NO_GO
+    )
+
+    plan = gate.compile_maneuver_plan(
+        scene,
+        gate.ROUTE_NO_GO,
+        proposed={"maneuver_sequence": [gate.MANEUVER_LOCAL_FETCH]},
+    )
+
+    assert plan["source"] == "deterministic_compiled_after_veto"
+    assert "planner_only_route_attempted_local_fetch" in plan["veto_reasons"]
+    assert plan["maneuver_sequence"] == [gate.MANEUVER_NO_GO]
+    assert plan["requires_measured_push_ready_before_fetch"] is False
 
 
 def test_route_executor_mapping_covers_all_route_labels():
@@ -612,7 +725,9 @@ def test_fetch_ready_layout_writer_preserves_planner_scene(tmp_path):
     assert layout["random_profile"] == gate.PLANNER_MIXED_PROFILE
     assert layout["planner_scene"]["scene_id"] == scene["scene_id"]
     assert layout["route_quality"]["route_label"] == gate.ROUTE_FETCH_READY
+    assert layout["maneuver_plan"]["requires_measured_push_ready_before_fetch"] is True
     assert layout["random_draw"]["route_quality"]["route_label"] == gate.ROUTE_FETCH_READY
+    assert layout["random_draw"]["maneuver_plan"]["push_ready_index"] < layout["random_draw"]["maneuver_plan"]["local_fetch_index"]
     assert layout["targets"][0]["forward_m"] == scene["ball_pose"]["x"]
 
 

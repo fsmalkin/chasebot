@@ -17,25 +17,31 @@ not only the current saved layouts.
 
 ## Next Major Milestone
 
-Deliver Planner-Gated Generalized Fetch-To-Pose v1: a no-shoot, robot-owned
-fetch behavior where an LLM/world-state planner chooses the right bounded route,
-the local fetch subsystem computes the intended ball path and capture geometry,
-Nav2 owns the corridor push after measured push-readiness is proven, and a thin
-fetch adapter monitors corrected ball/target geometry, success, escape, stale
-state, and replanning triggers. The runtime sequence is: planner route
-classification, ball-target delivery line, capture-pose setup, push-readiness
-gate, Nav2 corridor push, monitor classification, and route-back-to-setup on
-setup or contact failure. One bounded terminal correction remains available only
-from a clean near-contract terminal miss. Custom contact routines and AI
-push-coast prediction remain fallback lanes that earn live authority only after
-corrected Nav2-first evidence exposes a reproducible stage gap.
+Deliver Open-Field Planner-Gated Generalized Fetch-To-Pose v1: a no-shoot,
+robot-owned fetch behavior where an LLM/world-state planner solves field-like
+setup geometry before local fetch begins. The planner receives robot, ball,
+target, freshness, confidence, and safety constraints, then proposes a bounded
+maneuver sequence such as scan, reposition, wraparound setup, re-aim,
+push-ready validation, local fetch, recovery, or no-go. Deterministic validators
+compile or reject that proposal. Deterministic route owners execute accepted
+motion through Nav2, setup routines, and local fetch. High-frequency control
+stays with Nav2, deterministic controllers, or later learned-local components
+behind guards.
 
-Scope correction: this milestone proves the planner-to-subsystem handoff plus
-the bounded local fetch skill. The planner first classifies scenes as
+Scope correction: this milestone proves open-field setup-to-push-ready
+planning plus the bounded local fetch skill. The route labels
 `fetch_ready_local`, `nav2_reposition_first`, `scan_or_perceive_first`,
-`recovery_or_reaim`, or `ambiguous_or_unsafe_no_go`. Only planner-approved
-`fetch_ready_local` cases should be handed to `fetch_to_pose` and scored as
-local fetch evidence.
+`recovery_or_reaim`, and `ambiguous_or_unsafe_no_go` remain useful reporting
+families. The planner authority target is an executable maneuver plan. Local
+fetch may start only after measured push-ready geometry is true: the robot is
+behind the ball on the intended ball-target line and inside standoff,
+lateral-error, yaw, freshness, and corridor-validity bounds.
+
+The open-field test surface is `broad_spatial_fetch_generalization_v1`. It
+covers front, behind, wraparound, true opposite-side, wide-angle, stale
+perception, blocked/no-go, and recovery setups on a soccer-field or
+putting-green-like local field. The previous opposite-circle Nav2 failure is a
+pinned regression case inside that broader surface.
 
 Milestone acceptance:
 
@@ -49,9 +55,8 @@ Milestone acceptance:
    implementation evidence. Architecture and promotion claims require the
    corrected marker and video floor.
 3. The planner-handoff gate passes before broad random UAT: mixed scenarios are
-   scored on correct route selection (`fetch_ready_local`,
-   `nav2_reposition_first`, `scan_or_perceive_first`, `recovery_or_reaim`,
-   `ambiguous_or_unsafe_no_go`) before subsystem execution is judged.
+   scored on executable maneuver plans, validator decisions, and route-family
+   outcomes before subsystem execution is judged.
 4. Saved-layout `zero`, `left05`, and `right05` pass `3/3` in the canonical
    calibrated golf-ball/turf lane with no retries and `0.300m` delivery radius.
 5. The first seeded random `fetch_generalization_gate` set runs; reproducible
@@ -64,6 +69,10 @@ Milestone acceptance:
    freshness, and corridor-validity bounds before Nav2 is allowed to push.
    Failures before that gate return to setup/reacquire rather than terminal
    correction.
+8. Broad-field UAT requires at least six successful deliveries across distinct
+   geometry classes, at least three successful true opposite-side starts, and
+   one success on the prior opposite-circle failure shape, all with
+   browser-watchable onboard and context evidence.
 
 ## May 31, 2026 Evidence And Architecture Reset
 
@@ -1634,10 +1643,11 @@ perception-first target-pose fetch.
 
 Do not jump straight into tuning one path. First ground in branch/docs/artifacts,
 then evaluate each path against the corrected calibrated fetch_to_pose contract,
-planner-handoff route labels, saved-layout anchors, seeded random/generalization
-gate, robot-owned contact requirement, hardware-transfer path, diagnosability,
-and implementation cost. Prefer Nav2 and LLM-planner reuse before custom
-contact development; make AI push-coast a fallback only when corrected evidence
-proves a reproducible stage gap. Come back with a findings matrix, a recommended
-primary path, fallback paths, no-go paths, and the next focused spike/gate plan.
+open-field planner maneuver compilation, saved-layout anchors, seeded
+random/generalization gate, robot-owned contact requirement, hardware-transfer
+path, diagnosability, and implementation cost. Prefer Nav2 and LLM-planner
+reuse before custom contact development; make AI push-coast a fallback only when
+corrected evidence proves a reproducible stage gap. Come back with a findings
+matrix, a recommended primary path, fallback paths, no-go paths, and the next
+focused spike/gate plan.
 ```

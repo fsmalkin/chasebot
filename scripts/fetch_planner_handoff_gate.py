@@ -66,12 +66,32 @@ ROUTE_EXECUTORS = {
     ROUTE_RECOVERY_OR_REAIM: ROUTE_EXECUTOR_RECOVERY,
     ROUTE_NO_GO: ROUTE_EXECUTOR_NO_GO,
 }
+MANEUVER_SCAN = "scan_perceive"
+MANEUVER_NO_GO = "safe_no_go"
+MANEUVER_NAV2_REPOSITION = "nav2_reposition"
+MANEUVER_WRAPAROUND_SETUP = "wraparound_setup"
+MANEUVER_RECOVERY_REAIM = "recovery_reaim"
+MANEUVER_VALIDATE_PUSH_READY = "validate_push_ready"
+MANEUVER_LOCAL_FETCH = "local_fetch_to_pose"
+MANEUVER_MONITOR_DELIVERY = "monitor_delivery"
+MANEUVER_LABELS = (
+    MANEUVER_SCAN,
+    MANEUVER_NO_GO,
+    MANEUVER_NAV2_REPOSITION,
+    MANEUVER_WRAPAROUND_SETUP,
+    MANEUVER_RECOVERY_REAIM,
+    MANEUVER_VALIDATE_PUSH_READY,
+    MANEUVER_LOCAL_FETCH,
+    MANEUVER_MONITOR_DELIVERY,
+)
 FETCH_TARGET_POSE = {"x": 0.95, "y": 0.0, "z": 0.001, "radius_m": 0.30}
 PLANNER_GATE_KIND = "fetch_planner_handoff_gate"
 PLANNER_MIXED_PROFILE = "planner_mixed_v1"
 HARD_SCENE_SET = "hard_mixed_fetch_planner_v1"
 OPPOSITE_BEHIND_SCENE_SET = "opposite_side_and_behind_robot_v1"
 OPPOSITE_BEHIND_PROFILE = "opposite_side_and_behind_robot_v1"
+BROAD_SPATIAL_SCENE_SET = "broad_spatial_fetch_generalization_v1"
+BROAD_SPATIAL_PROFILE = "broad_spatial_fetch_generalization_v1"
 OPENAI_TOOL_NAME = "emit_fetch_planner_route"
 LLM_SUPERVISED_MIN_CONFIDENCE = 0.90
 CONTACT_QUALITY_CLEAN_LATERAL_M = 0.030
@@ -367,6 +387,8 @@ def generate_random_scenes(
         return generate_hard_scenes(random_cases=random_cases, scene_set=scene_set)
     if str(scene_set or "").strip() == OPPOSITE_BEHIND_SCENE_SET:
         return generate_opposite_behind_scenes(random_cases=random_cases, scene_set=scene_set)
+    if str(scene_set or "").strip() == BROAD_SPATIAL_SCENE_SET:
+        return generate_broad_spatial_scenes(random_cases=random_cases, scene_set=scene_set)
 
     rng = random.Random(int(seed))
     case_count = max(int(random_cases), 1)
@@ -696,6 +718,98 @@ def generate_opposite_behind_scenes(
             standoff_m=0.70,
             lateral_m=0.12,
             yaw_error_deg=31.0,
+            scene_set=scene_set,
+        ),
+    ]
+    case_count = max(int(random_cases), 1)
+    if case_count <= len(scenes):
+        return scenes[:case_count]
+    extra: list[dict[str, Any]] = []
+    while len(scenes) + len(extra) < case_count:
+        template = scenes[len(extra) % len(scenes)]
+        clone = json.loads(json.dumps(template))
+        clone["scene_id"] = f"{template['scene_id']}_repeat{len(extra) + 1:02d}"
+        extra.append(clone)
+    return scenes + extra
+
+
+def generate_broad_spatial_scenes(
+    *,
+    random_cases: int = 18,
+    scene_set: str = BROAD_SPATIAL_SCENE_SET,
+) -> list[dict[str, Any]]:
+    """Return a broad deterministic matrix for generalizable fetch setup UAT."""
+
+    scenes = [
+        *generate_opposite_behind_scenes(random_cases=12, scene_set=scene_set),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="broad_nav2_opposite_circle_left_deep_13",
+            distance_m=0.76,
+            angle_deg=145.0,
+            standoff_m=0.96,
+            lateral_m=0.18,
+            relative_bearing_deg=132.0,
+            opposite_side_setup=True,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="broad_nav2_opposite_circle_right_deep_14",
+            distance_m=0.76,
+            angle_deg=-145.0,
+            standoff_m=0.96,
+            lateral_m=-0.18,
+            relative_bearing_deg=-132.0,
+            opposite_side_setup=True,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="broad_nav2_opposite_circle_left_shallow_15",
+            distance_m=0.48,
+            angle_deg=122.0,
+            standoff_m=0.78,
+            lateral_m=-0.10,
+            relative_bearing_deg=104.0,
+            opposite_side_setup=True,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NAV2_REPOSITION,
+            scene_id="broad_nav2_opposite_circle_right_shallow_16",
+            distance_m=0.48,
+            angle_deg=-122.0,
+            standoff_m=0.78,
+            lateral_m=0.10,
+            relative_bearing_deg=-104.0,
+            opposite_side_setup=True,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_SCAN_OR_PERCEIVE,
+            scene_id="broad_scan_low_confidence_opposite_17",
+            distance_m=0.66,
+            angle_deg=152.0,
+            standoff_m=0.86,
+            lateral_m=0.06,
+            relative_bearing_deg=118.0,
+            ball_confidence=0.35,
+            opposite_side_setup=True,
+            scene_set=scene_set,
+        ),
+        _scene_with_relative_ball_bearing(
+            route_label=ROUTE_NO_GO,
+            scene_id="broad_no_go_blocked_opposite_right_18",
+            distance_m=0.70,
+            angle_deg=-150.0,
+            standoff_m=0.92,
+            lateral_m=-0.06,
+            relative_bearing_deg=-122.0,
+            opposite_side_setup=True,
+            corridor_blocked=True,
+            corridor_clearance_m=0.05,
+            unsafe_drift_m=0.24,
             scene_set=scene_set,
         ),
     ]
@@ -1064,6 +1178,113 @@ def executor_for_route(route_label: str) -> str:
     return str(ROUTE_EXECUTORS.get(str(route_label or "").strip(), "unsupported_route"))
 
 
+def default_maneuver_sequence_for_route(scene: dict[str, Any], route_label: str) -> list[str]:
+    route = str(route_label or "").strip()
+    geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
+    opposite = bool(geometry.get("opposite_side_of_circle", False))
+    behind = _finite_float(geometry.get("robot_ball_relative_bearing_abs_deg"), 0.0) >= 90.0
+    if route == ROUTE_SCAN_OR_PERCEIVE:
+        return [MANEUVER_SCAN]
+    if route == ROUTE_NO_GO:
+        return [MANEUVER_NO_GO]
+    if route == ROUTE_FETCH_READY:
+        return [MANEUVER_VALIDATE_PUSH_READY, MANEUVER_LOCAL_FETCH, MANEUVER_MONITOR_DELIVERY]
+    if route == ROUTE_RECOVERY_OR_REAIM:
+        return [
+            MANEUVER_RECOVERY_REAIM,
+            MANEUVER_VALIDATE_PUSH_READY,
+            MANEUVER_LOCAL_FETCH,
+            MANEUVER_MONITOR_DELIVERY,
+        ]
+    if route == ROUTE_NAV2_REPOSITION:
+        sequence = [MANEUVER_NAV2_REPOSITION]
+        if opposite or behind:
+            sequence.append(MANEUVER_WRAPAROUND_SETUP)
+        sequence.extend([MANEUVER_VALIDATE_PUSH_READY, MANEUVER_LOCAL_FETCH, MANEUVER_MONITOR_DELIVERY])
+        return sequence
+    return [MANEUVER_NO_GO]
+
+
+def compile_maneuver_plan(
+    scene: dict[str, Any],
+    route_label: str,
+    *,
+    proposed: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    route = str(route_label or "").strip()
+    proposed = proposed if isinstance(proposed, dict) else {}
+    raw_sequence = proposed.get("maneuver_sequence") if isinstance(proposed.get("maneuver_sequence"), list) else []
+    sequence = [str(item).strip() for item in raw_sequence if str(item or "").strip() in MANEUVER_LABELS]
+    source = "llm_proposed"
+    if not sequence:
+        sequence = default_maneuver_sequence_for_route(scene, route)
+        source = "deterministic_compiled"
+
+    executable_fetch_route = route in {ROUTE_FETCH_READY, ROUTE_NAV2_REPOSITION, ROUTE_RECOVERY_OR_REAIM}
+    veto_reasons: list[str] = []
+    if executable_fetch_route:
+        if MANEUVER_LOCAL_FETCH not in sequence:
+            veto_reasons.append("missing_local_fetch_maneuver")
+        if MANEUVER_VALIDATE_PUSH_READY not in sequence:
+            veto_reasons.append("missing_validate_push_ready_before_fetch")
+        elif MANEUVER_LOCAL_FETCH in sequence and sequence.index(MANEUVER_VALIDATE_PUSH_READY) > sequence.index(MANEUVER_LOCAL_FETCH):
+            veto_reasons.append("validate_push_ready_after_fetch")
+    else:
+        if MANEUVER_LOCAL_FETCH in sequence:
+            veto_reasons.append("planner_only_route_attempted_local_fetch")
+
+    for blocked in ("cmd_vel", "direct_ball_impulse", "shoot_ball"):
+        if blocked in {item.lower() for item in sequence}:
+            veto_reasons.append(f"forbidden_maneuver_{blocked}")
+
+    if veto_reasons:
+        sequence = default_maneuver_sequence_for_route(scene, route)
+        source = "deterministic_compiled_after_veto"
+
+    geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
+    validation_gates = proposed.get("validation_gates") if isinstance(proposed.get("validation_gates"), list) else []
+    if not validation_gates and executable_fetch_route:
+        validation_gates = [
+            "state_not_stale",
+            "ball_motion_within_setup_limit",
+            "robot_ball_distance_within_push_ready_window",
+            "lateral_error_within_push_ready_limit",
+            "yaw_error_within_push_ready_limit",
+        ]
+    elif not validation_gates:
+        validation_gates = ["planner_only_route_local_fetch_withheld"]
+    replan_triggers = proposed.get("replan_triggers") if isinstance(proposed.get("replan_triggers"), list) else []
+    if not replan_triggers:
+        replan_triggers = [
+            "stale_state",
+            "ball_escape",
+            "setup_timeout",
+            "push_ready_validation_failed",
+            "nav2_abort",
+        ]
+    return {
+        "objective": str(proposed.get("objective", "") or "deliver_ball_to_target_circle"),
+        "route_label": route,
+        "route_executor": executor_for_route(route),
+        "source": source,
+        "maneuver_sequence": sequence,
+        "validation_gates": [str(item) for item in validation_gates],
+        "replan_triggers": [str(item) for item in replan_triggers],
+        "requires_measured_push_ready_before_fetch": bool(executable_fetch_route),
+        "local_fetch_index": sequence.index(MANEUVER_LOCAL_FETCH) if MANEUVER_LOCAL_FETCH in sequence else None,
+        "push_ready_index": sequence.index(MANEUVER_VALIDATE_PUSH_READY) if MANEUVER_VALIDATE_PUSH_READY in sequence else None,
+        "opposite_side_of_circle": bool(geometry.get("opposite_side_of_circle", False)),
+        "robot_ball_relative_bearing_abs_deg": round(
+            _finite_float(geometry.get("robot_ball_relative_bearing_abs_deg"), 0.0),
+            6,
+        ),
+        "veto_reasons": veto_reasons,
+        "valid": not bool(veto_reasons),
+        "no_direct_cmd_vel": True,
+        "no_direct_ball_impulse": True,
+    }
+
+
 def random_profile_for_scene(scene: dict[str, Any]) -> str:
     explicit = str(scene.get("random_profile", "") or "").strip()
     if explicit:
@@ -1071,15 +1292,20 @@ def random_profile_for_scene(scene: dict[str, Any]) -> str:
     scene_set = str(scene.get("scene_set", "") or "").strip()
     if scene_set == OPPOSITE_BEHIND_SCENE_SET:
         return OPPOSITE_BEHIND_PROFILE
+    if scene_set == BROAD_SPATIAL_SCENE_SET:
+        return BROAD_SPATIAL_PROFILE
     return PLANNER_MIXED_PROFILE
 
 
 def planner_prompt(scene: dict[str, Any]) -> str:
     return (
-        "Classify this robot fetch scene before any local fetch execution.\n"
-        "Return exactly one route label. fetch_ready_local may dispatch local fetch_to_pose immediately; "
-        "nav2_reposition_first must route through a bounded reposition executor first.\n"
+        "Plan this robot fetch scene before any local fetch execution.\n"
+        "Return one compatible route label plus a bounded maneuver sequence. "
+        "The planner may solve open field-like setup challenges with scan, reposition, wraparound setup, "
+        "re-aim, push-ready validation, local fetch, recovery, or no-go maneuvers. "
+        "Never emit velocity commands. Local fetch may appear only after validate_push_ready.\n"
         f"Allowed labels: {json.dumps(list(ROUTE_LABELS))}\n\n"
+        f"Allowed maneuvers: {json.dumps(list(MANEUVER_LABELS))}\n\n"
         f"Scene descriptor:\n{json.dumps(scene, indent=2, sort_keys=True)}"
     )
 
@@ -1096,9 +1322,10 @@ def build_llm_shadow_request(
         "parallel_tool_calls": False,
         "reasoning": {"effort": reasoning_effort},
         "instructions": (
-            "You are a high-level robot planner. Use exactly one function tool. "
-            "Classify whether local fetch is applicable or another bounded route is required. "
-            "Never emit velocity commands and never bypass deterministic guards."
+            "You are a high-level field robot planner. Use exactly one function tool. "
+            "Generate a bounded maneuver plan for a soccer-field or putting-green-like fetch setup. "
+            "Route labels are compatibility summaries; the maneuver sequence is the plan. "
+            "Never emit velocity commands and never bypass deterministic validation gates."
         ),
         "input": planner_prompt(scene),
         "tool_choice": "required",
@@ -1114,6 +1341,19 @@ def build_llm_shadow_request(
                     "required": ["route_label", "rationale_short", "confidence"],
                     "properties": {
                         "route_label": {"type": "string", "enum": list(ROUTE_LABELS)},
+                        "objective": {"type": "string"},
+                        "maneuver_sequence": {
+                            "type": "array",
+                            "items": {"type": "string", "enum": list(MANEUVER_LABELS)},
+                        },
+                        "validation_gates": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "replan_triggers": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
                         "rationale_short": {"type": "string"},
                         "confidence": {"type": "number", "minimum": 0.0, "maximum": 1.0},
                     },
@@ -1138,6 +1378,22 @@ def extract_llm_route(raw_response: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"LLM emitted unsupported route label: {route_label}")
         return {
             "route_label": route_label,
+            "objective": str(payload.get("objective", "") or ""),
+            "maneuver_sequence": [
+                str(item)
+                for item in list(payload.get("maneuver_sequence", []))
+                if str(item or "").strip()
+            ],
+            "validation_gates": [
+                str(item)
+                for item in list(payload.get("validation_gates", []))
+                if str(item or "").strip()
+            ],
+            "replan_triggers": [
+                str(item)
+                for item in list(payload.get("replan_triggers", []))
+                if str(item or "").strip()
+            ],
             "rationale_short": str(payload.get("rationale_short", "") or ""),
             "confidence": float(payload.get("confidence", 0.0) or 0.0),
         }
@@ -1169,6 +1425,7 @@ def decide_scene(
     llm_route_label = ""
     llm_rationale = ""
     llm_confidence = 0.0
+    llm_plan: dict[str, Any] = {}
     llm_supervised_guard: dict[str, Any] = {}
 
     if planner_mode in {PLANNER_MODE_LLM_SHADOW, PLANNER_MODE_LLM_SUPERVISED_GUARDED}:
@@ -1196,6 +1453,12 @@ def decide_scene(
                 llm_route_label = route["route_label"]
                 llm_rationale = route["rationale_short"]
                 llm_confidence = float(route["confidence"])
+                llm_plan = {
+                    "objective": route.get("objective", ""),
+                    "maneuver_sequence": route.get("maneuver_sequence", []),
+                    "validation_gates": route.get("validation_gates", []),
+                    "replan_triggers": route.get("replan_triggers", []),
+                }
                 route_label = llm_route_label
                 rationale = llm_rationale
                 confidence = llm_confidence
@@ -1259,6 +1522,11 @@ def decide_scene(
     wrong_fetch_dispatch = bool(fetch_dispatch and expected_route != ROUTE_FETCH_READY)
     route_executor = executor_for_route(route_label)
     route_quality = score_route_quality(scene, route_label)
+    maneuver_plan = compile_maneuver_plan(
+        scene,
+        route_label,
+        proposed=llm_plan if llm_plan else None,
+    )
     return {
         "scene_id": str(scene.get("scene_id", "") or ""),
         "planner_mode": planner_mode,
@@ -1276,6 +1544,7 @@ def decide_scene(
         "rationale_short": rationale,
         "confidence": round(float(confidence), 6),
         "route_quality": route_quality,
+        "maneuver_plan": maneuver_plan,
         "route_admissibility": route_admissibility,
         "llm_supervised_guard": llm_supervised_guard,
         "provider_status": provider_status,
@@ -1298,6 +1567,7 @@ def write_fetch_ready_layout_from_scene(
     clean_route_label = str(route_label or scene.get("expected_route_label", "") or ROUTE_FETCH_READY).strip()
     clean_route_executor = str(route_executor or executor_for_route(clean_route_label)).strip()
     route_quality = score_route_quality(scene, clean_route_label)
+    maneuver_plan = compile_maneuver_plan(scene, clean_route_label)
     random_profile = random_profile_for_scene(scene)
     layout_family = (
         "planner_gated_fetch_ready"
@@ -1314,6 +1584,7 @@ def write_fetch_ready_layout_from_scene(
             "planner_route_label": clean_route_label,
             "route_executor": clean_route_executor,
             "route_quality": route_quality,
+            "maneuver_plan": maneuver_plan,
             "planner_scene": scene,
             "random_draw": {
                 "random_profile": random_profile,
@@ -1322,6 +1593,7 @@ def write_fetch_ready_layout_from_scene(
                 "planner_route_label": clean_route_label,
                 "route_executor": clean_route_executor,
                 "route_quality": route_quality,
+                "maneuver_plan": maneuver_plan,
                 "target_pose": scene.get("target_pose", {}),
                 "ball_pose": scene.get("ball_pose", {}),
                 "robot_pose": scene.get("robot_pose", {}),
@@ -1607,6 +1879,13 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
             f"dispatch_fetch=`{bool(result.get('should_dispatch_fetch_to_pose', False))}` "
             f"guard=`{result.get('guard_route_label', '')}` provider=`{result.get('provider_status', '')}`"
         )
+        plan = result.get("maneuver_plan") if isinstance(result.get("maneuver_plan"), dict) else {}
+        if plan:
+            lines.append(
+                f"  - plan=`{' -> '.join(str(item) for item in list(plan.get('maneuver_sequence', [])))}` "
+                f"push_ready_before_fetch=`{bool(plan.get('requires_measured_push_ready_before_fetch', False))}` "
+                f"source=`{plan.get('source', '')}`"
+            )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
