@@ -29,6 +29,8 @@ from golf_ball_circle_delivery_demo_runner import ensure_base_controller_active 
 from golf_ball_circle_delivery_demo_runner import dispatch_nav2_reposition_before_fetch  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import NAV2_REPOSITION_BEHAVIOR_TREE  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import parse_nav2_reposition_result  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import nav2_reposition_measured_goal_validation  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import apply_nav2_measured_goal_validation  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import summarize_line_servo_effective_command  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import transform_nav2_reposition_layout_to_current_robot  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import nav2_precontact_fallback_to_local_recovery_decision  # noqa: E402
@@ -607,6 +609,36 @@ def test_nav2_precontact_fallback_accepts_wide_setup_after_timeout_without_ball_
     assert decision["geometry"]["robot_yaw_error_deg"] == pytest.approx(150.0)
 
 
+def test_nav2_precontact_fallback_accepts_observed_scene02_wide_lateral_setup_mismatch():
+    args = _route_default_args(
+        planner_route_label="nav2_reposition_first",
+        route_executor="nav2_forward_reposition_then_fetch",
+        ball_x=0.12877,
+        ball_y=-0.011075,
+        zone_x=0.95,
+        zone_y=0.0,
+    )
+    samples = [
+        {
+            "robot_pose": {"x": 0.369758, "y": -1.705235, "yaw": 0.900226, "z": 0.0},
+            "ball_pose": {"x": 0.12877, "y": -0.011075, "yaw": 0.0, "z": 0.021336},
+        }
+    ]
+
+    decision = nav2_precontact_fallback_to_local_recovery_decision(
+        args=args,
+        target_layout={},
+        pre_fetch_reposition={"success": False, "status_text": "goal_succeeded_measured_pose_mismatch"},
+        pre_fetch_reposition_samples=samples,
+    )
+
+    assert decision["eligible"] is True
+    assert decision["reason"] == "pre_contact_nav2_failure_inside_wide_setup_fallback_envelope"
+    assert decision["local_recovery_admissible"] is False
+    assert decision["wide_setup_admissible"] is True
+    assert decision["geometry"]["robot_lateral_error_m"] > 1.6
+
+
 def test_nav2_success_refinement_accepts_dirty_post_nav2_setup():
     args = _route_default_args(
         planner_route_label="nav2_reposition_first",
@@ -976,6 +1008,40 @@ def test_parse_nav2_reposition_result_extracts_marker_payload():
     assert result["dispatch_status"] == "goal_succeeded"
     assert result["status_text"] == "STATUS_SUCCEEDED"
     assert result["process_returncode"] == 0
+
+
+def test_nav2_measured_goal_validation_accepts_close_measured_pose():
+    validation = nav2_reposition_measured_goal_validation(
+        goal_pose={"x": 0.50, "y": -0.10, "yaw": 0.20},
+        post_reposition_robot_pose={"position": {"x": 0.56, "y": -0.14, "z": 0.0}, "yaw": 0.28},
+    )
+
+    assert validation["pass"] is True
+    assert validation["reason"] == "measured_goal_reached"
+    assert validation["position_error_m"] < 0.25
+    assert validation["yaw_error_deg"] < 25.0
+
+
+def test_apply_nav2_measured_goal_validation_fail_closes_action_success_pose_mismatch():
+    reposition = {
+        "success": True,
+        "dispatch_status": "goal_succeeded",
+        "post_reposition_robot_pose": {
+            "position": {"x": 0.361856, "y": -1.706868, "z": 0.0},
+            "yaw": 0.872545,
+        },
+    }
+
+    apply_nav2_measured_goal_validation(
+        reposition,
+        {"x": -0.251195, "y": -0.016199, "yaw": 0.013485},
+    )
+
+    assert reposition["action_success"] is True
+    assert reposition["success"] is False
+    assert reposition["dispatch_status"] == "goal_succeeded_measured_pose_mismatch"
+    assert reposition["measured_goal_validation"]["reason"] == "measured_goal_pose_mismatch"
+    assert reposition["measured_goal_validation"]["position_error_m"] > 1.0
 
 
 def test_nav2_reposition_client_uses_repo_bt_and_ros_status_compatible_rejection():

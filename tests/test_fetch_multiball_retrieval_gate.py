@@ -114,7 +114,7 @@ def test_generate_multiball_scenes_is_deterministic_and_bounded():
                 assert _pose_distance(pose, other["pose"]) >= multiball_gate.MIN_BALL_SEPARATION_M
 
 
-def test_multiball_planner_orders_nearest_feasible_setup_first():
+def test_multiball_planner_skips_nearest_candidate_when_route_quality_blocks_nav2_setup():
     target = multiball_gate.target_pose()
     scene = {
         "generated_utc": "2026-06-06T00:00:00Z",
@@ -134,9 +134,37 @@ def test_multiball_planner_orders_nearest_feasible_setup_first():
     plan = multiball_gate.plan_multiball_scene(scene, args=_args())
 
     assert plan["planner_ready"] is True
-    assert plan["retrieval_order"][0] == "ball_2"
+    assert plan["retrieval_order"][0] == "ball_1"
     assert sorted(plan["retrieval_order"]) == ["ball_1", "ball_2", "ball_3"]
     assert plan["executable_step_count"] == 3
+
+
+def test_multiball_planner_prioritizes_target_aligned_candidate_over_nearer_high_angle_nav2_setup():
+    target = multiball_gate.target_pose()
+    scene = {
+        "generated_utc": "2026-06-06T00:00:00Z",
+        "type": "fetch_multiball_scene_descriptor",
+        "profile": multiball_gate.DEFAULT_PROFILE,
+        "scene_id": "manual_multiball_setup_debt",
+        "seed": 20260606,
+        "target_pose": target,
+        "robot_pose": {"x": 0.65962, "y": -1.35, "z": 0.0, "yaw": 1.082342},
+        "balls": [
+            {"id": "aligned_far", "pose": {"x": 0.12877, "y": -0.011075, "z": 0.021336, "yaw": 0.0}},
+            {"id": "moderate_angle", "pose": {"x": 0.461078, "y": 0.204072, "z": 0.021336, "yaw": 0.0}},
+            {"id": "near_high_angle", "pose": {"x": 1.312656, "y": -0.519675, "z": 0.021336, "yaw": 0.0}},
+        ],
+    }
+
+    plan = multiball_gate.plan_multiball_scene(scene, args=_args())
+    first_step = plan["sequence"][0]
+    first_candidates = plan["candidate_audit"][0]["candidates"]
+    high_angle = next(row for row in first_candidates if row["ball_id"] == "near_high_angle")
+
+    assert plan["retrieval_order"][0] == "aligned_far"
+    assert first_step["route_label"] == planner_gate.ROUTE_NAV2_REPOSITION
+    assert high_angle["cost"]["direction_alignment_penalty"] > 1.0
+    assert high_angle["route_quality"]["setup_debt"]["ball_target_angle_abs_deg"] > 90.0
 
 
 def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_path, monkeypatch):
@@ -149,9 +177,14 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
     assert summary["scene_count"] == 2
     assert summary["planned_step_count"] == 6
     assert summary["planner_ready_scene_count"] == 2
-    assert summary["scene_rows"][0]["retrieval_order"] == ["ball_3", "ball_1", "ball_2"]
+    assert summary["scene_rows"][0]["retrieval_order"] == ["ball_3", "ball_2", "ball_1"]
     assert (tmp_path / summary["summary_path"]).is_file()
     assert (tmp_path / summary["scorecard_path"]).is_file()
+    first_plan_path = tmp_path / summary["scene_rows"][0]["sequence_plan_path"]
+    first_plan = json.loads(first_plan_path.read_text(encoding="utf-8"))
+    first_candidate = first_plan["candidate_audit"][0]["candidates"][0]
+    assert "route_quality" in first_candidate
+    assert "direction_alignment_penalty" in first_candidate["cost"]
     seen_model_names = set()
     for row in summary["step_rows"]:
         layout_path = tmp_path / row["layout_path"]
@@ -173,14 +206,17 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
         assert float(row["command"][row["command"].index("--robot-x") + 1]) == robot_pose["x"]
         assert float(row["command"][row["command"].index("--robot-y") + 1]) == robot_pose["y"]
         assert float(row["command"][row["command"].index("--robot-yaw") + 1]) == robot_pose["yaw"]
-        assert "--nav2-reposition-before-fetch" in row["command"]
-        assert "--nav2-reposition-goal-frame-mode" in row["command"]
-        assert row["command"][row["command"].index("--nav2-reposition-goal-frame-mode") + 1] == "world_direct"
-        assert "--nav2-reposition-timeout-s" in row["command"]
-        assert float(row["command"][row["command"].index("--nav2-reposition-timeout-s") + 1]) == 48.0
-        assert "--nav2-reposition-refine-attempts" in row["command"]
-        assert int(row["command"][row["command"].index("--nav2-reposition-refine-attempts") + 1]) == 1
-        assert "--nav2-reposition-continue-on-failure" not in row["command"]
+        if row["route_label"] == planner_gate.ROUTE_NAV2_REPOSITION:
+            assert "--nav2-reposition-before-fetch" in row["command"]
+            assert "--nav2-reposition-goal-frame-mode" in row["command"]
+            assert row["command"][row["command"].index("--nav2-reposition-goal-frame-mode") + 1] == "world_direct"
+            assert "--nav2-reposition-timeout-s" in row["command"]
+            assert float(row["command"][row["command"].index("--nav2-reposition-timeout-s") + 1]) == 48.0
+            assert "--nav2-reposition-refine-attempts" in row["command"]
+            assert int(row["command"][row["command"].index("--nav2-reposition-refine-attempts") + 1]) == 1
+            assert "--nav2-reposition-continue-on-failure" not in row["command"]
+        else:
+            assert "--nav2-reposition-before-fetch" not in row["command"]
         assert "--ai-push-coast-mode" in row["command"]
         assert row["command"][row["command"].index("--ai-push-coast-mode") + 1] == "guarded_live"
 
@@ -197,8 +233,11 @@ def test_persistent_field_mode_preserves_target_and_robot_in_step_commands(tmp_p
         assert "--preserve-robot-pose" in row["command"]
         assert "--pre-fetch-setup-correction-s" in row["command"]
         assert float(row["command"][row["command"].index("--pre-fetch-setup-correction-s") + 1]) == 14.0
-        assert "--nav2-pre-setup-standoff-m" in row["command"]
-        assert float(row["command"][row["command"].index("--nav2-pre-setup-standoff-m") + 1]) == 0.9
+        if row["route_label"] == planner_gate.ROUTE_NAV2_REPOSITION:
+            assert "--nav2-pre-setup-standoff-m" in row["command"]
+            assert float(row["command"][row["command"].index("--nav2-pre-setup-standoff-m") + 1]) == 0.9
+        else:
+            assert "--nav2-pre-setup-standoff-m" not in row["command"]
 
 
 def test_nav2_goal_frame_mode_is_configurable_for_step_commands(tmp_path, monkeypatch):
@@ -216,6 +255,28 @@ def test_nav2_goal_frame_mode_is_configurable_for_step_commands(tmp_path, monkey
 
     command = summary["step_rows"][0]["command"]
     assert command[command.index("--nav2-reposition-goal-frame-mode") + 1] == "nav2_relative"
+
+
+def test_recovery_route_step_command_does_not_force_nav2_reposition(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    layout_path = tmp_path / "layout.json"
+    _write_json(layout_path, {"planner_route_label": planner_gate.ROUTE_RECOVERY_OR_REAIM})
+
+    command = multiball_gate.build_step_command(
+        args=_args(dry_run=True, persistent_field=True),
+        layout_path=layout_path,
+        scene_id="manual_scene",
+        step={
+            "ball_id": "ball_1",
+            "route_label": planner_gate.ROUTE_RECOVERY_OR_REAIM,
+            "estimated_start_robot_pose": {"x": 0.1, "y": 0.2, "z": 0.0, "yaw": 0.3},
+        },
+    )
+
+    assert "--nav2-reposition-before-fetch" not in command
+    assert "--nav2-pre-setup-standoff-m" not in command
+    assert "--use-existing-target-model" in command
+    assert "--preserve-robot-pose" in command
 
 
 def test_prepare_persistent_field_scene_spawns_all_balls_and_sets_robot(tmp_path, monkeypatch):
@@ -295,6 +356,61 @@ def test_latest_measured_state_from_mission_reads_contact_trace(tmp_path, monkey
     assert state["contact_sample_count"] == 2
     assert state["robot_pose"] == {"x": 0.6, "y": 0.7, "z": 0.0, "yaw": 0.8}
     assert state["ball_pose"] == {"x": 0.9, "y": 1.0, "z": 0.021336, "yaw": 0.0}
+
+
+def test_latest_measured_state_from_mission_falls_back_to_post_nav2_reposition_pose(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    artifact_dir = tmp_path / "artifacts" / "session" / "session_nav2" / "golf_ball_circle_delivery" / "run_nav2"
+    artifact_dir.mkdir(parents=True)
+    mission = artifact_dir / "mission_verdict.json"
+    _write_json(
+        mission,
+        {
+            "artifact_dir": str(artifact_dir),
+            "fetch_to_pose_pass": False,
+            "pre_fetch_reposition": {
+                "post_reposition_robot_pose": {
+                    "position": {"x": 0.36, "y": -1.70, "z": 0.0},
+                    "yaw": 0.87,
+                },
+                "post_reposition_ball_pose": {
+                    "position": {"x": 0.13, "y": -0.01, "z": 0.021336},
+                    "yaw": 0.0,
+                },
+            },
+            "shot_outcome": {"reason": "fetch_skipped_after_reposition"},
+        },
+    )
+
+    state = multiball_gate.latest_measured_state_from_mission(mission)
+
+    assert state["available"] is True
+    assert state["fetch_to_pose_pass"] is False
+    assert state["robot_pose"] == {"x": 0.36, "y": -1.7, "z": 0.0, "yaw": 0.87}
+    assert state["ball_pose"] == {"x": 0.13, "y": -0.01, "z": 0.021336, "yaw": 0.0}
+
+
+def test_update_remaining_removes_passed_ball_and_keeps_failed_ball_with_measured_pose():
+    remaining = [
+        {"id": "ball_1", "pose": {"x": 0.1, "y": 0.0, "z": 0.021336, "yaw": 0.0}},
+        {"id": "ball_2", "pose": {"x": 0.5, "y": 0.2, "z": 0.021336, "yaw": 0.0}},
+    ]
+
+    after_pass = multiball_gate.update_remaining_after_attempt(
+        remaining,
+        attempted_ball_id="ball_1",
+        measured_state={"fetch_to_pose_pass": True, "ball_pose": {"x": 0.9, "y": 0.0, "z": 0.021336, "yaw": 0.0}},
+    )
+    after_fail = multiball_gate.update_remaining_after_attempt(
+        remaining,
+        attempted_ball_id="ball_1",
+        measured_state={"fetch_to_pose_pass": False, "ball_pose": {"x": 0.25, "y": -0.1, "z": 0.021336, "yaw": 0.0}},
+    )
+
+    assert [ball["id"] for ball in after_pass] == ["ball_2"]
+    assert [ball["id"] for ball in after_fail] == ["ball_1", "ball_2"]
+    assert after_fail[0]["pose"]["x"] == 0.25
+    assert after_fail[0]["last_attempt_failed"] is True
 
 
 def test_replanning_rows_use_measured_robot_pose_for_next_step(tmp_path, monkeypatch):

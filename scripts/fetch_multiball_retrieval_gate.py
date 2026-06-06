@@ -403,11 +403,26 @@ def candidate_cost(
     quality_flags = {str(flag) for flag in quality.get("flags", [])} if isinstance(quality.get("flags"), list) else set()
     first_contact_risk = str(quality.get("predicted_first_contact_risk", "") or "").strip()
     predicted_contact_quality = str(quality.get("predicted_contact_quality", "") or "").strip()
+    predicted_first_contact_quality = str(quality.get("predicted_first_contact_quality", "") or "").strip()
+    setup_debt = quality.get("setup_debt") if isinstance(quality.get("setup_debt"), dict) else {}
+    ball_target_angle_abs_deg = abs(finite_float(setup_debt.get("ball_target_angle_abs_deg"), 0.0))
+    route_quality_score = finite_float(quality.get("quality_score"), 100.0)
+
+    route_quality_deficit_penalty = max(0.0, (82.0 - route_quality_score) / 82.0)
+    direction_alignment_penalty = min(max(ball_target_angle_abs_deg - 12.0, 0.0) / 70.0, 1.45)
+    blocker_penalty = 0.0
+    if predicted_contact_quality == "blocker" or predicted_first_contact_quality == "blocker":
+        blocker_penalty += 1.15
+    if "nav2_reposition_near_field_not_admissible" in quality_flags:
+        blocker_penalty += 0.80
+    if "opposite_side_of_circle" in quality_flags:
+        blocker_penalty += 0.35
+
     quality_penalty = 0.0
     if first_contact_risk == "high":
-        quality_penalty += 0.45
+        quality_penalty += 0.65
     elif first_contact_risk == "medium":
-        quality_penalty += 0.15
+        quality_penalty += 0.25
     if predicted_contact_quality == "watch":
         quality_penalty += 0.10
     if str(route_label) == planner_gate.ROUTE_RECOVERY_OR_REAIM and "ball_behind_robot_heading" in quality_flags:
@@ -420,6 +435,9 @@ def candidate_cost(
         + ROUTE_PENALTY.get(str(route_label), 5.0)
         + 0.40 * interference_count
         + quality_penalty
+        + route_quality_deficit_penalty
+        + direction_alignment_penalty
+        + blocker_penalty
     )
     return {
         "score": round(float(cost), 6),
@@ -427,6 +445,9 @@ def candidate_cost(
         "ball_target_distance_m": round(float(ball_target_distance_m), 6),
         "route_penalty": round(float(ROUTE_PENALTY.get(str(route_label), 5.0)), 6),
         "quality_penalty": round(float(quality_penalty), 6),
+        "route_quality_deficit_penalty": round(float(route_quality_deficit_penalty), 6),
+        "direction_alignment_penalty": round(float(direction_alignment_penalty), 6),
+        "blocker_penalty": round(float(blocker_penalty), 6),
         "corridor_interference_count": int(interference_count),
         "setup_pose": setup_pose,
     }
@@ -517,6 +538,7 @@ def plan_multiball_scene(scene: dict[str, Any], *, args: argparse.Namespace) -> 
                         "ball_id": str(candidate.get("ball_id", "") or ""),
                         "route_label": str((candidate.get("decision") or {}).get("route_label", "") or ""),
                         "route_executor": str((candidate.get("decision") or {}).get("route_executor", "") or ""),
+                        "route_quality": (candidate.get("decision") or {}).get("route_quality", {}),
                         "cost": candidate.get("cost", {}),
                         "executable_route": bool(candidate.get("executable_route", False)),
                     }
@@ -590,22 +612,27 @@ def build_step_command(
         "--fetch-delivery-radius-m",
         f"{float(args.fetch_delivery_radius_m):.3f}",
         "--forward-only-pre-contact-required",
-        "--nav2-reposition-before-fetch",
-        "--nav2-reposition-goal-frame-mode",
-        str(getattr(args, "nav2_goal_frame_mode", "world_direct") or "world_direct"),
-        "--nav2-reposition-timeout-s",
-        "48.000",
-        "--nav2-reposition-server-wait-s",
-        "8.000",
-        "--nav2-reposition-pose-wait-s",
-        "2.500",
-        "--nav2-pre-setup-standoff-m",
-        "0.900",
-        "--nav2-reposition-refine-attempts",
-        "1",
         "--ai-push-coast-mode",
         "guarded_live",
     ]
+    if str(step.get("route_label", "") or "") == planner_gate.ROUTE_NAV2_REPOSITION:
+        command.extend(
+            [
+                "--nav2-reposition-before-fetch",
+                "--nav2-reposition-goal-frame-mode",
+                str(getattr(args, "nav2_goal_frame_mode", "world_direct") or "world_direct"),
+                "--nav2-reposition-timeout-s",
+                "48.000",
+                "--nav2-reposition-server-wait-s",
+                "8.000",
+                "--nav2-reposition-pose-wait-s",
+                "2.500",
+                "--nav2-pre-setup-standoff-m",
+                "0.900",
+                "--nav2-reposition-refine-attempts",
+                "1",
+            ]
+        )
     if bool(getattr(args, "persistent_field", False)):
         command.extend(
             [
@@ -874,6 +901,13 @@ def latest_measured_state_from_mission(mission_summary_path: Path) -> dict[str, 
     shot_outcome = payload.get("shot_outcome") if isinstance(payload.get("shot_outcome"), dict) else {}
     if ball_pose is None and isinstance(shot_outcome.get("ball_end_pose"), dict):
         ball_pose = pose_from_contact_pose(shot_outcome.get("ball_end_pose"))
+    pre_fetch_reposition = (
+        payload.get("pre_fetch_reposition") if isinstance(payload.get("pre_fetch_reposition"), dict) else {}
+    )
+    if robot_pose is None and isinstance(pre_fetch_reposition.get("post_reposition_robot_pose"), dict):
+        robot_pose = pose_from_contact_pose(pre_fetch_reposition.get("post_reposition_robot_pose"))
+    if ball_pose is None and isinstance(pre_fetch_reposition.get("post_reposition_ball_pose"), dict):
+        ball_pose = pose_from_contact_pose(pre_fetch_reposition.get("post_reposition_ball_pose"))
     return {
         "available": bool(robot_pose is not None or ball_pose is not None),
         "mission_summary_path": artifact_display_path(mission_summary_path),
@@ -892,11 +926,21 @@ def update_remaining_after_attempt(
     attempted_ball_id: str,
     measured_state: dict[str, Any],
 ) -> list[dict[str, Any]]:
+    attempt_passed = bool(measured_state.get("fetch_to_pose_pass", False))
+    measured_ball_pose = measured_state.get("ball_pose") if isinstance(measured_state.get("ball_pose"), dict) else None
     updated: list[dict[str, Any]] = []
     for ball in remaining_balls:
         ball_id = str(ball.get("id", "") or "")
         if ball_id == str(attempted_ball_id):
-            continue
+            if attempt_passed:
+                continue
+            if measured_ball_pose is not None:
+                updated_ball = dict(ball)
+                updated_ball["pose"] = dict(measured_ball_pose)
+                updated_ball["last_attempt_failed"] = True
+                updated.append(updated_ball)
+            else:
+                updated.append(ball)
         else:
             updated.append(ball)
     return updated

@@ -61,8 +61,10 @@ RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M = 0.900
 NAV2_FALLBACK_ROBOT_BALL_DISTANCE_LIMIT_M = 1.300
 NAV2_FALLBACK_BALL_MOTION_LIMIT_M = 0.020
 NAV2_WIDE_SETUP_ROBOT_BALL_DISTANCE_LIMIT_M = 1.800
-NAV2_WIDE_SETUP_LATERAL_LIMIT_M = 1.100
+NAV2_WIDE_SETUP_LATERAL_LIMIT_M = 1.800
 NAV2_WIDE_SETUP_YAW_LIMIT_DEG = 165.0
+NAV2_REPOSITION_GOAL_POSITION_TOLERANCE_M = 0.250
+NAV2_REPOSITION_GOAL_YAW_TOLERANCE_DEG = 25.0
 PUSH_READY_LATERAL_LIMIT_M = 0.030
 PUSH_READY_YAW_LIMIT_DEG = 3.0
 RECOVERY_ROUTE_DRIVE_DURATION_S = 118.0
@@ -293,6 +295,57 @@ def _route_geometry_from_layout(target_layout: dict[str, Any]) -> dict[str, Any]
         ),
         "robot_yaw_error_deg": round(abs(float(_finite_float(random_draw.get("robot_yaw_error_deg"), 999.0))), 6),
     }
+
+
+def nav2_reposition_measured_goal_validation(
+    *,
+    goal_pose: dict[str, Any],
+    post_reposition_robot_pose: dict[str, Any] | None,
+    position_tolerance_m: float = NAV2_REPOSITION_GOAL_POSITION_TOLERANCE_M,
+    yaw_tolerance_deg: float = NAV2_REPOSITION_GOAL_YAW_TOLERANCE_DEG,
+) -> dict[str, Any]:
+    goal_xy = pose_xy_yaw(goal_pose)
+    robot_xy = pose_xy_yaw(post_reposition_robot_pose)
+    validation: dict[str, Any] = {
+        "available": bool(goal_xy is not None and robot_xy is not None),
+        "pass": False,
+        "reason": "missing_goal_or_robot_pose",
+        "position_tolerance_m": round(float(position_tolerance_m), 6),
+        "yaw_tolerance_deg": round(float(yaw_tolerance_deg), 6),
+        "goal_pose": goal_xy or {},
+        "robot_pose": robot_xy or {},
+    }
+    if goal_xy is None or robot_xy is None:
+        return validation
+    position_error_m = math.hypot(goal_xy["x"] - robot_xy["x"], goal_xy["y"] - robot_xy["y"])
+    yaw_error_deg = abs(math.degrees(normalize_angle_rad(goal_xy["yaw"] - robot_xy["yaw"])))
+    passed = bool(position_error_m <= float(position_tolerance_m) and yaw_error_deg <= float(yaw_tolerance_deg))
+    validation.update(
+        {
+            "pass": passed,
+            "reason": "measured_goal_reached" if passed else "measured_goal_pose_mismatch",
+            "position_error_m": round(float(position_error_m), 6),
+            "yaw_error_deg": round(float(yaw_error_deg), 6),
+        }
+    )
+    return validation
+
+
+def apply_nav2_measured_goal_validation(reposition: dict[str, Any], goal_pose: dict[str, Any]) -> None:
+    validation = nav2_reposition_measured_goal_validation(
+        goal_pose=goal_pose,
+        post_reposition_robot_pose=(
+            reposition.get("post_reposition_robot_pose")
+            if isinstance(reposition.get("post_reposition_robot_pose"), dict)
+            else None
+        ),
+    )
+    reposition["measured_goal_validation"] = validation
+    reposition["action_success"] = bool(reposition.get("success", False))
+    if bool(reposition.get("success", False)) and bool(validation.get("available", False)) and not bool(validation.get("pass", False)):
+        reposition["success"] = False
+        reposition["dispatch_status"] = "goal_succeeded_measured_pose_mismatch"
+        reposition["measured_failure_reason"] = str(validation.get("reason", "measured_goal_pose_mismatch"))
 
 
 def _fallback_geometry_is_admissible(geometry: dict[str, Any]) -> bool:
@@ -3095,6 +3148,7 @@ def main() -> int:
                 pre_setup_reposition["post_reposition_sample_count"] = len(pre_setup_samples)
                 pre_setup_reposition["post_reposition_robot_pose"] = pre_setup_samples[-1].get("robot_pose")
                 pre_setup_reposition["post_reposition_ball_pose"] = pre_setup_samples[-1].get("ball_pose")
+                apply_nav2_measured_goal_validation(pre_setup_reposition, pre_setup_goal_pose)
                 append_jsonl(artifact_dir / "pre_fetch_pre_setup_trace.jsonl", pre_setup_samples)
         update_runtime(
             args.gather_runtime_json,
@@ -3146,6 +3200,7 @@ def main() -> int:
             last_sample = pre_fetch_reposition_samples[-1]
             pre_fetch_reposition["post_reposition_robot_pose"] = last_sample.get("robot_pose")
             pre_fetch_reposition["post_reposition_ball_pose"] = last_sample.get("ball_pose")
+            apply_nav2_measured_goal_validation(pre_fetch_reposition, goal_pose)
             append_jsonl(artifact_dir / "pre_fetch_reposition_trace.jsonl", pre_fetch_reposition_samples)
         if bool(pre_fetch_reposition.get("success", False)):
             nav2_precontact_fallback = nav2_precontact_refinement_to_local_recovery_decision(
@@ -3210,6 +3265,7 @@ def main() -> int:
                     refine_result["post_reposition_sample_count"] = len(refine_samples)
                     refine_result["post_reposition_robot_pose"] = last_sample.get("robot_pose")
                     refine_result["post_reposition_ball_pose"] = last_sample.get("ball_pose")
+                    apply_nav2_measured_goal_validation(refine_result, goal_pose)
                     pre_fetch_reposition["post_reposition_sample_count"] = len(pre_fetch_reposition_samples)
                     pre_fetch_reposition["post_reposition_robot_pose"] = last_sample.get("robot_pose")
                     pre_fetch_reposition["post_reposition_ball_pose"] = last_sample.get("ball_pose")
