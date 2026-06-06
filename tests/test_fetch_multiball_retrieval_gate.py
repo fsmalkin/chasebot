@@ -628,6 +628,86 @@ def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatc
     assert all(row["mission"]["fetch_to_pose_pass"] for row in summary["step_rows"])
 
 
+def test_multiball_gate_can_package_before_blocking_dashboard_stop(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    calls = []
+    stops = []
+
+    def fake_stop_dashboard_environment(dashboard_url, *, timeout_s):
+        stops.append((dashboard_url, timeout_s))
+        return {"request": {"ok": True}, "state": {"environment_state": "stopped"}}
+
+    def fake_start_dashboard_environment(args):
+        return {
+            "request": {"ok": True},
+            "state": {
+                "environment_state": "environment_ready",
+                "phase": "environment_ready",
+                "sim_gate_ready": True,
+                "operator_view_ready": True,
+                "compose_project": "fresh_multiball_project",
+                "session_id": "fresh_multiball_session",
+            },
+        }
+
+    def fake_run_command(command, *, timeout_s):
+        calls.append(command)
+        if "fetch_visual_uat_package.py" in " ".join(command):
+            package_path = (
+                tmp_path
+                / "artifacts"
+                / "session"
+                / "live_multiball_visual_package"
+                / "fetch_visual_uat_package"
+                / "package_summary.json"
+            )
+            _write_json(package_path, {"pass": True, "mobile_watchable": True, "onboard_camera_watchable": True})
+            return subprocess.CompletedProcess(command, 0, stdout=f"{multiball_gate.VISUAL_PACKAGE_MARKER}{package_path}\n", stderr="")
+        mission_path = (
+            tmp_path
+            / "artifacts"
+            / "session"
+            / "fresh_multiball_session"
+            / "golf_ball_circle_delivery"
+            / f"run_{len(calls)}"
+            / "mission_verdict.json"
+        )
+        _write_json(
+            mission_path,
+            {
+                "pass": True,
+                "fetch_to_pose_pass": True,
+                "scenario_id": "fetch_multiball_retrieval_v1",
+                "scenario_label": "Multi-Ball Retrieval v1",
+                "shot_outcome": {"closest_approach_distance_m": 0.18},
+            },
+        )
+        return subprocess.CompletedProcess(command, 0, stdout=f"{multiball_gate.MISSION_SUMMARY_MARKER}{mission_path}\n", stderr="")
+
+    monkeypatch.setattr(replay_batch, "stop_dashboard_environment", fake_stop_dashboard_environment)
+    monkeypatch.setattr(replay_batch, "start_dashboard_environment", fake_start_dashboard_environment)
+    monkeypatch.setattr(multiball_gate, "run_command", fake_run_command)
+
+    summary = multiball_gate.run_gate(
+        _args(
+            campaign_id="live_multiball_skip_stop_before_package",
+            dry_run=False,
+            random_cases=1,
+            balls_per_scene=3,
+            fresh_dashboard_session=True,
+            skip_dashboard_stop_before_package=True,
+            dashboard_url="http://127.0.0.1:8894",
+        )
+    )
+
+    assert summary["pass"] is True
+    assert summary["skip_dashboard_stop_before_package"] is True
+    assert len(stops) == 1
+    assert len(calls) == 4
+    assert summary["dashboard_stop_before_package"] == {}
+    assert summary["visual_package_pass"] is True
+
+
 def test_multiball_gate_fresh_session_per_scene_isolates_random_scenes(tmp_path, monkeypatch):
     _patch_roots(tmp_path, monkeypatch)
     starts = []

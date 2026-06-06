@@ -1210,8 +1210,14 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     visual_package_returncode: int | None = None
     visual_package_stdout_tail = ""
     visual_package_stderr_tail = ""
+    skip_dashboard_stop_before_package = bool(getattr(args, "skip_dashboard_stop_before_package", False))
     if not dry_run and not bool(args.no_visual_package):
-        if bool(getattr(args, "fresh_dashboard_session", False)) and live_execution_ready and not fresh_session_per_scene:
+        if (
+            bool(getattr(args, "fresh_dashboard_session", False))
+            and live_execution_ready
+            and not fresh_session_per_scene
+            and not skip_dashboard_stop_before_package
+        ):
             dashboard_stop_before_package = replay_batch.stop_dashboard_environment(
                 str(args.dashboard_url or ""),
                 timeout_s=float(args.env_stop_timeout_s),
@@ -1257,6 +1263,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "dashboard_stop_before_start": dashboard_stop_before_start,
         "dashboard_start": dashboard_start,
         "dashboard_stop_before_package": dashboard_stop_before_package,
+        "skip_dashboard_stop_before_package": skip_dashboard_stop_before_package,
         "seed": int(args.seed),
         "random_cases": int(args.random_cases),
         "balls_per_scene": int(args.balls_per_scene),
@@ -1387,6 +1394,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-session-id", default="")
     parser.add_argument("--fresh-dashboard-session", action="store_true")
     parser.add_argument("--fresh-session-per-scene", action="store_true")
+    parser.add_argument("--skip-dashboard-stop-before-package", action="store_true")
     parser.add_argument("--allow-operator-view-degraded", action="store_true")
     parser.add_argument("--world-file", default="yolo_test_world_v6_calibrated_golf_turf.world")
     parser.add_argument("--surface-profile", default="calibrated_golf_turf")
