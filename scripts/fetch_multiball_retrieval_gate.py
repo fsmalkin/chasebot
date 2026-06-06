@@ -605,7 +605,14 @@ def build_step_command(
         "guarded_live",
     ]
     if bool(getattr(args, "persistent_field", False)):
-        command.extend(["--use-existing-target-model", "--preserve-robot-pose"])
+        command.extend(
+            [
+                "--use-existing-target-model",
+                "--preserve-robot-pose",
+                "--pre-fetch-setup-correction-s",
+                "14.000",
+            ]
+        )
     if robot_pose:
         command.extend(
             [

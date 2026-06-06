@@ -193,6 +193,8 @@ def test_persistent_field_mode_preserves_target_and_robot_in_step_commands(tmp_p
     for row in summary["step_rows"]:
         assert "--use-existing-target-model" in row["command"]
         assert "--preserve-robot-pose" in row["command"]
+        assert "--pre-fetch-setup-correction-s" in row["command"]
+        assert float(row["command"][row["command"].index("--pre-fetch-setup-correction-s") + 1]) == 14.0
 
 
 def test_prepare_persistent_field_scene_spawns_all_balls_and_sets_robot(tmp_path, monkeypatch):
@@ -346,6 +348,7 @@ def test_replanning_rows_use_measured_robot_pose_for_next_step(tmp_path, monkeyp
     assert second_layout["multiball_estimated_start_robot_pose"]["x"] == 0.1
     assert "--use-existing-target-model" in rows[0]["command"]
     assert "--preserve-robot-pose" in rows[0]["command"]
+    assert "--pre-fetch-setup-correction-s" in rows[0]["command"]
 
 
 def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatch):

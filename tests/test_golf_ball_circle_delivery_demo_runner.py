@@ -34,6 +34,7 @@ from golf_ball_circle_delivery_demo_runner import transform_nav2_reposition_layo
 from golf_ball_circle_delivery_demo_runner import nav2_precontact_fallback_to_local_recovery_decision  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import nav2_precontact_refinement_to_local_recovery_decision  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import measured_push_ready_handoff_from_approach_metrics  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import extend_contact_samples  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import set_model_pose  # noqa: E402
 import passive_ball_roll_calibration_runner as passive_runner  # noqa: E402
 
@@ -109,6 +110,8 @@ def test_parse_args_accepts_persistent_scene_fetch_flags(monkeypatch):
             "golf_ball_circle_delivery_demo_runner.py",
             "--use-existing-target-model",
             "--preserve-robot-pose",
+            "--pre-fetch-setup-correction-s",
+            "14.0",
         ],
     )
 
@@ -116,6 +119,23 @@ def test_parse_args_accepts_persistent_scene_fetch_flags(monkeypatch):
 
     assert args.use_existing_target_model is True
     assert args.preserve_robot_pose is True
+    assert args.pre_fetch_setup_correction_s == pytest.approx(14.0)
+
+
+def test_extend_contact_samples_preserves_one_timeline():
+    existing = [{"sample_index": 0, "t_s": 0.0, "phase_a": True}]
+    added = extend_contact_samples(
+        existing,
+        [{"sample_index": 0, "t_s": 0.0}, {"sample_index": 1, "t_s": 0.1}],
+        phase_key="phase_b",
+        poll_period_s=0.1,
+    )
+
+    assert added == [
+        {"sample_index": 1, "t_s": 0.1, "phase_b": True},
+        {"sample_index": 2, "t_s": 0.2, "phase_b": True},
+    ]
+    assert existing[-1]["sample_index"] == 2
 
 
 def test_ai_push_coast_terminal_decision_accepts_clean_near_contract_miss():

@@ -95,6 +95,31 @@ def append_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write(json.dumps(row, sort_keys=True) + "\n")
 
 
+def extend_contact_samples(
+    contact_samples: list[dict[str, Any]],
+    new_samples: list[dict[str, Any]],
+    *,
+    phase_key: str = "",
+    poll_period_s: float = 0.10,
+) -> list[dict[str, Any]]:
+    index_offset = len(contact_samples)
+    t_offset = (
+        float(contact_samples[-1].get("t_s", 0.0) or 0.0) + float(poll_period_s)
+        if contact_samples
+        else 0.0
+    )
+    adjusted: list[dict[str, Any]] = []
+    for index, sample in enumerate(new_samples):
+        row = dict(sample)
+        row["sample_index"] = index_offset + index
+        row["t_s"] = round(t_offset + float(row.get("t_s", 0.0) or 0.0), 6)
+        if phase_key:
+            row[phase_key] = True
+        adjusted.append(row)
+    contact_samples.extend(adjusted)
+    return adjusted
+
+
 def read_json(path: Path) -> dict[str, Any]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -2512,6 +2537,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--nav2-reposition-refine-attempts", type=int, default=0)
     parser.add_argument("--nav2-reposition-continue-on-failure", action="store_true")
     parser.add_argument("--disable-nav2-precontact-fallback", action="store_true")
+    parser.add_argument("--pre-fetch-setup-correction-s", type=float, default=0.0)
     parser.add_argument("--forward-only-pre-contact-required", action="store_true")
     parser.add_argument("--stop-on-delivery", action="store_true")
     parser.add_argument("--delivery-stop-radius-m", type=float, default=0.0)
@@ -3188,6 +3214,99 @@ def main() -> int:
                 pre_fetch_reposition["fallback_to_local_recovery"] = nav2_precontact_fallback
         write_json(artifact_dir / "pre_fetch_reposition.json", pre_fetch_reposition)
 
+    pre_fetch_setup_correction: dict[str, Any] = {
+        "attempted": False,
+        "enabled": bool(float(args.pre_fetch_setup_correction_s) > 0.0),
+        "requested_duration_s": round(float(args.pre_fetch_setup_correction_s), 6),
+        "reason": "not_requested" if float(args.pre_fetch_setup_correction_s) <= 0.0 else "not_needed",
+        "sample_count": 0,
+    }
+    pre_fetch_setup_correction_samples: list[dict[str, Any]] = []
+    setup_correction_delivered = False
+    correction_eligible = bool(
+        not fetch_skipped_after_reposition
+        and float(args.pre_fetch_setup_correction_s) > 0.0
+        and bool(nav2_precontact_fallback.get("eligible", False))
+        and not bool(nav2_precontact_fallback.get("push_ready", False))
+    )
+    if correction_eligible:
+        pre_fetch_setup_correction.update(
+            {
+                "attempted": True,
+                "reason": "measured_setup_not_push_ready",
+                "nav2_precontact_reason": str(nav2_precontact_fallback.get("reason", "")),
+                "pre_correction_geometry": nav2_precontact_fallback.get("geometry", {}),
+            }
+        )
+        try:
+            pre_fetch_setup_correction_samples = collect_line_servo_samples(
+                compose_project=args.compose_project,
+                world_name=args.world_name,
+                robot_model_name=args.robot_model_name,
+                ball_model_name=args.target_model_name,
+                duration_s=float(args.pre_fetch_setup_correction_s),
+                poll_period_s=args.poll_period_s,
+                delivery_target_x=args.zone_x,
+                delivery_target_y=args.zone_y,
+                delivery_radius_m=args.fetch_delivery_radius_m,
+                delivery_stop_radius_m=delivery_stop_radius_m,
+                stop_on_delivery=bool(args.stop_on_delivery),
+                motion_threshold_m=args.first_contact_motion_threshold_m,
+                max_linear_x_mps=args.drive_linear_x_mps,
+                push_linear_x_mps=args.line_servo_push_linear_x_mps,
+                min_linear_x_mps=args.line_servo_min_linear_x_mps,
+                max_angular_z_rps=args.line_servo_max_angular_z_rps,
+                yaw_gain=args.line_servo_yaw_gain,
+                contact_lateral_ready_m=args.line_servo_contact_lateral_ready_m,
+                contact_yaw_ready_rad=math.radians(args.line_servo_contact_yaw_ready_deg),
+                route_label=ROUTE_RECOVERY_OR_REAIM,
+            )
+            pre_fetch_setup_correction["sample_count"] = len(pre_fetch_setup_correction_samples)
+            latest_robot_pose, latest_ball_pose = latest_robot_ball_xyyaw(pre_fetch_setup_correction_samples)
+            if latest_robot_pose is not None:
+                args.robot_x = float(latest_robot_pose["x"])
+                args.robot_y = float(latest_robot_pose["y"])
+                args.robot_yaw = float(latest_robot_pose["yaw"])
+                pre_fetch_setup_correction["post_correction_robot_pose"] = latest_robot_pose
+            if latest_ball_pose is not None:
+                args.ball_x = float(latest_ball_pose["x"])
+                args.ball_y = float(latest_ball_pose["y"])
+                args.ball_z = float(latest_ball_pose.get("z", args.ball_z))
+                pre_fetch_setup_correction["post_correction_ball_pose"] = latest_ball_pose
+            if latest_robot_pose is not None and latest_ball_pose is not None:
+                post_geometry = _route_geometry_from_poses(
+                    robot_pose=latest_robot_pose,
+                    ball_pose=latest_ball_pose,
+                    target_x=float(args.zone_x),
+                    target_y=float(args.zone_y),
+                )
+                pre_fetch_setup_correction["post_correction_geometry"] = post_geometry
+                pre_fetch_setup_correction["push_ready_after_correction"] = _post_nav2_setup_is_push_ready(
+                    post_geometry
+                )
+            correction_outcome = build_shot_outcome(
+                ball_samples_from_contact_samples(pre_fetch_setup_correction_samples),
+                target_x=args.zone_x,
+                target_y=args.zone_y,
+                target_z=args.zone_z,
+                radius_m=args.fetch_delivery_radius_m,
+            )
+            pre_fetch_setup_correction["shot_outcome"] = correction_outcome
+            setup_correction_delivered = bool(correction_outcome.get("pass", False))
+            pre_fetch_setup_correction["delivered"] = setup_correction_delivered
+            if setup_correction_delivered:
+                pre_fetch_setup_correction["reason"] = "setup_correction_delivered"
+        except Exception as exc:
+            pre_fetch_setup_correction["reason"] = "setup_correction_error"
+            pre_fetch_setup_correction["error"] = str(exc)
+    elif float(args.pre_fetch_setup_correction_s) > 0.0:
+        pre_fetch_setup_correction["reason"] = (
+            "fetch_skipped_after_reposition"
+            if fetch_skipped_after_reposition
+            else "nav2_precontact_fallback_not_eligible"
+        )
+    write_json(artifact_dir / "pre_fetch_setup_correction.json", pre_fetch_setup_correction)
+
     update_runtime(
         args.gather_runtime_json,
         mission_phase="fetch_to_pose",
@@ -3203,14 +3322,30 @@ def main() -> int:
         ),
     )
     contact_samples: list[dict[str, Any]] = []
+    if pre_fetch_setup_correction_samples:
+        extend_contact_samples(
+            contact_samples,
+            pre_fetch_setup_correction_samples,
+            phase_key="pre_fetch_setup_correction_sample",
+            poll_period_s=args.poll_period_s,
+        )
     drive_output = ""
     stop_payload: dict[str, Any] = {"returncode": None, "output": "", "pass": None, "skipped": True}
     stop_publishers_payload: dict[str, Any] = {"returncode": None, "output": "", "pass": None, "skipped": True}
     if fetch_skipped_after_reposition:
         drive_output = "local contact fetch skipped because nav2 reposition before fetch failed"
         stop_payload = {"returncode": None, "output": "", "pass": None, "skipped": True, "reason": "nav2_reposition_failed"}
+    elif setup_correction_delivered:
+        drive_output = "delivery completed during pre-fetch setup correction"
+        stop_payload = {
+            "returncode": None,
+            "output": "",
+            "pass": True,
+            "skipped": True,
+            "reason": "setup_correction_delivered",
+        }
     elif str(args.drive_mode) == "line_servo":
-        contact_samples = collect_line_servo_samples(
+        drive_samples = collect_line_servo_samples(
             compose_project=args.compose_project,
             world_name=args.world_name,
             robot_model_name=args.robot_model_name,
@@ -3232,6 +3367,12 @@ def main() -> int:
             contact_yaw_ready_rad=math.radians(args.line_servo_contact_yaw_ready_deg),
             route_label=args.planner_route_label,
         )
+        extend_contact_samples(
+            contact_samples,
+            drive_samples,
+            phase_key="main_fetch_sample",
+            poll_period_s=args.poll_period_s,
+        )
         stop_payload = publish_zero_stop(args.compose_project)
     else:
         drive_proc = start_robot_drive(
@@ -3240,8 +3381,9 @@ def main() -> int:
             angular_z_rps=0.0,
             duration_s=args.drive_duration_s,
         )
+        drive_samples: list[dict[str, Any]] = []
         try:
-            contact_samples = collect_contact_samples(
+            drive_samples = collect_contact_samples(
                 compose_project=args.compose_project,
                 world_name=args.world_name,
                 robot_model_name=args.robot_model_name,
@@ -3256,7 +3398,7 @@ def main() -> int:
             )
         finally:
             delivery_detected_while_sampling = any(
-                bool(row.get("delivery_stop_triggered", False)) for row in contact_samples
+                bool(row.get("delivery_stop_triggered", False)) for row in drive_samples
             )
             if delivery_detected_while_sampling and drive_proc.poll() is None:
                 stop_publishers_payload = stop_robot_drive_publishers(args.compose_project)
@@ -3271,6 +3413,12 @@ def main() -> int:
                 except subprocess.TimeoutExpired:
                     drive_output = ""
             stop_payload = publish_zero_stop(args.compose_project)
+        extend_contact_samples(
+            contact_samples,
+            drive_samples,
+            phase_key="main_fetch_sample",
+            poll_period_s=args.poll_period_s,
+        )
 
     delivery_stop_triggered = any(bool(row.get("delivery_stop_triggered", False)) for row in contact_samples)
     post_delivery_sample_count = 0
@@ -3283,14 +3431,13 @@ def main() -> int:
             duration_s=float(args.post_delivery_sample_s),
             poll_period_s=args.poll_period_s,
         )
-        t_offset = float(contact_samples[-1].get("t_s", 0.0) or 0.0) + float(args.poll_period_s) if contact_samples else 0.0
-        index_offset = len(contact_samples)
-        for index, row in enumerate(post_samples):
-            row["sample_index"] = index_offset + index
-            row["t_s"] = round(t_offset + float(row.get("t_s", 0.0) or 0.0), 6)
-            row["post_delivery_sample"] = True
+        post_samples = extend_contact_samples(
+            contact_samples,
+            post_samples,
+            phase_key="post_delivery_sample",
+            poll_period_s=args.poll_period_s,
+        )
         post_delivery_sample_count = len(post_samples)
-        contact_samples.extend(post_samples)
 
     samples = ball_samples_from_contact_samples(contact_samples)
     shot_outcome = build_shot_outcome(
@@ -3381,17 +3528,12 @@ def main() -> int:
                     contact_yaw_ready_rad=math.radians(args.line_servo_contact_yaw_ready_deg),
                     route_label=planner_route_label,
                 )
-                t_offset = (
-                    float(contact_samples[-1].get("t_s", 0.0) or 0.0) + float(args.poll_period_s)
-                    if contact_samples
-                    else 0.0
+                correction_samples = extend_contact_samples(
+                    contact_samples,
+                    correction_samples,
+                    phase_key="terminal_correction_sample",
+                    poll_period_s=args.poll_period_s,
                 )
-                index_offset = len(contact_samples)
-                for index, row in enumerate(correction_samples):
-                    row["sample_index"] = index_offset + index
-                    row["t_s"] = round(t_offset + float(row.get("t_s", 0.0) or 0.0), 6)
-                    row["terminal_correction_sample"] = True
-                contact_samples.extend(correction_samples)
                 samples = ball_samples_from_contact_samples(contact_samples)
                 shot_outcome = build_shot_outcome(
                     samples,
@@ -3475,6 +3617,7 @@ def main() -> int:
         "route_quality": route_quality,
         "pre_fetch_reposition": pre_fetch_reposition,
         "nav2_precontact_fallback": nav2_precontact_fallback,
+        "pre_fetch_setup_correction": pre_fetch_setup_correction,
         "nav2_reposition_before_fetch": bool(args.nav2_reposition_before_fetch),
         "nav2_reposition_required": bool(args.nav2_reposition_before_fetch),
         "nav2_reposition_success": pre_fetch_reposition.get("success"),
