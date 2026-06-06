@@ -38,6 +38,7 @@ def _args(**overrides):
         "compose_project": "",
         "expected_session_id": "",
         "fresh_dashboard_session": False,
+        "fresh_session_per_scene": False,
         "allow_operator_view_degraded": False,
         "world_file": "yolo_test_world_v6_calibrated_golf_turf.world",
         "surface_profile": "calibrated_golf_turf",
@@ -489,3 +490,93 @@ def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatc
     assert package_command.count("--visual-dir") == 1
     assert str(tmp_path / "artifacts" / "session" / "fresh_multiball_session" / "visual") in package_command
     assert all(row["mission"]["fetch_to_pose_pass"] for row in summary["step_rows"])
+
+
+def test_multiball_gate_fresh_session_per_scene_isolates_random_scenes(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    starts = []
+    stops = []
+    calls = []
+
+    def fake_stop_dashboard_environment(dashboard_url, *, timeout_s):
+        stops.append((dashboard_url, timeout_s))
+        return {"request": {"ok": True}, "state": {"environment_state": "stopped"}}
+
+    def fake_start_dashboard_environment(args):
+        starts.append(dict(index=len(starts) + 1))
+        index = len(starts)
+        return {
+            "request": {"ok": True},
+            "state": {
+                "environment_state": "environment_ready",
+                "phase": "environment_ready",
+                "sim_gate_ready": True,
+                "operator_view_ready": True,
+                "compose_project": f"fresh_scene_project_{index}",
+                "session_id": f"fresh_scene_session_{index}",
+            },
+        }
+
+    def fake_run_command(command, *, timeout_s):
+        calls.append(command)
+        session_id = command[command.index("--expected-session-id") + 1]
+        mission_path = (
+            tmp_path
+            / "artifacts"
+            / "session"
+            / session_id
+            / "golf_ball_circle_delivery"
+            / f"run_{len(calls)}"
+            / "mission_verdict.json"
+        )
+        _write_json(
+            mission_path,
+            {
+                "pass": True,
+                "fetch_to_pose_pass": True,
+                "scenario_id": "fetch_multiball_retrieval_v1",
+                "scenario_label": "Multi-Ball Retrieval v1",
+                "shot_outcome": {"closest_approach_distance_m": 0.2},
+                "approach_contact_metrics": {"flags": [], "first_contact_quality_flags": []},
+            },
+        )
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=f"{multiball_gate.MISSION_SUMMARY_MARKER}{mission_path}\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(replay_batch, "stop_dashboard_environment", fake_stop_dashboard_environment)
+    monkeypatch.setattr(replay_batch, "start_dashboard_environment", fake_start_dashboard_environment)
+    monkeypatch.setattr(multiball_gate, "run_command", fake_run_command)
+
+    summary = multiball_gate.run_gate(
+        _args(
+            campaign_id="fresh_session_per_scene",
+            dry_run=False,
+            random_cases=2,
+            balls_per_scene=1,
+            fresh_dashboard_session=True,
+            fresh_session_per_scene=True,
+            no_visual_package=True,
+            dashboard_url="http://127.0.0.1:8894",
+        )
+    )
+
+    assert summary["pass"] is True
+    assert summary["fresh_session_per_scene"] is True
+    assert len(starts) == 2
+    assert len(stops) == 4
+    assert [row["expected_session_id"] for row in summary["scene_rows"]] == [
+        "fresh_scene_session_1",
+        "fresh_scene_session_2",
+    ]
+    assert {row["expected_session_id"] for row in summary["step_rows"]} == {
+        "fresh_scene_session_1",
+        "fresh_scene_session_2",
+    }
+    assert {row["compose_project"] for row in summary["step_rows"]} == {
+        "fresh_scene_project_1",
+        "fresh_scene_project_2",
+    }

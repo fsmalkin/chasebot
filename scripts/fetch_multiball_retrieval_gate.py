@@ -1020,6 +1020,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     campaign_id = str(args.campaign_id or "").strip() or f"live_fetch_multiball_retrieval_gate_{current_utc_stamp()}"
     root = ensure_dir(SESSION_ROOT / campaign_id / GATE_KIND)
     dry_run = bool(args.dry_run)
+    fresh_session_per_scene = bool(getattr(args, "fresh_session_per_scene", False))
     run_compose_project = str(args.compose_project or "").strip()
     expected_session_id = str(getattr(args, "expected_session_id", "") or "").strip()
     dashboard_stop_before_start: dict[str, Any] = {}
@@ -1027,7 +1028,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     dashboard_stop_before_package: dict[str, Any] = {}
     live_execution_ready = not dry_run
     live_execution_blocker = ""
-    if not dry_run and bool(getattr(args, "fresh_dashboard_session", False)):
+    if not dry_run and bool(getattr(args, "fresh_dashboard_session", False)) and not fresh_session_per_scene:
         dashboard_stop_before_start = replay_batch.stop_dashboard_environment(
             str(args.dashboard_url or ""),
             timeout_s=float(args.env_stop_timeout_s),
@@ -1053,15 +1054,41 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     scene_rows: list[dict[str, Any]] = []
     step_rows: list[dict[str, Any]] = []
     for scene in scenes:
+        scene_dashboard_stop_before_start: dict[str, Any] = {}
+        scene_dashboard_start: dict[str, Any] = {}
+        scene_dashboard_stop_after_scene: dict[str, Any] = {}
+        scene_compose_project = run_compose_project
+        scene_expected_session_id = expected_session_id
+        scene_live_execution_ready = bool(live_execution_ready)
+        scene_live_execution_blocker = str(live_execution_blocker or "")
+        if not dry_run and fresh_session_per_scene:
+            scene_dashboard_stop_before_start = replay_batch.stop_dashboard_environment(
+                str(args.dashboard_url or ""),
+                timeout_s=float(args.env_stop_timeout_s),
+            )
+            scene_dashboard_start = replay_batch.start_dashboard_environment(args)
+            scene_start_state = (
+                scene_dashboard_start.get("state") if isinstance(scene_dashboard_start.get("state"), dict) else {}
+            )
+            scene_compose_project = str(
+                scene_start_state.get("compose_project", "") or scene_start_state.get("launcher_project", "") or ""
+            )
+            scene_expected_session_id = str(scene_start_state.get("session_id", "") or "")
+            scene_live_execution_ready = replay_batch.dashboard_environment_ready(
+                scene_start_state,
+                allow_operator_view_degraded=bool(getattr(args, "allow_operator_view_degraded", False)),
+            )
+            if not scene_live_execution_ready:
+                scene_live_execution_blocker = replay_batch.dashboard_start_failure_reason(scene_dashboard_start)
         plan = plan_multiball_scene(scene, args=args)
         artifact_paths = write_scene_artifacts(root, scene, plan)
         persistent_field_setup: dict[str, Any] = {"enabled": False}
-        scene_execution_ready = bool(live_execution_ready)
-        scene_execution_blocker = str(live_execution_blocker or "")
+        scene_execution_ready = bool(scene_live_execution_ready)
+        scene_execution_blocker = str(scene_live_execution_blocker or "")
         if scene_execution_ready and bool(getattr(args, "persistent_field", False)):
             persistent_field_setup = prepare_persistent_field_scene(
                 scene=scene,
-                compose_project=run_compose_project,
+                compose_project=scene_compose_project,
                 world_name=DEFAULT_WORLD_NAME,
             )
             setup_path = ensure_dir(root / "persistent_field_setup") / f"{safe_id(str(scene.get('scene_id', 'scene')))}.json"
@@ -1077,8 +1104,8 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                 scene,
                 args=args,
                 execute_live=scene_execution_ready,
-                compose_project=run_compose_project,
-                expected_session_id=expected_session_id,
+                compose_project=scene_compose_project,
+                expected_session_id=scene_expected_session_id,
                 execution_skipped_reason=scene_execution_blocker,
             )
         else:
@@ -1087,8 +1114,8 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                 plan,
                 args=args,
                 execute_live=scene_execution_ready,
-                compose_project=run_compose_project,
-                expected_session_id=expected_session_id,
+                compose_project=scene_compose_project,
+                expected_session_id=scene_expected_session_id,
                 execution_skipped_reason=scene_execution_blocker,
             )
         step_rows.extend(rows)
@@ -1100,6 +1127,11 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                 and len(scene_rows_for_scene) == int(plan.get("ball_count", 0) or 0)
                 and all(bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)) for row in scene_rows_for_scene)
             )
+        if not dry_run and fresh_session_per_scene and scene_live_execution_ready:
+            scene_dashboard_stop_after_scene = replay_batch.stop_dashboard_environment(
+                str(args.dashboard_url or ""),
+                timeout_s=float(args.env_stop_timeout_s),
+            )
         scene_rows.append(
             {
                 "scene_id": str(scene.get("scene_id", "") or ""),
@@ -1108,6 +1140,13 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                 "retrieval_order": plan.get("retrieval_order", []),
                 "planner_ready": bool(plan.get("planner_ready", False)),
                 "executable_step_count": int(plan.get("executable_step_count", 0) or 0),
+                "compose_project": scene_compose_project,
+                "expected_session_id": scene_expected_session_id,
+                "live_execution_ready": bool(scene_live_execution_ready),
+                "live_execution_blocker": scene_live_execution_blocker,
+                "dashboard_stop_before_start": scene_dashboard_stop_before_start,
+                "dashboard_start": scene_dashboard_start,
+                "dashboard_stop_after_scene": scene_dashboard_stop_after_scene,
                 "persistent_field_setup": persistent_field_setup,
                 "live_replanning": live_replan_summary,
                 **artifact_paths,
@@ -1126,7 +1165,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
     visual_package_stdout_tail = ""
     visual_package_stderr_tail = ""
     if not dry_run and not bool(args.no_visual_package):
-        if bool(getattr(args, "fresh_dashboard_session", False)) and live_execution_ready:
+        if bool(getattr(args, "fresh_dashboard_session", False)) and live_execution_ready and not fresh_session_per_scene:
             dashboard_stop_before_package = replay_batch.stop_dashboard_environment(
                 str(args.dashboard_url or ""),
                 timeout_s=float(args.env_stop_timeout_s),
@@ -1163,6 +1202,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "planner_mode": str(args.planner_mode),
         "persistent_field": bool(getattr(args, "persistent_field", False)),
         "fresh_dashboard_session": bool(getattr(args, "fresh_dashboard_session", False)),
+        "fresh_session_per_scene": fresh_session_per_scene,
         "dashboard_url": str(args.dashboard_url or ""),
         "compose_project": run_compose_project,
         "expected_session_id": expected_session_id,
@@ -1231,6 +1271,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- dry_run: `{summary.get('dry_run', False)}`",
         f"- planner_mode: `{summary.get('planner_mode', '')}`",
         f"- fresh_dashboard_session: `{summary.get('fresh_dashboard_session', False)}`",
+        f"- fresh_session_per_scene: `{summary.get('fresh_session_per_scene', False)}`",
         f"- live_execution_ready: `{summary.get('live_execution_ready', False)}`",
         f"- expected_session_id: `{summary.get('expected_session_id', '')}`",
         f"- pass: `{summary.get('pass', False)}`",
@@ -1299,6 +1340,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--compose-project", default="")
     parser.add_argument("--expected-session-id", default="")
     parser.add_argument("--fresh-dashboard-session", action="store_true")
+    parser.add_argument("--fresh-session-per-scene", action="store_true")
     parser.add_argument("--allow-operator-view-degraded", action="store_true")
     parser.add_argument("--world-file", default="yolo_test_world_v6_calibrated_golf_turf.world")
     parser.add_argument("--surface-profile", default="calibrated_golf_turf")
