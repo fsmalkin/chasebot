@@ -850,6 +850,8 @@ def test_parse_args_accepts_nav2_reposition_before_fetch(monkeypatch):
             "--nav2-reposition-transform-layout-to-current-robot",
             "--nav2-reposition-setup-standoff-m",
             "0.42",
+            "--nav2-pre-setup-standoff-m",
+            "0.9",
             "--nav2-reposition-timeout-s",
             "19.0",
             "--nav2-reposition-server-wait-s",
@@ -867,6 +869,7 @@ def test_parse_args_accepts_nav2_reposition_before_fetch(monkeypatch):
     assert args.nav2_reposition_goal_frame_mode == "nav2_relative"
     assert args.nav2_reposition_transform_layout_to_current_robot is True
     assert args.nav2_reposition_setup_standoff_m == pytest.approx(0.42)
+    assert args.nav2_pre_setup_standoff_m == pytest.approx(0.9)
     assert args.nav2_reposition_timeout_s == pytest.approx(19.0)
     assert args.nav2_reposition_server_wait_s == pytest.approx(4.0)
     assert args.nav2_reposition_pose_wait_s == pytest.approx(2.5)

@@ -592,13 +592,15 @@ def build_step_command(
         "--forward-only-pre-contact-required",
         "--nav2-reposition-before-fetch",
         "--nav2-reposition-goal-frame-mode",
-        "world_direct",
+        str(getattr(args, "nav2_goal_frame_mode", "world_direct") or "world_direct"),
         "--nav2-reposition-timeout-s",
         "48.000",
         "--nav2-reposition-server-wait-s",
         "8.000",
         "--nav2-reposition-pose-wait-s",
         "2.500",
+        "--nav2-pre-setup-standoff-m",
+        "0.900",
         "--nav2-reposition-refine-attempts",
         "1",
         "--ai-push-coast-mode",
@@ -1345,6 +1347,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--world-file", default="yolo_test_world_v6_calibrated_golf_turf.world")
     parser.add_argument("--surface-profile", default="calibrated_golf_turf")
     parser.add_argument("--robot-sdf-name", default="jetbot_core_ignition_v1.7.0.sdf")
+    parser.add_argument("--nav2-goal-frame-mode", choices=["world_direct", "nav2_relative"], default="world_direct")
     parser.add_argument("--env-ready-timeout-s", type=float, default=replay_batch.DEFAULT_ENV_READY_TIMEOUT_S)
     parser.add_argument("--env-start-attempts", type=int, default=2)
     parser.add_argument("--env-stop-timeout-s", type=float, default=90.0)

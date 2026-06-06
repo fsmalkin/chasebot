@@ -2531,6 +2531,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--nav2-reposition-goal-frame-mode", choices=["nav2_relative", "world_direct"], default="nav2_relative")
     parser.add_argument("--nav2-reposition-transform-layout-to-current-robot", action="store_true")
     parser.add_argument("--nav2-reposition-setup-standoff-m", type=float, default=0.38)
+    parser.add_argument("--nav2-pre-setup-standoff-m", type=float, default=0.0)
     parser.add_argument("--nav2-reposition-timeout-s", type=float, default=24.0)
     parser.add_argument("--nav2-reposition-server-wait-s", type=float, default=8.0)
     parser.add_argument("--nav2-reposition-pose-wait-s", type=float, default=3.0)
@@ -3030,6 +3031,71 @@ def main() -> int:
                     nav2_robot_pose=nav2_robot_pose,
                     frame_id=args.nav2_reposition_frame_id,
                 )
+        pre_setup_reposition: dict[str, Any] = {
+            "attempted": False,
+            "skipped": True,
+            "reason": "pre_setup_standoff_disabled",
+        }
+        if float(args.nav2_pre_setup_standoff_m) > float(args.nav2_reposition_setup_standoff_m) + 0.05:
+            world_pre_setup_pose = build_nav2_reposition_setup_pose(
+                ball_x=args.ball_x,
+                ball_y=args.ball_y,
+                target_x=args.zone_x,
+                target_y=args.zone_y,
+                setup_standoff_m=args.nav2_pre_setup_standoff_m,
+                frame_id=args.nav2_reposition_frame_id,
+            )
+            pre_setup_goal_pose = dict(world_pre_setup_pose)
+            if str(args.nav2_reposition_goal_frame_mode) == "nav2_relative" and nav2_pose_sample.get("pose"):
+                pre_setup_goal_pose = build_nav2_relative_setup_goal(
+                    world_setup_pose=world_pre_setup_pose,
+                    world_robot_pose=world_robot_pose,
+                    nav2_robot_pose=nav2_pose_sample["pose"],
+                    frame_id=args.nav2_reposition_frame_id,
+                )
+            update_runtime(
+                args.gather_runtime_json,
+                mission_phase="nav2_pre_setup",
+                gather_phase="nav2_pre_setup",
+                proof_state="visiting",
+                zone_pose={
+                    "x": args.zone_x,
+                    "y": args.zone_y,
+                    "z": args.zone_z,
+                    "radius_m": args.fetch_delivery_radius_m,
+                },
+                latest_feedback="Nav2 is moving to a farther behind-ball setup pose before close push setup.",
+            )
+            pre_setup_reposition = dispatch_nav2_reposition_before_fetch(
+                compose_project=args.compose_project,
+                goal_pose=pre_setup_goal_pose,
+                timeout_s=args.nav2_reposition_timeout_s,
+                server_wait_s=args.nav2_reposition_server_wait_s,
+            )
+            pre_setup_reposition["attempted"] = True
+            pre_setup_reposition["skipped"] = False
+            pre_setup_reposition["goal_pose"] = pre_setup_goal_pose
+            pre_setup_reposition["world_setup_pose"] = world_pre_setup_pose
+            pre_setup_reposition["goal_frame_mode"] = str(args.nav2_reposition_goal_frame_mode)
+            pre_setup_reposition["configured_standoff_m"] = round(float(args.nav2_pre_setup_standoff_m), 6)
+            pre_setup_reposition["stop_after_reposition"] = publish_zero_stop(args.compose_project)
+            pre_setup_samples: list[dict[str, Any]] = []
+            try:
+                pre_setup_samples = collect_contact_samples(
+                    compose_project=args.compose_project,
+                    world_name=args.world_name,
+                    robot_model_name=args.robot_model_name,
+                    ball_model_name=args.target_model_name,
+                    duration_s=0.5,
+                    poll_period_s=args.poll_period_s,
+                )
+            except Exception as exc:
+                pre_setup_reposition["post_reposition_sample_error"] = str(exc)
+            if pre_setup_samples:
+                pre_setup_reposition["post_reposition_sample_count"] = len(pre_setup_samples)
+                pre_setup_reposition["post_reposition_robot_pose"] = pre_setup_samples[-1].get("robot_pose")
+                pre_setup_reposition["post_reposition_ball_pose"] = pre_setup_samples[-1].get("ball_pose")
+                append_jsonl(artifact_dir / "pre_fetch_pre_setup_trace.jsonl", pre_setup_samples)
         update_runtime(
             args.gather_runtime_json,
             mission_phase="nav2_reposition",
@@ -3055,10 +3121,12 @@ def main() -> int:
         pre_fetch_reposition["world_setup_pose"] = world_setup_pose
         pre_fetch_reposition["world_robot_pose"] = world_robot_pose
         pre_fetch_reposition["nav2_pose_sample"] = nav2_pose_sample
+        pre_fetch_reposition["pre_setup_reposition"] = pre_setup_reposition
         pre_fetch_reposition["goal_frame_mode"] = str(args.nav2_reposition_goal_frame_mode)
         pre_fetch_reposition["configured_timeout_s"] = round(float(args.nav2_reposition_timeout_s), 6)
         pre_fetch_reposition["configured_server_wait_s"] = round(float(args.nav2_reposition_server_wait_s), 6)
         pre_fetch_reposition["configured_pose_wait_s"] = round(float(args.nav2_reposition_pose_wait_s), 6)
+        pre_fetch_reposition["configured_pre_setup_standoff_m"] = round(float(args.nav2_pre_setup_standoff_m), 6)
         pre_fetch_reposition["configured_refine_attempts"] = max(0, int(args.nav2_reposition_refine_attempts))
         pre_fetch_reposition["continue_on_failure"] = bool(args.nav2_reposition_continue_on_failure)
         pre_fetch_reposition["stop_after_reposition"] = publish_zero_stop(args.compose_project)

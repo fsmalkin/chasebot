@@ -43,6 +43,7 @@ def _args(**overrides):
         "world_file": "yolo_test_world_v6_calibrated_golf_turf.world",
         "surface_profile": "calibrated_golf_turf",
         "robot_sdf_name": "jetbot_core_ignition_v1.7.0.sdf",
+        "nav2_goal_frame_mode": "world_direct",
         "env_ready_timeout_s": replay_batch.DEFAULT_ENV_READY_TIMEOUT_S,
         "env_start_attempts": 2,
         "env_stop_timeout_s": 90.0,
@@ -196,6 +197,25 @@ def test_persistent_field_mode_preserves_target_and_robot_in_step_commands(tmp_p
         assert "--preserve-robot-pose" in row["command"]
         assert "--pre-fetch-setup-correction-s" in row["command"]
         assert float(row["command"][row["command"].index("--pre-fetch-setup-correction-s") + 1]) == 14.0
+        assert "--nav2-pre-setup-standoff-m" in row["command"]
+        assert float(row["command"][row["command"].index("--nav2-pre-setup-standoff-m") + 1]) == 0.9
+
+
+def test_nav2_goal_frame_mode_is_configurable_for_step_commands(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+
+    summary = multiball_gate.run_gate(
+        _args(
+            campaign_id="dry_nav2_relative_multiball",
+            dry_run=True,
+            random_cases=1,
+            balls_per_scene=1,
+            nav2_goal_frame_mode="nav2_relative",
+        )
+    )
+
+    command = summary["step_rows"][0]["command"]
+    assert command[command.index("--nav2-reposition-goal-frame-mode") + 1] == "nav2_relative"
 
 
 def test_prepare_persistent_field_scene_spawns_all_balls_and_sets_robot(tmp_path, monkeypatch):
