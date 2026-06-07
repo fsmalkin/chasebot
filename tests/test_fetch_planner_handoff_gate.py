@@ -464,6 +464,36 @@ def test_local_setup_capture_opposite_side_plan_includes_wraparound_and_push_rea
     assert plan["requires_measured_push_ready_before_fetch"] is True
 
 
+def test_plan_compiler_inserts_required_wraparound_when_llm_omits_it():
+    scene = next(
+        item for item in gate.generate_random_scenes(
+            seed=123,
+            random_cases=18,
+            scene_set=gate.BROAD_SPATIAL_SCENE_SET,
+        )
+        if item["geometry"]["opposite_side_of_circle"] is True
+        and item["expected_route_label"] == gate.ROUTE_LOCAL_SETUP_CAPTURE
+    )
+
+    plan = gate.compile_maneuver_plan(
+        scene,
+        gate.ROUTE_LOCAL_SETUP_CAPTURE,
+        proposed={
+            "maneuver_sequence": [
+                gate.MANEUVER_LOCAL_SETUP_CAPTURE,
+                gate.MANEUVER_VALIDATE_PUSH_READY,
+                gate.MANEUVER_LOCAL_FETCH,
+                gate.MANEUVER_MONITOR_DELIVERY,
+            ],
+        },
+    )
+
+    assert plan["source"] == "llm_proposed_with_deterministic_required_maneuvers"
+    assert plan["inserted_maneuvers"] == [gate.MANEUVER_WRAPAROUND_SETUP]
+    assert plan["maneuver_sequence"].index(gate.MANEUVER_WRAPAROUND_SETUP) < plan["push_ready_index"]
+    assert plan["valid"] is True
+
+
 def test_local_setup_capture_plan_requires_setup_capture_before_push_ready():
     scene = next(
         item for item in gate.generate_random_scenes(seed=123, random_cases=12)

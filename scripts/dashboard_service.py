@@ -3101,6 +3101,20 @@ class DashboardController:
         self.lifecycle_thread.start()
         return HTTPStatus.ACCEPTED, {"accepted": True, "message": "environment refresh queued"}
 
+    def request_activity(self, payload: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
+        body = dict(payload or {})
+        reason = str(body.get("reason", "") or "operator_activity").strip() or "operator_activity"
+        self._mark_operator_activity(reason)
+        with self.state_lock:
+            return HTTPStatus.OK, {
+                "accepted": True,
+                "message": "activity recorded",
+                "last_operator_activity_utc": self.state.get("last_operator_activity_utc", ""),
+                "last_operator_activity_reason": self.state.get("last_operator_activity_reason", ""),
+                "idle_shutdown_state": self.state.get("idle_shutdown_state", ""),
+                "idle_shutdown_remaining_s": self.state.get("idle_shutdown_remaining_s"),
+            }
+
     def request_reset_sim(self, overrides: Optional[Dict[str, Any]] = None) -> tuple[int, Dict[str, Any]]:
         self._mark_operator_activity("sim_reset")
         with self.state_lock:
@@ -6249,6 +6263,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return self._json_response(status, payload)
         if path == "/api/env/refresh":
             status, payload = controller.request_refresh()
+            return self._json_response(status, payload)
+        if path == "/api/activity":
+            status, payload = controller.request_activity(body)
             return self._json_response(status, payload)
         if path == "/api/sim/reset":
             status, payload = controller.request_reset_sim(body)

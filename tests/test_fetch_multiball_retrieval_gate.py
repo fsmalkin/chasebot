@@ -802,6 +802,103 @@ def test_replanning_rows_keep_ball_remaining_when_runner_omits_mission_marker(tm
     assert scene["balls"][0]["id"] in replan["remaining_ball_ids"]
 
 
+def test_runner_failure_classifier_reads_spawn_summary_for_stopped_sim_gate(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    spawn_summary = tmp_path / "artifacts" / "session" / "session_env_fail" / "run" / "spawn_summary.json"
+    _write_json(
+        spawn_summary,
+        {
+            "robot_pose": {
+                "pass": False,
+                "output": 'service "sim-gate" is not running\n',
+            },
+            "ball": {
+                "pass": False,
+                "output": 'service "sim-gate" is not running\n',
+            },
+        },
+    )
+
+    reason, detail_path, detail = multiball_gate.classify_runner_failure(f"Demo spawn failed; see {spawn_summary}")
+
+    assert reason == multiball_gate.EXECUTION_ENVIRONMENT_FAILURE_REASON
+    assert detail_path.endswith("spawn_summary.json")
+    assert detail["robot_pose"]["pass"] is False
+
+
+def test_live_multiball_gate_separates_environment_abort_from_fetch_failure(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    spawn_summary = tmp_path / "artifacts" / "session" / "fresh_multiball_session" / "run" / "spawn_summary.json"
+    _write_json(
+        spawn_summary,
+        {
+            "robot_pose": {"pass": False, "output": 'service "sim-gate" is not running\n'},
+            "ball": {"pass": False, "output": 'service "sim-gate" is not running\n'},
+        },
+    )
+    touches = []
+
+    monkeypatch.setattr(
+        replay_batch,
+        "stop_dashboard_environment",
+        lambda dashboard_url, *, timeout_s: {"request": {"ok": True}, "state": {"environment_state": "stopped"}},
+    )
+    monkeypatch.setattr(
+        replay_batch,
+        "start_dashboard_environment",
+        lambda args: {
+            "request": {"ok": True},
+            "state": {
+                "environment_state": "environment_ready",
+                "phase": "environment_ready",
+                "sim_gate_ready": True,
+                "operator_view_ready": True,
+                "compose_project": "fresh_multiball_project",
+                "session_id": "fresh_multiball_session",
+            },
+        },
+    )
+    monkeypatch.setattr(
+        replay_batch,
+        "post_dashboard_json",
+        lambda dashboard_url, path, payload=None, *, timeout_s=30.0: touches.append((path, payload)) or {"ok": True},
+    )
+
+    def fake_run_command(command, *, timeout_s):
+        return subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr=f"RuntimeError: Demo spawn failed; see {spawn_summary}\n",
+        )
+
+    monkeypatch.setattr(multiball_gate, "run_command", fake_run_command)
+
+    summary = multiball_gate.run_gate(
+        _args(
+            campaign_id="live_multiball_env_abort",
+            dry_run=False,
+            random_cases=1,
+            balls_per_scene=1,
+            fresh_dashboard_session=True,
+            no_visual_package=True,
+            stop_on_fail=True,
+            dashboard_url="http://127.0.0.1:8894",
+        )
+    )
+
+    assert summary["pass"] is False
+    assert summary["live_fetch_to_pose_pass_count"] == 0
+    assert summary["live_fetch_to_pose_fail_count"] == 0
+    assert summary["live_execution_environment_fail_count"] == 1
+    assert summary["scene_rows"][0]["execution_environment_fail_count"] == 1
+    assert summary["step_rows"][0]["failure_reason"] == multiball_gate.EXECUTION_ENVIRONMENT_FAILURE_REASON
+    assert summary["step_rows"][0]["failure_detail_path"].endswith("spawn_summary.json")
+    assert [path for path, _payload in touches].count("/api/activity") >= 2
+    assert summary["step_rows"][0]["dashboard_activity_before_step"]["ok"] is True
+    assert summary["step_rows"][0]["dashboard_activity_after_step"]["ok"] is True
+
+
 def test_multiball_gate_live_mock_records_per_ball_missions(tmp_path, monkeypatch):
     _patch_roots(tmp_path, monkeypatch)
     calls = []

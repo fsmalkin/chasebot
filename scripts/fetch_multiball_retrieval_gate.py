@@ -40,6 +40,9 @@ DEFAULT_PROFILE = "open_field_multiball_v1"
 ROUTE_DIVERSE_PROFILE = "open_field_multiball_route_diverse_v1"
 DEFAULT_NAV2_GOAL_FRAME_MODE = "world_direct"
 LOCAL_SETUP_CAPTURE_STEP_TIMEOUT_S = 420.0
+RUNNER_FAILURE_REASON = "runner_returned_nonzero"
+EXECUTION_ENVIRONMENT_FAILURE_REASON = "execution_environment_unavailable"
+SPAWN_FAILURE_REASON = "spawn_failed_before_mission"
 DEFAULT_FIELD_BOUNDS = {
     "x_min_m": -1.20,
     "x_max_m": 2.20,
@@ -1016,6 +1019,59 @@ def run_command(command: list[str], *, timeout_s: float) -> subprocess.Completed
         return subprocess.CompletedProcess(command, 124, stdout=str(stdout or ""), stderr=stderr_text)
 
 
+def touch_dashboard_activity(args: argparse.Namespace, *, reason: str) -> dict[str, Any]:
+    dashboard_url = str(getattr(args, "dashboard_url", "") or "").strip()
+    if not dashboard_url:
+        return {}
+    return replay_batch.post_dashboard_json(
+        dashboard_url,
+        "/api/activity",
+        {"reason": str(reason or "multiball_gate_activity")},
+        timeout_s=5.0,
+    )
+
+
+def spawn_summary_path_from_output(output: str) -> Path | None:
+    match = re.search(r"see\s+([^\r\n]*spawn_summary\.json)", str(output or ""))
+    if not match:
+        return None
+    path_text = match.group(1).strip().strip("'\"")
+    if not path_text:
+        return None
+    return resolve_path(path_text)
+
+
+def spawn_summary_mentions_sim_gate_stopped(summary: dict[str, Any]) -> bool:
+    def _walk(value: Any) -> bool:
+        if isinstance(value, dict):
+            return any(_walk(child) for child in value.values())
+        if isinstance(value, list):
+            return any(_walk(child) for child in value)
+        text = str(value or "").lower()
+        return "sim-gate" in text and "not running" in text
+
+    return _walk(summary)
+
+
+def classify_runner_failure(output: str) -> tuple[str, str, dict[str, Any]]:
+    text = str(output or "")
+    lowered = text.lower()
+    if "sim-gate" in lowered and "not running" in lowered:
+        return EXECUTION_ENVIRONMENT_FAILURE_REASON, "", {}
+    spawn_summary_path = spawn_summary_path_from_output(text)
+    if spawn_summary_path is not None:
+        spawn_summary = read_json(spawn_summary_path)
+        failure_detail_path = artifact_display_path(spawn_summary_path)
+        if spawn_summary_mentions_sim_gate_stopped(spawn_summary):
+            return EXECUTION_ENVIRONMENT_FAILURE_REASON, failure_detail_path, spawn_summary
+        return SPAWN_FAILURE_REASON, failure_detail_path, spawn_summary
+    return RUNNER_FAILURE_REASON, "", {}
+
+
+def row_has_execution_environment_failure(row: dict[str, Any]) -> bool:
+    return str(row.get("failure_reason", "") or "") == EXECUTION_ENVIRONMENT_FAILURE_REASON
+
+
 def step_run_timeout_s(args: argparse.Namespace, step: dict[str, Any]) -> float:
     base_timeout_s = float(getattr(args, "timeout_s", 180.0) or 180.0)
     route_label = str(step.get("route_label", "") or "")
@@ -1147,22 +1203,37 @@ def materialize_plan_rows(
             "failure_reason": "",
             "mission_summary_path": "",
             "mission": {},
+            "dashboard_activity_before_step": {},
+            "dashboard_activity_after_step": {},
+            "failure_detail_path": "",
+            "failure_detail": {},
             "stdout_tail": "",
             "stderr_tail": "",
             "step_timeout_s": step_run_timeout_s(args, step),
         }
         if execute_live:
+            row["dashboard_activity_before_step"] = touch_dashboard_activity(
+                args,
+                reason=f"multiball_step_start:{scene_id}:{row['step_index']}",
+            )
             completed = run_command(command, timeout_s=float(row["step_timeout_s"]))
             output = (completed.stdout or "") + "\n" + (completed.stderr or "")
             mission_summary_raw = extract_marker(output, MISSION_SUMMARY_MARKER)
             row["returncode"] = int(completed.returncode)
             row["stdout_tail"] = "\n".join((completed.stdout or "").splitlines()[-20:])
             row["stderr_tail"] = "\n".join((completed.stderr or "").splitlines()[-20:])
+            row["dashboard_activity_after_step"] = touch_dashboard_activity(
+                args,
+                reason=f"multiball_step_end:{scene_id}:{row['step_index']}",
+            )
             if mission_summary_raw:
                 mission_summary_path = resolve_path(mission_summary_raw)
                 enrich_row_with_mission_evidence(row, mission_summary_path)
             if int(completed.returncode) != 0 and not row["failure_reason"]:
-                row["failure_reason"] = "runner_returned_nonzero"
+                failure_reason, failure_detail_path, failure_detail = classify_runner_failure(output)
+                row["failure_reason"] = failure_reason
+                row["failure_detail_path"] = failure_detail_path
+                row["failure_detail"] = failure_detail
         rows.append(row)
         if execute_live and bool(args.stop_on_fail) and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)):
             break
@@ -1361,17 +1432,29 @@ def materialize_replanning_rows(
             "mission_summary_path": "",
             "mission": {},
             "measured_post_step_state": {},
+            "dashboard_activity_before_step": {},
+            "dashboard_activity_after_step": {},
+            "failure_detail_path": "",
+            "failure_detail": {},
             "stdout_tail": "",
             "stderr_tail": "",
             "step_timeout_s": step_run_timeout_s(args, step),
         }
         if execute_live:
+            row["dashboard_activity_before_step"] = touch_dashboard_activity(
+                args,
+                reason=f"multiball_replan_step_start:{scene_id}:{row['step_index']}",
+            )
             completed = run_command(command, timeout_s=float(row["step_timeout_s"]))
             output = (completed.stdout or "") + "\n" + (completed.stderr or "")
             mission_summary_raw = extract_marker(output, MISSION_SUMMARY_MARKER)
             row["returncode"] = int(completed.returncode)
             row["stdout_tail"] = "\n".join((completed.stdout or "").splitlines()[-20:])
             row["stderr_tail"] = "\n".join((completed.stderr or "").splitlines()[-20:])
+            row["dashboard_activity_after_step"] = touch_dashboard_activity(
+                args,
+                reason=f"multiball_replan_step_end:{scene_id}:{row['step_index']}",
+            )
             if mission_summary_raw:
                 mission_summary_path = resolve_path(mission_summary_raw)
                 measured_state = enrich_row_with_mission_evidence(row, mission_summary_path)
@@ -1391,7 +1474,10 @@ def materialize_replanning_rows(
                     measured_state={"fetch_to_pose_pass": False},
                 )
             if int(completed.returncode) != 0 and not row["failure_reason"]:
-                row["failure_reason"] = "runner_returned_nonzero"
+                failure_reason, failure_detail_path, failure_detail = classify_runner_failure(output)
+                row["failure_reason"] = failure_reason
+                row["failure_detail_path"] = failure_detail_path
+                row["failure_detail"] = failure_detail
         rows.append(row)
         if execute_live and bool(args.stop_on_fail) and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)):
             break
@@ -1560,6 +1646,10 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
             for row in scene_rows_for_scene
             if row.get("returncode") is not None
             and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+            and not row_has_execution_environment_failure(row)
+        )
+        execution_environment_fail_count = sum(
+            1 for row in scene_rows_for_scene if row_has_execution_environment_failure(row)
         )
         delivered_ball_ids: list[str] = []
         remaining_ball_ids: list[str] = []
@@ -1591,6 +1681,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                 "remaining_ball_ids": remaining_ball_ids,
                 "fetch_to_pose_pass_count": fetch_to_pose_pass_count,
                 "fetch_to_pose_fail_count": fetch_to_pose_fail_count,
+                "execution_environment_fail_count": execution_environment_fail_count,
                 "live_all_balls_delivered": bool(
                     isinstance(live_replan_summary, dict)
                     and live_replan_summary.get("enabled", False)
@@ -1616,6 +1707,14 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
 
     planned_step_count = len(step_rows)
     live_pass_count = sum(1 for row in step_rows if bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)))
+    live_execution_environment_fail_count = sum(1 for row in step_rows if row_has_execution_environment_failure(row))
+    live_control_fail_count = sum(
+        1
+        for row in step_rows
+        if row.get("returncode") is not None
+        and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+        and not row_has_execution_environment_failure(row)
+    )
     planner_ready_scene_count = sum(1 for row in scene_rows if bool(row.get("planner_ready", False)))
     route_counts = {
         route: sum(1 for row in step_rows if str(row.get("route_label", "") or "") == route)
@@ -1716,7 +1815,8 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "route_executor_counts": route_executor_counts,
         "route_diversity": route_diversity,
         "live_fetch_to_pose_pass_count": live_pass_count,
-        "live_fetch_to_pose_fail_count": 0 if dry_run else planned_step_count - live_pass_count,
+        "live_fetch_to_pose_fail_count": 0 if dry_run else live_control_fail_count,
+        "live_execution_environment_fail_count": 0 if dry_run else live_execution_environment_fail_count,
         "live_all_balls_delivered_scene_count": sum(
             1 for row in scene_rows if bool((row.get("live_replanning") or {}).get("all_balls_delivered", False))
         ),
@@ -1795,6 +1895,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- planner_ready_scene_count: `{summary.get('planner_ready_scene_count', 0)}`",
         f"- live_fetch_to_pose_pass_count: `{summary.get('live_fetch_to_pose_pass_count', 0)}`",
         f"- live_fetch_to_pose_fail_count: `{summary.get('live_fetch_to_pose_fail_count', 0)}`",
+        f"- live_execution_environment_fail_count: `{summary.get('live_execution_environment_fail_count', 0)}`",
         f"- visual_package_required: `{summary.get('visual_package_required', False)}`",
         f"- visual_package_pass: `{summary.get('visual_package_pass', False)}`",
         f"- visual_package_effective_pass: `{summary.get('visual_package_effective_pass', False)}`",

@@ -1715,6 +1715,87 @@ def test_local_setup_trajectory_uses_lateral_trim_near_push_ready_pocket():
     assert abs(command["yaw_error_rad"]) < 0.10
 
 
+def test_local_setup_trajectory_keeps_line_acquire_after_near_contact_projection_drift():
+    command = line_servo_command(
+        robot_pose={"x": 1.8567679511167812, "y": 0.20449122152517193, "yaw": -3.0561989727966625},
+        ball_pose={"x": 1.50223, "y": 0.145572, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 1.50223, "y": 0.145572, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["phase"] == "local_setup_trajectory_line_acquire"
+    assert command["local_setup_trajectory_stage"] == "line_acquire"
+    assert command["near_contact_line_acquire_active"] is True
+    assert command["distance_to_contact_m"] == pytest.approx(0.250085, abs=1.0e-6)
+    assert command["setup_projection_error_m"] == pytest.approx(0.102155, abs=1.0e-6)
+    assert abs(command["line_yaw_error_rad"]) < 0.20
+    assert abs(command["desired_yaw_rad"] - command["line_yaw_rad"]) < 0.25
+    assert abs(command["desired_yaw_rad"] - command["setup_yaw_rad"]) > 1.0
+    assert command["linear_x_mps"] > 0.0
+
+
+def test_local_setup_trajectory_keeps_line_acquire_when_projection_barely_exceeds_old_gate():
+    command = line_servo_command(
+        robot_pose={"x": 1.8142861614059245, "y": 0.19610952050065733, "yaw": -2.8887327553627378},
+        ball_pose={"x": 1.50223, "y": 0.145572, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 1.50223, "y": 0.145572, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["phase"] == "local_setup_trajectory_line_acquire"
+    assert command["local_setup_trajectory_stage"] == "line_acquire"
+    assert command["near_contact_line_acquire_active"] is True
+    assert command["setup_projection_error_m"] == pytest.approx(0.14537, abs=1.0e-5)
+    assert abs(command["line_yaw_error_rad"]) < 0.01
+    assert abs(command["desired_yaw_rad"] - command["line_yaw_rad"]) < 0.25
+    assert abs(command["desired_yaw_rad"] - command["setup_yaw_rad"]) > 1.0
+
+
+def test_local_setup_trajectory_keeps_line_acquire_below_old_distance_floor_when_aligned():
+    command = line_servo_command(
+        robot_pose={"x": 1.787843317691804, "y": 0.18915883248261217, "yaw": -2.8845250563605376},
+        ball_pose={"x": 1.50223, "y": 0.145572, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 1.50223, "y": 0.145572, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["phase"] == "local_setup_trajectory_line_acquire"
+    assert command["local_setup_trajectory_stage"] == "line_acquire"
+    assert command["near_contact_line_acquire_active"] is True
+    assert command["distance_to_contact_m"] == pytest.approx(0.17992, abs=1.0e-5)
+    assert command["setup_projection_error_m"] == pytest.approx(0.172711, abs=1.0e-5)
+    assert abs(command["line_yaw_error_rad"]) < 0.01
+    assert abs(command["desired_yaw_rad"] - command["line_yaw_rad"]) < 0.25
+    assert abs(command["desired_yaw_rad"] - command["setup_yaw_rad"]) > 1.0
+
+
 def test_local_setup_trajectory_uses_close_side_escape_before_side_setup_contact_risk():
     command = line_servo_command(
         robot_pose={"x": 1.7814065651092068, "y": -0.669354759879795, "yaw": 0.7453161254591563},

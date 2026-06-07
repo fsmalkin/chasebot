@@ -53,6 +53,18 @@ therefore optimizes mission-level decomposition: the planner must choose order,
 setup owner, recovery owner, and handoff timing from measured state, while local
 fetch executes only inside the push-ready envelope.
 
+June 7, 2026 route-diverse multi-ball update: the current branch has a green
+same-session route-diverse visual gate:
+`artifacts/session/live_multiball_llm_supervised_route_diverse_seed20260644_4x3_activity_fix_20260607/fetch_multiball_retrieval_gate/scorecard.md`.
+It delivered four three-ball scenes (`12/12`) with live coverage for
+`nav2_reposition_first`, `local_setup_capture`, `recovery_or_reaim`, and
+`fetch_ready_local`. The companion rollup
+`artifacts/session/live_multiball_llm_supervised_route_diverse_activity_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`
+keeps the work below promotion because one delivered step is a
+`push_contact_quality_watch` and the rollup requires another live
+LLM-supervised gate. Next work is contact-quality hardening plus repeat breadth,
+not another architecture reset.
+
 May 31, 2026 evidence and architecture reset: the delivery-marker geometry
 issue means pre-fix fetch pass/fail claims are diagnostic unless the artifact
 records `geometry_consistency.pass=true`, the visible delivery marker matches

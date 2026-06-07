@@ -937,6 +937,26 @@ def test_idle_shutdown_queues_environment_stop_after_ready_idle_timeout(monkeypa
     assert controller.state["environment_message"] == "idle shutdown queued"
 
 
+def test_request_activity_marks_operator_activity_without_lifecycle_work(monkeypatch, tmp_path):
+    controller = _make_controller(tmp_path)
+    controller.state["idle_shutdown_idle_since_utc"] = "2026-05-22T12:00:00+00:00"
+    controller.state["idle_shutdown_deadline_utc"] = "2026-05-22T12:10:00+00:00"
+    controller.state["idle_shutdown_remaining_s"] = 120.0
+    monkeypatch.setattr(dashboard_service, "utc_now", lambda: "2026-05-22T12:08:00+00:00")
+
+    status, payload = controller.request_activity({"reason": "multiball_step_start:test"})
+
+    assert status == dashboard_service.HTTPStatus.OK
+    assert payload["accepted"] is True
+    assert payload["last_operator_activity_utc"] == "2026-05-22T12:08:00+00:00"
+    assert payload["last_operator_activity_reason"] == "multiball_step_start:test"
+    assert controller.state["last_operator_activity_reason"] == "multiball_step_start:test"
+    assert controller.state["idle_shutdown_idle_since_utc"] == ""
+    assert controller.state["idle_shutdown_deadline_utc"] == ""
+    assert controller.state["idle_shutdown_remaining_s"] is None
+    assert controller.lifecycle_thread is None
+
+
 def test_idle_shutdown_does_not_stop_while_scenario_running(monkeypatch, tmp_path):
     controller = _make_controller(tmp_path)
     controller.idle_shutdown_after_s = 10.0

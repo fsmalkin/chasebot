@@ -1342,6 +1342,27 @@ def compile_maneuver_plan(
         source = "deterministic_compiled_after_veto"
 
     geometry = scene.get("geometry") if isinstance(scene.get("geometry"), dict) else {}
+    inserted_maneuvers: list[str] = []
+    requires_wraparound_setup = bool(
+        route in {ROUTE_LOCAL_SETUP_CAPTURE, ROUTE_NAV2_REPOSITION}
+        and (
+            bool(geometry.get("opposite_side_of_circle", False))
+            or _finite_float(geometry.get("robot_ball_relative_bearing_abs_deg"), 0.0) >= 90.0
+        )
+    )
+    if requires_wraparound_setup and MANEUVER_WRAPAROUND_SETUP not in sequence:
+        if route == ROUTE_LOCAL_SETUP_CAPTURE and MANEUVER_LOCAL_SETUP_CAPTURE in sequence:
+            insert_at = sequence.index(MANEUVER_LOCAL_SETUP_CAPTURE) + 1
+        elif route == ROUTE_NAV2_REPOSITION and MANEUVER_NAV2_REPOSITION in sequence:
+            insert_at = sequence.index(MANEUVER_NAV2_REPOSITION) + 1
+        elif MANEUVER_VALIDATE_PUSH_READY in sequence:
+            insert_at = sequence.index(MANEUVER_VALIDATE_PUSH_READY)
+        else:
+            insert_at = 0
+        sequence.insert(insert_at, MANEUVER_WRAPAROUND_SETUP)
+        inserted_maneuvers.append(MANEUVER_WRAPAROUND_SETUP)
+        if source == "llm_proposed":
+            source = "llm_proposed_with_deterministic_required_maneuvers"
     validation_gates = proposed.get("validation_gates") if isinstance(proposed.get("validation_gates"), list) else []
     if not validation_gates and executable_fetch_route:
         validation_gates = [
@@ -1378,6 +1399,7 @@ def compile_maneuver_plan(
             _finite_float(geometry.get("robot_ball_relative_bearing_abs_deg"), 0.0),
             6,
         ),
+        "inserted_maneuvers": inserted_maneuvers,
         "veto_reasons": veto_reasons,
         "valid": not bool(veto_reasons),
         "no_direct_cmd_vel": True,

@@ -1829,3 +1829,18 @@ measured pose mismatch, then handed off through measured `local_setup_capture`
 and delivered. The follow-on generator work adds
 `open_field_multiball_route_diverse_v1` so the next live UAT can exercise all
 executable route families instead of relying on a mostly local random draw.
+
+June 7 route-diverse live gate update: the full route-diverse LLM-supervised
+gate is now green for visual UAT. Evidence:
+`artifacts/session/live_multiball_llm_supervised_route_diverse_seed20260644_4x3_activity_fix_20260607/fetch_multiball_retrieval_gate/scorecard.md`.
+It passed four three-ball scenes in one same-session run with `12/12`
+deliveries, all four executable route families represented, `0` control
+failures, `0` environment failures, and browser-watchable onboard/topdown/world
+plus keyframe proof. The supporting rollup
+`artifacts/session/live_multiball_llm_supervised_route_diverse_activity_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`
+stays yellow by design: it wants more than one live LLM-supervised gate and it
+flags one delivered step with `push_contact_quality_watch` /
+`measured_push_ready_handoff_pass=false`. The next roadmap work is quality
+hardening, then breadth repeat: inspect that handoff/contact-watch case, keep
+the dashboard activity heartbeat in place for long gates, and run a second
+route-diverse seed before any promotion claim.

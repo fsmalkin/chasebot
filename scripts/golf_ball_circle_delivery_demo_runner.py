@@ -1852,6 +1852,12 @@ def line_servo_command(
             and abs(line_yaw_error) <= max(float(contact_yaw_ready_rad) * 2.75, 0.145)
             and abs(setup_projection_error_m) <= 0.095
         )
+        near_contact_line_acquire_active = bool(
+            0.12 <= distance_to_contact <= 0.34
+            and abs(robot_lateral_error) <= max(setup_lateral_ready_m * 1.55, 0.070)
+            and abs(line_yaw_error) <= max(float(contact_yaw_ready_rad) * 4.0, 0.240)
+            and abs(setup_projection_error_m) <= 0.185
+        )
         if recovery_wrong_side_orbit_active:
             phase = "recovery_orbit_setup"
             local_setup_trajectory_stage = "safe_side_orbit"
@@ -1941,6 +1947,20 @@ def line_servo_command(
                 "yaw": round(float(line_yaw), 6),
             }
             desired_yaw = lateral_corrected_yaw
+            base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
+        elif near_contact_line_acquire_active:
+            phase = "local_setup_trajectory_line_acquire"
+            local_setup_trajectory_stage = "line_acquire"
+            local_setup_trajectory_goal_pose = {
+                "x": round(float(behind_x), 6),
+                "y": round(float(behind_y), 6),
+                "yaw": round(float(line_yaw), 6),
+            }
+            desired_yaw = (
+                lateral_corrected_yaw
+                if abs(robot_lateral_error) > effective_contact_lateral_ready_m * 0.75
+                else line_yaw
+            )
             base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
         elif setup_yaw_align_envelope and abs(line_yaw_error) > max(float(contact_yaw_ready_rad) * 1.35, 0.080):
             phase = "local_setup_trajectory_yaw_align"
@@ -2262,6 +2282,7 @@ def line_servo_command(
         "near_contact_lateral_trim_active": bool(
             local_setup_trajectory_stage == "lateral_trim"
         ),
+        "near_contact_line_acquire_active": bool(local_setup_trajectory_stage == "line_acquire"),
         "lateral_reaim_rad": round(float(lateral_reaim), 6),
         "lateral_reaim_release_m": round(float(lateral_reaim_release_m), 6),
         "lateral_reaim_gain": round(float(lateral_reaim_gain), 6),

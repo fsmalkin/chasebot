@@ -65,6 +65,21 @@ LLM-supervised route-diverse UAT run that packages onboard, topdown, world, and
 keyframe evidence and rolls up route-family performance before tuning another
 local setup behavior.
 
+June 7, 2026 live route-diverse update: keep
+`spike/fetch-multiball-open-field-20260606` as the active branch. The latest
+green gate is
+`artifacts/session/live_multiball_llm_supervised_route_diverse_seed20260644_4x3_activity_fix_20260607/fetch_multiball_retrieval_gate/scorecard.md`:
+four three-ball scenes, twelve live deliveries, all required executable route
+families, and browser-watchable visual proof. The gate also records the
+dashboard `/api/activity` heartbeat added after a prior long run hit idle
+shutdown/refresh interference. The latest rollup
+`artifacts/session/live_multiball_llm_supervised_route_diverse_activity_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`
+is intentionally yellow because one delivered row remains a
+`push_contact_quality_watch` and the rollup requires multiple live
+LLM-supervised gates. Branch priority is now quality hardening plus repeat
+breadth, starting with the `seed20260644_mb_route_diverse_s01_nav2` step 3
+handoff/contact-watch row.
+
 ## Recommended Branch Roles
 
 1. Stable demo/UAT branch:

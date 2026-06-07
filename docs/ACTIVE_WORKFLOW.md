@@ -257,24 +257,30 @@ python scripts\fetch_multiball_uat_rollup.py `
   --gate-summary artifacts\session\<gate_b>\fetch_multiball_retrieval_gate\gate_summary.json
 ```
 
-Current LLM-supervised route-diverse green reference:
-`artifacts/session/live_multiball_llm_supervised_route_diverse_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`.
-That package counts three live LLM-supervised scenes, nine measured retrieval
-steps, `9/9` `fetch_to_pose` passes, `0` hidden Nav2 prefetches, provider
-status `ok` on all steps, one recovered provider retry, and browser-watchable
-onboard/topdown/world/keyframe evidence. The route mix includes eight measured
-local setup/capture steps and one explicit `nav2_reposition_first` free-space
-stage. The Nav2 stage reached `STATUS_SUCCEEDED` with measured pose mismatch,
-then handed off to measured `local_setup_capture`, passed push-ready handoff,
-and delivered. This is multi-ball route-diverse visual UAT evidence; broader
-seeded coverage and canonical promotion gates remain ahead.
+Current LLM-supervised route-diverse live gate reference:
+`artifacts/session/live_multiball_llm_supervised_route_diverse_seed20260644_4x3_activity_fix_20260607/fetch_multiball_retrieval_gate/scorecard.md`.
+That package passed four three-ball scenes in one dashboard session: `12/12`
+`fetch_to_pose` passes, `0` control failures, `0` environment failures, and
+required executable route coverage across `nav2_reposition_first`,
+`local_setup_capture`, `recovery_or_reaim`, and `fetch_ready_local`.
+Browser-watchable proof is packaged at
+`artifacts/session/live_multiball_llm_supervised_route_diverse_seed20260644_4x3_activity_fix_20260607_visual_package/fetch_visual_uat_package/package_summary.json`.
+Operator links:
+[onboard](http://100.112.221.6:8895/artifacts/session/20260607T150953019289Z/visual/raw_camera_browser.mp4),
+[topdown](http://100.112.221.6:8895/artifacts/session/20260607T150953019289Z/visual/topdown_telemetry_browser.mp4),
+[world](http://100.112.221.6:8895/artifacts/session/20260607T150953019289Z/visual/world_stream.mp4),
+and
+[keyframes](http://100.112.221.6:8895/artifacts/session/20260607T150953019289Z/visual/keyframe_review_contact_sheet.png).
 
-Next route-diverse live rung: run the LLM-supervised gate with
-`--profile open_field_multiball_route_diverse_v1`, seed `20260644`, six
-three-ball scenes, browser-watchable visual packaging, and stop-on-fail. A green
-result should count each scene, step, route family, measured push-ready handoff,
-Nav2 measured-pose fallback, and visual keyframe review in the multiball UAT
-rollup before any promotion discussion.
+Current route-diverse rollup status:
+`artifacts/session/live_multiball_llm_supervised_route_diverse_activity_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`.
+The rollup records the same `12/12` delivery pass but stays yellow because it
+requires more than one live LLM-supervised gate and one delivered step
+(`seed20260644_mb_route_diverse_s01_nav2` step 3) carried
+`push_contact_quality_watch` with `measured_push_ready_handoff_pass=false`.
+Treat the gate as visual UAT progress and the rollup as the next quality
+checklist: investigate that contact-quality watch, then run a second
+route-diverse seed or repeat before promotion discussion.
 
 Saved-anchor repeatability analyzer scope:
 

@@ -163,6 +163,18 @@ setup budget, and records explicit `side_setup`, `behind_setup`, `yaw_align`,
 measured setup pose/trajectory executor that can reduce lateral setup debt
 without relying on a single forward line-servo target.
 
+June 7, 2026 route-diverse multi-ball update: the LLM-supervised route-diverse
+gate now has green same-session visual UAT evidence:
+`artifacts/session/live_multiball_llm_supervised_route_diverse_seed20260644_4x3_activity_fix_20260607/fetch_multiball_retrieval_gate/scorecard.md`.
+It delivered four three-ball scenes (`12/12`) across `nav2_reposition_first`,
+`local_setup_capture`, `recovery_or_reaim`, and `fetch_ready_local`, with
+browser-watchable onboard/topdown/world video and keyframe review. The rollup
+`artifacts/session/live_multiball_llm_supervised_route_diverse_activity_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`
+remains yellow because one delivered row carries `push_contact_quality_watch`
+and measured push-ready handoff did not pass on that row. The next research
+step is contact-quality hardening plus a second route-diverse live seed before
+promotion discussion.
+
 ## May 31, 2026 Evidence And Architecture Reset
 
 The delivery-marker geometry issue invalidated a meaningful share of recent
