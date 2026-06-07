@@ -2002,6 +2002,16 @@ Nav2 coarse reposition, local setup trajectory progress, yaw alignment,
 push-ready handoff, local fetch dispatch, and give-up. Use Nav2 only for
 measured-admissible free-space setup before this owner takes over.
 
+June 7 measured setup-owner checkpoint:
+`artifacts/session/live_multiball_local_setup_capture_seed20260607_scene01_setupbudget_20260607_visual_package/fetch_visual_uat_package/scorecard.md`.
+Result: `0/3`, no promoting delivery evidence. The useful correction is safety
+and diagnosis: field-bounded Nav2 pre-setup is skipped for `local_setup_capture`,
+the step wrapper allows the longer measured setup window, and the runner emits
+explicit local setup trajectory stages. Ball_2 and ball_1 still fail before
+push-ready with lateral/yaw setup debt; ball_3 blocks at the
+measured-admissible Nav2 setup gate. Next implementation should improve the
+setup pose/trajectory executor rather than widening success criteria.
+
 ## Corral Surface Calibration
 
 Use this to compare one-ball corral behavior across the three surface lanes without changing the operator-facing dashboard flow.

@@ -141,6 +141,15 @@ the main path. The next executor should be a measured local setup trajectory
 owner with explicit safe-side, behind-ball, yaw-align, and push-ready
 milestones.
 
+The June 7 follow-up confirms the boundary and keeps the executor work open.
+`artifacts/session/live_multiball_local_setup_capture_seed20260607_scene01_setupbudget_20260607_visual_package/fetch_visual_uat_package/scorecard.md`
+is red at `0/3`, with no local fetch dispatched. The stack now rejects
+field-bounded Nav2 pre-setup for `local_setup_capture` and emits measured local
+setup stages, so the failure is now surfaced as setup-owner evidence. The LLM
+planner's job for this class is to choose the route and recognize when
+free-space setup is admissible; the deterministic executor still needs a better
+side/behind/yaw-align trajectory owner before push-ready handoff can generalize.
+
 The opposite-side fetch probe turns that boundary into a control requirement.
 Local fetch should enter contact from a forward-driving setup. Reverse pre-stage
 commands are legacy gather behavior and should be treated as a planner/executor

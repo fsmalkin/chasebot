@@ -151,6 +151,18 @@ owner takes over. The LLM/world-state planner remains responsible for order,
 route family, and maneuver-plan selection through deterministic validators; it
 hands high-frequency setup motion to deterministic guarded owners.
 
+June 7, 2026 setup-owner evidence: the first measured trajectory-owner slice now
+preserves the safety boundary but remains red on the hard seed. The latest
+package
+`artifacts/session/live_multiball_local_setup_capture_seed20260607_scene01_setupbudget_20260607_visual_package/fetch_visual_uat_package/scorecard.md`
+is `0/3`: ball_2 and ball_1 stayed fail-closed before contact, and ball_3 was
+blocked after Nav2 failed measured-admissible setup. The implementation now
+skips field-bounded Nav2 pre-setup for `local_setup_capture`, extends the local
+setup budget, and records explicit `side_setup`, `behind_setup`, `yaw_align`,
+`push_ready_creep`, and escape stages. The next control lane is a stronger
+measured setup pose/trajectory executor that can reduce lateral setup debt
+without relying on a single forward line-servo target.
+
 ## May 31, 2026 Evidence And Architecture Reset
 
 The delivery-marker geometry issue invalidated a meaningful share of recent

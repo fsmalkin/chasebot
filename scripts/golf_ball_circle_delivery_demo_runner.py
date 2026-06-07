@@ -86,6 +86,8 @@ PUSH_READY_LATERAL_LIMIT_M = 0.030
 PUSH_READY_YAW_LIMIT_DEG = 3.0
 RECOVERY_ROUTE_DRIVE_DURATION_S = 118.0
 RECOVERY_ROUTE_SAMPLE_DURATION_S = 122.0
+LOCAL_SETUP_CAPTURE_ROUTE_DRIVE_DURATION_S = 238.0
+LOCAL_SETUP_CAPTURE_ROUTE_SAMPLE_DURATION_S = 242.0
 ROUTE_EXECUTOR_BY_LABEL = {
     ROUTE_FETCH_READY: ROUTE_EXECUTOR_LOCAL_FETCH,
     ROUTE_NAV2_REPOSITION: ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
@@ -714,7 +716,10 @@ def apply_planner_route_execution_defaults(
     _set_route_default(args, explicit_args, "forward_only_pre_contact_required", True, "--forward-only-pre-contact-required")
     _set_route_default(args, explicit_args, "drive_mode", "line_servo", "--drive-mode")
     _set_route_default(args, explicit_args, "drive_linear_x_mps", 0.1, "--drive-linear-x-mps")
-    if _is_local_setup_owner_route(route_label):
+    if route_label == ROUTE_LOCAL_SETUP_CAPTURE:
+        route_drive_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_DRIVE_DURATION_S
+        route_sample_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_SAMPLE_DURATION_S
+    elif _is_local_setup_owner_route(route_label):
         route_drive_duration_s = RECOVERY_ROUTE_DRIVE_DURATION_S
         route_sample_duration_s = RECOVERY_ROUTE_SAMPLE_DURATION_S
     elif route_label == ROUTE_NAV2_REPOSITION:
@@ -1127,6 +1132,27 @@ def build_nav2_reposition_setup_pose(
         "field_bounded": bool(field_bounded),
         "source": "ball_target_line_setup_pose_field_bounded" if field_bounded else "ball_target_line_setup_pose",
         "orientation": yaw_to_quaternion(line_yaw),
+    }
+
+
+def local_setup_nav2_setup_pose_admissibility(
+    *,
+    planner_route_label: str,
+    setup_pose: dict[str, Any],
+    stage: str,
+) -> dict[str, Any]:
+    route_label = str(planner_route_label or "").strip()
+    field_bounded = bool(setup_pose.get("field_bounded", False)) if isinstance(setup_pose, dict) else False
+    admissible = bool(route_label != ROUTE_LOCAL_SETUP_CAPTURE or not field_bounded)
+    return {
+        "pass": admissible,
+        "reason": "nav2_setup_pose_admissible"
+        if admissible
+        else f"{stage}_field_bounded_not_nav2_admissible",
+        "planner_route_label": route_label,
+        "stage": str(stage or ""),
+        "field_bounded": field_bounded,
+        "setup_pose": dict(setup_pose) if isinstance(setup_pose, dict) else {},
     }
 
 
@@ -1662,6 +1688,14 @@ def line_servo_command(
     )
     recovery_close_escape_pose: dict[str, float] = {}
     recovery_close_escape_heading_toward_ball = False
+    local_setup_trajectory_active = bool(
+        clean_route_label == ROUTE_LOCAL_SETUP_CAPTURE
+        and not ball_moved
+        and not contact_ready
+    )
+    local_setup_trajectory_stage = ""
+    local_setup_trajectory_goal_pose: dict[str, float] = {}
+    setup_projection_error_m = robot_longitudinal_projection + effective_setup_standoff_m
     if ball_moved:
         yaw_misaligned_after_motion = abs(line_yaw_error) > max(float(contact_yaw_ready_rad) * 1.50, 0.10)
         if abs(robot_lateral_error) > effective_contact_lateral_ready_m or yaw_misaligned_after_motion:
@@ -1681,6 +1715,127 @@ def line_servo_command(
             phase = "push_coast"
             desired_yaw = line_yaw
             base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps))
+    elif local_setup_trajectory_active:
+        safe_side_lateral_ready_m = max(recovery_line_acquire_lateral_m, 0.085)
+        setup_pose_ready = bool(
+            abs(setup_projection_error_m) <= 0.055
+            and abs(robot_lateral_error) <= max(effective_contact_lateral_ready_m * 1.15, 0.033)
+        )
+        setup_yaw_align_envelope = bool(
+            abs(setup_projection_error_m) <= 0.070
+            and abs(robot_lateral_error) <= safe_side_lateral_ready_m
+        )
+        if recovery_wrong_side_orbit_active:
+            phase = "recovery_orbit_setup"
+            local_setup_trajectory_stage = "safe_side_orbit"
+            lateral_sign = 1.0 if robot_lateral_error >= 0.0 else -1.0
+            side_clearance_m = max(0.38, min(0.52, effective_setup_standoff_m + 0.14))
+            orbit_longitudinal_m = -max(effective_setup_standoff_m, float(contact_standoff_m) + 0.18)
+            orbit_x = (
+                ball_x
+                + math.cos(line_yaw) * orbit_longitudinal_m
+                - math.sin(line_yaw) * lateral_sign * side_clearance_m
+            )
+            orbit_y = (
+                ball_y
+                + math.sin(line_yaw) * orbit_longitudinal_m
+                + math.cos(line_yaw) * lateral_sign * side_clearance_m
+            )
+            local_setup_trajectory_goal_pose = {
+                "x": round(float(orbit_x), 6),
+                "y": round(float(orbit_y), 6),
+                "yaw": round(float(line_yaw), 6),
+            }
+            desired_yaw = math.atan2(orbit_y - robot_y, orbit_x - robot_x)
+            base_linear = min(float(max_linear_x_mps), 0.075 if distance_to_contact > 0.45 else 0.045)
+            if distance_to_contact < 0.22 and abs(line_yaw_error) > 0.80:
+                base_linear = min(base_linear, 0.018)
+        elif recovery_contact_micro_yaw_hold_active:
+            phase = "recovery_contact_micro_yaw_hold"
+            local_setup_trajectory_stage = "close_yaw_align"
+            local_setup_trajectory_goal_pose = {
+                "x": round(float(behind_x), 6),
+                "y": round(float(behind_y), 6),
+                "yaw": round(float(line_yaw), 6),
+            }
+            desired_yaw = line_yaw
+            base_linear = 0.0
+        elif recovery_close_misaligned_escape_active:
+            phase = "recovery_close_misaligned_escape"
+            local_setup_trajectory_stage = "close_escape"
+            lateral_sign = 1.0 if robot_lateral_error >= 0.0 else -1.0
+            escape_lateral_m = min(0.18, max(0.10, abs(robot_lateral_error) + 0.055))
+            escape_longitudinal_m = -max(float(contact_standoff_m) + 0.12, 0.23)
+            escape_x = (
+                ball_x
+                + math.cos(line_yaw) * escape_longitudinal_m
+                + normal_x * lateral_sign * escape_lateral_m
+            )
+            escape_y = (
+                ball_y
+                + math.sin(line_yaw) * escape_longitudinal_m
+                + normal_y * lateral_sign * escape_lateral_m
+            )
+            recovery_close_escape_pose = {
+                "x": round(float(escape_x), 6),
+                "y": round(float(escape_y), 6),
+                "yaw": round(float(line_yaw), 6),
+            }
+            local_setup_trajectory_goal_pose = dict(recovery_close_escape_pose)
+            desired_yaw = math.atan2(escape_y - robot_y, escape_x - robot_x)
+            ball_bearing_yaw = math.atan2(ball_y - robot_y, ball_x - robot_x)
+            recovery_close_escape_heading_toward_ball = (
+                abs(normalize_angle_rad(desired_yaw - ball_bearing_yaw)) < (math.pi * 0.50)
+            )
+            base_linear = min(float(max_linear_x_mps), 0.018)
+            if distance_to_contact <= 0.06:
+                base_linear = min(base_linear, 0.012)
+            if distance_to_contact <= 0.06 and recovery_close_escape_heading_toward_ball:
+                base_linear = 0.0
+        elif abs(robot_lateral_error) > safe_side_lateral_ready_m:
+            phase = "local_setup_trajectory_side_setup"
+            local_setup_trajectory_stage = "side_setup"
+            local_setup_trajectory_goal_pose = {
+                "x": round(float(setup_x), 6),
+                "y": round(float(setup_y), 6),
+                "yaw": round(float(line_yaw), 6),
+            }
+            desired_yaw = setup_yaw
+            base_linear = min(float(max_linear_x_mps), 0.075)
+        elif setup_yaw_align_envelope and abs(line_yaw_error) > max(float(contact_yaw_ready_rad) * 1.35, 0.080):
+            phase = "local_setup_trajectory_yaw_align"
+            local_setup_trajectory_stage = "yaw_align"
+            local_setup_trajectory_goal_pose = {
+                "x": round(float(setup_x), 6),
+                "y": round(float(setup_y), 6),
+                "yaw": round(float(line_yaw), 6),
+            }
+            desired_yaw = line_yaw
+            base_linear = 0.0
+        elif not setup_pose_ready:
+            phase = "local_setup_trajectory_behind_setup"
+            local_setup_trajectory_stage = "behind_setup"
+            local_setup_trajectory_goal_pose = {
+                "x": round(float(setup_x), 6),
+                "y": round(float(setup_y), 6),
+                "yaw": round(float(line_yaw), 6),
+            }
+            desired_yaw = setup_yaw
+            base_linear = min(float(max_linear_x_mps), 0.065)
+        else:
+            phase = "local_setup_trajectory_push_ready_creep"
+            local_setup_trajectory_stage = "push_ready_creep"
+            local_setup_trajectory_goal_pose = {
+                "x": round(float(behind_x), 6),
+                "y": round(float(behind_y), 6),
+                "yaw": round(float(line_yaw), 6),
+            }
+            desired_yaw = (
+                lateral_corrected_yaw
+                if abs(robot_lateral_error) > effective_contact_lateral_ready_m * 0.75
+                else line_yaw
+            )
+            base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.020))
     elif local_contact_yaw_hold_active:
         phase = "local_contact_yaw_hold"
         desired_yaw = line_yaw
@@ -1831,13 +1986,26 @@ def line_servo_command(
         base_linear = min(float(max_linear_x_mps), max(float(push_linear_x_mps), 0.06))
     yaw_error = normalize_angle_rad(desired_yaw - robot_yaw)
     angular_z = clamp(float(yaw_gain) * yaw_error, -effective_max_angular_z_rps, effective_max_angular_z_rps)
-    if abs(yaw_error) > 0.45:
+    if local_setup_trajectory_active:
+        if local_setup_trajectory_stage in {"side_setup", "safe_side_orbit"}:
+            if abs(yaw_error) > 0.75:
+                base_linear = min(base_linear, 0.030)
+            elif abs(yaw_error) > 0.50:
+                base_linear = min(base_linear, 0.055)
+        elif abs(yaw_error) > 0.45:
+            base_linear = min(base_linear, 0.030)
+        elif abs(yaw_error) > 0.25:
+            base_linear = min(base_linear, 0.055)
+    elif abs(yaw_error) > 0.45:
         base_linear = min(base_linear, 0.035)
     elif abs(yaw_error) > 0.25:
         base_linear = min(base_linear, 0.055)
     linear_floor = float(min_linear_x_mps)
+    if local_setup_trajectory_active and base_linear <= 0.0:
+        linear_floor = 0.0
     recovery_yaw_hold = bool(
         _is_local_setup_owner_route(clean_route_label)
+        and not local_setup_trajectory_active
         and not ball_moved
         and abs(yaw_error) > 1.25
         and distance_to_contact > 0.20
@@ -1846,6 +2014,7 @@ def line_servo_command(
         recovery_line_acquire_yaw_crawl_active
         or (
             _is_local_setup_owner_route(clean_route_label)
+            and not local_setup_trajectory_active
             and not ball_moved
             and not recovery_yaw_hold
             and not recovery_contact_yaw_hold_active
@@ -1909,6 +2078,10 @@ def line_servo_command(
         "recovery_close_misaligned_escape_active": recovery_close_misaligned_escape_active,
         "recovery_close_escape_pose": recovery_close_escape_pose,
         "recovery_close_escape_heading_toward_ball": recovery_close_escape_heading_toward_ball,
+        "local_setup_trajectory_active": local_setup_trajectory_active,
+        "local_setup_trajectory_stage": local_setup_trajectory_stage,
+        "local_setup_trajectory_goal_pose": local_setup_trajectory_goal_pose,
+        "setup_projection_error_m": round(float(setup_projection_error_m), 6),
         "lateral_reaim_rad": round(float(lateral_reaim), 6),
         "lateral_reaim_release_m": round(float(lateral_reaim_release_m), 6),
         "lateral_reaim_gain": round(float(lateral_reaim_gain), 6),
@@ -3440,58 +3613,76 @@ def main() -> int:
                 setup_standoff_m=args.nav2_pre_setup_standoff_m,
                 frame_id=args.nav2_reposition_frame_id,
             )
-            pre_setup_goal_pose = dict(world_pre_setup_pose)
-            if str(args.nav2_reposition_goal_frame_mode) == "nav2_relative" and nav2_pose_sample.get("pose"):
-                pre_setup_goal_pose = build_nav2_relative_setup_goal(
-                    world_setup_pose=world_pre_setup_pose,
-                    world_robot_pose=world_robot_pose,
-                    nav2_robot_pose=nav2_pose_sample["pose"],
-                    frame_id=args.nav2_reposition_frame_id,
+            pre_setup_admissibility = local_setup_nav2_setup_pose_admissibility(
+                planner_route_label=planner_route_label,
+                setup_pose=world_pre_setup_pose,
+                stage="nav2_pre_setup",
+            )
+            if not bool(pre_setup_admissibility.get("pass", False)):
+                pre_setup_reposition = {
+                    "attempted": False,
+                    "skipped": True,
+                    "success": None,
+                    "reason": str(pre_setup_admissibility.get("reason", "nav2_pre_setup_not_admissible")),
+                    "world_setup_pose": world_pre_setup_pose,
+                    "goal_frame_mode": str(args.nav2_reposition_goal_frame_mode),
+                    "configured_standoff_m": round(float(args.nav2_pre_setup_standoff_m), 6),
+                    "nav2_setup_admissibility": pre_setup_admissibility,
+                }
+            else:
+                pre_setup_goal_pose = dict(world_pre_setup_pose)
+                if str(args.nav2_reposition_goal_frame_mode) == "nav2_relative" and nav2_pose_sample.get("pose"):
+                    pre_setup_goal_pose = build_nav2_relative_setup_goal(
+                        world_setup_pose=world_pre_setup_pose,
+                        world_robot_pose=world_robot_pose,
+                        nav2_robot_pose=nav2_pose_sample["pose"],
+                        frame_id=args.nav2_reposition_frame_id,
+                    )
+                update_runtime(
+                    args.gather_runtime_json,
+                    mission_phase="nav2_pre_setup",
+                    gather_phase="nav2_pre_setup",
+                    proof_state="visiting",
+                    zone_pose={
+                        "x": args.zone_x,
+                        "y": args.zone_y,
+                        "z": args.zone_z,
+                        "radius_m": args.fetch_delivery_radius_m,
+                    },
+                    latest_feedback="Nav2 is moving to a farther behind-ball setup pose before close push setup.",
                 )
-            update_runtime(
-                args.gather_runtime_json,
-                mission_phase="nav2_pre_setup",
-                gather_phase="nav2_pre_setup",
-                proof_state="visiting",
-                zone_pose={
-                    "x": args.zone_x,
-                    "y": args.zone_y,
-                    "z": args.zone_z,
-                    "radius_m": args.fetch_delivery_radius_m,
-                },
-                latest_feedback="Nav2 is moving to a farther behind-ball setup pose before close push setup.",
-            )
-            pre_setup_reposition = dispatch_nav2_reposition_before_fetch(
-                compose_project=args.compose_project,
-                goal_pose=pre_setup_goal_pose,
-                timeout_s=args.nav2_reposition_timeout_s,
-                server_wait_s=args.nav2_reposition_server_wait_s,
-            )
-            pre_setup_reposition["attempted"] = True
-            pre_setup_reposition["skipped"] = False
-            pre_setup_reposition["goal_pose"] = pre_setup_goal_pose
-            pre_setup_reposition["world_setup_pose"] = world_pre_setup_pose
-            pre_setup_reposition["goal_frame_mode"] = str(args.nav2_reposition_goal_frame_mode)
-            pre_setup_reposition["configured_standoff_m"] = round(float(args.nav2_pre_setup_standoff_m), 6)
-            pre_setup_reposition["stop_after_reposition"] = publish_zero_stop(args.compose_project)
-            pre_setup_samples: list[dict[str, Any]] = []
-            try:
-                pre_setup_samples = collect_contact_samples(
+                pre_setup_reposition = dispatch_nav2_reposition_before_fetch(
                     compose_project=args.compose_project,
-                    world_name=args.world_name,
-                    robot_model_name=args.robot_model_name,
-                    ball_model_name=args.target_model_name,
-                    duration_s=0.5,
-                    poll_period_s=args.poll_period_s,
+                    goal_pose=pre_setup_goal_pose,
+                    timeout_s=args.nav2_reposition_timeout_s,
+                    server_wait_s=args.nav2_reposition_server_wait_s,
                 )
-            except Exception as exc:
-                pre_setup_reposition["post_reposition_sample_error"] = str(exc)
-            if pre_setup_samples:
-                pre_setup_reposition["post_reposition_sample_count"] = len(pre_setup_samples)
-                pre_setup_reposition["post_reposition_robot_pose"] = pre_setup_samples[-1].get("robot_pose")
-                pre_setup_reposition["post_reposition_ball_pose"] = pre_setup_samples[-1].get("ball_pose")
-                apply_nav2_measured_goal_validation(pre_setup_reposition, pre_setup_goal_pose)
-                append_jsonl(artifact_dir / "pre_fetch_pre_setup_trace.jsonl", pre_setup_samples)
+                pre_setup_reposition["attempted"] = True
+                pre_setup_reposition["skipped"] = False
+                pre_setup_reposition["goal_pose"] = pre_setup_goal_pose
+                pre_setup_reposition["world_setup_pose"] = world_pre_setup_pose
+                pre_setup_reposition["goal_frame_mode"] = str(args.nav2_reposition_goal_frame_mode)
+                pre_setup_reposition["configured_standoff_m"] = round(float(args.nav2_pre_setup_standoff_m), 6)
+                pre_setup_reposition["nav2_setup_admissibility"] = pre_setup_admissibility
+                pre_setup_reposition["stop_after_reposition"] = publish_zero_stop(args.compose_project)
+                pre_setup_samples: list[dict[str, Any]] = []
+                try:
+                    pre_setup_samples = collect_contact_samples(
+                        compose_project=args.compose_project,
+                        world_name=args.world_name,
+                        robot_model_name=args.robot_model_name,
+                        ball_model_name=args.target_model_name,
+                        duration_s=0.5,
+                        poll_period_s=args.poll_period_s,
+                    )
+                except Exception as exc:
+                    pre_setup_reposition["post_reposition_sample_error"] = str(exc)
+                if pre_setup_samples:
+                    pre_setup_reposition["post_reposition_sample_count"] = len(pre_setup_samples)
+                    pre_setup_reposition["post_reposition_robot_pose"] = pre_setup_samples[-1].get("robot_pose")
+                    pre_setup_reposition["post_reposition_ball_pose"] = pre_setup_samples[-1].get("ball_pose")
+                    apply_nav2_measured_goal_validation(pre_setup_reposition, pre_setup_goal_pose)
+                    append_jsonl(artifact_dir / "pre_fetch_pre_setup_trace.jsonl", pre_setup_samples)
         update_runtime(
             args.gather_runtime_json,
             mission_phase="nav2_reposition",
@@ -3638,9 +3829,13 @@ def main() -> int:
                 pre_fetch_reposition["post_refinement_handoff_decision"] = nav2_precontact_fallback
             if bool(nav2_precontact_fallback.get("eligible", False)):
                 nav2_precontact_fallback["applied"] = True
+                route_drive_duration_s = RECOVERY_ROUTE_DRIVE_DURATION_S
+                route_sample_duration_s = RECOVERY_ROUTE_SAMPLE_DURATION_S
                 if str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE:
                     args.planner_route_label = ROUTE_LOCAL_SETUP_CAPTURE
                     args.route_executor = ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE
+                    route_drive_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_DRIVE_DURATION_S
+                    route_sample_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_SAMPLE_DURATION_S
                 else:
                     args.planner_route_label = ROUTE_RECOVERY_OR_REAIM
                     args.route_executor = ROUTE_EXECUTOR_RECOVERY
@@ -3648,14 +3843,14 @@ def main() -> int:
                     args,
                     explicit_args,
                     "drive_duration_s",
-                    RECOVERY_ROUTE_DRIVE_DURATION_S,
+                    route_drive_duration_s,
                     "--drive-duration-s",
                 )
                 _set_route_default(
                     args,
                     explicit_args,
                     "sample_duration_s",
-                    RECOVERY_ROUTE_SAMPLE_DURATION_S,
+                    route_sample_duration_s,
                     "--sample-duration-s",
                 )
                 pre_fetch_reposition["fallback_to_local_recovery"] = nav2_precontact_fallback
@@ -3671,9 +3866,13 @@ def main() -> int:
             )
             if bool(nav2_precontact_fallback.get("eligible", False)):
                 nav2_precontact_fallback["applied"] = True
+                route_drive_duration_s = RECOVERY_ROUTE_DRIVE_DURATION_S
+                route_sample_duration_s = RECOVERY_ROUTE_SAMPLE_DURATION_S
                 if str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE:
                     args.planner_route_label = ROUTE_LOCAL_SETUP_CAPTURE
                     args.route_executor = ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE
+                    route_drive_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_DRIVE_DURATION_S
+                    route_sample_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_SAMPLE_DURATION_S
                 else:
                     args.planner_route_label = ROUTE_RECOVERY_OR_REAIM
                     args.route_executor = ROUTE_EXECUTOR_RECOVERY
@@ -3681,14 +3880,14 @@ def main() -> int:
                     args,
                     explicit_args,
                     "drive_duration_s",
-                    RECOVERY_ROUTE_DRIVE_DURATION_S,
+                    route_drive_duration_s,
                     "--drive-duration-s",
                 )
                 _set_route_default(
                     args,
                     explicit_args,
                     "sample_duration_s",
-                    RECOVERY_ROUTE_SAMPLE_DURATION_S,
+                    route_sample_duration_s,
                     "--sample-duration-s",
                 )
                 pre_fetch_reposition["fallback_to_local_recovery"] = nav2_precontact_fallback

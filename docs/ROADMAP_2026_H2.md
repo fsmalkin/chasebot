@@ -1801,3 +1801,13 @@ failure: route ownership and fail-closed measured handoff are now working, while
 the current line-servo setup loop stalls near the setup pocket with remaining yaw
 debt. The next roadmap lane is a measured local setup trajectory/pose owner with
 explicit safe-side, behind-ball, yaw-align, and push-ready milestones.
+
+June 7 setup-owner checkpoint: the first trajectory-stage slice keeps the
+measured boundary intact and remains red. Evidence:
+`artifacts/session/live_multiball_local_setup_capture_seed20260607_scene01_setupbudget_20260607_visual_package/fetch_visual_uat_package/scorecard.md`.
+The run is `0/3`; ball_2 and ball_1 stay fail-closed before push-ready, and
+ball_3 blocks at the measured-admissible Nav2 setup gate. The roadmap still
+points at the same milestone, but the next engineering step is sharper: replace
+the single-target local setup line-servo behavior with a measured pose/trajectory
+executor that can close side setup, behind-ball position, yaw alignment, and
+push-ready handoff as separate stages.

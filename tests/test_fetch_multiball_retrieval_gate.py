@@ -335,9 +335,9 @@ def test_local_setup_capture_step_uses_extended_runner_timeout():
         {"route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE},
     ) == multiball_gate.LOCAL_SETUP_CAPTURE_STEP_TIMEOUT_S
     assert multiball_gate.step_run_timeout_s(
-        _args(timeout_s=360.0),
+        _args(timeout_s=480.0),
         {"route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE},
-    ) == 360.0
+    ) == 480.0
     assert multiball_gate.step_run_timeout_s(
         _args(timeout_s=180.0),
         {"route_label": planner_gate.ROUTE_NAV2_REPOSITION},
