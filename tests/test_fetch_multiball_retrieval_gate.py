@@ -363,6 +363,28 @@ def test_local_setup_capture_step_command_skips_nav2_inside_local_envelope(tmp_p
     assert command[command.index("--planner-route-label") + 1] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
 
 
+def test_local_setup_capture_step_command_keeps_near_opposite_side_setup_local(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    layout_path = tmp_path / "layout.json"
+    _write_json(layout_path, {"planner_route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE})
+
+    command = multiball_gate.build_step_command(
+        args=_args(nav2_goal_frame_mode="world_direct"),
+        layout_path=layout_path,
+        scene_id="manual_near_opposite_side_local_setup_scene",
+        step={
+            "ball_id": "ball_1",
+            "route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
+            "estimated_start_robot_pose": {"x": 0.89786, "y": -0.275102, "z": 0.0, "yaw": 1.383487},
+            "ball_pose": {"x": 1.043824, "y": 0.643622, "z": 0.021336, "yaw": 0.0},
+        },
+    )
+
+    assert "--nav2-reposition-before-fetch" not in command
+    assert "--nav2-pre-setup-standoff-m" not in command
+    assert command[command.index("--planner-route-label") + 1] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
+
+
 def test_local_setup_capture_step_uses_extended_runner_timeout():
     assert multiball_gate.step_run_timeout_s(
         _args(timeout_s=180.0),
