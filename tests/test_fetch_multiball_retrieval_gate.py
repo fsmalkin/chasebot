@@ -227,7 +227,12 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
         assert float(row["command"][row["command"].index("--robot-x") + 1]) == robot_pose["x"]
         assert float(row["command"][row["command"].index("--robot-y") + 1]) == robot_pose["y"]
         assert float(row["command"][row["command"].index("--robot-yaw") + 1]) == robot_pose["yaw"]
-        if row["route_label"] in {planner_gate.ROUTE_NAV2_REPOSITION, planner_gate.ROUTE_LOCAL_SETUP_CAPTURE}:
+        local_setup_close_skip = bool(
+            row["route_label"] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
+            and layout["random_draw"]["robot_ball_distance_m"]
+            <= multiball_gate.LOCAL_SETUP_NAV2_MIN_ROBOT_BALL_DISTANCE_M
+        )
+        if row["route_label"] in {planner_gate.ROUTE_NAV2_REPOSITION, planner_gate.ROUTE_LOCAL_SETUP_CAPTURE} and not local_setup_close_skip:
             assert "--nav2-reposition-before-fetch" in row["command"]
             assert "--nav2-reposition-goal-frame-mode" in row["command"]
             expected_frame_mode = "nav2_relative" if row["route_label"] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE else "world_direct"
@@ -251,11 +256,17 @@ def test_persistent_field_mode_preserves_target_and_robot_in_step_commands(tmp_p
     )
 
     for row in summary["step_rows"]:
+        layout = json.loads((tmp_path / row["layout_path"]).read_text(encoding="utf-8"))
+        local_setup_close_skip = bool(
+            row["route_label"] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
+            and layout["random_draw"]["robot_ball_distance_m"]
+            <= multiball_gate.LOCAL_SETUP_NAV2_MIN_ROBOT_BALL_DISTANCE_M
+        )
         assert "--use-existing-target-model" in row["command"]
         assert "--preserve-robot-pose" in row["command"]
         assert "--pre-fetch-setup-correction-s" in row["command"]
         assert float(row["command"][row["command"].index("--pre-fetch-setup-correction-s") + 1]) == 14.0
-        if row["route_label"] in {planner_gate.ROUTE_NAV2_REPOSITION, planner_gate.ROUTE_LOCAL_SETUP_CAPTURE}:
+        if row["route_label"] in {planner_gate.ROUTE_NAV2_REPOSITION, planner_gate.ROUTE_LOCAL_SETUP_CAPTURE} and not local_setup_close_skip:
             assert "--nav2-pre-setup-standoff-m" in row["command"]
             assert float(row["command"][row["command"].index("--nav2-pre-setup-standoff-m") + 1]) == 0.9
         else:
@@ -317,6 +328,7 @@ def test_local_setup_capture_step_command_uses_nav2_free_space_setup(tmp_path, m
             "ball_id": "ball_1",
             "route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
             "estimated_start_robot_pose": {"x": 0.1, "y": 0.2, "z": 0.0, "yaw": 0.3},
+            "ball_pose": {"x": 1.4, "y": -0.2, "z": 0.021336, "yaw": 0.0},
         },
     )
 
@@ -327,6 +339,28 @@ def test_local_setup_capture_step_command_uses_nav2_free_space_setup(tmp_path, m
     assert "--nav2-reposition-continue-on-failure" not in command
     assert command[command.index("--planner-route-label") + 1] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
     assert command[command.index("--route-executor") + 1] == ""
+
+
+def test_local_setup_capture_step_command_skips_nav2_inside_local_envelope(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    layout_path = tmp_path / "layout.json"
+    _write_json(layout_path, {"planner_route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE})
+
+    command = multiball_gate.build_step_command(
+        args=_args(nav2_goal_frame_mode="world_direct"),
+        layout_path=layout_path,
+        scene_id="manual_close_local_setup_scene",
+        step={
+            "ball_id": "ball_1",
+            "route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
+            "estimated_start_robot_pose": {"x": 0.1, "y": 0.2, "z": 0.0, "yaw": 0.3},
+            "ball_pose": {"x": 0.52, "y": 0.16, "z": 0.021336, "yaw": 0.0},
+        },
+    )
+
+    assert "--nav2-reposition-before-fetch" not in command
+    assert "--nav2-pre-setup-standoff-m" not in command
+    assert command[command.index("--planner-route-label") + 1] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
 
 
 def test_local_setup_capture_step_uses_extended_runner_timeout():

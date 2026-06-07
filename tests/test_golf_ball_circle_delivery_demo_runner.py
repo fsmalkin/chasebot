@@ -1709,7 +1709,8 @@ def test_local_setup_trajectory_uses_close_side_escape_before_side_setup_contact
     assert command["recovery_close_misaligned_escape_active"] is True
     assert abs(command["line_yaw_error_rad"]) > 1.0
     assert command["recovery_close_escape_pose"]
-    assert command["linear_x_mps"] <= 0.018
+    assert command["recovery_close_escape_pose"]["x"] > 1.90
+    assert 0.018 < command["linear_x_mps"] <= 0.045
 
 
 def test_local_setup_trajectory_side_setup_keeps_speed_with_moderate_waypoint_yaw_error():

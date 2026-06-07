@@ -1845,8 +1845,12 @@ def line_servo_command(
             phase = "recovery_close_misaligned_escape"
             local_setup_trajectory_stage = "close_escape"
             lateral_sign = 1.0 if robot_lateral_error >= 0.0 else -1.0
-            escape_lateral_m = min(0.18, max(0.10, abs(robot_lateral_error) + 0.055))
-            escape_longitudinal_m = -max(float(contact_standoff_m) + 0.12, 0.23)
+            if local_setup_close_side_escape_active:
+                escape_lateral_m = min(0.28, max(0.18, abs(robot_lateral_error) + 0.080))
+                escape_longitudinal_m = -max(effective_setup_standoff_m, 0.42)
+            else:
+                escape_lateral_m = min(0.18, max(0.10, abs(robot_lateral_error) + 0.055))
+                escape_longitudinal_m = -max(float(contact_standoff_m) + 0.12, 0.23)
             escape_x = (
                 ball_x
                 + math.cos(line_yaw) * escape_longitudinal_m
@@ -1867,7 +1871,7 @@ def line_servo_command(
             recovery_close_escape_heading_toward_ball = (
                 abs(normalize_angle_rad(desired_yaw - ball_bearing_yaw)) < (math.pi * 0.50)
             )
-            base_linear = min(float(max_linear_x_mps), 0.018)
+            base_linear = min(float(max_linear_x_mps), 0.045 if local_setup_close_side_escape_active else 0.018)
             if distance_to_contact <= 0.06:
                 base_linear = min(base_linear, 0.012)
             if distance_to_contact <= 0.06 and recovery_close_escape_heading_toward_ball:
