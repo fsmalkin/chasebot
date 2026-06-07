@@ -5785,8 +5785,8 @@ python3 scripts/multi_target_nav2_runner.py --runtime-target "{DEFAULT_RUNTIME_T
                 }
                 command.extend(["--drive-mode", "line_servo"])
                 command.extend(["--drive-linear-x-mps", "0.100000"])
-                command.extend(["--drive-duration-s", "118.000000" if local_setup_route else "36.000000"])
-                command.extend(["--sample-duration-s", "122.000000" if local_setup_route else "40.000000"])
+                command.extend(["--drive-duration-s", "148.000000" if local_setup_route else "36.000000"])
+                command.extend(["--sample-duration-s", "152.000000" if local_setup_route else "40.000000"])
                 command.extend(["--line-servo-push-linear-x-mps", "0.055000"])
                 command.extend(["--line-servo-max-angular-z-rps", "0.180000"])
                 command.extend(["--line-servo-yaw-gain", "1.200000"])

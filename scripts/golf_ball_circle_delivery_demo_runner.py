@@ -73,6 +73,8 @@ NAV2_WIDE_SETUP_YAW_LIMIT_DEG = 165.0
 LOCAL_SETUP_NAV2_COARSE_ROBOT_BALL_DISTANCE_LIMIT_M = 3.000
 LOCAL_SETUP_NAV2_COARSE_LATERAL_LIMIT_M = 2.400
 LOCAL_SETUP_NAV2_COARSE_BALL_MOTION_LIMIT_M = 0.020
+LOCAL_SETUP_NAV2_COARSE_YAW_LIMIT_DEG = 165.0
+LOCAL_SETUP_NAV2_FIELD_BOUNDED_PRE_SETUP_MIN_STANDOFF_M = 0.60
 NAV2_SETUP_FIELD_BOUNDS = {
     "x_min_m": -1.20,
     "x_max_m": 2.20,
@@ -84,13 +86,13 @@ NAV2_REPOSITION_GOAL_POSITION_TOLERANCE_M = 0.250
 NAV2_REPOSITION_GOAL_YAW_TOLERANCE_DEG = 25.0
 PUSH_READY_LATERAL_LIMIT_M = 0.030
 PUSH_READY_YAW_LIMIT_DEG = 3.0
-RECOVERY_ROUTE_DRIVE_DURATION_S = 118.0
-RECOVERY_ROUTE_SAMPLE_DURATION_S = 122.0
+RECOVERY_ROUTE_DRIVE_DURATION_S = 148.0
+RECOVERY_ROUTE_SAMPLE_DURATION_S = 152.0
 LOCAL_SETUP_CAPTURE_ROUTE_DRIVE_DURATION_S = 238.0
 LOCAL_SETUP_CAPTURE_ROUTE_SAMPLE_DURATION_S = 242.0
 LOCAL_SETUP_CAPTURE_MAIN_FETCH_MIN_DURATION_S = 72.0
 LOCAL_SETUP_CAPTURE_SETUP_STANDOFF_M = 0.46
-LOCAL_SETUP_CAPTURE_NAV2_SETUP_STANDOFF_M = 0.50
+LOCAL_SETUP_CAPTURE_NAV2_SETUP_STANDOFF_M = 0.65
 ROUTE_EXECUTOR_BY_LABEL = {
     ROUTE_FETCH_READY: ROUTE_EXECUTOR_LOCAL_FETCH,
     ROUTE_NAV2_REPOSITION: ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
@@ -102,6 +104,34 @@ ROUTE_EXECUTOR_BY_LABEL = {
 
 def _is_local_setup_owner_route(route_label: str) -> bool:
     return str(route_label or "").strip() in {ROUTE_RECOVERY_OR_REAIM, ROUTE_LOCAL_SETUP_CAPTURE}
+
+
+def setup_owner_route_label_for_planner_route(route_label: str) -> str:
+    clean_route_label = str(route_label or "").strip()
+    if _is_local_setup_owner_route(clean_route_label):
+        return ROUTE_LOCAL_SETUP_CAPTURE
+    return clean_route_label
+
+
+def local_setup_capture_needs_nav2_setup_assist(route_label: str, route_quality: dict[str, Any] | None) -> bool:
+    if str(route_label or "").strip() != ROUTE_LOCAL_SETUP_CAPTURE:
+        return False
+    quality = route_quality if isinstance(route_quality, dict) else {}
+    flags = {str(flag) for flag in quality.get("flags", [])} if isinstance(quality.get("flags"), list) else set()
+    if "wide_lateral_setup_debt" in flags or "wide_yaw_setup_debt" in flags:
+        return True
+    setup_debt = quality.get("setup_debt") if isinstance(quality.get("setup_debt"), dict) else {}
+    try:
+        lateral_m = abs(float(setup_debt.get("lateral_m", 0.0) or 0.0))
+        yaw_deg = abs(float(setup_debt.get("yaw_deg", 0.0) or 0.0))
+        robot_ball_distance_m = abs(float(setup_debt.get("robot_ball_distance_m", 0.0) or 0.0))
+    except (TypeError, ValueError):
+        return False
+    return bool(
+        lateral_m > RECOVERY_LATERAL_LIMIT_M
+        or yaw_deg > RECOVERY_YAW_LIMIT_DEG
+        or robot_ball_distance_m > RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
+    )
 
 
 def utc_now() -> str:
@@ -320,6 +350,9 @@ def _route_geometry_from_poses(
             line_yaw_rad=line_yaw,
         )
     )
+    robot_longitudinal_projection_m = math.cos(line_yaw) * (robot_xy["x"] - ball_xy["x"]) + math.sin(line_yaw) * (
+        robot_xy["y"] - ball_xy["y"]
+    )
     yaw_error_deg = abs(math.degrees(normalize_angle_rad(line_yaw - robot_xy["yaw"])))
     return {
         "available": True,
@@ -329,6 +362,7 @@ def _route_geometry_from_poses(
         "ball_target_distance_m": round(float(ball_target_distance_m), 6),
         "robot_ball_distance_m": round(float(robot_ball_distance_m), 6),
         "robot_lateral_error_m": round(float(lateral_error_m), 6),
+        "robot_longitudinal_projection_m": round(float(robot_longitudinal_projection_m), 6),
         "robot_yaw_error_deg": round(float(yaw_error_deg), 6),
         "line_yaw_deg": round(math.degrees(line_yaw), 6),
     }
@@ -397,6 +431,8 @@ def apply_local_setup_nav2_coarse_acceptance(
         reasons.append("robot_ball_distance_outside_local_setup_envelope")
     if _finite_float(geometry.get("robot_lateral_error_m"), 999.0) > LOCAL_SETUP_NAV2_COARSE_LATERAL_LIMIT_M:
         reasons.append("lateral_error_outside_local_setup_envelope")
+    if _finite_float(geometry.get("robot_yaw_error_deg"), 999.0) > LOCAL_SETUP_NAV2_COARSE_YAW_LIMIT_DEG:
+        reasons.append("yaw_error_outside_local_setup_envelope")
     accepted = not reasons
     return {
         "applied": True,
@@ -409,6 +445,7 @@ def apply_local_setup_nav2_coarse_acceptance(
             "ball_motion_limit_m": LOCAL_SETUP_NAV2_COARSE_BALL_MOTION_LIMIT_M,
             "robot_ball_distance_limit_m": LOCAL_SETUP_NAV2_COARSE_ROBOT_BALL_DISTANCE_LIMIT_M,
             "lateral_limit_m": LOCAL_SETUP_NAV2_COARSE_LATERAL_LIMIT_M,
+            "yaw_limit_deg": LOCAL_SETUP_NAV2_COARSE_YAW_LIMIT_DEG,
         },
     }
 
@@ -472,6 +509,7 @@ def _fallback_geometry_is_admissible(geometry: dict[str, Any]) -> bool:
         <= _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
         <= NAV2_FALLBACK_ROBOT_BALL_DISTANCE_LIMIT_M
         and _finite_float(geometry.get("robot_lateral_error_m"), 999.0) <= RECOVERY_LATERAL_LIMIT_M
+        and _finite_float(geometry.get("robot_longitudinal_projection_m"), 999.0) <= -0.02
         and _finite_float(geometry.get("robot_yaw_error_deg"), 999.0) <= RECOVERY_YAW_LIMIT_DEG
     )
 
@@ -492,6 +530,7 @@ def _post_nav2_setup_is_push_ready(geometry: dict[str, Any]) -> bool:
     return bool(
         geometry.get("available")
         and 0.24 <= _finite_float(geometry.get("robot_ball_distance_m"), 999.0) <= 0.46
+        and _finite_float(geometry.get("robot_longitudinal_projection_m"), 999.0) <= -0.02
         and _finite_float(geometry.get("robot_lateral_error_m"), 999.0) <= PUSH_READY_LATERAL_LIMIT_M
         and _finite_float(geometry.get("robot_yaw_error_deg"), 999.0) <= PUSH_READY_YAW_LIMIT_DEG
     )
@@ -786,6 +825,8 @@ def apply_planner_route_execution_defaults(
         if isinstance(target_layout.get("route_quality"), dict)
         else {}
     )
+    nav2_setup_assist_requested = local_setup_capture_needs_nav2_setup_assist(route_label, route_quality)
+    nav2_setup_route = bool(route_label in NAV2_SETUP_PLANNER_ROUTES or nav2_setup_assist_requested)
     _set_route_default(args, explicit_args, "line_servo_push_linear_x_mps", 0.055, "--line-servo-push-linear-x-mps")
     _set_route_default(args, explicit_args, "line_servo_max_angular_z_rps", 0.18, "--line-servo-max-angular-z-rps")
     _set_route_default(args, explicit_args, "line_servo_yaw_gain", 1.2, "--line-servo-yaw-gain")
@@ -807,7 +848,13 @@ def apply_planner_route_execution_defaults(
             or route_quality_status == "watch"
         )
     )
-    contact_lateral_ready_default_m = 0.024 if pre_contact_smoothing_requested else 0.028
+    contact_lateral_ready_default_m = (
+        0.030
+        if _is_local_setup_owner_route(route_label)
+        else 0.024
+        if pre_contact_smoothing_requested
+        else 0.028
+    )
     _set_route_default(
         args,
         explicit_args,
@@ -825,7 +872,7 @@ def apply_planner_route_execution_defaults(
     _set_route_default(args, explicit_args, "stop_on_delivery", True, "--stop-on-delivery")
     _set_route_default(args, explicit_args, "delivery_stop_radius_m", 0.2, "--delivery-stop-radius-m")
     _set_route_default(args, explicit_args, "post_delivery_sample_s", 4.0, "--post-delivery-sample-s")
-    if route_label in NAV2_SETUP_PLANNER_ROUTES:
+    if nav2_setup_route:
         _set_route_default(args, explicit_args, "robot_x", 0.0, "--robot-x")
         _set_route_default(args, explicit_args, "robot_y", 0.0, "--robot-y")
         _set_route_default(args, explicit_args, "robot_yaw", 0.0, "--robot-yaw")
@@ -838,11 +885,12 @@ def apply_planner_route_execution_defaults(
             "--nav2-reposition-transform-layout-to-current-robot",
         )
         _set_route_default(args, explicit_args, "nav2_reposition_frame_id", "odom", "--nav2-reposition-frame-id")
+        nav2_goal_frame_mode_default = "nav2_relative"
         _set_route_default(
             args,
             explicit_args,
             "nav2_reposition_goal_frame_mode",
-            "nav2_relative",
+            nav2_goal_frame_mode_default,
             "--nav2-reposition-goal-frame-mode",
         )
         nav2_setup_standoff_default_m = (
@@ -857,9 +905,25 @@ def apply_planner_route_execution_defaults(
             nav2_setup_standoff_default_m,
             "--nav2-reposition-setup-standoff-m",
         )
-        _set_route_default(args, explicit_args, "nav2_reposition_timeout_s", 24.0, "--nav2-reposition-timeout-s")
+        nav2_reposition_timeout_default_s = 48.0 if nav2_setup_assist_requested else 24.0
+        _set_route_default(
+            args,
+            explicit_args,
+            "nav2_reposition_timeout_s",
+            nav2_reposition_timeout_default_s,
+            "--nav2-reposition-timeout-s",
+        )
         _set_route_default(args, explicit_args, "nav2_reposition_server_wait_s", 8.0, "--nav2-reposition-server-wait-s")
         _set_route_default(args, explicit_args, "nav2_reposition_pose_wait_s", 3.0, "--nav2-reposition-pose-wait-s")
+        _set_route_default(args, explicit_args, "nav2_pre_setup_standoff_m", 0.9, "--nav2-pre-setup-standoff-m")
+        nav2_refine_attempts_default = 0 if route_label == ROUTE_LOCAL_SETUP_CAPTURE else 1
+        _set_route_default(
+            args,
+            explicit_args,
+            "nav2_reposition_refine_attempts",
+            nav2_refine_attempts_default,
+            "--nav2-reposition-refine-attempts",
+        )
     elif robot_pose:
         _set_route_default(args, explicit_args, "robot_x", float(robot_pose.get("x", args.robot_x) or 0.0), "--robot-x")
         _set_route_default(args, explicit_args, "robot_y", float(robot_pose.get("y", args.robot_y) or 0.0), "--robot-y")
@@ -873,6 +937,7 @@ def apply_planner_route_execution_defaults(
         "route_admissibility": route_admissibility,
         "drive_mode": str(args.drive_mode),
         "nav2_reposition_before_fetch": bool(args.nav2_reposition_before_fetch),
+        "nav2_setup_assist_requested": bool(nav2_setup_assist_requested),
         "route_quality": route_quality,
         "line_servo_quality_defaults": {
             "min_linear_x_mps": round(float(args.line_servo_min_linear_x_mps), 6),
@@ -1129,6 +1194,8 @@ def nav2_field_clamped_setup_goal(
 ) -> dict[str, Any]:
     if str(planner_route_label or "").strip() != ROUTE_LOCAL_SETUP_CAPTURE:
         return goal_pose
+    if str(goal_pose.get("source", "") or "").startswith("nav2_relative_from_truth_delta"):
+        return goal_pose
     try:
         goal_x = float(goal_pose.get("x", 0.0) or 0.0)
         goal_y = float(goal_pose.get("y", 0.0) or 0.0)
@@ -1237,15 +1304,31 @@ def local_setup_nav2_setup_pose_admissibility(
 ) -> dict[str, Any]:
     route_label = str(planner_route_label or "").strip()
     field_bounded = bool(setup_pose.get("field_bounded", False)) if isinstance(setup_pose, dict) else False
-    admissible = bool(route_label != ROUTE_LOCAL_SETUP_CAPTURE or not field_bounded)
+    setup_standoff_m = _finite_float(
+        setup_pose.get("setup_standoff_m") if isinstance(setup_pose, dict) else None,
+        0.0,
+    )
+    field_bounded_pre_setup_admissible = bool(
+        route_label == ROUTE_LOCAL_SETUP_CAPTURE
+        and field_bounded
+        and str(stage or "") == "nav2_pre_setup"
+        and setup_standoff_m >= LOCAL_SETUP_NAV2_FIELD_BOUNDED_PRE_SETUP_MIN_STANDOFF_M
+    )
+    admissible = bool(route_label != ROUTE_LOCAL_SETUP_CAPTURE or not field_bounded or field_bounded_pre_setup_admissible)
     return {
         "pass": admissible,
-        "reason": "nav2_setup_pose_admissible"
-        if admissible
-        else f"{stage}_field_bounded_not_nav2_admissible",
+        "reason": (
+            "nav2_field_bounded_pre_setup_admissible"
+            if field_bounded_pre_setup_admissible
+            else "nav2_setup_pose_admissible"
+            if admissible
+            else f"{stage}_field_bounded_not_nav2_admissible"
+        ),
         "planner_route_label": route_label,
         "stage": str(stage or ""),
         "field_bounded": field_bounded,
+        "setup_standoff_m": round(float(setup_standoff_m), 6),
+        "field_bounded_pre_setup_min_standoff_m": LOCAL_SETUP_NAV2_FIELD_BOUNDED_PRE_SETUP_MIN_STANDOFF_M,
         "setup_pose": dict(setup_pose) if isinstance(setup_pose, dict) else {},
     }
 
@@ -1815,6 +1898,13 @@ def line_servo_command(
     local_setup_trajectory_stage = ""
     local_setup_trajectory_goal_pose: dict[str, float] = {}
     setup_projection_error_m = robot_longitudinal_projection + effective_setup_standoff_m
+    push_ready_line_commit_active = bool(
+        not ball_moved
+        and contact_ready
+        and 0.16 < distance_to_contact <= 0.34
+        and abs(robot_lateral_error) <= max(effective_contact_lateral_ready_m * 1.15, 0.034)
+        and abs(line_yaw_error) <= max(float(contact_yaw_ready_rad) * 1.10, 0.060)
+    )
     if ball_moved:
         yaw_misaligned_after_motion = abs(line_yaw_error) > max(float(contact_yaw_ready_rad) * 1.50, 0.10)
         if abs(robot_lateral_error) > effective_contact_lateral_ready_m or yaw_misaligned_after_motion:
@@ -1834,6 +1924,10 @@ def line_servo_command(
             phase = "push_coast"
             desired_yaw = line_yaw
             base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps))
+    elif push_ready_line_commit_active:
+        phase = "push_ready_line_commit"
+        desired_yaw = line_yaw
+        base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), float(push_linear_x_mps)))
     elif local_setup_trajectory_active:
         safe_side_lateral_ready_m = max(recovery_line_acquire_lateral_m, 0.085)
         setup_lateral_ready_m = max(effective_contact_lateral_ready_m * 1.35, 0.045)
@@ -1853,10 +1947,16 @@ def line_servo_command(
             and abs(setup_projection_error_m) <= 0.095
         )
         near_contact_line_acquire_active = bool(
-            0.12 <= distance_to_contact <= 0.34
+            0.08 <= distance_to_contact <= 0.34
             and abs(robot_lateral_error) <= max(setup_lateral_ready_m * 1.55, 0.070)
             and abs(line_yaw_error) <= max(float(contact_yaw_ready_rad) * 4.0, 0.240)
-            and abs(setup_projection_error_m) <= 0.185
+            and abs(setup_projection_error_m) <= 0.240
+        )
+        near_contact_yaw_trim_active = bool(
+            0.08 <= distance_to_contact <= 0.24
+            and abs(robot_lateral_error) <= max(effective_contact_lateral_ready_m * 1.25, 0.036)
+            and abs(line_yaw_error) > float(contact_yaw_ready_rad)
+            and abs(line_yaw_error) <= max(float(contact_yaw_ready_rad) * 3.5, 0.18)
         )
         if recovery_wrong_side_orbit_active:
             phase = "recovery_orbit_setup"
@@ -1886,6 +1986,16 @@ def line_servo_command(
         elif recovery_contact_micro_yaw_hold_active:
             phase = "recovery_contact_micro_yaw_hold"
             local_setup_trajectory_stage = "close_yaw_align"
+            local_setup_trajectory_goal_pose = {
+                "x": round(float(behind_x), 6),
+                "y": round(float(behind_y), 6),
+                "yaw": round(float(line_yaw), 6),
+            }
+            desired_yaw = line_yaw
+            base_linear = 0.0
+        elif near_contact_yaw_trim_active:
+            phase = "local_setup_trajectory_yaw_trim"
+            local_setup_trajectory_stage = "yaw_trim"
             local_setup_trajectory_goal_pose = {
                 "x": round(float(behind_x), 6),
                 "y": round(float(behind_y), 6),
@@ -1956,9 +2066,10 @@ def line_servo_command(
                 "y": round(float(behind_y), 6),
                 "yaw": round(float(line_yaw), 6),
             }
+            final_line_lateral_reaim = clamp(float(robot_lateral_error) * 3.0, -0.18, 0.18)
             desired_yaw = (
-                lateral_corrected_yaw
-                if abs(robot_lateral_error) > effective_contact_lateral_ready_m * 0.75
+                normalize_angle_rad(line_yaw - final_line_lateral_reaim)
+                if abs(robot_lateral_error) > effective_contact_lateral_ready_m
                 else line_yaw
             )
             base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
@@ -2154,14 +2265,34 @@ def line_servo_command(
         and distance_to_contact <= 0.17
         and abs(yaw_error) > 0.75
     )
+    local_setup_safe_side_orbit_yaw_guard = bool(
+        local_setup_trajectory_active
+        and local_setup_trajectory_stage == "safe_side_orbit"
+        and not ball_moved
+        and not contact_ready
+        and robot_ball_distance <= max(effective_setup_standoff_m + 0.18, 0.58)
+        and abs(yaw_error) > 0.62
+    )
+    local_setup_safe_side_orbit_yaw_crawl = bool(
+        local_setup_trajectory_active
+        and local_setup_trajectory_stage == "safe_side_orbit"
+        and not ball_moved
+        and not contact_ready
+        and not local_setup_safe_side_orbit_yaw_guard
+        and recovery_wrong_side_orbit_active
+        and robot_ball_distance <= max(effective_setup_standoff_m + 0.18, 0.64)
+        and distance_to_contact > 0.34
+        and abs(yaw_error) > 0.32
+    )
     local_setup_contact_risk_freeze = bool(
         local_setup_trajectory_active
         and not ball_moved
         and not contact_ready
+        and local_setup_trajectory_stage != "yaw_trim"
         and distance_to_contact <= 0.145
         and (
-            abs(robot_lateral_error) > effective_contact_lateral_ready_m
-            or abs(line_yaw_error) > float(contact_yaw_ready_rad)
+            abs(robot_lateral_error) > max(effective_contact_lateral_ready_m * 1.25, 0.036)
+            or abs(line_yaw_error) > max(float(contact_yaw_ready_rad) * 1.50, 0.080)
         )
     )
     if local_setup_trajectory_active:
@@ -2169,6 +2300,12 @@ def line_servo_command(
             phase = f"{phase}_contact_freeze"
             base_linear = 0.0
             angular_z = 0.0
+        elif local_setup_safe_side_orbit_yaw_guard:
+            phase = f"{phase}_yaw_guard"
+            base_linear = 0.0
+        elif local_setup_safe_side_orbit_yaw_crawl:
+            phase = f"{phase}_yaw_crawl"
+            base_linear = min(max(base_linear, float(min_linear_x_mps)), 0.018)
         elif local_setup_near_contact_yaw_lock:
             phase = f"{phase}_yaw_lock"
             base_linear = 0.0
@@ -2270,6 +2407,7 @@ def line_servo_command(
         "local_setup_trajectory_active": local_setup_trajectory_active,
         "local_setup_trajectory_stage": local_setup_trajectory_stage,
         "local_setup_trajectory_goal_pose": local_setup_trajectory_goal_pose,
+        "push_ready_line_commit_active": push_ready_line_commit_active,
         "setup_projection_error_m": round(float(setup_projection_error_m), 6),
         "setup_lateral_ready_m": round(
             float(max(effective_contact_lateral_ready_m * 1.35, 0.045)),
@@ -2278,11 +2416,14 @@ def line_servo_command(
         "robot_ball_distance_m": round(float(robot_ball_distance), 6),
         "setup_heading_toward_ball": setup_heading_toward_ball,
         "local_setup_near_contact_yaw_lock": local_setup_near_contact_yaw_lock,
+        "local_setup_safe_side_orbit_yaw_guard": local_setup_safe_side_orbit_yaw_guard,
+        "local_setup_safe_side_orbit_yaw_crawl": local_setup_safe_side_orbit_yaw_crawl,
         "local_setup_contact_risk_freeze": local_setup_contact_risk_freeze,
         "near_contact_lateral_trim_active": bool(
             local_setup_trajectory_stage == "lateral_trim"
         ),
         "near_contact_line_acquire_active": bool(local_setup_trajectory_stage == "line_acquire"),
+        "near_contact_yaw_trim_active": bool(local_setup_trajectory_stage == "yaw_trim"),
         "lateral_reaim_rad": round(float(lateral_reaim), 6),
         "lateral_reaim_release_m": round(float(lateral_reaim_release_m), 6),
         "lateral_reaim_gain": round(float(lateral_reaim_gain), 6),
@@ -2369,7 +2510,7 @@ def measured_push_ready_handoff_from_setup_samples(
     *,
     planner_route_label: str,
 ) -> dict[str, Any]:
-    required = bool(str(planner_route_label or "").strip() == ROUTE_LOCAL_SETUP_CAPTURE)
+    required = bool(_is_local_setup_owner_route(str(planner_route_label or "").strip()))
     commands = [
         sample.get("line_servo_command")
         for sample in samples
@@ -3980,14 +4121,40 @@ def main() -> int:
                     },
                     latest_feedback="Measured setup is not push-ready; Nav2 is refining the setup pose.",
                 )
+                refine_goal_pose = dict(goal_pose)
+                refine_nav2_pose_sample: dict[str, Any] = {"available": False, "pose": None, "source": ""}
+                latest_world_robot_pose, _latest_world_ball_pose = latest_robot_ball_xyyaw(pre_fetch_reposition_samples)
+                if str(args.nav2_reposition_goal_frame_mode) == "nav2_relative" and latest_world_robot_pose is not None:
+                    refine_nav2_pose_sample = wait_for_dashboard_robot_pose(
+                        args.dashboard_url,
+                        timeout_s=args.nav2_reposition_pose_wait_s,
+                    )
+                    refine_nav2_robot_pose = (
+                        refine_nav2_pose_sample.get("pose")
+                        if isinstance(refine_nav2_pose_sample.get("pose"), dict)
+                        else None
+                    )
+                    if refine_nav2_robot_pose is not None:
+                        refine_goal_pose = build_nav2_relative_setup_goal(
+                            world_setup_pose=world_setup_pose,
+                            world_robot_pose=latest_world_robot_pose,
+                            nav2_robot_pose=refine_nav2_robot_pose,
+                            frame_id=args.nav2_reposition_frame_id,
+                        )
+                        refine_goal_pose = nav2_field_clamped_setup_goal(
+                            refine_goal_pose,
+                            planner_route_label=planner_route_label,
+                        )
                 refine_result = dispatch_nav2_reposition_before_fetch(
                     compose_project=args.compose_project,
-                    goal_pose=goal_pose,
+                    goal_pose=refine_goal_pose,
                     timeout_s=args.nav2_reposition_timeout_s,
                     server_wait_s=args.nav2_reposition_server_wait_s,
                 )
                 refine_result["attempt_index"] = refine_index + 1
-                refine_result["goal_pose"] = goal_pose
+                refine_result["goal_pose"] = refine_goal_pose
+                refine_result["nav2_pose_sample"] = refine_nav2_pose_sample
+                refine_result["world_robot_pose"] = latest_world_robot_pose or {}
                 refine_result["stop_after_reposition"] = publish_zero_stop(args.compose_project)
                 refine_samples: list[dict[str, Any]] = []
                 try:
@@ -4017,7 +4184,7 @@ def main() -> int:
                     refine_result["post_reposition_sample_count"] = len(refine_samples)
                     refine_result["post_reposition_robot_pose"] = last_sample.get("robot_pose")
                     refine_result["post_reposition_ball_pose"] = last_sample.get("ball_pose")
-                    apply_nav2_measured_goal_validation(refine_result, goal_pose)
+                    apply_nav2_measured_goal_validation(refine_result, refine_goal_pose)
                     pre_fetch_reposition["post_reposition_sample_count"] = len(pre_fetch_reposition_samples)
                     pre_fetch_reposition["post_reposition_robot_pose"] = last_sample.get("robot_pose")
                     pre_fetch_reposition["post_reposition_ball_pose"] = last_sample.get("ball_pose")
@@ -4173,7 +4340,7 @@ def main() -> int:
         )
     local_setup_capture_setup: dict[str, Any] = {
         "attempted": False,
-        "required": bool(str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE),
+        "required": bool(_is_local_setup_owner_route(str(planner_route_label).strip())),
         "pass": None,
         "reason": "not_required",
         "sample_count": 0,
@@ -4183,8 +4350,9 @@ def main() -> int:
     fetch_skipped_by_push_ready_handoff = False
     main_fetch_sample_duration_s = float(args.sample_duration_s)
     main_fetch_route_label = str(args.planner_route_label or "")
+    setup_owner_route_label = setup_owner_route_label_for_planner_route(str(planner_route_label).strip())
     if (
-        str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE
+        _is_local_setup_owner_route(str(planner_route_label).strip())
         and not fetch_skipped_after_reposition
         and not setup_correction_delivered
         and str(args.drive_mode) == "line_servo"
@@ -4218,7 +4386,7 @@ def main() -> int:
                 yaw_gain=args.line_servo_yaw_gain,
                 contact_lateral_ready_m=args.line_servo_contact_lateral_ready_m,
                 contact_yaw_ready_rad=math.radians(args.line_servo_contact_yaw_ready_deg),
-                route_label=args.planner_route_label,
+                route_label=setup_owner_route_label,
                 setup_only=True,
             )
             setup_elapsed_s = max(
@@ -4264,6 +4432,7 @@ def main() -> int:
                 "elapsed_s": round(float(setup_elapsed_s), 6),
                 "main_fetch_sample_duration_s": round(float(main_fetch_sample_duration_s), 6),
                 "main_fetch_route_label": main_fetch_route_label,
+                "setup_owner_route_label": setup_owner_route_label,
                 "pre_push_measured_handoff": pre_push_measured_handoff,
             }
         except Exception as exc:
@@ -4284,6 +4453,7 @@ def main() -> int:
                 "reason": "setup_capture_error",
                 "error": str(exc),
                 "sample_count": len(local_setup_capture_setup_samples),
+                "setup_owner_route_label": setup_owner_route_label,
                 "pre_push_measured_handoff": pre_push_measured_handoff,
             }
     write_json(artifact_dir / "local_setup_capture_setup.json", local_setup_capture_setup)

@@ -62,8 +62,21 @@ It delivered four three-ball scenes (`12/12`) with live coverage for
 `artifacts/session/live_multiball_llm_supervised_route_diverse_activity_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`
 keeps the work below promotion because one delivered step is a
 `push_contact_quality_watch` and the rollup requires another live
-LLM-supervised gate. Next work is contact-quality hardening plus repeat breadth,
-not another architecture reset.
+LLM-supervised gate.
+
+Corrected hardening reruns reclassify that watch case as a setup-stage blocker:
+`artifacts/session/live_multiball_route_diverse_seed20260644_s01_relative_setup_no_refine_20260607/fetch_multiball_retrieval_gate/scorecard.md`.
+The first two retrievals pass cleanly through `nav2_reposition_first` and
+`recovery_or_reaim`; ball_3 fails before local fetch dispatch with
+`measured_push_ready_handoff_failed`. The robot remains front-side/target-side
+relative to the ball-target line, and the close local setup servo leaves that
+pose outside measured behind-ball geometry. The next work is
+`wraparound_setup_v1`: a measured free-space setup owner that chooses side and
+behind-ball waypoints, executes them through Nav2 or a bounded deterministic
+pose-stage routine, verifies zero ball motion and negative behind-ball
+projection, then releases to the existing close setup/capture and push-ready
+gate. LLM planning may choose and explain this route family; deterministic
+guards own waypoint admissibility and handoff.
 
 May 31, 2026 evidence and architecture reset: the delivery-marker geometry
 issue means pre-fix fetch pass/fail claims are diagnostic unless the artifact

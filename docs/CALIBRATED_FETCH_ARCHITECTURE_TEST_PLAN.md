@@ -466,6 +466,13 @@ branch strategy changes are propagated back to `main`.
   contact, and first-contact quality. Scene03's earlier no-motion failure is
   now handled as infrastructure evidence by a base-controller preflight before
   executable fetch scoring.
+- Multi-ball route-diverse setup boundary:
+  `artifacts/session/live_multiball_route_diverse_seed20260644_s01_relative_setup_no_refine_20260607/fetch_multiball_retrieval_gate/scorecard.md`
+  passes the first two balls cleanly and fails ball_3 before local fetch
+  dispatch on measured push-ready handoff. Treat earlier seed20260644 `12/12`
+  visual UAT as provisional route-owner progress; the corrected evidence says
+  front-side/target-side starts need an explicit measured free-space
+  `wraparound_setup_v1` owner before close setup/capture and guarded fetch.
 - Corrected May 31 geometry/video reference:
   `artifacts/session/20260531T204154158382Z/gather_mission/20260531T204255Z/mission_verdict.json`
   passed saved `zero` with `fetch_to_pose_pass=true`,

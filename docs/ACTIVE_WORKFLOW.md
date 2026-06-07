@@ -282,6 +282,28 @@ Treat the gate as visual UAT progress and the rollup as the next quality
 checklist: investigate that contact-quality watch, then run a second
 route-diverse seed or repeat before promotion discussion.
 
+Corrected seed20260644 setup checkpoint:
+`artifacts/session/live_multiball_route_diverse_seed20260644_s01_relative_setup_no_refine_20260607/fetch_multiball_retrieval_gate/scorecard.md`.
+The stricter rerun passes the first two balls cleanly, then fails ball_3 before
+local fetch dispatch with `measured_push_ready_handoff_failed`. The robot is on
+the target/circle side of the ball, Nav2 setup action success returns a pose
+that measured validation rejects, and the close local setup servo stays in
+`recovery_orbit_setup_yaw_guard` without reaching contact-ready. Code now
+requires behind-ball projection for push-ready, bounds coarse Nav2 accept by
+yaw, allows field-bounded far pre-setup when the shortened standoff remains
+large, and keeps local setup assist on relative Nav2 goals without a second
+relative refine. Treat the prior `12/12` route-diverse gate as provisional UAT
+progress; the active blocker is `wraparound_setup_v1`.
+
+Next implementation lane: add an explicit measured free-space wraparound setup
+owner before local setup/capture. The stage should classify front-side or
+target-side geometry, choose side/behind waypoints from measured robot/ball/target
+state, let Nav2 or a deterministic pose-stage executor reach those waypoints
+without ball motion, validate negative behind-ball projection plus lateral/yaw
+limits, then hand off to the close local setup servo. Continue live proof from
+seed `20260644` scene01 ball_3, then rerun the one-scene `3/3` gate and only
+after that return to route-diverse breadth.
+
 Saved-anchor repeatability analyzer scope:
 
 ```powershell

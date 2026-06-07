@@ -1844,3 +1844,26 @@ flags one delivered step with `push_contact_quality_watch` /
 hardening, then breadth repeat: inspect that handoff/contact-watch case, keep
 the dashboard activity heartbeat in place for long gates, and run a second
 route-diverse seed before any promotion claim.
+
+June 7 corrected route-diverse checkpoint: the stricter seed20260644 scene01
+reruns convert the contact-watch case into a measured setup-stage blocker.
+Latest evidence:
+`artifacts/session/live_multiball_route_diverse_seed20260644_s01_relative_setup_no_refine_20260607/fetch_multiball_retrieval_gate/scorecard.md`.
+The first two balls pass cleanly through `nav2_reposition_first` and
+`recovery_or_reaim`; ball_3 fails before local fetch dispatch because the robot
+remains on the target/circle side of the ball. Nav2 setup returns action
+success while measured validation rejects the pose, and the close setup servo
+leaves the behind-ball projection unresolved from that front-side geometry. The
+code checkpoint hardens the gates: push-ready now requires behind-ball projection,
+local setup Nav2 coarse accept has a yaw limit, field-bounded far pre-setup is
+allowed when standoff remains large, local setup assist uses relative Nav2 goals,
+and local relative refine is withheld until measured-frame validation improves.
+
+The next milestone slice is `wraparound_setup_v1`: a measured free-space setup
+owner that handles front-side, target-side, and true opposite-side geometry
+before the close local setup/capture owner starts. The owner should pick
+side/behind waypoints from measured state, execute them through Nav2 or a
+bounded deterministic pose-stage executor, verify zero ball motion and
+behind-line geometry, then dispatch the existing push-ready gate and guarded
+fetch. Requalify seed20260644 scene01 `3/3` before restarting route-diverse
+breadth.
