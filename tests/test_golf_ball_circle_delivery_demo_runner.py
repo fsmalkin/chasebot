@@ -24,6 +24,7 @@ from golf_ball_circle_delivery_demo_runner import apply_target_layout  # noqa: E
 from golf_ball_circle_delivery_demo_runner import apply_planner_route_execution_defaults  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_nav2_reposition_setup_pose  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_nav2_relative_setup_goal  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import nav2_field_clamped_setup_goal  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import local_setup_nav2_setup_pose_admissibility  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import docker_exec_service  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import ensure_base_controller_active  # noqa: E402
@@ -1173,6 +1174,25 @@ def test_build_nav2_relative_setup_goal_preserves_truth_delta_in_nav2_frame():
     assert goal["nav2_robot_pose"] == nav2_robot_pose
 
 
+def test_nav2_field_clamped_setup_goal_bounds_local_setup_relative_goal():
+    goal = nav2_field_clamped_setup_goal(
+        {
+            "frame_id": "odom",
+            "x": 2.482023,
+            "y": -1.44,
+            "yaw": -1.033222,
+            "source": "nav2_relative_from_truth_delta",
+        },
+        planner_route_label="local_setup_capture",
+    )
+
+    assert goal["x"] == pytest.approx(2.15)
+    assert goal["y"] == pytest.approx(-1.30)
+    assert goal["field_bounded"] is True
+    assert goal["source"] == "nav2_relative_from_truth_delta_nav2_field_clamped"
+    assert goal["unclamped_goal_pose"]["x"] == pytest.approx(2.482023)
+
+
 def test_transform_nav2_reposition_layout_to_current_robot_preserves_scene_geometry():
     args = SimpleNamespace(
         robot_x=0.0,
@@ -1497,13 +1517,14 @@ def test_line_servo_command_holds_linear_motion_when_close_yaw_not_ready():
     assert command["recovery_contact_micro_yaw_hold_active"] is True
     assert command["phase"].startswith("recovery_contact_micro_yaw_hold")
     assert command["local_setup_trajectory_stage"] == "close_yaw_align"
+    assert command["local_setup_contact_risk_freeze"] is True
     assert command["contact_ready"] is False
     assert command["distance_to_contact_m"] <= 0.055
     assert command["linear_x_mps"] == 0.0
-    assert abs(command["angular_z_rps"]) > 0.0
+    assert command["angular_z_rps"] == 0.0
 
 
-def test_line_servo_command_escapes_close_misaligned_setup_before_contact():
+def test_line_servo_command_keeps_safe_behind_lateral_debt_in_side_setup():
     command = line_servo_command(
         robot_pose={"x": 1.4124001025450685, "y": 0.8558706226344617, "yaw": -2.73320903211721},
         ball_pose={"x": 1.2411847480885942, "y": 0.6659736545248174, "yaw": 0.0},
@@ -1520,13 +1541,15 @@ def test_line_servo_command_escapes_close_misaligned_setup_before_contact():
         route_label="local_setup_capture",
     )
 
-    assert command["recovery_close_misaligned_escape_active"] is True
-    assert command["phase"].startswith("recovery_close_misaligned_escape")
+    assert command["recovery_close_misaligned_escape_active"] is False
+    assert command["phase"] == "local_setup_trajectory_side_setup_yaw_lock"
+    assert command["local_setup_trajectory_stage"] == "side_setup"
+    assert command["local_setup_near_contact_yaw_lock"] is True
     assert command["contact_ready"] is False
     assert command["ball_moved"] is False
-    assert command["linear_x_mps"] <= 0.018
-    assert command["recovery_close_escape_heading_toward_ball"] is False
-    assert command["recovery_close_escape_pose"]
+    assert command["robot_lateral_error_m"] > command["setup_lateral_ready_m"]
+    assert command["setup_heading_toward_ball"] is False
+    assert command["linear_x_mps"] == 0.0
 
 
 def test_line_servo_command_does_not_creep_into_ball_when_lateral_gate_is_not_ready():
@@ -1555,7 +1578,7 @@ def test_line_servo_command_does_not_creep_into_ball_when_lateral_gate_is_not_re
     assert command["recovery_close_escape_heading_toward_ball"] is False
 
 
-def test_local_setup_yaw_aligns_inside_setup_envelope_with_lateral_debt():
+def test_local_setup_keeps_side_setup_until_lateral_debt_is_inside_setup_gate():
     command = line_servo_command(
         robot_pose={"x": 1.4336860729107566, "y": 0.9189536984262521, "yaw": -2.589925600406849},
         ball_pose={"x": 1.23928, "y": 0.670304, "yaw": 0.0},
@@ -1572,16 +1595,16 @@ def test_local_setup_yaw_aligns_inside_setup_envelope_with_lateral_debt():
         route_label="local_setup_capture",
     )
 
-    assert command["phase"] == "local_setup_trajectory_yaw_align"
-    assert command["local_setup_trajectory_stage"] == "yaw_align"
+    assert command["phase"] == "local_setup_trajectory_side_setup"
+    assert command["local_setup_trajectory_stage"] == "side_setup"
     assert command["local_setup_trajectory_active"] is True
     assert command["recovery_contact_yaw_hold_active"] is False
     assert command["recovery_line_acquire_yaw_crawl_active"] is False
-    assert command["robot_lateral_error_m"] > command["contact_lateral_ready_m"] * 1.25
-    assert command["desired_yaw_rad"] == pytest.approx(command["line_yaw_rad"], abs=1.0e-6)
+    assert command["robot_lateral_error_m"] > command["setup_lateral_ready_m"]
+    assert command["desired_yaw_rad"] == pytest.approx(command["setup_yaw_rad"], abs=1.0e-6)
 
 
-def test_local_setup_keeps_yaw_align_on_near_threshold_lateral_debt():
+def test_local_setup_keeps_behind_setup_when_farther_pocket_has_projection_debt():
     command = line_servo_command(
         robot_pose={"x": 1.4001491580890113, "y": 0.9553145713583798, "yaw": -2.661138511175531},
         ball_pose={"x": 1.23928, "y": 0.670304, "yaw": 0.0},
@@ -1598,16 +1621,17 @@ def test_local_setup_keeps_yaw_align_on_near_threshold_lateral_debt():
         route_label="local_setup_capture",
     )
 
-    assert command["phase"] == "local_setup_trajectory_yaw_align"
-    assert command["local_setup_trajectory_stage"] == "yaw_align"
+    assert command["phase"] == "local_setup_trajectory_behind_setup"
+    assert command["local_setup_trajectory_stage"] == "behind_setup"
     assert command["local_setup_trajectory_active"] is True
     assert command["recovery_contact_yaw_hold_active"] is False
     assert command["recovery_line_acquire_yaw_crawl_active"] is False
     assert command["robot_lateral_error_m"] > command["contact_lateral_ready_m"] * 1.05
-    assert command["desired_yaw_rad"] == pytest.approx(command["line_yaw_rad"], abs=1.0e-6)
+    assert command["setup_projection_error_m"] > 0.12
+    assert command["desired_yaw_rad"] == pytest.approx(command["setup_yaw_rad"], abs=1.0e-6)
 
 
-def test_local_setup_trajectory_uses_line_yaw_at_setup_pocket_yaw_debt():
+def test_local_setup_trajectory_uses_behind_setup_before_farther_setup_pocket():
     command = line_servo_command(
         robot_pose={"x": 1.3971764942473286, "y": 0.9611291587929407, "yaw": -2.5311180345265054},
         ball_pose={"x": 1.23928, "y": 0.670304, "yaw": 0.0},
@@ -1624,17 +1648,44 @@ def test_local_setup_trajectory_uses_line_yaw_at_setup_pocket_yaw_debt():
         route_label="local_setup_capture",
     )
 
-    assert command["phase"] == "local_setup_trajectory_yaw_align"
-    assert command["local_setup_trajectory_stage"] == "yaw_align"
+    assert command["phase"] == "local_setup_trajectory_behind_setup"
+    assert command["local_setup_trajectory_stage"] == "behind_setup"
     assert command["local_setup_trajectory_active"] is True
-    assert command["linear_x_mps"] == 0.0
-    assert command["desired_yaw_rad"] == pytest.approx(command["line_yaw_rad"], abs=1.0e-6)
+    assert command["linear_x_mps"] > 0.0
+    assert command["desired_yaw_rad"] == pytest.approx(command["setup_yaw_rad"], abs=1.0e-6)
     assert abs(command["setup_yaw_rad"] - command["line_yaw_rad"]) > 1.0
     assert command["recovery_yaw_hold"] is False
-    assert command["angular_z_rps"] > 0.0
+    assert command["angular_z_rps"] < 0.0
 
 
-def test_local_setup_trajectory_side_setup_uses_setup_yaw_speed_gate():
+def test_local_setup_trajectory_uses_lateral_trim_near_push_ready_pocket():
+    command = line_servo_command(
+        robot_pose={"x": 1.4345020228695726, "y": 1.0217131088556357, "yaw": -2.05821474095024},
+        ball_pose={"x": 1.23928, "y": 0.670304, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 1.23928, "y": 0.670304, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["phase"] == "local_setup_trajectory_lateral_trim"
+    assert command["local_setup_trajectory_stage"] == "lateral_trim"
+    assert command["near_contact_lateral_trim_active"] is True
+    assert command["local_setup_near_contact_yaw_lock"] is False
+    assert command["robot_lateral_error_m"] > command["contact_lateral_ready_m"]
+    assert command["setup_projection_error_m"] == pytest.approx(0.06, abs=1.0e-6)
+    assert command["linear_x_mps"] == pytest.approx(0.014)
+    assert abs(command["yaw_error_rad"]) < 0.10
+
+
+def test_local_setup_trajectory_uses_close_side_escape_before_side_setup_contact_risk():
     command = line_servo_command(
         robot_pose={"x": 1.7814065651092068, "y": -0.669354759879795, "yaw": 0.7453161254591563},
         ball_pose={"x": 1.656822, "y": -0.351905, "yaw": 0.0},
@@ -1651,13 +1702,14 @@ def test_local_setup_trajectory_side_setup_uses_setup_yaw_speed_gate():
         route_label="local_setup_capture",
     )
 
-    assert command["phase"] == "local_setup_trajectory_side_setup"
-    assert command["local_setup_trajectory_stage"] == "side_setup"
+    assert command["phase"] == "recovery_close_misaligned_escape"
+    assert command["local_setup_trajectory_stage"] == "close_escape"
     assert command["local_setup_trajectory_active"] is True
-    assert command["desired_yaw_rad"] == pytest.approx(command["setup_yaw_rad"], abs=1.0e-6)
+    assert command["local_setup_close_side_escape_active"] is True
+    assert command["recovery_close_misaligned_escape_active"] is True
     assert abs(command["line_yaw_error_rad"]) > 1.0
-    assert abs(command["yaw_error_rad"]) < 1.0e-5
-    assert command["linear_x_mps"] >= 0.070
+    assert command["recovery_close_escape_pose"]
+    assert command["linear_x_mps"] <= 0.018
 
 
 def test_local_setup_trajectory_side_setup_keeps_speed_with_moderate_waypoint_yaw_error():

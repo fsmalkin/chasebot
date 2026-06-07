@@ -48,7 +48,7 @@ BALL_TARGET_DISTANCE_RANGE_M = (0.45, 0.84)
 ROBOT_TARGET_DISTANCE_RANGE_M = (0.70, 1.75)
 MIN_BALL_SEPARATION_M = 0.34
 MIN_ROBOT_BALL_SEPARATION_M = 0.30
-SETUP_STANDOFF_M = 0.38
+SETUP_STANDOFF_M = 0.50
 CORRIDOR_INTERFERENCE_RADIUS_M = 0.22
 TARGET_MODEL_NAME_PREFIX = "visit_mission_target_multiball_fetch"
 DEFAULT_BALL_SDF = REPO_ROOT / "ros2_config" / "calibrated_golf_ball.sdf"
@@ -659,6 +659,8 @@ def build_step_command(
                 "8.000",
                 "--nav2-reposition-pose-wait-s",
                 "2.500",
+                "--nav2-reposition-setup-standoff-m",
+                f"{SETUP_STANDOFF_M:.3f}",
                 "--nav2-pre-setup-standoff-m",
                 "0.900",
                 "--nav2-reposition-refine-attempts",

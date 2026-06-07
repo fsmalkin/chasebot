@@ -542,6 +542,12 @@ def decide_ai_push_coast_handoff(
         and not bool(nav2.get("first_contact_no_object_motion", False))
         and ("terminal_arrival" in stage_labels or terminal_settled)
     )
+    terminal_repush_can_absorb_contact_flags = bool(
+        terminal_contact_confirmed
+        and not current_setup_geometry_bad
+        and "setup" not in stage_labels
+        and "terminal_arrival" in stage_labels
+    )
     capture_warning_only = bool(
         capture_gate
         and capture_gate.get("pass") is False
@@ -566,6 +572,8 @@ def decide_ai_push_coast_handoff(
         guard_reasons.append("not_terminal_arrival_stage")
     for blocked_stage in ("setup", "first_contact", "push_coast"):
         if blocked_stage == "setup" and capture_warning_only:
+            continue
+        if blocked_stage in {"first_contact", "push_coast"} and terminal_repush_can_absorb_contact_flags:
             continue
         if blocked_stage in stage_labels:
             guard_reasons.append(f"stage_{blocked_stage}_not_live")

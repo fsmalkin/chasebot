@@ -404,6 +404,38 @@ def test_guarded_live_accepts_terminal_repush_after_capture_warning_with_confirm
     assert decision["ai_push_coast_shadow"]["input_digest"]["capture_geometry_gate_pass"] is False
 
 
+def test_guarded_live_terminal_repush_accepts_contact_quality_flags_after_measured_motion():
+    decision = decide_ai_push_coast_handoff(
+        robot_pose={"x": 0.62, "y": 0.055, "yaw": 0.0},
+        ball_pose={"x": 0.73, "y": 0.0, "z": 0.05},
+        fetch_pose_world={"x": 1.12, "y": 0.0, "z": 0.001},
+        delivery_radius_m=0.3,
+        nav2_corridor_push={"dispatch_status": "goal_finished", "success": True},
+        nav2_attempted=True,
+        terminal_correction_attempted=False,
+        distance_to_fetch_pose_m=0.390543,
+        closest_approach_distance_m=0.390543,
+        terminal_settled_after_nav2=True,
+        ball_moved_since_fetch=True,
+        approach_contact_metrics={
+            "stable_contact_approach_pass": False,
+            "flags": ["ball_lateral_knock_away", "contact_trajectory_angle_error"],
+        },
+        shot_outcome={"reason": "missed_delivery_radius"},
+        mode="guarded_live",
+    )
+
+    assert decision["ai_push_coast_proposal"]["maneuver_class"] == "terminal_repush"
+    assert decision["ai_push_coast_guard"]["accepted"] is True
+    assert "stage_first_contact_not_live" not in decision["ai_push_coast_guard"]["reasons"]
+    assert "stage_push_coast_not_live" not in decision["ai_push_coast_guard"]["reasons"]
+    assert decision["ai_push_coast_shadow"]["stage_classification"]["stage_labels"] == [
+        "first_contact",
+        "push_coast",
+        "terminal_arrival",
+    ]
+
+
 def test_guarded_live_rejects_terminal_repush_when_setup_flags_are_current_blockers():
     decision = decide_ai_push_coast_handoff(
         robot_pose={"x": 0.43, "y": 0.0, "yaw": 0.0},

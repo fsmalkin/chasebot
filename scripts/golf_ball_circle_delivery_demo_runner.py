@@ -88,6 +88,9 @@ RECOVERY_ROUTE_DRIVE_DURATION_S = 118.0
 RECOVERY_ROUTE_SAMPLE_DURATION_S = 122.0
 LOCAL_SETUP_CAPTURE_ROUTE_DRIVE_DURATION_S = 238.0
 LOCAL_SETUP_CAPTURE_ROUTE_SAMPLE_DURATION_S = 242.0
+LOCAL_SETUP_CAPTURE_MAIN_FETCH_MIN_DURATION_S = 72.0
+LOCAL_SETUP_CAPTURE_SETUP_STANDOFF_M = 0.46
+LOCAL_SETUP_CAPTURE_NAV2_SETUP_STANDOFF_M = 0.50
 ROUTE_EXECUTOR_BY_LABEL = {
     ROUTE_FETCH_READY: ROUTE_EXECUTOR_LOCAL_FETCH,
     ROUTE_NAV2_REPOSITION: ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
@@ -796,7 +799,18 @@ def apply_planner_route_execution_defaults(
             "nav2_relative",
             "--nav2-reposition-goal-frame-mode",
         )
-        _set_route_default(args, explicit_args, "nav2_reposition_setup_standoff_m", 0.38, "--nav2-reposition-setup-standoff-m")
+        nav2_setup_standoff_default_m = (
+            LOCAL_SETUP_CAPTURE_NAV2_SETUP_STANDOFF_M
+            if route_label == ROUTE_LOCAL_SETUP_CAPTURE
+            else 0.38
+        )
+        _set_route_default(
+            args,
+            explicit_args,
+            "nav2_reposition_setup_standoff_m",
+            nav2_setup_standoff_default_m,
+            "--nav2-reposition-setup-standoff-m",
+        )
         _set_route_default(args, explicit_args, "nav2_reposition_timeout_s", 24.0, "--nav2-reposition-timeout-s")
         _set_route_default(args, explicit_args, "nav2_reposition_server_wait_s", 8.0, "--nav2-reposition-server-wait-s")
         _set_route_default(args, explicit_args, "nav2_reposition_pose_wait_s", 3.0, "--nav2-reposition-pose-wait-s")
@@ -1060,6 +1074,40 @@ def setup_point_inside_nav2_field(x: float, y: float) -> bool:
         <= float(y)
         <= float(NAV2_SETUP_FIELD_BOUNDS["y_max_m"]) - NAV2_SETUP_FIELD_MARGIN_M
     )
+
+
+def nav2_field_clamped_setup_goal(
+    goal_pose: dict[str, Any],
+    *,
+    planner_route_label: str,
+) -> dict[str, Any]:
+    if str(planner_route_label or "").strip() != ROUTE_LOCAL_SETUP_CAPTURE:
+        return goal_pose
+    try:
+        goal_x = float(goal_pose.get("x", 0.0) or 0.0)
+        goal_y = float(goal_pose.get("y", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return goal_pose
+    if setup_point_inside_nav2_field(goal_x, goal_y):
+        return goal_pose
+    clamped_x = clamp(
+        goal_x,
+        float(NAV2_SETUP_FIELD_BOUNDS["x_min_m"]) + NAV2_SETUP_FIELD_MARGIN_M,
+        float(NAV2_SETUP_FIELD_BOUNDS["x_max_m"]) - NAV2_SETUP_FIELD_MARGIN_M,
+    )
+    clamped_y = clamp(
+        goal_y,
+        float(NAV2_SETUP_FIELD_BOUNDS["y_min_m"]) + NAV2_SETUP_FIELD_MARGIN_M,
+        float(NAV2_SETUP_FIELD_BOUNDS["y_max_m"]) - NAV2_SETUP_FIELD_MARGIN_M,
+    )
+    return {
+        **goal_pose,
+        "x": round(float(clamped_x), 6),
+        "y": round(float(clamped_y), 6),
+        "field_bounded": True,
+        "source": f"{goal_pose.get('source', 'setup_pose')}_nav2_field_clamped",
+        "unclamped_goal_pose": dict(goal_pose),
+    }
 
 
 def bounded_nav2_setup_standoff(
@@ -1512,7 +1560,13 @@ def line_servo_command(
     effective_contact_lateral_ready_m = float(contact_lateral_ready_m)
     recovery_line_acquire_lateral_m = max(float(effective_contact_lateral_ready_m), 0.0)
     recovery_setup_pocket_m = 0.10
-    if _is_local_setup_owner_route(clean_route_label):
+    if clean_route_label == ROUTE_LOCAL_SETUP_CAPTURE:
+        effective_setup_standoff_m = max(effective_setup_standoff_m, LOCAL_SETUP_CAPTURE_SETUP_STANDOFF_M)
+        effective_max_angular_z_rps = max(effective_max_angular_z_rps, float(recovery_max_angular_z_rps))
+        effective_contact_lateral_ready_m = min(effective_contact_lateral_ready_m, 0.030)
+        recovery_line_acquire_lateral_m = max(effective_contact_lateral_ready_m, 0.080)
+        recovery_setup_pocket_m = 0.12
+    elif _is_local_setup_owner_route(clean_route_label):
         effective_setup_standoff_m = max(effective_setup_standoff_m, float(recovery_setup_standoff_m))
         effective_max_angular_z_rps = max(effective_max_angular_z_rps, float(recovery_max_angular_z_rps))
         effective_contact_lateral_ready_m = min(effective_contact_lateral_ready_m, 0.030)
@@ -1522,10 +1576,13 @@ def line_servo_command(
     behind_y = ball_y - math.sin(line_yaw) * float(contact_standoff_m)
     setup_x = ball_x - math.cos(line_yaw) * effective_setup_standoff_m
     setup_y = ball_y - math.sin(line_yaw) * effective_setup_standoff_m
+    robot_ball_distance = math.hypot(ball_x - robot_x, ball_y - robot_y)
     distance_to_contact = math.hypot(behind_x - robot_x, behind_y - robot_y)
     distance_to_setup = math.hypot(setup_x - robot_x, setup_y - robot_y)
     aim_yaw = math.atan2(behind_y - robot_y, behind_x - robot_x)
     setup_yaw = math.atan2(setup_y - robot_y, setup_x - robot_x)
+    ball_bearing_yaw = math.atan2(ball_y - robot_y, ball_x - robot_x)
+    setup_heading_toward_ball = abs(normalize_angle_rad(setup_yaw - ball_bearing_yaw)) < (math.pi * 0.42)
     robot_lateral_error = signed_lateral_error_m(robot_x, robot_y, origin_x=ball_x, origin_y=ball_y, line_yaw_rad=line_yaw)
     robot_longitudinal_projection = (
         (robot_x - ball_x) * math.cos(line_yaw)
@@ -1676,15 +1733,31 @@ def line_servo_command(
         and robot_longitudinal_projection > -float(contact_standoff_m) * 0.60
         and distance_to_contact > 0.14
     )
+    local_setup_close_side_escape_active = bool(
+        clean_route_label == ROUTE_LOCAL_SETUP_CAPTURE
+        and not ball_moved
+        and not contact_ready
+        and distance_to_contact <= 0.28
+        and abs(robot_lateral_error) > max(0.12, effective_contact_lateral_ready_m * 3.5)
+        and robot_longitudinal_projection > -effective_setup_standoff_m * 0.75
+    )
     recovery_close_misaligned_escape_active = bool(
         clean_route_label == ROUTE_LOCAL_SETUP_CAPTURE
         and not ball_moved
         and not contact_ready
         and distance_to_contact <= 0.18
         and (
+            distance_to_contact <= 0.14
+            or robot_ball_distance <= float(contact_standoff_m) + 0.10
+            or setup_heading_toward_ball
+        )
+        and (
             abs(robot_lateral_error) > effective_contact_lateral_ready_m * 1.18
             or abs(line_yaw_error) > float(contact_yaw_ready_rad) * 1.70
         )
+    )
+    recovery_close_misaligned_escape_active = bool(
+        recovery_close_misaligned_escape_active or local_setup_close_side_escape_active
     )
     recovery_close_escape_pose: dict[str, float] = {}
     recovery_close_escape_heading_toward_ball = False
@@ -1717,13 +1790,21 @@ def line_servo_command(
             base_linear = min(float(push_linear_x_mps), float(max_linear_x_mps))
     elif local_setup_trajectory_active:
         safe_side_lateral_ready_m = max(recovery_line_acquire_lateral_m, 0.085)
+        setup_lateral_ready_m = max(effective_contact_lateral_ready_m * 1.35, 0.045)
         setup_pose_ready = bool(
             abs(setup_projection_error_m) <= 0.055
             and abs(robot_lateral_error) <= max(effective_contact_lateral_ready_m * 1.15, 0.033)
         )
         setup_yaw_align_envelope = bool(
             abs(setup_projection_error_m) <= 0.070
-            and abs(robot_lateral_error) <= safe_side_lateral_ready_m
+            and abs(robot_lateral_error) <= setup_lateral_ready_m
+        )
+        near_contact_lateral_trim_active = bool(
+            0.20 <= distance_to_contact <= 0.34
+            and abs(robot_lateral_error) > effective_contact_lateral_ready_m
+            and abs(robot_lateral_error) <= max(setup_lateral_ready_m * 1.25, 0.056)
+            and abs(line_yaw_error) <= max(float(contact_yaw_ready_rad) * 2.75, 0.145)
+            and abs(setup_projection_error_m) <= 0.095
         )
         if recovery_wrong_side_orbit_active:
             phase = "recovery_orbit_setup"
@@ -1783,7 +1864,6 @@ def line_servo_command(
             }
             local_setup_trajectory_goal_pose = dict(recovery_close_escape_pose)
             desired_yaw = math.atan2(escape_y - robot_y, escape_x - robot_x)
-            ball_bearing_yaw = math.atan2(ball_y - robot_y, ball_x - robot_x)
             recovery_close_escape_heading_toward_ball = (
                 abs(normalize_angle_rad(desired_yaw - ball_bearing_yaw)) < (math.pi * 0.50)
             )
@@ -1792,7 +1872,7 @@ def line_servo_command(
                 base_linear = min(base_linear, 0.012)
             if distance_to_contact <= 0.06 and recovery_close_escape_heading_toward_ball:
                 base_linear = 0.0
-        elif abs(robot_lateral_error) > safe_side_lateral_ready_m:
+        elif abs(robot_lateral_error) > setup_lateral_ready_m:
             phase = "local_setup_trajectory_side_setup"
             local_setup_trajectory_stage = "side_setup"
             local_setup_trajectory_goal_pose = {
@@ -1802,6 +1882,16 @@ def line_servo_command(
             }
             desired_yaw = setup_yaw
             base_linear = min(float(max_linear_x_mps), 0.075)
+        elif near_contact_lateral_trim_active:
+            phase = "local_setup_trajectory_lateral_trim"
+            local_setup_trajectory_stage = "lateral_trim"
+            local_setup_trajectory_goal_pose = {
+                "x": round(float(behind_x), 6),
+                "y": round(float(behind_y), 6),
+                "yaw": round(float(line_yaw), 6),
+            }
+            desired_yaw = lateral_corrected_yaw
+            base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
         elif setup_yaw_align_envelope and abs(line_yaw_error) > max(float(contact_yaw_ready_rad) * 1.35, 0.080):
             phase = "local_setup_trajectory_yaw_align"
             local_setup_trajectory_stage = "yaw_align"
@@ -1986,8 +2076,33 @@ def line_servo_command(
         base_linear = min(float(max_linear_x_mps), max(float(push_linear_x_mps), 0.06))
     yaw_error = normalize_angle_rad(desired_yaw - robot_yaw)
     angular_z = clamp(float(yaw_gain) * yaw_error, -effective_max_angular_z_rps, effective_max_angular_z_rps)
+    local_setup_near_contact_yaw_lock = bool(
+        local_setup_trajectory_active
+        and local_setup_trajectory_stage in {"behind_setup", "side_setup", "safe_side_orbit"}
+        and not ball_moved
+        and not contact_ready
+        and distance_to_contact <= 0.17
+        and abs(yaw_error) > 0.75
+    )
+    local_setup_contact_risk_freeze = bool(
+        local_setup_trajectory_active
+        and not ball_moved
+        and not contact_ready
+        and distance_to_contact <= 0.145
+        and (
+            abs(robot_lateral_error) > effective_contact_lateral_ready_m
+            or abs(line_yaw_error) > float(contact_yaw_ready_rad)
+        )
+    )
     if local_setup_trajectory_active:
-        if local_setup_trajectory_stage in {"side_setup", "safe_side_orbit"}:
+        if local_setup_contact_risk_freeze:
+            phase = f"{phase}_contact_freeze"
+            base_linear = 0.0
+            angular_z = 0.0
+        elif local_setup_near_contact_yaw_lock:
+            phase = f"{phase}_yaw_lock"
+            base_linear = 0.0
+        elif local_setup_trajectory_stage in {"side_setup", "safe_side_orbit"}:
             if abs(yaw_error) > 0.75:
                 base_linear = min(base_linear, 0.030)
             elif abs(yaw_error) > 0.50:
@@ -2037,7 +2152,10 @@ def line_servo_command(
         crawl_cap = 0.018 if recovery_line_acquire_yaw_crawl_active or distance_to_contact < 0.14 else 0.025
         base_linear = min(max(base_linear, float(min_linear_x_mps)), crawl_cap)
     linear_x = clamp(base_linear, linear_floor, float(max_linear_x_mps))
-    if local_contact_yaw_hold_active or recovery_contact_yaw_hold_active or recovery_contact_micro_yaw_hold_active:
+    if (
+        not local_setup_trajectory_active
+        and (local_contact_yaw_hold_active or recovery_contact_yaw_hold_active or recovery_contact_micro_yaw_hold_active)
+    ):
         linear_x = 0.0
     return {
         "phase": phase,
@@ -2075,6 +2193,7 @@ def line_servo_command(
         "recovery_contact_micro_yaw_hold_active": recovery_contact_micro_yaw_hold_active,
         "recovery_contact_lateral_trim_active": recovery_contact_lateral_trim_active,
         "recovery_wrong_side_orbit_active": recovery_wrong_side_orbit_active,
+        "local_setup_close_side_escape_active": local_setup_close_side_escape_active,
         "recovery_close_misaligned_escape_active": recovery_close_misaligned_escape_active,
         "recovery_close_escape_pose": recovery_close_escape_pose,
         "recovery_close_escape_heading_toward_ball": recovery_close_escape_heading_toward_ball,
@@ -2082,6 +2201,17 @@ def line_servo_command(
         "local_setup_trajectory_stage": local_setup_trajectory_stage,
         "local_setup_trajectory_goal_pose": local_setup_trajectory_goal_pose,
         "setup_projection_error_m": round(float(setup_projection_error_m), 6),
+        "setup_lateral_ready_m": round(
+            float(max(effective_contact_lateral_ready_m * 1.35, 0.045)),
+            6,
+        ),
+        "robot_ball_distance_m": round(float(robot_ball_distance), 6),
+        "setup_heading_toward_ball": setup_heading_toward_ball,
+        "local_setup_near_contact_yaw_lock": local_setup_near_contact_yaw_lock,
+        "local_setup_contact_risk_freeze": local_setup_contact_risk_freeze,
+        "near_contact_lateral_trim_active": bool(
+            local_setup_trajectory_stage == "lateral_trim"
+        ),
         "lateral_reaim_rad": round(float(lateral_reaim), 6),
         "lateral_reaim_release_m": round(float(lateral_reaim_release_m), 6),
         "lateral_reaim_gain": round(float(lateral_reaim_gain), 6),
@@ -3112,8 +3242,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--delivery-stop-radius-m", type=float, default=0.0)
     parser.add_argument("--post-delivery-sample-s", type=float, default=0.0)
     parser.add_argument("--ai-push-coast-mode", choices=ALLOWED_AI_PUSH_COAST_MODES, default=AI_PUSH_COAST_MODE_SHADOW)
-    parser.add_argument("--terminal-correction-extra-margin-m", type=float, default=0.080)
-    parser.add_argument("--terminal-correction-duration-s", type=float, default=3.0)
+    parser.add_argument("--terminal-correction-extra-margin-m", type=float, default=0.250)
+    parser.add_argument("--terminal-correction-duration-s", type=float, default=16.0)
     parser.add_argument("--sample-duration-s", type=float, default=9.0)
     parser.add_argument("--poll-period-s", type=float, default=0.10)
     parser.add_argument("--first-contact-motion-threshold-m", type=float, default=0.005)
@@ -3599,6 +3729,10 @@ def main() -> int:
                     nav2_robot_pose=nav2_robot_pose,
                     frame_id=args.nav2_reposition_frame_id,
                 )
+        goal_pose = nav2_field_clamped_setup_goal(
+            goal_pose,
+            planner_route_label=planner_route_label,
+        )
         pre_setup_reposition: dict[str, Any] = {
             "attempted": False,
             "skipped": True,
@@ -3638,6 +3772,10 @@ def main() -> int:
                         nav2_robot_pose=nav2_pose_sample["pose"],
                         frame_id=args.nav2_reposition_frame_id,
                     )
+                pre_setup_goal_pose = nav2_field_clamped_setup_goal(
+                    pre_setup_goal_pose,
+                    planner_route_label=planner_route_label,
+                )
                 update_runtime(
                     args.gather_runtime_json,
                     mission_phase="nav2_pre_setup",
@@ -4009,6 +4147,7 @@ def main() -> int:
     pre_push_measured_handoff: dict[str, Any] = {}
     fetch_skipped_by_push_ready_handoff = False
     main_fetch_sample_duration_s = float(args.sample_duration_s)
+    main_fetch_route_label = str(args.planner_route_label or "")
     if (
         str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE
         and not fetch_skipped_after_reposition
@@ -4051,7 +4190,10 @@ def main() -> int:
                 (float(sample.get("t_s", 0.0) or 0.0) for sample in local_setup_capture_setup_samples),
                 default=0.0,
             )
-            main_fetch_sample_duration_s = max(20.0, float(args.sample_duration_s) - setup_elapsed_s)
+            main_fetch_sample_duration_s = max(
+                LOCAL_SETUP_CAPTURE_MAIN_FETCH_MIN_DURATION_S,
+                float(args.sample_duration_s) - setup_elapsed_s,
+            )
             extend_contact_samples(
                 contact_samples,
                 local_setup_capture_setup_samples,
@@ -4072,6 +4214,8 @@ def main() -> int:
                 planner_route_label=planner_route_label,
             )
             fetch_skipped_by_push_ready_handoff = not bool(pre_push_measured_handoff.get("pass", False))
+            if not fetch_skipped_by_push_ready_handoff:
+                main_fetch_route_label = ROUTE_FETCH_READY
             local_setup_capture_setup = {
                 "attempted": True,
                 "required": True,
@@ -4084,6 +4228,7 @@ def main() -> int:
                 "sample_count": len(local_setup_capture_setup_samples),
                 "elapsed_s": round(float(setup_elapsed_s), 6),
                 "main_fetch_sample_duration_s": round(float(main_fetch_sample_duration_s), 6),
+                "main_fetch_route_label": main_fetch_route_label,
                 "pre_push_measured_handoff": pre_push_measured_handoff,
             }
         except Exception as exc:
@@ -4163,7 +4308,7 @@ def main() -> int:
             yaw_gain=args.line_servo_yaw_gain,
             contact_lateral_ready_m=args.line_servo_contact_lateral_ready_m,
             contact_yaw_ready_rad=math.radians(args.line_servo_contact_yaw_ready_deg),
-            route_label=args.planner_route_label,
+            route_label=main_fetch_route_label,
         )
         extend_contact_samples(
             contact_samples,
@@ -4334,7 +4479,7 @@ def main() -> int:
                     yaw_gain=args.line_servo_yaw_gain,
                     contact_lateral_ready_m=args.line_servo_contact_lateral_ready_m,
                     contact_yaw_ready_rad=math.radians(args.line_servo_contact_yaw_ready_deg),
-                    route_label=planner_route_label,
+                    route_label=main_fetch_route_label,
                 )
                 correction_samples = extend_contact_samples(
                     contact_samples,
