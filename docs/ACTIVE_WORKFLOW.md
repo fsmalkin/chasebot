@@ -190,6 +190,27 @@ planner-routed setup/capture/push-to-target cycles and includes onboard,
 topdown, world/context video, keyframe sequence review, and mission-level
 retrieval scoring.
 
+Route-diverse seeded planning profile:
+
+```powershell
+python scripts\fetch_multiball_retrieval_gate.py `
+  --campaign-id <id> `
+  --dry-run `
+  --profile open_field_multiball_route_diverse_v1 `
+  --random-cases 6 `
+  --balls-per-scene 3 `
+  --seed 20260644
+```
+
+Current route-diverse dry-run reference:
+`artifacts/session/multiball_route_diverse_profile_dry_seed20260644_20260607/fetch_multiball_retrieval_gate/scorecard.md`.
+That package generated six three-ball scenes and eighteen planned retrieval
+steps with required executable route coverage: `nav2_reposition_first`,
+`local_setup_capture`, `recovery_or_reaim`, and `fetch_ready_local`. Use this
+profile for the next seeded breadth UAT because the default
+`open_field_multiball_v1` draw remains useful for local-heavy compatibility
+checks.
+
 Live one-scene rung:
 
 ```powershell
@@ -247,6 +268,13 @@ stage. The Nav2 stage reached `STATUS_SUCCEEDED` with measured pose mismatch,
 then handed off to measured `local_setup_capture`, passed push-ready handoff,
 and delivered. This is multi-ball route-diverse visual UAT evidence; broader
 seeded coverage and canonical promotion gates remain ahead.
+
+Next route-diverse live rung: run the LLM-supervised gate with
+`--profile open_field_multiball_route_diverse_v1`, seed `20260644`, six
+three-ball scenes, browser-watchable visual packaging, and stop-on-fail. A green
+result should count each scene, step, route family, measured push-ready handoff,
+Nav2 measured-pose fallback, and visual keyframe review in the multiball UAT
+rollup before any promotion discussion.
 
 Saved-anchor repeatability analyzer scope:
 

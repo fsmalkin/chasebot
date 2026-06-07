@@ -123,6 +123,31 @@ def test_generate_multiball_scenes_is_deterministic_and_bounded():
                 assert _pose_distance(pose, other["pose"]) >= multiball_gate.MIN_BALL_SEPARATION_M
 
 
+def test_generate_route_diverse_multiball_scenes_covers_required_executable_routes():
+    scenes = multiball_gate.generate_route_diverse_multiball_scenes(
+        seed=20260644,
+        random_cases=4,
+        balls_per_scene=3,
+    )
+    args = _args(planner_mode=planner_gate.PLANNER_MODE_DETERMINISTIC)
+    route_counts = {route: 0 for route in planner_gate.ROUTE_LABELS}
+
+    assert len(scenes) == 4
+    for scene in scenes:
+        assert scene["profile"] == multiball_gate.ROUTE_DIVERSE_PROFILE
+        assert scene["randomization"]["route_diverse"] is True
+        assert scene["randomization"]["desired_route_label"] in multiball_gate.ROUTE_DIVERSE_ROUTE_CYCLE
+        assert scene["randomization"]["deterministic_planner_ready"] is True
+        assert len(scene["balls"]) == 3
+        plan = multiball_gate.plan_multiball_scene(scene, args=args)
+        assert plan["planner_ready"] is True
+        for step in plan["sequence"]:
+            route_counts[step["route_label"]] += 1
+
+    for route in multiball_gate.route_diverse_required_routes(4):
+        assert route_counts[route] > 0
+
+
 def test_multiball_planner_prefers_lower_setup_debt_local_setup_capture_candidate():
     target = multiball_gate.target_pose()
     scene = {
@@ -263,6 +288,31 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
             assert "--nav2-reposition-before-fetch" not in row["command"]
         assert "--ai-push-coast-mode" in row["command"]
         assert row["command"][row["command"].index("--ai-push-coast-mode") + 1] == "guarded_live"
+
+
+def test_multiball_route_diverse_gate_reports_required_route_coverage(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+
+    summary = multiball_gate.run_gate(
+        _args(
+            campaign_id="dry_multiball_route_diverse",
+            dry_run=True,
+            random_cases=4,
+            balls_per_scene=3,
+            profile=multiball_gate.ROUTE_DIVERSE_PROFILE,
+        )
+    )
+
+    assert summary["pass"] is True
+    assert summary["profile"] == multiball_gate.ROUTE_DIVERSE_PROFILE
+    assert summary["route_diversity"]["enabled"] is True
+    assert summary["route_diversity"]["pass"] is True
+    assert summary["route_diversity"]["missing_routes"] == []
+    assert summary["route_diversity"]["required_routes"] == multiball_gate.route_diverse_required_routes(4)
+    for route in summary["route_diversity"]["required_routes"]:
+        assert summary["route_counts"][route] > 0
+    scorecard = (tmp_path / summary["scorecard_path"]).read_text(encoding="utf-8")
+    assert "route_diversity" in scorecard
 
 
 def test_persistent_field_mode_preserves_target_and_robot_in_step_commands(tmp_path, monkeypatch):

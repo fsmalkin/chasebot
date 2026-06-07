@@ -37,6 +37,7 @@ DEFAULT_SEED = 20260606
 DEFAULT_RANDOM_CASES = 6
 DEFAULT_BALLS_PER_SCENE = 3
 DEFAULT_PROFILE = "open_field_multiball_v1"
+ROUTE_DIVERSE_PROFILE = "open_field_multiball_route_diverse_v1"
 DEFAULT_NAV2_GOAL_FRAME_MODE = "world_direct"
 LOCAL_SETUP_CAPTURE_STEP_TIMEOUT_S = 420.0
 DEFAULT_FIELD_BOUNDS = {
@@ -69,6 +70,18 @@ EXECUTABLE_ROUTES = {
     planner_gate.ROUTE_NAV2_REPOSITION,
     planner_gate.ROUTE_RECOVERY_OR_REAIM,
     planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
+}
+ROUTE_DIVERSE_ROUTE_CYCLE = (
+    planner_gate.ROUTE_NAV2_REPOSITION,
+    planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
+    planner_gate.ROUTE_RECOVERY_OR_REAIM,
+    planner_gate.ROUTE_FETCH_READY,
+)
+ROUTE_DIVERSE_ROUTE_SLUGS = {
+    planner_gate.ROUTE_NAV2_REPOSITION: "nav2",
+    planner_gate.ROUTE_LOCAL_SETUP_CAPTURE: "setup",
+    planner_gate.ROUTE_RECOVERY_OR_REAIM: "reaim",
+    planner_gate.ROUTE_FETCH_READY: "ready",
 }
 
 
@@ -606,6 +619,228 @@ def plan_multiball_scene(scene: dict[str, Any], *, args: argparse.Namespace) -> 
         "candidate_audit": all_candidates_by_step,
         "executable_step_count": executable_count,
         "planner_ready": bool(executable_count == len(sequence) and sequence),
+    }
+
+
+def route_diverse_required_routes(random_cases: int) -> list[str]:
+    case_count = max(int(random_cases), 1)
+    if case_count >= len(ROUTE_DIVERSE_ROUTE_CYCLE):
+        return list(ROUTE_DIVERSE_ROUTE_CYCLE)
+    return list(ROUTE_DIVERSE_ROUTE_CYCLE[:case_count])
+
+
+def deterministic_planner_args_for_generation() -> argparse.Namespace:
+    return argparse.Namespace(
+        planner_mode=planner_gate.PLANNER_MODE_DETERMINISTIC,
+        openai_api_key="",
+        openai_model=planner_gate.DEFAULT_OPENAI_MODEL,
+        openai_base_url=planner_gate.DEFAULT_OPENAI_BASE_URL,
+        openai_org_id="",
+        openai_project_id="",
+        reasoning_effort=planner_gate.DEFAULT_REASONING_EFFORT,
+        planner_timeout_s=1.0,
+    )
+
+
+def effective_route_label_for_scene(scene: dict[str, Any]) -> str:
+    route_label = planner_gate.deterministic_route_label(scene)
+    admissibility = planner_gate.route_admissibility_for_scene(scene, route_label)
+    if bool(admissibility.get("changed", False)):
+        route_label = str(admissibility.get("route_label", route_label) or route_label)
+    return str(route_label)
+
+
+def one_ball_primary_candidates_for_route(
+    *,
+    seed: int,
+    route_label: str,
+    minimum_count: int,
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    batch_index = 0
+    while len(candidates) < minimum_count and batch_index < 12:
+        batch_seed = int(seed) + 1009 * (batch_index + 1)
+        generated = planner_gate.generate_random_scenes(
+            seed=batch_seed,
+            random_cases=max(24, minimum_count * len(planner_gate.ROUTE_LABELS)),
+            scene_set=planner_gate.DEFAULT_SCENE_SET,
+        )
+        for scene in generated:
+            if effective_route_label_for_scene(scene) == route_label:
+                candidates.append(scene)
+                if len(candidates) >= minimum_count:
+                    break
+        batch_index += 1
+    if len(candidates) < minimum_count:
+        raise RuntimeError(f"Unable to generate primary one-ball candidates for route {route_label}.")
+    return candidates
+
+
+def build_route_diverse_multiball_scene(
+    *,
+    rng: random.Random,
+    scene_id: str,
+    seed: int,
+    scene_index: int,
+    desired_route_label: str,
+    primary_scene: dict[str, Any],
+    balls_per_scene: int,
+) -> dict[str, Any]:
+    robot_pose = dict(primary_scene.get("robot_pose", {}) if isinstance(primary_scene.get("robot_pose"), dict) else {})
+    primary_ball_pose = dict(
+        primary_scene.get("ball_pose", {}) if isinstance(primary_scene.get("ball_pose"), dict) else {}
+    )
+    balls: list[dict[str, Any]] = [
+        {
+            "id": "ball_1",
+            "label": f"route-diverse primary {desired_route_label}",
+            "pose": primary_ball_pose,
+            "target_geometry": ball_target_geometry(primary_ball_pose, robot_pose),
+            "route_diversity_primary": True,
+            "desired_route_label": desired_route_label,
+            "source_one_ball_scene_id": str(primary_scene.get("scene_id", "") or ""),
+        }
+    ]
+    rejection_count = 0
+    attempts = 0
+    ball_count = max(int(balls_per_scene), 2)
+    while len(balls) < ball_count and attempts < 1000:
+        attempts += 1
+        pose = sample_ball_pose(rng)
+        distance_to_target = pose_distance(pose, target_pose())
+        if distance_to_target <= finite_float(target_pose().get("radius_m")) + 0.12:
+            rejection_count += 1
+            continue
+        if not in_field_bounds(finite_float(pose.get("x")), finite_float(pose.get("y"))):
+            rejection_count += 1
+            continue
+        if pose_distance(pose, robot_pose) < MIN_ROBOT_BALL_SEPARATION_M:
+            rejection_count += 1
+            continue
+        if any(pose_distance(pose, other.get("pose", {})) < MIN_BALL_SEPARATION_M for other in balls):
+            rejection_count += 1
+            continue
+        ball_id = f"ball_{len(balls) + 1}"
+        balls.append(
+            {
+                "id": ball_id,
+                "label": f"retrieval target {len(balls) + 1}",
+                "pose": pose,
+                "target_geometry": ball_target_geometry(pose, robot_pose),
+            }
+        )
+    if len(balls) < ball_count:
+        raise RuntimeError(f"Unable to generate route-diverse scene {scene_id} after {attempts} decoy attempts.")
+    return {
+        "generated_utc": utc_now(),
+        "type": "fetch_multiball_scene_descriptor",
+        "profile": ROUTE_DIVERSE_PROFILE,
+        "scene_id": scene_id,
+        "seed": int(seed),
+        "case_index": int(scene_index),
+        "target_pose": target_pose(),
+        "robot_pose": robot_pose,
+        "balls": balls,
+        "field_bounds": dict(DEFAULT_FIELD_BOUNDS),
+        "randomization": {
+            "profile": ROUTE_DIVERSE_PROFILE,
+            "route_diverse": True,
+            "desired_route_label": desired_route_label,
+            "primary_one_ball_scene_id": str(primary_scene.get("scene_id", "") or ""),
+            "primary_expected_route_label": str(primary_scene.get("expected_route_label", "") or ""),
+            "primary_effective_route_label": effective_route_label_for_scene(primary_scene),
+            "ball_target_distance_range_m": list(BALL_TARGET_DISTANCE_RANGE_M),
+            "robot_target_distance_range_m": list(ROBOT_TARGET_DISTANCE_RANGE_M),
+            "min_ball_separation_m": MIN_BALL_SEPARATION_M,
+            "min_robot_ball_separation_m": MIN_ROBOT_BALL_SEPARATION_M,
+            "rejection_count": rejection_count,
+            "attempt_count": attempts,
+        },
+        "constraints": {
+            "robot_owned_contact": True,
+            "no_direct_ball_impulse": True,
+            "local_fetch_primitive": "planner_routed_fetch_to_pose",
+            "route_diverse_profile": True,
+        },
+    }
+
+
+def generate_route_diverse_multiball_scenes(
+    *,
+    seed: int,
+    random_cases: int,
+    balls_per_scene: int,
+    profile: str = ROUTE_DIVERSE_PROFILE,
+) -> list[dict[str, Any]]:
+    case_count = max(int(random_cases), 1)
+    rng = random.Random(int(seed))
+    route_plan = [ROUTE_DIVERSE_ROUTE_CYCLE[index % len(ROUTE_DIVERSE_ROUTE_CYCLE)] for index in range(case_count)]
+    candidate_pool = {
+        route_label: one_ball_primary_candidates_for_route(
+            seed=int(seed) + 7919 * (route_index + 1),
+            route_label=route_label,
+            minimum_count=case_count + 4,
+        )
+        for route_index, route_label in enumerate(ROUTE_DIVERSE_ROUTE_CYCLE)
+    }
+    deterministic_args = deterministic_planner_args_for_generation()
+    scenes: list[dict[str, Any]] = []
+    route_use_counts = {route_label: 0 for route_label in ROUTE_DIVERSE_ROUTE_CYCLE}
+    for scene_index, desired_route_label in enumerate(route_plan, start=1):
+        accepted_scene: dict[str, Any] | None = None
+        accepted_plan: dict[str, Any] = {}
+        pool = candidate_pool[desired_route_label]
+        for attempt in range(1, 250):
+            primary_index = (route_use_counts[desired_route_label] + attempt - 1) % len(pool)
+            route_slug = ROUTE_DIVERSE_ROUTE_SLUGS.get(desired_route_label, safe_id(desired_route_label))
+            scene_id = f"seed{int(seed)}_mb_route_diverse_s{scene_index:02d}_{route_slug}"
+            candidate_scene = build_route_diverse_multiball_scene(
+                rng=rng,
+                scene_id=scene_id,
+                seed=int(seed),
+                scene_index=scene_index,
+                desired_route_label=desired_route_label,
+                primary_scene=pool[primary_index],
+                balls_per_scene=balls_per_scene,
+            )
+            plan = plan_multiball_scene(candidate_scene, args=deterministic_args)
+            route_counts = {
+                route: sum(1 for step in plan.get("sequence", []) if step.get("route_label") == route)
+                for route in planner_gate.ROUTE_LABELS
+            }
+            if (
+                route_counts.get(desired_route_label, 0) > 0
+                and bool(plan.get("planner_ready", False))
+                and all(str(step.get("route_label", "")) in EXECUTABLE_ROUTES for step in plan.get("sequence", []))
+            ):
+                accepted_scene = candidate_scene
+                accepted_plan = plan
+                candidate_scene["randomization"]["route_diversity_accept_attempt"] = attempt
+                candidate_scene["randomization"]["deterministic_plan_route_counts"] = route_counts
+                candidate_scene["randomization"]["deterministic_retrieval_order"] = plan.get("retrieval_order", [])
+                break
+        if accepted_scene is None:
+            raise RuntimeError(f"Unable to generate route-diverse multi-ball scene for {desired_route_label}.")
+        route_use_counts[desired_route_label] += 1
+        if str(profile or "").strip():
+            accepted_scene["profile"] = str(profile)
+            accepted_scene["randomization"]["profile"] = str(profile)
+        accepted_scene["randomization"]["deterministic_planner_ready"] = bool(accepted_plan.get("planner_ready", False))
+        scenes.append(accepted_scene)
+    return scenes
+
+
+def route_diversity_summary(*, profile: str, random_cases: int, route_counts: dict[str, int]) -> dict[str, Any]:
+    enabled = str(profile or "").strip() == ROUTE_DIVERSE_PROFILE
+    required_routes = route_diverse_required_routes(random_cases) if enabled else []
+    present_routes = [route for route in planner_gate.ROUTE_LABELS if int(route_counts.get(route, 0) or 0) > 0]
+    missing_routes = [route for route in required_routes if int(route_counts.get(route, 0) or 0) <= 0]
+    return {
+        "enabled": enabled,
+        "required_routes": required_routes,
+        "present_routes": present_routes,
+        "missing_routes": missing_routes,
+        "pass": bool(not enabled or not missing_routes),
     }
 
 
@@ -1217,12 +1452,21 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
             live_execution_blocker = replay_batch.dashboard_start_failure_reason(dashboard_start)
     scenes = load_scene_descriptors(list(args.scene_descriptor_json or []))
     if not scenes:
-        scenes = generate_multiball_scenes(
-            seed=int(args.seed),
-            random_cases=int(args.random_cases),
-            balls_per_scene=int(args.balls_per_scene),
-            profile=str(args.profile or DEFAULT_PROFILE),
-        )
+        profile = str(args.profile or DEFAULT_PROFILE)
+        if profile == ROUTE_DIVERSE_PROFILE:
+            scenes = generate_route_diverse_multiball_scenes(
+                seed=int(args.seed),
+                random_cases=int(args.random_cases),
+                balls_per_scene=int(args.balls_per_scene),
+                profile=profile,
+            )
+        else:
+            scenes = generate_multiball_scenes(
+                seed=int(args.seed),
+                random_cases=int(args.random_cases),
+                balls_per_scene=int(args.balls_per_scene),
+                profile=profile,
+            )
     scene_rows: list[dict[str, Any]] = []
     step_rows: list[dict[str, Any]] = []
     for scene in scenes:
@@ -1381,6 +1625,11 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         executor: sum(1 for row in step_rows if str(row.get("route_executor", "") or "") == executor)
         for executor in sorted({str(row.get("route_executor", "") or "") for row in step_rows if str(row.get("route_executor", "") or "")})
     }
+    route_diversity = route_diversity_summary(
+        profile=str(args.profile or DEFAULT_PROFILE),
+        random_cases=int(args.random_cases),
+        route_counts=route_counts,
+    )
     visual_package_command: list[str] = []
     visual_package_summary_path = ""
     visual_package: dict[str, Any] = {}
@@ -1465,6 +1714,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "planned_step_count": planned_step_count,
         "route_counts": route_counts,
         "route_executor_counts": route_executor_counts,
+        "route_diversity": route_diversity,
         "live_fetch_to_pose_pass_count": live_pass_count,
         "live_fetch_to_pose_fail_count": 0 if dry_run else planned_step_count - live_pass_count,
         "live_all_balls_delivered_scene_count": sum(
@@ -1488,6 +1738,7 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "pass": bool(
             scene_rows
             and (planner_ready_scene_count == len(scene_rows))
+            and bool(route_diversity.get("pass", True))
             and (dry_run or all_scene_rows_pass)
             and (not visual_package_required or visual_package_effective_pass)
         ),
@@ -1540,6 +1791,7 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- planned_step_count: `{summary.get('planned_step_count', 0)}`",
         f"- route_counts: `{summary.get('route_counts', {})}`",
         f"- route_executor_counts: `{summary.get('route_executor_counts', {})}`",
+        f"- route_diversity: `{summary.get('route_diversity', {})}`",
         f"- planner_ready_scene_count: `{summary.get('planner_ready_scene_count', 0)}`",
         f"- live_fetch_to_pose_pass_count: `{summary.get('live_fetch_to_pose_pass_count', 0)}`",
         f"- live_fetch_to_pose_fail_count: `{summary.get('live_fetch_to_pose_fail_count', 0)}`",

@@ -53,6 +53,18 @@ commands for every ball. The dry-run is planning evidence only; promotion
 requires same-session live multi-ball demos with browser-watchable onboard,
 topdown, and context proof.
 
+June 7, 2026 route-diverse branch decision: keep the default
+`open_field_multiball_v1` profile for compatibility and local-heavy regression
+checks, and use `open_field_multiball_route_diverse_v1` for the next seeded
+breadth gate. The dry reference is
+`artifacts/session/multiball_route_diverse_profile_dry_seed20260644_20260607/fetch_multiball_retrieval_gate/scorecard.md`:
+six three-ball scenes, eighteen planned steps, and required executable route
+coverage across `nav2_reposition_first`, `local_setup_capture`,
+`recovery_or_reaim`, and `fetch_ready_local`. The next live branch action is an
+LLM-supervised route-diverse UAT run that packages onboard, topdown, world, and
+keyframe evidence and rolls up route-family performance before tuning another
+local setup behavior.
+
 ## Recommended Branch Roles
 
 1. Stable demo/UAT branch:

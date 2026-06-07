@@ -1763,6 +1763,14 @@ planner-routed local-fetch layout per ball. This dry-run validates scene
 generation, order planning, and replay-command materialization inside the
 current local push envelope. Live retrieval claims start at the next rung.
 
+The route-diverse planning profile now broadens that seeded surface. Evidence:
+`artifacts/session/multiball_route_diverse_profile_dry_seed20260644_20260607/fetch_multiball_retrieval_gate/scorecard.md`.
+It generated six three-ball scenes, eighteen planned retrieval steps, and full
+required executable route coverage across `nav2_reposition_first`,
+`local_setup_capture`, `recovery_or_reaim`, and `fetch_ready_local`. This becomes
+the next live breadth gate because it samples the planner/stage-owner boundary
+more evenly than the original local-heavy random draw.
+
 The multi-ball ladder is:
 
 1. dry-run seeded planning gate over bounded three-ball scenes
@@ -1770,7 +1778,8 @@ The multi-ball ladder is:
    topdown, and world/context video
 3. three varied three-ball scenes with frame-sequence review and mission-level
    retrieval scoring
-4. seeded randomized multi-ball gate with replayable frozen failures
+4. route-diverse seeded randomized multi-ball gate with replayable frozen
+   failures and required executable route coverage
 5. planner/provider comparison for order choice and recovery strategy
 6. mission-time optimization after retrieval reliability is stable
 
@@ -1811,3 +1820,12 @@ points at the same milestone, but the next engineering step is sharper: replace
 the single-target local setup line-servo behavior with a measured pose/trajectory
 executor that can close side setup, behind-ball position, yaw alignment, and
 push-ready handoff as separate stages.
+
+June 7 route-diverse recovery checkpoint: the LLM-supervised multiball rollup
+is green for three live scenes and nine measured retrieval steps:
+`artifacts/session/live_multiball_llm_supervised_route_diverse_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`.
+It includes one explicit Nav2 free-space route that reached action success with
+measured pose mismatch, then handed off through measured `local_setup_capture`
+and delivered. The follow-on generator work adds
+`open_field_multiball_route_diverse_v1` so the next live UAT can exercise all
+executable route families instead of relying on a mostly local random draw.
