@@ -236,14 +236,17 @@ python scripts\fetch_multiball_uat_rollup.py `
   --gate-summary artifacts\session\<gate_b>\fetch_multiball_retrieval_gate\gate_summary.json
 ```
 
-Current LLM-supervised green reference:
-`artifacts/session/live_multiball_llm_supervised_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`.
-That package counts two live LLM-supervised scenes, six measured local
-setup/capture/fetch steps, `6/6` `fetch_to_pose` passes, `0` hidden Nav2
-prefetches, provider status `ok` on all steps, one recovered provider retry,
-and browser-watchable onboard/topdown/world/keyframe evidence. It is multi-ball
-visual UAT evidence; route diversity, broader seeded coverage, and canonical
-promotion gates remain ahead.
+Current LLM-supervised route-diverse green reference:
+`artifacts/session/live_multiball_llm_supervised_route_diverse_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`.
+That package counts three live LLM-supervised scenes, nine measured retrieval
+steps, `9/9` `fetch_to_pose` passes, `0` hidden Nav2 prefetches, provider
+status `ok` on all steps, one recovered provider retry, and browser-watchable
+onboard/topdown/world/keyframe evidence. The route mix includes eight measured
+local setup/capture steps and one explicit `nav2_reposition_first` free-space
+stage. The Nav2 stage reached `STATUS_SUCCEEDED` with measured pose mismatch,
+then handed off to measured `local_setup_capture`, passed push-ready handoff,
+and delivered. This is multi-ball route-diverse visual UAT evidence; broader
+seeded coverage and canonical promotion gates remain ahead.
 
 Saved-anchor repeatability analyzer scope:
 

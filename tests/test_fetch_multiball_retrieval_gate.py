@@ -58,6 +58,15 @@ def _args(**overrides):
     return SimpleNamespace(**payload)
 
 
+def test_multiball_parser_defaults_openai_key_from_environment(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-env-key")
+    monkeypatch.setattr(sys, "argv", ["fetch_multiball_retrieval_gate.py", "--dry-run"])
+
+    args = multiball_gate.parse_args()
+
+    assert args.openai_api_key == "test-env-key"
+
+
 def _patch_roots(tmp_path, monkeypatch):
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(multiball_gate, "REPO_ROOT", tmp_path)
@@ -211,6 +220,18 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
         layout = json.loads(layout_path.read_text(encoding="utf-8"))
         assert layout["multiball_scene_id"] == row["scene_id"]
         assert layout["multiball_ball_id"] == row["ball_id"]
+        scene_plan = json.loads((tmp_path / summary["scene_rows"][0]["sequence_plan_path"]).read_text(encoding="utf-8"))
+        matching_step = next(
+            (
+                step
+                for step in scene_plan["sequence"]
+                if step["step_index"] == row["step_index"] and step["ball_id"] == row["ball_id"]
+            ),
+            {},
+        )
+        if matching_step:
+            assert layout["maneuver_plan"] == matching_step["maneuver_plan"]
+            assert layout["multiball_maneuver_plan"] == matching_step["maneuver_plan"]
         assert "--target-layout-json" in row["command"]
         assert row["command"][row["command"].index("--target-layout-json") + 1] == str(layout_path)
         assert "--target-model-name" in row["command"]

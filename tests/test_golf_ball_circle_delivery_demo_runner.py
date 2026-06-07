@@ -38,6 +38,7 @@ from golf_ball_circle_delivery_demo_runner import summarize_line_servo_effective
 from golf_ball_circle_delivery_demo_runner import transform_nav2_reposition_layout_to_current_robot  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import nav2_precontact_fallback_to_local_recovery_decision  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import nav2_precontact_refinement_to_local_recovery_decision  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import apply_nav2_precontact_fallback_route_defaults  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import measured_push_ready_handoff_from_approach_metrics  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import measured_push_ready_handoff_from_setup_samples  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import extend_contact_samples  # noqa: E402
@@ -673,6 +674,8 @@ def test_nav2_precontact_fallback_accepts_wide_setup_after_timeout_without_ball_
     assert decision["reason"] == "pre_contact_nav2_failure_inside_wide_setup_fallback_envelope"
     assert decision["local_recovery_admissible"] is False
     assert decision["wide_setup_admissible"] is True
+    assert decision["fallback_route_label"] == "local_setup_capture"
+    assert decision["fallback_route_executor"] == "measured_local_setup_capture"
     assert decision["geometry"]["robot_lateral_error_m"] == pytest.approx(1.0)
     assert decision["geometry"]["robot_yaw_error_deg"] == pytest.approx(150.0)
 
@@ -704,6 +707,8 @@ def test_nav2_precontact_fallback_accepts_observed_scene02_wide_lateral_setup_mi
     assert decision["reason"] == "pre_contact_nav2_failure_inside_wide_setup_fallback_envelope"
     assert decision["local_recovery_admissible"] is False
     assert decision["wide_setup_admissible"] is True
+    assert decision["fallback_route_label"] == "local_setup_capture"
+    assert decision["fallback_route_executor"] == "measured_local_setup_capture"
     assert decision["geometry"]["robot_lateral_error_m"] > 1.6
 
 
@@ -764,6 +769,31 @@ def test_local_setup_capture_uses_nav2_success_refinement_for_dirty_setup():
     assert decision["eligible"] is True
     assert decision["reason"] == "nav2_success_needs_local_recovery_refinement"
     assert decision["requested_route_label"] == "local_setup_capture"
+
+
+def test_nav2_precontact_fallback_route_defaults_use_measured_local_setup_for_wide_setup():
+    args = _route_default_args(
+        planner_route_label="nav2_reposition_first",
+        route_executor="nav2_forward_reposition_then_fetch",
+        drive_duration_s=74.0,
+        sample_duration_s=78.0,
+    )
+
+    applied = apply_nav2_precontact_fallback_route_defaults(
+        args,
+        set(),
+        {
+            "fallback_route_label": "local_setup_capture",
+            "fallback_route_executor": "measured_local_setup_capture",
+        },
+    )
+
+    assert applied["route_label"] == "local_setup_capture"
+    assert applied["route_executor"] == "measured_local_setup_capture"
+    assert args.planner_route_label == "local_setup_capture"
+    assert args.route_executor == "measured_local_setup_capture"
+    assert args.drive_duration_s == pytest.approx(238.0)
+    assert args.sample_duration_s == pytest.approx(242.0)
 
 
 def test_nav2_precontact_fallback_rejects_ball_motion_before_handoff():

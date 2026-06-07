@@ -599,6 +599,9 @@ def nav2_precontact_fallback_to_local_recovery_decision(
         if local_admissible
         else "pre_contact_nav2_failure_inside_wide_setup_fallback_envelope"
     )
+    if str(route_label) == ROUTE_LOCAL_SETUP_CAPTURE or not local_admissible:
+        decision["fallback_route_label"] = ROUTE_LOCAL_SETUP_CAPTURE
+        decision["fallback_route_executor"] = ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE
     return decision
 
 
@@ -668,7 +671,50 @@ def nav2_precontact_refinement_to_local_recovery_decision(
         if local_admissible
         else "nav2_success_needs_wide_setup_refinement"
     )
+    if str(route_label) == ROUTE_LOCAL_SETUP_CAPTURE or not local_admissible:
+        decision["fallback_route_label"] = ROUTE_LOCAL_SETUP_CAPTURE
+        decision["fallback_route_executor"] = ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE
     return decision
+
+
+def apply_nav2_precontact_fallback_route_defaults(
+    args: argparse.Namespace,
+    explicit_args: set[str],
+    nav2_precontact_fallback: dict[str, Any],
+) -> dict[str, Any]:
+    fallback_route_label = str(nav2_precontact_fallback.get("fallback_route_label", "") or ROUTE_RECOVERY_OR_REAIM)
+    fallback_route_executor = str(nav2_precontact_fallback.get("fallback_route_executor", "") or "")
+    if fallback_route_label == ROUTE_LOCAL_SETUP_CAPTURE:
+        fallback_route_executor = fallback_route_executor or ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE
+        route_drive_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_DRIVE_DURATION_S
+        route_sample_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_SAMPLE_DURATION_S
+    else:
+        fallback_route_label = ROUTE_RECOVERY_OR_REAIM
+        fallback_route_executor = fallback_route_executor or ROUTE_EXECUTOR_RECOVERY
+        route_drive_duration_s = RECOVERY_ROUTE_DRIVE_DURATION_S
+        route_sample_duration_s = RECOVERY_ROUTE_SAMPLE_DURATION_S
+    args.planner_route_label = fallback_route_label
+    args.route_executor = fallback_route_executor
+    _set_route_default(
+        args,
+        explicit_args,
+        "drive_duration_s",
+        route_drive_duration_s,
+        "--drive-duration-s",
+    )
+    _set_route_default(
+        args,
+        explicit_args,
+        "sample_duration_s",
+        route_sample_duration_s,
+        "--sample-duration-s",
+    )
+    return {
+        "route_label": fallback_route_label,
+        "route_executor": fallback_route_executor,
+        "drive_duration_s": route_drive_duration_s,
+        "sample_duration_s": route_sample_duration_s,
+    }
 
 
 def apply_planner_route_execution_defaults(
@@ -3971,30 +4017,12 @@ def main() -> int:
                 pre_fetch_reposition["post_refinement_handoff_decision"] = nav2_precontact_fallback
             if bool(nav2_precontact_fallback.get("eligible", False)):
                 nav2_precontact_fallback["applied"] = True
-                route_drive_duration_s = RECOVERY_ROUTE_DRIVE_DURATION_S
-                route_sample_duration_s = RECOVERY_ROUTE_SAMPLE_DURATION_S
-                if str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE:
-                    args.planner_route_label = ROUTE_LOCAL_SETUP_CAPTURE
-                    args.route_executor = ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE
-                    route_drive_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_DRIVE_DURATION_S
-                    route_sample_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_SAMPLE_DURATION_S
-                else:
-                    args.planner_route_label = ROUTE_RECOVERY_OR_REAIM
-                    args.route_executor = ROUTE_EXECUTOR_RECOVERY
-                _set_route_default(
+                pre_fetch_reposition["fallback_route_defaults"] = apply_nav2_precontact_fallback_route_defaults(
                     args,
                     explicit_args,
-                    "drive_duration_s",
-                    route_drive_duration_s,
-                    "--drive-duration-s",
+                    nav2_precontact_fallback,
                 )
-                _set_route_default(
-                    args,
-                    explicit_args,
-                    "sample_duration_s",
-                    route_sample_duration_s,
-                    "--sample-duration-s",
-                )
+                planner_route_label = str(args.planner_route_label or planner_route_label)
                 pre_fetch_reposition["fallback_to_local_recovery"] = nav2_precontact_fallback
                 pre_fetch_reposition["local_fetch_refined_after_nav2_success"] = True
             else:
@@ -4008,30 +4036,12 @@ def main() -> int:
             )
             if bool(nav2_precontact_fallback.get("eligible", False)):
                 nav2_precontact_fallback["applied"] = True
-                route_drive_duration_s = RECOVERY_ROUTE_DRIVE_DURATION_S
-                route_sample_duration_s = RECOVERY_ROUTE_SAMPLE_DURATION_S
-                if str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE:
-                    args.planner_route_label = ROUTE_LOCAL_SETUP_CAPTURE
-                    args.route_executor = ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE
-                    route_drive_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_DRIVE_DURATION_S
-                    route_sample_duration_s = LOCAL_SETUP_CAPTURE_ROUTE_SAMPLE_DURATION_S
-                else:
-                    args.planner_route_label = ROUTE_RECOVERY_OR_REAIM
-                    args.route_executor = ROUTE_EXECUTOR_RECOVERY
-                _set_route_default(
+                pre_fetch_reposition["fallback_route_defaults"] = apply_nav2_precontact_fallback_route_defaults(
                     args,
                     explicit_args,
-                    "drive_duration_s",
-                    route_drive_duration_s,
-                    "--drive-duration-s",
+                    nav2_precontact_fallback,
                 )
-                _set_route_default(
-                    args,
-                    explicit_args,
-                    "sample_duration_s",
-                    route_sample_duration_s,
-                    "--sample-duration-s",
-                )
+                planner_route_label = str(args.planner_route_label or planner_route_label)
                 pre_fetch_reposition["fallback_to_local_recovery"] = nav2_precontact_fallback
                 pre_fetch_reposition["local_fetch_continued_after_nav2_failure"] = True
             else:

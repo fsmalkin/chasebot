@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import random
 import re
 import subprocess
@@ -624,6 +625,11 @@ def write_layout_for_step(root: Path, scene_id: str, step: dict[str, Any]) -> Pa
     layout["multiball_estimated_start_robot_pose"] = step.get("estimated_start_robot_pose", {})
     layout["multiball_estimated_setup_pose"] = step.get("estimated_setup_pose", {})
     layout["multiball_estimated_post_fetch_robot_pose"] = step.get("estimated_post_fetch_robot_pose", {})
+    if isinstance(step.get("maneuver_plan"), dict) and step["maneuver_plan"]:
+        layout["maneuver_plan"] = step["maneuver_plan"]
+        layout["multiball_maneuver_plan"] = step["maneuver_plan"]
+        if isinstance(layout.get("random_draw"), dict):
+            layout["random_draw"]["maneuver_plan"] = step["maneuver_plan"]
     write_json(layout_path, layout)
     return layout_path
 
@@ -1587,7 +1593,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scene-descriptor-json", action="append", default=[])
     parser.add_argument("--planner-mode", choices=planner_gate.PLANNER_MODES, default=planner_gate.PLANNER_MODE_DETERMINISTIC)
     parser.add_argument("--openai-model", default=planner_gate.DEFAULT_OPENAI_MODEL)
-    parser.add_argument("--openai-api-key", default="")
+    parser.add_argument("--openai-api-key", default=os.environ.get("OPENAI_API_KEY", ""))
     parser.add_argument("--openai-base-url", default=planner_gate.DEFAULT_OPENAI_BASE_URL)
     parser.add_argument("--openai-org-id", default="")
     parser.add_argument("--openai-project-id", default="")
