@@ -223,6 +223,28 @@ as setup/capture-owner evidence. The planner should solve the mission by
 choosing order, setup route, recovery route, and measured push-ready handoff
 timing before local fetch dispatch.
 
+Multi-ball LLM-supervised UAT now has an aggregate rollup. Use it after
+same-session live multi-ball gates to count supervised scenes, live fetch steps,
+planner/provider health, hidden Nav2 prefetch inside local setup, measured
+push-ready handoff, stage labels, and browser-watchable proof links:
+
+```powershell
+python scripts\fetch_multiball_uat_rollup.py `
+  --campaign-id <id> `
+  --dashboard-base-url http://100.112.221.6:8895 `
+  --gate-summary artifacts\session\<gate_a>\fetch_multiball_retrieval_gate\gate_summary.json `
+  --gate-summary artifacts\session\<gate_b>\fetch_multiball_retrieval_gate\gate_summary.json
+```
+
+Current LLM-supervised green reference:
+`artifacts/session/live_multiball_llm_supervised_rollup_20260607/fetch_multiball_uat_rollup/scorecard.md`.
+That package counts two live LLM-supervised scenes, six measured local
+setup/capture/fetch steps, `6/6` `fetch_to_pose` passes, `0` hidden Nav2
+prefetches, provider status `ok` on all steps, one recovered provider retry,
+and browser-watchable onboard/topdown/world/keyframe evidence. It is multi-ball
+visual UAT evidence; route diversity, broader seeded coverage, and canonical
+promotion gates remain ahead.
+
 Saved-anchor repeatability analyzer scope:
 
 ```powershell
