@@ -49,7 +49,6 @@ ROBOT_TARGET_DISTANCE_RANGE_M = (0.70, 1.75)
 MIN_BALL_SEPARATION_M = 0.34
 MIN_ROBOT_BALL_SEPARATION_M = 0.30
 SETUP_STANDOFF_M = 0.50
-LOCAL_SETUP_NAV2_MIN_ROBOT_BALL_DISTANCE_M = 1.05
 CORRIDOR_INTERFERENCE_RADIUS_M = 0.22
 TARGET_MODEL_NAME_PREFIX = "visit_mission_target_multiball_fetch"
 DEFAULT_BALL_SDF = REPO_ROOT / "ros2_config" / "calibrated_golf_ball.sdf"
@@ -645,24 +644,6 @@ def build_step_command(
         robot_pose = one_ball_scene.get("robot_pose") if isinstance(one_ball_scene.get("robot_pose"), dict) else {}
     route_label = str(step.get("route_label", "") or "")
     route_executor = str(step.get("route_executor", "") or "")
-    ball_pose = step.get("ball_pose") if isinstance(step.get("ball_pose"), dict) else {}
-    if not ball_pose:
-        one_ball_scene = step.get("one_ball_scene") if isinstance(step.get("one_ball_scene"), dict) else {}
-        ball_pose = one_ball_scene.get("ball_pose") if isinstance(one_ball_scene.get("ball_pose"), dict) else {}
-    robot_ball_distance_m = None
-    try:
-        if robot_pose and ball_pose:
-            robot_ball_distance_m = math.hypot(
-                finite_float(robot_pose.get("x")) - finite_float(ball_pose.get("x")),
-                finite_float(robot_pose.get("y")) - finite_float(ball_pose.get("y")),
-            )
-    except (TypeError, ValueError):
-        robot_ball_distance_m = None
-    local_setup_skip_nav2 = bool(
-        route_label == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
-        and robot_ball_distance_m is not None
-        and robot_ball_distance_m <= LOCAL_SETUP_NAV2_MIN_ROBOT_BALL_DISTANCE_M
-    )
     command = [
         str(args.python_exe or sys.executable),
         str(REPO_ROOT / "scripts" / "golf_ball_circle_delivery_demo_runner.py"),
@@ -684,7 +665,7 @@ def build_step_command(
         "--route-executor",
         route_executor,
     ]
-    if route_label in {planner_gate.ROUTE_NAV2_REPOSITION, planner_gate.ROUTE_LOCAL_SETUP_CAPTURE} and not local_setup_skip_nav2:
+    if route_label == planner_gate.ROUTE_NAV2_REPOSITION:
         nav2_goal_frame_mode = (
             "nav2_relative"
             if route_label == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE

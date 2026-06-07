@@ -229,16 +229,10 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
         assert float(row["command"][row["command"].index("--robot-x") + 1]) == robot_pose["x"]
         assert float(row["command"][row["command"].index("--robot-y") + 1]) == robot_pose["y"]
         assert float(row["command"][row["command"].index("--robot-yaw") + 1]) == robot_pose["yaw"]
-        local_setup_close_skip = bool(
-            row["route_label"] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
-            and layout["random_draw"]["robot_ball_distance_m"]
-            <= multiball_gate.LOCAL_SETUP_NAV2_MIN_ROBOT_BALL_DISTANCE_M
-        )
-        if row["route_label"] in {planner_gate.ROUTE_NAV2_REPOSITION, planner_gate.ROUTE_LOCAL_SETUP_CAPTURE} and not local_setup_close_skip:
+        if row["route_label"] == planner_gate.ROUTE_NAV2_REPOSITION:
             assert "--nav2-reposition-before-fetch" in row["command"]
             assert "--nav2-reposition-goal-frame-mode" in row["command"]
-            expected_frame_mode = "nav2_relative" if row["route_label"] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE else "world_direct"
-            assert row["command"][row["command"].index("--nav2-reposition-goal-frame-mode") + 1] == expected_frame_mode
+            assert row["command"][row["command"].index("--nav2-reposition-goal-frame-mode") + 1] == "world_direct"
             assert "--nav2-reposition-timeout-s" in row["command"]
             assert float(row["command"][row["command"].index("--nav2-reposition-timeout-s") + 1]) == 48.0
             assert "--nav2-reposition-refine-attempts" in row["command"]
@@ -258,17 +252,11 @@ def test_persistent_field_mode_preserves_target_and_robot_in_step_commands(tmp_p
     )
 
     for row in summary["step_rows"]:
-        layout = json.loads((tmp_path / row["layout_path"]).read_text(encoding="utf-8"))
-        local_setup_close_skip = bool(
-            row["route_label"] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
-            and layout["random_draw"]["robot_ball_distance_m"]
-            <= multiball_gate.LOCAL_SETUP_NAV2_MIN_ROBOT_BALL_DISTANCE_M
-        )
         assert "--use-existing-target-model" in row["command"]
         assert "--preserve-robot-pose" in row["command"]
         assert "--pre-fetch-setup-correction-s" in row["command"]
         assert float(row["command"][row["command"].index("--pre-fetch-setup-correction-s") + 1]) == 14.0
-        if row["route_label"] in {planner_gate.ROUTE_NAV2_REPOSITION, planner_gate.ROUTE_LOCAL_SETUP_CAPTURE} and not local_setup_close_skip:
+        if row["route_label"] == planner_gate.ROUTE_NAV2_REPOSITION:
             assert "--nav2-pre-setup-standoff-m" in row["command"]
             assert float(row["command"][row["command"].index("--nav2-pre-setup-standoff-m") + 1]) == 0.9
         else:
@@ -317,7 +305,7 @@ def test_recovery_route_step_command_does_not_force_nav2_reposition(tmp_path, mo
     assert "--preserve-robot-pose" in command
 
 
-def test_local_setup_capture_step_command_uses_nav2_free_space_setup(tmp_path, monkeypatch):
+def test_local_setup_capture_step_command_keeps_setup_with_measured_local_owner(tmp_path, monkeypatch):
     _patch_roots(tmp_path, monkeypatch)
     layout_path = tmp_path / "layout.json"
     _write_json(layout_path, {"planner_route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE})
@@ -334,10 +322,9 @@ def test_local_setup_capture_step_command_uses_nav2_free_space_setup(tmp_path, m
         },
     )
 
-    assert "--nav2-reposition-before-fetch" in command
-    assert command[command.index("--nav2-reposition-goal-frame-mode") + 1] == "nav2_relative"
-    assert "--nav2-pre-setup-standoff-m" in command
-    assert "--nav2-reposition-refine-attempts" in command
+    assert "--nav2-reposition-before-fetch" not in command
+    assert "--nav2-pre-setup-standoff-m" not in command
+    assert "--nav2-reposition-refine-attempts" not in command
     assert "--nav2-reposition-continue-on-failure" not in command
     assert command[command.index("--planner-route-label") + 1] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
     assert command[command.index("--route-executor") + 1] == ""
