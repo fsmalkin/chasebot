@@ -266,6 +266,78 @@ def test_visual_uat_package_scores_route_only_proof(tmp_path, monkeypatch):
     assert "route_outcome=`safe_no_go_selected`" in text
 
 
+def test_visual_uat_package_infers_withheld_fetch_from_pre_push_handoff(tmp_path, monkeypatch):
+    session_root = tmp_path / "artifacts" / "session"
+    monkeypatch.setattr(package, "SESSION_ROOT", session_root)
+    monkeypatch.setattr(package, "REPO_ROOT", tmp_path)
+    _stub_browser_video_probe(monkeypatch)
+
+    mission = session_root / "mission" / "golf_ball_circle_delivery" / "mission_verdict.json"
+    _write_json(
+        mission,
+        {
+            "type": "gather_mission",
+            "pass": False,
+            "fetch_to_pose_pass": False,
+            "planner_route_label": "local_setup_capture",
+            "route_executor": "measured_local_setup_capture",
+            "pre_push_measured_handoff": {
+                "required": True,
+                "pass": False,
+                "local_fetch_dispatched": False,
+                "reasons": ["contact_ready_not_observed"],
+            },
+            "shot_outcome": {
+                "pass": False,
+                "reason": "measured_push_ready_handoff_failed",
+            },
+            "model_provenance": {
+                "model_provenance_valid": True,
+                "model_provenance_reason": "calibrated_fetch_models",
+                "target_model_radius_m": 0.021336,
+                "target_model_classification": "calibrated_golf_ball",
+            },
+        },
+    )
+    visual = session_root / "mission" / "visual"
+    visual.mkdir(parents=True)
+    (visual / "world_stream.mp4").write_bytes(b"w" * package.VIDEO_MIN_BYTES)
+    (visual / "topdown_telemetry_browser.mp4").write_bytes(b"t" * package.VIDEO_MIN_BYTES)
+    (visual / "raw_camera_browser.mp4").write_bytes(b"r" * package.VIDEO_MIN_BYTES)
+    _write_json(
+        visual / "visual_demo_summary.json",
+        {
+            "pass": True,
+            "raw_nonblank": True,
+            "debug_nonblank": True,
+            "target_persistence_ok": False,
+            "motion_progress_ok": False,
+            "raw_frame_count": 12,
+            "telemetry_frame_count": 12,
+        },
+    )
+
+    args = type(
+        "Args",
+        (),
+        {
+            "campaign_id": "withheld_fetch_uat",
+            "planner_summary": [],
+            "seeded_evidence_summary": [],
+            "stage_quality_summary": [],
+            "mission_summary": [str(mission)],
+            "visual_dir": [str(visual)],
+        },
+    )()
+
+    summary = package.build_summary(args)
+
+    assert summary["missions"][0]["local_fetch_dispatched"] is False
+    assert summary["local_fetch_pass_seen"] is False
+    assert summary["pass"] is False
+    assert "no_local_fetch_pass_seen" in summary["warnings"]
+
+
 def test_visual_uat_package_scorecard_labels_multiple_planner_routes(tmp_path, monkeypatch):
     session_root = tmp_path / "artifacts" / "session"
     monkeypatch.setattr(package, "SESSION_ROOT", session_root)

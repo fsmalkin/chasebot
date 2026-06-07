@@ -70,6 +70,9 @@ NAV2_FALLBACK_BALL_MOTION_LIMIT_M = 0.020
 NAV2_WIDE_SETUP_ROBOT_BALL_DISTANCE_LIMIT_M = 1.800
 NAV2_WIDE_SETUP_LATERAL_LIMIT_M = 1.800
 NAV2_WIDE_SETUP_YAW_LIMIT_DEG = 165.0
+LOCAL_SETUP_NAV2_COARSE_ROBOT_BALL_DISTANCE_LIMIT_M = 3.000
+LOCAL_SETUP_NAV2_COARSE_LATERAL_LIMIT_M = 2.400
+LOCAL_SETUP_NAV2_COARSE_BALL_MOTION_LIMIT_M = 0.020
 NAV2_SETUP_FIELD_BOUNDS = {
     "x_min_m": -1.20,
     "x_max_m": 2.20,
@@ -351,6 +354,60 @@ def _route_geometry_from_layout(target_layout: dict[str, Any]) -> dict[str, Any]
     }
 
 
+def apply_local_setup_nav2_coarse_acceptance(
+    *,
+    args: argparse.Namespace,
+    target_layout: dict[str, Any],
+    pre_fetch_reposition: dict[str, Any],
+) -> dict[str, Any]:
+    if str(getattr(args, "planner_route_label", "") or "").strip() != ROUTE_LOCAL_SETUP_CAPTURE:
+        return {"applied": False, "reason": "route_not_local_setup_capture"}
+    if not bool(pre_fetch_reposition.get("action_success", pre_fetch_reposition.get("success", False))):
+        return {"applied": False, "reason": "nav2_action_not_successful"}
+    robot_pose = pre_fetch_reposition.get("post_reposition_robot_pose")
+    ball_pose = pre_fetch_reposition.get("post_reposition_ball_pose")
+    if not isinstance(robot_pose, dict) or not isinstance(ball_pose, dict):
+        return {"applied": False, "reason": "missing_post_reposition_pose_sample"}
+    geometry = _route_geometry_from_poses(
+        robot_pose=robot_pose,
+        ball_pose=ball_pose,
+        target_x=float(args.zone_x),
+        target_y=float(args.zone_y),
+    )
+    if not bool(geometry.get("available", False)):
+        return {"applied": False, "reason": "missing_post_reposition_geometry", "geometry": geometry}
+    random_draw = target_layout.get("random_draw") if isinstance(target_layout.get("random_draw"), dict) else {}
+    start_ball_pose = random_draw.get("ball_pose") if isinstance(random_draw.get("ball_pose"), dict) else {}
+    current_ball_pose = pose_xy_yaw(ball_pose)
+    ball_motion_m = 0.0
+    if start_ball_pose and current_ball_pose is not None:
+        ball_motion_m = math.hypot(
+            current_ball_pose["x"] - float(start_ball_pose.get("x", current_ball_pose["x"]) or current_ball_pose["x"]),
+            current_ball_pose["y"] - float(start_ball_pose.get("y", current_ball_pose["y"]) or current_ball_pose["y"]),
+        )
+    reasons: list[str] = []
+    if ball_motion_m > LOCAL_SETUP_NAV2_COARSE_BALL_MOTION_LIMIT_M:
+        reasons.append("ball_moved_during_nav2_setup")
+    if _finite_float(geometry.get("robot_ball_distance_m"), 999.0) > LOCAL_SETUP_NAV2_COARSE_ROBOT_BALL_DISTANCE_LIMIT_M:
+        reasons.append("robot_ball_distance_outside_local_setup_envelope")
+    if _finite_float(geometry.get("robot_lateral_error_m"), 999.0) > LOCAL_SETUP_NAV2_COARSE_LATERAL_LIMIT_M:
+        reasons.append("lateral_error_outside_local_setup_envelope")
+    accepted = not reasons
+    return {
+        "applied": True,
+        "accepted": accepted,
+        "reason": "local_setup_nav2_coarse_accept" if accepted else "local_setup_nav2_coarse_reject",
+        "reasons": reasons,
+        "geometry": geometry,
+        "ball_motion_m": round(float(ball_motion_m), 6),
+        "thresholds": {
+            "ball_motion_limit_m": LOCAL_SETUP_NAV2_COARSE_BALL_MOTION_LIMIT_M,
+            "robot_ball_distance_limit_m": LOCAL_SETUP_NAV2_COARSE_ROBOT_BALL_DISTANCE_LIMIT_M,
+            "lateral_limit_m": LOCAL_SETUP_NAV2_COARSE_LATERAL_LIMIT_M,
+        },
+    }
+
+
 def nav2_reposition_measured_goal_validation(
     *,
     goal_pose: dict[str, Any],
@@ -498,8 +555,8 @@ def nav2_precontact_fallback_to_local_recovery_decision(
     if disabled:
         decision["reason"] = "fallback_disabled"
         return decision
-    if route_label != ROUTE_NAV2_REPOSITION:
-        decision["reason"] = "route_not_nav2_reposition"
+    if route_label not in {ROUTE_NAV2_REPOSITION, ROUTE_LOCAL_SETUP_CAPTURE}:
+        decision["reason"] = "route_not_nav2_or_local_setup"
         return decision
     if bool(pre_fetch_reposition.get("success", False)):
         decision["reason"] = "nav2_reposition_succeeded"
@@ -567,8 +624,8 @@ def nav2_precontact_refinement_to_local_recovery_decision(
     if bool(getattr(args, "disable_nav2_precontact_fallback", False)):
         decision["reason"] = "fallback_disabled"
         return decision
-    if route_label != ROUTE_NAV2_REPOSITION:
-        decision["reason"] = "route_not_nav2_reposition"
+    if route_label not in {ROUTE_NAV2_REPOSITION, ROUTE_LOCAL_SETUP_CAPTURE}:
+        decision["reason"] = "route_not_nav2_or_local_setup"
         return decision
     if not bool(pre_fetch_reposition.get("success", False)):
         decision["reason"] = "nav2_reposition_not_successful"
@@ -1421,6 +1478,8 @@ def line_servo_command(
     ball_x = float(ball_pose.get("x", 0.0) or 0.0)
     ball_y = float(ball_pose.get("y", 0.0) or 0.0)
     line_yaw = math.atan2(float(target_y) - ball_y, float(target_x) - ball_x)
+    normal_x = -math.sin(line_yaw)
+    normal_y = math.cos(line_yaw)
     clean_route_label = str(route_label or "").strip()
     effective_setup_standoff_m = max(float(setup_standoff_m), float(contact_standoff_m))
     effective_max_angular_z_rps = float(max_angular_z_rps)
@@ -1442,6 +1501,10 @@ def line_servo_command(
     aim_yaw = math.atan2(behind_y - robot_y, behind_x - robot_x)
     setup_yaw = math.atan2(setup_y - robot_y, setup_x - robot_x)
     robot_lateral_error = signed_lateral_error_m(robot_x, robot_y, origin_x=ball_x, origin_y=ball_y, line_yaw_rad=line_yaw)
+    robot_longitudinal_projection = (
+        (robot_x - ball_x) * math.cos(line_yaw)
+        + (robot_y - ball_y) * math.sin(line_yaw)
+    )
     line_yaw_error = normalize_angle_rad(line_yaw - robot_yaw)
     yaw_priority_lateral_m = max(float(effective_contact_lateral_ready_m), 0.032)
     contact_final_reaim_active = bool(
@@ -1517,6 +1580,10 @@ def line_servo_command(
         _is_local_setup_owner_route(clean_route_label)
         and not ball_moved
         and recovery_line_acquire_yaw_hold_active
+        and (
+            clean_route_label != ROUTE_LOCAL_SETUP_CAPTURE
+            or abs(robot_lateral_error) <= effective_contact_lateral_ready_m * 1.05
+        )
         and 0.20 < distance_to_contact <= 0.24
         and abs(robot_lateral_error) >= max(effective_contact_lateral_ready_m * 2.0, recovery_line_acquire_lateral_m * 0.70)
         and abs(line_yaw_error) <= recovery_close_line_acquire_yaw_hold_threshold_rad
@@ -1556,6 +1623,10 @@ def line_servo_command(
             (
                 recovery_line_acquire_yaw_hold_active
                 and not recovery_line_acquire_yaw_crawl_active
+                and (
+                    clean_route_label != ROUTE_LOCAL_SETUP_CAPTURE
+                    or abs(robot_lateral_error) <= effective_contact_lateral_ready_m * 1.05
+                )
             )
             or (
                 0.10 < distance_to_contact <= 0.18
@@ -1565,6 +1636,32 @@ def line_servo_command(
         and not contact_ready
         and abs(line_yaw_error) > recovery_contact_yaw_hold_threshold_rad
     )
+    recovery_contact_micro_yaw_hold_active = bool(
+        _is_local_setup_owner_route(clean_route_label)
+        and not ball_moved
+        and not contact_ready
+        and distance_to_contact <= 0.055
+        and abs(line_yaw_error) > float(contact_yaw_ready_rad)
+    )
+    recovery_wrong_side_orbit_active = bool(
+        _is_local_setup_owner_route(clean_route_label)
+        and not ball_moved
+        and not contact_ready
+        and robot_longitudinal_projection > -float(contact_standoff_m) * 0.60
+        and distance_to_contact > 0.14
+    )
+    recovery_close_misaligned_escape_active = bool(
+        clean_route_label == ROUTE_LOCAL_SETUP_CAPTURE
+        and not ball_moved
+        and not contact_ready
+        and distance_to_contact <= 0.18
+        and (
+            abs(robot_lateral_error) > effective_contact_lateral_ready_m * 1.18
+            or abs(line_yaw_error) > float(contact_yaw_ready_rad) * 1.70
+        )
+    )
+    recovery_close_escape_pose: dict[str, float] = {}
+    recovery_close_escape_heading_toward_ball = False
     if ball_moved:
         yaw_misaligned_after_motion = abs(line_yaw_error) > max(float(contact_yaw_ready_rad) * 1.50, 0.10)
         if abs(robot_lateral_error) > effective_contact_lateral_ready_m or yaw_misaligned_after_motion:
@@ -1592,14 +1689,71 @@ def line_servo_command(
         phase = "recovery_contact_yaw_hold"
         desired_yaw = line_yaw
         base_linear = 0.0
+    elif recovery_contact_micro_yaw_hold_active:
+        phase = "recovery_contact_micro_yaw_hold"
+        desired_yaw = line_yaw
+        base_linear = 0.0
     elif recovery_line_acquire_yaw_crawl_active:
         phase = "recovery_line_acquire_yaw_crawl"
         desired_yaw = line_yaw
         base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), 0.014))
+    elif recovery_wrong_side_orbit_active:
+        phase = "recovery_orbit_setup"
+        lateral_sign = 1.0 if robot_lateral_error >= 0.0 else -1.0
+        side_clearance_m = max(0.38, min(0.52, effective_setup_standoff_m + 0.14))
+        orbit_longitudinal_m = -max(effective_setup_standoff_m, float(contact_standoff_m) + 0.18)
+        orbit_x = (
+            ball_x
+            + math.cos(line_yaw) * orbit_longitudinal_m
+            - math.sin(line_yaw) * lateral_sign * side_clearance_m
+        )
+        orbit_y = (
+            ball_y
+            + math.sin(line_yaw) * orbit_longitudinal_m
+            + math.cos(line_yaw) * lateral_sign * side_clearance_m
+        )
+        desired_yaw = math.atan2(orbit_y - robot_y, orbit_x - robot_x)
+        base_linear = min(float(max_linear_x_mps), 0.045)
+        if distance_to_contact < 0.22 and abs(line_yaw_error) > 0.80:
+            base_linear = min(base_linear, 0.018)
+    elif recovery_close_misaligned_escape_active:
+        phase = "recovery_close_misaligned_escape"
+        lateral_sign = 1.0 if robot_lateral_error >= 0.0 else -1.0
+        escape_lateral_m = min(0.18, max(0.10, abs(robot_lateral_error) + 0.055))
+        escape_longitudinal_m = -max(float(contact_standoff_m) + 0.12, 0.23)
+        escape_x = (
+            ball_x
+            + math.cos(line_yaw) * escape_longitudinal_m
+            + normal_x * lateral_sign * escape_lateral_m
+        )
+        escape_y = (
+            ball_y
+            + math.sin(line_yaw) * escape_longitudinal_m
+            + normal_y * lateral_sign * escape_lateral_m
+        )
+        recovery_close_escape_pose = {
+            "x": round(float(escape_x), 6),
+            "y": round(float(escape_y), 6),
+            "yaw": round(float(line_yaw), 6),
+        }
+        desired_yaw = math.atan2(escape_y - robot_y, escape_x - robot_x)
+        ball_bearing_yaw = math.atan2(ball_y - robot_y, ball_x - robot_x)
+        recovery_close_escape_heading_toward_ball = (
+            abs(normalize_angle_rad(desired_yaw - ball_bearing_yaw)) < (math.pi * 0.50)
+        )
+        base_linear = min(float(max_linear_x_mps), 0.018)
+        if distance_to_contact <= 0.06:
+            base_linear = min(base_linear, 0.012)
+        if distance_to_contact <= 0.06 and recovery_close_escape_heading_toward_ball:
+            base_linear = 0.0
     elif (
         _is_local_setup_owner_route(clean_route_label)
         and distance_to_setup <= recovery_setup_pocket_m
         and abs(robot_lateral_error) <= recovery_line_acquire_lateral_m
+        and (
+            clean_route_label != ROUTE_LOCAL_SETUP_CAPTURE
+            or abs(robot_lateral_error) <= effective_contact_lateral_ready_m * 1.05
+        )
         and distance_to_contact > 0.12
         and not recovery_close_settle_active
     ):
@@ -1626,10 +1780,13 @@ def line_servo_command(
                 if abs(robot_lateral_error) > lateral_reaim_release_m
                 else line_yaw
             )
-            settle_cap = 0.012 if (
-                abs(robot_lateral_error) > effective_contact_lateral_ready_m * 1.25
-                or abs(line_yaw_error) > float(contact_yaw_ready_rad) * 2.50
-            ) else 0.018
+            if distance_to_contact > 0.14:
+                settle_cap = 0.022
+            else:
+                settle_cap = 0.012 if (
+                    abs(robot_lateral_error) > effective_contact_lateral_ready_m * 1.25
+                    or abs(line_yaw_error) > float(contact_yaw_ready_rad) * 2.50
+                ) else 0.018
             base_linear = min(float(max_linear_x_mps), max(float(min_linear_x_mps), settle_cap))
         elif contact_final_reaim_active:
             phase = "contact_final_reaim"
@@ -1711,7 +1868,7 @@ def line_servo_command(
         crawl_cap = 0.018 if recovery_line_acquire_yaw_crawl_active or distance_to_contact < 0.14 else 0.025
         base_linear = min(max(base_linear, float(min_linear_x_mps)), crawl_cap)
     linear_x = clamp(base_linear, linear_floor, float(max_linear_x_mps))
-    if local_contact_yaw_hold_active or recovery_contact_yaw_hold_active:
+    if local_contact_yaw_hold_active or recovery_contact_yaw_hold_active or recovery_contact_micro_yaw_hold_active:
         linear_x = 0.0
     return {
         "phase": phase,
@@ -1724,6 +1881,7 @@ def line_servo_command(
         "yaw_error_rad": round(float(yaw_error), 6),
         "line_yaw_error_rad": round(float(line_yaw_error), 6),
         "robot_lateral_error_m": round(float(robot_lateral_error), 6),
+        "robot_longitudinal_projection_m": round(float(robot_longitudinal_projection), 6),
         "contact_lateral_ready_m": round(float(effective_contact_lateral_ready_m), 6),
         "contact_yaw_ready_rad": round(float(contact_yaw_ready_rad), 6),
         "recovery_line_acquire_lateral_m": round(float(recovery_line_acquire_lateral_m), 6),
@@ -1745,7 +1903,12 @@ def line_servo_command(
         ),
         "recovery_contact_yaw_hold_active": recovery_contact_yaw_hold_active,
         "recovery_contact_yaw_hold_threshold_rad": round(float(recovery_contact_yaw_hold_threshold_rad), 6),
+        "recovery_contact_micro_yaw_hold_active": recovery_contact_micro_yaw_hold_active,
         "recovery_contact_lateral_trim_active": recovery_contact_lateral_trim_active,
+        "recovery_wrong_side_orbit_active": recovery_wrong_side_orbit_active,
+        "recovery_close_misaligned_escape_active": recovery_close_misaligned_escape_active,
+        "recovery_close_escape_pose": recovery_close_escape_pose,
+        "recovery_close_escape_heading_toward_ball": recovery_close_escape_heading_toward_ball,
         "lateral_reaim_rad": round(float(lateral_reaim), 6),
         "lateral_reaim_release_m": round(float(lateral_reaim_release_m), 6),
         "lateral_reaim_gain": round(float(lateral_reaim_gain), 6),
@@ -1824,6 +1987,68 @@ def measured_push_ready_handoff_from_approach_metrics(
         if isinstance(approach_metrics.get("first_contact_quality_flags"), list)
         else [],
         "source": "approach_contact_metrics",
+    }
+
+
+def measured_push_ready_handoff_from_setup_samples(
+    samples: list[dict[str, Any]],
+    *,
+    planner_route_label: str,
+) -> dict[str, Any]:
+    required = bool(str(planner_route_label or "").strip() == ROUTE_LOCAL_SETUP_CAPTURE)
+    commands = [
+        sample.get("line_servo_command")
+        for sample in samples
+        if isinstance(sample, dict) and isinstance(sample.get("line_servo_command"), dict)
+    ]
+    latest_command = commands[-1] if commands else {}
+    ready_commands = [command for command in commands if bool(command.get("contact_ready", False))]
+    ball_motion_commands = [command for command in commands if bool(command.get("ball_moved", False))]
+    setup_contact_ready = bool(
+        ready_commands
+        or any(bool(sample.get("setup_contact_ready_triggered", False)) for sample in samples if isinstance(sample, dict))
+    )
+    setup_ball_motion = bool(
+        ball_motion_commands
+        or any(bool(sample.get("setup_ball_motion_triggered", False)) for sample in samples if isinstance(sample, dict))
+    )
+    latest_ready = ready_commands[-1] if ready_commands else latest_command
+    passed = bool((not required) or (setup_contact_ready and not setup_ball_motion))
+    reasons: list[str] = []
+    if required and not setup_contact_ready:
+        reasons.append("contact_ready_not_observed")
+    if required and setup_ball_motion:
+        reasons.append("ball_moved_before_push_ready")
+    if not commands:
+        reasons.append("missing_line_servo_commands")
+    return {
+        "required": required,
+        "pass": passed,
+        "local_fetch_dispatched": False,
+        "planner_route_label": str(planner_route_label or ""),
+        "setup_contact_ready": setup_contact_ready,
+        "setup_ball_motion_before_ready": setup_ball_motion,
+        "setup_sample_count": len(samples),
+        "line_servo_command_count": len(commands),
+        "latest_phase": str(latest_command.get("phase", "") or ""),
+        "latest_contact_ready": bool(latest_command.get("contact_ready", False)),
+        "latest_ball_moved": bool(latest_command.get("ball_moved", False)),
+        "latest_distance_to_contact_m": latest_command.get("distance_to_contact_m"),
+        "latest_robot_lateral_error_m": latest_command.get("robot_lateral_error_m"),
+        "latest_robot_yaw_error_deg": (
+            round(math.degrees(float(latest_command.get("line_yaw_error_rad", 0.0) or 0.0)), 6)
+            if latest_command
+            else None
+        ),
+        "ready_distance_to_contact_m": latest_ready.get("distance_to_contact_m") if latest_ready else None,
+        "ready_robot_lateral_error_m": latest_ready.get("robot_lateral_error_m") if latest_ready else None,
+        "ready_robot_yaw_error_deg": (
+            round(math.degrees(float(latest_ready.get("line_yaw_error_rad", 0.0) or 0.0)), 6)
+            if latest_ready
+            else None
+        ),
+        "reasons": reasons,
+        "source": "setup_only_line_servo_samples",
     }
 
 
@@ -1996,6 +2221,7 @@ def collect_line_servo_samples(
     contact_lateral_ready_m: float = 0.035,
     contact_yaw_ready_rad: float = 0.10,
     route_label: str = "",
+    setup_only: bool = False,
 ) -> list[dict[str, Any]]:
     effective_stop_radius_m = float(delivery_stop_radius_m) if float(delivery_stop_radius_m) > 0.0 else float(delivery_radius_m)
     script = f"""
@@ -2022,6 +2248,7 @@ export YAW_GAIN={json.dumps(f"{yaw_gain:.6f}")}
 export CONTACT_LATERAL_READY_M={json.dumps(f"{contact_lateral_ready_m:.6f}")}
 export CONTACT_YAW_READY_RAD={json.dumps(f"{contact_yaw_ready_rad:.6f}")}
 export PLANNER_ROUTE_LABEL={json.dumps(str(route_label or ""))}
+export SETUP_ONLY={json.dumps("1" if setup_only else "0")}
 python3 - <<'PY'
 import json
 import math
@@ -2056,6 +2283,7 @@ yaw_gain = float(os.environ["YAW_GAIN"])
 contact_lateral_ready_m = float(os.environ["CONTACT_LATERAL_READY_M"])
 contact_yaw_ready_rad = float(os.environ["CONTACT_YAW_READY_RAD"])
 planner_route_label = os.environ.get("PLANNER_ROUTE_LABEL", "")
+setup_only = os.environ.get("SETUP_ONLY", "0") == "1"
 topic = f"/world/{{world_name}}/dynamic_pose/info"
 started = time.monotonic()
 deadline = started + max(duration_s, 0.1)
@@ -2160,7 +2388,16 @@ try:
                         route_label=planner_route_label,
                     )
                     record["line_servo_command"] = command
-                    publish(pub, node, command["linear_x_mps"], command["angular_z_rps"])
+                    if setup_only and bool(command.get("ball_moved", False)):
+                        record["setup_ball_motion_triggered"] = True
+                        publish(pub, node, 0.0, 0.0)
+                        should_break = True
+                    elif setup_only and bool(command.get("contact_ready", False)):
+                        record["setup_contact_ready_triggered"] = True
+                        publish(pub, node, 0.0, 0.0)
+                        should_break = True
+                    else:
+                        publish(pub, node, command["linear_x_mps"], command["angular_z_rps"])
                     dx = ball_xy["x"] - delivery_target_x
                     dy = ball_xy["y"] - delivery_target_y
                     distance = math.hypot(dx, dy)
@@ -3306,6 +3543,16 @@ def main() -> int:
             pre_fetch_reposition["post_reposition_robot_pose"] = last_sample.get("robot_pose")
             pre_fetch_reposition["post_reposition_ball_pose"] = last_sample.get("ball_pose")
             apply_nav2_measured_goal_validation(pre_fetch_reposition, goal_pose)
+            local_setup_nav2_acceptance = apply_local_setup_nav2_coarse_acceptance(
+                args=args,
+                target_layout=target_layout,
+                pre_fetch_reposition=pre_fetch_reposition,
+            )
+            pre_fetch_reposition["local_setup_nav2_coarse_acceptance"] = local_setup_nav2_acceptance
+            if bool(local_setup_nav2_acceptance.get("accepted", False)):
+                pre_fetch_reposition["success"] = True
+                pre_fetch_reposition["dispatch_status"] = "goal_succeeded_local_setup_coarse_accept"
+                pre_fetch_reposition["local_setup_coarse_accept_overrode_measured_goal"] = True
             append_jsonl(artifact_dir / "pre_fetch_reposition_trace.jsonl", pre_fetch_reposition_samples)
         if bool(pre_fetch_reposition.get("success", False)):
             nav2_precontact_fallback = nav2_precontact_refinement_to_local_recovery_decision(
@@ -3391,8 +3638,12 @@ def main() -> int:
                 pre_fetch_reposition["post_refinement_handoff_decision"] = nav2_precontact_fallback
             if bool(nav2_precontact_fallback.get("eligible", False)):
                 nav2_precontact_fallback["applied"] = True
-                args.planner_route_label = ROUTE_RECOVERY_OR_REAIM
-                args.route_executor = ROUTE_EXECUTOR_RECOVERY
+                if str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE:
+                    args.planner_route_label = ROUTE_LOCAL_SETUP_CAPTURE
+                    args.route_executor = ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE
+                else:
+                    args.planner_route_label = ROUTE_RECOVERY_OR_REAIM
+                    args.route_executor = ROUTE_EXECUTOR_RECOVERY
                 _set_route_default(
                     args,
                     explicit_args,
@@ -3420,8 +3671,12 @@ def main() -> int:
             )
             if bool(nav2_precontact_fallback.get("eligible", False)):
                 nav2_precontact_fallback["applied"] = True
-                args.planner_route_label = ROUTE_RECOVERY_OR_REAIM
-                args.route_executor = ROUTE_EXECUTOR_RECOVERY
+                if str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE:
+                    args.planner_route_label = ROUTE_LOCAL_SETUP_CAPTURE
+                    args.route_executor = ROUTE_EXECUTOR_LOCAL_SETUP_CAPTURE
+                else:
+                    args.planner_route_label = ROUTE_RECOVERY_OR_REAIM
+                    args.route_executor = ROUTE_EXECUTOR_RECOVERY
                 _set_route_default(
                     args,
                     explicit_args,
@@ -3536,6 +3791,124 @@ def main() -> int:
         )
     write_json(artifact_dir / "pre_fetch_setup_correction.json", pre_fetch_setup_correction)
 
+    contact_samples: list[dict[str, Any]] = []
+    if pre_fetch_setup_correction_samples:
+        extend_contact_samples(
+            contact_samples,
+            pre_fetch_setup_correction_samples,
+            phase_key="pre_fetch_setup_correction_sample",
+            poll_period_s=args.poll_period_s,
+        )
+    local_setup_capture_setup: dict[str, Any] = {
+        "attempted": False,
+        "required": bool(str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE),
+        "pass": None,
+        "reason": "not_required",
+        "sample_count": 0,
+    }
+    local_setup_capture_setup_samples: list[dict[str, Any]] = []
+    pre_push_measured_handoff: dict[str, Any] = {}
+    fetch_skipped_by_push_ready_handoff = False
+    main_fetch_sample_duration_s = float(args.sample_duration_s)
+    if (
+        str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE
+        and not fetch_skipped_after_reposition
+        and not setup_correction_delivered
+        and str(args.drive_mode) == "line_servo"
+    ):
+        update_runtime(
+            args.gather_runtime_json,
+            mission_phase="local_setup_capture",
+            gather_phase="local_setup_capture",
+            proof_state="setup_capture",
+            zone_pose={"x": args.zone_x, "y": args.zone_y, "z": args.zone_z, "radius_m": args.fetch_delivery_radius_m},
+            latest_feedback="Measured local setup/capture is moving to push-ready geometry before fetch.",
+        )
+        try:
+            local_setup_capture_setup_samples = collect_line_servo_samples(
+                compose_project=args.compose_project,
+                world_name=args.world_name,
+                robot_model_name=args.robot_model_name,
+                ball_model_name=args.target_model_name,
+                duration_s=args.sample_duration_s,
+                poll_period_s=args.poll_period_s,
+                delivery_target_x=args.zone_x,
+                delivery_target_y=args.zone_y,
+                delivery_radius_m=args.fetch_delivery_radius_m,
+                delivery_stop_radius_m=delivery_stop_radius_m,
+                stop_on_delivery=False,
+                motion_threshold_m=args.first_contact_motion_threshold_m,
+                max_linear_x_mps=args.drive_linear_x_mps,
+                push_linear_x_mps=args.line_servo_push_linear_x_mps,
+                min_linear_x_mps=args.line_servo_min_linear_x_mps,
+                max_angular_z_rps=args.line_servo_max_angular_z_rps,
+                yaw_gain=args.line_servo_yaw_gain,
+                contact_lateral_ready_m=args.line_servo_contact_lateral_ready_m,
+                contact_yaw_ready_rad=math.radians(args.line_servo_contact_yaw_ready_deg),
+                route_label=args.planner_route_label,
+                setup_only=True,
+            )
+            setup_elapsed_s = max(
+                (float(sample.get("t_s", 0.0) or 0.0) for sample in local_setup_capture_setup_samples),
+                default=0.0,
+            )
+            main_fetch_sample_duration_s = max(20.0, float(args.sample_duration_s) - setup_elapsed_s)
+            extend_contact_samples(
+                contact_samples,
+                local_setup_capture_setup_samples,
+                phase_key="local_setup_capture_setup_sample",
+                poll_period_s=args.poll_period_s,
+            )
+            latest_robot_pose, latest_ball_pose = latest_robot_ball_xyyaw(local_setup_capture_setup_samples)
+            if latest_robot_pose is not None:
+                args.robot_x = float(latest_robot_pose["x"])
+                args.robot_y = float(latest_robot_pose["y"])
+                args.robot_yaw = float(latest_robot_pose["yaw"])
+            if latest_ball_pose is not None:
+                args.ball_x = float(latest_ball_pose["x"])
+                args.ball_y = float(latest_ball_pose["y"])
+                args.ball_z = float(latest_ball_pose.get("z", args.ball_z))
+            pre_push_measured_handoff = measured_push_ready_handoff_from_setup_samples(
+                local_setup_capture_setup_samples,
+                planner_route_label=planner_route_label,
+            )
+            fetch_skipped_by_push_ready_handoff = not bool(pre_push_measured_handoff.get("pass", False))
+            local_setup_capture_setup = {
+                "attempted": True,
+                "required": True,
+                "pass": bool(pre_push_measured_handoff.get("pass", False)),
+                "reason": (
+                    "push_ready_handoff_green"
+                    if bool(pre_push_measured_handoff.get("pass", False))
+                    else "measured_push_ready_handoff_failed"
+                ),
+                "sample_count": len(local_setup_capture_setup_samples),
+                "elapsed_s": round(float(setup_elapsed_s), 6),
+                "main_fetch_sample_duration_s": round(float(main_fetch_sample_duration_s), 6),
+                "pre_push_measured_handoff": pre_push_measured_handoff,
+            }
+        except Exception as exc:
+            fetch_skipped_by_push_ready_handoff = True
+            pre_push_measured_handoff = {
+                "required": True,
+                "pass": False,
+                "local_fetch_dispatched": False,
+                "planner_route_label": planner_route_label,
+                "reasons": ["setup_capture_error"],
+                "error": str(exc),
+                "source": "setup_only_line_servo_samples",
+            }
+            local_setup_capture_setup = {
+                "attempted": True,
+                "required": True,
+                "pass": False,
+                "reason": "setup_capture_error",
+                "error": str(exc),
+                "sample_count": len(local_setup_capture_setup_samples),
+                "pre_push_measured_handoff": pre_push_measured_handoff,
+            }
+    write_json(artifact_dir / "local_setup_capture_setup.json", local_setup_capture_setup)
+
     update_runtime(
         args.gather_runtime_json,
         mission_phase="fetch_to_pose",
@@ -3545,25 +3918,22 @@ def main() -> int:
         latest_feedback=(
             "Nav2 reposition failed; local contact fetch is blocked."
             if fetch_skipped_after_reposition
+            else "Measured push-ready handoff failed; local contact fetch is blocked."
+            if fetch_skipped_by_push_ready_handoff
             else "Nav2 setup failed cleanly; bounded local recovery is taking over."
             if bool(nav2_precontact_fallback.get("applied", False))
             else "Driving the robot forward to collect and deliver the golf ball."
         ),
     )
-    contact_samples: list[dict[str, Any]] = []
-    if pre_fetch_setup_correction_samples:
-        extend_contact_samples(
-            contact_samples,
-            pre_fetch_setup_correction_samples,
-            phase_key="pre_fetch_setup_correction_sample",
-            poll_period_s=args.poll_period_s,
-        )
     drive_output = ""
     stop_payload: dict[str, Any] = {"returncode": None, "output": "", "pass": None, "skipped": True}
     stop_publishers_payload: dict[str, Any] = {"returncode": None, "output": "", "pass": None, "skipped": True}
     if fetch_skipped_after_reposition:
         drive_output = "local contact fetch skipped because nav2 reposition before fetch failed"
         stop_payload = {"returncode": None, "output": "", "pass": None, "skipped": True, "reason": "nav2_reposition_failed"}
+    elif fetch_skipped_by_push_ready_handoff:
+        drive_output = "local contact fetch skipped because measured push-ready handoff failed"
+        stop_payload = publish_zero_stop(args.compose_project)
     elif setup_correction_delivered:
         drive_output = "delivery completed during pre-fetch setup correction"
         stop_payload = {
@@ -3579,7 +3949,7 @@ def main() -> int:
             world_name=args.world_name,
             robot_model_name=args.robot_model_name,
             ball_model_name=args.target_model_name,
-            duration_s=args.sample_duration_s,
+            duration_s=main_fetch_sample_duration_s,
             poll_period_s=args.poll_period_s,
             delivery_target_x=args.zone_x,
             delivery_target_y=args.zone_y,
@@ -3683,6 +4053,14 @@ def main() -> int:
             "reason": "nav2_reposition_failed_before_fetch",
             "nav2_reposition": pre_fetch_reposition,
         }
+    elif fetch_skipped_by_push_ready_handoff:
+        shot_outcome = {
+            **shot_outcome,
+            "pass": False,
+            "reason": "measured_push_ready_handoff_failed",
+            "pre_push_measured_handoff": pre_push_measured_handoff,
+            "local_setup_capture_setup": local_setup_capture_setup,
+        }
     approach_metrics = build_approach_contact_metrics(
         contact_samples,
         ball_start_x=args.ball_x,
@@ -3715,7 +4093,9 @@ def main() -> int:
             6,
         ),
     }
-    if bool(shot_outcome.get("pass", False)):
+    if fetch_skipped_by_push_ready_handoff:
+        terminal_correction["reason"] = "local_fetch_withheld_before_push"
+    elif bool(shot_outcome.get("pass", False)):
         terminal_correction["reason"] = "delivery_already_passed"
     elif str(args.ai_push_coast_mode or AI_PUSH_COAST_MODE_SHADOW) == AI_PUSH_COAST_MODE_GUARDED_LIVE:
         guard = ai_push_coast_decision.get("ai_push_coast_guard", {})
@@ -3807,11 +4187,26 @@ def main() -> int:
     samples = ball_samples_from_contact_samples(contact_samples)
     append_jsonl(trace_path, samples)
     append_jsonl(contact_trace_path, contact_samples)
+    local_fetch_dispatched = not bool(fetch_skipped_after_reposition or fetch_skipped_by_push_ready_handoff)
     measured_push_ready_handoff = measured_push_ready_handoff_from_approach_metrics(
         approach_metrics,
-        local_fetch_dispatched=not bool(fetch_skipped_after_reposition),
+        local_fetch_dispatched=local_fetch_dispatched,
         planner_route_label=planner_route_label,
     )
+    if pre_push_measured_handoff:
+        post_contact_handoff = dict(measured_push_ready_handoff)
+        measured_push_ready_handoff = {
+            **post_contact_handoff,
+            "pass": bool(
+                pre_push_measured_handoff.get("pass", False)
+                and local_fetch_dispatched
+                and post_contact_handoff.get("pass", False)
+            ),
+            "local_fetch_dispatched": local_fetch_dispatched,
+            "pre_push_handoff": pre_push_measured_handoff,
+            "post_contact_handoff": post_contact_handoff,
+            "source": "pre_push_and_post_contact_handoff",
+        }
     model_provenance = fetch_model_provenance(
         mission_objective=args.mission_objective,
         target_model_sdf=args.target_model_sdf,
@@ -3824,9 +4219,15 @@ def main() -> int:
         if bool(terminal_correction.get("attempted", False))
         else 0.0
     )
+    local_setup_capture_elapsed_s = float(local_setup_capture_setup.get("elapsed_s", 0.0) or 0.0)
     mission_time_s = (
         pre_fetch_elapsed_s
-        + (0.0 if fetch_skipped_after_reposition else max(float(args.sample_duration_s), float(args.drive_duration_s)))
+        + local_setup_capture_elapsed_s
+        + (
+            0.0
+            if fetch_skipped_after_reposition or fetch_skipped_by_push_ready_handoff
+            else max(float(main_fetch_sample_duration_s), float(args.drive_duration_s))
+        )
         + terminal_correction_elapsed_s
     )
     forward_only_pre_contact = bool(float(args.drive_linear_x_mps) >= -1e-9)
@@ -3847,6 +4248,8 @@ def main() -> int:
         "pre_fetch_reposition": pre_fetch_reposition,
         "nav2_precontact_fallback": nav2_precontact_fallback,
         "pre_fetch_setup_correction": pre_fetch_setup_correction,
+        "local_setup_capture_setup": local_setup_capture_setup,
+        "pre_push_measured_handoff": pre_push_measured_handoff,
         "nav2_reposition_before_fetch": bool(args.nav2_reposition_before_fetch),
         "nav2_reposition_required": bool(args.nav2_reposition_before_fetch),
         "nav2_reposition_success": pre_fetch_reposition.get("success"),
@@ -3858,6 +4261,8 @@ def main() -> int:
         "planner_route_execution_defaults": planner_route_defaults,
         "control_preflight": control_preflight,
         "fetch_skipped_after_reposition": bool(fetch_skipped_after_reposition),
+        "fetch_skipped_by_push_ready_handoff": bool(fetch_skipped_by_push_ready_handoff),
+        "local_fetch_dispatched": bool(local_fetch_dispatched),
         "contact_phase_forward_only": bool(float(args.drive_linear_x_mps) >= -1e-9),
         "forward_only_pre_contact_required": bool(args.forward_only_pre_contact_required),
         "forward_only_pre_contact": forward_only_pre_contact,
@@ -3874,6 +4279,7 @@ def main() -> int:
         "drive_stop_publishers": stop_publishers_payload,
         "drive_linear_x_mps": round(float(args.drive_linear_x_mps), 6),
         "drive_duration_s": round(float(args.drive_duration_s), 6),
+        "main_fetch_sample_duration_s": round(float(main_fetch_sample_duration_s), 6),
         "drive_mode": str(args.drive_mode),
         "line_servo_push_linear_x_mps": round(float(args.line_servo_push_linear_x_mps), 6),
         "line_servo_min_linear_x_mps": round(float(args.line_servo_min_linear_x_mps), 6),
@@ -3883,7 +4289,7 @@ def main() -> int:
         "line_servo_contact_yaw_ready_deg": round(float(args.line_servo_contact_yaw_ready_deg), 6),
     }
     route_metadata.update(summarize_line_servo_effective_command(contact_samples))
-    if fetch_skipped_after_reposition:
+    if fetch_skipped_after_reposition or fetch_skipped_by_push_ready_handoff:
         pass_flag = False
     if bool(args.forward_only_pre_contact_required) and not forward_only_pre_contact:
         pass_flag = False
@@ -3911,6 +4317,8 @@ def main() -> int:
         "random_draw": random_draw,
         "planner_route": route_metadata,
         "measured_push_ready_handoff": measured_push_ready_handoff,
+        "pre_push_measured_handoff": pre_push_measured_handoff,
+        "local_setup_capture_setup": local_setup_capture_setup,
         "control_preflight": control_preflight,
         "pre_fetch_reposition": pre_fetch_reposition,
         "nav2_layout_transform": nav2_layout_transform,
@@ -3942,6 +4350,8 @@ def main() -> int:
         "random_draw": random_draw,
         "planner_route": route_metadata,
         "measured_push_ready_handoff": measured_push_ready_handoff,
+        "pre_push_measured_handoff": pre_push_measured_handoff,
+        "local_setup_capture_setup": local_setup_capture_setup,
         "control_preflight": control_preflight,
         "session_id": session_id,
         "dashboard_session_binding": dashboard_session_binding,

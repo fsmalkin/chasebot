@@ -1792,3 +1792,12 @@ retrieval order, route class, recovery route, and push-ready handoff timing from
 measured state. Nav2 owns free-space repositioning after route validation. A
 local setup/capture owner gets behind the selected ball on the ball-target line
 before dispatching the one-ball local primitive.
+
+Follow-on hard-scene evidence sharpens that boundary. The latest explicit
+`local_setup_capture` package,
+`artifacts/session/live_multiball_local_setup_capture_seed20260607_scene01_lateralready_20260606_visual_package/fetch_visual_uat_package/scorecard.md`,
+is red at `0/3`, with all contact withheld before push-ready. That is a useful
+failure: route ownership and fail-closed measured handoff are now working, while
+the current line-servo setup loop stalls near the setup pocket with remaining yaw
+debt. The next roadmap lane is a measured local setup trajectory/pose owner with
+explicit safe-side, behind-ball, yaw-align, and push-ready milestones.

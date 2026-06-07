@@ -37,6 +37,7 @@ DEFAULT_RANDOM_CASES = 6
 DEFAULT_BALLS_PER_SCENE = 3
 DEFAULT_PROFILE = "open_field_multiball_v1"
 DEFAULT_NAV2_GOAL_FRAME_MODE = "world_direct"
+LOCAL_SETUP_CAPTURE_STEP_TIMEOUT_S = 300.0
 DEFAULT_FIELD_BOUNDS = {
     "x_min_m": -1.20,
     "x_max_m": 2.20,
@@ -618,6 +619,8 @@ def build_step_command(
     if not robot_pose:
         one_ball_scene = step.get("one_ball_scene") if isinstance(step.get("one_ball_scene"), dict) else {}
         robot_pose = one_ball_scene.get("robot_pose") if isinstance(one_ball_scene.get("robot_pose"), dict) else {}
+    route_label = str(step.get("route_label", "") or "")
+    route_executor = str(step.get("route_executor", "") or "")
     command = [
         str(args.python_exe or sys.executable),
         str(REPO_ROOT / "scripts" / "golf_ball_circle_delivery_demo_runner.py"),
@@ -634,13 +637,22 @@ def build_step_command(
         "--forward-only-pre-contact-required",
         "--ai-push-coast-mode",
         "guarded_live",
+        "--planner-route-label",
+        route_label,
+        "--route-executor",
+        route_executor,
     ]
-    if str(step.get("route_label", "") or "") == planner_gate.ROUTE_NAV2_REPOSITION:
+    if route_label in {planner_gate.ROUTE_NAV2_REPOSITION, planner_gate.ROUTE_LOCAL_SETUP_CAPTURE}:
+        nav2_goal_frame_mode = (
+            "nav2_relative"
+            if route_label == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
+            else str(getattr(args, "nav2_goal_frame_mode", DEFAULT_NAV2_GOAL_FRAME_MODE) or DEFAULT_NAV2_GOAL_FRAME_MODE)
+        )
         command.extend(
             [
                 "--nav2-reposition-before-fetch",
                 "--nav2-reposition-goal-frame-mode",
-                str(getattr(args, "nav2_goal_frame_mode", DEFAULT_NAV2_GOAL_FRAME_MODE) or DEFAULT_NAV2_GOAL_FRAME_MODE),
+                nav2_goal_frame_mode,
                 "--nav2-reposition-timeout-s",
                 "48.000",
                 "--nav2-reposition-server-wait-s",
@@ -736,6 +748,14 @@ def run_command(command: list[str], *, timeout_s: float) -> subprocess.Completed
             stderr = stderr.decode(errors="replace")
         stderr_text = f"{stderr}\ntimeout_after_s={timeout:.3f}".strip()
         return subprocess.CompletedProcess(command, 124, stdout=str(stdout or ""), stderr=stderr_text)
+
+
+def step_run_timeout_s(args: argparse.Namespace, step: dict[str, Any]) -> float:
+    base_timeout_s = float(getattr(args, "timeout_s", 180.0) or 180.0)
+    route_label = str(step.get("route_label", "") or "")
+    if route_label == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE:
+        return max(base_timeout_s, LOCAL_SETUP_CAPTURE_STEP_TIMEOUT_S)
+    return base_timeout_s
 
 
 def extract_marker(output: str, marker: str) -> str:
@@ -863,9 +883,10 @@ def materialize_plan_rows(
             "mission": {},
             "stdout_tail": "",
             "stderr_tail": "",
+            "step_timeout_s": step_run_timeout_s(args, step),
         }
         if execute_live:
-            completed = run_command(command, timeout_s=float(args.timeout_s))
+            completed = run_command(command, timeout_s=float(row["step_timeout_s"]))
             output = (completed.stdout or "") + "\n" + (completed.stderr or "")
             mission_summary_raw = extract_marker(output, MISSION_SUMMARY_MARKER)
             row["returncode"] = int(completed.returncode)
@@ -1076,9 +1097,10 @@ def materialize_replanning_rows(
             "measured_post_step_state": {},
             "stdout_tail": "",
             "stderr_tail": "",
+            "step_timeout_s": step_run_timeout_s(args, step),
         }
         if execute_live:
-            completed = run_command(command, timeout_s=float(args.timeout_s))
+            completed = run_command(command, timeout_s=float(row["step_timeout_s"]))
             output = (completed.stdout or "") + "\n" + (completed.stderr or "")
             mission_summary_raw = extract_marker(output, MISSION_SUMMARY_MARKER)
             row["returncode"] = int(completed.returncode)

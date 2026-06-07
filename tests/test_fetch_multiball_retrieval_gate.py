@@ -216,6 +216,10 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
         assert model_name not in seen_model_names
         assert model_name.startswith(multiball_gate.TARGET_MODEL_NAME_PREFIX)
         seen_model_names.add(model_name)
+        assert "--planner-route-label" in row["command"]
+        assert row["command"][row["command"].index("--planner-route-label") + 1] == row["route_label"]
+        assert "--route-executor" in row["command"]
+        assert row["command"][row["command"].index("--route-executor") + 1] == row["route_executor"]
         robot_pose = layout["multiball_estimated_start_robot_pose"]
         assert "--robot-x" in row["command"]
         assert "--robot-y" in row["command"]
@@ -223,10 +227,11 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
         assert float(row["command"][row["command"].index("--robot-x") + 1]) == robot_pose["x"]
         assert float(row["command"][row["command"].index("--robot-y") + 1]) == robot_pose["y"]
         assert float(row["command"][row["command"].index("--robot-yaw") + 1]) == robot_pose["yaw"]
-        if row["route_label"] == planner_gate.ROUTE_NAV2_REPOSITION:
+        if row["route_label"] in {planner_gate.ROUTE_NAV2_REPOSITION, planner_gate.ROUTE_LOCAL_SETUP_CAPTURE}:
             assert "--nav2-reposition-before-fetch" in row["command"]
             assert "--nav2-reposition-goal-frame-mode" in row["command"]
-            assert row["command"][row["command"].index("--nav2-reposition-goal-frame-mode") + 1] == "world_direct"
+            expected_frame_mode = "nav2_relative" if row["route_label"] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE else "world_direct"
+            assert row["command"][row["command"].index("--nav2-reposition-goal-frame-mode") + 1] == expected_frame_mode
             assert "--nav2-reposition-timeout-s" in row["command"]
             assert float(row["command"][row["command"].index("--nav2-reposition-timeout-s") + 1]) == 48.0
             assert "--nav2-reposition-refine-attempts" in row["command"]
@@ -250,7 +255,7 @@ def test_persistent_field_mode_preserves_target_and_robot_in_step_commands(tmp_p
         assert "--preserve-robot-pose" in row["command"]
         assert "--pre-fetch-setup-correction-s" in row["command"]
         assert float(row["command"][row["command"].index("--pre-fetch-setup-correction-s") + 1]) == 14.0
-        if row["route_label"] == planner_gate.ROUTE_NAV2_REPOSITION:
+        if row["route_label"] in {planner_gate.ROUTE_NAV2_REPOSITION, planner_gate.ROUTE_LOCAL_SETUP_CAPTURE}:
             assert "--nav2-pre-setup-standoff-m" in row["command"]
             assert float(row["command"][row["command"].index("--nav2-pre-setup-standoff-m") + 1]) == 0.9
         else:
@@ -297,6 +302,46 @@ def test_recovery_route_step_command_does_not_force_nav2_reposition(tmp_path, mo
     assert "--nav2-pre-setup-standoff-m" not in command
     assert "--use-existing-target-model" in command
     assert "--preserve-robot-pose" in command
+
+
+def test_local_setup_capture_step_command_uses_nav2_free_space_setup(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    layout_path = tmp_path / "layout.json"
+    _write_json(layout_path, {"planner_route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE})
+
+    command = multiball_gate.build_step_command(
+        args=_args(nav2_goal_frame_mode="world_direct"),
+        layout_path=layout_path,
+        scene_id="manual_local_setup_scene",
+        step={
+            "ball_id": "ball_1",
+            "route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE,
+            "estimated_start_robot_pose": {"x": 0.1, "y": 0.2, "z": 0.0, "yaw": 0.3},
+        },
+    )
+
+    assert "--nav2-reposition-before-fetch" in command
+    assert command[command.index("--nav2-reposition-goal-frame-mode") + 1] == "nav2_relative"
+    assert "--nav2-pre-setup-standoff-m" in command
+    assert "--nav2-reposition-refine-attempts" in command
+    assert "--nav2-reposition-continue-on-failure" not in command
+    assert command[command.index("--planner-route-label") + 1] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
+    assert command[command.index("--route-executor") + 1] == ""
+
+
+def test_local_setup_capture_step_uses_extended_runner_timeout():
+    assert multiball_gate.step_run_timeout_s(
+        _args(timeout_s=180.0),
+        {"route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE},
+    ) == multiball_gate.LOCAL_SETUP_CAPTURE_STEP_TIMEOUT_S
+    assert multiball_gate.step_run_timeout_s(
+        _args(timeout_s=360.0),
+        {"route_label": planner_gate.ROUTE_LOCAL_SETUP_CAPTURE},
+    ) == 360.0
+    assert multiball_gate.step_run_timeout_s(
+        _args(timeout_s=180.0),
+        {"route_label": planner_gate.ROUTE_NAV2_REPOSITION},
+    ) == 180.0
 
 
 def test_prepare_persistent_field_scene_spawns_all_balls_and_sets_robot(tmp_path, monkeypatch):

@@ -1982,6 +1982,26 @@ ball-relative setup owner. Dry-run seed `20260607` planned `11`
 multi-ball scenes:
 `artifacts/session/multiball_local_setup_capture_dryrun_seed20260607_20260606/fetch_multiball_retrieval_gate/scorecard.md`.
 
+June 6 live hard-scene update: route-owner propagation and fail-closed reporting
+are now explicit. The multiball gate passes `--planner-route-label
+local_setup_capture` and `--route-executor measured_local_setup_capture` into
+child runs, and visual packages preserve `local_fetch_dispatched=false` when the
+pre-push measured handoff is red. Latest live package:
+`artifacts/session/live_multiball_local_setup_capture_seed20260607_scene01_lateralready_20260606_visual_package/fetch_visual_uat_package/scorecard.md`.
+Result: `0/3`, all local fetch pushes withheld before contact, no valid
+multi-ball delivery. Interpretation: the current line-servo setup loop is now a
+safe diagnostic owner, but it remains insufficient for generalization. It can
+reduce lateral error on some balls without moving the ball, yet stalls near the
+setup pocket with yaw debt while measured push-ready remains red.
+
+Immediate implementation lane: build a measured local setup trajectory/pose
+owner for `local_setup_capture`. It should compute explicit safe side,
+behind-ball, yaw-align, and push-ready milestones; track them from measured
+poses; guard ball clearance before contact; and write stage labels that separate
+Nav2 coarse reposition, local setup trajectory progress, yaw alignment,
+push-ready handoff, local fetch dispatch, and give-up. Use Nav2 only for
+measured-admissible free-space setup before this owner takes over.
+
 ## Corral Surface Calibration
 
 Use this to compare one-ball corral behavior across the three surface lanes without changing the operator-facing dashboard flow.

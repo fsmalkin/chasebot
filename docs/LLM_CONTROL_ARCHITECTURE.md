@@ -130,6 +130,17 @@ setup ownership; dry-run seed `20260607` now plans `11` measured local
 setup/capture steps and `1` bounded recovery step across four multi-ball
 scenes, with zero Nav2 setup routes.
 
+Latest live hard-scene evidence keeps the architecture layered and narrows the
+executor gap. The multiball gate now preserves explicit route ownership into
+child runs, and visual packages correctly report withheld fetch when
+`pre_push_measured_handoff.pass=false`. Seed `20260607` scene01 remains red in
+`artifacts/session/live_multiball_local_setup_capture_seed20260607_scene01_lateralready_20260606_visual_package/fetch_visual_uat_package/scorecard.md`:
+three local setup attempts withheld contact before push-ready. The result
+supports the current high-level plan and rejects more line-servo-only tuning as
+the main path. The next executor should be a measured local setup trajectory
+owner with explicit safe-side, behind-ball, yaw-align, and push-ready
+milestones.
+
 The opposite-side fetch probe turns that boundary into a control requirement.
 Local fetch should enter contact from a forward-driving setup. Reverse pre-stage
 commands are legacy gather behavior and should be treated as a planner/executor

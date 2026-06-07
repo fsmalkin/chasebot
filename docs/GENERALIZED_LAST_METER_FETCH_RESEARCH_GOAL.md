@@ -129,6 +129,28 @@ free-space repositioning, while a local setup/capture owner must get the robot
 behind the selected ball on the ball-target line before guarded `fetch_to_pose`
 contact begins.
 
+June 6, 2026 measured-stage correction: the latest `20260607` hard-scene runs
+now prove the route-owner boundary more sharply. The multiball gate passes
+`local_setup_capture` and `measured_local_setup_capture` explicitly into each
+child `fetch_to_pose` run, visual packages infer withheld local fetch from the
+pre-push handoff record, and the local setup loop no longer dispatches contact
+after a red measured handoff. Live package
+`artifacts/session/live_multiball_local_setup_capture_seed20260607_scene01_lateralready_20260606_visual_package/fetch_visual_uat_package/scorecard.md`
+is still red at `0/3`, with all pushes withheld before contact. The useful
+result is diagnostic: the existing line-servo setup loop can fail closed and
+preserve pre-handoff ball clearance. The hard multi-ball scene still exceeds
+that loop's generalization envelope because it stalls near the setup pocket with
+remaining yaw debt.
+
+Next control lane: replace the current stateless line-servo setup behavior with
+a measured local setup trajectory/pose owner. That owner should track explicit
+side, behind, yaw-align, and push-ready milestones from measured robot/ball/goal
+poses, preserve ball clearance until the final handoff, and emit replayable
+stage labels. Nav2 remains the measured-admissible free-space helper before this
+owner takes over. The LLM/world-state planner remains responsible for order,
+route family, and maneuver-plan selection through deterministic validators; it
+hands high-frequency setup motion to deterministic guarded owners.
+
 ## May 31, 2026 Evidence And Architecture Reset
 
 The delivery-marker geometry issue invalidated a meaningful share of recent

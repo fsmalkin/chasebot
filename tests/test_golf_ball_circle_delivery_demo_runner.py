@@ -31,11 +31,13 @@ from golf_ball_circle_delivery_demo_runner import NAV2_REPOSITION_BEHAVIOR_TREE 
 from golf_ball_circle_delivery_demo_runner import parse_nav2_reposition_result  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import nav2_reposition_measured_goal_validation  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import apply_nav2_measured_goal_validation  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import apply_local_setup_nav2_coarse_acceptance  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import summarize_line_servo_effective_command  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import transform_nav2_reposition_layout_to_current_robot  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import nav2_precontact_fallback_to_local_recovery_decision  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import nav2_precontact_refinement_to_local_recovery_decision  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import measured_push_ready_handoff_from_approach_metrics  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import measured_push_ready_handoff_from_setup_samples  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import extend_contact_samples  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import set_model_pose  # noqa: E402
 import passive_ball_roll_calibration_runner as passive_runner  # noqa: E402
@@ -713,6 +715,34 @@ def test_nav2_success_refinement_accepts_dirty_post_nav2_setup():
     assert decision["geometry"]["robot_yaw_error_deg"] == pytest.approx(28.0)
 
 
+def test_local_setup_capture_uses_nav2_success_refinement_for_dirty_setup():
+    args = _route_default_args(
+        planner_route_label="local_setup_capture",
+        route_executor="measured_local_setup_capture",
+        ball_x=0.0,
+        ball_y=0.0,
+        zone_x=0.62,
+        zone_y=0.0,
+    )
+    samples = [
+        {
+            "robot_pose": {"x": -0.33, "y": 0.06, "yaw": math.radians(-28.0), "z": 0.0},
+            "ball_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0, "z": 0.021336},
+        }
+    ]
+
+    decision = nav2_precontact_refinement_to_local_recovery_decision(
+        args=args,
+        target_layout={},
+        pre_fetch_reposition={"success": True, "status_text": "goal_succeeded_local_setup_coarse_accept"},
+        pre_fetch_reposition_samples=samples,
+    )
+
+    assert decision["eligible"] is True
+    assert decision["reason"] == "nav2_success_needs_local_recovery_refinement"
+    assert decision["requested_route_label"] == "local_setup_capture"
+
+
 def test_nav2_precontact_fallback_rejects_ball_motion_before_handoff():
     args = _route_default_args(
         planner_route_label="nav2_reposition_first",
@@ -783,6 +813,56 @@ def test_measured_push_ready_handoff_not_required_for_no_go_route():
 
     assert handoff["required"] is False
     assert handoff["pass"] is True
+
+
+def test_measured_setup_handoff_accepts_contact_ready_without_ball_motion():
+    handoff = measured_push_ready_handoff_from_setup_samples(
+        [
+            {
+                "line_servo_command": {
+                    "phase": "first_contact_align",
+                    "contact_ready": True,
+                    "ball_moved": False,
+                    "distance_to_contact_m": 0.028,
+                    "robot_lateral_error_m": 0.012,
+                    "line_yaw_error_rad": 0.02,
+                },
+                "setup_contact_ready_triggered": True,
+            }
+        ],
+        planner_route_label="local_setup_capture",
+    )
+
+    assert handoff["required"] is True
+    assert handoff["pass"] is True
+    assert handoff["setup_contact_ready"] is True
+    assert handoff["setup_ball_motion_before_ready"] is False
+    assert handoff["ready_robot_yaw_error_deg"] == pytest.approx(1.145916)
+
+
+def test_measured_setup_handoff_blocks_ball_motion_before_ready():
+    handoff = measured_push_ready_handoff_from_setup_samples(
+        [
+            {
+                "line_servo_command": {
+                    "phase": "push_coast_realign",
+                    "contact_ready": False,
+                    "ball_moved": True,
+                    "distance_to_contact_m": 0.22,
+                    "robot_lateral_error_m": 0.16,
+                    "line_yaw_error_rad": 2.8,
+                },
+                "setup_ball_motion_triggered": True,
+            }
+        ],
+        planner_route_label="local_setup_capture",
+    )
+
+    assert handoff["required"] is True
+    assert handoff["pass"] is False
+    assert handoff["setup_contact_ready"] is False
+    assert handoff["setup_ball_motion_before_ready"] is True
+    assert handoff["reasons"] == ["contact_ready_not_observed", "ball_moved_before_push_ready"]
 
 
 def test_planner_route_defaults_extend_recovery_execution_window_without_nav2_setup():
@@ -1112,6 +1192,67 @@ def test_apply_nav2_measured_goal_validation_fail_closes_action_success_pose_mis
     assert reposition["measured_goal_validation"]["position_error_m"] > 1.0
 
 
+def test_local_setup_nav2_coarse_accepts_ball_stable_local_envelope():
+    args = SimpleNamespace(
+        planner_route_label="local_setup_capture",
+        zone_x=0.95,
+        zone_y=0.0,
+    )
+    target_layout = {"random_draw": {"ball_pose": {"x": 1.20, "y": 0.60}}}
+    reposition = {
+        "success": False,
+        "action_success": True,
+        "post_reposition_robot_pose": {
+            "position": {"x": 1.52, "y": 0.72, "z": 0.0},
+            "yaw": -2.0,
+        },
+        "post_reposition_ball_pose": {
+            "position": {"x": 1.20, "y": 0.60, "z": 0.021336},
+            "yaw": 0.0,
+        },
+    }
+
+    acceptance = apply_local_setup_nav2_coarse_acceptance(
+        args=args,
+        target_layout=target_layout,
+        pre_fetch_reposition=reposition,
+    )
+
+    assert acceptance["applied"] is True
+    assert acceptance["accepted"] is True
+    assert acceptance["ball_motion_m"] == pytest.approx(0.0)
+    assert acceptance["geometry"]["robot_ball_distance_m"] < 3.0
+
+
+def test_local_setup_nav2_coarse_rejects_ball_motion():
+    args = SimpleNamespace(
+        planner_route_label="local_setup_capture",
+        zone_x=0.95,
+        zone_y=0.0,
+    )
+    target_layout = {"random_draw": {"ball_pose": {"x": 1.20, "y": 0.60}}}
+    reposition = {
+        "success": True,
+        "post_reposition_robot_pose": {
+            "position": {"x": 1.52, "y": 0.72, "z": 0.0},
+            "yaw": -2.0,
+        },
+        "post_reposition_ball_pose": {
+            "position": {"x": 1.25, "y": 0.65, "z": 0.021336},
+            "yaw": 0.0,
+        },
+    }
+
+    acceptance = apply_local_setup_nav2_coarse_acceptance(
+        args=args,
+        target_layout=target_layout,
+        pre_fetch_reposition=reposition,
+    )
+
+    assert acceptance["accepted"] is False
+    assert "ball_moved_during_nav2_setup" in acceptance["reasons"]
+
+
 def test_nav2_reposition_client_uses_repo_bt_and_ros_status_compatible_rejection():
     source = inspect.getsource(dispatch_nav2_reposition_before_fetch)
 
@@ -1239,6 +1380,156 @@ def test_line_servo_command_promotes_recovery_setup_pocket_to_line_acquire():
     assert command["desired_yaw_rad"] == pytest.approx(command["line_yaw_rad"], abs=1.0e-6)
     assert command["linear_x_mps"] >= 0.055
     assert command["angular_z_rps"] > 0.0
+
+
+def test_line_servo_command_orbits_wrong_side_local_setup_instead_of_crossing_ball():
+    command = line_servo_command(
+        robot_pose={"x": 0.842, "y": 0.272, "yaw": 2.80},
+        ball_pose={"x": 0.572109, "y": 0.268491, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.572109, "y": 0.268491, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.030,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["phase"].startswith("recovery_orbit_setup")
+    assert command["recovery_wrong_side_orbit_active"] is True
+    assert command["contact_ready"] is False
+    assert command["robot_longitudinal_projection_m"] > 0.0
+    assert command["linear_x_mps"] <= 0.045
+    assert abs(command["desired_yaw_rad"] - command["setup_yaw_rad"]) > 0.20
+
+
+def test_line_servo_command_holds_linear_motion_when_close_yaw_not_ready():
+    command = line_servo_command(
+        robot_pose={"x": 0.507041, "y": 0.349108, "yaw": -0.740095},
+        ball_pose={"x": 0.576084, "y": 0.271026, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.572109, "y": 0.268491, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["recovery_contact_micro_yaw_hold_active"] is True
+    assert command["phase"].startswith("recovery_contact_micro_yaw_hold")
+    assert command["contact_ready"] is False
+    assert command["distance_to_contact_m"] <= 0.055
+    assert command["linear_x_mps"] == 0.0
+    assert abs(command["angular_z_rps"]) > 0.0
+
+
+def test_line_servo_command_escapes_close_misaligned_setup_before_contact():
+    command = line_servo_command(
+        robot_pose={"x": 1.4124001025450685, "y": 0.8558706226344617, "yaw": -2.73320903211721},
+        ball_pose={"x": 1.2411847480885942, "y": 0.6659736545248174, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 1.2411847480885942, "y": 0.6659736545248174, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["recovery_close_misaligned_escape_active"] is True
+    assert command["phase"].startswith("recovery_close_misaligned_escape")
+    assert command["contact_ready"] is False
+    assert command["ball_moved"] is False
+    assert command["linear_x_mps"] <= 0.018
+    assert command["recovery_close_escape_heading_toward_ball"] is False
+    assert command["recovery_close_escape_pose"]
+
+
+def test_line_servo_command_does_not_creep_into_ball_when_lateral_gate_is_not_ready():
+    command = line_servo_command(
+        robot_pose={"x": 1.821395412721273, "y": -0.4916902683277605, "yaw": 2.33689586428015},
+        ball_pose={"x": 1.656822, "y": -0.351905, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 1.656822, "y": -0.351905, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["recovery_close_misaligned_escape_active"] is True
+    assert command["phase"].startswith("recovery_close_misaligned_escape")
+    assert command["contact_ready"] is False
+    assert command["distance_to_contact_m"] < 0.12
+    assert command["robot_lateral_error_m"] > command["contact_lateral_ready_m"]
+    assert command["linear_x_mps"] <= 0.018
+    assert command["recovery_close_escape_heading_toward_ball"] is False
+
+
+def test_local_setup_keeps_setup_pocket_authority_until_lateral_gate_is_ready():
+    command = line_servo_command(
+        robot_pose={"x": 1.4336860729107566, "y": 0.9189536984262521, "yaw": -2.589925600406849},
+        ball_pose={"x": 1.23928, "y": 0.670304, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 1.23928, "y": 0.670304, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["phase"].startswith("setup_converge")
+    assert command["recovery_contact_yaw_hold_active"] is False
+    assert command["recovery_line_acquire_yaw_crawl_active"] is False
+    assert command["robot_lateral_error_m"] > command["contact_lateral_ready_m"] * 1.25
+    assert command["desired_yaw_rad"] == pytest.approx(command["setup_yaw_rad"], abs=1.0e-6)
+
+
+def test_local_setup_does_not_switch_to_line_yaw_on_near_threshold_lateral_debt():
+    command = line_servo_command(
+        robot_pose={"x": 1.4001491580890113, "y": 0.9553145713583798, "yaw": -2.661138511175531},
+        ball_pose={"x": 1.23928, "y": 0.670304, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 1.23928, "y": 0.670304, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.028,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["phase"].startswith("setup_converge")
+    assert command["recovery_contact_yaw_hold_active"] is False
+    assert command["recovery_line_acquire_yaw_crawl_active"] is False
+    assert command["robot_lateral_error_m"] > command["contact_lateral_ready_m"] * 1.05
+    assert command["desired_yaw_rad"] == pytest.approx(command["setup_yaw_rad"], abs=1.0e-6)
 
 
 def test_line_servo_command_allows_first_contact_when_geometry_ready():
@@ -1422,15 +1713,16 @@ def test_line_servo_command_uses_recovery_final_reaim_before_rough_contact():
         route_label="recovery_or_reaim",
     )
 
-    assert command["phase"] == "recovery_final_reaim_yaw_crawl"
+    assert command["phase"].startswith("recovery_contact_micro_yaw_hold")
     assert command["contact_final_reaim_active"] is True
     assert command["recovery_final_reaim_active"] is True
+    assert command["recovery_contact_micro_yaw_hold_active"] is True
     assert command["contact_ready"] is False
     assert command["recovery_yaw_crawl"] is True
-    assert command["linear_x_mps"] <= 0.014
+    assert command["linear_x_mps"] == pytest.approx(0.0)
     assert command["lateral_reaim_gain"] == pytest.approx(6.5)
     assert abs(command["lateral_reaim_rad"]) > 0.20
-    assert command["angular_z_rps"] < -0.05
+    assert abs(command["angular_z_rps"]) > 0.05
 
 
 def test_line_servo_command_slow_settles_recovery_before_lateral_debt_contact():
@@ -1455,7 +1747,7 @@ def test_line_servo_command_slow_settles_recovery_before_lateral_debt_contact():
     assert command["recovery_final_reaim_active"] is False
     assert command["contact_ready"] is False
     assert command["ball_moved"] is False
-    assert command["linear_x_mps"] == pytest.approx(0.012)
+    assert command["linear_x_mps"] == pytest.approx(0.022)
     assert command["desired_yaw_rad"] != pytest.approx(command["line_yaw_rad"], abs=1.0e-6)
     assert command["angular_z_rps"] < -0.18
 

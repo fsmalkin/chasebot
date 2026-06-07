@@ -673,6 +673,15 @@ def summarize_mission(path: Path) -> dict[str, Any]:
     for candidate in (payload.get("shot_outcome"), mission_verdict.get("shot_outcome"), first_run.get("shot_outcome")):
         if isinstance(candidate, dict):
             shot_outcome.update(candidate)
+    pre_push_measured_handoff: dict[str, Any] = {}
+    for candidate in (
+        payload.get("pre_push_measured_handoff"),
+        mission_verdict.get("pre_push_measured_handoff"),
+        first_run.get("pre_push_measured_handoff"),
+        shot_outcome.get("pre_push_measured_handoff"),
+    ):
+        if isinstance(candidate, dict):
+            pre_push_measured_handoff.update(candidate)
 
     def pick_text(*values: Any) -> str:
         for value in values:
@@ -722,10 +731,21 @@ def summarize_mission(path: Path) -> dict[str, Any]:
         "local_fetch_dispatched",
         mission_verdict.get(
             "local_fetch_dispatched",
-            first_run.get("local_fetch_dispatched", planner_route_execution.get("local_fetch_dispatched", None)),
+            first_run.get(
+                "local_fetch_dispatched",
+                planner_route_execution.get(
+                    "local_fetch_dispatched",
+                    pre_push_measured_handoff.get("local_fetch_dispatched", None),
+                ),
+            ),
         ),
     )
     local_fetch_dispatched = True if local_fetch_dispatched_raw is None else bool(local_fetch_dispatched_raw)
+    if local_fetch_dispatched_raw is None and pre_push_measured_handoff:
+        handoff_required = bool(pre_push_measured_handoff.get("required", False))
+        handoff_passed = bool(pre_push_measured_handoff.get("pass", False))
+        if handoff_required and not handoff_passed:
+            local_fetch_dispatched = False
     planner_route_executed = bool(
         payload.get(
             "planner_route_executed",
