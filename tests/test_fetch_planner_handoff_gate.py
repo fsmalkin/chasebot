@@ -538,8 +538,24 @@ def test_llm_shadow_without_api_key_records_request_and_uses_guard_fallback():
     assert decision["route_executable"] is True
     assert decision["planner_mode_effective"] == "deterministic_fallback"
     assert decision["provider_status"] == "skipped_missing_openai_api_key"
+    assert decision["llm_route_label"] == ""
+    assert decision["llm_confidence"] == 0.0
     assert decision["provider_request"]["tools"][0]["name"] == gate.OPENAI_TOOL_NAME
     assert decision["should_dispatch_fetch_to_pose"] is False
+
+
+def test_llm_shadow_request_strict_schema_requires_all_declared_properties():
+    scene = gate.generate_random_scenes(seed=456, random_cases=1)[0]
+
+    request = gate.build_llm_shadow_request(
+        scene=scene,
+        model=gate.DEFAULT_OPENAI_MODEL,
+        reasoning_effort=gate.DEFAULT_REASONING_EFFORT,
+    )
+
+    parameters = request["tools"][0]["parameters"]
+    assert parameters["additionalProperties"] is False
+    assert set(parameters["required"]) == set(parameters["properties"])
 
 
 def test_llm_shadow_gate_without_api_key_reports_fallback_not_ready(tmp_path, monkeypatch):
@@ -656,8 +672,48 @@ def test_llm_supervised_guarded_accepts_only_guard_agreeing_high_confidence(monk
     assert decision["route_label"] == gate.ROUTE_NAV2_REPOSITION
     assert decision["planner_mode_effective"] == gate.PLANNER_MODE_LLM_SUPERVISED_GUARDED
     assert decision["provider_status"] == "ok"
+    assert decision["llm_route_label"] == gate.ROUTE_NAV2_REPOSITION
+    assert decision["llm_confidence"] == 0.96
     assert decision["llm_supervised_guard"]["accepted"] is True
     assert decision["llm_supervised_guard"]["veto_reasons"] == []
+
+
+def test_llm_shadow_retries_provider_parse_failure(monkeypatch):
+    scene = next(
+        item for item in gate.generate_random_scenes(seed=456, random_cases=10)
+        if item["expected_route_label"] == gate.ROUTE_NAV2_REPOSITION
+    )
+    calls = {"count": 0}
+
+    def fake_call_openai_responses(**_kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {"output": [{"type": "function_call", "name": gate.OPENAI_TOOL_NAME, "arguments": ""}]}
+        return {
+            "output": [
+                {
+                    "type": "function_call",
+                    "name": gate.OPENAI_TOOL_NAME,
+                    "arguments": (
+                        '{"route_label": "nav2_reposition_first", '
+                        '"rationale_short": "retry route", "confidence": 0.91}'
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr(gate, "call_openai_responses", fake_call_openai_responses)
+
+    decision = gate.decide_scene(
+        scene,
+        planner_mode=gate.PLANNER_MODE_LLM_SHADOW,
+        openai_api_key="test-key",
+    )
+
+    assert calls["count"] == 2
+    assert decision["provider_status"] == "ok"
+    assert decision["llm_route_label"] == gate.ROUTE_NAV2_REPOSITION
+    assert [attempt["status"] for attempt in decision["provider_attempts"]] == ["error", "ok"]
 
 
 def test_llm_supervised_guarded_vetoes_disagreement_and_keeps_guard_route(monkeypatch):

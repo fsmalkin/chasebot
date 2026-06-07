@@ -100,6 +100,7 @@ BROAD_SPATIAL_SCENE_SET = "broad_spatial_fetch_generalization_v1"
 BROAD_SPATIAL_PROFILE = "broad_spatial_fetch_generalization_v1"
 OPENAI_TOOL_NAME = "emit_fetch_planner_route"
 LLM_SUPERVISED_MIN_CONFIDENCE = 0.90
+LLM_PROVIDER_MAX_ATTEMPTS = 2
 CONTACT_QUALITY_CLEAN_LATERAL_M = 0.030
 CONTACT_QUALITY_CLEAN_YAW_DEG = 3.0
 FETCH_READY_LATERAL_LIMIT_M = 0.050
@@ -1437,7 +1438,15 @@ def build_llm_shadow_request(
                 "parameters": {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["route_label", "rationale_short", "confidence"],
+                    "required": [
+                        "route_label",
+                        "objective",
+                        "maneuver_sequence",
+                        "validation_gates",
+                        "replan_triggers",
+                        "rationale_short",
+                        "confidence",
+                    ],
                     "properties": {
                         "route_label": {"type": "string", "enum": list(ROUTE_LABELS)},
                         "objective": {"type": "string"},
@@ -1517,6 +1526,7 @@ def decide_scene(
     provider_response: dict[str, Any] = {}
     provider_status = "not_used"
     provider_error = ""
+    provider_attempts: list[dict[str, Any]] = []
     route_label = guard_route
     rationale = "Deterministic guard classified the scene."
     confidence = 1.0
@@ -1539,36 +1549,47 @@ def decide_scene(
             rationale = "LLM shadow request recorded; missing OPENAI_API_KEY so deterministic guard provided the route."
             confidence = 0.0
         else:
-            try:
-                provider_response = call_openai_responses(
-                    api_key=openai_api_key,
-                    request_payload=provider_request,
-                    base_url=normalize_openai_base_url(openai_base_url),
-                    timeout_s=timeout_s,
-                    org_id=openai_org_id,
-                    project_id=openai_project_id,
-                )
-                route = extract_llm_route(provider_response)
-                llm_route_label = route["route_label"]
-                llm_rationale = route["rationale_short"]
-                llm_confidence = float(route["confidence"])
-                llm_plan = {
-                    "objective": route.get("objective", ""),
-                    "maneuver_sequence": route.get("maneuver_sequence", []),
-                    "validation_gates": route.get("validation_gates", []),
-                    "replan_triggers": route.get("replan_triggers", []),
-                }
-                route_label = llm_route_label
-                rationale = llm_rationale
-                confidence = llm_confidence
-                provider_status = "ok"
-                planner_mode_effective = PLANNER_MODE_LLM_SHADOW
-            except Exception as exc:
-                provider_status = "error"
-                provider_error = str(exc)
-                planner_mode_effective = "deterministic_fallback"
-                rationale = "LLM shadow failed validation; deterministic guard provided the route."
-                confidence = 0.0
+            for attempt_index in range(1, LLM_PROVIDER_MAX_ATTEMPTS + 1):
+                try:
+                    provider_response = call_openai_responses(
+                        api_key=openai_api_key,
+                        request_payload=provider_request,
+                        base_url=normalize_openai_base_url(openai_base_url),
+                        timeout_s=timeout_s,
+                        org_id=openai_org_id,
+                        project_id=openai_project_id,
+                    )
+                    route = extract_llm_route(provider_response)
+                    llm_route_label = route["route_label"]
+                    llm_rationale = route["rationale_short"]
+                    llm_confidence = float(route["confidence"])
+                    llm_plan = {
+                        "objective": route.get("objective", ""),
+                        "maneuver_sequence": route.get("maneuver_sequence", []),
+                        "validation_gates": route.get("validation_gates", []),
+                        "replan_triggers": route.get("replan_triggers", []),
+                    }
+                    route_label = llm_route_label
+                    rationale = llm_rationale
+                    confidence = llm_confidence
+                    provider_status = "ok"
+                    provider_error = ""
+                    planner_mode_effective = PLANNER_MODE_LLM_SHADOW
+                    provider_attempts.append({"attempt": attempt_index, "status": "ok"})
+                    break
+                except Exception as exc:
+                    provider_status = "error"
+                    provider_error = str(exc)
+                    planner_mode_effective = "deterministic_fallback"
+                    rationale = "LLM shadow failed validation; deterministic guard provided the route."
+                    confidence = 0.0
+                    provider_attempts.append(
+                        {
+                            "attempt": attempt_index,
+                            "status": "error",
+                            "error": provider_error,
+                        }
+                    )
 
         if planner_mode == PLANNER_MODE_LLM_SUPERVISED_GUARDED:
             veto_reasons: list[str] = []
@@ -1646,8 +1667,12 @@ def decide_scene(
         "maneuver_plan": maneuver_plan,
         "route_admissibility": route_admissibility,
         "llm_supervised_guard": llm_supervised_guard,
+        "llm_route_label": llm_route_label,
+        "llm_rationale_short": llm_rationale,
+        "llm_confidence": round(float(llm_confidence), 6),
         "provider_status": provider_status,
         "provider_error": provider_error,
+        "provider_attempts": provider_attempts,
         "provider_request": provider_request,
         "provider_response": provider_response,
         "no_direct_cmd_vel": True,

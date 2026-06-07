@@ -493,6 +493,26 @@ def decide_single_ball_scene(
     )
 
 
+def planner_decision_evidence(decision: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "planner_mode": str(decision.get("planner_mode", "") or ""),
+        "planner_mode_effective": str(decision.get("planner_mode_effective", "") or ""),
+        "provider_status": str(decision.get("provider_status", "") or ""),
+        "provider_error": str(decision.get("provider_error", "") or ""),
+        "provider_attempt_count": len(decision.get("provider_attempts", []))
+        if isinstance(decision.get("provider_attempts"), list)
+        else 0,
+        "route_label": str(decision.get("route_label", "") or ""),
+        "route_executor": str(decision.get("route_executor", "") or ""),
+        "guard_route_label": str(decision.get("guard_route_label", "") or ""),
+        "guard_agrees": bool(decision.get("guard_agrees", False)),
+        "llm_route_label": str(decision.get("llm_route_label", "") or ""),
+        "llm_confidence": finite_float(decision.get("llm_confidence"), 0.0),
+        "confidence": finite_float(decision.get("confidence"), 0.0),
+        "rationale_short": str(decision.get("rationale_short", "") or ""),
+    }
+
+
 def plan_multiball_scene(scene: dict[str, Any], *, args: argparse.Namespace) -> dict[str, Any]:
     remaining = [dict(ball) for ball in scene.get("balls", []) if isinstance(ball, dict)]
     current_robot_pose = dict(scene.get("robot_pose", {}) if isinstance(scene.get("robot_pose"), dict) else {})
@@ -560,6 +580,9 @@ def plan_multiball_scene(scene: dict[str, Any], *, args: argparse.Namespace) -> 
                         "ball_id": str(candidate.get("ball_id", "") or ""),
                         "route_label": str((candidate.get("decision") or {}).get("route_label", "") or ""),
                         "route_executor": str((candidate.get("decision") or {}).get("route_executor", "") or ""),
+                        "planner_evidence": planner_decision_evidence(
+                            candidate.get("decision") if isinstance(candidate.get("decision"), dict) else {}
+                        ),
                         "route_quality": (candidate.get("decision") or {}).get("route_quality", {}),
                         "cost": candidate.get("cost", {}),
                         "executable_route": bool(candidate.get("executable_route", False)),

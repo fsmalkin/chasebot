@@ -201,6 +201,8 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
     first_plan = json.loads(first_plan_path.read_text(encoding="utf-8"))
     first_candidate = first_plan["candidate_audit"][0]["candidates"][0]
     assert "route_quality" in first_candidate
+    assert first_candidate["planner_evidence"]["provider_status"] == "not_used"
+    assert first_candidate["planner_evidence"]["guard_agrees"] is True
     assert "direction_alignment_penalty" in first_candidate["cost"]
     seen_model_names = set()
     for row in summary["step_rows"]:
