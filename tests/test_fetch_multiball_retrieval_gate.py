@@ -148,7 +148,7 @@ def test_generate_route_diverse_multiball_scenes_covers_required_executable_rout
         assert route_counts[route] > 0
 
 
-def test_multiball_planner_prefers_lower_setup_debt_local_setup_capture_candidate():
+def test_multiball_planner_prefers_lower_setup_debt_recovery_candidate():
     target = multiball_gate.target_pose()
     scene = {
         "generated_utc": "2026-06-06T00:00:00Z",
@@ -171,7 +171,8 @@ def test_multiball_planner_prefers_lower_setup_debt_local_setup_capture_candidat
     assert plan["retrieval_order"][0] == "ball_2"
     assert sorted(plan["retrieval_order"]) == ["ball_1", "ball_2", "ball_3"]
     assert plan["executable_step_count"] == 3
-    assert plan["sequence"][0]["route_label"] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
+    assert plan["sequence"][0]["route_label"] == planner_gate.ROUTE_RECOVERY_OR_REAIM
+    assert "bounded_recovery_required" in plan["sequence"][0]["route_quality"]["flags"]
 
 
 def test_multiball_planner_prioritizes_target_aligned_candidate_over_nearer_high_angle_nav2_setup():
@@ -397,6 +398,7 @@ def test_local_setup_capture_step_command_keeps_setup_with_measured_local_owner(
     assert "--nav2-pre-setup-standoff-m" not in command
     assert "--nav2-reposition-refine-attempts" not in command
     assert "--nav2-reposition-continue-on-failure" not in command
+    assert "--disable-wraparound-setup" in command
     assert command[command.index("--planner-route-label") + 1] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
     assert command[command.index("--route-executor") + 1] == ""
 
@@ -420,6 +422,7 @@ def test_local_setup_capture_step_command_skips_nav2_inside_local_envelope(tmp_p
 
     assert "--nav2-reposition-before-fetch" not in command
     assert "--nav2-pre-setup-standoff-m" not in command
+    assert "--disable-wraparound-setup" in command
     assert command[command.index("--planner-route-label") + 1] == planner_gate.ROUTE_LOCAL_SETUP_CAPTURE
 
 

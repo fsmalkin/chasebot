@@ -93,6 +93,17 @@ LOCAL_SETUP_CAPTURE_ROUTE_SAMPLE_DURATION_S = 242.0
 LOCAL_SETUP_CAPTURE_MAIN_FETCH_MIN_DURATION_S = 72.0
 LOCAL_SETUP_CAPTURE_SETUP_STANDOFF_M = 0.46
 LOCAL_SETUP_CAPTURE_NAV2_SETUP_STANDOFF_M = 0.65
+WRAPAROUND_SETUP_DEFAULT_DURATION_S = 96.0
+WRAPAROUND_SETUP_BALL_MOTION_LIMIT_M = 0.020
+WRAPAROUND_SETUP_SIDE_CLEARANCE_M = 0.62
+WRAPAROUND_SETUP_BEHIND_STANDOFF_M = 0.58
+WRAPAROUND_SETUP_POSITION_TOLERANCE_M = 0.080
+WRAPAROUND_SETUP_FINAL_YAW_TOLERANCE_RAD = 0.18
+WRAPAROUND_SETUP_MAX_LINEAR_X_MPS = 0.115
+WRAPAROUND_SETUP_INTERMEDIATE_TOLERANCE_M = 0.160
+WRAPAROUND_SETUP_PUBLISHED_ANGULAR_SIGN = -1.0
+WRAPAROUND_FORWARD_CLEAR_DURATION_S = 5.5
+WRAPAROUND_FORWARD_CLEAR_LINEAR_X_MPS = 0.08
 ROUTE_EXECUTOR_BY_LABEL = {
     ROUTE_FETCH_READY: ROUTE_EXECUTOR_LOCAL_FETCH,
     ROUTE_NAV2_REPOSITION: ROUTE_EXECUTOR_NAV2_REPOSITION_FETCH,
@@ -534,6 +545,215 @@ def _post_nav2_setup_is_push_ready(geometry: dict[str, Any]) -> bool:
         and _finite_float(geometry.get("robot_lateral_error_m"), 999.0) <= PUSH_READY_LATERAL_LIMIT_M
         and _finite_float(geometry.get("robot_yaw_error_deg"), 999.0) <= PUSH_READY_YAW_LIMIT_DEG
     )
+
+
+def wraparound_setup_needed(geometry: dict[str, Any]) -> bool:
+    return bool(
+        geometry.get("available")
+        and _finite_float(geometry.get("robot_longitudinal_projection_m"), -999.0) > -0.02
+        and 0.24 <= _finite_float(geometry.get("robot_ball_distance_m"), 999.0) <= 1.40
+        and _finite_float(geometry.get("ball_target_distance_m"), 999.0) <= 1.10
+    )
+
+
+def _point_inside_setup_field(x: float, y: float, *, margin_m: float = NAV2_SETUP_FIELD_MARGIN_M) -> bool:
+    return bool(
+        float(NAV2_SETUP_FIELD_BOUNDS["x_min_m"]) + float(margin_m)
+        <= float(x)
+        <= float(NAV2_SETUP_FIELD_BOUNDS["x_max_m"]) - float(margin_m)
+        and float(NAV2_SETUP_FIELD_BOUNDS["y_min_m"]) + float(margin_m)
+        <= float(y)
+        <= float(NAV2_SETUP_FIELD_BOUNDS["y_max_m"]) - float(margin_m)
+    )
+
+
+def build_wraparound_setup_waypoints(
+    *,
+    robot_pose: dict[str, Any],
+    ball_pose: dict[str, Any],
+    target_x: float,
+    target_y: float,
+    side_clearance_m: float = WRAPAROUND_SETUP_SIDE_CLEARANCE_M,
+    behind_standoff_m: float = WRAPAROUND_SETUP_BEHIND_STANDOFF_M,
+    final_standoff_m: float = LOCAL_SETUP_CAPTURE_SETUP_STANDOFF_M,
+) -> dict[str, Any]:
+    robot_xy = pose_xy_yaw(robot_pose)
+    ball_xy = pose_xy_yaw(ball_pose)
+    if robot_xy is None or ball_xy is None:
+        return {"available": False, "reason": "missing_robot_or_ball_pose"}
+    line_yaw = math.atan2(float(target_y) - ball_xy["y"], float(target_x) - ball_xy["x"])
+    normal_x = -math.sin(line_yaw)
+    normal_y = math.cos(line_yaw)
+    line_x = math.cos(line_yaw)
+    line_y = math.sin(line_yaw)
+    robot_lateral_error_m = signed_lateral_error_m(
+        robot_xy["x"],
+        robot_xy["y"],
+        origin_x=ball_xy["x"],
+        origin_y=ball_xy["y"],
+        line_yaw_rad=line_yaw,
+    )
+
+    candidates: list[dict[str, Any]] = []
+    for side_sign in (-1.0, 1.0):
+        side_entry = {
+            "name": "wraparound_side_entry",
+            "x": ball_xy["x"] + normal_x * side_sign * float(side_clearance_m),
+            "y": ball_xy["y"] + normal_y * side_sign * float(side_clearance_m),
+            "yaw": line_yaw,
+            "require_final_yaw": False,
+            "position_tolerance_m": WRAPAROUND_SETUP_INTERMEDIATE_TOLERANCE_M,
+            "cruise_linear_x_mps": WRAPAROUND_SETUP_MAX_LINEAR_X_MPS,
+            "near_linear_x_mps": 0.055,
+        }
+        behind_side = {
+            "name": "wraparound_behind_side",
+            "x": ball_xy["x"] - line_x * float(behind_standoff_m) + normal_x * side_sign * float(side_clearance_m),
+            "y": ball_xy["y"] - line_y * float(behind_standoff_m) + normal_y * side_sign * float(side_clearance_m),
+            "yaw": line_yaw,
+            "require_final_yaw": False,
+            "position_tolerance_m": WRAPAROUND_SETUP_INTERMEDIATE_TOLERANCE_M,
+            "cruise_linear_x_mps": WRAPAROUND_SETUP_MAX_LINEAR_X_MPS,
+            "near_linear_x_mps": 0.055,
+        }
+        final_behind = {
+            "name": "wraparound_final_behind",
+            "x": ball_xy["x"] - line_x * float(final_standoff_m),
+            "y": ball_xy["y"] - line_y * float(final_standoff_m),
+            "yaw": line_yaw,
+            "require_final_yaw": True,
+            "position_tolerance_m": WRAPAROUND_SETUP_POSITION_TOLERANCE_M,
+            "cruise_linear_x_mps": 0.075,
+            "near_linear_x_mps": 0.026,
+        }
+        waypoints = [side_entry, behind_side, final_behind]
+        inside_count = sum(1 for waypoint in waypoints if _point_inside_setup_field(waypoint["x"], waypoint["y"]))
+        path_distance_m = math.hypot(side_entry["x"] - robot_xy["x"], side_entry["y"] - robot_xy["y"])
+        path_distance_m += math.hypot(behind_side["x"] - side_entry["x"], behind_side["y"] - side_entry["y"])
+        path_distance_m += math.hypot(final_behind["x"] - behind_side["x"], final_behind["y"] - behind_side["y"])
+        candidates.append(
+            {
+                "side_sign": side_sign,
+                "inside_count": inside_count,
+                "path_distance_m": path_distance_m,
+                "waypoints": waypoints,
+            }
+        )
+    preferred_side = -1.0 if robot_lateral_error_m >= 0.0 else 1.0
+    candidates = sorted(
+        candidates,
+        key=lambda item: (
+            -int(item["inside_count"]),
+            0 if float(item["side_sign"]) == preferred_side else 1,
+            float(item["path_distance_m"]),
+        ),
+    )
+    selected = candidates[0]
+    return {
+        "available": True,
+        "reason": "wraparound_waypoints_built",
+        "line_yaw_rad": round(float(line_yaw), 6),
+        "robot_lateral_error_m": round(float(robot_lateral_error_m), 6),
+        "selected_side_sign": int(float(selected["side_sign"])),
+        "side_clearance_m": round(float(side_clearance_m), 6),
+        "behind_standoff_m": round(float(behind_standoff_m), 6),
+        "final_standoff_m": round(float(final_standoff_m), 6),
+        "path_distance_m": round(float(selected["path_distance_m"]), 6),
+        "candidates": [
+            {
+                "side_sign": int(float(candidate["side_sign"])),
+                "inside_count": int(candidate["inside_count"]),
+                "path_distance_m": round(float(candidate["path_distance_m"]), 6),
+            }
+            for candidate in candidates
+        ],
+        "waypoints": [
+            {
+                **waypoint,
+                "x": round(float(waypoint["x"]), 6),
+                "y": round(float(waypoint["y"]), 6),
+                "yaw": round(float(waypoint["yaw"]), 6),
+            }
+            for waypoint in selected["waypoints"]
+        ],
+    }
+
+
+def wraparound_pose_stage_command(
+    *,
+    robot_pose: dict[str, float],
+    waypoint: dict[str, Any],
+    max_linear_x_mps: float = WRAPAROUND_SETUP_MAX_LINEAR_X_MPS,
+    min_linear_x_mps: float = 0.020,
+    max_angular_z_rps: float = 0.45,
+    yaw_gain: float = 1.20,
+    position_tolerance_m: float = WRAPAROUND_SETUP_POSITION_TOLERANCE_M,
+    final_yaw_tolerance_rad: float = WRAPAROUND_SETUP_FINAL_YAW_TOLERANCE_RAD,
+) -> dict[str, Any]:
+    robot_x = float(robot_pose.get("x", 0.0) or 0.0)
+    robot_y = float(robot_pose.get("y", 0.0) or 0.0)
+    robot_yaw = float(robot_pose.get("yaw", 0.0) or 0.0)
+    goal_x = float(waypoint.get("x", 0.0) or 0.0)
+    goal_y = float(waypoint.get("y", 0.0) or 0.0)
+    goal_yaw = float(waypoint.get("yaw", 0.0) or 0.0)
+    require_final_yaw = bool(waypoint.get("require_final_yaw", False))
+    waypoint_position_tolerance_m = float(waypoint.get("position_tolerance_m", position_tolerance_m) or position_tolerance_m)
+    waypoint_max_linear_x_mps = float(waypoint.get("max_linear_x_mps", max_linear_x_mps) or max_linear_x_mps)
+    cruise_linear_x_mps = float(waypoint.get("cruise_linear_x_mps", waypoint_max_linear_x_mps) or waypoint_max_linear_x_mps)
+    near_linear_x_mps = float(waypoint.get("near_linear_x_mps", 0.026 if require_final_yaw else 0.055) or 0.0)
+    effective_max_linear_x_mps = min(float(max_linear_x_mps), waypoint_max_linear_x_mps)
+    dx = goal_x - robot_x
+    dy = goal_y - robot_y
+    distance_m = math.hypot(dx, dy)
+    heading_yaw = math.atan2(dy, dx) if distance_m > 1.0e-6 else goal_yaw
+    heading_error = normalize_angle_rad(heading_yaw - robot_yaw)
+    final_yaw_error = normalize_angle_rad(goal_yaw - robot_yaw)
+    position_reached = bool(distance_m <= waypoint_position_tolerance_m)
+    yaw_reached = bool((not require_final_yaw) or abs(final_yaw_error) <= float(final_yaw_tolerance_rad))
+    waypoint_reached = bool(position_reached and yaw_reached)
+    if waypoint_reached:
+        phase = "wraparound_waypoint_reached"
+        desired_yaw = goal_yaw if require_final_yaw else heading_yaw
+        base_linear = 0.0
+    elif position_reached:
+        phase = "wraparound_yaw_align"
+        desired_yaw = goal_yaw
+        heading_error = final_yaw_error
+        base_linear = 0.0
+    elif abs(heading_error) > 0.52:
+        phase = "wraparound_heading_align"
+        desired_yaw = heading_yaw
+        base_linear = 0.0
+    else:
+        phase = "wraparound_drive"
+        desired_yaw = heading_yaw
+        if abs(heading_error) > 0.34:
+            base_linear = min(effective_max_linear_x_mps, 0.034 if not require_final_yaw else 0.024)
+        elif distance_m < 0.18:
+            base_linear = min(effective_max_linear_x_mps, near_linear_x_mps)
+        else:
+            base_linear = min(effective_max_linear_x_mps, cruise_linear_x_mps)
+    yaw_error = normalize_angle_rad(desired_yaw - robot_yaw)
+    angular_z = clamp(float(yaw_gain) * yaw_error, -float(max_angular_z_rps), float(max_angular_z_rps))
+    linear_x = 0.0 if base_linear <= 0.0 else clamp(base_linear, float(min_linear_x_mps), effective_max_linear_x_mps)
+    return {
+        "phase": phase,
+        "waypoint_name": str(waypoint.get("name", "") or ""),
+        "waypoint_reached": waypoint_reached,
+        "position_reached": position_reached,
+        "yaw_reached": yaw_reached,
+        "require_final_yaw": require_final_yaw,
+        "distance_to_waypoint_m": round(float(distance_m), 6),
+        "heading_yaw_rad": round(float(heading_yaw), 6),
+        "desired_yaw_rad": round(float(desired_yaw), 6),
+        "heading_error_rad": round(float(heading_error), 6),
+        "final_yaw_error_rad": round(float(final_yaw_error), 6),
+        "yaw_error_rad": round(float(yaw_error), 6),
+        "linear_x_mps": round(float(linear_x), 6),
+        "angular_z_rps": round(float(angular_z), 6),
+        "position_tolerance_m": round(float(waypoint_position_tolerance_m), 6),
+        "final_yaw_tolerance_rad": round(float(final_yaw_tolerance_rad), 6),
+    }
 
 
 def _nav2_precontact_geometry_assessment(
@@ -1897,6 +2117,10 @@ def line_servo_command(
     )
     local_setup_trajectory_stage = ""
     local_setup_trajectory_goal_pose: dict[str, float] = {}
+    safe_side_orbit_selected_side_sign = 0
+    safe_side_orbit_selected_clearance_m = 0.0
+    safe_side_orbit_selected_path_clearance_m = 0.0
+    safe_side_orbit_required_path_clearance_m = 0.24 if robot_ball_distance <= 0.36 else 0.20
     setup_projection_error_m = robot_longitudinal_projection + effective_setup_standoff_m
     push_ready_line_commit_active = bool(
         not ball_moved
@@ -1964,16 +2188,72 @@ def line_servo_command(
             lateral_sign = 1.0 if robot_lateral_error >= 0.0 else -1.0
             side_clearance_m = max(0.38, min(0.52, effective_setup_standoff_m + 0.14))
             orbit_longitudinal_m = -max(effective_setup_standoff_m, float(contact_standoff_m) + 0.18)
-            orbit_x = (
-                ball_x
-                + math.cos(line_yaw) * orbit_longitudinal_m
-                - math.sin(line_yaw) * lateral_sign * side_clearance_m
+            orbit_candidates: list[dict[str, float]] = []
+            for candidate_side_sign in (lateral_sign, -lateral_sign):
+                for candidate_clearance_m in (
+                    side_clearance_m,
+                    max(side_clearance_m, 0.68),
+                ):
+                    candidate_x = (
+                        ball_x
+                        + math.cos(line_yaw) * orbit_longitudinal_m
+                        + normal_x * candidate_side_sign * candidate_clearance_m
+                    )
+                    candidate_y = (
+                        ball_y
+                        + math.sin(line_yaw) * orbit_longitudinal_m
+                        + normal_y * candidate_side_sign * candidate_clearance_m
+                    )
+                    candidate_yaw = math.atan2(candidate_y - robot_y, candidate_x - robot_x)
+                    candidate_heading_error = normalize_angle_rad(candidate_yaw - robot_yaw)
+                    candidate_path_clearance_m = point_segment_distance(
+                        (ball_x, ball_y),
+                        (robot_x, robot_y),
+                        (candidate_x, candidate_y),
+                    )
+                    clearance_penalty = (
+                        max(0.0, safe_side_orbit_required_path_clearance_m - candidate_path_clearance_m) * 10.0
+                    )
+                    field_ok = _point_inside_setup_field(candidate_x, candidate_y, margin_m=0.02)
+                    clearance_ready = candidate_path_clearance_m >= safe_side_orbit_required_path_clearance_m
+                    field_penalty = 0.0 if field_ok else 2.0
+                    lateral_side_penalty = (
+                        1.0
+                        if robot_longitudinal_projection > -float(contact_standoff_m)
+                        and abs(robot_lateral_error) > 0.50
+                        and candidate_side_sign != lateral_sign
+                        else 0.0
+                    )
+                    orbit_candidates.append(
+                        {
+                            "x": candidate_x,
+                            "y": candidate_y,
+                            "yaw": candidate_yaw,
+                            "side_sign": candidate_side_sign,
+                            "clearance_m": candidate_clearance_m,
+                            "path_clearance_m": candidate_path_clearance_m,
+                            "field_ok": float(1.0 if field_ok else 0.0),
+                            "clearance_ready": float(1.0 if clearance_ready else 0.0),
+                            "score": abs(candidate_heading_error)
+                            + clearance_penalty
+                            + field_penalty
+                            + lateral_side_penalty
+                            + 0.04 * math.hypot(candidate_x - robot_x, candidate_y - robot_y),
+                        }
+                    )
+            selected_orbit = min(
+                orbit_candidates,
+                key=lambda item: (
+                    float(item.get("field_ok", 0.0)) < 0.5,
+                    float(item.get("clearance_ready", 0.0)) < 0.5,
+                    float(item["score"]),
+                ),
             )
-            orbit_y = (
-                ball_y
-                + math.sin(line_yaw) * orbit_longitudinal_m
-                + math.cos(line_yaw) * lateral_sign * side_clearance_m
-            )
+            orbit_x = float(selected_orbit["x"])
+            orbit_y = float(selected_orbit["y"])
+            safe_side_orbit_selected_side_sign = int(1 if selected_orbit["side_sign"] >= 0.0 else -1)
+            safe_side_orbit_selected_clearance_m = float(selected_orbit["clearance_m"])
+            safe_side_orbit_selected_path_clearance_m = float(selected_orbit["path_clearance_m"])
             local_setup_trajectory_goal_pose = {
                 "x": round(float(orbit_x), 6),
                 "y": round(float(orbit_y), 6),
@@ -2128,16 +2408,72 @@ def line_servo_command(
         lateral_sign = 1.0 if robot_lateral_error >= 0.0 else -1.0
         side_clearance_m = max(0.38, min(0.52, effective_setup_standoff_m + 0.14))
         orbit_longitudinal_m = -max(effective_setup_standoff_m, float(contact_standoff_m) + 0.18)
-        orbit_x = (
-            ball_x
-            + math.cos(line_yaw) * orbit_longitudinal_m
-            - math.sin(line_yaw) * lateral_sign * side_clearance_m
+        orbit_candidates = []
+        for candidate_side_sign in (lateral_sign, -lateral_sign):
+            for candidate_clearance_m in (
+                side_clearance_m,
+                max(side_clearance_m, 0.68),
+            ):
+                candidate_x = (
+                    ball_x
+                    + math.cos(line_yaw) * orbit_longitudinal_m
+                    + normal_x * candidate_side_sign * candidate_clearance_m
+                )
+                candidate_y = (
+                    ball_y
+                    + math.sin(line_yaw) * orbit_longitudinal_m
+                    + normal_y * candidate_side_sign * candidate_clearance_m
+                )
+                candidate_yaw = math.atan2(candidate_y - robot_y, candidate_x - robot_x)
+                candidate_heading_error = normalize_angle_rad(candidate_yaw - robot_yaw)
+                candidate_path_clearance_m = point_segment_distance(
+                    (ball_x, ball_y),
+                    (robot_x, robot_y),
+                    (candidate_x, candidate_y),
+                )
+                clearance_penalty = (
+                    max(0.0, safe_side_orbit_required_path_clearance_m - candidate_path_clearance_m) * 10.0
+                )
+                field_ok = _point_inside_setup_field(candidate_x, candidate_y, margin_m=0.02)
+                clearance_ready = candidate_path_clearance_m >= safe_side_orbit_required_path_clearance_m
+                field_penalty = 0.0 if field_ok else 2.0
+                lateral_side_penalty = (
+                    1.0
+                    if robot_longitudinal_projection > -float(contact_standoff_m)
+                    and abs(robot_lateral_error) > 0.50
+                    and candidate_side_sign != lateral_sign
+                    else 0.0
+                )
+                orbit_candidates.append(
+                    {
+                        "x": candidate_x,
+                        "y": candidate_y,
+                        "yaw": candidate_yaw,
+                        "side_sign": candidate_side_sign,
+                        "clearance_m": candidate_clearance_m,
+                        "path_clearance_m": candidate_path_clearance_m,
+                        "field_ok": float(1.0 if field_ok else 0.0),
+                        "clearance_ready": float(1.0 if clearance_ready else 0.0),
+                        "score": abs(candidate_heading_error)
+                        + clearance_penalty
+                        + field_penalty
+                        + lateral_side_penalty
+                        + 0.04 * math.hypot(candidate_x - robot_x, candidate_y - robot_y),
+                    }
+                )
+        selected_orbit = min(
+            orbit_candidates,
+            key=lambda item: (
+                float(item.get("field_ok", 0.0)) < 0.5,
+                float(item.get("clearance_ready", 0.0)) < 0.5,
+                float(item["score"]),
+            ),
         )
-        orbit_y = (
-            ball_y
-            + math.sin(line_yaw) * orbit_longitudinal_m
-            + math.cos(line_yaw) * lateral_sign * side_clearance_m
-        )
+        orbit_x = float(selected_orbit["x"])
+        orbit_y = float(selected_orbit["y"])
+        safe_side_orbit_selected_side_sign = int(1 if selected_orbit["side_sign"] >= 0.0 else -1)
+        safe_side_orbit_selected_clearance_m = float(selected_orbit["clearance_m"])
+        safe_side_orbit_selected_path_clearance_m = float(selected_orbit["path_clearance_m"])
         desired_yaw = math.atan2(orbit_y - robot_y, orbit_x - robot_x)
         base_linear = min(float(max_linear_x_mps), 0.045)
         if distance_to_contact < 0.22 and abs(line_yaw_error) > 0.80:
@@ -2270,7 +2606,7 @@ def line_servo_command(
         and local_setup_trajectory_stage == "safe_side_orbit"
         and not ball_moved
         and not contact_ready
-        and robot_ball_distance <= max(effective_setup_standoff_m + 0.18, 0.58)
+        and robot_ball_distance <= max(effective_setup_standoff_m + 0.04, 0.50)
         and abs(yaw_error) > 0.62
     )
     local_setup_safe_side_orbit_yaw_crawl = bool(
@@ -2280,9 +2616,20 @@ def line_servo_command(
         and not contact_ready
         and not local_setup_safe_side_orbit_yaw_guard
         and recovery_wrong_side_orbit_active
-        and robot_ball_distance <= max(effective_setup_standoff_m + 0.18, 0.64)
-        and distance_to_contact > 0.34
+        and robot_ball_distance <= max(effective_setup_standoff_m + 0.04, 0.50)
+        and 0.34 < distance_to_contact <= 0.52
         and abs(yaw_error) > 0.32
+    )
+    local_setup_safe_side_orbit_cruise_active = bool(
+        local_setup_trajectory_active
+        and local_setup_trajectory_stage == "safe_side_orbit"
+        and not ball_moved
+        and not contact_ready
+        and not local_setup_safe_side_orbit_yaw_guard
+        and not local_setup_safe_side_orbit_yaw_crawl
+        and recovery_wrong_side_orbit_active
+        and robot_ball_distance > max(effective_setup_standoff_m + 0.04, 0.50)
+        and distance_to_contact > 0.34
     )
     local_setup_contact_risk_freeze = bool(
         local_setup_trajectory_active
@@ -2309,6 +2656,13 @@ def line_servo_command(
         elif local_setup_near_contact_yaw_lock:
             phase = f"{phase}_yaw_lock"
             base_linear = 0.0
+        elif local_setup_safe_side_orbit_cruise_active:
+            phase = f"{phase}_arc_cruise"
+            if abs(yaw_error) > 0.75:
+                base_linear = min(base_linear, 0.030)
+            else:
+                base_linear = max(min(base_linear, float(max_linear_x_mps)), max(float(min_linear_x_mps), 0.055))
+            angular_z = clamp(angular_z, -0.24, 0.24)
         elif local_setup_trajectory_stage in {"side_setup", "safe_side_orbit"}:
             if abs(yaw_error) > 0.75:
                 base_linear = min(base_linear, 0.030)
@@ -2407,6 +2761,10 @@ def line_servo_command(
         "local_setup_trajectory_active": local_setup_trajectory_active,
         "local_setup_trajectory_stage": local_setup_trajectory_stage,
         "local_setup_trajectory_goal_pose": local_setup_trajectory_goal_pose,
+        "safe_side_orbit_selected_side_sign": safe_side_orbit_selected_side_sign,
+        "safe_side_orbit_selected_clearance_m": round(float(safe_side_orbit_selected_clearance_m), 6),
+        "safe_side_orbit_selected_path_clearance_m": round(float(safe_side_orbit_selected_path_clearance_m), 6),
+        "safe_side_orbit_required_path_clearance_m": round(float(safe_side_orbit_required_path_clearance_m), 6),
         "push_ready_line_commit_active": push_ready_line_commit_active,
         "setup_projection_error_m": round(float(setup_projection_error_m), 6),
         "setup_lateral_ready_m": round(
@@ -2418,6 +2776,7 @@ def line_servo_command(
         "local_setup_near_contact_yaw_lock": local_setup_near_contact_yaw_lock,
         "local_setup_safe_side_orbit_yaw_guard": local_setup_safe_side_orbit_yaw_guard,
         "local_setup_safe_side_orbit_yaw_crawl": local_setup_safe_side_orbit_yaw_crawl,
+        "local_setup_safe_side_orbit_cruise_active": local_setup_safe_side_orbit_cruise_active,
         "local_setup_contact_risk_freeze": local_setup_contact_risk_freeze,
         "near_contact_lateral_trim_active": bool(
             local_setup_trajectory_stage == "lateral_trim"
@@ -2711,6 +3070,234 @@ PY
             samples.append(row)
     if rc != 0 and not samples:
         raise RuntimeError(output.strip() or "failed to sample Gazebo pose topic")
+    return samples
+
+
+def collect_wraparound_setup_samples(
+    *,
+    compose_project: str,
+    world_name: str,
+    robot_model_name: str,
+    ball_model_name: str,
+    waypoints: list[dict[str, Any]],
+    duration_s: float,
+    poll_period_s: float,
+    ball_motion_limit_m: float = WRAPAROUND_SETUP_BALL_MOTION_LIMIT_M,
+    max_linear_x_mps: float = 0.085,
+    min_linear_x_mps: float = 0.012,
+    max_angular_z_rps: float = 0.45,
+    yaw_gain: float = 1.20,
+) -> list[dict[str, Any]]:
+    script = f"""
+set -eo pipefail
+set +u
+source /opt/ros/${{CORE_ROS_DISTRO:-kilted}}/setup.bash
+set -u
+export WORLD_NAME={json.dumps(world_name)}
+export ROBOT_MODEL_NAME={json.dumps(robot_model_name)}
+export BALL_MODEL_NAME={json.dumps(ball_model_name)}
+export WAYPOINTS_JSON={json.dumps(json.dumps(waypoints))}
+export DURATION_S={json.dumps(f"{duration_s:.6f}")}
+export POLL_PERIOD_S={json.dumps(f"{poll_period_s:.6f}")}
+export BALL_MOTION_LIMIT_M={json.dumps(f"{ball_motion_limit_m:.6f}")}
+export MAX_LINEAR_X_MPS={json.dumps(f"{max_linear_x_mps:.6f}")}
+export MIN_LINEAR_X_MPS={json.dumps(f"{min_linear_x_mps:.6f}")}
+export MAX_ANGULAR_Z_RPS={json.dumps(f"{max_angular_z_rps:.6f}")}
+export YAW_GAIN={json.dumps(f"{yaw_gain:.6f}")}
+export PUBLISHED_ANGULAR_SIGN={json.dumps(f"{WRAPAROUND_SETUP_PUBLISHED_ANGULAR_SIGN:.6f}")}
+python3 - <<'PY'
+import json
+import math
+import os
+import subprocess
+import time
+
+import rclpy
+from geometry_msgs.msg import TwistStamped
+
+import sys
+sys.path.insert(0, "/workspaces/chasecar/scripts")
+from golf_ball_circle_delivery_demo_runner import wraparound_pose_stage_command
+from sim_truth_probe import parse_pose_message
+
+world_name = os.environ["WORLD_NAME"]
+robot_model_name = os.environ["ROBOT_MODEL_NAME"]
+ball_model_name = os.environ["BALL_MODEL_NAME"]
+waypoints = json.loads(os.environ["WAYPOINTS_JSON"])
+duration_s = float(os.environ["DURATION_S"])
+poll_period_s = float(os.environ["POLL_PERIOD_S"])
+ball_motion_limit_m = float(os.environ["BALL_MOTION_LIMIT_M"])
+max_linear_x_mps = float(os.environ["MAX_LINEAR_X_MPS"])
+min_linear_x_mps = float(os.environ["MIN_LINEAR_X_MPS"])
+max_angular_z_rps = float(os.environ["MAX_ANGULAR_Z_RPS"])
+yaw_gain = float(os.environ["YAW_GAIN"])
+published_angular_sign = float(os.environ["PUBLISHED_ANGULAR_SIGN"])
+topic = f"/world/{{world_name}}/dynamic_pose/info"
+started = time.monotonic()
+deadline = started + max(duration_s, 0.1)
+index = 0
+waypoint_index = 0
+ball_start_xy = None
+
+def yaw_from_orientation(orientation):
+    try:
+        x = float(orientation.get("x", 0.0) or 0.0)
+        y = float(orientation.get("y", 0.0) or 0.0)
+        z = float(orientation.get("z", 0.0) or 0.0)
+        w = float(orientation.get("w", 1.0) or 1.0)
+    except Exception:
+        return 0.0
+    return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+
+def convert_pose(pose):
+    if not pose:
+        return None
+    position = pose.get("position") if isinstance(pose.get("position"), dict) else {{}}
+    orientation = pose.get("orientation") if isinstance(pose.get("orientation"), dict) else {{}}
+    return {{
+        "name": pose.get("name", ""),
+        "position": position,
+        "orientation": orientation,
+        "yaw": yaw_from_orientation(orientation),
+    }}
+
+def pose_xy_yaw(converted):
+    if not converted:
+        return None
+    position = converted.get("position") if isinstance(converted.get("position"), dict) else {{}}
+    return {{
+        "x": float(position.get("x", 0.0) or 0.0),
+        "y": float(position.get("y", 0.0) or 0.0),
+        "z": float(position.get("z", 0.0) or 0.0),
+        "yaw": float(converted.get("yaw", 0.0) or 0.0),
+    }}
+
+def publish(pub, node, linear_x, angular_z):
+    msg = TwistStamped()
+    msg.header.frame_id = "base_link"
+    msg.header.stamp = node.get_clock().now().to_msg()
+    msg.twist.linear.x = float(linear_x)
+    msg.twist.angular.z = float(angular_z)
+    pub.publish(msg)
+    rclpy.spin_once(node, timeout_sec=0.0)
+
+rclpy.init(args=None)
+node = rclpy.create_node("fetch_wraparound_setup_runner")
+pub = node.create_publisher(TwistStamped, "/jetbot_base_controller/cmd_vel", 10)
+try:
+    while time.monotonic() < deadline:
+        tick_started = time.monotonic()
+        should_break = False
+        record = {{
+            "sample_index": index,
+            "t_s": round(tick_started - started, 6),
+            "topic_ok": False,
+            "robot_model_name": robot_model_name,
+            "ball_model_name": ball_model_name,
+            "robot_pose": None,
+            "ball_pose": None,
+            "wraparound_setup_sample": True,
+            "wraparound_waypoint_index": waypoint_index,
+            "wraparound_waypoint_count": len(waypoints),
+        }}
+        try:
+            completed = subprocess.run(
+                ["gz", "topic", "-e", "-n", "1", "-t", topic],
+                capture_output=True,
+                text=True,
+                timeout=3.0,
+                check=False,
+            )
+            record["topic_ok"] = completed.returncode == 0
+            if completed.returncode == 0:
+                poses = parse_pose_message(completed.stdout or "")
+                robot_pose = next((item for item in poses if item.get("name") == robot_model_name), None)
+                ball_pose = next((item for item in poses if item.get("name") == ball_model_name), None)
+                converted_robot = convert_pose(robot_pose)
+                converted_ball = convert_pose(ball_pose)
+                record["robot_pose"] = converted_robot
+                record["ball_pose"] = converted_ball
+                robot_xy = pose_xy_yaw(converted_robot)
+                ball_xy = pose_xy_yaw(converted_ball)
+                if ball_xy and ball_start_xy is None:
+                    ball_start_xy = dict(ball_xy)
+                ball_motion_m = 0.0
+                if ball_xy and ball_start_xy:
+                    ball_motion_m = math.hypot(ball_xy["x"] - ball_start_xy["x"], ball_xy["y"] - ball_start_xy["y"])
+                record["wraparound_ball_motion_m"] = round(ball_motion_m, 6)
+                if ball_motion_m > ball_motion_limit_m:
+                    record["wraparound_abort_reason"] = "ball_moved_during_wraparound_setup"
+                    publish(pub, node, 0.0, 0.0)
+                    should_break = True
+                elif robot_xy and waypoint_index < len(waypoints):
+                    waypoint = waypoints[waypoint_index]
+                    command = wraparound_pose_stage_command(
+                        robot_pose=robot_xy,
+                        waypoint=waypoint,
+                        max_linear_x_mps=max_linear_x_mps,
+                        min_linear_x_mps=min_linear_x_mps,
+                        max_angular_z_rps=max_angular_z_rps,
+                        yaw_gain=yaw_gain,
+                    )
+                    record["wraparound_setup_command"] = command
+                    record["wraparound_waypoint"] = waypoint
+                    if bool(command.get("waypoint_reached", False)):
+                        record["wraparound_waypoint_reached"] = True
+                        waypoint_index += 1
+                        publish(pub, node, 0.0, 0.0)
+                        if waypoint_index >= len(waypoints):
+                            record["wraparound_setup_complete"] = True
+                            should_break = True
+                    else:
+                        published_angular_z = published_angular_sign * float(command["angular_z_rps"])
+                        record["wraparound_published_command"] = {{
+                            "linear_x_mps": command["linear_x_mps"],
+                            "angular_z_rps": round(published_angular_z, 6),
+                            "angular_sign": round(published_angular_sign, 6),
+                        }}
+                        publish(pub, node, command["linear_x_mps"], published_angular_z)
+                else:
+                    record["wraparound_setup_complete"] = waypoint_index >= len(waypoints)
+                    publish(pub, node, 0.0, 0.0)
+                    should_break = True
+        except Exception as exc:
+            record["error"] = str(exc)
+            try:
+                publish(pub, node, 0.0, 0.0)
+            except Exception:
+                pass
+        print(json.dumps(record, sort_keys=True), flush=True)
+        index += 1
+        if should_break:
+            break
+        elapsed = time.monotonic() - tick_started
+        if elapsed < poll_period_s:
+            time.sleep(poll_period_s - elapsed)
+finally:
+    for _ in range(5):
+        try:
+            publish(pub, node, 0.0, 0.0)
+            time.sleep(0.05)
+        except Exception:
+            pass
+    node.destroy_node()
+    rclpy.shutdown()
+PY
+"""
+    rc, output = docker_exec(compose_project, script, timeout_s=duration_s + 60.0)
+    samples: list[dict[str, Any]] = []
+    for line in output.splitlines():
+        text = line.strip()
+        if not text or not text.startswith("{"):
+            continue
+        try:
+            sample = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(sample, dict):
+            samples.append(sample)
+    if rc != 0 and not samples:
+        raise RuntimeError(f"wraparound setup failed rc={rc}: {output[-2000:]}")
     return samples
 
 
@@ -3449,6 +4036,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--nav2-reposition-continue-on-failure", action="store_true")
     parser.add_argument("--disable-nav2-precontact-fallback", action="store_true")
     parser.add_argument("--pre-fetch-setup-correction-s", type=float, default=0.0)
+    parser.add_argument("--wraparound-setup-duration-s", type=float, default=WRAPAROUND_SETUP_DEFAULT_DURATION_S)
+    parser.add_argument(
+        "--wraparound-setup-mode",
+        choices=["nav2_waypoints", "cmd_vel_pose_stage"],
+        default="nav2_waypoints",
+    )
+    parser.add_argument("--disable-wraparound-setup", action="store_true")
     parser.add_argument("--forward-only-pre-contact-required", action="store_true")
     parser.add_argument("--stop-on-delivery", action="store_true")
     parser.add_argument("--delivery-stop-radius-m", type=float, default=0.0)
@@ -4338,6 +4932,409 @@ def main() -> int:
             phase_key="pre_fetch_setup_correction_sample",
             poll_period_s=args.poll_period_s,
         )
+    wraparound_setup: dict[str, Any] = {
+        "attempted": False,
+        "enabled": bool(
+            not bool(args.disable_wraparound_setup)
+            and float(args.wraparound_setup_duration_s or 0.0) > 0.0
+        ),
+        "requested_duration_s": round(float(args.wraparound_setup_duration_s or 0.0), 6),
+        "pass": None,
+        "reason": "not_required",
+        "sample_count": 0,
+    }
+    wraparound_setup_samples: list[dict[str, Any]] = []
+    fetch_skipped_by_wraparound_setup = False
+    wraparound_route_enabled = str(planner_route_label).strip() == ROUTE_LOCAL_SETUP_CAPTURE
+    wraparound_eligible = bool(
+        wraparound_route_enabled
+        and not fetch_skipped_after_reposition
+        and not setup_correction_delivered
+        and not bool(args.disable_wraparound_setup)
+        and float(args.wraparound_setup_duration_s or 0.0) > 0.0
+    )
+    if wraparound_eligible:
+        pose_source_samples = (
+            pre_fetch_setup_correction_samples
+            or pre_fetch_reposition_samples
+            or initial_pose_samples
+        )
+        current_robot_pose, current_ball_pose = latest_robot_ball_xyyaw(pose_source_samples)
+        if current_robot_pose is None or current_ball_pose is None:
+            try:
+                pose_source_samples = collect_contact_samples(
+                    compose_project=args.compose_project,
+                    world_name=args.world_name,
+                    robot_model_name=args.robot_model_name,
+                    ball_model_name=args.target_model_name,
+                    duration_s=max(float(args.poll_period_s), 0.2),
+                    poll_period_s=args.poll_period_s,
+                )
+                current_robot_pose, current_ball_pose = latest_robot_ball_xyyaw(pose_source_samples)
+            except Exception as exc:
+                wraparound_setup.update(
+                    {
+                        "attempted": False,
+                        "pass": False,
+                        "reason": "wraparound_pose_sample_error",
+                        "error": str(exc),
+                    }
+                )
+                fetch_skipped_by_wraparound_setup = True
+        if current_robot_pose is not None and current_ball_pose is not None:
+            pre_wraparound_geometry = _route_geometry_from_poses(
+                robot_pose=current_robot_pose,
+                ball_pose=current_ball_pose,
+                target_x=float(args.zone_x),
+                target_y=float(args.zone_y),
+            )
+            wraparound_setup["pre_wraparound_geometry"] = pre_wraparound_geometry
+            wraparound_clear: dict[str, Any] = {
+                "attempted": False,
+                "reason": "not_needed",
+                "sample_count": 0,
+            }
+            clear_needed = bool(
+                pre_wraparound_geometry.get("available")
+                and _finite_float(pre_wraparound_geometry.get("robot_longitudinal_projection_m"), -999.0) > 0.10
+                and _finite_float(pre_wraparound_geometry.get("robot_ball_distance_m"), 999.0) < 0.65
+            )
+            if clear_needed:
+                wraparound_clear.update(
+                    {
+                        "attempted": True,
+                        "reason": "close_front_side_forward_clear",
+                        "duration_s": round(float(WRAPAROUND_FORWARD_CLEAR_DURATION_S), 6),
+                        "linear_x_mps": round(float(WRAPAROUND_FORWARD_CLEAR_LINEAR_X_MPS), 6),
+                    }
+                )
+                clear_start_ball_pose = current_ball_pose
+                clear_proc = start_robot_drive(
+                    compose_project=args.compose_project,
+                    linear_x_mps=WRAPAROUND_FORWARD_CLEAR_LINEAR_X_MPS,
+                    angular_z_rps=0.0,
+                    duration_s=WRAPAROUND_FORWARD_CLEAR_DURATION_S,
+                )
+                clear_samples: list[dict[str, Any]] = []
+                try:
+                    clear_samples = collect_contact_samples(
+                        compose_project=args.compose_project,
+                        world_name=args.world_name,
+                        robot_model_name=args.robot_model_name,
+                        ball_model_name=args.target_model_name,
+                        duration_s=WRAPAROUND_FORWARD_CLEAR_DURATION_S + 0.4,
+                        poll_period_s=args.poll_period_s,
+                    )
+                finally:
+                    if clear_proc.poll() is None:
+                        stop_robot_drive_publishers(args.compose_project)
+                        clear_proc.terminate()
+                    try:
+                        clear_output, _ = clear_proc.communicate(timeout=4.0)
+                    except subprocess.TimeoutExpired:
+                        clear_proc.kill()
+                        clear_output, _ = clear_proc.communicate(timeout=2.0)
+                    publish_zero_stop(args.compose_project)
+                for sample in clear_samples:
+                    sample["wraparound_forward_clear_sample"] = True
+                wraparound_setup_samples.extend(clear_samples)
+                clear_robot_pose, clear_ball_pose = latest_robot_ball_xyyaw(clear_samples)
+                if clear_robot_pose is not None:
+                    current_robot_pose = clear_robot_pose
+                if clear_ball_pose is not None:
+                    current_ball_pose = clear_ball_pose
+                clear_start_xy = pose_xy_yaw(clear_start_ball_pose)
+                clear_ball_xy = pose_xy_yaw(current_ball_pose)
+                clear_ball_motion_m = (
+                    math.hypot(clear_ball_xy["x"] - clear_start_xy["x"], clear_ball_xy["y"] - clear_start_xy["y"])
+                    if clear_start_xy is not None and clear_ball_xy is not None
+                    else 0.0
+                )
+                pre_wraparound_geometry = _route_geometry_from_poses(
+                    robot_pose=current_robot_pose,
+                    ball_pose=current_ball_pose,
+                    target_x=float(args.zone_x),
+                    target_y=float(args.zone_y),
+                )
+                wraparound_clear.update(
+                    {
+                        "sample_count": len(clear_samples),
+                        "ball_motion_m": round(float(clear_ball_motion_m), 6),
+                        "output_tail": _tail_text(clear_output),
+                        "post_clear_robot_pose": current_robot_pose or {},
+                        "post_clear_ball_pose": current_ball_pose or {},
+                        "post_clear_geometry": pre_wraparound_geometry,
+                    }
+                )
+                wraparound_setup["pre_wraparound_geometry"] = pre_wraparound_geometry
+                if clear_ball_motion_m > WRAPAROUND_SETUP_BALL_MOTION_LIMIT_M:
+                    wraparound_clear["reason"] = "forward_clear_ball_motion_guard"
+                    wraparound_setup.update(
+                        {
+                            "attempted": True,
+                            "mode": str(args.wraparound_setup_mode or "nav2_waypoints"),
+                            "pass": False,
+                            "reason": "wraparound_forward_clear_ball_motion_guard",
+                            "sample_count": len(wraparound_setup_samples),
+                            "wraparound_clear": wraparound_clear,
+                        }
+                    )
+                    append_jsonl(artifact_dir / "wraparound_setup_trace.jsonl", wraparound_setup_samples)
+                    extend_contact_samples(
+                        contact_samples,
+                        wraparound_setup_samples,
+                        phase_key="wraparound_setup_sample",
+                        poll_period_s=args.poll_period_s,
+                    )
+                    fetch_skipped_by_wraparound_setup = True
+            wraparound_setup["wraparound_clear"] = wraparound_clear
+            if fetch_skipped_by_wraparound_setup:
+                pass
+            elif not wraparound_setup_needed(pre_wraparound_geometry):
+                wraparound_setup.update(
+                    {
+                        "attempted": False,
+                        "pass": None,
+                        "reason": "already_behind_or_outside_wraparound_envelope",
+                    }
+                )
+            else:
+                waypoint_plan = build_wraparound_setup_waypoints(
+                    robot_pose=current_robot_pose,
+                    ball_pose=current_ball_pose,
+                    target_x=float(args.zone_x),
+                    target_y=float(args.zone_y),
+                )
+                wraparound_setup["waypoint_plan"] = waypoint_plan
+                if not bool(waypoint_plan.get("available", False)):
+                    wraparound_setup.update(
+                        {
+                            "attempted": False,
+                            "pass": False,
+                            "reason": str(waypoint_plan.get("reason", "wraparound_waypoints_unavailable")),
+                        }
+                    )
+                    fetch_skipped_by_wraparound_setup = True
+                else:
+                    update_runtime(
+                        args.gather_runtime_json,
+                        mission_phase="wraparound_setup",
+                        gather_phase="wraparound_setup",
+                        proof_state="setup_capture",
+                        zone_pose={
+                            "x": args.zone_x,
+                            "y": args.zone_y,
+                            "z": args.zone_z,
+                            "radius_m": args.fetch_delivery_radius_m,
+                        },
+                        latest_feedback="Measured wraparound setup is moving around the ball before close capture.",
+                    )
+                    try:
+                        wraparound_mode = str(args.wraparound_setup_mode or "nav2_waypoints")
+                        nav2_waypoint_results: list[dict[str, Any]] = []
+                        wraparound_started = time.monotonic()
+                        latest_robot_pose = current_robot_pose
+                        latest_ball_pose = current_ball_pose
+                        if wraparound_mode == "nav2_waypoints":
+                            waypoints = list(waypoint_plan.get("waypoints", []))
+                            per_waypoint_timeout_s = max(
+                                12.0,
+                                min(
+                                    float(args.nav2_reposition_timeout_s),
+                                    float(args.wraparound_setup_duration_s) / max(len(waypoints), 1),
+                                ),
+                            )
+                            ball_start_xy = pose_xy_yaw(current_ball_pose)
+                            for waypoint_index, waypoint in enumerate(waypoints):
+                                world_goal_pose = {
+                                    "frame_id": str(args.nav2_reposition_frame_id or "odom"),
+                                    "x": float(waypoint.get("x", 0.0) or 0.0),
+                                    "y": float(waypoint.get("y", 0.0) or 0.0),
+                                    "z": 0.0,
+                                    "yaw": float(waypoint.get("yaw", 0.0) or 0.0),
+                                    "orientation": yaw_to_quaternion(float(waypoint.get("yaw", 0.0) or 0.0)),
+                                    "source": "wraparound_nav2_waypoint",
+                                    "waypoint_name": str(waypoint.get("name", "")),
+                                    "waypoint_index": waypoint_index,
+                                }
+                                goal_pose = dict(world_goal_pose)
+                                nav2_pose_sample: dict[str, Any] = {"available": False}
+                                if str(args.nav2_reposition_goal_frame_mode) == "nav2_relative":
+                                    nav2_pose_sample = wait_for_dashboard_robot_pose(
+                                        args.dashboard_url,
+                                        timeout_s=args.nav2_reposition_pose_wait_s,
+                                    )
+                                    if latest_robot_pose is not None and nav2_pose_sample.get("pose"):
+                                        goal_pose = build_nav2_relative_setup_goal(
+                                            world_setup_pose=world_goal_pose,
+                                            world_robot_pose=latest_robot_pose,
+                                            nav2_robot_pose=nav2_pose_sample["pose"],
+                                            frame_id=args.nav2_reposition_frame_id,
+                                        )
+                                        goal_pose["source"] = "wraparound_nav2_relative_waypoint"
+                                        goal_pose["waypoint_name"] = str(waypoint.get("name", ""))
+                                        goal_pose["waypoint_index"] = waypoint_index
+                                    else:
+                                        goal_pose["relative_goal_unavailable"] = True
+                                        goal_pose["relative_goal_sample"] = nav2_pose_sample
+                                waypoint_result = dispatch_nav2_reposition_before_fetch(
+                                    compose_project=args.compose_project,
+                                    goal_pose=goal_pose,
+                                    timeout_s=per_waypoint_timeout_s,
+                                    server_wait_s=args.nav2_reposition_server_wait_s,
+                                )
+                                waypoint_result["waypoint_index"] = waypoint_index
+                                waypoint_result["waypoint"] = dict(waypoint)
+                                waypoint_result["world_goal_pose"] = world_goal_pose
+                                waypoint_result["goal_frame_mode"] = str(args.nav2_reposition_goal_frame_mode)
+                                waypoint_result["nav2_pose_sample"] = nav2_pose_sample
+                                waypoint_samples = collect_contact_samples(
+                                    compose_project=args.compose_project,
+                                    world_name=args.world_name,
+                                    robot_model_name=args.robot_model_name,
+                                    ball_model_name=args.target_model_name,
+                                    duration_s=max(float(args.poll_period_s), 0.3),
+                                    poll_period_s=args.poll_period_s,
+                                )
+                                for sample in waypoint_samples:
+                                    sample["wraparound_nav2_waypoint_sample"] = True
+                                    sample["wraparound_waypoint_index"] = waypoint_index
+                                    sample["wraparound_waypoint_name"] = str(waypoint.get("name", ""))
+                                wraparound_setup_samples.extend(waypoint_samples)
+                                waypoint_robot_pose, waypoint_ball_pose = latest_robot_ball_xyyaw(waypoint_samples)
+                                if waypoint_robot_pose is not None:
+                                    latest_robot_pose = waypoint_robot_pose
+                                if waypoint_ball_pose is not None:
+                                    latest_ball_pose = waypoint_ball_pose
+                                waypoint_result["post_waypoint_robot_pose"] = latest_robot_pose or {}
+                                waypoint_result["post_waypoint_ball_pose"] = latest_ball_pose or {}
+                                ball_motion_m = 0.0
+                                latest_ball_xy = pose_xy_yaw(latest_ball_pose)
+                                if ball_start_xy is not None and latest_ball_xy is not None:
+                                    ball_motion_m = math.hypot(
+                                        latest_ball_xy["x"] - ball_start_xy["x"],
+                                        latest_ball_xy["y"] - ball_start_xy["y"],
+                                    )
+                                waypoint_result["ball_motion_m"] = round(float(ball_motion_m), 6)
+                                nav2_waypoint_results.append(waypoint_result)
+                                if ball_motion_m > WRAPAROUND_SETUP_BALL_MOTION_LIMIT_M:
+                                    waypoint_result["wraparound_abort_reason"] = "ball_moved_during_nav2_wraparound"
+                                    break
+                                if not bool(waypoint_result.get("success", False)):
+                                    break
+                        else:
+                            wraparound_setup_samples = collect_wraparound_setup_samples(
+                                compose_project=args.compose_project,
+                                world_name=args.world_name,
+                                robot_model_name=args.robot_model_name,
+                                ball_model_name=args.target_model_name,
+                                waypoints=list(waypoint_plan.get("waypoints", [])),
+                                duration_s=float(args.wraparound_setup_duration_s),
+                                poll_period_s=args.poll_period_s,
+                            )
+                            latest_robot_pose, latest_ball_pose = latest_robot_ball_xyyaw(wraparound_setup_samples)
+                        wraparound_elapsed_s = time.monotonic() - wraparound_started
+                        append_jsonl(artifact_dir / "wraparound_setup_trace.jsonl", wraparound_setup_samples)
+                        extend_contact_samples(
+                            contact_samples,
+                            wraparound_setup_samples,
+                            phase_key="wraparound_setup_sample",
+                            poll_period_s=args.poll_period_s,
+                        )
+                        if latest_robot_pose is not None:
+                            args.robot_x = float(latest_robot_pose["x"])
+                            args.robot_y = float(latest_robot_pose["y"])
+                            args.robot_yaw = float(latest_robot_pose["yaw"])
+                        if latest_ball_pose is not None:
+                            args.ball_x = float(latest_ball_pose["x"])
+                            args.ball_y = float(latest_ball_pose["y"])
+                            args.ball_z = float(latest_ball_pose.get("z", args.ball_z))
+                        post_wraparound_geometry: dict[str, Any] = {"available": False}
+                        if latest_robot_pose is not None and latest_ball_pose is not None:
+                            post_wraparound_geometry = _route_geometry_from_poses(
+                                robot_pose=latest_robot_pose,
+                                ball_pose=latest_ball_pose,
+                                target_x=float(args.zone_x),
+                                target_y=float(args.zone_y),
+                            )
+                        abort_reasons = [
+                            str(sample.get("wraparound_abort_reason", ""))
+                            for sample in wraparound_setup_samples
+                            if sample.get("wraparound_abort_reason")
+                        ]
+                        abort_reasons.extend(
+                            str(item.get("wraparound_abort_reason", ""))
+                            for item in nav2_waypoint_results
+                            if item.get("wraparound_abort_reason")
+                        )
+                        behind_ready = bool(
+                            post_wraparound_geometry.get("available")
+                            and _finite_float(
+                                post_wraparound_geometry.get("robot_longitudinal_projection_m"),
+                                999.0,
+                            )
+                            <= -0.02
+                            and 0.20
+                            <= _finite_float(post_wraparound_geometry.get("robot_ball_distance_m"), 999.0)
+                            <= 1.10
+                        )
+                        completed_waypoints = any(
+                            bool(sample.get("wraparound_setup_complete", False))
+                            for sample in wraparound_setup_samples
+                        ) or bool(nav2_waypoint_results and all(bool(item.get("success", False)) for item in nav2_waypoint_results))
+                        wraparound_pass = bool(behind_ready and not abort_reasons)
+                        wraparound_setup.update(
+                            {
+                                "attempted": True,
+                                "mode": wraparound_mode,
+                                "pass": wraparound_pass,
+                                "reason": (
+                                    "wraparound_setup_behind_ready"
+                                    if wraparound_pass
+                                    else "wraparound_ball_motion_guard"
+                                    if abort_reasons
+                                    else "wraparound_setup_not_behind_ball"
+                                ),
+                                "sample_count": len(wraparound_setup_samples),
+                                "elapsed_s": round(float(wraparound_elapsed_s), 6),
+                                "completed_waypoints": completed_waypoints,
+                                "nav2_waypoint_results": nav2_waypoint_results,
+                                "abort_reasons": abort_reasons,
+                                "post_wraparound_robot_pose": latest_robot_pose or {},
+                                "post_wraparound_ball_pose": latest_ball_pose or {},
+                                "post_wraparound_geometry": post_wraparound_geometry,
+                            }
+                        )
+                        fetch_skipped_by_wraparound_setup = not wraparound_pass
+                    except Exception as exc:
+                        wraparound_setup.update(
+                            {
+                                "attempted": True,
+                                "pass": False,
+                                "reason": "wraparound_setup_error",
+                                "error": str(exc),
+                                "sample_count": len(wraparound_setup_samples),
+                            }
+                        )
+                        fetch_skipped_by_wraparound_setup = True
+        elif not bool(wraparound_setup.get("pass", False)):
+            wraparound_setup.update(
+                {
+                    "attempted": False,
+                    "pass": False,
+                    "reason": "wraparound_missing_measured_pose",
+                }
+            )
+            fetch_skipped_by_wraparound_setup = True
+    elif not bool(args.disable_wraparound_setup) and float(args.wraparound_setup_duration_s or 0.0) > 0.0:
+        wraparound_setup["reason"] = (
+            "fetch_skipped_after_reposition"
+            if fetch_skipped_after_reposition
+            else "setup_correction_delivered"
+            if setup_correction_delivered
+            else "not_local_setup_capture_route"
+        )
+    write_json(artifact_dir / "wraparound_setup.json", wraparound_setup)
     local_setup_capture_setup: dict[str, Any] = {
         "attempted": False,
         "required": bool(_is_local_setup_owner_route(str(planner_route_label).strip())),
@@ -4354,6 +5351,7 @@ def main() -> int:
     if (
         _is_local_setup_owner_route(str(planner_route_label).strip())
         and not fetch_skipped_after_reposition
+        and not fetch_skipped_by_wraparound_setup
         and not setup_correction_delivered
         and str(args.drive_mode) == "line_servo"
     ):
@@ -4456,6 +5454,15 @@ def main() -> int:
                 "setup_owner_route_label": setup_owner_route_label,
                 "pre_push_measured_handoff": pre_push_measured_handoff,
             }
+    elif fetch_skipped_by_wraparound_setup and wraparound_route_enabled:
+        local_setup_capture_setup.update(
+            {
+                "required": True,
+                "pass": False,
+                "reason": "wraparound_setup_failed_before_close_capture",
+                "wraparound_setup": wraparound_setup,
+            }
+        )
     write_json(artifact_dir / "local_setup_capture_setup.json", local_setup_capture_setup)
 
     update_runtime(
@@ -4602,6 +5609,13 @@ def main() -> int:
             "reason": "nav2_reposition_failed_before_fetch",
             "nav2_reposition": pre_fetch_reposition,
         }
+    elif fetch_skipped_by_wraparound_setup:
+        shot_outcome = {
+            **shot_outcome,
+            "pass": False,
+            "reason": "wraparound_setup_failed_before_local_fetch",
+            "wraparound_setup": wraparound_setup,
+        }
     elif fetch_skipped_by_push_ready_handoff:
         shot_outcome = {
             **shot_outcome,
@@ -4736,7 +5750,11 @@ def main() -> int:
     samples = ball_samples_from_contact_samples(contact_samples)
     append_jsonl(trace_path, samples)
     append_jsonl(contact_trace_path, contact_samples)
-    local_fetch_dispatched = not bool(fetch_skipped_after_reposition or fetch_skipped_by_push_ready_handoff)
+    local_fetch_dispatched = not bool(
+        fetch_skipped_after_reposition
+        or fetch_skipped_by_wraparound_setup
+        or fetch_skipped_by_push_ready_handoff
+    )
     measured_push_ready_handoff = measured_push_ready_handoff_from_approach_metrics(
         approach_metrics,
         local_fetch_dispatched=local_fetch_dispatched,
@@ -4763,6 +5781,7 @@ def main() -> int:
     )
     pass_flag = bool(shot_outcome.get("pass", False))
     pre_fetch_elapsed_s = float(pre_fetch_reposition.get("elapsed_s", 0.0) or 0.0)
+    wraparound_elapsed_s = float(wraparound_setup.get("elapsed_s", 0.0) or 0.0)
     terminal_correction_elapsed_s = (
         float(terminal_correction.get("duration_s", 0.0) or 0.0)
         if bool(terminal_correction.get("attempted", False))
@@ -4771,10 +5790,13 @@ def main() -> int:
     local_setup_capture_elapsed_s = float(local_setup_capture_setup.get("elapsed_s", 0.0) or 0.0)
     mission_time_s = (
         pre_fetch_elapsed_s
+        + wraparound_elapsed_s
         + local_setup_capture_elapsed_s
         + (
             0.0
-            if fetch_skipped_after_reposition or fetch_skipped_by_push_ready_handoff
+            if fetch_skipped_after_reposition
+            or fetch_skipped_by_wraparound_setup
+            or fetch_skipped_by_push_ready_handoff
             else max(float(main_fetch_sample_duration_s), float(args.drive_duration_s))
         )
         + terminal_correction_elapsed_s
@@ -4797,6 +5819,7 @@ def main() -> int:
         "pre_fetch_reposition": pre_fetch_reposition,
         "nav2_precontact_fallback": nav2_precontact_fallback,
         "pre_fetch_setup_correction": pre_fetch_setup_correction,
+        "wraparound_setup": wraparound_setup,
         "local_setup_capture_setup": local_setup_capture_setup,
         "pre_push_measured_handoff": pre_push_measured_handoff,
         "nav2_reposition_before_fetch": bool(args.nav2_reposition_before_fetch),
@@ -4810,6 +5833,7 @@ def main() -> int:
         "planner_route_execution_defaults": planner_route_defaults,
         "control_preflight": control_preflight,
         "fetch_skipped_after_reposition": bool(fetch_skipped_after_reposition),
+        "fetch_skipped_by_wraparound_setup": bool(fetch_skipped_by_wraparound_setup),
         "fetch_skipped_by_push_ready_handoff": bool(fetch_skipped_by_push_ready_handoff),
         "local_fetch_dispatched": bool(local_fetch_dispatched),
         "contact_phase_forward_only": bool(float(args.drive_linear_x_mps) >= -1e-9),
@@ -4838,7 +5862,7 @@ def main() -> int:
         "line_servo_contact_yaw_ready_deg": round(float(args.line_servo_contact_yaw_ready_deg), 6),
     }
     route_metadata.update(summarize_line_servo_effective_command(contact_samples))
-    if fetch_skipped_after_reposition or fetch_skipped_by_push_ready_handoff:
+    if fetch_skipped_after_reposition or fetch_skipped_by_wraparound_setup or fetch_skipped_by_push_ready_handoff:
         pass_flag = False
     if bool(args.forward_only_pre_contact_required) and not forward_only_pre_contact:
         pass_flag = False
@@ -4867,6 +5891,7 @@ def main() -> int:
         "planner_route": route_metadata,
         "measured_push_ready_handoff": measured_push_ready_handoff,
         "pre_push_measured_handoff": pre_push_measured_handoff,
+        "wraparound_setup": wraparound_setup,
         "local_setup_capture_setup": local_setup_capture_setup,
         "control_preflight": control_preflight,
         "pre_fetch_reposition": pre_fetch_reposition,
@@ -4900,6 +5925,7 @@ def main() -> int:
         "planner_route": route_metadata,
         "measured_push_ready_handoff": measured_push_ready_handoff,
         "pre_push_measured_handoff": pre_push_measured_handoff,
+        "wraparound_setup": wraparound_setup,
         "local_setup_capture_setup": local_setup_capture_setup,
         "control_preflight": control_preflight,
         "session_id": session_id,
@@ -4947,6 +5973,8 @@ def main() -> int:
             f"`{pre_fetch_reposition.get('status_text', '')}`",
             f"- Nav2 pre-contact fallback: `{bool(nav2_precontact_fallback.get('applied', False))}` "
             f"`{nav2_precontact_fallback.get('reason', '')}`",
+            f"- Wraparound setup: `{bool(wraparound_setup.get('attempted', False))}` "
+            f"`{wraparound_setup.get('reason', '')}`",
             f"- AI push-coast mode: `{args.ai_push_coast_mode}`",
             f"- Terminal correction: `{bool(terminal_correction.get('attempted', False))}` "
             f"`{terminal_correction.get('reason', '')}`",

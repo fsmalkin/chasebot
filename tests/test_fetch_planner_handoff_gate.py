@@ -138,6 +138,37 @@ def test_deterministic_classifier_routes_near_field_long_setup_to_recovery():
     assert scene["local_fetch_envelope"]["eligible"] is False
 
 
+def test_deterministic_classifier_routes_close_wide_setup_debt_to_extended_recovery():
+    scene = {
+        "perception": {"ball_confidence": 0.98, "target_confidence": 0.99, "state_age_s": 0.15},
+        "corridor": {"blocked": False, "clearance_m": 0.35, "unsafe_drift_m": 0.0},
+        "geometry": {
+            "ball_target_distance_m": 0.704614,
+            "ball_target_angle_deg": 123.356958,
+            "robot_ball_distance_m": 0.678441,
+            "robot_lateral_error_m": 0.272012,
+            "robot_lateral_signed_m": 0.272012,
+            "robot_yaw_error_deg": -76.280844,
+            "robot_ball_relative_bearing_abs_deg": 80.082412,
+            "opposite_side_of_circle": False,
+        },
+    }
+
+    gate._refresh_local_fetch_envelope(scene)
+    local_admissibility = gate.route_admissibility_for_scene(scene, gate.ROUTE_LOCAL_SETUP_CAPTURE)
+    quality = gate.score_route_quality(scene, gate.ROUTE_RECOVERY_OR_REAIM)
+
+    assert gate.deterministic_route_label(scene) == gate.ROUTE_RECOVERY_OR_REAIM
+    assert local_admissibility["changed"] is True
+    assert local_admissibility["route_label"] == gate.ROUTE_RECOVERY_OR_REAIM
+    assert local_admissibility["reason"] == "close_wide_setup_debt_prefers_bounded_recovery_reaim"
+    assert quality["predicted_contact_quality"] == "watch"
+    assert "extended_recovery_reaim_required" in quality["flags"]
+    assert "outside_nominal_recovery_envelope" in quality["flags"]
+    assert "outside_recovery_envelope" not in quality["flags"]
+    assert scene["local_fetch_envelope"]["eligible"] is False
+
+
 def test_deterministic_classifier_keeps_exact_centerline_anchor_fetch_ready():
     scene = {
         "perception": {"ball_confidence": 0.98, "target_confidence": 0.99, "state_age_s": 0.15},

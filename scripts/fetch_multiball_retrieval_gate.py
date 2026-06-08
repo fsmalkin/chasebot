@@ -908,6 +908,7 @@ def build_step_command(
         route_label,
         "--route-executor",
         route_executor,
+        "--disable-wraparound-setup",
     ]
     if route_label == planner_gate.ROUTE_NAV2_REPOSITION:
         nav2_goal_frame_mode = (

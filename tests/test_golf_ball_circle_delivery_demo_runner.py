@@ -45,6 +45,10 @@ from golf_ball_circle_delivery_demo_runner import measured_push_ready_handoff_fr
 from golf_ball_circle_delivery_demo_runner import setup_owner_route_label_for_planner_route  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import extend_contact_samples  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import set_model_pose  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import wraparound_setup_needed  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import build_wraparound_setup_waypoints  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import wraparound_pose_stage_command  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import collect_wraparound_setup_samples  # noqa: E402
 import passive_ball_roll_calibration_runner as passive_runner  # noqa: E402
 
 
@@ -129,6 +133,131 @@ def test_parse_args_accepts_persistent_scene_fetch_flags(monkeypatch):
     assert args.use_existing_target_model is True
     assert args.preserve_robot_pose is True
     assert args.pre_fetch_setup_correction_s == pytest.approx(14.0)
+
+
+def test_parse_args_accepts_wraparound_setup_flags(monkeypatch):
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "golf_ball_circle_delivery_demo_runner.py",
+            "--wraparound-setup-duration-s",
+            "42",
+            "--wraparound-setup-mode",
+            "cmd_vel_pose_stage",
+            "--disable-wraparound-setup",
+        ],
+    )
+
+    args = parse_args()
+
+    assert args.wraparound_setup_duration_s == pytest.approx(42.0)
+    assert args.wraparound_setup_mode == "cmd_vel_pose_stage"
+    assert args.disable_wraparound_setup is True
+
+
+def test_wraparound_setup_needed_for_front_side_robot_and_skips_behind_robot():
+    front_side_geometry = {
+        "available": True,
+        "robot_longitudinal_projection_m": 0.18,
+        "robot_ball_distance_m": 0.72,
+        "ball_target_distance_m": 0.69,
+    }
+    behind_ball_geometry = {
+        "available": True,
+        "robot_longitudinal_projection_m": -0.32,
+        "robot_ball_distance_m": 0.34,
+        "ball_target_distance_m": 0.69,
+    }
+
+    assert wraparound_setup_needed(front_side_geometry) is True
+    assert wraparound_setup_needed(behind_ball_geometry) is False
+
+
+def test_build_wraparound_setup_waypoints_for_observed_front_side_scene():
+    plan = build_wraparound_setup_waypoints(
+        robot_pose={"x": 0.952331, "y": -0.23318, "yaw": 1.563391},
+        ball_pose={"x": 1.328716, "y": -0.574301, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+    )
+
+    assert plan["available"] is True
+    assert plan["reason"] == "wraparound_waypoints_built"
+    assert len(plan["waypoints"]) == 3
+    assert plan["waypoints"][0]["name"] == "wraparound_side_entry"
+    assert plan["waypoints"][1]["name"] == "wraparound_behind_side"
+    assert plan["waypoints"][2]["name"] == "wraparound_final_behind"
+    assert plan["waypoints"][2]["require_final_yaw"] is True
+    assert plan["waypoints"][2]["x"] > 1.328716
+
+
+def test_wraparound_pose_stage_command_aligns_before_driving():
+    command = wraparound_pose_stage_command(
+        robot_pose={"x": 0.0, "y": 0.0, "yaw": math.radians(90.0)},
+        waypoint={"name": "wraparound_side_entry", "x": 1.0, "y": 0.0, "yaw": 0.0},
+    )
+
+    assert command["phase"] == "wraparound_heading_align"
+    assert command["linear_x_mps"] == pytest.approx(0.0)
+    assert abs(command["angular_z_rps"]) > 0.0
+
+
+def test_wraparound_pose_stage_command_drives_when_heading_is_bounded():
+    command = wraparound_pose_stage_command(
+        robot_pose={"x": 0.0, "y": 0.0, "yaw": 0.05},
+        waypoint={"name": "wraparound_side_entry", "x": 1.0, "y": 0.0, "yaw": 0.0},
+    )
+
+    assert command["phase"] == "wraparound_drive"
+    assert command["linear_x_mps"] > 0.0
+    assert abs(command["angular_z_rps"]) > 0.0
+
+
+def test_wraparound_pose_stage_command_requires_final_yaw_at_final_waypoint():
+    command = wraparound_pose_stage_command(
+        robot_pose={"x": 0.02, "y": 0.0, "yaw": math.radians(35.0)},
+        waypoint={
+            "name": "wraparound_final_behind",
+            "x": 0.0,
+            "y": 0.0,
+            "yaw": 0.0,
+            "require_final_yaw": True,
+        },
+    )
+
+    assert command["phase"] == "wraparound_yaw_align"
+    assert command["position_reached"] is True
+    assert command["waypoint_reached"] is False
+
+
+def test_collect_wraparound_setup_samples_builds_embedded_script_with_published_command(monkeypatch):
+    import golf_ball_circle_delivery_demo_runner as runner
+
+    captured = {}
+
+    def fake_docker_exec(compose_project, script, *, timeout_s):
+        captured["compose_project"] = compose_project
+        captured["script"] = script
+        captured["timeout_s"] = timeout_s
+        return 0, '{"wraparound_setup_sample": true, "robot_pose": {}, "ball_pose": {}}\n'
+
+    monkeypatch.setattr(runner, "docker_exec", fake_docker_exec)
+
+    samples = collect_wraparound_setup_samples(
+        compose_project="project",
+        world_name="world",
+        robot_model_name="jetbot",
+        ball_model_name="ball",
+        waypoints=[{"name": "wraparound_side_entry", "x": 1.0, "y": 0.0, "yaw": 0.0}],
+        duration_s=0.1,
+        poll_period_s=0.1,
+    )
+
+    assert samples == [{"wraparound_setup_sample": True, "robot_pose": {}, "ball_pose": {}}]
+    assert captured["compose_project"] == "project"
+    assert "wraparound_published_command" in captured["script"]
+    assert "published_angular_sign * float" in captured["script"]
 
 
 def test_extend_contact_samples_preserves_one_timeline():
@@ -1882,7 +2011,7 @@ def test_local_setup_trajectory_uses_behind_setup_before_farther_setup_pocket():
     assert command["angular_z_rps"] < 0.0
 
 
-def test_local_setup_safe_side_orbit_crawls_after_moderate_yaw_alignment():
+def test_local_setup_safe_side_orbit_cruises_after_moderate_yaw_alignment():
     command = line_servo_command(
         robot_pose={"x": 0.9976737159815053, "y": -0.19887268037269532, "yaw": -1.7910671969844927},
         ball_pose={"x": 1.328716, "y": -0.574301, "yaw": 0.0},
@@ -1899,16 +2028,18 @@ def test_local_setup_safe_side_orbit_crawls_after_moderate_yaw_alignment():
         route_label="local_setup_capture",
     )
 
-    assert command["phase"] == "recovery_orbit_setup_yaw_crawl"
+    assert command["phase"] == "recovery_orbit_setup_arc_cruise"
     assert command["local_setup_trajectory_stage"] == "safe_side_orbit"
     assert command["local_setup_safe_side_orbit_yaw_guard"] is False
-    assert command["local_setup_safe_side_orbit_yaw_crawl"] is True
+    assert command["local_setup_safe_side_orbit_yaw_crawl"] is False
+    assert command["local_setup_safe_side_orbit_cruise_active"] is True
     assert command["recovery_wrong_side_orbit_active"] is True
-    assert command["linear_x_mps"] == pytest.approx(0.018)
+    assert command["linear_x_mps"] >= 0.055
+    assert abs(command["angular_z_rps"]) <= 0.24
     assert command["angular_z_rps"] > 0.0
 
 
-def test_local_setup_safe_side_orbit_holds_on_large_yaw_error():
+def test_local_setup_safe_side_orbit_cruises_slowly_on_far_large_yaw_error():
     command = line_servo_command(
         robot_pose={"x": 0.9605262530207337, "y": -0.2223489478157923, "yaw": -2.97406935799141},
         ball_pose={"x": 1.328716, "y": -0.574301, "yaw": 0.0},
@@ -1925,9 +2056,111 @@ def test_local_setup_safe_side_orbit_holds_on_large_yaw_error():
         route_label="local_setup_capture",
     )
 
-    assert command["phase"] == "recovery_orbit_setup_yaw_guard"
-    assert command["local_setup_safe_side_orbit_yaw_guard"] is True
+    assert command["phase"] == "recovery_orbit_setup_arc_cruise"
+    assert command["local_setup_safe_side_orbit_yaw_guard"] is False
     assert command["local_setup_safe_side_orbit_yaw_crawl"] is False
+    assert command["local_setup_safe_side_orbit_cruise_active"] is True
+    assert command["linear_x_mps"] == pytest.approx(0.03)
+    assert abs(command["angular_z_rps"]) <= 0.24
+
+
+def test_local_setup_safe_side_orbit_selects_alternate_clear_arc_for_observed_multiball_case():
+    command = line_servo_command(
+        robot_pose={"x": 0.759475, "y": -0.205184, "yaw": 0.822426},
+        ball_pose={"x": 1.328716, "y": -0.574301, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 1.328716, "y": -0.574301, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.030,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["phase"] == "recovery_orbit_setup_arc_cruise"
+    assert command["safe_side_orbit_selected_side_sign"] == -1
+    assert command["safe_side_orbit_selected_clearance_m"] == pytest.approx(0.68)
+    assert command["safe_side_orbit_selected_path_clearance_m"] >= 0.20
+    assert command["local_setup_safe_side_orbit_cruise_active"] is True
+    assert command["linear_x_mps"] == pytest.approx(0.03)
+    assert command["angular_z_rps"] == pytest.approx(-0.24)
+
+
+def test_local_setup_safe_side_orbit_preserves_lateral_side_after_bad_nav2_handoff():
+    command = line_servo_command(
+        robot_pose={"x": 1.733359276068506, "y": -0.5945545067941077, "yaw": 1.1130789367617215},
+        ball_pose={"x": 0.83472, "y": -0.520438, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.83472, "y": -0.520438, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.030,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["phase"] == "recovery_orbit_setup_arc_cruise"
+    assert command["recovery_wrong_side_orbit_active"] is True
+    assert command["safe_side_orbit_selected_side_sign"] == -1
+    assert command["safe_side_orbit_selected_path_clearance_m"] >= 0.20
+    assert command["local_setup_safe_side_orbit_cruise_active"] is True
+    assert command["linear_x_mps"] == pytest.approx(0.03)
+    assert command["angular_z_rps"] == pytest.approx(0.24)
+
+
+def test_recovery_orbit_prefers_required_ball_clearance_over_easy_heading():
+    command = line_servo_command(
+        robot_pose={"x": 0.933851, "y": 0.279534, "yaw": -1.51309},
+        ball_pose={"x": 1.346778, "y": 0.341345, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 1.346778, "y": 0.341345, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.030,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="recovery_or_reaim",
+    )
+
+    assert command["phase"] == "recovery_orbit_setup_yaw_hold"
+    assert command["recovery_wrong_side_orbit_active"] is True
+    assert command["safe_side_orbit_selected_side_sign"] == -1
+    assert command["safe_side_orbit_selected_path_clearance_m"] >= 0.20
+    assert command["linear_x_mps"] == 0.0
+
+
+def test_local_setup_safe_side_orbit_requires_extra_clearance_for_close_side_on_case():
+    command = line_servo_command(
+        robot_pose={"x": 0.683347, "y": -0.085416, "yaw": 0.31},
+        ball_pose={"x": 0.502897, "y": 0.164384, "yaw": 0.0},
+        target_x=0.95,
+        target_y=0.0,
+        ball_start_pose={"x": 0.502897, "y": 0.164384, "yaw": 0.0},
+        max_linear_x_mps=0.10,
+        push_linear_x_mps=0.055,
+        min_linear_x_mps=0.012,
+        max_angular_z_rps=0.45,
+        yaw_gain=1.20,
+        contact_lateral_ready_m=0.030,
+        contact_yaw_ready_rad=math.radians(3.0),
+        route_label="local_setup_capture",
+    )
+
+    assert command["phase"] == "recovery_orbit_setup_yaw_guard"
+    assert command["safe_side_orbit_required_path_clearance_m"] == pytest.approx(0.24)
+    assert command["safe_side_orbit_selected_side_sign"] == -1
+    assert command["safe_side_orbit_selected_path_clearance_m"] >= 0.24
     assert command["linear_x_mps"] == 0.0
 
 

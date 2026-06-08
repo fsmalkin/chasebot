@@ -108,6 +108,9 @@ FETCH_READY_YAW_LIMIT_DEG = 6.0
 RECOVERY_LATERAL_LIMIT_M = 0.240
 RECOVERY_YAW_LIMIT_DEG = 35.0
 RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M = 0.900
+EXTENDED_RECOVERY_LATERAL_LIMIT_M = 0.360
+EXTENDED_RECOVERY_YAW_LIMIT_DEG = 85.0
+EXTENDED_RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M = 0.950
 LOCAL_SETUP_CAPTURE_ROBOT_BALL_DISTANCE_LIMIT_M = 2.600
 LOCAL_SETUP_CAPTURE_LATERAL_LIMIT_M = 2.200
 LOCAL_SETUP_CAPTURE_YAW_LIMIT_DEG = 180.0
@@ -254,6 +257,19 @@ def _recovery_admissible_from_geometry(geometry: dict[str, Any]) -> bool:
     )
 
 
+def _extended_recovery_admissible_from_geometry(geometry: dict[str, Any]) -> bool:
+    ball_target_distance_m = _finite_float(geometry.get("ball_target_distance_m"), 999.0)
+    robot_ball_distance_m = _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
+    lateral_error_m = _finite_float(geometry.get("robot_lateral_error_m"), 999.0)
+    yaw_error_deg = abs(_finite_float(geometry.get("robot_yaw_error_deg"), 999.0))
+    return bool(
+        0.34 <= ball_target_distance_m <= 0.85
+        and 0.24 <= robot_ball_distance_m <= EXTENDED_RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
+        and lateral_error_m <= EXTENDED_RECOVERY_LATERAL_LIMIT_M
+        and yaw_error_deg <= EXTENDED_RECOVERY_YAW_LIMIT_DEG
+    )
+
+
 def _local_setup_capture_admissible_from_geometry(geometry: dict[str, Any]) -> bool:
     ball_target_distance_m = _finite_float(geometry.get("ball_target_distance_m"), 999.0)
     robot_ball_distance_m = _finite_float(geometry.get("robot_ball_distance_m"), 999.0)
@@ -293,6 +309,12 @@ def route_admissibility_for_scene(scene: dict[str, Any], route_label: str) -> di
     if route == ROUTE_NAV2_REPOSITION and _recovery_admissible_from_geometry(geometry):
         effective_route = ROUTE_RECOVERY_OR_REAIM
         reason = "near_field_setup_prefers_bounded_recovery_reaim"
+        changed = True
+    elif route in {ROUTE_NAV2_REPOSITION, ROUTE_LOCAL_SETUP_CAPTURE} and _extended_recovery_admissible_from_geometry(
+        geometry
+    ):
+        effective_route = ROUTE_RECOVERY_OR_REAIM
+        reason = "close_wide_setup_debt_prefers_bounded_recovery_reaim"
         changed = True
     elif (
         route == ROUTE_NAV2_REPOSITION
@@ -1079,6 +1101,8 @@ def deterministic_route_label(scene: dict[str, Any]) -> str:
         and yaw_error_deg <= RECOVERY_YAW_LIMIT_DEG
     ):
         return ROUTE_RECOVERY_OR_REAIM
+    if _extended_recovery_admissible_from_geometry(geometry):
+        return ROUTE_RECOVERY_OR_REAIM
     if needs_local_setup_capture and _local_setup_capture_admissible_from_geometry(geometry):
         return ROUTE_LOCAL_SETUP_CAPTURE
     return ROUTE_NAV2_REPOSITION
@@ -1141,11 +1165,22 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
             recommendations.append("pre_contact_smoothing")
         score = 100.0 - 42.0 * severity
     elif route == ROUTE_RECOVERY_OR_REAIM:
-        lateral_ratio = _quality_ratio(lateral_m, FETCH_READY_LATERAL_LIMIT_M, RECOVERY_LATERAL_LIMIT_M)
-        yaw_ratio = _quality_ratio(yaw_deg, FETCH_READY_YAW_LIMIT_DEG, RECOVERY_YAW_LIMIT_DEG)
-        standoff_ratio = _quality_ratio(robot_ball_m, 0.52, RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M)
+        nominal_recovery = _recovery_admissible_from_geometry(geometry)
+        extended_recovery = _extended_recovery_admissible_from_geometry(geometry)
+        lateral_limit_m = RECOVERY_LATERAL_LIMIT_M if nominal_recovery else EXTENDED_RECOVERY_LATERAL_LIMIT_M
+        yaw_limit_deg = RECOVERY_YAW_LIMIT_DEG if nominal_recovery else EXTENDED_RECOVERY_YAW_LIMIT_DEG
+        standoff_limit_m = (
+            RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
+            if nominal_recovery
+            else EXTENDED_RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
+        )
+        lateral_ratio = _quality_ratio(lateral_m, FETCH_READY_LATERAL_LIMIT_M, lateral_limit_m)
+        yaw_ratio = _quality_ratio(yaw_deg, FETCH_READY_YAW_LIMIT_DEG, yaw_limit_deg)
+        standoff_ratio = _quality_ratio(robot_ball_m, 0.52, standoff_limit_m)
         severity = max(lateral_ratio, yaw_ratio, standoff_ratio)
         flags.append("bounded_recovery_required")
+        if extended_recovery and not nominal_recovery:
+            flags.append("extended_recovery_reaim_required")
         if lateral_m > CONTACT_QUALITY_CLEAN_LATERAL_M:
             flags.append("initial_lateral_setup_debt")
         if yaw_deg > CONTACT_QUALITY_CLEAN_YAW_DEG:
@@ -1154,6 +1189,12 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
             lateral_m > RECOVERY_LATERAL_LIMIT_M
             or yaw_deg > RECOVERY_YAW_LIMIT_DEG
             or robot_ball_m > RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
+        ) and extended_recovery:
+            flags.append("outside_nominal_recovery_envelope")
+        if (
+            lateral_m > EXTENDED_RECOVERY_LATERAL_LIMIT_M
+            or yaw_deg > EXTENDED_RECOVERY_YAW_LIMIT_DEG
+            or robot_ball_m > EXTENDED_RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M
         ):
             flags.append("outside_recovery_envelope")
             status = "blocker"
@@ -1255,6 +1296,9 @@ def score_route_quality(scene: dict[str, Any], route_label: str = "") -> dict[st
             "recovery_lateral_limit_m": RECOVERY_LATERAL_LIMIT_M,
             "recovery_yaw_limit_deg": RECOVERY_YAW_LIMIT_DEG,
             "recovery_robot_ball_distance_limit_m": RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M,
+            "extended_recovery_lateral_limit_m": EXTENDED_RECOVERY_LATERAL_LIMIT_M,
+            "extended_recovery_yaw_limit_deg": EXTENDED_RECOVERY_YAW_LIMIT_DEG,
+            "extended_recovery_robot_ball_distance_limit_m": EXTENDED_RECOVERY_ROBOT_BALL_DISTANCE_LIMIT_M,
             "local_setup_capture_lateral_limit_m": LOCAL_SETUP_CAPTURE_LATERAL_LIMIT_M,
             "local_setup_capture_yaw_limit_deg": LOCAL_SETUP_CAPTURE_YAW_LIMIT_DEG,
             "local_setup_capture_robot_ball_distance_limit_m": LOCAL_SETUP_CAPTURE_ROBOT_BALL_DISTANCE_LIMIT_M,
