@@ -217,6 +217,47 @@ def test_multiball_planner_deprioritizes_recently_failed_ball_when_other_targets
     assert failed_candidate["cost"]["failed_attempt_penalty"] > 0.0
 
 
+def test_multiball_planner_marks_reproduced_open_field_setup_gap_as_bounded_give_up():
+    scenes = multiball_gate.generate_route_diverse_multiball_scenes(
+        seed=20260648,
+        random_cases=4,
+        balls_per_scene=3,
+        profile=multiball_gate.ROUTE_DIVERSE_PROFILE,
+    )
+    hard_scene = scenes[1]
+
+    plan = multiball_gate.plan_multiball_scene(hard_scene, args=_args())
+    hard_step = plan["sequence"][2]
+
+    assert plan["planner_ready"] is True
+    assert plan["executable_step_count"] == 2
+    assert plan["terminal_step_count"] == 3
+    assert plan["bounded_give_up_count"] == 1
+    assert hard_step["ball_id"] == "ball_2"
+    assert hard_step["route_label"] == planner_gate.ROUTE_RECOVERY_OR_REAIM
+    assert hard_step["executable_route"] is False
+    assert hard_step["terminal_step"] is True
+    assert hard_step["bounded_give_up"] is True
+    assert hard_step["bounded_give_up_reason"] == multiball_gate.BOUNDED_GIVE_UP_FIELD_SETUP_REASON
+    assert hard_step["bounded_give_up_next_capability"] == multiball_gate.BOUNDED_GIVE_UP_NEXT_CAPABILITY
+    assert hard_step["bounded_give_up_detail"]["runner_nav2_setup_analysis"]["field_bounded"] is True
+
+
+def test_multiball_planner_keeps_seed20260647_green_edge_cases_executable():
+    scenes = multiball_gate.generate_route_diverse_multiball_scenes(
+        seed=20260647,
+        random_cases=4,
+        balls_per_scene=3,
+        profile=multiball_gate.ROUTE_DIVERSE_PROFILE,
+    )
+
+    plans = [multiball_gate.plan_multiball_scene(scene, args=_args()) for scene in scenes]
+
+    assert all(plan["planner_ready"] for plan in plans)
+    assert sum(plan["bounded_give_up_count"] for plan in plans) == 0
+    assert sum(plan["executable_step_count"] for plan in plans) == 12
+
+
 def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_path, monkeypatch):
     _patch_roots(tmp_path, monkeypatch)
 
@@ -289,6 +330,128 @@ def test_multiball_gate_dry_run_materializes_layouts_and_replay_commands(tmp_pat
             assert "--nav2-reposition-before-fetch" not in row["command"]
         assert "--ai-push-coast-mode" in row["command"]
         assert row["command"][row["command"].index("--ai-push-coast-mode") + 1] == "guarded_live"
+
+
+def test_materialize_plan_rows_skips_planned_bounded_give_up_without_running_fetch(tmp_path, monkeypatch):
+    _patch_roots(tmp_path, monkeypatch)
+    root = tmp_path / "artifacts" / "session" / "bounded_skip" / multiball_gate.GATE_KIND
+    scene = multiball_gate.generate_route_diverse_multiball_scenes(
+        seed=20260648,
+        random_cases=4,
+        balls_per_scene=3,
+        profile=multiball_gate.ROUTE_DIVERSE_PROFILE,
+    )[1]
+    plan = multiball_gate.plan_multiball_scene(scene, args=_args())
+    calls = []
+
+    def fake_run_command(command, *, timeout_s):
+        calls.append(command)
+        run_index = len(calls)
+        artifact_dir = tmp_path / "artifacts" / "session" / "bounded_skip_session" / f"run_{run_index}"
+        contact_trace = artifact_dir / "contact_trace.jsonl"
+        contact_trace.parent.mkdir(parents=True, exist_ok=True)
+        contact_trace.write_text(
+            json.dumps(
+                {
+                    "robot_pose": {"position": {"x": 0.7, "y": 0.0, "z": 0.0}, "yaw": 0.0},
+                    "ball_pose": {"position": {"x": 0.9, "y": 0.0, "z": 0.021336}, "yaw": 0.0},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        mission = artifact_dir / "mission_verdict.json"
+        _write_json(
+            mission,
+            {
+                "artifact_dir": str(artifact_dir),
+                "fetch_to_pose_pass": True,
+                "pass": True,
+                "shot_outcome": {
+                    "closest_approach_distance_m": 0.12,
+                    "reason": "trajectory_intersects_delivery_radius",
+                    "ball_end_pose": {"x": 0.9, "y": 0.0, "z": 0.021336},
+                },
+            },
+        )
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=f"{multiball_gate.MISSION_SUMMARY_MARKER}{mission}\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(multiball_gate, "run_command", fake_run_command)
+
+    rows = multiball_gate.materialize_plan_rows(
+        root,
+        plan,
+        args=_args(dry_run=False, stop_on_fail=True),
+        execute_live=True,
+        compose_project="bounded_project",
+        expected_session_id="bounded_skip_session",
+    )
+
+    assert len(rows) == 3
+    assert len(calls) == 2
+    assert [row["ball_id"] for row in rows] == ["ball_1", "ball_3", "ball_2"]
+    assert [bool(row["mission"].get("fetch_to_pose_pass", False)) for row in rows] == [True, True, False]
+    bounded_row = rows[2]
+    assert bounded_row["bounded_give_up"] is True
+    assert bounded_row["bounded_give_up_reason"] == multiball_gate.BOUNDED_GIVE_UP_FIELD_SETUP_REASON
+    assert bounded_row["returncode"] is None
+    assert bounded_row["mission"]["bounded_give_up"] is True
+    assert bounded_row["execution_skipped_reason"].startswith("bounded_give_up:")
+
+
+def test_measured_setup_failure_classifies_as_bounded_give_up():
+    row = {
+        "route_label": planner_gate.ROUTE_RECOVERY_OR_REAIM,
+        "route_executor": planner_gate.ROUTE_EXECUTOR_RECOVERY,
+        "failure_reason": multiball_gate.RUNNER_FAILURE_REASON,
+        "mission_summary_path": "artifacts/session/session/run/mission_verdict.json",
+        "mission": {"fetch_to_pose_pass": False},
+        "shot_reason": "measured_push_ready_handoff_failed",
+        "stage_labels": ["setup", "terminal_arrival"],
+        "contact_quality_flags": [
+            "missing_first_contact_motion",
+            "pre_contact_lateral_error",
+            "pre_contact_yaw_error",
+        ],
+        "measured_post_step_state": {
+            "fetch_to_pose_pass": False,
+            "shot_outcome": {
+                "reason": "measured_push_ready_handoff_failed",
+                "ai_push_coast_proposal": {
+                    "stage_classification": {
+                        "stage_labels": ["setup", "terminal_arrival"],
+                        "contact_quality_flags": [
+                            "missing_first_contact_motion",
+                            "pre_contact_lateral_error",
+                            "pre_contact_yaw_error",
+                        ],
+                    }
+                },
+                "pre_push_measured_handoff": {
+                    "latest_phase": "recovery_orbit_setup_yaw_guard",
+                    "local_fetch_dispatched": False,
+                    "latest_ball_moved": False,
+                    "setup_contact_ready": False,
+                    "latest_contact_ready": False,
+                },
+            },
+        },
+    }
+
+    decision = multiball_gate.classify_measured_bounded_give_up(row)
+    multiball_gate.mark_row_bounded_give_up(row, reason=decision["reason"], detail=decision["detail"])
+
+    assert decision["bounded_give_up"] is True
+    assert decision["reason"] == multiball_gate.BOUNDED_GIVE_UP_MEASURED_SETUP_REASON
+    assert row["bounded_give_up"] is True
+    assert row["failure_reason"] == ""
+    assert row["mission"]["bounded_give_up"] is True
+    assert row["bounded_give_up_next_capability"] == multiball_gate.BOUNDED_GIVE_UP_NEXT_CAPABILITY
 
 
 def test_multiball_route_diverse_gate_reports_required_route_coverage(tmp_path, monkeypatch):

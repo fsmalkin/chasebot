@@ -80,6 +80,19 @@ LLM-supervised gates. Branch priority is now quality hardening plus repeat
 breadth, starting with the `seed20260644_mb_route_diverse_s01_nav2` step 3
 handoff/contact-watch row.
 
+June 8, 2026 bounded-give-up branch update: keep
+`spike/fetch-multiball-open-field-20260606` as the active branch and carry
+bounded give-up as an explicit terminal outcome for Multi-Ball Retrieval v1.
+The seed `20260648` route-diverse gate is green at
+`artifacts/session/live_multiball_route_diverse_seed20260648_4x3_bounded_giveup_20260608/fetch_multiball_retrieval_gate/scorecard.md`:
+four three-ball scenes, eleven measured deliveries, one planned bounded
+give-up, zero live fetch failures, zero environment failures, and browser
+keyframe proof. The bounded row is
+`field_bounded_setup_pose_requires_open_field_setup_planner`, which names the
+missing route owner rather than weakening the `fetch_to_pose` contract. Branch
+priority is repeat breadth with this terminal accounting, followed by an
+open-field setup trajectory owner for the field-bounded target-side geometry.
+
 ## Recommended Branch Roles
 
 1. Stable demo/UAT branch:

@@ -304,6 +304,27 @@ limits, then hand off to the close local setup servo. Continue live proof from
 seed `20260644` scene01 ball_3, then rerun the one-scene `3/3` gate and only
 after that return to route-diverse breadth.
 
+Current bounded-give-up route-diverse reference:
+`artifacts/session/live_multiball_route_diverse_seed20260648_4x3_bounded_giveup_20260608/fetch_multiball_retrieval_gate/scorecard.md`.
+This seed `20260648` run passed as terminal UAT evidence: four three-ball
+scenes, required route-family diversity, `11` measured deliveries, one bounded
+give-up, `0` live fetch failures, and `0` environment failures. The bounded row
+is `seed20260648_mb_route_diverse_s02_setup` step 3 `ball_2`, recorded as
+`field_bounded_setup_pose_requires_open_field_setup_planner`; no live fetch was
+dispatched for that ball. Treat bounded give-up as a terminal diagnostic with
+replayable geometry and a named missing capability. Treat it separately from
+`fetch_to_pose` delivery.
+
+Browser-watchable proof:
+[scene 1 onboard](http://100.112.221.6:8895/artifacts/session/20260609T014550277555Z/visual/raw_camera_browser.mp4),
+[scene 2 onboard](http://100.112.221.6:8895/artifacts/session/20260609T015846475172Z/visual/raw_camera_browser.mp4),
+[scene 3 onboard](http://100.112.221.6:8895/artifacts/session/20260609T021111225550Z/visual/raw_camera_browser.mp4),
+[scene 4 onboard](http://100.112.221.6:8895/artifacts/session/20260609T021927401634Z/visual/raw_camera_browser.mp4),
+and
+[scene 2 keyframes](http://100.112.221.6:8895/artifacts/session/20260609T015846475172Z/visual/keyframe_review_contact_sheet.png).
+The visual package summary is
+`artifacts/session/live_multiball_route_diverse_seed20260648_4x3_bounded_giveup_20260608_visual_package/fetch_visual_uat_package/package_summary.json`.
+
 Saved-anchor repeatability analyzer scope:
 
 ```powershell

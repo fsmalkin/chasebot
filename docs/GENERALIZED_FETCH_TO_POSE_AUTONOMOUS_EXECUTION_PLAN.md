@@ -35,6 +35,19 @@ quality failed after Nav2 returned success:
 Use that failure to build measured handoff replanning rather than tuning
 terminal distance.
 
+June 8, 2026 bounded terminal update: Multi-Ball Retrieval v1 now separates
+delivery from diagnosed setup give-up. The seed `20260648` route-diverse gate
+passed with terminal accounting:
+`artifacts/session/live_multiball_route_diverse_seed20260648_4x3_bounded_giveup_20260608/fetch_multiball_retrieval_gate/scorecard.md`.
+The run produced `11` measured `fetch_to_pose` deliveries, one planned bounded
+give-up, and no live fetch failures. The bounded row records
+`field_bounded_setup_pose_requires_open_field_setup_planner` and preserves the
+delivery contract by skipping live fetch for the unowned setup geometry. This
+supports the broader architecture: the LLM/world-state planner and deterministic
+guards can choose a terminal no-execution outcome when the current route owners
+lack a measured push-ready path. The next execution capability is an open-field
+setup trajectory owner for field-bounded target-side cases.
+
 June 2, 2026 execution pivot: the LLM/world-state planner is integrated as a
 route-classification and shadow-evidence surface. The non-local route labels
 still need executable route owners. The opposite-side direct run proved

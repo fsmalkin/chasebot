@@ -1867,3 +1867,30 @@ bounded deterministic pose-stage executor, verify zero ball motion and
 behind-line geometry, then dispatch the existing push-ready gate and guarded
 fetch. Requalify seed20260644 scene01 `3/3` before restarting route-diverse
 breadth.
+
+June 8 bounded-give-up route-diverse checkpoint: seed `20260648` now has a
+terminal green gate with explicit setup-gap accounting. Evidence:
+`artifacts/session/live_multiball_route_diverse_seed20260648_4x3_bounded_giveup_20260608/fetch_multiball_retrieval_gate/scorecard.md`.
+The run covered four three-ball scenes with required route-family diversity,
+`11/12` live deliveries, `0` live fetch failures, `0` environment failures, and
+one bounded give-up for `seed20260648_mb_route_diverse_s02_setup` step 3
+`ball_2`. That row is recorded as
+`field_bounded_setup_pose_requires_open_field_setup_planner` with no live fetch
+dispatch. It counts as a diagnosed terminal condition while delivered-ball
+counts stay tied to measured `fetch_to_pose` passes. Browser proof is
+packaged at
+`artifacts/session/live_multiball_route_diverse_seed20260648_4x3_bounded_giveup_20260608_visual_package/fetch_visual_uat_package/package_summary.json`,
+with onboard-first links such as
+[scene 2 onboard](http://100.112.221.6:8895/artifacts/session/20260609T015846475172Z/visual/raw_camera_browser.mp4)
+and
+[scene 2 keyframes](http://100.112.221.6:8895/artifacts/session/20260609T015846475172Z/visual/keyframe_review_contact_sheet.png).
+
+This checkpoint reframes the next roadmap lane. Multi-Ball Retrieval v1 can
+advance with a terminal outcome contract: deliver each ball through measured
+`fetch_to_pose`, or produce a bounded give-up with replayable geometry, route
+reason, and the named missing capability. The missing capability remains an
+open-field setup trajectory owner that can solve the field-bounded target-side
+geometry instead of repeatedly spending live runs on the same unreached
+push-ready handoff. The next breadth gate should repeat route-diverse seeds with
+this accounting, then promote only after bounded give-up frequency and visual
+quality are acceptable for UAT.

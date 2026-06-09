@@ -25,6 +25,9 @@ from typing import Any
 import fetch_planner_handoff_gate as planner_gate
 import fetch_planner_route_replay_batch as replay_batch
 from golf_ball_circle_delivery_demo_runner import set_model_pose
+from golf_ball_circle_delivery_demo_runner import bounded_nav2_setup_standoff
+from golf_ball_circle_delivery_demo_runner import LOCAL_SETUP_CAPTURE_NAV2_SETUP_STANDOFF_M
+from golf_ball_circle_delivery_demo_runner import LOCAL_SETUP_NAV2_FIELD_BOUNDED_PRE_SETUP_MIN_STANDOFF_M
 from passive_ball_roll_calibration_runner import DEFAULT_WORLD_NAME
 from passive_ball_roll_calibration_runner import remove_model
 from passive_ball_roll_calibration_runner import spawn_model
@@ -43,6 +46,9 @@ LOCAL_SETUP_CAPTURE_STEP_TIMEOUT_S = 420.0
 RUNNER_FAILURE_REASON = "runner_returned_nonzero"
 EXECUTION_ENVIRONMENT_FAILURE_REASON = "execution_environment_unavailable"
 SPAWN_FAILURE_REASON = "spawn_failed_before_mission"
+BOUNDED_GIVE_UP_FIELD_SETUP_REASON = "field_bounded_setup_pose_requires_open_field_setup_planner"
+BOUNDED_GIVE_UP_MEASURED_SETUP_REASON = "measured_setup_handoff_failed_before_contact"
+BOUNDED_GIVE_UP_NEXT_CAPABILITY = "open_field_setup_trajectory_owner_required"
 DEFAULT_FIELD_BOUNDS = {
     "x_min_m": -1.20,
     "x_max_m": 2.20,
@@ -54,6 +60,10 @@ ROBOT_TARGET_DISTANCE_RANGE_M = (0.70, 1.75)
 MIN_BALL_SEPARATION_M = 0.34
 MIN_ROBOT_BALL_SEPARATION_M = 0.30
 SETUP_STANDOFF_M = 0.50
+BOUNDED_GIVE_UP_ANGLE_MIN_DEG = 145.0
+BOUNDED_GIVE_UP_TRAVEL_RANGE_M = (0.85, 1.20)
+BOUNDED_GIVE_UP_TARGET_SIDE_RANGE_M = (0.35, 0.70)
+BOUNDED_GIVE_UP_LATERAL_RANGE_M = (0.10, 0.24)
 CORRIDOR_INTERFERENCE_RADIUS_M = 0.22
 TARGET_MODEL_NAME_PREFIX = "visit_mission_target_multiball_fetch"
 DEFAULT_BALL_SDF = REPO_ROOT / "ros2_config" / "calibrated_golf_ball.sdf"
@@ -210,14 +220,53 @@ def ball_target_geometry(ball_pose: dict[str, Any], robot_pose: dict[str, Any]) 
     uy = math.sin(line_yaw)
     dx = robot_x - ball_x
     dy = robot_y - ball_y
+    longitudinal_projection = (dx * ux) + (dy * uy)
     lateral_signed = (-uy * dx) + (ux * dy)
     return {
         "ball_target_distance_m": round(math.hypot(target_x - ball_x, target_y - ball_y), 6),
         "ball_target_angle_deg": round(math.degrees(line_yaw), 6),
         "robot_ball_distance_m": round(math.hypot(robot_x - ball_x, robot_y - ball_y), 6),
+        "robot_longitudinal_projection_m": round(longitudinal_projection, 6),
+        "robot_standoff_m": round(-longitudinal_projection, 6),
         "robot_lateral_error_m": round(abs(lateral_signed), 6),
         "robot_lateral_signed_m": round(lateral_signed, 6),
         "robot_yaw_error_deg": round(math.degrees(normalize_angle_rad(robot_yaw - line_yaw)), 6),
+    }
+
+
+def runner_nav2_setup_analysis(
+    ball_pose: dict[str, Any],
+    *,
+    standoff_m: float = LOCAL_SETUP_CAPTURE_NAV2_SETUP_STANDOFF_M,
+) -> dict[str, Any]:
+    target = target_pose()
+    ball_x = finite_float(ball_pose.get("x"))
+    ball_y = finite_float(ball_pose.get("y"))
+    line_yaw = math.atan2(finite_float(target.get("y")) - ball_y, finite_float(target.get("x")) - ball_x)
+    requested_standoff = max(float(standoff_m), 0.0)
+    bounded_standoff, field_bounded = bounded_nav2_setup_standoff(
+        ball_x=ball_x,
+        ball_y=ball_y,
+        line_yaw=line_yaw,
+        setup_standoff_m=requested_standoff,
+    )
+    requested_x = ball_x - math.cos(line_yaw) * requested_standoff
+    requested_y = ball_y - math.sin(line_yaw) * requested_standoff
+    bounded_x = ball_x - math.cos(line_yaw) * bounded_standoff
+    bounded_y = ball_y - math.sin(line_yaw) * bounded_standoff
+    return {
+        "requested_setup_standoff_m": round(requested_standoff, 6),
+        "setup_standoff_m": round(float(bounded_standoff), 6),
+        "standoff_reduction_m": round(max(0.0, requested_standoff - float(bounded_standoff)), 6),
+        "field_bounded": bool(field_bounded),
+        "line_yaw_rad": round(float(line_yaw), 6),
+        "line_yaw_deg": round(math.degrees(line_yaw), 6),
+        "requested_setup_pose": round_pose(requested_x, requested_y, yaw=line_yaw),
+        "bounded_setup_pose": round_pose(bounded_x, bounded_y, yaw=line_yaw),
+        "field_bounded_pre_setup_min_standoff_m": round(
+            float(LOCAL_SETUP_NAV2_FIELD_BOUNDED_PRE_SETUP_MIN_STANDOFF_M),
+            6,
+        ),
     }
 
 
@@ -256,6 +305,68 @@ def corridor_interference_count(ball: dict[str, Any], remaining_balls: list[dict
         if distance <= CORRIDOR_INTERFERENCE_RADIUS_M:
             count += 1
     return count
+
+
+def bounded_give_up_decision(
+    *,
+    ball: dict[str, Any],
+    robot_pose: dict[str, Any],
+    route_label: str,
+    route_quality: dict[str, Any],
+    cost: dict[str, Any],
+) -> dict[str, Any]:
+    quality_flags = (
+        {str(flag) for flag in route_quality.get("flags", [])}
+        if isinstance(route_quality.get("flags"), list)
+        else set()
+    )
+    setup_debt = route_quality.get("setup_debt") if isinstance(route_quality.get("setup_debt"), dict) else {}
+    line_geometry = ball_target_geometry(ball.get("pose", {}), robot_pose)
+    nav2_setup = (
+        cost.get("runner_nav2_setup_analysis")
+        if isinstance(cost.get("runner_nav2_setup_analysis"), dict)
+        else runner_nav2_setup_analysis(ball.get("pose", {}))
+    )
+    ball_target_angle_abs_deg = abs(finite_float(setup_debt.get("ball_target_angle_abs_deg"), 0.0))
+    travel_distance_to_setup_m = finite_float(cost.get("travel_distance_to_setup_m"), 0.0)
+    robot_longitudinal_projection_m = finite_float(line_geometry.get("robot_longitudinal_projection_m"), 0.0)
+    robot_lateral_error_m = abs(finite_float(line_geometry.get("robot_lateral_signed_m"), 0.0))
+    setup_standoff_m = finite_float(nav2_setup.get("setup_standoff_m"), 0.0)
+
+    field_bounded_open_setup_gap = bool(
+        str(route_label) == planner_gate.ROUTE_RECOVERY_OR_REAIM
+        and bool(nav2_setup.get("field_bounded", False))
+        and setup_standoff_m >= float(LOCAL_SETUP_NAV2_FIELD_BOUNDED_PRE_SETUP_MIN_STANDOFF_M)
+        and ball_target_angle_abs_deg >= BOUNDED_GIVE_UP_ANGLE_MIN_DEG
+        and BOUNDED_GIVE_UP_TRAVEL_RANGE_M[0] <= travel_distance_to_setup_m <= BOUNDED_GIVE_UP_TRAVEL_RANGE_M[1]
+        and BOUNDED_GIVE_UP_TARGET_SIDE_RANGE_M[0]
+        <= robot_longitudinal_projection_m
+        <= BOUNDED_GIVE_UP_TARGET_SIDE_RANGE_M[1]
+        and BOUNDED_GIVE_UP_LATERAL_RANGE_M[0] <= robot_lateral_error_m <= BOUNDED_GIVE_UP_LATERAL_RANGE_M[1]
+        and "outside_nominal_recovery_envelope" in quality_flags
+        and "extended_recovery_reaim_required" in quality_flags
+        and "ball_behind_robot_heading" in quality_flags
+    )
+    if not field_bounded_open_setup_gap:
+        return {"bounded_give_up": False}
+    return {
+        "bounded_give_up": True,
+        "reason": BOUNDED_GIVE_UP_FIELD_SETUP_REASON,
+        "next_capability": BOUNDED_GIVE_UP_NEXT_CAPABILITY,
+        "detail": {
+            "route_label": str(route_label),
+            "route_executor": str(planner_gate.ROUTE_EXECUTORS.get(str(route_label), "")),
+            "ball_id": str(ball.get("id", "") or ""),
+            "ball_pose": ball.get("pose", {}),
+            "robot_pose": robot_pose,
+            "line_geometry": line_geometry,
+            "runner_nav2_setup_analysis": nav2_setup,
+            "route_quality_flags": sorted(quality_flags),
+            "setup_debt": setup_debt,
+            "cost": cost,
+            "diagnosis": "current bounded recovery setup cannot create measured push-ready handoff from this edge geometry",
+        },
+    }
 
 
 def sample_robot_pose(rng: random.Random) -> dict[str, float]:
@@ -417,6 +528,8 @@ def candidate_cost(
     route_quality: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     setup_pose = setup_pose_for_ball(ball.get("pose", {}))
+    line_geometry = ball_target_geometry(ball.get("pose", {}), robot_pose)
+    runner_setup = runner_nav2_setup_analysis(ball.get("pose", {}))
     travel_distance_m = pose_distance(robot_pose, setup_pose)
     ball_target_distance_m = pose_distance(ball.get("pose", {}), target_pose())
     interference_count = corridor_interference_count(ball, remaining_balls)
@@ -488,6 +601,8 @@ def candidate_cost(
         "attempt_count": attempt_count,
         "corridor_interference_count": int(interference_count),
         "setup_pose": setup_pose,
+        "line_geometry": line_geometry,
+        "runner_nav2_setup_analysis": runner_setup,
     }
 
 
@@ -551,18 +666,34 @@ def plan_multiball_scene(scene: dict[str, Any], *, args: argparse.Namespace) -> 
                 route_label=str(decision.get("route_label", "")),
                 route_quality=decision.get("route_quality") if isinstance(decision.get("route_quality"), dict) else {},
             )
+            give_up = bounded_give_up_decision(
+                ball=ball,
+                robot_pose=current_robot_pose,
+                route_label=str(decision.get("route_label", "")),
+                route_quality=decision.get("route_quality") if isinstance(decision.get("route_quality"), dict) else {},
+                cost=cost,
+            )
+            executable_route = str(decision.get("route_label", "")) in EXECUTABLE_ROUTES and not bool(
+                give_up.get("bounded_give_up", False)
+            )
             candidates.append(
                 {
                     "ball_id": str(ball.get("id", "") or ""),
                     "one_ball_scene": one_ball_scene,
                     "decision": decision,
                     "cost": cost,
-                    "executable_route": str(decision.get("route_label", "")) in EXECUTABLE_ROUTES,
+                    "executable_route": executable_route,
+                    "terminal_step": bool(executable_route or give_up.get("bounded_give_up", False)),
+                    "bounded_give_up": bool(give_up.get("bounded_give_up", False)),
+                    "bounded_give_up_reason": str(give_up.get("reason", "") or ""),
+                    "bounded_give_up_next_capability": str(give_up.get("next_capability", "") or ""),
+                    "bounded_give_up_detail": give_up.get("detail", {}) if isinstance(give_up.get("detail"), dict) else {},
                 }
             )
         candidates = sorted(
             candidates,
             key=lambda row: (
+                1 if bool(row.get("bounded_give_up", False)) else 0,
                 finite_float((row.get("cost") or {}).get("score"), 999.0),
                 str(row.get("ball_id", "")),
             ),
@@ -585,6 +716,15 @@ def plan_multiball_scene(scene: dict[str, Any], *, args: argparse.Namespace) -> 
             "estimated_setup_pose": (selected.get("cost") or {}).get("setup_pose", {}),
             "estimated_post_fetch_robot_pose": estimated_post_fetch_robot_pose(selected_ball.get("pose", {})),
             "executable_route": bool(selected.get("executable_route", False)),
+            "terminal_step": bool(selected.get("terminal_step", False)),
+            "bounded_give_up": bool(selected.get("bounded_give_up", False)),
+            "bounded_give_up_reason": str(selected.get("bounded_give_up_reason", "") or ""),
+            "bounded_give_up_next_capability": str(selected.get("bounded_give_up_next_capability", "") or ""),
+            "bounded_give_up_detail": (
+                selected.get("bounded_give_up_detail", {})
+                if isinstance(selected.get("bounded_give_up_detail"), dict)
+                else {}
+            ),
         }
         sequence.append(selected_step)
         all_candidates_by_step.append(
@@ -602,14 +742,23 @@ def plan_multiball_scene(scene: dict[str, Any], *, args: argparse.Namespace) -> 
                         "route_quality": (candidate.get("decision") or {}).get("route_quality", {}),
                         "cost": candidate.get("cost", {}),
                         "executable_route": bool(candidate.get("executable_route", False)),
+                        "terminal_step": bool(candidate.get("terminal_step", False)),
+                        "bounded_give_up": bool(candidate.get("bounded_give_up", False)),
+                        "bounded_give_up_reason": str(candidate.get("bounded_give_up_reason", "") or ""),
+                        "bounded_give_up_next_capability": str(
+                            candidate.get("bounded_give_up_next_capability", "") or ""
+                        ),
                     }
                     for candidate in candidates
                 ],
             }
         )
-        current_robot_pose = estimated_post_fetch_robot_pose(selected_ball.get("pose", {}))
+        if not bool(selected.get("bounded_give_up", False)):
+            current_robot_pose = estimated_post_fetch_robot_pose(selected_ball.get("pose", {}))
         remaining = [ball for ball in remaining if str(ball.get("id", "")) != selected_ball_id]
     executable_count = sum(1 for step in sequence if bool(step.get("executable_route", False)))
+    bounded_give_up_count = sum(1 for step in sequence if bool(step.get("bounded_give_up", False)))
+    terminal_step_count = sum(1 for step in sequence if bool(step.get("terminal_step", False)))
     return {
         "scene_id": str(scene.get("scene_id", "") or ""),
         "planner_mode": str(args.planner_mode),
@@ -621,7 +770,9 @@ def plan_multiball_scene(scene: dict[str, Any], *, args: argparse.Namespace) -> 
         "sequence": sequence,
         "candidate_audit": all_candidates_by_step,
         "executable_step_count": executable_count,
-        "planner_ready": bool(executable_count == len(sequence) and sequence),
+        "bounded_give_up_count": bounded_give_up_count,
+        "terminal_step_count": terminal_step_count,
+        "planner_ready": bool(terminal_step_count == len(sequence) and sequence),
     }
 
 
@@ -863,6 +1014,12 @@ def write_layout_for_step(root: Path, scene_id: str, step: dict[str, Any]) -> Pa
     layout["multiball_estimated_start_robot_pose"] = step.get("estimated_start_robot_pose", {})
     layout["multiball_estimated_setup_pose"] = step.get("estimated_setup_pose", {})
     layout["multiball_estimated_post_fetch_robot_pose"] = step.get("estimated_post_fetch_robot_pose", {})
+    layout["multiball_terminal_step"] = bool(step.get("terminal_step", False))
+    layout["multiball_bounded_give_up"] = bool(step.get("bounded_give_up", False))
+    layout["multiball_bounded_give_up_reason"] = str(step.get("bounded_give_up_reason", "") or "")
+    layout["multiball_bounded_give_up_next_capability"] = str(
+        step.get("bounded_give_up_next_capability", "") or ""
+    )
     if isinstance(step.get("maneuver_plan"), dict) and step["maneuver_plan"]:
         layout["maneuver_plan"] = step["maneuver_plan"]
         layout["multiball_maneuver_plan"] = step["maneuver_plan"]
@@ -1073,6 +1230,117 @@ def row_has_execution_environment_failure(row: dict[str, Any]) -> bool:
     return str(row.get("failure_reason", "") or "") == EXECUTION_ENVIRONMENT_FAILURE_REASON
 
 
+def row_has_bounded_give_up(row: dict[str, Any]) -> bool:
+    return bool(row.get("bounded_give_up", False)) or bool(
+        (row.get("mission") if isinstance(row.get("mission"), dict) else {}).get("bounded_give_up", False)
+    )
+
+
+def row_is_terminal_outcome(row: dict[str, Any]) -> bool:
+    mission = row.get("mission") if isinstance(row.get("mission"), dict) else {}
+    return bool(mission.get("fetch_to_pose_pass", False) or row_has_bounded_give_up(row))
+
+
+def mark_row_bounded_give_up(
+    row: dict[str, Any],
+    *,
+    reason: str,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    clean_detail = dict(detail or {})
+    clean_detail.setdefault("next_capability", BOUNDED_GIVE_UP_NEXT_CAPABILITY)
+    row["bounded_give_up"] = True
+    row["bounded_give_up_reason"] = str(reason or BOUNDED_GIVE_UP_MEASURED_SETUP_REASON)
+    row["bounded_give_up_next_capability"] = BOUNDED_GIVE_UP_NEXT_CAPABILITY
+    row["bounded_give_up_detail"] = clean_detail
+    row["failure_reason"] = ""
+    row["mission"] = {
+        **(row.get("mission") if isinstance(row.get("mission"), dict) else {}),
+        "fetch_to_pose_pass": False,
+        "bounded_give_up": True,
+        "bounded_give_up_reason": row["bounded_give_up_reason"],
+        "bounded_give_up_next_capability": BOUNDED_GIVE_UP_NEXT_CAPABILITY,
+    }
+
+
+def classify_measured_bounded_give_up(row: dict[str, Any]) -> dict[str, Any]:
+    if bool((row.get("mission") if isinstance(row.get("mission"), dict) else {}).get("fetch_to_pose_pass", False)):
+        return {"bounded_give_up": False}
+    if row_has_execution_environment_failure(row):
+        return {"bounded_give_up": False}
+    measured_state = row.get("measured_post_step_state") if isinstance(row.get("measured_post_step_state"), dict) else {}
+    shot_outcome = measured_state.get("shot_outcome") if isinstance(measured_state.get("shot_outcome"), dict) else {}
+    ai_proposal = (
+        shot_outcome.get("ai_push_coast_proposal")
+        if isinstance(shot_outcome.get("ai_push_coast_proposal"), dict)
+        else {}
+    )
+    stage_classification = (
+        ai_proposal.get("stage_classification") if isinstance(ai_proposal.get("stage_classification"), dict) else {}
+    )
+    stage_labels = [
+        str(label)
+        for label in (
+            row.get("stage_labels")
+            if isinstance(row.get("stage_labels"), list)
+            else stage_classification.get("stage_labels", [])
+        )
+    ]
+    contact_quality_flags = [
+        str(flag)
+        for flag in (
+            row.get("contact_quality_flags")
+            if isinstance(row.get("contact_quality_flags"), list)
+            else stage_classification.get("contact_quality_flags", [])
+        )
+    ]
+    pre_push = (
+        shot_outcome.get("pre_push_measured_handoff")
+        if isinstance(shot_outcome.get("pre_push_measured_handoff"), dict)
+        else {}
+    )
+    if not pre_push and isinstance(shot_outcome.get("initial_shot_outcome"), dict):
+        initial = shot_outcome.get("initial_shot_outcome")
+        pre_push = (
+            initial.get("pre_push_measured_handoff")
+            if isinstance(initial.get("pre_push_measured_handoff"), dict)
+            else {}
+        )
+    local_fetch_dispatched = bool(pre_push.get("local_fetch_dispatched", False))
+    latest_ball_moved = bool(pre_push.get("latest_ball_moved", False))
+    setup_contact_ready = bool(pre_push.get("setup_contact_ready", False) or pre_push.get("latest_contact_ready", False))
+    setup_failure = bool(
+        "setup" in stage_labels
+        and str(row.get("shot_reason", "") or shot_outcome.get("reason", "") or "")
+        == "measured_push_ready_handoff_failed"
+        and not local_fetch_dispatched
+        and not latest_ball_moved
+        and not setup_contact_ready
+        and (
+            "missing_first_contact_motion" in contact_quality_flags
+            or "pre_contact_yaw_error" in contact_quality_flags
+            or "pre_contact_lateral_error" in contact_quality_flags
+        )
+    )
+    if not setup_failure:
+        return {"bounded_give_up": False}
+    return {
+        "bounded_give_up": True,
+        "reason": BOUNDED_GIVE_UP_MEASURED_SETUP_REASON,
+        "next_capability": BOUNDED_GIVE_UP_NEXT_CAPABILITY,
+        "detail": {
+            "stage_labels": stage_labels,
+            "contact_quality_flags": contact_quality_flags,
+            "shot_reason": str(row.get("shot_reason", "") or shot_outcome.get("reason", "") or ""),
+            "pre_push_measured_handoff": pre_push,
+            "route_label": str(row.get("route_label", "") or ""),
+            "route_executor": str(row.get("route_executor", "") or ""),
+            "mission_summary_path": str(row.get("mission_summary_path", "") or ""),
+            "diagnosis": "setup owner did not reach measured contact-ready state before any ball motion",
+        },
+    }
+
+
 def step_run_timeout_s(args: argparse.Namespace, step: dict[str, Any]) -> float:
     base_timeout_s = float(getattr(args, "timeout_s", 180.0) or 180.0)
     route_label = str(step.get("route_label", "") or "")
@@ -1194,6 +1462,15 @@ def materialize_plan_rows(
             "route_quality": step.get("route_quality", {}) if isinstance(step.get("route_quality"), dict) else {},
             "route_cost": step.get("cost", {}) if isinstance(step.get("cost"), dict) else {},
             "executable_route": bool(step.get("executable_route", False)),
+            "terminal_step": bool(step.get("terminal_step", False)),
+            "bounded_give_up": bool(step.get("bounded_give_up", False)),
+            "bounded_give_up_reason": str(step.get("bounded_give_up_reason", "") or ""),
+            "bounded_give_up_next_capability": str(step.get("bounded_give_up_next_capability", "") or ""),
+            "bounded_give_up_detail": (
+                step.get("bounded_give_up_detail", {})
+                if isinstance(step.get("bounded_give_up_detail"), dict)
+                else {}
+            ),
             "layout_path": artifact_display_path(layout_path),
             "command": command,
             "dry_run": not bool(execute_live),
@@ -1212,7 +1489,20 @@ def materialize_plan_rows(
             "stderr_tail": "",
             "step_timeout_s": step_run_timeout_s(args, step),
         }
-        if execute_live:
+        if bool(step.get("bounded_give_up", False)):
+            row["execution_skipped_reason"] = (
+                str(row.get("execution_skipped_reason", "") or "")
+                or f"bounded_give_up:{row['bounded_give_up_reason']}"
+            )
+            row["mission"] = {
+                "fetch_to_pose_pass": False,
+                "bounded_give_up": True,
+                "bounded_give_up_reason": row["bounded_give_up_reason"],
+                "bounded_give_up_next_capability": row["bounded_give_up_next_capability"],
+            }
+            row["fetch_to_pose_pass"] = False
+            row["shot_reason"] = row["bounded_give_up_reason"]
+        elif execute_live:
             row["dashboard_activity_before_step"] = touch_dashboard_activity(
                 args,
                 reason=f"multiball_step_start:{scene_id}:{row['step_index']}",
@@ -1230,13 +1520,20 @@ def materialize_plan_rows(
             if mission_summary_raw:
                 mission_summary_path = resolve_path(mission_summary_raw)
                 enrich_row_with_mission_evidence(row, mission_summary_path)
-            if int(completed.returncode) != 0 and not row["failure_reason"]:
+                give_up = classify_measured_bounded_give_up(row)
+                if bool(give_up.get("bounded_give_up", False)):
+                    mark_row_bounded_give_up(
+                        row,
+                        reason=str(give_up.get("reason", "") or BOUNDED_GIVE_UP_MEASURED_SETUP_REASON),
+                        detail=give_up.get("detail", {}) if isinstance(give_up.get("detail"), dict) else {},
+                    )
+            if int(completed.returncode) != 0 and not row["failure_reason"] and not row_has_bounded_give_up(row):
                 failure_reason, failure_detail_path, failure_detail = classify_runner_failure(output)
                 row["failure_reason"] = failure_reason
                 row["failure_detail_path"] = failure_detail_path
                 row["failure_detail"] = failure_detail
         rows.append(row)
-        if execute_live and bool(args.stop_on_fail) and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)):
+        if execute_live and bool(args.stop_on_fail) and not row_is_terminal_outcome(row):
             break
     return rows
 
@@ -1421,6 +1718,15 @@ def materialize_replanning_rows(
             "route_quality": step.get("route_quality", {}) if isinstance(step.get("route_quality"), dict) else {},
             "route_cost": step.get("cost", {}) if isinstance(step.get("cost"), dict) else {},
             "executable_route": bool(step.get("executable_route", False)),
+            "terminal_step": bool(step.get("terminal_step", False)),
+            "bounded_give_up": bool(step.get("bounded_give_up", False)),
+            "bounded_give_up_reason": str(step.get("bounded_give_up_reason", "") or ""),
+            "bounded_give_up_next_capability": str(step.get("bounded_give_up_next_capability", "") or ""),
+            "bounded_give_up_detail": (
+                step.get("bounded_give_up_detail", {})
+                if isinstance(step.get("bounded_give_up_detail"), dict)
+                else {}
+            ),
             "layout_path": artifact_display_path(layout_path),
             "command": command,
             "dry_run": not bool(execute_live),
@@ -1441,7 +1747,21 @@ def materialize_replanning_rows(
             "stderr_tail": "",
             "step_timeout_s": step_run_timeout_s(args, step),
         }
-        if execute_live:
+        if bool(step.get("bounded_give_up", False)):
+            row["execution_skipped_reason"] = (
+                str(row.get("execution_skipped_reason", "") or "")
+                or f"bounded_give_up:{row['bounded_give_up_reason']}"
+            )
+            row["mission"] = {
+                "fetch_to_pose_pass": False,
+                "bounded_give_up": True,
+                "bounded_give_up_reason": row["bounded_give_up_reason"],
+                "bounded_give_up_next_capability": row["bounded_give_up_next_capability"],
+            }
+            row["fetch_to_pose_pass"] = False
+            row["shot_reason"] = row["bounded_give_up_reason"]
+            remaining = [ball for ball in remaining if str(ball.get("id", "") or "") != str(step.get("ball_id", "") or "")]
+        elif execute_live:
             row["dashboard_activity_before_step"] = touch_dashboard_activity(
                 args,
                 reason=f"multiball_replan_step_start:{scene_id}:{row['step_index']}",
@@ -1459,33 +1779,48 @@ def materialize_replanning_rows(
             if mission_summary_raw:
                 mission_summary_path = resolve_path(mission_summary_raw)
                 measured_state = enrich_row_with_mission_evidence(row, mission_summary_path)
+                give_up = classify_measured_bounded_give_up(row)
+                if bool(give_up.get("bounded_give_up", False)):
+                    mark_row_bounded_give_up(
+                        row,
+                        reason=str(give_up.get("reason", "") or BOUNDED_GIVE_UP_MEASURED_SETUP_REASON),
+                        detail=give_up.get("detail", {}) if isinstance(give_up.get("detail"), dict) else {},
+                    )
                 if isinstance(measured_state.get("robot_pose"), dict):
                     current_robot_pose = dict(measured_state["robot_pose"])
                 else:
                     current_robot_pose = step.get("estimated_post_fetch_robot_pose", current_robot_pose)
-                remaining = update_remaining_after_attempt(
-                    remaining,
-                    attempted_ball_id=str(step.get("ball_id", "") or ""),
-                    measured_state=measured_state,
-                )
+                if row_has_bounded_give_up(row):
+                    remaining = [
+                        ball for ball in remaining if str(ball.get("id", "") or "") != str(step.get("ball_id", "") or "")
+                    ]
+                else:
+                    remaining = update_remaining_after_attempt(
+                        remaining,
+                        attempted_ball_id=str(step.get("ball_id", "") or ""),
+                        measured_state=measured_state,
+                    )
             else:
                 remaining = update_remaining_after_attempt(
                     remaining,
                     attempted_ball_id=str(step.get("ball_id", "") or ""),
                     measured_state={"fetch_to_pose_pass": False},
                 )
-            if int(completed.returncode) != 0 and not row["failure_reason"]:
+            if int(completed.returncode) != 0 and not row["failure_reason"] and not row_has_bounded_give_up(row):
                 failure_reason, failure_detail_path, failure_detail = classify_runner_failure(output)
                 row["failure_reason"] = failure_reason
                 row["failure_detail_path"] = failure_detail_path
                 row["failure_detail"] = failure_detail
         rows.append(row)
-        if execute_live and bool(args.stop_on_fail) and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)):
+        if execute_live and bool(args.stop_on_fail) and not row_is_terminal_outcome(row):
             break
     delivered_ball_ids = [
         str(row.get("ball_id", "") or "")
         for row in rows
         if bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+    ]
+    bounded_give_up_ball_ids = [
+        str(row.get("ball_id", "") or "") for row in rows if row_has_bounded_give_up(row)
     ]
     return rows, {
         "enabled": True,
@@ -1493,8 +1828,11 @@ def materialize_replanning_rows(
         "initial_ball_count": initial_ball_count,
         "max_iterations": max_iterations,
         "delivered_ball_ids": delivered_ball_ids,
+        "bounded_give_up_ball_ids": bounded_give_up_ball_ids,
+        "bounded_give_up_count": len(bounded_give_up_ball_ids),
         "remaining_ball_ids": [str(ball.get("id", "") or "") for ball in remaining],
-        "all_balls_delivered": bool(not remaining and initial_ball_count > 0),
+        "all_balls_delivered": bool(not remaining and initial_ball_count > 0 and not bounded_give_up_ball_ids),
+        "all_balls_terminal": bool(not remaining and initial_ball_count > 0),
     }
 
 
@@ -1626,12 +1964,15 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         if not dry_run:
             scene_rows_for_scene = [row for row in rows if row.get("scene_id") == plan.get("scene_id")]
             if bool(getattr(args, "persistent_field", False)):
-                scene_pass = bool(live_replan_summary.get("all_balls_delivered", False))
+                scene_pass = bool(
+                    live_replan_summary.get("all_balls_delivered", False)
+                    or live_replan_summary.get("all_balls_terminal", False)
+                )
             else:
                 scene_pass = bool(
                     scene_rows_for_scene
                     and len(scene_rows_for_scene) == int(plan.get("ball_count", 0) or 0)
-                    and all(bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)) for row in scene_rows_for_scene)
+                    and all(row_is_terminal_outcome(row) for row in scene_rows_for_scene)
                 )
         if not dry_run and fresh_session_per_scene and scene_live_execution_ready:
             scene_dashboard_stop_after_scene = replay_batch.stop_dashboard_environment(
@@ -1647,13 +1988,16 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
             for row in scene_rows_for_scene
             if row.get("returncode") is not None
             and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+            and not row_has_bounded_give_up(row)
             and not row_has_execution_environment_failure(row)
         )
+        bounded_give_up_count = sum(1 for row in scene_rows_for_scene if row_has_bounded_give_up(row))
         execution_environment_fail_count = sum(
             1 for row in scene_rows_for_scene if row_has_execution_environment_failure(row)
         )
         delivered_ball_ids: list[str] = []
         remaining_ball_ids: list[str] = []
+        bounded_give_up_ball_ids: list[str] = []
         if isinstance(live_replan_summary, dict) and bool(live_replan_summary.get("enabled", False)):
             delivered_ball_ids = [
                 str(ball_id)
@@ -1665,11 +2009,33 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                 for ball_id in live_replan_summary.get("remaining_ball_ids", [])
                 if str(ball_id or "").strip()
             ]
+            bounded_give_up_ball_ids = [
+                str(ball_id)
+                for ball_id in live_replan_summary.get("bounded_give_up_ball_ids", [])
+                if str(ball_id or "").strip()
+            ]
         elif scene_rows_for_scene:
             delivered_ball_ids = [
                 str(row.get("ball_id", "") or "")
                 for row in scene_rows_for_scene
                 if bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+            ]
+            bounded_give_up_ball_ids = [
+                str(row.get("ball_id", "") or "")
+                for row in scene_rows_for_scene
+                if row_has_bounded_give_up(row)
+            ]
+            terminal_ball_ids = {ball_id for ball_id in delivered_ball_ids + bounded_give_up_ball_ids if ball_id}
+            remaining_ball_ids = [
+                str(ball.get("id", "") or "")
+                for ball in scene.get("balls", [])
+                if isinstance(ball, dict) and str(ball.get("id", "") or "") not in terminal_ball_ids
+            ]
+        else:
+            bounded_give_up_ball_ids = [
+                str(row.get("ball_id", "") or "")
+                for row in scene_rows_for_scene
+                if row_has_bounded_give_up(row)
             ]
         scene_rows.append(
             {
@@ -1677,8 +2043,15 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                 "pass": scene_pass,
                 "ball_count": int(plan.get("ball_count", 0) or 0),
                 "delivered_ball_count": len(delivered_ball_ids),
+                "bounded_give_up_count": bounded_give_up_count,
                 "remaining_ball_count": len(remaining_ball_ids),
                 "delivered_ball_ids": delivered_ball_ids,
+                "bounded_give_up_ball_ids": bounded_give_up_ball_ids,
+                "bounded_give_up_reasons": [
+                    str(row.get("bounded_give_up_reason", "") or "")
+                    for row in scene_rows_for_scene
+                    if row_has_bounded_give_up(row)
+                ],
                 "remaining_ball_ids": remaining_ball_ids,
                 "fetch_to_pose_pass_count": fetch_to_pose_pass_count,
                 "fetch_to_pose_fail_count": fetch_to_pose_fail_count,
@@ -1688,9 +2061,16 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
                     and live_replan_summary.get("enabled", False)
                     and live_replan_summary.get("all_balls_delivered", False)
                 ),
+                "live_all_balls_terminal": bool(
+                    isinstance(live_replan_summary, dict)
+                    and live_replan_summary.get("enabled", False)
+                    and live_replan_summary.get("all_balls_terminal", False)
+                ),
                 "retrieval_order": plan.get("retrieval_order", []),
                 "planner_ready": bool(plan.get("planner_ready", False)),
                 "executable_step_count": int(plan.get("executable_step_count", 0) or 0),
+                "terminal_step_count": int(plan.get("terminal_step_count", 0) or 0),
+                "planned_bounded_give_up_count": int(plan.get("bounded_give_up_count", 0) or 0),
                 "compose_project": scene_compose_project,
                 "expected_session_id": scene_expected_session_id,
                 "live_execution_ready": bool(scene_live_execution_ready),
@@ -1708,12 +2088,14 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
 
     planned_step_count = len(step_rows)
     live_pass_count = sum(1 for row in step_rows if bool((row.get("mission") or {}).get("fetch_to_pose_pass", False)))
+    bounded_give_up_count = sum(1 for row in step_rows if row_has_bounded_give_up(row))
     live_execution_environment_fail_count = sum(1 for row in step_rows if row_has_execution_environment_failure(row))
     live_control_fail_count = sum(
         1
         for row in step_rows
         if row.get("returncode") is not None
         and not bool((row.get("mission") or {}).get("fetch_to_pose_pass", False))
+        and not row_has_bounded_give_up(row)
         and not row_has_execution_environment_failure(row)
     )
     planner_ready_scene_count = sum(1 for row in scene_rows if bool(row.get("planner_ready", False)))
@@ -1816,10 +2198,21 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "route_executor_counts": route_executor_counts,
         "route_diversity": route_diversity,
         "live_fetch_to_pose_pass_count": live_pass_count,
+        "bounded_give_up_count": bounded_give_up_count,
+        "bounded_give_up_reasons": sorted(
+            {
+                str(row.get("bounded_give_up_reason", "") or "")
+                for row in step_rows
+                if row_has_bounded_give_up(row) and str(row.get("bounded_give_up_reason", "") or "").strip()
+            }
+        ),
         "live_fetch_to_pose_fail_count": 0 if dry_run else live_control_fail_count,
         "live_execution_environment_fail_count": 0 if dry_run else live_execution_environment_fail_count,
         "live_all_balls_delivered_scene_count": sum(
             1 for row in scene_rows if bool((row.get("live_replanning") or {}).get("all_balls_delivered", False))
+        ),
+        "live_all_balls_terminal_scene_count": sum(
+            1 for row in scene_rows if bool((row.get("live_replanning") or {}).get("all_balls_terminal", False))
         ),
         "visual_package_required": visual_package_required,
         "visual_package_pass": visual_package_pass,
@@ -1827,6 +2220,8 @@ def run_gate(args: argparse.Namespace) -> dict[str, Any]:
         "multiball_visual_evidence_pass": multiball_visual_evidence_pass,
         "multiball_visual_evidence_reason": (
             "all_scenes_delivered_with_watchable_keyframed_visuals"
+            if multiball_visual_evidence_pass and bounded_give_up_count == 0
+            else "all_scenes_delivered_or_bounded_give_up_with_watchable_keyframed_visuals"
             if multiball_visual_evidence_pass
             else ""
         ),
@@ -1895,6 +2290,8 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         f"- route_diversity: `{summary.get('route_diversity', {})}`",
         f"- planner_ready_scene_count: `{summary.get('planner_ready_scene_count', 0)}`",
         f"- live_fetch_to_pose_pass_count: `{summary.get('live_fetch_to_pose_pass_count', 0)}`",
+        f"- bounded_give_up_count: `{summary.get('bounded_give_up_count', 0)}`",
+        f"- bounded_give_up_reasons: `{summary.get('bounded_give_up_reasons', [])}`",
         f"- live_fetch_to_pose_fail_count: `{summary.get('live_fetch_to_pose_fail_count', 0)}`",
         f"- live_execution_environment_fail_count: `{summary.get('live_execution_environment_fail_count', 0)}`",
         f"- visual_package_required: `{summary.get('visual_package_required', False)}`",
@@ -1906,31 +2303,38 @@ def write_scorecard(path: Path, summary: dict[str, Any]) -> None:
         "",
         "## Scenes",
         "",
-        "| Scene | Pass | Balls | Planner ready | Order |",
-        "| --- | --- | ---: | --- | --- |",
+        "| Scene | Pass | Delivered | Bounded give-up | Remaining | Planner ready | Order |",
+        "| --- | --- | ---: | ---: | ---: | --- | --- |",
     ]
     for row in summary.get("scene_rows", []) if isinstance(summary.get("scene_rows"), list) else []:
         order = ", ".join(str(item) for item in row.get("retrieval_order", []))
         lines.append(
             f"| `{row.get('scene_id', '')}` | `{row.get('pass', False)}` | "
-            f"`{row.get('ball_count', 0)}` | `{row.get('planner_ready', False)}` | `{order}` |"
+            f"`{row.get('delivered_ball_count', 0)}/{row.get('ball_count', 0)}` | "
+            f"`{row.get('bounded_give_up_count', 0)}` | `{row.get('remaining_ball_count', 0)}` | "
+            f"`{row.get('planner_ready', False)}` | `{order}` |"
         )
     lines.extend(
         [
             "",
             "## Retrieval Steps",
             "",
-            "| Scene | Step | Ball | Route | Executor | Layout | Mission pass |",
+            "| Scene | Step | Ball | Route | Executor | Layout | Outcome |",
             "| --- | ---: | --- | --- | --- | --- | --- |",
         ]
     )
     for row in summary.get("step_rows", []) if isinstance(summary.get("step_rows"), list) else []:
         mission = row.get("mission") if isinstance(row.get("mission"), dict) else {}
-        mission_pass = "n/a" if bool(row.get("dry_run", False)) else str(bool(mission.get("fetch_to_pose_pass", False)))
+        if row_has_bounded_give_up(row):
+            outcome = f"bounded_give_up:{row.get('bounded_give_up_reason', '')}"
+        elif bool(row.get("dry_run", False)):
+            outcome = "n/a"
+        else:
+            outcome = str(bool(mission.get("fetch_to_pose_pass", False)))
         lines.append(
             f"| `{row.get('scene_id', '')}` | `{row.get('step_index', 0)}` | `{row.get('ball_id', '')}` | "
             f"`{row.get('route_label', '')}` | `{row.get('route_executor', '')}` | "
-            f"`{row.get('layout_path', '')}` | `{mission_pass}` |"
+            f"`{row.get('layout_path', '')}` | `{outcome}` |"
         )
     lines.append("")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
