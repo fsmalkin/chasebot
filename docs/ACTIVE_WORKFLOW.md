@@ -325,6 +325,15 @@ and
 The visual package summary is
 `artifacts/session/live_multiball_route_diverse_seed20260648_4x3_bounded_giveup_20260608_visual_package/fetch_visual_uat_package/package_summary.json`.
 
+June 9 active lane: (1) route-diverse breadth repeat with bounded accounting,
+next seed `20260649` (4x3, llm_supervised_guarded, same recipe as the
+seed `20260648` run); (2) open-field setup trajectory owner design is complete
+in `docs/OPEN_FIELD_SETUP_TRAJECTORY_OWNER_DESIGN.md` — implementation holds
+until the v1 scope decision and breadth give-up frequency are in. The design's
+pre-merge requalification ladder (targeted frozen-layout run, s02 3/3, full
+seed `20260648` 4x3 expecting 12/12, seed `20260647` invariance) is recorded
+there and is mandatory before any owner merge.
+
 Saved-anchor repeatability analyzer scope:
 
 ```powershell

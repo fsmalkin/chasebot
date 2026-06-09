@@ -1894,3 +1894,22 @@ geometry instead of repeatedly spending live runs on the same unreached
 push-ready handoff. The next breadth gate should repeat route-diverse seeds with
 this accounting, then promote only after bounded give-up frequency and visual
 quality are acceptable for UAT.
+
+June 9 design checkpoint: the open-field setup trajectory owner is designed
+and documented in `docs/OPEN_FIELD_SETUP_TRAJECTORY_OWNER_DESIGN.md` via a
+judged three-candidate study. Chosen path: two-slice landing — first a
+boundary-aware promotion of the existing wraparound machinery behind a CLI
+flag (no planner_gate or route-label churn), then promotion to the named
+`open_field_setup_trajectory` route with the orbit-arc ladder once live
+mileage exists. The Nav2-staged variant is a recorded no-go: ball-relative
+legs must not be delegated to Nav2 while the ball is absent from the costmap.
+Two roadmap decisions now gate implementation: (1) the v1 scope call —
+promote Multi-Ball Retrieval v1 with bounded give-up as an accepted terminal
+outcome (owner becomes the v1.1 headline) versus requiring the owner for v1 —
+and (2) bounded give-up frequency from the breadth seeds starting at
+`20260649`. Two standing roadmap gaps remain explicitly open: a numeric
+promotion bar for the breadth gate (proposed: five consecutive green seeds,
+delivery rate >= 90%, all non-deliveries bounded-and-diagnosed, visual
+package green every run) and a named entry point for hardware-in-the-loop
+evidence (the owner's measured validation currently rides sim-truth pose
+sampling that does not exist on `robot_fidelity_orin`).

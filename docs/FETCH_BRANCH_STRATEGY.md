@@ -93,6 +93,16 @@ missing route owner rather than weakening the `fetch_to_pose` contract. Branch
 priority is repeat breadth with this terminal accounting, followed by an
 open-field setup trajectory owner for the field-bounded target-side geometry.
 
+June 9, 2026 design update: the open-field setup trajectory owner design is
+complete and documented in `docs/OPEN_FIELD_SETUP_TRAJECTORY_OWNER_DESIGN.md`
+(judged three-candidate study; two-slice landing: boundary-aware wraparound
+promotion behind a CLI flag first, named `open_field_setup_trajectory` route
+promotion second; the Nav2-staged variant is rejected as a standing no-go for
+ball-relative legs). Implementation is on hold pending the v1 scope decision
+(promote with bounded give-up accepted vs require the owner) and bounded
+give-up frequency data from the route-diverse breadth seeds (`20260649`
+onward, in progress).
+
 ## Recommended Branch Roles
 
 1. Stable demo/UAT branch:

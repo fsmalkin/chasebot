@@ -48,6 +48,19 @@ guards can choose a terminal no-execution outcome when the current route owners
 lack a measured push-ready path. The next execution capability is an open-field
 setup trajectory owner for field-bounded target-side cases.
 
+June 9, 2026: that owner is now designed —
+`docs/OPEN_FIELD_SETUP_TRAJECTORY_OWNER_DESIGN.md`. Slice 1 promotes the
+existing wraparound machinery into a boundary-aware committed maneuver (field
+clamp at 0.10 m wall margin, 0.30 m chord ball-clearance floor with radial
+back-out, side ranking, per-side reject reasons; zero planner_gate changes).
+Slice 2 promotes it to the named `open_field_setup_trajectory` route with the
+orbit-arc radius/direction ladder. All downstream measured gates (behind-ready,
+contact_ready servo handoff, push-ready, guarded fetch) are unchanged. The
+design numerically solves the frozen seed `20260648` s02 step 3 `ball_2`
+geometry; expected outcome after landing is that gate at 12/12 with 0
+give-ups. Implementation awaits the v1 scope decision and breadth-seed give-up
+frequency data.
+
 June 2, 2026 execution pivot: the LLM/world-state planner is integrated as a
 route-classification and shadow-evidence surface. The non-local route labels
 still need executable route owners. The opposite-side direct run proved
