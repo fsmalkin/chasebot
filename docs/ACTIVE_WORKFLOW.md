@@ -402,6 +402,69 @@ an MCP subagent (`mcp__codex__codex`, gpt-5.5 xhigh). The dashboard service
 (pid file `runtime/dashboard_8895_codex_resume.pid`) is Codex-lane
 infrastructure and stays running.
 
+June 11 supervisory classification (new Claude session): seed `20260651` is a
+**ROBOT-BEHAVIOR red** — the green streak is broken at four; restart policy is
+with Fred (concept brief sent June 11; Codex evidence-read thread
+`019eb6c3-238a-7350-ba24-6c77fbd5b4af`). Environment is exonerated by direct
+evidence: the session's world stream stayed ready with fresh frames through
+the failure (`artifacts/session/20260611T051601675784Z/visual/world_stream_summary.json`:
+pass, latest frame age 0.337 s at 05:20:21Z), the truth topic delivered 401
+samples, the dashboard session binding matched, controller preflight was
+active, and no 409 / stream-not-ready / restart marker appears in the failure
+window.
+
+Mechanism (from
+`artifacts/session/20260611T051601675784Z/golf_ball_circle_delivery/20260611T051945328893Z/pre_fetch_reposition.json`):
+the step's Nav2 setup-assist legs were dispatched with goals built by
+`build_nav2_relative_setup_goal`
+(`scripts/golf_ball_circle_delivery_demo_runner.py:1608-1642`), which adds the
+world-frame translation delta to the odom belief pose WITHOUT rotating it by
+the odom-vs-world yaw offset (yaw is handled relatively; translation is not).
+At dispatch the offset was ~-37.7 deg (belief yaw -0.177 vs truth yaw +0.481),
+so the commanded odom goal pointed the physical robot ~38 deg off-course;
+rotating the commanded delta by the offset reproduces the observed world
+endpoint to ~0.2 m. The robot crossed the ball field during the 14.5 s
+pre-setup leg, bulldozed `ball_2` (net 1.106 m from its layout pose, pinned at
+the bumper: robot-ball 0.115 m at leg end, rolled orientation) and disturbed
+the already-delivered `ball_1` (final poses 4 cm apart in front of the robot).
+Nav2 itself reported STATUS_SUCCEEDED in its own frame; the measured guard
+caught it (`goal_succeeded_measured_pose_mismatch`, position errors 1.886 m /
+1.800 m vs 0.25 m tolerance, yaw errors ~64 deg vs 25 deg), coarse acceptance
+correctly rejected with `ball_moved_during_nav2_setup` (1.106 m vs 0.020 m
+limit), fallback correctly rejected with `nav2_moved_ball_before_fallback`,
+and the step went terminal rc=2 with `nav2_reposition_failed_before_fetch`.
+
+Why this is robot-shaped and systematic, not a session anomaly: in the green
+seeds the SAME goal construction missed its world goal by 0.18-4.76 m (yaw
+error up to 122 deg) across all nine passing `local_setup_capture` rows
+(seeds `20260649` rerun2 and `20260650`; eight of nine exceeded the 0.25 m
+tolerance); every row was salvaged by
+`goal_succeeded_local_setup_coarse_accept` because ball motion was 0.0 and the
+local capture machinery recovers from arbitrary placement. Seed `20260651`'s
+geometry simply put `ball_2` inside the mis-aimed transit corridor. A second,
+latent defect compounds it: the setup-assist leg runs
+`navigate_to_pose_w_replanning` near uncostmapped balls with no transit
+clearance check — the risk class the standing Nav2-near-ball rule names.
+
+Frozen replayable failure (committed per the named-saved-layout discipline,
+before any tuning), all under
+`artifacts/session/live_multiball_route_diverse_seed20260651_4x3_breadth_20260611/fetch_multiball_retrieval_gate/`:
+- `target_layouts/seed20260651_mb_route_diverse_s01_nav2_step01_ball_1.json`
+- `target_layouts/seed20260651_mb_route_diverse_s01_nav2_step02_ball_2.json`
+- `scene_descriptors/seed20260651_mb_route_diverse_s01_nav2.json`
+- `sequence_plans/seed20260651_mb_route_diverse_s01_nav2.json`
+Replay caveat: the failure depends on the odom-vs-world offset accumulated
+during step 1, so the replay unit is the SCENE (step 1 then step 2 in one
+persistent session), not the step-2 layout alone — a fresh-session step-2
+replay starts at near-zero offset and will not reproduce the plow.
+
+Per the bounded execution plan this is a stop-and-report trigger: no tuning,
+no predicate changes, no reruns until Fred picks the repair option. Queued
+options (brief in chat, June 11): A) rotation-aware delta fix plus a
+ball-clearance corridor gate on the setup-assist leg, requalify, restart the
+streak (recommended); B) rotation fix only; C) costmap-based ball avoidance
+for setup legs.
+
 ## Codex execution plan (June 9, 2026 — bounded autonomous lane)
 
 Owner: GPT-5.5 Codex thread. Source-of-truth docs: this file,

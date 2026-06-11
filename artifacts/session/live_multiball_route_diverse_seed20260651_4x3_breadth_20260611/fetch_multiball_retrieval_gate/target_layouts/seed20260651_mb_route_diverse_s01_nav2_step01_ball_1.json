@@ -1,0 +1,330 @@
+{
+  "generated_utc": "2026-06-11T05:18:01.148463+00:00",
+  "layout_family": "planner_gated_nav2_reposition_first",
+  "maneuver_plan": {
+    "inserted_maneuvers": [],
+    "local_fetch_index": 3,
+    "maneuver_sequence": [
+      "nav2_reposition",
+      "local_setup_capture",
+      "validate_push_ready",
+      "local_fetch_to_pose",
+      "monitor_delivery"
+    ],
+    "no_direct_ball_impulse": true,
+    "no_direct_cmd_vel": true,
+    "objective": "Reposition into a behind-ball, target-aligned setup lane, capture a controlled local setup, then execute local fetch only after deterministic push-ready validation.",
+    "opposite_side_of_circle": false,
+    "push_ready_index": 2,
+    "replan_triggers": [
+      "Ball or target pose confidence drops materially, or state age becomes stale during reposition/setup.",
+      "Corridor status changes, clearance degrades, or an obstacle appears on the approach or delivery line.",
+      "After reposition/setup, alignment remains outside push-ready tolerance or contact ownership cannot be established.",
+      "Unexpected ball motion, slip, or loss of controlled setup occurs before or during validation.",
+      "Delivery deviates from the expected corridor-to-target path or monitoring detects loss of controlled progress."
+    ],
+    "requires_measured_push_ready_before_fetch": true,
+    "robot_ball_relative_bearing_abs_deg": 16.092831,
+    "route_executor": "nav2_forward_reposition_then_fetch",
+    "route_label": "nav2_reposition_first",
+    "source": "llm_proposed",
+    "valid": true,
+    "validation_gates": [
+      "Perception freshness and confidence remain valid before motion: ball_confidence and target_confidence stay high and state_age remains within local planning tolerance.",
+      "Corridor remains usable for approach: blocked=false, unsafe_drift_m=0.0, and available clearance stays sufficient for a clean reposition/setup path.",
+      "Reposition ends in a behind-ball approach geometry with reduced lateral offset and yaw error relative to the ball-to-target line.",
+      "Local setup capture establishes robot-owned contact/control without direct uncontrolled ball impulse.",
+      "validate_push_ready must confirm target-aligned push geometry, stable contact ownership, and delivery path consistency before any local_fetch_to_pose begins."
+    ],
+    "veto_reasons": []
+  },
+  "multiball_ball_id": "ball_1",
+  "multiball_bounded_give_up": false,
+  "multiball_bounded_give_up_next_capability": "",
+  "multiball_bounded_give_up_reason": "",
+  "multiball_estimated_post_fetch_robot_pose": {
+    "x": 0.701737,
+    "y": -0.129482,
+    "yaw": 0.480742,
+    "z": 0.0
+  },
+  "multiball_estimated_setup_pose": {
+    "x": -0.068369,
+    "y": -0.531135,
+    "yaw": 0.480742,
+    "z": 0.0
+  },
+  "multiball_estimated_start_robot_pose": {
+    "x": -0.738866,
+    "y": -0.749257,
+    "yaw": 0.664326,
+    "z": 0.0
+  },
+  "multiball_maneuver_plan": {
+    "inserted_maneuvers": [],
+    "local_fetch_index": 3,
+    "maneuver_sequence": [
+      "nav2_reposition",
+      "local_setup_capture",
+      "validate_push_ready",
+      "local_fetch_to_pose",
+      "monitor_delivery"
+    ],
+    "no_direct_ball_impulse": true,
+    "no_direct_cmd_vel": true,
+    "objective": "Reposition into a behind-ball, target-aligned setup lane, capture a controlled local setup, then execute local fetch only after deterministic push-ready validation.",
+    "opposite_side_of_circle": false,
+    "push_ready_index": 2,
+    "replan_triggers": [
+      "Ball or target pose confidence drops materially, or state age becomes stale during reposition/setup.",
+      "Corridor status changes, clearance degrades, or an obstacle appears on the approach or delivery line.",
+      "After reposition/setup, alignment remains outside push-ready tolerance or contact ownership cannot be established.",
+      "Unexpected ball motion, slip, or loss of controlled setup occurs before or during validation.",
+      "Delivery deviates from the expected corridor-to-target path or monitoring detects loss of controlled progress."
+    ],
+    "requires_measured_push_ready_before_fetch": true,
+    "robot_ball_relative_bearing_abs_deg": 16.092831,
+    "route_executor": "nav2_forward_reposition_then_fetch",
+    "route_label": "nav2_reposition_first",
+    "source": "llm_proposed",
+    "valid": true,
+    "validation_gates": [
+      "Perception freshness and confidence remain valid before motion: ball_confidence and target_confidence stay high and state_age remains within local planning tolerance.",
+      "Corridor remains usable for approach: blocked=false, unsafe_drift_m=0.0, and available clearance stays sufficient for a clean reposition/setup path.",
+      "Reposition ends in a behind-ball approach geometry with reduced lateral offset and yaw error relative to the ball-to-target line.",
+      "Local setup capture establishes robot-owned contact/control without direct uncontrolled ball impulse.",
+      "validate_push_ready must confirm target-aligned push geometry, stable contact ownership, and delivery path consistency before any local_fetch_to_pose begins."
+    ],
+    "veto_reasons": []
+  },
+  "multiball_scene_id": "seed20260651_mb_route_diverse_s01_nav2",
+  "multiball_step_index": 1,
+  "multiball_terminal_step": true,
+  "planner_route_label": "nav2_reposition_first",
+  "planner_scene": {
+    "ball_pose": {
+      "x": 0.374957,
+      "y": -0.299916,
+      "yaw": 0.0,
+      "z": 0.021336
+    },
+    "corridor": {
+      "blocked": false,
+      "clearance_m": 0.35,
+      "unsafe_drift_m": 0.0
+    },
+    "expected_route_label": "nav2_reposition_first",
+    "generated_utc": "2026-06-11T05:16:28.216917+00:00",
+    "geometry": {
+      "ball_target_angle_deg": 27.544475,
+      "ball_target_distance_m": 0.648555,
+      "opposite_side_of_circle": false,
+      "robot_ball_distance_m": 1.201045,
+      "robot_ball_relative_bearing_abs_deg": 16.092831,
+      "robot_ball_relative_bearing_deg": -16.092831,
+      "robot_lateral_error_m": 0.116664,
+      "robot_lateral_signed_m": 0.116664,
+      "robot_longitudinal_projection_m": -1.195365,
+      "robot_standoff_m": 1.195365,
+      "robot_to_ball_bearing_deg": 21.970246,
+      "robot_yaw_error_deg": 10.518601,
+      "target_robot_ball_angle_deg": 3.620246
+    },
+    "local_fetch_envelope": {
+      "delivery_radius_m": 0.3,
+      "eligible": false,
+      "no_direct_ball_impulse": true,
+      "requires_robot_owned_contact": true
+    },
+    "multiball_context": {
+      "ball_id": "ball_1",
+      "parent_scene_id": "seed20260651_mb_route_diverse_s01_nav2",
+      "remaining_ball_count": 3,
+      "step_index": 1
+    },
+    "perception": {
+      "ball_confidence": 0.98,
+      "state_age_s": 0.15,
+      "target_confidence": 0.99
+    },
+    "robot_pose": {
+      "x": -0.738866,
+      "y": -0.749257,
+      "yaw": 0.664326,
+      "z": 0.0
+    },
+    "scene_id": "seed20260651_mb_route_diverse_s01_nav2_ball_1_step01",
+    "scene_set": "open_field_multiball_v1",
+    "target_pose": {
+      "radius_m": 0.3,
+      "x": 0.95,
+      "y": 0.0,
+      "z": 0.001
+    },
+    "type": "fetch_planner_scene_descriptor"
+  },
+  "random_draw": {
+    "ball_pose": {
+      "x": 0.374957,
+      "y": -0.299916,
+      "yaw": 0.0,
+      "z": 0.021336
+    },
+    "ball_target_angle_deg": 27.544475,
+    "ball_target_distance_m": 0.648555,
+    "maneuver_plan": {
+      "inserted_maneuvers": [],
+      "local_fetch_index": 3,
+      "maneuver_sequence": [
+        "nav2_reposition",
+        "local_setup_capture",
+        "validate_push_ready",
+        "local_fetch_to_pose",
+        "monitor_delivery"
+      ],
+      "no_direct_ball_impulse": true,
+      "no_direct_cmd_vel": true,
+      "objective": "Reposition into a behind-ball, target-aligned setup lane, capture a controlled local setup, then execute local fetch only after deterministic push-ready validation.",
+      "opposite_side_of_circle": false,
+      "push_ready_index": 2,
+      "replan_triggers": [
+        "Ball or target pose confidence drops materially, or state age becomes stale during reposition/setup.",
+        "Corridor status changes, clearance degrades, or an obstacle appears on the approach or delivery line.",
+        "After reposition/setup, alignment remains outside push-ready tolerance or contact ownership cannot be established.",
+        "Unexpected ball motion, slip, or loss of controlled setup occurs before or during validation.",
+        "Delivery deviates from the expected corridor-to-target path or monitoring detects loss of controlled progress."
+      ],
+      "requires_measured_push_ready_before_fetch": true,
+      "robot_ball_relative_bearing_abs_deg": 16.092831,
+      "route_executor": "nav2_forward_reposition_then_fetch",
+      "route_label": "nav2_reposition_first",
+      "source": "llm_proposed",
+      "valid": true,
+      "validation_gates": [
+        "Perception freshness and confidence remain valid before motion: ball_confidence and target_confidence stay high and state_age remains within local planning tolerance.",
+        "Corridor remains usable for approach: blocked=false, unsafe_drift_m=0.0, and available clearance stays sufficient for a clean reposition/setup path.",
+        "Reposition ends in a behind-ball approach geometry with reduced lateral offset and yaw error relative to the ball-to-target line.",
+        "Local setup capture establishes robot-owned contact/control without direct uncontrolled ball impulse.",
+        "validate_push_ready must confirm target-aligned push geometry, stable contact ownership, and delivery path consistency before any local_fetch_to_pose begins."
+      ],
+      "veto_reasons": []
+    },
+    "opposite_side_of_circle": false,
+    "planner_route_label": "nav2_reposition_first",
+    "random_profile": "planner_mixed_v1",
+    "robot_ball_distance_m": 1.201045,
+    "robot_ball_relative_bearing_abs_deg": 16.092831,
+    "robot_ball_relative_bearing_deg": -16.092831,
+    "robot_lateral_error_m": 0.116664,
+    "robot_lateral_signed_m": 0.116664,
+    "robot_longitudinal_projection_m": -1.195365,
+    "robot_pose": {
+      "x": -0.738866,
+      "y": -0.749257,
+      "yaw": 0.664326,
+      "z": 0.0
+    },
+    "robot_standoff_m": 1.195365,
+    "robot_to_ball_bearing_deg": 21.970246,
+    "robot_yaw_error_deg": 10.518601,
+    "route_executor": "nav2_forward_reposition_then_fetch",
+    "route_quality": {
+      "flags": [
+        "nav2_reposition_required"
+      ],
+      "predicted_contact_quality": "watch",
+      "predicted_first_contact_quality": "watch",
+      "predicted_first_contact_risk": "medium",
+      "quality_score": 62.417,
+      "recommendations": [
+        "nav2_forward_reposition",
+        "verify_setup_pose_before_push"
+      ],
+      "route_label": "nav2_reposition_first",
+      "setup_debt": {
+        "ball_target_angle_abs_deg": 27.544475,
+        "ball_target_distance_m": 0.648555,
+        "lateral_m": 0.086664,
+        "robot_ball_distance_m": 1.201045,
+        "yaw_deg": 7.518601
+      },
+      "thresholds": {
+        "clean_lateral_m": 0.03,
+        "clean_yaw_deg": 3.0,
+        "extended_recovery_lateral_limit_m": 0.36,
+        "extended_recovery_robot_ball_distance_limit_m": 0.95,
+        "extended_recovery_yaw_limit_deg": 85.0,
+        "fetch_ready_lateral_limit_m": 0.05,
+        "fetch_ready_yaw_limit_deg": 6.0,
+        "local_setup_capture_lateral_limit_m": 2.2,
+        "local_setup_capture_robot_ball_distance_limit_m": 2.6,
+        "local_setup_capture_yaw_limit_deg": 180.0,
+        "nav2_reposition_min_robot_ball_distance_m": 0.9,
+        "recovery_lateral_limit_m": 0.24,
+        "recovery_robot_ball_distance_limit_m": 0.9,
+        "recovery_yaw_limit_deg": 35.0
+      }
+    },
+    "scene_set": "open_field_multiball_v1",
+    "seed": "",
+    "target_pose": {
+      "radius_m": 0.3,
+      "x": 0.95,
+      "y": 0.0,
+      "z": 0.001
+    },
+    "target_robot_ball_angle_deg": 3.620246
+  },
+  "random_profile": "planner_mixed_v1",
+  "route_executor": "nav2_forward_reposition_then_fetch",
+  "route_quality": {
+    "flags": [
+      "nav2_reposition_required"
+    ],
+    "predicted_contact_quality": "watch",
+    "predicted_first_contact_quality": "watch",
+    "predicted_first_contact_risk": "medium",
+    "quality_score": 62.417,
+    "recommendations": [
+      "nav2_forward_reposition",
+      "verify_setup_pose_before_push"
+    ],
+    "route_label": "nav2_reposition_first",
+    "setup_debt": {
+      "ball_target_angle_abs_deg": 27.544475,
+      "ball_target_distance_m": 0.648555,
+      "lateral_m": 0.086664,
+      "robot_ball_distance_m": 1.201045,
+      "yaw_deg": 7.518601
+    },
+    "thresholds": {
+      "clean_lateral_m": 0.03,
+      "clean_yaw_deg": 3.0,
+      "extended_recovery_lateral_limit_m": 0.36,
+      "extended_recovery_robot_ball_distance_limit_m": 0.95,
+      "extended_recovery_yaw_limit_deg": 85.0,
+      "fetch_ready_lateral_limit_m": 0.05,
+      "fetch_ready_yaw_limit_deg": 6.0,
+      "local_setup_capture_lateral_limit_m": 2.2,
+      "local_setup_capture_robot_ball_distance_limit_m": 2.6,
+      "local_setup_capture_yaw_limit_deg": 180.0,
+      "nav2_reposition_min_robot_ball_distance_m": 0.9,
+      "recovery_lateral_limit_m": 0.24,
+      "recovery_robot_ball_distance_limit_m": 0.9,
+      "recovery_yaw_limit_deg": 35.0
+    }
+  },
+  "scenario_id": "golf_ball_circle_delivery_uat",
+  "targets": [
+    {
+      "forward_m": 0.374957,
+      "id": "ball_1",
+      "label": "planner_gated_ball",
+      "lateral_m": -0.299916,
+      "min_dwell_s": 0.5,
+      "start_visible": true,
+      "visit_tolerance_m": 0.22,
+      "z_m": 0.021336
+    }
+  ]
+}

@@ -1956,3 +1956,16 @@ green, and a green browser-watchable visual package at
 Codex reviewed onboard and topdown frame-sequence sheets for all four scene
 sessions and found no visual contradiction with the delivery metric. Next
 roadmap action: run seed `20260651` with the same route-diverse 4x3 recipe.
+
+June 11 breadth red: seed `20260651` FAILED as
+`live_multiball_route_diverse_seed20260651_4x3_breadth_20260611` and is
+classified ROBOT-BEHAVIOR (not environment): the Nav2 setup-assist goal
+construction (`build_nav2_relative_setup_goal`) applies the world-frame
+translation delta in odom coordinates without rotating by the odom-vs-world
+yaw offset, drove the robot ~38 deg off-course through the ball field, and
+bulldozed `ball_2` 1.106 m during the pre-setup leg
+(`ball_moved_during_nav2_setup`; full mechanism, evidence, and frozen
+replayable scene pointers in `docs/ACTIVE_WORKFLOW.md`). The five-green
+streak is broken at four; the repair decision (concept brief with options)
+is with Fred. No tuning and no rerun before Fred's pick; the frozen-scene
+discipline is already satisfied.
