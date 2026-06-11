@@ -465,6 +465,26 @@ ball-clearance corridor gate on the setup-assist leg, requalify, restart the
 streak (recommended); B) rotation fix only; C) costmap-based ball avoidance
 for setup legs.
 
+**June 11 decision (Fred): Option A, with streak restart.** Repair scope:
+(1) rotate the world->odom translation delta in `build_nav2_relative_setup_goal`
+by the odom-vs-world yaw offset (yaw already relative); (2) pre-dispatch
+corridor gate on Nav2 setup-assist legs — chord clearance >= 0.30 m against
+ALL balls present (measured truth poses at dispatch); conflict => named
+reject `nav2_setup_corridor_ball_conflict`, route to the existing fallback
+ladder, Nav2 not dispatched. Untouched by bound: ball-motion guard, bounded
+give-up predicate, planner_gate, route labels, frozen 7-intent contract.
+Requalification ladder (in order): unit/property tests (incl. replaying the
+recorded 20260651 dispatch inputs and the corridor-reject of the frozen
+geometry), `fetch_moonshot_regression_manifest`, frozen-scene live replay
+(scene-level, step 1 then step 2 in one persistent session), full seed
+`20260651` 4x3 gate post-fix, seed `20260650` invariance gate (unchanged
+route labels). Streak restarts at 0/5 on the fixed build; instantiation
+plan (Fred may veto): post-fix `20260651` = candidate green 1, `20260650`
+invariance = candidate green 2, then `20260652`-`20260654`. Execution is
+delegated to the Codex spine thread in phases; Phase 1 (implementation +
+tests, no gates, no commits) launched June 11, Claude reviews the diff
+before any live run.
+
 ## Codex execution plan (June 9, 2026 — bounded autonomous lane)
 
 Owner: GPT-5.5 Codex thread. Source-of-truth docs: this file,
