@@ -24,7 +24,9 @@ from golf_ball_circle_delivery_demo_runner import apply_target_layout  # noqa: E
 from golf_ball_circle_delivery_demo_runner import apply_planner_route_execution_defaults  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_nav2_reposition_setup_pose  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import build_nav2_relative_setup_goal  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import dispatch_nav2_setup_assist_with_corridor_gate  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import nav2_field_clamped_setup_goal  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import nav2_setup_corridor_gate  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import local_setup_nav2_setup_pose_admissibility  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import docker_exec_service  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import ensure_base_controller_active  # noqa: E402
@@ -49,6 +51,8 @@ from golf_ball_circle_delivery_demo_runner import wraparound_setup_needed  # noq
 from golf_ball_circle_delivery_demo_runner import build_wraparound_setup_waypoints  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import wraparound_pose_stage_command  # noqa: E402
 from golf_ball_circle_delivery_demo_runner import collect_wraparound_setup_samples  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import NAV2_SETUP_CORRIDOR_CLEAR_STATUS  # noqa: E402
+from golf_ball_circle_delivery_demo_runner import NAV2_SETUP_CORRIDOR_CONFLICT_STATUS  # noqa: E402
 import passive_ball_roll_calibration_runner as passive_runner  # noqa: E402
 
 
@@ -1470,7 +1474,24 @@ def test_local_setup_nav2_admissibility_allows_unbounded_setup_and_other_routes(
     assert nav2_decision["pass"] is True
 
 
-def test_build_nav2_relative_setup_goal_preserves_truth_delta_in_nav2_frame():
+def _old_nav2_relative_goal_xy(world_setup_pose, world_robot_pose, nav2_robot_pose):
+    return (
+        float(nav2_robot_pose["x"]) + (float(world_setup_pose["x"]) - float(world_robot_pose["x"])),
+        float(nav2_robot_pose["y"]) + (float(world_setup_pose["y"]) - float(world_robot_pose["y"])),
+    )
+
+
+def _nav2_goal_xy_to_world(goal_pose, world_robot_pose, nav2_robot_pose):
+    theta = float(world_robot_pose["yaw"]) - float(nav2_robot_pose["yaw"])
+    dx = float(goal_pose["x"]) - float(nav2_robot_pose["x"])
+    dy = float(goal_pose["y"]) - float(nav2_robot_pose["y"])
+    return (
+        float(world_robot_pose["x"]) + math.cos(theta) * dx - math.sin(theta) * dy,
+        float(world_robot_pose["y"]) + math.sin(theta) * dx + math.cos(theta) * dy,
+    )
+
+
+def test_build_nav2_relative_setup_goal_rotates_truth_delta_into_nav2_frame():
     world_setup_pose = {
         "frame_id": "odom",
         "x": 0.09564,
@@ -1489,12 +1510,194 @@ def test_build_nav2_relative_setup_goal_preserves_truth_delta_in_nav2_frame():
     )
 
     assert goal["source"] == "nav2_relative_from_truth_delta"
-    assert goal["x"] == pytest.approx(0.09564 - (-0.389734), abs=1.0e-6)
-    assert goal["y"] == pytest.approx(0.360834 - 0.662437, abs=1.0e-6)
+    frame_yaw_offset_rad = nav2_robot_pose["yaw"] - world_robot_pose["yaw"]
+    dx = world_setup_pose["x"] - world_robot_pose["x"]
+    dy = world_setup_pose["y"] - world_robot_pose["y"]
+    assert goal["x"] == pytest.approx(math.cos(frame_yaw_offset_rad) * dx - math.sin(frame_yaw_offset_rad) * dy, abs=1.0e-6)
+    assert goal["y"] == pytest.approx(math.sin(frame_yaw_offset_rad) * dx + math.cos(frame_yaw_offset_rad) * dy, abs=1.0e-6)
     assert goal["yaw"] == pytest.approx(1.73 + (-0.399619 - (-0.572531)), abs=1.0e-6)
+    assert goal["frame_delta"]["frame_yaw_offset_rad"] == pytest.approx(frame_yaw_offset_rad, abs=1.0e-6)
     assert goal["world_setup_pose"] == world_setup_pose
     assert goal["world_robot_pose"] == world_robot_pose
     assert goal["nav2_robot_pose"] == nav2_robot_pose
+
+
+def test_build_nav2_relative_setup_goal_replays_20260651_bad_dispatch_inputs():
+    world_robot_pose = {"x": 0.701737, "y": -0.129482, "yaw": 0.480742}
+    nav2_robot_pose = {"x": 1.487079, "y": -0.411623, "yaw": -0.176645}
+    world_setup_pose = {"frame_id": "odom", "x": 0.788271, "y": 1.144128, "yaw": -1.430371}
+
+    old_x, old_y = _old_nav2_relative_goal_xy(world_setup_pose, world_robot_pose, nav2_robot_pose)
+    assert old_x == pytest.approx(1.573613, abs=1.0e-6)
+    assert old_y == pytest.approx(0.861987, abs=1.0e-6)
+
+    goal = build_nav2_relative_setup_goal(
+        world_setup_pose=world_setup_pose,
+        world_robot_pose=world_robot_pose,
+        nav2_robot_pose=nav2_robot_pose,
+        frame_id="odom",
+    )
+    mapped_world_x, mapped_world_y = _nav2_goal_xy_to_world(goal, world_robot_pose, nav2_robot_pose)
+
+    assert mapped_world_x == pytest.approx(world_setup_pose["x"], abs=1.0e-6)
+    assert mapped_world_y == pytest.approx(world_setup_pose["y"], abs=1.0e-6)
+    assert goal["frame_delta"]["frame_yaw_offset_rad"] == pytest.approx(-0.657387, abs=1.0e-6)
+
+
+@pytest.mark.parametrize("frame_offset_rad", [0.0, math.pi / 2.0, -math.pi / 2.0, math.pi])
+def test_build_nav2_relative_setup_goal_handles_synthetic_frame_offsets(frame_offset_rad):
+    world_robot_pose = {"x": 1.2, "y": -0.7, "yaw": 0.25}
+    nav2_robot_pose = {"x": -2.0, "y": 3.0, "yaw": world_robot_pose["yaw"] + frame_offset_rad}
+    world_setup_pose = {"frame_id": "odom", "x": 1.8, "y": 0.4, "yaw": -0.2}
+
+    goal = build_nav2_relative_setup_goal(
+        world_setup_pose=world_setup_pose,
+        world_robot_pose=world_robot_pose,
+        nav2_robot_pose=nav2_robot_pose,
+        frame_id="odom",
+    )
+    mapped_world_x, mapped_world_y = _nav2_goal_xy_to_world(goal, world_robot_pose, nav2_robot_pose)
+
+    assert mapped_world_x == pytest.approx(world_setup_pose["x"], abs=1.0e-6)
+    assert mapped_world_y == pytest.approx(world_setup_pose["y"], abs=1.0e-6)
+
+
+def test_nav2_setup_corridor_gate_rejects_conflict_and_allows_clear_dispatch():
+    conflict_snapshot = {
+        "robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        "ball_poses": [{"model_name": "ball_conflict", "pose": {"x": 0.5, "y": 0.1, "yaw": 0.0}}],
+    }
+    clear_snapshot = {
+        "robot_pose": {"x": 0.0, "y": 0.0, "yaw": 0.0},
+        "ball_poses": [{"model_name": "ball_clear", "pose": {"x": 0.5, "y": 0.31, "yaw": 0.0}}],
+    }
+    setup_pose = {"x": 1.0, "y": 0.0, "yaw": 0.0}
+
+    conflict_gate = nav2_setup_corridor_gate(
+        robot_pose=conflict_snapshot["robot_pose"],
+        world_setup_pose=setup_pose,
+        ball_poses=conflict_snapshot["ball_poses"],
+    )
+    assert conflict_gate["pass"] is False
+    assert conflict_gate["status"] == NAV2_SETUP_CORRIDOR_CONFLICT_STATUS
+    assert conflict_gate["ball_clearances"][0]["model_name"] == "ball_conflict"
+    assert conflict_gate["ball_clearances"][0]["distance_m"] == pytest.approx(0.1)
+
+    dispatch_calls = []
+
+    def fake_dispatcher(**kwargs):
+        dispatch_calls.append(kwargs)
+        return {"attempted": True, "accepted": True, "success": True, "dispatch_status": "goal_succeeded"}
+
+    conflict_result = dispatch_nav2_setup_assist_with_corridor_gate(
+        compose_project="unused",
+        goal_pose=setup_pose,
+        world_setup_pose=setup_pose,
+        truth_snapshot=conflict_snapshot,
+        timeout_s=1.0,
+        server_wait_s=1.0,
+        leg_name="nav2_final_setup",
+        dispatcher=fake_dispatcher,
+    )
+    assert dispatch_calls == []
+    assert conflict_result["attempted"] is False
+    assert conflict_result["dispatch_status"] == NAV2_SETUP_CORRIDOR_CONFLICT_STATUS
+
+    clear_result = dispatch_nav2_setup_assist_with_corridor_gate(
+        compose_project="unused",
+        goal_pose=setup_pose,
+        world_setup_pose=setup_pose,
+        truth_snapshot=clear_snapshot,
+        timeout_s=1.0,
+        server_wait_s=1.0,
+        leg_name="nav2_final_setup",
+        dispatcher=fake_dispatcher,
+    )
+    assert len(dispatch_calls) == 1
+    assert clear_result["success"] is True
+    assert clear_result["corridor_gate"]["status"] == NAV2_SETUP_CORRIDOR_CLEAR_STATUS
+    assert clear_result["corridor_gate"]["ball_clearances"][0]["model_name"] == "ball_clear"
+
+
+def _corridor_fallback_args(**overrides):
+    values = {
+        "planner_route_label": "nav2_reposition_first",
+        "disable_nav2_precontact_fallback": False,
+        "nav2_reposition_continue_on_failure": False,
+        "ball_x": 0.879248,
+        "ball_y": 0.500526,
+        "zone_x": 0.95,
+        "zone_y": 0.0,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+def _corridor_fallback_layout():
+    return {
+        "random_draw": {
+            "ball_pose": {"x": 0.879248, "y": 0.500526, "yaw": 0.0, "z": 0.021336},
+            "ball_target_distance_m": 0.505502,
+            "robot_ball_distance_m": 0.654538,
+            "robot_lateral_error_m": 0.263942,
+            "robot_yaw_error_deg": 109.498732,
+        }
+    }
+
+
+def test_nav2_setup_corridor_conflict_routes_to_existing_fallback_ladder():
+    reposition = {
+        "attempted": False,
+        "success": False,
+        "dispatch_status": NAV2_SETUP_CORRIDOR_CONFLICT_STATUS,
+        "corridor_gate": {"status": NAV2_SETUP_CORRIDOR_CONFLICT_STATUS, "ball_clearances": []},
+    }
+    args = _corridor_fallback_args()
+
+    decision = nav2_precontact_fallback_to_local_recovery_decision(
+        args=args,
+        target_layout=_corridor_fallback_layout(),
+        pre_fetch_reposition=reposition,
+        pre_fetch_reposition_samples=[],
+    )
+    defaults = apply_nav2_precontact_fallback_route_defaults(args, set(), decision)
+
+    assert decision["eligible"] is True
+    assert decision["fallback_route_label"] == "local_setup_capture"
+    assert defaults["route_label"] == "local_setup_capture"
+    assert args.planner_route_label == "local_setup_capture"
+
+
+def test_nav2_setup_corridor_gate_rejects_frozen_20260651_step2_geometry():
+    robot_pose = {"x": 0.701737, "y": -0.129482, "yaw": 0.480742}
+    pre_setup_world_pose = {"x": 0.766238, "y": 1.3, "yaw": -1.430371}
+    ball_2_pose = {"model_name": "ball_2", "pose": {"x": 0.879248, "y": 0.500526, "yaw": 0.0}}
+
+    gate = nav2_setup_corridor_gate(
+        robot_pose=robot_pose,
+        world_setup_pose=pre_setup_world_pose,
+        ball_poses=[ball_2_pose],
+    )
+
+    assert gate["pass"] is False
+    assert gate["status"] == NAV2_SETUP_CORRIDOR_CONFLICT_STATUS
+    assert gate["min_clearance_m"] < 0.30
+    assert gate["ball_clearances"][0]["distance_m"] == pytest.approx(0.149, abs=0.02)
+
+    decision = nav2_precontact_fallback_to_local_recovery_decision(
+        args=_corridor_fallback_args(),
+        target_layout=_corridor_fallback_layout(),
+        pre_fetch_reposition={
+            "attempted": False,
+            "success": False,
+            "dispatch_status": NAV2_SETUP_CORRIDOR_CONFLICT_STATUS,
+            "corridor_gate": gate,
+        },
+        pre_fetch_reposition_samples=[],
+    )
+
+    assert decision["eligible"] is True
+    assert decision["fallback_route_label"] == "local_setup_capture"
 
 
 def test_nav2_field_clamped_setup_goal_preserves_local_setup_relative_goal():

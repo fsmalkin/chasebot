@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import subprocess
 import sys
 import time
@@ -84,6 +85,11 @@ NAV2_SETUP_FIELD_BOUNDS = {
 NAV2_SETUP_FIELD_MARGIN_M = 0.05
 NAV2_REPOSITION_GOAL_POSITION_TOLERANCE_M = 0.250
 NAV2_REPOSITION_GOAL_YAW_TOLERANCE_DEG = 25.0
+NAV2_SETUP_CORRIDOR_CLEARANCE_M = 0.300
+NAV2_SETUP_CORRIDOR_CLEAR_STATUS = "nav2_setup_corridor_clear"
+NAV2_SETUP_CORRIDOR_CONFLICT_STATUS = "nav2_setup_corridor_ball_conflict"
+NAV2_SETUP_CORRIDOR_UNAVAILABLE_STATUS = "nav2_setup_corridor_state_unavailable"
+MULTIBALL_TARGET_MODEL_NAME_PREFIX = "visit_mission_target_multiball_fetch"
 PUSH_READY_LATERAL_LIMIT_M = 0.030
 PUSH_READY_YAW_LIMIT_DEG = 3.0
 RECOVERY_ROUTE_DRIVE_DURATION_S = 148.0
@@ -1386,6 +1392,178 @@ def pose_xy_yaw(pose: dict[str, Any] | None) -> dict[str, float] | None:
     return {"x": x, "y": y, "z": z, "yaw": yaw}
 
 
+def _segment_distance_payload(
+    *,
+    point_x: float,
+    point_y: float,
+    segment_start_x: float,
+    segment_start_y: float,
+    segment_end_x: float,
+    segment_end_y: float,
+) -> dict[str, float]:
+    vx = float(segment_end_x) - float(segment_start_x)
+    vy = float(segment_end_y) - float(segment_start_y)
+    wx = float(point_x) - float(segment_start_x)
+    wy = float(point_y) - float(segment_start_y)
+    length_sq = vx * vx + vy * vy
+    if length_sq <= 1.0e-12:
+        fraction = 0.0
+    else:
+        fraction = clamp((wx * vx + wy * vy) / length_sq, 0.0, 1.0)
+    closest_x = float(segment_start_x) + fraction * vx
+    closest_y = float(segment_start_y) + fraction * vy
+    return {
+        "distance_m": round(math.hypot(float(point_x) - closest_x, float(point_y) - closest_y), 6),
+        "segment_fraction": round(float(fraction), 6),
+        "closest_x": round(float(closest_x), 6),
+        "closest_y": round(float(closest_y), 6),
+    }
+
+
+def _corridor_ball_pose_entry(ball_pose: dict[str, Any], *, index: int) -> dict[str, Any] | None:
+    if not isinstance(ball_pose, dict):
+        return None
+    model_name = str(
+        ball_pose.get("model_name")
+        or ball_pose.get("name")
+        or ball_pose.get("ball_id")
+        or ball_pose.get("id")
+        or f"ball_{index + 1}"
+    )
+    raw_pose = ball_pose.get("pose") if isinstance(ball_pose.get("pose"), dict) else ball_pose
+    pose = pose_xy_yaw(raw_pose)
+    if pose is None:
+        return None
+    return {
+        "model_name": model_name,
+        "pose": pose,
+    }
+
+
+def nav2_setup_corridor_gate(
+    *,
+    robot_pose: dict[str, Any] | None,
+    world_setup_pose: dict[str, Any],
+    ball_poses: list[dict[str, Any]],
+    clearance_floor_m: float = NAV2_SETUP_CORRIDOR_CLEARANCE_M,
+) -> dict[str, Any]:
+    robot_xy = pose_xy_yaw(robot_pose if isinstance(robot_pose, dict) else None)
+    setup_xy = pose_xy_yaw(world_setup_pose)
+    floor_m = float(clearance_floor_m)
+    gate: dict[str, Any] = {
+        "available": bool(robot_xy is not None and setup_xy is not None),
+        "pass": False,
+        "status": NAV2_SETUP_CORRIDOR_UNAVAILABLE_STATUS,
+        "clearance_floor_m": round(floor_m, 6),
+        "start_pose": robot_xy or {},
+        "end_pose": setup_xy or {},
+        "ball_clearances": [],
+        "min_clearance_m": None,
+        "ball_count": 0,
+    }
+    if robot_xy is None:
+        gate["reason"] = "missing_measured_robot_pose"
+        return gate
+    if setup_xy is None:
+        gate["reason"] = "missing_world_setup_pose"
+        return gate
+
+    min_clearance: float | None = None
+    clearances: list[dict[str, Any]] = []
+    for index, raw_ball_pose in enumerate(ball_poses or []):
+        entry = _corridor_ball_pose_entry(raw_ball_pose, index=index)
+        if entry is None:
+            continue
+        pose = entry["pose"]
+        distance = _segment_distance_payload(
+            point_x=pose["x"],
+            point_y=pose["y"],
+            segment_start_x=robot_xy["x"],
+            segment_start_y=robot_xy["y"],
+            segment_end_x=setup_xy["x"],
+            segment_end_y=setup_xy["y"],
+        )
+        clearance = {
+            "model_name": entry["model_name"],
+            "x": round(float(pose["x"]), 6),
+            "y": round(float(pose["y"]), 6),
+            **distance,
+        }
+        clearance["conflict"] = float(clearance["distance_m"]) < floor_m
+        clearances.append(clearance)
+        min_clearance = (
+            float(clearance["distance_m"])
+            if min_clearance is None
+            else min(min_clearance, float(clearance["distance_m"]))
+        )
+
+    conflicts = [item for item in clearances if bool(item.get("conflict", False))]
+    gate.update(
+        {
+            "available": True,
+            "ball_clearances": clearances,
+            "ball_count": len(clearances),
+            "min_clearance_m": round(float(min_clearance), 6) if min_clearance is not None else None,
+        }
+    )
+    if conflicts:
+        gate["pass"] = False
+        gate["status"] = NAV2_SETUP_CORRIDOR_CONFLICT_STATUS
+        gate["reason"] = NAV2_SETUP_CORRIDOR_CONFLICT_STATUS
+        gate["conflict_count"] = len(conflicts)
+        gate["conflict_models"] = [str(item.get("model_name", "")) for item in conflicts]
+        return gate
+    gate["pass"] = True
+    gate["status"] = NAV2_SETUP_CORRIDOR_CLEAR_STATUS
+    gate["reason"] = NAV2_SETUP_CORRIDOR_CLEAR_STATUS
+    gate["conflict_count"] = 0
+    gate["conflict_models"] = []
+    return gate
+
+
+def _safe_multiball_id(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "").strip())
+    return cleaned.strip("_") or "scene"
+
+
+def nav2_setup_corridor_ball_model_names(
+    *,
+    target_model_name: str,
+    target_layout: dict[str, Any],
+    target_layout_json: str | Path | None = None,
+) -> list[str]:
+    names: list[str] = []
+
+    def add_name(value: Any) -> None:
+        text = str(value or "").strip()
+        if text and text not in names:
+            names.append(text)
+
+    add_name(target_model_name)
+    layout = target_layout if isinstance(target_layout, dict) else {}
+    scene_id = str(layout.get("multiball_scene_id", "") or "").strip()
+    balls = layout.get("multiball_scene_balls") if isinstance(layout.get("multiball_scene_balls"), list) else None
+    if balls is None and scene_id and target_layout_json:
+        layout_path = Path(str(target_layout_json))
+        if not layout_path.is_absolute():
+            layout_path = REPO_ROOT / layout_path
+        scene_path = layout_path.parent.parent / "scene_descriptors" / f"{_safe_multiball_id(scene_id)}.json"
+        if scene_path.exists():
+            try:
+                scene_payload = read_json(scene_path)
+                balls = scene_payload.get("balls") if isinstance(scene_payload.get("balls"), list) else []
+            except Exception:
+                balls = []
+    if scene_id and isinstance(balls, list):
+        for ball in balls:
+            if not isinstance(ball, dict):
+                continue
+            ball_id = str(ball.get("id", "") or "").strip()
+            if ball_id:
+                add_name(f"{MULTIBALL_TARGET_MODEL_NAME_PREFIX}_{_safe_multiball_id(scene_id)}_{_safe_multiball_id(ball_id)}")
+    return names
+
+
 def signed_lateral_error_m(point_x: float, point_y: float, *, origin_x: float, origin_y: float, line_yaw_rad: float) -> float:
     dx = float(point_x) - float(origin_x)
     dy = float(point_y) - float(origin_y)
@@ -1621,12 +1799,19 @@ def build_nav2_relative_setup_goal(
     nav2_robot_x = float(nav2_robot_pose.get("x", 0.0) or 0.0)
     nav2_robot_y = float(nav2_robot_pose.get("y", 0.0) or 0.0)
     nav2_robot_yaw = float(nav2_robot_pose.get("yaw", 0.0) or 0.0)
+    world_dx = world_setup_x - world_robot_x
+    world_dy = world_setup_y - world_robot_y
+    frame_yaw_offset_rad = normalize_angle_rad(nav2_robot_yaw - world_robot_yaw)
+    offset_cos = math.cos(frame_yaw_offset_rad)
+    offset_sin = math.sin(frame_yaw_offset_rad)
+    goal_x = nav2_robot_x + offset_cos * world_dx - offset_sin * world_dy
+    goal_y = nav2_robot_y + offset_sin * world_dx + offset_cos * world_dy
     goal_yaw = normalize_angle_rad(nav2_robot_yaw + normalize_angle_rad(world_setup_yaw - world_robot_yaw))
     goal = {
         **world_setup_pose,
         "frame_id": str(frame_id or world_setup_pose.get("frame_id") or "odom"),
-        "x": round(nav2_robot_x + (world_setup_x - world_robot_x), 6),
-        "y": round(nav2_robot_y + (world_setup_y - world_robot_y), 6),
+        "x": round(goal_x, 6),
+        "y": round(goal_y, 6),
         "yaw": round(goal_yaw, 6),
         "orientation": yaw_to_quaternion(goal_yaw),
         "source": "nav2_relative_from_truth_delta",
@@ -1634,9 +1819,10 @@ def build_nav2_relative_setup_goal(
         "world_robot_pose": dict(world_robot_pose),
         "nav2_robot_pose": dict(nav2_robot_pose),
         "frame_delta": {
-            "world_dx_m": round(world_setup_x - world_robot_x, 6),
-            "world_dy_m": round(world_setup_y - world_robot_y, 6),
+            "world_dx_m": round(world_dx, 6),
+            "world_dy_m": round(world_dy, 6),
             "world_dyaw_rad": round(normalize_angle_rad(world_setup_yaw - world_robot_yaw), 6),
+            "frame_yaw_offset_rad": round(frame_yaw_offset_rad, 6),
         },
     }
     return goal
@@ -1872,6 +2058,199 @@ PY
     result.setdefault("goal_pose", dict(goal_pose))
     result.setdefault("behavior_tree", NAV2_REPOSITION_BEHAVIOR_TREE)
     return result
+
+
+def build_nav2_setup_corridor_rejection(
+    *,
+    goal_pose: dict[str, Any],
+    world_setup_pose: dict[str, Any],
+    corridor_gate: dict[str, Any],
+    truth_snapshot: dict[str, Any] | None = None,
+    leg_name: str = "nav2_setup",
+) -> dict[str, Any]:
+    status = str(corridor_gate.get("status") or NAV2_SETUP_CORRIDOR_UNAVAILABLE_STATUS)
+    return {
+        "phase": "nav2_reposition_before_fetch",
+        "leg_name": str(leg_name or "nav2_setup"),
+        "attempted": False,
+        "accepted": False,
+        "success": False,
+        "skipped": True,
+        "dispatch_status": status,
+        "status_code": None,
+        "status_text": "STATUS_NOT_DISPATCHED",
+        "elapsed_s": 0.0,
+        "reason": status,
+        "error": status,
+        "goal_pose": dict(goal_pose),
+        "world_setup_pose": dict(world_setup_pose),
+        "corridor_gate": dict(corridor_gate),
+        "truth_snapshot": dict(truth_snapshot or {}),
+    }
+
+
+def dispatch_nav2_setup_assist_with_corridor_gate(
+    *,
+    compose_project: str,
+    goal_pose: dict[str, Any],
+    world_setup_pose: dict[str, Any],
+    truth_snapshot: dict[str, Any],
+    timeout_s: float,
+    server_wait_s: float,
+    leg_name: str,
+    dispatcher: Any = dispatch_nav2_reposition_before_fetch,
+) -> dict[str, Any]:
+    robot_pose = truth_snapshot.get("robot_pose") if isinstance(truth_snapshot, dict) else None
+    ball_poses = truth_snapshot.get("ball_poses") if isinstance(truth_snapshot, dict) and isinstance(truth_snapshot.get("ball_poses"), list) else []
+    corridor_gate = nav2_setup_corridor_gate(
+        robot_pose=robot_pose if isinstance(robot_pose, dict) else None,
+        world_setup_pose=world_setup_pose,
+        ball_poses=ball_poses,
+        clearance_floor_m=NAV2_SETUP_CORRIDOR_CLEARANCE_M,
+    )
+    if not ball_poses:
+        corridor_gate.update(
+            {
+                "available": False,
+                "pass": False,
+                "status": NAV2_SETUP_CORRIDOR_UNAVAILABLE_STATUS,
+                "reason": "missing_measured_ball_poses",
+            }
+        )
+    if not bool(corridor_gate.get("pass", False)):
+        return build_nav2_setup_corridor_rejection(
+            goal_pose=goal_pose,
+            world_setup_pose=world_setup_pose,
+            corridor_gate=corridor_gate,
+            truth_snapshot=truth_snapshot,
+            leg_name=leg_name,
+        )
+    result = dispatcher(
+        compose_project=compose_project,
+        goal_pose=goal_pose,
+        timeout_s=timeout_s,
+        server_wait_s=server_wait_s,
+    )
+    result["corridor_gate"] = corridor_gate
+    result["truth_snapshot"] = dict(truth_snapshot)
+    result["leg_name"] = str(leg_name or "nav2_setup")
+    return result
+
+
+def collect_model_pose_snapshot(
+    *,
+    compose_project: str,
+    world_name: str,
+    robot_model_name: str,
+    ball_model_names: list[str],
+) -> dict[str, Any]:
+    model_names: list[str] = []
+    for name in [robot_model_name, *(ball_model_names or [])]:
+        text = str(name or "").strip()
+        if text and text not in model_names:
+            model_names.append(text)
+    script = f"""
+set -eo pipefail
+set +u
+source /opt/ros/${{CORE_ROS_DISTRO:-kilted}}/setup.bash
+set -u
+export WORLD_NAME={json.dumps(world_name)}
+export MODEL_NAMES_JSON={json.dumps(json.dumps(model_names))}
+python3 - <<'PY'
+import json
+import math
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, "/workspaces/chasecar/scripts")
+from sim_truth_probe import parse_pose_message
+
+world_name = os.environ["WORLD_NAME"]
+model_names = json.loads(os.environ["MODEL_NAMES_JSON"])
+topic = f"/world/{{world_name}}/dynamic_pose/info"
+
+def yaw_from_orientation(orientation):
+    try:
+        x = float(orientation.get("x", 0.0) or 0.0)
+        y = float(orientation.get("y", 0.0) or 0.0)
+        z = float(orientation.get("z", 0.0) or 0.0)
+        w = float(orientation.get("w", 1.0) or 1.0)
+    except Exception:
+        return 0.0
+    return math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+
+def convert_pose(pose):
+    if not pose:
+        return None
+    position = pose.get("position") if isinstance(pose.get("position"), dict) else {{}}
+    orientation = pose.get("orientation") if isinstance(pose.get("orientation"), dict) else {{}}
+    return {{
+        "name": pose.get("name", ""),
+        "position": position,
+        "orientation": orientation,
+        "yaw": yaw_from_orientation(orientation),
+    }}
+
+record = {{
+    "topic_ok": False,
+    "requested_model_names": model_names,
+    "model_poses": {{}},
+}}
+completed = subprocess.run(
+    ["gz", "topic", "-e", "-n", "1", "-t", topic],
+    capture_output=True,
+    text=True,
+    timeout=3.0,
+    check=False,
+)
+record["topic_ok"] = completed.returncode == 0
+record["returncode"] = completed.returncode
+if completed.returncode != 0:
+    record["error"] = (completed.stderr or completed.stdout or "gz_topic_failed").strip()
+else:
+    poses = parse_pose_message(completed.stdout or "")
+    by_name = {{str(item.get("name", "")): item for item in poses}}
+    for name in model_names:
+        converted = convert_pose(by_name.get(name))
+        if converted is not None:
+            record["model_poses"][name] = converted
+print(json.dumps(record, sort_keys=True), flush=True)
+PY
+"""
+    rc, output = docker_exec(compose_project, script, timeout_s=10.0)
+    record: dict[str, Any] = {
+        "topic_ok": False,
+        "requested_model_names": model_names,
+        "model_poses": {},
+        "returncode": rc,
+    }
+    for line in output.splitlines():
+        text = line.strip()
+        if not text or not text.startswith("{"):
+            continue
+        try:
+            row = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict):
+            record.update(row)
+    if rc != 0 and not record.get("model_poses"):
+        record.setdefault("error", output.strip() or "failed_to_sample_model_pose_snapshot")
+    robot_pose = None
+    model_poses = record.get("model_poses") if isinstance(record.get("model_poses"), dict) else {}
+    if isinstance(model_poses, dict):
+        robot_pose = model_poses.get(str(robot_model_name or ""))
+    ball_poses: list[dict[str, Any]] = []
+    for name in ball_model_names or []:
+        pose = model_poses.get(str(name or "")) if isinstance(model_poses, dict) else None
+        if isinstance(pose, dict):
+            ball_poses.append({"model_name": str(name), "pose": pose})
+    record["robot_pose"] = robot_pose
+    record["ball_poses"] = ball_poses
+    record["ball_pose_count"] = len(ball_poses)
+    record["available"] = bool(robot_pose is not None and ball_poses)
+    return record
 
 
 def line_servo_command(
@@ -4539,6 +4918,34 @@ def main() -> int:
             goal_pose,
             planner_route_label=planner_route_label,
         )
+        nav2_setup_corridor_ball_names = nav2_setup_corridor_ball_model_names(
+            target_model_name=str(args.target_model_name),
+            target_layout=target_layout,
+            target_layout_json=getattr(args, "target_layout_json", ""),
+        )
+
+        def _collect_nav2_setup_corridor_truth_snapshot(leg_name: str) -> dict[str, Any]:
+            try:
+                snapshot = collect_model_pose_snapshot(
+                    compose_project=args.compose_project,
+                    world_name=args.world_name,
+                    robot_model_name=args.robot_model_name,
+                    ball_model_names=nav2_setup_corridor_ball_names,
+                )
+            except Exception as exc:
+                snapshot = {
+                    "available": False,
+                    "error": str(exc),
+                    "requested_model_names": [args.robot_model_name, *nav2_setup_corridor_ball_names],
+                    "robot_pose": None,
+                    "ball_poses": [],
+                    "ball_pose_count": 0,
+                }
+            snapshot["leg_name"] = str(leg_name)
+            snapshot["ball_model_names"] = list(nav2_setup_corridor_ball_names)
+            return snapshot
+
+        nav2_setup_corridor_rejection: dict[str, Any] | None = None
         pre_setup_reposition: dict[str, Any] = {
             "attempted": False,
             "skipped": True,
@@ -4595,38 +5002,45 @@ def main() -> int:
                     },
                     latest_feedback="Nav2 is moving to a farther behind-ball setup pose before close push setup.",
                 )
-                pre_setup_reposition = dispatch_nav2_reposition_before_fetch(
+                pre_setup_truth_snapshot = _collect_nav2_setup_corridor_truth_snapshot("nav2_pre_setup")
+                pre_setup_reposition = dispatch_nav2_setup_assist_with_corridor_gate(
                     compose_project=args.compose_project,
                     goal_pose=pre_setup_goal_pose,
+                    world_setup_pose=world_pre_setup_pose,
+                    truth_snapshot=pre_setup_truth_snapshot,
                     timeout_s=args.nav2_reposition_timeout_s,
                     server_wait_s=args.nav2_reposition_server_wait_s,
+                    leg_name="nav2_pre_setup",
                 )
-                pre_setup_reposition["attempted"] = True
-                pre_setup_reposition["skipped"] = False
+                if not bool(pre_setup_reposition.get("attempted", False)):
+                    nav2_setup_corridor_rejection = dict(pre_setup_reposition)
+                pre_setup_reposition["attempted"] = bool(pre_setup_reposition.get("attempted", False))
+                pre_setup_reposition["skipped"] = not bool(pre_setup_reposition.get("attempted", False))
                 pre_setup_reposition["goal_pose"] = pre_setup_goal_pose
                 pre_setup_reposition["world_setup_pose"] = world_pre_setup_pose
                 pre_setup_reposition["goal_frame_mode"] = str(args.nav2_reposition_goal_frame_mode)
                 pre_setup_reposition["configured_standoff_m"] = round(float(args.nav2_pre_setup_standoff_m), 6)
                 pre_setup_reposition["nav2_setup_admissibility"] = pre_setup_admissibility
-                pre_setup_reposition["stop_after_reposition"] = publish_zero_stop(args.compose_project)
-                pre_setup_samples: list[dict[str, Any]] = []
-                try:
-                    pre_setup_samples = collect_contact_samples(
-                        compose_project=args.compose_project,
-                        world_name=args.world_name,
-                        robot_model_name=args.robot_model_name,
-                        ball_model_name=args.target_model_name,
-                        duration_s=0.5,
-                        poll_period_s=args.poll_period_s,
-                    )
-                except Exception as exc:
-                    pre_setup_reposition["post_reposition_sample_error"] = str(exc)
-                if pre_setup_samples:
-                    pre_setup_reposition["post_reposition_sample_count"] = len(pre_setup_samples)
-                    pre_setup_reposition["post_reposition_robot_pose"] = pre_setup_samples[-1].get("robot_pose")
-                    pre_setup_reposition["post_reposition_ball_pose"] = pre_setup_samples[-1].get("ball_pose")
-                    apply_nav2_measured_goal_validation(pre_setup_reposition, pre_setup_goal_pose)
-                    append_jsonl(artifact_dir / "pre_fetch_pre_setup_trace.jsonl", pre_setup_samples)
+                if bool(pre_setup_reposition.get("attempted", False)):
+                    pre_setup_reposition["stop_after_reposition"] = publish_zero_stop(args.compose_project)
+                    pre_setup_samples: list[dict[str, Any]] = []
+                    try:
+                        pre_setup_samples = collect_contact_samples(
+                            compose_project=args.compose_project,
+                            world_name=args.world_name,
+                            robot_model_name=args.robot_model_name,
+                            ball_model_name=args.target_model_name,
+                            duration_s=0.5,
+                            poll_period_s=args.poll_period_s,
+                        )
+                    except Exception as exc:
+                        pre_setup_reposition["post_reposition_sample_error"] = str(exc)
+                    if pre_setup_samples:
+                        pre_setup_reposition["post_reposition_sample_count"] = len(pre_setup_samples)
+                        pre_setup_reposition["post_reposition_robot_pose"] = pre_setup_samples[-1].get("robot_pose")
+                        pre_setup_reposition["post_reposition_ball_pose"] = pre_setup_samples[-1].get("ball_pose")
+                        apply_nav2_measured_goal_validation(pre_setup_reposition, pre_setup_goal_pose)
+                        append_jsonl(artifact_dir / "pre_fetch_pre_setup_trace.jsonl", pre_setup_samples)
         update_runtime(
             args.gather_runtime_json,
             mission_phase="nav2_reposition",
@@ -4641,15 +5055,31 @@ def main() -> int:
             proof_state="visiting",
             latest_feedback="Nav2 repositioning before contact fetch.",
         )
-        pre_fetch_reposition = dispatch_nav2_reposition_before_fetch(
-            compose_project=args.compose_project,
-            goal_pose=goal_pose,
-            timeout_s=args.nav2_reposition_timeout_s,
-            server_wait_s=args.nav2_reposition_server_wait_s,
-        )
-        pre_fetch_reposition["skipped"] = False
-        pre_fetch_reposition["goal_pose"] = goal_pose
-        pre_fetch_reposition["world_setup_pose"] = world_setup_pose
+        if nav2_setup_corridor_rejection is not None:
+            pre_fetch_reposition = dict(nav2_setup_corridor_rejection)
+            pre_fetch_reposition["reason"] = str(
+                pre_fetch_reposition.get("dispatch_status")
+                or pre_fetch_reposition.get("reason")
+                or NAV2_SETUP_CORRIDOR_CONFLICT_STATUS
+            )
+        else:
+            final_setup_truth_snapshot = _collect_nav2_setup_corridor_truth_snapshot("nav2_final_setup")
+            pre_fetch_reposition = dispatch_nav2_setup_assist_with_corridor_gate(
+                compose_project=args.compose_project,
+                goal_pose=goal_pose,
+                world_setup_pose=world_setup_pose,
+                truth_snapshot=final_setup_truth_snapshot,
+                timeout_s=args.nav2_reposition_timeout_s,
+                server_wait_s=args.nav2_reposition_server_wait_s,
+                leg_name="nav2_final_setup",
+            )
+        pre_fetch_reposition["skipped"] = not bool(pre_fetch_reposition.get("attempted", False))
+        if nav2_setup_corridor_rejection is not None:
+            pre_fetch_reposition["final_goal_pose_skipped_after_pre_setup_conflict"] = goal_pose
+            pre_fetch_reposition["final_world_setup_pose_skipped_after_pre_setup_conflict"] = world_setup_pose
+        else:
+            pre_fetch_reposition["goal_pose"] = goal_pose
+            pre_fetch_reposition["world_setup_pose"] = world_setup_pose
         pre_fetch_reposition["world_robot_pose"] = world_robot_pose
         pre_fetch_reposition["nav2_pose_sample"] = nav2_pose_sample
         pre_fetch_reposition["pre_setup_reposition"] = pre_setup_reposition
@@ -4660,18 +5090,19 @@ def main() -> int:
         pre_fetch_reposition["configured_pre_setup_standoff_m"] = round(float(args.nav2_pre_setup_standoff_m), 6)
         pre_fetch_reposition["configured_refine_attempts"] = max(0, int(args.nav2_reposition_refine_attempts))
         pre_fetch_reposition["continue_on_failure"] = bool(args.nav2_reposition_continue_on_failure)
-        pre_fetch_reposition["stop_after_reposition"] = publish_zero_stop(args.compose_project)
-        try:
-            pre_fetch_reposition_samples = collect_contact_samples(
-                compose_project=args.compose_project,
-                world_name=args.world_name,
-                robot_model_name=args.robot_model_name,
-                ball_model_name=args.target_model_name,
-                duration_s=0.5,
-                poll_period_s=args.poll_period_s,
-            )
-        except Exception as exc:
-            pre_fetch_reposition["post_reposition_sample_error"] = str(exc)
+        if bool(pre_fetch_reposition.get("attempted", False)):
+            pre_fetch_reposition["stop_after_reposition"] = publish_zero_stop(args.compose_project)
+            try:
+                pre_fetch_reposition_samples = collect_contact_samples(
+                    compose_project=args.compose_project,
+                    world_name=args.world_name,
+                    robot_model_name=args.robot_model_name,
+                    ball_model_name=args.target_model_name,
+                    duration_s=0.5,
+                    poll_period_s=args.poll_period_s,
+                )
+            except Exception as exc:
+                pre_fetch_reposition["post_reposition_sample_error"] = str(exc)
         if pre_fetch_reposition_samples:
             pre_fetch_reposition["post_reposition_sample_count"] = len(pre_fetch_reposition_samples)
             last_sample = pre_fetch_reposition_samples[-1]
