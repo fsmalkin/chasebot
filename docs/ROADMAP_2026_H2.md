@@ -1928,10 +1928,10 @@ June 9 PM decisions (approved by Fred): (1) the Multi-Ball Retrieval v1
 promotion bar is now numeric — five consecutive green route-diverse seeds,
 delivery rate >= 90% across them, every non-delivery bounded-and-diagnosed
 (zero unbounded failures), and a green visual package on every run; seeds
-`20260647`, `20260648`, and `20260649` count as the first three consecutive
-greens, so the bar completes at seed `20260651` if the streak holds. (2) v1
-scope: v1 promotes WITH bounded give-up accepted as a terminal outcome; the
-open-field setup trajectory owner
+`20260647`, `20260648`, `20260649`, and `20260650` count as the first four
+consecutive greens, so the bar completes at seed `20260651` if the streak
+holds. (2) v1 scope: v1 promotes WITH bounded give-up accepted as a terminal
+outcome; the open-field setup trajectory owner
 (`docs/OPEN_FIELD_SETUP_TRAJECTORY_OWNER_DESIGN.md`) is the v1.1 headline
 capability and its implementation starts after v1 promotion rather than
 gating it.
@@ -1944,5 +1944,15 @@ scenes, with `0` bounded give-ups, `0` environment failures, route diversity
 green, and a green browser-watchable visual package at
 `artifacts/session/live_multiball_route_diverse_seed20260649_4x3_breadth_rerun2_20260609_visual_package/fetch_visual_uat_package/package_summary.json`.
 Codex reviewed onboard and topdown frame-sequence sheets for all four scene
+sessions and found no visual contradiction with the delivery metric.
+
+June 11 breadth checkpoint: seed `20260650` now counts as green four.
+Evidence:
+`artifacts/session/live_multiball_route_diverse_seed20260650_4x3_breadth_20260611/fetch_multiball_retrieval_gate/scorecard.md`.
+The run delivered `12/12` fetch-to-pose passes across four route-diverse
+scenes, with `0` bounded give-ups, `0` environment failures, route diversity
+green, and a green browser-watchable visual package at
+`artifacts/session/live_multiball_route_diverse_seed20260650_4x3_breadth_20260611_visual_package/fetch_visual_uat_package/package_summary.json`.
+Codex reviewed onboard and topdown frame-sequence sheets for all four scene
 sessions and found no visual contradiction with the delivery metric. Next
-roadmap action: run seed `20260650` with the same route-diverse 4x3 recipe.
+roadmap action: run seed `20260651` with the same route-diverse 4x3 recipe.
