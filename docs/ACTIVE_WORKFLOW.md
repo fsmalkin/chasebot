@@ -337,8 +337,8 @@ June 9 PM decisions (Fred): v1 promotes with bounded give-up accepted; the
 open-field owner is v1.1 and starts after promotion. Numeric promotion bar:
 five consecutive green route-diverse seeds, delivery >= 90%, every
 non-delivery bounded-and-diagnosed, visual package green every run. Streak
-state: `20260647` and `20260648` are greens one and two; `20260649` is in
-flight as the third.
+state: `20260647`, `20260648`, and `20260649` are greens one through three;
+`20260650` is next.
 
 June 9 evening breadth status: seed `20260649` has two ENVIRONMENT-failed
 runs — neither is robot-behavior evidence and neither breaks the green
@@ -358,7 +358,19 @@ behind it is wedged; the `chasecar_gate_20260606235143-*` containers have
 been up 3+ days with `dashboard-control-1` unhealthy. Environment recovery
 (restart escalation up to a full gate-stack compose restart, then a smoke
 session that reaches `environment_ready`) is required before the next gate.
-Environment failures must never motivate robot-code changes.
+Environment failures route to environment recovery; robot code stays unchanged.
+
+June 11 Codex recovery checkpoint: the stale gate stack was gone, so Codex
+started a fresh dashboard service on port `8895`, launched a new gate
+environment, and verified a smoke session at `environment_ready` with
+`sim_gate_ready=true`, `operator_view_ready=true`, and `world_stream_ready=true`.
+Seed `20260649` rerun2 then completed as
+`live_multiball_route_diverse_seed20260649_4x3_breadth_rerun2_20260609`:
+`12/12` fetch-to-pose passes across four route-diverse scenes, `0` bounded
+give-ups, `0` environment failures, route diversity green, and a green
+browser-watchable visual package. Codex inspected onboard and topdown
+frame-sequence sheets for all four scene sessions and found no visual
+contradiction with the delivery metric.
 
 ## Codex execution plan (June 9, 2026 — bounded autonomous lane)
 
@@ -370,10 +382,10 @@ Phase 1 — environment recovery (now): restore the sim/dashboard environment
 using the documented restart escalation; verify with a smoke session reaching
 `environment_ready` before launching any gate.
 
-Phase 2 — breadth to the promotion bar: rerun seed `20260649`
-(`..._breadth_rerun2_20260609`, same recipe as the seed `20260648` run), then
-seeds `20260650` and `20260651`, until five consecutive greens exist.
-Env-failed attempts are reruns, not streak breaks. Update this file and
+Phase 2 — breadth to the promotion bar: run seeds `20260650` and `20260651`
+with the same recipe as the seed `20260648` and `20260649` green runs, until
+five consecutive greens exist.
+Env-failed attempts require rerun and preserve the streak. Update this file and
 `docs/ROADMAP_2026_H2.md` with evidence after each green; commit and push per
 checkpoint.
 
