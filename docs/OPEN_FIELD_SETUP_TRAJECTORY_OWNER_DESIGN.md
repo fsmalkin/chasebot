@@ -236,12 +236,12 @@ direction).
 
 ## Relationship to the v1 promotion decision
 
-This design is intentionally decision-agnostic:
+**Decided June 9, 2026 (Fred): Option A.** v1 promotes with bounded give-up
+accepted as a terminal outcome; this owner is the headline v1.1 capability and
+slice 1 starts after v1 promotion. The numeric promotion bar approved the same
+day: five consecutive green route-diverse seeds, delivery rate >= 90%, all
+non-deliveries bounded-and-diagnosed, visual package green every run.
 
-- If v1 promotes **with** bounded give-up accepted (Option A), this owner is
-  the headline v1.1 capability and slice 1 starts after promotion.
-- If v1 **requires** the owner (Option B), slice 1 starts immediately and the
-  requalification ladder becomes part of the v1 promotion gate.
-
-Either way, implementation does not start before the scope decision and the
-breadth-seed give-up frequency data are in.
+(Original framing, for the record: Option A = v1 accepts bounded give-up,
+owner becomes v1.1; Option B = v1 requires the owner, with the
+requalification ladder folded into the v1 promotion gate.)

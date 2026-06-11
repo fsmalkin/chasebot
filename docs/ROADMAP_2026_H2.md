@@ -1907,9 +1907,30 @@ Two roadmap decisions now gate implementation: (1) the v1 scope call —
 promote Multi-Ball Retrieval v1 with bounded give-up as an accepted terminal
 outcome (owner becomes the v1.1 headline) versus requiring the owner for v1 —
 and (2) bounded give-up frequency from the breadth seeds starting at
-`20260649`. Two standing roadmap gaps remain explicitly open: a numeric
-promotion bar for the breadth gate (proposed: five consecutive green seeds,
-delivery rate >= 90%, all non-deliveries bounded-and-diagnosed, visual
-package green every run) and a named entry point for hardware-in-the-loop
-evidence (the owner's measured validation currently rides sim-truth pose
-sampling that does not exist on `robot_fidelity_orin`).
+`20260649`. One standing roadmap gap remains explicitly open: a named entry point for
+hardware-in-the-loop evidence (the owner's measured validation currently rides
+sim-truth pose sampling that does not exist on `robot_fidelity_orin`).
+
+June 9 architecture review checkpoint: a grounded internal-bets pass plus an
+adversarially verified external SOTA sweep concluded KEEP the layered
+deterministic architecture — no 2024-2026 learned or foundation-model
+alternative is production-ready for this task class on Orin Nano-class
+hardware. Full findings and the R1-R6 recommendation set (sim physics
+calibration post-v1, contact-MPC paper spike post-v1, opennav_docking as a
+slice-2 candidate substrate, hardware entry immediately after v1 promotion,
+VLA re-check in two quarters) are in
+`docs/ARCHITECTURE_SOTA_REVIEW_2026_06.md`. The hardware entry point is now
+named: qualify one-ball `fetch_to_pose` on the Orin with onboard TensorRT
+INT8 and the physical camera, immediately after v1 promotion, before any
+v1.1 capability meets hardware.
+
+June 9 PM decisions (approved by Fred): (1) the Multi-Ball Retrieval v1
+promotion bar is now numeric — five consecutive green route-diverse seeds,
+delivery rate >= 90% across them, every non-delivery bounded-and-diagnosed
+(zero unbounded failures), and a green visual package on every run; seeds
+`20260647` and `20260648` count as the first two consecutive greens, so the
+bar completes at seed `20260651` if the streak holds. (2) v1 scope: v1
+promotes WITH bounded give-up accepted as a terminal outcome; the open-field
+setup trajectory owner (`docs/OPEN_FIELD_SETUP_TRAJECTORY_OWNER_DESIGN.md`)
+is the v1.1 headline capability and its implementation starts after v1
+promotion rather than gating it.

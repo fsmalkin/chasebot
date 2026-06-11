@@ -328,11 +328,76 @@ The visual package summary is
 June 9 active lane: (1) route-diverse breadth repeat with bounded accounting,
 next seed `20260649` (4x3, llm_supervised_guarded, same recipe as the
 seed `20260648` run); (2) open-field setup trajectory owner design is complete
-in `docs/OPEN_FIELD_SETUP_TRAJECTORY_OWNER_DESIGN.md` — implementation holds
-until the v1 scope decision and breadth give-up frequency are in. The design's
+in `docs/OPEN_FIELD_SETUP_TRAJECTORY_OWNER_DESIGN.md`. The design's
 pre-merge requalification ladder (targeted frozen-layout run, s02 3/3, full
 seed `20260648` 4x3 expecting 12/12, seed `20260647` invariance) is recorded
 there and is mandatory before any owner merge.
+
+June 9 PM decisions (Fred): v1 promotes with bounded give-up accepted; the
+open-field owner is v1.1 and starts after promotion. Numeric promotion bar:
+five consecutive green route-diverse seeds, delivery >= 90%, every
+non-delivery bounded-and-diagnosed, visual package green every run. Streak
+state: `20260647` and `20260648` are greens one and two; `20260649` is in
+flight as the third.
+
+June 9 evening breadth status: seed `20260649` has two ENVIRONMENT-failed
+runs — neither is robot-behavior evidence and neither breaks the green
+streak, but neither counts as green:
+
+1. `live_multiball_route_diverse_seed20260649_4x3_breadth_20260609`: scenes
+   1-3 delivered 9/9 with 0 bounded give-ups and 0 fetch failures; scene 4
+   never started — fresh dashboard session returned HTTP 409 Conflict with
+   `environment_state=stopped`.
+2. After a dashboard-service restart (logs
+   `runtime/dashboard_8895_claude_restart.*`),
+   `live_multiball_route_diverse_seed20260649_4x3_breadth_rerun1_20260609`
+   skipped all scene-1 steps with `World stream did not become ready`.
+
+Diagnosis: the dashboard HTTP service is up, but the world-stream component
+behind it is wedged; the `chasecar_gate_20260606235143-*` containers have
+been up 3+ days with `dashboard-control-1` unhealthy. Environment recovery
+(restart escalation up to a full gate-stack compose restart, then a smoke
+session that reaches `environment_ready`) is required before the next gate.
+Environment failures must never motivate robot-code changes.
+
+## Codex execution plan (June 9, 2026 — bounded autonomous lane)
+
+Owner: GPT-5.5 Codex thread. Source-of-truth docs: this file,
+`docs/OPEN_FIELD_SETUP_TRAJECTORY_OWNER_DESIGN.md`,
+`docs/ARCHITECTURE_SOTA_REVIEW_2026_06.md`, `docs/ROADMAP_2026_H2.md`.
+
+Phase 1 — environment recovery (now): restore the sim/dashboard environment
+using the documented restart escalation; verify with a smoke session reaching
+`environment_ready` before launching any gate.
+
+Phase 2 — breadth to the promotion bar: rerun seed `20260649`
+(`..._breadth_rerun2_20260609`, same recipe as the seed `20260648` run), then
+seeds `20260650` and `20260651`, until five consecutive greens exist.
+Env-failed attempts are reruns, not streak breaks. Update this file and
+`docs/ROADMAP_2026_H2.md` with evidence after each green; commit and push per
+checkpoint.
+
+Phase 3 — v1 promotion package: when the bar is met, assemble the promotion
+package per the gate ladder (margin/stability/visual evidence), update the
+planning docs, commit.
+
+Phase 4 — v1.1 slice 1: implement the open-field setup trajectory owner
+slice 1 exactly per the design doc, including all twelve grafted hardening
+requirements, then run the mandatory requalification ladder in order. Slice 2
+(named route label) requires Fred's sign-off before any implementation.
+
+Hard bounds (stop and report to Fred rather than cross):
+- No changes to the frozen 7-intent contract, LLM authority, Nav2 ownership
+  boundaries, or anything on the do-not-relitigate list.
+- No adoption of VLA/learned policies; learned outputs stay shadow-only
+  behind the existing ladder (`docs/ARCHITECTURE_SOTA_REVIEW_2026_06.md`).
+- The contact-MPC spike (R3) and opennav_docking evaluation (R4) are
+  design-note-only until after v1 promotion, then proposals to Fred first.
+- Stop-and-report triggers: any true robot-behavior red in a breadth seed;
+  more than one bounded give-up in any single seed run or more than two
+  across the five-seed window; any need to modify the bounded give-up
+  predicate beyond what the design doc specifies; any hardware-lane action;
+  environment unrecoverable after the full restart escalation.
 
 Saved-anchor repeatability analyzer scope:
 
