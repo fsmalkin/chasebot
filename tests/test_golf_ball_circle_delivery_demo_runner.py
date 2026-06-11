@@ -1700,6 +1700,30 @@ def test_nav2_setup_corridor_gate_rejects_frozen_20260651_step2_geometry():
     assert decision["fallback_route_label"] == "local_setup_capture"
 
 
+def test_apply_target_layout_preserves_multiball_scene_id_for_corridor_siblings():
+    from golf_ball_circle_delivery_demo_runner import nav2_setup_corridor_ball_model_names
+
+    layout_json = (
+        REPO_ROOT
+        / "artifacts/session/live_multiball_route_diverse_seed20260651_4x3_breadth_20260611"
+        / "fetch_multiball_retrieval_gate/target_layouts"
+        / "seed20260651_mb_route_diverse_s01_nav2_step02_ball_2.json"
+    )
+    args = SimpleNamespace(target_layout_json=str(layout_json), ball_x=0.0, ball_y=0.0, ball_z=0.0)
+    layout = apply_target_layout(args)
+    assert layout["multiball_scene_id"] == "seed20260651_mb_route_diverse_s01_nav2"
+
+    names = nav2_setup_corridor_ball_model_names(
+        target_model_name="visit_mission_target_multiball_fetch_seed20260651_mb_route_diverse_s01_nav2_ball_2",
+        target_layout=layout,
+        target_layout_json=str(layout_json),
+    )
+    assert len(names) == 3
+    assert names[0].endswith("_ball_2")
+    assert any(name.endswith("_ball_1") for name in names)
+    assert any(name.endswith("_ball_3") for name in names)
+
+
 def test_nav2_field_clamped_setup_goal_preserves_local_setup_relative_goal():
     goal = nav2_field_clamped_setup_goal(
         {

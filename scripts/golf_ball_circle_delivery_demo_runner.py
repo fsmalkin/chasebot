@@ -255,6 +255,7 @@ def apply_target_layout(args: argparse.Namespace) -> dict[str, Any]:
         "random_profile": str(layout.get("random_profile", "") or random_draw.get("random_profile", "")),
         "planner_route_label": str(layout.get("planner_route_label", "") or random_draw.get("planner_route_label", "")),
         "route_executor": str(layout.get("route_executor", "") or random_draw.get("route_executor", "")),
+        "multiball_scene_id": str(layout.get("multiball_scene_id", "") or ""),
         "random_draw": random_draw,
         "target": target,
     }
