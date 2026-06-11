@@ -485,6 +485,18 @@ delegated to the Codex spine thread in phases; Phase 1 (implementation +
 tests, no gates, no commits) launched June 11, Claude reviews the diff
 before any live run.
 
+June 11 Option A Phase 1 landed as `9c3f193` (Codex spine implemented;
+supervisor reviewed the full diff and independently re-ran both suites:
+139 runner + 34 gate tests green). Scope as specified in the decision
+block; additionally fail-closed on missing measured state
+(`nav2_setup_corridor_state_unavailable`: truth-sampling hiccup => no Nav2
+dispatch => fallback ladder, never a blind transit). A pre-setup corridor
+conflict also skips the final setup leg. Phase 2 next: regression
+manifest, environment preflight, frozen-scene live replay
+(`--scene-descriptor-json` on the committed s01 descriptor, all three
+steps in one persistent session; step 2 expected to corridor-reject at
+~0.15 m chord clearance and complete via the wide-setup fallback).
+
 ## Codex execution plan (June 9, 2026 — bounded autonomous lane)
 
 Owner: GPT-5.5 Codex thread. Source-of-truth docs: this file,
