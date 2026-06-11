@@ -379,6 +379,29 @@ diversity green, and a green browser-watchable visual package. Codex inspected
 onboard and topdown frame-sequence sheets for all four scene sessions and found
 no visual contradiction with the delivery metric.
 
+June 11 session tie-off (Claude supervisory session): streak state is
+**4/5 greens** (`20260647`, `20260648`, `20260649`, `20260650`); the
+would-be fifth, seed `20260651`, FAILED as
+`live_multiball_route_diverse_seed20260651_4x3_breadth_20260611`: scene 1
+delivered ball 1, then step 2 `ball_2` (route `local_setup_capture`) failed
+live with `runner_returned_nonzero` (rc 2), runner reason
+`nav2_reposition_failed_before_fetch`; `0` environment-failure rows, `0`
+bounded give-ups; `--stop-on-fail` ended the run. Evidence:
+`artifacts/session/live_multiball_route_diverse_seed20260651_4x3_breadth_20260611/fetch_multiball_retrieval_gate/gate_summary.json`,
+runner logs
+`runtime/live_multiball_route_diverse_seed20260651_4x3_breadth_20260611.out.log`
+/ `.err.log`, and the visual package at
+`artifacts/session/live_multiball_route_diverse_seed20260651_4x3_breadth_20260611_visual_package/`.
+**The next gate is classifying this failure: environment (Nav2 stack
+degradation — reruns, streak preserved) versus robot-behavior (a true red —
+stop-and-report trigger under the plan bounds, streak broken).** Do not rerun
+or tune until that classification is made from the runner logs and session
+artifacts. Lane ownership: the GPT-5.5 Codex thread owns execution per the
+plan below; in new supervisory sessions Codex is also reachable directly as
+an MCP subagent (`mcp__codex__codex`, gpt-5.5 xhigh). The dashboard service
+(pid file `runtime/dashboard_8895_codex_resume.pid`) is Codex-lane
+infrastructure and stays running.
+
 ## Codex execution plan (June 9, 2026 — bounded autonomous lane)
 
 Owner: GPT-5.5 Codex thread. Source-of-truth docs: this file,
