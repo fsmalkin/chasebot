@@ -17,29 +17,25 @@ During material work, an agent must always be in one of two states:
 
 - Acting: inspecting, editing, validating, documenting, committing, pushing, or
   taking the next safe reversible step.
-- Waiting: explicitly waiting on a running command, tool result, Telegram reply,
-  or required human decision, with the reason stated.
+- Waiting: explicitly waiting on a running command, tool result, or required
+  human decision, with the reason stated.
 
 Do not idle silently. If a safe next step exists, take it. If a human decision is
 required, ask for it and wait through the available tool when possible.
 
-For Telegram:
-- Send start, material milestone, blocker/input, and completion updates when the
-  Telegram tool is available.
-- Use `timeout_seconds >= 5`.
-- If a Telegram send fails, retry once when safe.
-- If Telegram worked earlier but later fails, try to rediscover or reuse the tool
-  once before final handoff.
-- If Telegram still fails, continue in chat and state the failure in the handoff.
-- When waiting for Fred input, include a recommended default. If the wait times
-  out and the default is safe under repo gates, continue with the default;
-  otherwise stop and state the exact blocker.
+For notifications:
+- Agent notifications and pings go through the Claude mobile app via the
+  `PushNotification` tool.
+- The Telegram bridge is retired (2026-06-10); do not use `mcp__telegram__*`
+  tools.
+- Keep agent-authored start, milestone, blocker, and completion updates in chat
+  plus repo handoff surfaces.
 
 Before final handoff:
 - Confirm no needed commands, tool waits, or background sessions are still
   running.
-- Send a completion Telegram update for material work, or state the failure and
-  retry outcome.
+- Let the terminal notification hook provide the completion alert for material
+  work.
 
 ## Operator Video Link Preference
 
@@ -153,8 +149,6 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Route-planning parallel soak | `scripts/run_route_planning_parallel_soak.ps1 -Workers 2 -RunsPerWorker 1` |
 | Dashboard service | `scripts/run_dashboard_service.ps1` |
 | Dashboard validation | `scripts/run_dashboard_validation.ps1` |
-| Telegram global verify | `D:\services\codex-telegram\scripts\verify-global.ps1` |
-| Telegram global install/repair | `D:\services\codex-telegram\scripts\install-global.ps1` |
 
 ## Compose Profiles
 
@@ -163,7 +157,6 @@ Full workflow details are in [docs/ACTIVE_WORKFLOW.md](docs/ACTIVE_WORKFLOW.md).
 | Gate lane | `scripts/run_compose_gate.ps1` |
 | Isaac lane | `scripts/run_compose_isaac.ps1` |
 | UAT orchestrator | `scripts/run_compose_uat.ps1` |
-| Telegram wait bridge | Global bridge at `D:\services\codex-telegram` |
 
 UAT modes: `prepare`, `coordinate`, `snapshot`, `orientation`, `nav2`, `multi_target`, `first_uat`, `full_replay`, `pre_llm`
 
@@ -450,3 +443,17 @@ When making changes that affect the items below, update the relevant docs **in t
 6. **Changing contract schema or version** → update the Frozen Contracts section in this file.
 
 If you are unsure whether a doc needs updating, check this file and `docs/ACTIVE_WORKFLOW.md` for references to the changed path or name.
+
+## Owner-facing docs & dashboards: serve via the docs-hub (cross-project rule)
+The owner reads on MOBILE over Tailscale. NEVER share a repo-relative `.md` path as the
+only pointer — it doesn't render on a phone. Publish, then share the full URL.
+- **The hub (always-on, independent of every dev server):** `node D:\services\docs-hub\hub-server.js`
+  — port **8123**, binds 0.0.0.0, root-jailed static server over `D:\services\docs-hub\site\<project>\...`.
+  If `http://127.0.0.1:8123/` is down (e.g. after reboot), restart it via a `run_in_background` shell call.
+- **Publish a doc:** copy the `.md` into `D:\services\docs-hub\site\<project>\docs\` and add an entry to
+  the `INDEX` array in `site\<project>\docs\index.html` (the mobile markdown renderer — copy
+  `site\factr\docs\index.html` to bootstrap a new project). Share:
+  `http://100.112.221.6:8123/<project>/docs/?doc=<file-stem>`
+- **Dashboards:** publish to `site\<project>\` (e.g. `plan-progress.html`) → share
+  `http://100.112.221.6:8123/<project>/<file>`.
+- Lead with the Tailscale URL (`100.112.221.6` — stable); the repo path may follow in parentheses.
